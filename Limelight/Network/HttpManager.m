@@ -160,7 +160,7 @@ static const NSString* HTTPS_PORT = @"47984";
 }
 
 - (NSURLRequest*) newLaunchRequest:(NSString*)appId width:(int)width height:(int)height refreshRate:(int)refreshRate rikey:(NSString*)rikey rikeyid:(int)rikeyid {
-    NSString* urlString = [NSString stringWithFormat:@"%@/launch?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=1&rikey=%@&rikeyid=%d", _baseHTTPSURL, _uniqueId, appId, width, height, refreshRate, rikey, rikeyid];
+    NSString* urlString = [NSString stringWithFormat:@"%@/launch?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=0&rikey=%@&rikeyid=%d", _baseHTTPSURL, _uniqueId, appId, width, height, refreshRate, rikey, rikeyid];
     // This blocks while the app is launching
     return [self createRequestFromString:urlString enableTimeout:FALSE];
 }
