@@ -32,8 +32,10 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
         resolution = 0;
     } else if ([currentSettings.height integerValue] == 1080) {
         resolution = 1;
+    } else if ([currentSettings.height integerValue] == 1440) {
+        resolution = 2;
     } else {
-        resolution = 0;
+        resolution = 3;
     }
     NSInteger onscreenControls = [currentSettings.onscreenControls integerValue];
     
@@ -52,8 +54,16 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
     NSInteger resHeight = [self getChosenStreamHeight];
     NSInteger defaultBitrate;
     
+    // 2160p60 is 40 Mbps
+    if (frameRate == 60 && resHeight == 2160) {
+        defaultBitrate = 40000;
+    }
+    // 1440p60 is 30 Mbps
+    else if ((frameRate == 60 && resHeight == 1440) || resHeight == 2160) {
+        defaultBitrate = 30000;
+    }
     // 1080p60 is 20 Mbps
-    if (frameRate == 60 && resHeight == 1080) {
+    else if ((frameRate == 60 && resHeight == 1080) || resHeight == 1440) {
         defaultBitrate = 20000;
     }
     // 720p60 and 1080p30 are 10 Mbps
@@ -86,10 +96,29 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
 }
 
 - (NSInteger) getChosenStreamHeight {
-    return [self.resolutionSelector selectedSegmentIndex] == 0 ? 720 : 1080;
+    NSInteger selectedSegment = [self.resolutionSelector selectedSegmentIndex];
+    if (selectedSegment == 0) {
+        return 720;
+    } else if (selectedSegment == 1) {
+        return 1080;
+    } else if (selectedSegment == 2) {
+        return 1440;
+    } else {
+        return 2160;
+    }
 }
 
 - (NSInteger) getChosenStreamWidth {
+    NSInteger selectedSegmentHeight = [self getChosenStreamHeight];
+    if (selectedSegmentHeight == 720) {
+        return 1280;
+    } else if (selectedSegmentHeight == 1080) {
+        return 1920;
+    } else if (selectedSegmentHeight == 1440) {
+        return 2560;
+    } else {
+        return 3840;
+    }
     return [self getChosenStreamHeight] == 720 ? 1280 : 1920;
 }
 
