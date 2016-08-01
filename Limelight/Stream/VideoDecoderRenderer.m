@@ -233,12 +233,22 @@
     // From now on, CMBlockBuffer owns the data pointer and will free it when it's dereferenced
     
     CMSampleBufferRef sampleBuffer;
+    CMSampleTimingInfo sampleTime;
+    
+    // HACK: We aren't supposed to need a CMSampleTimingInfo since we have
+    // specified kCMSampleAttachmentKey_DisplayImmediately, but iOS 10 is broken
+    // and doesn't respect that attribute for some reason. Prior versions of iOS
+    // don't have this behavior.
+    sampleTime.duration = kCMTimeZero;
+    sampleTime.decodeTimeStamp = kCMTimeInvalid;
+    sampleTime.presentationTimeStamp = CMClockGetTime(CMClockGetHostTimeClock());
     
     status = CMSampleBufferCreate(kCFAllocatorDefault,
                                   blockBuffer,
-                                  true, NULL,
-                                  NULL, formatDesc, 1, 0,
-                                  NULL, 0, NULL,
+                                  true, NULL, NULL,
+                                  formatDesc, 1,
+                                  1, &sampleTime,
+                                  0, NULL,
                                   &sampleBuffer);
     if (status != noErr) {
         Log(LOG_E, @"CMSampleBufferCreate failed: %d", (int)status);
