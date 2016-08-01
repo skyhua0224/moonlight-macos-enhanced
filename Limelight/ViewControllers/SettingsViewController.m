@@ -119,7 +119,6 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
     } else {
         return 3840;
     }
-    return [self getChosenStreamHeight] == 720 ? 1280 : 1920;
 }
 
 - (void) saveSettings {
