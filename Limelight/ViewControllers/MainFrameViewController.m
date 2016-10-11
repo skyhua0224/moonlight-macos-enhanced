@@ -417,6 +417,17 @@ static NSMutableSet* hostList;
                                             // Exempt this host from discovery while handling the quit operation
                                             [_discMan removeHostFromDiscovery:app.host];
                                             [hMan executeRequestSynchronously:quitRequest];
+                                            if (quitResponse.statusCode == 200) {
+                                                ServerInfoResponse* serverInfoResp = [[ServerInfoResponse alloc] init];
+                                                [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest]
+                                                                                                            fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
+                                                if (![serverInfoResp isStatusOk] || ![[serverInfoResp getStringTag:@"state"] hasSuffix:@"_SERVER_AVAILABLE"]) {
+                                                    // On newer GFE versions, the quit request succeeds even though the app doesn't
+                                                    // really quit if another client tries to kill your app. We'll patch the response
+                                                    // to look like the old error in that case, so the UI behaves.
+                                                    quitResponse.statusCode = 599;
+                                                }
+                                            }
                                             [_discMan addHostToDiscovery:app.host];
                                             
                                             UIAlertController* alert;
@@ -539,14 +550,13 @@ static NSMutableSet* hostList;
     hostScrollView.delaysContentTouches = NO;
     
     UIButton* pullArrow = [[UIButton alloc] init];
+    [pullArrow addTarget:self.revealViewController action:@selector(revealToggle:) forControlEvents:UIControlEventTouchDown];
     [pullArrow setImage:[UIImage imageNamed:@"PullArrow"] forState:UIControlStateNormal];
     [pullArrow sizeToFit];
     pullArrow.frame = CGRectMake(0,
-                                 self.collectionView.frame.size.height / 2 - pullArrow.frame.size.height / 2 - self.navigationController.navigationBar.frame.size.height,
+                                 self.collectionView.frame.size.height / 6 - pullArrow.frame.size.height / 2 - self.navigationController.navigationBar.frame.size.height,
                                  pullArrow.frame.size.width,
                                  pullArrow.frame.size.height);
-    [self.view addSubview:pullArrow];
-    
     
     self.collectionView.delaysContentTouches = NO;
     self.collectionView.allowsMultipleSelection = NO;
@@ -562,6 +572,7 @@ static NSMutableSet* hostList;
     
     [self updateHosts];
     [self.view addSubview:hostScrollView];
+    [self.view addSubview:pullArrow];
 }
 
 -(void)dealloc
