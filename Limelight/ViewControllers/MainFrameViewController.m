@@ -49,6 +49,7 @@ static NSMutableSet* hostList;
                                                          message:[NSString stringWithFormat:@"Enter the following PIN on the host machine: %@", PIN]
                                                   preferredStyle:UIAlertControllerStyleAlert];
         [_pairAlert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+            _pairAlert = nil;
             [_discMan startDiscovery];
             [self hideLoadingFrame];
         }]];
@@ -56,24 +57,36 @@ static NSMutableSet* hostList;
     });
 }
 
+- (void)displayFailureDialog:(NSString *)message {
+    UIAlertController* failedDialog = [UIAlertController alertControllerWithTitle:@"Pairing Failed"
+                                                     message:message
+                                              preferredStyle:UIAlertControllerStyleAlert];
+    [failedDialog addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:nil]];
+    [self presentViewController:failedDialog animated:YES completion:nil];
+    
+    [_discMan startDiscovery];
+    [self hideLoadingFrame];
+}
+
 - (void)pairFailed:(NSString *)message {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [_pairAlert dismissViewControllerAnimated:YES completion:^{
-            _pairAlert = [UIAlertController alertControllerWithTitle:@"Pairing Failed"
-                                                             message:message
-                                                      preferredStyle:UIAlertControllerStyleAlert];
-            [_pairAlert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:nil]];
-            [self presentViewController:_pairAlert animated:YES completion:nil];
-            
-            [_discMan startDiscovery];
-            [self hideLoadingFrame];
-        }];
+        if (_pairAlert != nil) {
+            [_pairAlert dismissViewControllerAnimated:YES completion:^{
+                [self displayFailureDialog:message];
+            }];
+            _pairAlert = nil;
+        }
+        else {
+            [self displayFailureDialog:message];
+        }
     });
 }
 
 - (void)pairSuccessful {
     dispatch_async(dispatch_get_main_queue(), ^{
         [_pairAlert dismissViewControllerAnimated:YES completion:nil];
+        _pairAlert = nil;
+
         [_discMan startDiscovery];
         [self alreadyPaired];
     });
@@ -259,8 +272,10 @@ static NSMutableSet* hostList;
     
     // If we are online, paired, and have a cached app list, skip straight
     // to the app grid without a loading frame. This is the fast path that users
-    // should hit most.
-    if (host.online && host.pairState == PairStatePaired && host.appList.count > 0) {
+    // should hit most. Check for a valid view because we don't want to hit the fast
+    // path after coming back from streaming, since we need to fetch serverinfo too
+    // so that our active game data is correct.
+    if (host.online && host.pairState == PairStatePaired && host.appList.count > 0 && view != nil) {
         [self alreadyPaired];
         return;
     }
