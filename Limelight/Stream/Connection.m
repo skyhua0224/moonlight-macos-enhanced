@@ -83,7 +83,7 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig)
     AVAudioSession* audioSession = [AVAudioSession sharedInstance];
     
     [audioSession setPreferredSampleRate:opusConfig->sampleRate error:&audioSessionError];
-    [audioSession setCategory: AVAudioSessionCategoryPlayback error: &audioSessionError];
+    [audioSession setCategory: AVAudioSessionCategoryAmbient error: &audioSessionError];
     [audioSession setPreferredOutputNumberOfChannels:opusConfig->channelCount error:&audioSessionError];
     [audioSession setPreferredIOBufferDuration:0.005 error:&audioSessionError];
     [audioSession setActive: YES error: &audioSessionError];
