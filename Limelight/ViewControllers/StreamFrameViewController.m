@@ -42,8 +42,8 @@
     [opQueue addOperation:_streamMan];
     
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(applicationWillResignActive:)
-                                                 name:UIApplicationWillResignActiveNotification
+                                             selector:@selector(applicationDidEnterBackground:)
+                                                 name:UIApplicationDidEnterBackgroundNotification
                                                object:nil];
 }
 
@@ -52,7 +52,7 @@
     [self.navigationController popToRootViewControllerAnimated:YES];
 }
 
-- (void)applicationWillResignActive:(NSNotification *)notification {
+- (void)applicationDidEnterBackground:(NSNotification *)notification {
     [_streamMan stopStream];
     [self returnToMainFrame];
 }
