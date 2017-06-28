@@ -12,8 +12,6 @@
 
 @interface VideoDecoderRenderer : NSObject
 
-- (void)layoutVideoStream;
-
 - (id)initWithView:(UIView*)view;
 
 - (void)updateBufferForRange:(CMBlockBufferRef)existingBuffer data:(unsigned char *)data offset:(int)offset length:(int)nalLength;
