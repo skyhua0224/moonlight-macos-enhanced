@@ -619,7 +619,7 @@ static NSMutableSet* hostList;
     
     [_discMan startDiscovery];
     
-    [self handleReturnToForeground];
+//    [self handleReturnToForeground];
 }
 
 - (void)viewDidDisappear:(BOOL)animated
