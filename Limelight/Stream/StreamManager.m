@@ -19,6 +19,7 @@
 
 @implementation StreamManager {
     StreamConfiguration* _config;
+    VideoDecoderRenderer* _renderer;
     UIView* _renderView;
     id<ConnectionCallbacks> _callbacks;
     Connection* _connection;
@@ -87,10 +88,14 @@
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
     
-    VideoDecoderRenderer* renderer = [[VideoDecoderRenderer alloc]initWithView:_renderView];
-    _connection = [[Connection alloc] initWithConfig:_config renderer:renderer connectionCallbacks:_callbacks];
+    _renderer = [[VideoDecoderRenderer alloc]initWithView:_renderView];
+    _connection = [[Connection alloc] initWithConfig:_config renderer:_renderer connectionCallbacks:_callbacks];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:_connection];
+}
+
+- (void)layoutDecoderStream {
+    [_renderer layoutVideoStream];
 }
 
 - (void) stopStream

@@ -25,10 +25,7 @@
     CALayer *oldLayer = displayLayer;
     
     displayLayer = [[AVSampleBufferDisplayLayer alloc] init];
-    displayLayer.bounds = _view.bounds;
-    displayLayer.backgroundColor = [UIColor blackColor].CGColor;
-    displayLayer.position = CGPointMake(CGRectGetMidX(_view.bounds), CGRectGetMidY(_view.bounds));
-    displayLayer.videoGravity = AVLayerVideoGravityResizeAspect;
+    [self layoutVideoStream];
     
     if (oldLayer != nil) {
         // Switch out the old display layer with the new one
@@ -48,6 +45,13 @@
         CFRelease(formatDesc);
         formatDesc = nil;
     }
+}
+
+- (void)layoutVideoStream {
+    displayLayer.bounds = _view.bounds;
+    displayLayer.backgroundColor = [UIColor blackColor].CGColor;
+    displayLayer.position = CGPointMake(CGRectGetMidX(_view.bounds), CGRectGetMidY(_view.bounds));
+    displayLayer.videoGravity = AVLayerVideoGravityResizeAspect;
 }
 
 - (id)initWithView:(UIView*)view
