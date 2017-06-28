@@ -7,11 +7,14 @@
 //
 
 #import "VideoDecoderRenderer.h"
+#import "RendererLayerContainer.h"
 
 #include "Limelight.h"
 
 @implementation VideoDecoderRenderer {
     UIView *_view;
+    
+    RendererLayerContainer *layerContainer;
     
     AVSampleBufferDisplayLayer* displayLayer;
     Boolean waitingForSps, waitingForPps;
@@ -22,18 +25,14 @@
 
 - (void)reinitializeDisplayLayer
 {
-    CALayer *oldLayer = displayLayer;
+    [layerContainer removeFromSuperview];
+    layerContainer = [[RendererLayerContainer alloc] init];
+    layerContainer.frame = _view.bounds;
+    layerContainer.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
+    [_view addSubview:layerContainer];
     
-    displayLayer = [[AVSampleBufferDisplayLayer alloc] init];
-    [self layoutVideoStream];
-    
-    if (oldLayer != nil) {
-        // Switch out the old display layer with the new one
-        [_view.layer replaceSublayer:oldLayer with:displayLayer];
-    }
-    else {
-        [_view.layer addSublayer:displayLayer];
-    }
+    displayLayer = (AVSampleBufferDisplayLayer *)layerContainer.layer;
+    displayLayer.backgroundColor = [UIColor blackColor].CGColor;
     
     // We need some parameter sets before we can properly start decoding frames
     waitingForSps = true;
@@ -45,13 +44,6 @@
         CFRelease(formatDesc);
         formatDesc = nil;
     }
-}
-
-- (void)layoutVideoStream {
-    displayLayer.bounds = _view.bounds;
-    displayLayer.backgroundColor = [UIColor blackColor].CGColor;
-    displayLayer.position = CGPointMake(CGRectGetMidX(_view.bounds), CGRectGetMidY(_view.bounds));
-    displayLayer.videoGravity = AVLayerVideoGravityResizeAspect;
 }
 
 - (id)initWithView:(UIView*)view

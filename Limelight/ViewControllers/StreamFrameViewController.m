@@ -47,12 +47,6 @@
                                                object:nil];
 }
 
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
-    
-    [_streamMan layoutDecoderStream];
-}
-
 - (void) returnToMainFrame {
     [_controllerSupport cleanup];
     [self.navigationController popToRootViewControllerAnimated:YES];
