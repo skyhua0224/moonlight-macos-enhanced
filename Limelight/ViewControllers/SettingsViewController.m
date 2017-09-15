@@ -14,30 +14,9 @@
 
 @implementation SettingsViewController {
     NSInteger _bitrate;
-    Boolean _adjustedForSafeArea;
 }
 static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
 
-- (void)viewDidAppear:(BOOL)animated
-{
-    [super viewDidAppear:animated];
-    
-    // Adjust the subviews for the safe area on the iPhone X.
-    if (!_adjustedForSafeArea) {
-        if (@available(iOS 11.0, *)) {
-            for (UIView* view in self.view.subviews) {
-                // HACK: The official safe area is much too large for our purposes
-                // so we'll just use the presence of any safe area to indicate we should
-                // pad by 20.
-                if (self.view.safeAreaInsets.left >= 20 || self.view.safeAreaInsets.right >= 20) {
-                    view.frame = CGRectMake(view.frame.origin.x + 20, view.frame.origin.y, view.frame.size.width, view.frame.size.height);
-                }
-            }
-        }
-
-        _adjustedForSafeArea = true;
-    }
-}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -53,10 +32,8 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
         resolution = 0;
     } else if ([currentSettings.height integerValue] == 1080) {
         resolution = 1;
-    } else if ([currentSettings.height integerValue] == 1440) {
-        resolution = 2;
     } else {
-        resolution = 3;
+        resolution = 0;
     }
     NSInteger onscreenControls = [currentSettings.onscreenControls integerValue];
     
@@ -75,16 +52,8 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
     NSInteger resHeight = [self getChosenStreamHeight];
     NSInteger defaultBitrate;
     
-    // 2160p60 is 40 Mbps
-    if (frameRate == 60 && resHeight == 2160) {
-        defaultBitrate = 40000;
-    }
-    // 1440p60 is 30 Mbps
-    else if ((frameRate == 60 && resHeight == 1440) || resHeight == 2160) {
-        defaultBitrate = 30000;
-    }
     // 1080p60 is 20 Mbps
-    else if ((frameRate == 60 && resHeight == 1080) || resHeight == 1440) {
+    if (frameRate == 60 && resHeight == 1080) {
         defaultBitrate = 20000;
     }
     // 720p60 and 1080p30 are 10 Mbps
@@ -117,29 +86,11 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
 }
 
 - (NSInteger) getChosenStreamHeight {
-    NSInteger selectedSegment = [self.resolutionSelector selectedSegmentIndex];
-    if (selectedSegment == 0) {
-        return 720;
-    } else if (selectedSegment == 1) {
-        return 1080;
-    } else if (selectedSegment == 2) {
-        return 1440;
-    } else {
-        return 2160;
-    }
+    return [self.resolutionSelector selectedSegmentIndex] == 0 ? 720 : 1080;
 }
 
 - (NSInteger) getChosenStreamWidth {
-    NSInteger selectedSegmentHeight = [self getChosenStreamHeight];
-    if (selectedSegmentHeight == 720) {
-        return 1280;
-    } else if (selectedSegmentHeight == 1080) {
-        return 1920;
-    } else if (selectedSegmentHeight == 1440) {
-        return 2560;
-    } else {
-        return 3840;
-    }
+    return [self getChosenStreamHeight] == 720 ? 1280 : 1920;
 }
 
 - (void) saveSettings {
