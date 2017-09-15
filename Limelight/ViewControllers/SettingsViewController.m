@@ -54,7 +54,7 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
     
     // 1080p60 is 20 Mbps
     if (frameRate == 60 && resHeight == 1080) {
-        defaultBitrate = 20000;
+        defaultBitrate = 30000;
     }
     // 720p60 and 1080p30 are 10 Mbps
     else if (frameRate == 60 || resHeight == 1080) {
