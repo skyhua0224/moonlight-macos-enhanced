@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
 		9832D1361BBCD5C50036EF48 /* TemporaryApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 9832D1351BBCD5C50036EF48 /* TemporaryApp.m */; };
 		98CFB82F1CAD481B0048EF74 /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		98D5856D1C0EA79600F6CC00 /* TemporaryHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856C1C0EA79600F6CC00 /* TemporaryHost.m */; };
@@ -105,6 +106,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RendererLayerContainer.h; sourceTree = "<group>"; };
+		4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RendererLayerContainer.m; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
@@ -528,6 +531,8 @@
 				FB89461B19F646E200339C8A /* StreamManager.m */,
 				FB89461C19F646E200339C8A /* VideoDecoderRenderer.h */,
 				FB89461D19F646E200339C8A /* VideoDecoderRenderer.m */,
+				4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */,
+				4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */,
 			);
 			path = Stream;
 			sourceTree = "<group>";
@@ -965,6 +970,7 @@
 				FBD349621A0089F6002D2A60 /* DataManager.m in Sources */,
 				D4746EEC1CBC740C006FB401 /* Controller.swift in Sources */,
 				FBFCB3351B50B29400089F8A /* App.m in Sources */,
+				4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */,
 				FB4A23B81A9D3637004D2EF2 /* LoadingFrameViewController.m in Sources */,
 				FB9AFD3A1A7E05CE00872C98 /* ServerInfoResponse.m in Sources */,
 				FB89463119F646E200339C8A /* StreamManager.m in Sources */,
