@@ -63,15 +63,13 @@ static UIImage* noImage;
     if ([_app.id isEqualToString:_app.host.currentGame]) {
         // Only create the app overlay if needed
         _appOverlay = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"Play"]];
-        _appOverlay.layer.shadowColor = [UIColor blackColor].CGColor;
-        _appOverlay.layer.shadowOffset = CGSizeMake(0, 0);
-        _appOverlay.layer.shadowOpacity = 1;
-        _appOverlay.layer.shadowRadius = 2.0;
-        
         [self addSubview:_appOverlay];
         
-        _appOverlay.frame = CGRectMake(0, 0, noImage.size.width / 2.f, noImage.size.height / 4.f);
-        [_appOverlay setCenter:CGPointMake(self.frame.size.width/2, self.frame.size.height/6)];
+        _appOverlay.translatesAutoresizingMaskIntoConstraints = NO;
+        [_appOverlay.widthAnchor constraintEqualToConstant:64].active = YES;;
+        [_appOverlay.heightAnchor constraintEqualToConstant:64].active = YES;;
+        [_appOverlay.centerXAnchor constraintEqualToAnchor:self.centerXAnchor].active = YES;
+        [_appOverlay.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active = YES;
     }
     
     // TODO: Improve no-app image detection
@@ -91,9 +89,6 @@ static UIImage* noImage;
             !(appImage.size.width == 628.f && appImage.size.height == 888.f)) { // GFE 3.0
             _appButton.frame = CGRectMake(0, 0, appImage.size.width / 2, appImage.size.height / 2);
             self.frame = CGRectMake(0, 0, appImage.size.width / 2, appImage.size.height / 2);
-            _appOverlay.frame = CGRectMake(0, 0, self.frame.size.width / 2.f, self.frame.size.height / 4.f);
-            _appOverlay.layer.shadowRadius = 4.0;
-            [_appOverlay setCenter:CGPointMake(self.frame.size.width/2, self.frame.size.height/6)];
             [_appButton setBackgroundImage:appImage forState:UIControlStateNormal];
             [self setNeedsDisplay];
         } else {
