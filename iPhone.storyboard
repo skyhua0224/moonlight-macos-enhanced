@@ -8,13 +8,8 @@
         <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="13173"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
-    <customFonts key="customFonts">
-        <array key="Roboto-Regular.ttf">
-            <string>Roboto-Regular</string>
-        </array>
-    </customFonts>
     <scenes>
-        <!--Main Frame View Controller-->
+        <!--Moonlight-->
         <scene sceneID="emz-kO-L7q">
             <objects>
                 <viewController id="dgh-JZ-Q7z" customClass="MainFrameViewController" sceneMemberID="viewController">
@@ -45,25 +40,13 @@
                         </connections>
                     </collectionView>
                     <toolbarItems/>
-                    <navigationItem key="navigationItem" id="1jn-Sf-Xky">
-                        <barButtonItem key="leftBarButtonItem" style="done" id="zAn-CM-7Yz">
-                            <button key="customView" opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" lineBreakMode="middleTruncation" id="pZ9-ft-T24">
-                                <rect key="frame" x="20" y="0.0" width="109" height="32"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <fontDescription key="fontDescription" name="Roboto-Regular" family="Roboto" pointSize="16"/>
-                                <state key="normal" title="Moonlight" image="Logo">
-                                    <color key="titleColor" red="0.9513210654258728" green="0.97490358352661133" blue="0.99987185001373291" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                                    <color key="titleShadowColor" red="0.5" green="0.5" blue="0.5" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                                </state>
-                            </button>
-                        </barButtonItem>
+                    <navigationItem key="navigationItem" title="Moonlight" id="1jn-Sf-Xky">
                         <barButtonItem key="rightBarButtonItem" title="No Host Selected" id="L1H-n4-HB7">
                             <color key="tintColor" red="0.9513210654258728" green="0.97490358352661133" blue="0.99987185001373291" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         </barButtonItem>
                     </navigationItem>
                     <connections>
                         <outlet property="computerNameButton" destination="L1H-n4-HB7" id="bng-Ky-oQs"/>
-                        <outlet property="limelightLogoButton" destination="pZ9-ft-T24" id="yRw-rK-9lQ"/>
                         <segue destination="mI3-9F-XwU" kind="push" identifier="createStreamFrame" id="Vgc-B6-lvM"/>
                     </connections>
                 </viewController>
@@ -252,7 +235,4 @@
             <point key="canvasLocation" x="2104" y="1266"/>
         </scene>
     </scenes>
-    <resources>
-        <image name="Logo" width="32" height="32"/>
-    </resources>
 </document>
