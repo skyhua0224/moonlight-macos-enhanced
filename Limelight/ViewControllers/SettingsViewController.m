@@ -10,7 +10,7 @@
 #import "TemporarySettings.h"
 #import "DataManager.h"
 
-#define BITRATE_INTERVAL 10000 // in kbps
+#define BITRATE_INTERVAL 5000 // in kbps
 
 @implementation SettingsViewController {
     NSInteger _bitrate;
@@ -68,7 +68,7 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
     [self.onscreenControlSelector setSelectedSegmentIndex:onscreenControls];
 
 
-    numbers = @[@(1), @(2), @(3), @(4), @(5), @(6), @(7), @(8), @(9), @(10)];
+    numbers = @[@(0.5), @(1), @(1.5), @(2), @(2.5), @(3), @(3.5), @(4), @(4.5), @(5), @(5.5), @(6), @(6.5), @(7), @(7.5), @(8), @(8.5), @(9), @(9.5), @(10)];
     NSInteger numberOfSteps = ((float)[numbers count]);
     self.bitrateSlider.maximumValue = numberOfSteps;
     self.bitrateSlider.minimumValue = 1;
