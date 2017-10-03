@@ -27,10 +27,17 @@
     
     [self.navigationController setNavigationBarHidden:YES animated:YES];
     
+    
     [self.stageLabel setText:@"Starting App"];
     [self.stageLabel sizeToFit];
-    self.stageLabel.center = CGPointMake(self.view.frame.size.width / 2, self.view.frame.size.height / 2);
-    self.spinner.center = CGPointMake(self.view.frame.size.width / 2, self.view.frame.size.height / 2 - self.stageLabel.frame.size.height - self.spinner.frame.size.height);
+    self.stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.stageLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor].active = YES;
+    [self.stageLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
+    
+    self.spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.spinner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor].active = YES;
+    [self.spinner.bottomAnchor constraintEqualToAnchor:self.stageLabel.topAnchor constant:-12].active = YES;
+    
     [UIApplication sharedApplication].idleTimerDisabled = YES;
     
     _controllerSupport = [[ControllerSupport alloc] init];

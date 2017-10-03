@@ -17,7 +17,9 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     // center the loading spinner
-    self.loadingSpinner.center = CGPointMake(self.view.frame.size.width / 2, self.view.frame.size.height / 2);
+    self.loadingSpinner.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.loadingSpinner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor].active = YES;
+    [self.loadingSpinner.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
 }
 
 - (void)didReceiveMemoryWarning {
