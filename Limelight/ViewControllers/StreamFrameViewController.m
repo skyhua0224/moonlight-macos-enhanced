@@ -32,11 +32,11 @@
     [self.stageLabel sizeToFit];
     self.stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [self.stageLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor].active = YES;
-    [self.stageLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
+    [self.stageLabel.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-32].active = YES;
     
     self.spinner.translatesAutoresizingMaskIntoConstraints = NO;
     [self.spinner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor].active = YES;
-    [self.spinner.bottomAnchor constraintEqualToAnchor:self.stageLabel.topAnchor constant:-12].active = YES;
+    [self.spinner.bottomAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
     
     [UIApplication sharedApplication].idleTimerDisabled = YES;
     
