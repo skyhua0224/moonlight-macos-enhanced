@@ -58,6 +58,8 @@ static const char* TAG_APP_ID = "ID";
     }
     self.statusMessage = statusMsg;
     
+    NSMutableSet<NSString *> *appNames = [[NSMutableSet alloc] init];
+    
     node = node->children;
     
     while (node != NULL) {
@@ -85,10 +87,14 @@ static const char* TAG_APP_ID = "ID";
                 appInfoNode = appInfoNode->next;
             }
             if (appId != nil) {
-                TemporaryApp* app = [[TemporaryApp alloc] init];
-                app.name = appName;
-                app.id = appId;
-                [_appList addObject:app];
+                if (![appNames containsObject:appName]) {
+                    [appNames addObject:appName];
+                    
+                    TemporaryApp* app = [[TemporaryApp alloc] init];
+                    app.name = appName;
+                    app.id = appId;
+                    [_appList addObject:app];
+                }
             }
         }
         node = node->next;
