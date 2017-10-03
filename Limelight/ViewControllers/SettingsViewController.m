@@ -10,12 +10,13 @@
 #import "TemporarySettings.h"
 #import "DataManager.h"
 
-#define BITRATE_INTERVAL 500 // in kbps
+#define BITRATE_INTERVAL 10000 // in kbps
 
 @implementation SettingsViewController {
     NSInteger _bitrate;
+    NSArray *numbers;
 }
-static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
+static NSString* bitrateFormat = @"Bitrate: %d Mbps";
 
 
 - (void)viewDidLoad {
@@ -42,6 +43,15 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
     [self.framerateSelector setSelectedSegmentIndex:framerate];
     [self.framerateSelector addTarget:self action:@selector(newResolutionFpsChosen) forControlEvents:UIControlEventValueChanged];
     [self.onscreenControlSelector setSelectedSegmentIndex:onscreenControls];
+
+
+    numbers = @[@(1), @(2), @(3), @(4), @(5), @(6), @(7), @(8), @(9), @(10)];
+    NSInteger numberOfSteps = ((float)[numbers count]);
+    self.bitrateSlider.maximumValue = numberOfSteps;
+    self.bitrateSlider.minimumValue = 1;
+    
+    self.bitrateSlider.continuous = YES;
+
     [self.bitrateSlider setValue:(_bitrate / BITRATE_INTERVAL) animated:YES];
     [self.bitrateSlider addTarget:self action:@selector(bitrateSliderMoved) forControlEvents:UIControlEventValueChanged];
     [self updateBitrateText];
@@ -72,13 +82,16 @@ static NSString* bitrateFormat = @"Bitrate: %.1f Mbps";
 }
 
 - (void) bitrateSliderMoved {
+    NSUInteger index = (NSUInteger)(self.bitrateSlider.value);
+    [self.bitrateSlider setValue:index animated:NO];
+    
     _bitrate = BITRATE_INTERVAL * (int)self.bitrateSlider.value;
     [self updateBitrateText];
 }
 
 - (void) updateBitrateText {
     // Display bitrate in Mbps
-    [self.bitrateLabel setText:[NSString stringWithFormat:bitrateFormat, _bitrate / 1000.]];
+    [self.bitrateLabel setText:[NSString stringWithFormat:bitrateFormat, _bitrate / 1000]];
 }
 
 - (NSInteger) getChosenFrameRate {
