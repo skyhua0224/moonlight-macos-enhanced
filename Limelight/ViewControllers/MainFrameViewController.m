@@ -765,30 +765,43 @@ static NSMutableSet* hostList;
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     UICollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AppCell" forIndexPath:indexPath];
+    [cell.contentView.subviews.firstObject removeFromSuperview];
+    
+    CGRect appContentViewFrame = cell.contentView.bounds;
+    appContentViewFrame.size.height -= 16;
+    appContentViewFrame.size.width -= 16;
+    appContentViewFrame.origin.x += 8;
+    appContentViewFrame.origin.y += 2;
+
+    UIView *appContentView = [[UIView alloc] initWithFrame:appContentViewFrame];
+    [cell.contentView addSubview:appContentView];
     
     TemporaryApp* app = _sortedAppList[indexPath.row];
     UIAppView* appView = [[UIAppView alloc] initWithApp:app cache:_boxArtCache andCallback:self];
     [appView updateAppImage];
+    appView.frame = appContentView.frame;
     
     if (appView.bounds.size.width > 10.0) {
-        CGFloat scale = cell.bounds.size.width / appView.bounds.size.width;
+        CGFloat scale = appContentView.bounds.size.width / appView.bounds.size.width;
         [appView setCenter:CGPointMake(appView.bounds.size.width / 2 * scale, appView.bounds.size.height / 2 * scale)];
         appView.transform = CGAffineTransformMakeScale(scale, scale);
     }
     
-    [cell.subviews.firstObject removeFromSuperview]; // Remove a view that was previously added
-    [cell addSubview:appView];
+    [appContentView addSubview:appView];
 
+    appView.clipsToBounds = YES;
+    appView.layer.cornerRadius = 6;
     
-    UIBezierPath *shadowPath = [UIBezierPath bezierPathWithRect:cell.bounds];
-    cell.layer.masksToBounds = NO;
-    cell.layer.shadowColor = [UIColor blackColor].CGColor;
-    cell.layer.shadowOffset = CGSizeMake(1.0f, 5.0f);
-    cell.layer.shadowOpacity = 0.5f;
-    cell.layer.shadowPath = shadowPath.CGPath;
+//    UIBezierPath *shadowPath = [UIBezierPath bezierPathWithRect:cell.bounds];
+//    cell.layer.masksToBounds = YES;
+    appContentView.layer.shadowColor = [UIColor blackColor].CGColor;
+    appContentView.layer.shadowOffset = CGSizeMake(0, 6);
+    appContentView.layer.shadowOpacity = 0.33;
+//    appContentView.layer.shadowPath = shadowPath.CGPath;
+    appContentView.layer.shadowRadius = 8;
     
-    cell.layer.borderColor = [[UIColor colorWithRed:0 green:0 blue:0 alpha:0.3f] CGColor];
-    cell.layer.borderWidth = 1;
+//    cell.layer.borderColor = [[UIColor colorWithRed:0 green:0 blue:0 alpha:0.3f] CGColor];
+//    cell.layer.borderWidth = 1;
     cell.exclusiveTouch = YES;
 
     return cell;
