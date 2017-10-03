@@ -14,8 +14,11 @@
 
 @implementation SettingsViewController {
     NSInteger _bitrate;
+<<<<<<< Updated upstream
     NSArray *numbers;
+=======
     Boolean _adjustedForSafeArea;
+>>>>>>> Stashed changes
 }
 static NSString* bitrateFormat = @"Bitrate: %d Mbps";
 
