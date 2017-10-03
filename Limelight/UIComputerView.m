@@ -27,11 +27,6 @@ static const int LABEL_DY = 20;
     [_hostButton setBackgroundImage:[UIImage imageNamed:@"Computer"] forState:UIControlStateNormal];
     [_hostButton sizeToFit];
     
-     _hostButton.layer.shadowColor = [UIColor blackColor].CGColor;
-    _hostButton.layer.shadowOffset = CGSizeMake(0, 6);
-    _hostButton.layer.shadowOpacity = 0.33;
-    _hostButton.layer.shadowRadius = 8;
-    
     _hostLabel = [[UILabel alloc] init];
     _hostStatus = [[UILabel alloc] init];
     _hostPairState = [[UILabel alloc] init];
