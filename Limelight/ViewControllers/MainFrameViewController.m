@@ -768,10 +768,10 @@ static NSMutableSet* hostList;
     [cell.contentView.subviews.firstObject removeFromSuperview];
     
     CGRect appContentViewFrame = cell.contentView.bounds;
-    appContentViewFrame.size.height -= 16;
-    appContentViewFrame.size.width -= 16;
-    appContentViewFrame.origin.x += 8;
-    appContentViewFrame.origin.y += 2;
+    appContentViewFrame.size.height -= 28;
+    appContentViewFrame.size.width -= 28;
+    appContentViewFrame.origin.x += 14;
+    appContentViewFrame.origin.y += 6;
 
     UIView *appContentView = [[UIView alloc] initWithFrame:appContentViewFrame];
     [cell.contentView addSubview:appContentView];
@@ -790,18 +790,13 @@ static NSMutableSet* hostList;
     [appContentView addSubview:appView];
 
     appView.clipsToBounds = YES;
-    appView.layer.cornerRadius = 6;
+    appView.layer.cornerRadius = 8;
     
-//    UIBezierPath *shadowPath = [UIBezierPath bezierPathWithRect:cell.bounds];
-//    cell.layer.masksToBounds = YES;
     appContentView.layer.shadowColor = [UIColor blackColor].CGColor;
     appContentView.layer.shadowOffset = CGSizeMake(0, 6);
     appContentView.layer.shadowOpacity = 0.33;
-//    appContentView.layer.shadowPath = shadowPath.CGPath;
     appContentView.layer.shadowRadius = 8;
     
-//    cell.layer.borderColor = [[UIColor colorWithRed:0 green:0 blue:0 alpha:0.3f] CGColor];
-//    cell.layer.borderWidth = 1;
     cell.exclusiveTouch = YES;
 
     return cell;
