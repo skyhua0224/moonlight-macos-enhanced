@@ -19,7 +19,7 @@
 
 static UIImage* noImage;
 
-- (id) initWithApp:(TemporaryApp*)app cache:(NSCache*)cache andCallback:(id<AppCallback>)callback {
+- (id) initWithApp:(TemporaryApp*)app frame:(CGRect)frame cache:(NSCache*)cache andCallback:(id<AppCallback>)callback {
     self = [super init];
     _app = app;
     _callback = callback;
@@ -40,8 +40,7 @@ static UIImage* noImage;
     [self addSubview:_appButton];
     [self sizeToFit];
     
-    _appButton.frame = CGRectMake(0, 0, noImage.size.width, noImage.size.height);
-    self.frame = CGRectMake(0, 0, noImage.size.width, noImage.size.height);
+    _appButton.frame = frame;
     
     // Rasterizing the cell layer increases rendering performance by quite a bit
     self.layer.shouldRasterize = YES;
@@ -102,8 +101,8 @@ static UIImage* noImage;
         _appLabel = [[UILabel alloc] init];
         CGFloat padding = 4.f;
         [_appLabel setFrame: CGRectMake(padding, padding, _appButton.frame.size.width - 2 * padding, _appButton.frame.size.height - 2 * padding)];
-        [_appLabel setTextColor:[UIColor whiteColor]];
-        [_appLabel setFont:[UIFont fontWithName:@"Roboto-Regular" size:10.f]];
+        [_appLabel setTextColor:[UIColor blackColor]];
+        [_appLabel setFont:[UIFont systemFontOfSize:14]];
         [_appLabel setBaselineAdjustment:UIBaselineAdjustmentAlignCenters];
         [_appLabel setTextAlignment:NSTextAlignmentCenter];
         [_appLabel setLineBreakMode:NSLineBreakByWordWrapping];

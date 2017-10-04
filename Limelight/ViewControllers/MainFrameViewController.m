@@ -777,7 +777,7 @@ static NSMutableSet* hostList;
     [cell.contentView addSubview:appContentView];
     
     TemporaryApp* app = _sortedAppList[indexPath.row];
-    UIAppView* appView = [[UIAppView alloc] initWithApp:app cache:_boxArtCache andCallback:self];
+    UIAppView* appView = [[UIAppView alloc] initWithApp:app frame:appContentView.bounds cache:_boxArtCache andCallback:self];
     [appView updateAppImage];
     appView.frame = appContentView.frame;
     

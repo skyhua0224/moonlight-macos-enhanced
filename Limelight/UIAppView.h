@@ -17,7 +17,7 @@
 
 @interface UIAppView : UIView
 
-- (id) initWithApp:(TemporaryApp*)app cache:(NSCache*)cache andCallback:(id<AppCallback>)callback;
+- (id) initWithApp:(TemporaryApp*)app frame:(CGRect)frame cache:(NSCache*)cache andCallback:(id<AppCallback>)callback;
 - (void) updateAppImage;
 
 @end
