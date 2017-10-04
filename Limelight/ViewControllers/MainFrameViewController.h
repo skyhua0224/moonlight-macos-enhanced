@@ -20,4 +20,7 @@
 @property (strong, nonatomic) IBOutlet UIButton *limelightLogoButton;
 @property (weak, nonatomic) IBOutlet UIBarButtonItem *computerNameButton;
 
+- (void)handleShortcut;
+- (NSArray<TemporaryHost *> *)returnSavedHosts;
+
 @end

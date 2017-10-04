@@ -639,6 +639,17 @@ static NSMutableSet* hostList;
     [_boxArtCache removeAllObjects];
 }
 
+- (NSArray<TemporaryHost *> *)returnSavedHosts {
+    NSMutableArray<TemporaryHost *> *hosts = [NSMutableArray array];
+    for (TemporaryHost *tempHost in hostList) {
+        if (tempHost.pairState == PairStatePaired) {
+            [hosts addObject:tempHost];
+        }
+    }
+    
+    return [hosts copy];
+}
+
 - (void) retrieveSavedHosts {
     DataManager* dataMan = [[DataManager alloc] init];
     NSArray* hosts = [dataMan getHosts];

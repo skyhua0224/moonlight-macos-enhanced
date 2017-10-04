@@ -7,6 +7,8 @@
 //
 
 #import "AppDelegate.h"
+#import "SWRevealViewController.h"
+#import "MainFrameViewController.h"
 
 @implementation AppDelegate
 
@@ -46,7 +48,16 @@ static NSOperationQueue* mainQueue;
                                                              [UIColor whiteColor], NSForegroundColorAttributeName,
                                                              [UIFont fontWithName:@"Roboto-Regular" size:[UIFont systemFontSize]], NSFontAttributeName, nil] forState:UIControlStateNormal];
     
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self setupShortcuts];
+    });
+
     return YES;
+}
+
+- (void)application:(UIApplication *)application performActionForShortcutItem:(UIApplicationShortcutItem *)shortcutItem completionHandler:(void (^)(BOOL))completionHandler {
+    [self handleShortcut:shortcutItem];
+    completionHandler(YES);
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application
@@ -75,6 +86,25 @@ static NSOperationQueue* mainQueue;
 {
     // Saves changes in the application's managed object context before the application terminates.
     [self saveContext];
+}
+
+- (void)setupShortcuts {
+    NSMutableArray<UIApplicationShortcutItem *> *moonlightShortcutItems = [NSMutableArray array];
+    NSArray<TemporaryHost *> *hosts = [[self mainFrameVC] returnSavedHosts];
+    for (TemporaryHost *host in hosts) {
+        [moonlightShortcutItems addObject:[[UIApplicationShortcutItem alloc] initWithType:@"computerHost" localizedTitle:host.name localizedSubtitle:nil icon:[UIApplicationShortcutIcon iconWithTemplateImageName:@"3DTouchHost"] userInfo:nil]];
+    }
+    [UIApplication sharedApplication].shortcutItems = moonlightShortcutItems;
+}
+
+- (void)handleShortcut:(UIApplicationShortcutItem *)shortcutItem {
+    [[self mainFrameVC] handleShortcut];
+}
+
+- (MainFrameViewController *)mainFrameVC {
+    SWRevealViewController *revealVC = (SWRevealViewController *)self.window.rootViewController;
+    UINavigationController *navVC = (UINavigationController *)revealVC.frontViewController;
+    return (MainFrameViewController *)navVC.childViewControllers.firstObject;
 }
 
 - (void)saveContext
