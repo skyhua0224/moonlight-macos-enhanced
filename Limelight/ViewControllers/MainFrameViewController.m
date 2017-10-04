@@ -564,7 +564,6 @@ static NSMutableSet* hostList;
     [self setAutomaticallyAdjustsScrollViewInsets:NO];
     
     hostScrollView = [[ComputerScrollView alloc] init];
-    hostScrollView.frame = CGRectMake(0, self.navigationController.navigationBar.frame.origin.y + self.navigationController.navigationBar.frame.size.height, self.view.frame.size.width, self.view.frame.size.height / 2);
     [hostScrollView setShowsHorizontalScrollIndicator:NO];
     hostScrollView.delaysContentTouches = NO;
     
@@ -589,9 +588,17 @@ static NSMutableSet* hostList;
                                                  name: UIApplicationWillEnterForegroundNotification
                                                object: nil];
     
-    [self updateHosts];
+
     [self.view addSubview:hostScrollView];
+    hostScrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    [hostScrollView.leftAnchor constraintEqualToAnchor:self.view.leftAnchor].active = YES;
+    [hostScrollView.rightAnchor constraintEqualToAnchor:self.view.rightAnchor].active = YES;
+    [hostScrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor].active = YES;
+    [hostScrollView.bottomAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
+
     [self.view addSubview:pullArrow];
+
+    [self updateHosts];
 }
 
 -(void)dealloc
@@ -672,31 +679,35 @@ static NSMutableSet* hostList;
     [[hostScrollView subviews] makeObjectsPerformSelector:@selector(removeFromSuperview)];
     UIComputerView* addComp = [[UIComputerView alloc] initForAddWithCallback:self];
     UIComputerView* compView;
-    float prevEdge = -1;
+    UIView *prevComp;
     @synchronized (hostList) {
         // Sort the host list in alphabetical order
         NSArray* sortedHostList = [[hostList allObjects] sortedArrayUsingSelector:@selector(compareName:)];
+        
         for (TemporaryHost* comp in sortedHostList) {
             compView = [[UIComputerView alloc] initWithComputer:comp andCallback:self];
-            compView.center = CGPointMake([self getCompViewX:compView addComp:addComp prevEdge:prevEdge], hostScrollView.frame.size.height / 2);
-            prevEdge = compView.frame.origin.x + compView.frame.size.width;
+
             [hostScrollView addSubview:compView];
+            [self constrainComputers:compView withPreviousComputer:prevComp];
+            
+            prevComp = compView;
         }
     }
     
-    prevEdge = [self getCompViewX:addComp addComp:addComp prevEdge:prevEdge];
-    addComp.center = CGPointMake(prevEdge, hostScrollView.frame.size.height / 2);
-    
     [hostScrollView addSubview:addComp];
-    [hostScrollView setContentSize:CGSizeMake(prevEdge + addComp.frame.size.width, hostScrollView.frame.size.height)];
+    [self constrainComputers:addComp withPreviousComputer:prevComp];
 }
 
-- (float) getCompViewX:(UIComputerView*)comp addComp:(UIComputerView*)addComp prevEdge:(float)prevEdge {
-    if (prevEdge == -1) {
-        return hostScrollView.frame.origin.x + comp.frame.size.width / 2 + addComp.frame.size.width / 2;
+- (void)constrainComputers:(UIView *)comp withPreviousComputer:(UIView *)prevComp {
+    comp.translatesAutoresizingMaskIntoConstraints = NO;
+    [comp.widthAnchor constraintEqualToConstant:comp.bounds.size.width].active = YES;
+    [comp.heightAnchor constraintEqualToConstant:comp.bounds.size.height].active = YES;
+    if (prevComp == nil) {
+        [comp.leadingAnchor constraintEqualToAnchor:hostScrollView.leadingAnchor constant:comp.bounds.size.width / 2].active = YES;
     } else {
-        return prevEdge + addComp.frame.size.width / 2  + comp.frame.size.width / 2;
+        [comp.leadingAnchor constraintEqualToAnchor:prevComp.trailingAnchor constant:comp.bounds.size.width / 2].active = YES;
     }
+    [comp.centerYAnchor constraintEqualToAnchor:hostScrollView.centerYAnchor].active = YES;
 }
 
 // This function forces immediate decoding of the UIImage, rather

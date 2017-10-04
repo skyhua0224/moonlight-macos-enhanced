@@ -9,7 +9,7 @@
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
-        <!--Moonlight-->
+        <!--Main Frame View Controller-->
         <scene sceneID="emz-kO-L7q">
             <objects>
                 <viewController id="dgh-JZ-Q7z" customClass="MainFrameViewController" sceneMemberID="viewController">
@@ -40,7 +40,7 @@
                         </connections>
                     </collectionView>
                     <toolbarItems/>
-                    <navigationItem key="navigationItem" title="Moonlight" id="1jn-Sf-Xky">
+                    <navigationItem key="navigationItem" id="1jn-Sf-Xky">
                         <barButtonItem key="rightBarButtonItem" title="No Host Selected" id="L1H-n4-HB7">
                             <color key="tintColor" red="0.9513210654258728" green="0.97490358352661133" blue="0.99987185001373291" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         </barButtonItem>
