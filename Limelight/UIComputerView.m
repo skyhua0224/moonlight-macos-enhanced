@@ -30,9 +30,9 @@ static const int LABEL_DY = 20;
     _hostLabel = [[UILabel alloc] init];
     _hostStatus = [[UILabel alloc] init];
     _hostPairState = [[UILabel alloc] init];
-    [_hostLabel setFont:[UIFont fontWithName:@"Roboto-Regular" size:[UIFont systemFontSize]]];
-    [_hostStatus setFont:[UIFont fontWithName:@"Roboto-Regular" size:[UIFont systemFontSize]]];
-	[_hostPairState setFont:[UIFont fontWithName:@"Roboto-Regular" size:[UIFont systemFontSize]]];
+    [_hostLabel setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
+    [_hostStatus setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
+	[_hostPairState setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
     return self;
 }
 

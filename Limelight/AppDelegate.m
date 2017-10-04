@@ -20,8 +20,8 @@ static NSOperationQueue* mainQueue;
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-    [[UILabel appearance] setFont:[UIFont fontWithName:@"Roboto-Regular" size:[UIFont systemFontSize]]];
-    [[UIButton appearance].titleLabel setFont:[UIFont fontWithName:@"Roboto-Regular" size:[UIFont systemFontSize]]];
+    [[UILabel appearance] setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
+    [[UIButton appearance].titleLabel setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
 
 
     // Generate selected segment background image
@@ -46,7 +46,7 @@ static NSOperationQueue* mainQueue;
     // Change font on UISegmentedControl
     [[UISegmentedControl appearance] setTitleTextAttributes:[NSDictionary dictionaryWithObjectsAndKeys:
                                                              [UIColor whiteColor], NSForegroundColorAttributeName,
-                                                             [UIFont fontWithName:@"Roboto-Regular" size:[UIFont systemFontSize]], NSFontAttributeName, nil] forState:UIControlStateNormal];
+                                                             [UIFont systemFontOfSize:[UIFont systemFontSize]], NSFontAttributeName, nil] forState:UIControlStateNormal];
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self setupShortcuts];
