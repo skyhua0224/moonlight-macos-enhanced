@@ -46,7 +46,7 @@ static NSMutableSet* hostList;
 - (void)showPIN:(NSString *)PIN {
     dispatch_async(dispatch_get_main_queue(), ^{
         _pairAlert = [UIAlertController alertControllerWithTitle:@"Pairing"
-                                                         message:[NSString stringWithFormat:@"Enter the following PIN on the host machine: %@", PIN]
+                                                         message:[NSString stringWithFormat:@"Please enter the following PIN on the target PC: %@", PIN]
                                                   preferredStyle:UIAlertControllerStyleAlert];
         [_pairAlert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
             _pairAlert = nil;
@@ -61,7 +61,7 @@ static NSMutableSet* hostList;
     UIAlertController* failedDialog = [UIAlertController alertControllerWithTitle:@"Pairing Failed"
                                                      message:message
                                               preferredStyle:UIAlertControllerStyleAlert];
-    [failedDialog addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:nil]];
+    [failedDialog addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDestructive handler:nil]];
     [self presentViewController:failedDialog animated:YES completion:nil];
     
     [_discMan startDiscovery];
@@ -151,7 +151,7 @@ static NSMutableSet* hostList;
                 UIAlertController* applistAlert = [UIAlertController alertControllerWithTitle:@"Fetching App List Failed"
                                                                                       message:@"The connection to the PC was interrupted."
                                                                                preferredStyle:UIAlertControllerStyleAlert];
-                [applistAlert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:nil]];
+                [applistAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDestructive handler:nil]];
                 [self presentViewController:applistAlert animated:YES completion:nil];
                 host.online = NO;
                 [self showHostSelectionView];
@@ -252,7 +252,7 @@ static NSMutableSet* hostList;
     UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Network Error"
                                                                    message:@"Failed to resolve host."
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDestructive handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -303,7 +303,7 @@ static NSMutableSet* hostList;
                 UIAlertController* applistAlert = [UIAlertController alertControllerWithTitle:@"Fetching Server Info Failed"
                                                                                       message:@"The connection to the PC was interrupted."
                                                                                preferredStyle:UIAlertControllerStyleAlert];
-                [applistAlert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:nil]];
+                [applistAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDestructive handler:nil]];
                 [self presentViewController:applistAlert animated:YES completion:nil];
                 host.online = NO;
                 [self showHostSelectionView];
@@ -329,22 +329,22 @@ static NSMutableSet* hostList;
     UIAlertController* longClickAlert = [UIAlertController alertControllerWithTitle:host.name message:@"" preferredStyle:UIAlertControllerStyleActionSheet];
     if (!host.online) {
         [longClickAlert addAction:[UIAlertAction actionWithTitle:@"Wake" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
-            UIAlertController* wolAlert = [UIAlertController alertControllerWithTitle:@"Wake On Lan" message:@"" preferredStyle:UIAlertControllerStyleAlert];
-            [wolAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            UIAlertController* wolAlert = [UIAlertController alertControllerWithTitle:@"Waking PC…" message:@"" preferredStyle:UIAlertControllerStyleAlert];
+            [wolAlert addAction:[UIAlertAction actionWithTitle:@"Dismiss" style:UIAlertActionStyleDefault handler:nil]];
             if (host.pairState != PairStatePaired) {
-                wolAlert.message = @"Cannot wake host because you are not paired";
+                wolAlert.message = @"Cannot wake PC because it's not paired";
             } else if (host.mac == nil || [host.mac isEqualToString:@"00:00:00:00:00:00"]) {
-                wolAlert.message = @"Host MAC unknown, unable to send WOL Packet";
+                wolAlert.message = @"Host MAC unknown, unable to wake PC";
             } else {
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     [WakeOnLanManager wakeHost:host];
                 });
-                wolAlert.message = @"Sent WOL Packet";
+                wolAlert.message = @"It may take a few seconds for your PC to wake up. If it doesn't make sure it's configured propery for Wake-on-LAN";
             }
             [self presentViewController:wolAlert animated:YES completion:nil];
         }]];
     }
-    [longClickAlert addAction:[UIAlertAction actionWithTitle:@"Remove Host" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+    [longClickAlert addAction:[UIAlertAction actionWithTitle:@"Delete PC" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
         [_discMan removeHostFromDiscovery:host];
         DataManager* dataMan = [[DataManager alloc] init];
         [dataMan removeHost:host];
@@ -383,7 +383,7 @@ static NSMutableSet* hostList;
                     });
                 } else {
                     UIAlertController* hostNotFoundAlert = [UIAlertController alertControllerWithTitle:@"Add Host" message:error preferredStyle:UIAlertControllerStyleAlert];
-                    [hostNotFoundAlert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:nil]];
+                    [hostNotFoundAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDestructive handler:nil]];
                     dispatch_async(dispatch_get_main_queue(), ^{
                         [self presentViewController:hostNotFoundAlert animated:YES completion:nil];
                     });
@@ -478,7 +478,7 @@ static NSMutableSet* hostList;
                                                                                      preferredStyle:UIAlertControllerStyleAlert];
                                             }
                                             
-                                            [alert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:nil]];
+                                            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDestructive handler:nil]];
                                             dispatch_async(dispatch_get_main_queue(), ^{
                                                 [self updateAppsForHost:app.host];
                                                 [self presentViewController:alert animated:YES completion:nil];
