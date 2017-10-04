@@ -37,6 +37,7 @@
     StreamConfiguration* _streamConfig;
     UIAlertController* _pairAlert;
     UIScrollView* hostScrollView;
+    UIView *hostContentView;
     int currentPosition;
     NSArray* _sortedAppList;
     NSCache* _boxArtCache;
@@ -595,6 +596,16 @@ static NSMutableSet* hostList;
     [hostScrollView.rightAnchor constraintEqualToAnchor:self.view.rightAnchor].active = YES;
     [hostScrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor].active = YES;
     [hostScrollView.bottomAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
+    
+    hostContentView = [[UIView alloc] init];
+    [hostScrollView addSubview:hostContentView];
+    hostContentView.translatesAutoresizingMaskIntoConstraints = NO;
+    [hostContentView.leftAnchor constraintEqualToAnchor:hostScrollView.leftAnchor].active = YES;
+    [hostContentView.rightAnchor constraintEqualToAnchor:hostScrollView.rightAnchor].active = YES;
+    [hostContentView.topAnchor constraintEqualToAnchor:hostScrollView.topAnchor].active = YES;
+    [hostContentView.bottomAnchor constraintEqualToAnchor:hostScrollView.bottomAnchor].active = YES;
+
+    [hostContentView.heightAnchor constraintEqualToAnchor:self.view.heightAnchor multiplier:0.5].active = YES;
 
     [self.view addSubview:pullArrow];
 
@@ -697,7 +708,7 @@ static NSMutableSet* hostList;
 
 - (void)updateHosts {
     Log(LOG_I, @"Updating hosts...");
-    [[hostScrollView subviews] makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    [[hostContentView subviews] makeObjectsPerformSelector:@selector(removeFromSuperview)];
     UIComputerView* addComp = [[UIComputerView alloc] initForAddWithCallback:self];
     UIComputerView* compView;
     UIView *prevComp;
@@ -708,15 +719,16 @@ static NSMutableSet* hostList;
         for (TemporaryHost* comp in sortedHostList) {
             compView = [[UIComputerView alloc] initWithComputer:comp andCallback:self];
 
-            [hostScrollView addSubview:compView];
+            [hostContentView addSubview:compView];
             [self constrainComputers:compView withPreviousComputer:prevComp];
             
             prevComp = compView;
         }
     }
     
-    [hostScrollView addSubview:addComp];
+    [hostContentView addSubview:addComp];
     [self constrainComputers:addComp withPreviousComputer:prevComp];
+    [addComp.trailingAnchor constraintEqualToAnchor:hostContentView.trailingAnchor constant:-addComp.bounds.size.width / 2].active = YES;
 }
 
 - (void)constrainComputers:(UIView *)comp withPreviousComputer:(UIView *)prevComp {
@@ -724,11 +736,11 @@ static NSMutableSet* hostList;
     [comp.widthAnchor constraintEqualToConstant:comp.bounds.size.width].active = YES;
     [comp.heightAnchor constraintEqualToConstant:comp.bounds.size.height].active = YES;
     if (prevComp == nil) {
-        [comp.leadingAnchor constraintEqualToAnchor:hostScrollView.leadingAnchor constant:comp.bounds.size.width / 2].active = YES;
+        [comp.leadingAnchor constraintEqualToAnchor:hostContentView.leadingAnchor constant:comp.bounds.size.width / 2].active = YES;
     } else {
         [comp.leadingAnchor constraintEqualToAnchor:prevComp.trailingAnchor constant:comp.bounds.size.width / 2].active = YES;
     }
-    [comp.centerYAnchor constraintEqualToAnchor:hostScrollView.centerYAnchor].active = YES;
+    [comp.centerYAnchor constraintEqualToAnchor:hostContentView.centerYAnchor].active = YES;
 }
 
 // This function forces immediate decoding of the UIImage, rather
