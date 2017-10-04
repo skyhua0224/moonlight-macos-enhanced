@@ -15,6 +15,7 @@
     UIImageView* _appOverlay;
     NSCache* _artCache;
     id<AppCallback> _callback;
+    CGRect appFrame;
 }
 
 static UIImage* noImage;
@@ -24,6 +25,7 @@ static UIImage* noImage;
     _app = app;
     _callback = callback;
     _artCache = cache;
+    appFrame = frame;
     
     // Cache the NoAppImage ourselves to avoid
     // having to load it each time
@@ -40,7 +42,7 @@ static UIImage* noImage;
     [self addSubview:_appButton];
     [self sizeToFit];
     
-    _appButton.frame = frame;
+    _appButton.frame = appFrame;
     
     // Rasterizing the cell layer increases rendering performance by quite a bit
     self.layer.shouldRasterize = YES;
@@ -86,7 +88,7 @@ static UIImage* noImage;
         // This size of image might be blank image received from GameStream.
         if (!(appImage.size.width == 130.f && appImage.size.height == 180.f) && // GFE 2.0
             !(appImage.size.width == 628.f && appImage.size.height == 888.f)) { // GFE 3.0
-            _appButton.frame = CGRectMake(0, 0, appImage.size.width / 2, appImage.size.height / 2);
+            _appButton.frame = appFrame;
             self.frame = CGRectMake(0, 0, appImage.size.width / 2, appImage.size.height / 2);
             [_appButton setBackgroundImage:appImage forState:UIControlStateNormal];
             [self setNeedsDisplay];
