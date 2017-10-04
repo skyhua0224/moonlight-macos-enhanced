@@ -92,13 +92,13 @@ static NSOperationQueue* mainQueue;
     NSMutableArray<UIApplicationShortcutItem *> *moonlightShortcutItems = [NSMutableArray array];
     NSArray<TemporaryHost *> *hosts = [[self mainFrameVC] returnSavedHosts];
     for (TemporaryHost *host in hosts) {
-        [moonlightShortcutItems addObject:[[UIApplicationShortcutItem alloc] initWithType:@"computerHost" localizedTitle:host.name localizedSubtitle:nil icon:[UIApplicationShortcutIcon iconWithTemplateImageName:@"3DTouchHost"] userInfo:nil]];
+        [moonlightShortcutItems addObject:[[UIApplicationShortcutItem alloc] initWithType:host.name localizedTitle:host.name localizedSubtitle:nil icon:[UIApplicationShortcutIcon iconWithTemplateImageName:@"3DTouchHost"] userInfo:nil]];
     }
     [UIApplication sharedApplication].shortcutItems = moonlightShortcutItems;
 }
 
 - (void)handleShortcut:(UIApplicationShortcutItem *)shortcutItem {
-    [[self mainFrameVC] handleShortcut];
+    [[self mainFrameVC] handleShortcutWithHostName:(NSString *)shortcutItem.type];
 }
 
 - (MainFrameViewController *)mainFrameVC {

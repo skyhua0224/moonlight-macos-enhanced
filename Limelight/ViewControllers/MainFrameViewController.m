@@ -639,6 +639,16 @@ static NSMutableSet* hostList;
     [_boxArtCache removeAllObjects];
 }
 
+- (void)handleShortcutWithHostName:(NSString *)hostName {
+    TemporaryHost *host;
+    for (TemporaryHost *tempHost in hostList) {
+        if (tempHost.name == hostName) {
+            host = tempHost;
+        }
+    }
+    [self hostClicked:host view:nil];
+}
+
 - (NSArray<TemporaryHost *> *)returnSavedHosts {
     NSMutableArray<TemporaryHost *> *hosts = [NSMutableArray array];
     for (TemporaryHost *tempHost in hostList) {
