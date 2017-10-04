@@ -234,6 +234,7 @@ static NSMutableSet* hostList;
     _computerNameButton.title = @"No Host Selected";
     [self.collectionView reloadData];
     [self.view addSubview:hostScrollView];
+    [self constrainHostElements];
 }
 
 - (void) receivedAssetForApp:(TemporaryApp*)app {
@@ -591,14 +592,23 @@ static NSMutableSet* hostList;
     
 
     [self.view addSubview:hostScrollView];
+    hostContentView = [[UIView alloc] init];
+    [hostScrollView addSubview:hostContentView];
+    [self constrainHostElements];
+
+    [self.view addSubview:pullArrow];
+}
+
+- (void)constrainHostElements {
+    // Constrain hostScrollView.
     hostScrollView.translatesAutoresizingMaskIntoConstraints = NO;
     [hostScrollView.leftAnchor constraintEqualToAnchor:self.view.leftAnchor].active = YES;
     [hostScrollView.rightAnchor constraintEqualToAnchor:self.view.rightAnchor].active = YES;
     [hostScrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor].active = YES;
     [hostScrollView.bottomAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
     
-    hostContentView = [[UIView alloc] init];
-    [hostScrollView addSubview:hostContentView];
+    
+    // Constrain host's contentView.
     hostContentView.translatesAutoresizingMaskIntoConstraints = NO;
     [hostContentView.leftAnchor constraintEqualToAnchor:hostScrollView.leftAnchor].active = YES;
     [hostContentView.rightAnchor constraintEqualToAnchor:hostScrollView.rightAnchor].active = YES;
@@ -606,9 +616,7 @@ static NSMutableSet* hostList;
     [hostContentView.bottomAnchor constraintEqualToAnchor:hostScrollView.bottomAnchor].active = YES;
 
     [hostContentView.heightAnchor constraintEqualToAnchor:self.view.heightAnchor multiplier:0.5].active = YES;
-
-    [self.view addSubview:pullArrow];
-
+    
     [self updateHosts];
 }
 
