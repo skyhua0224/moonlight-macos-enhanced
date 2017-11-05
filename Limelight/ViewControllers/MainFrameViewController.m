@@ -564,6 +564,11 @@ static NSMutableSet* hostList;
     _boxArtCache = [[NSCache alloc] init];
     
     [self setAutomaticallyAdjustsScrollViewInsets:NO];
+
+    UICollectionViewFlowLayout *flowLayout = (UICollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
+    if (@available(iOS 11.0, *)) {
+        flowLayout.sectionInsetReference = UICollectionViewFlowLayoutSectionInsetFromSafeArea;
+    }
     
     hostScrollView = [[ComputerScrollView alloc] init];
     [hostScrollView setShowsHorizontalScrollIndicator:NO];
