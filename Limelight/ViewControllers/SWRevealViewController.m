@@ -165,6 +165,12 @@ static CGFloat scaledValue( CGFloat v1, CGFloat min2, CGFloat max2, CGFloat min1
     [_c _getRevealWidth:&revealWidth revealOverDraw:&revealOverdraw forSymetry:symetry];
     [_c _getAdjustedFrontViewPosition:&frontViewPosition forSymetry:symetry];
     
+    if (@available(iOS 11.0, *)) {
+        if (self.safeAreaInsets.left > 0) {
+            revealWidth += self.safeAreaInsets.left;
+        }
+    }
+    
     if ( frontViewPosition == FrontViewPositionRight )
         location = revealWidth;
     
@@ -625,7 +631,7 @@ const int FrontViewPositionNone = 0xff;
     _frontViewPosition = FrontViewPositionLeft;
     _rearViewPosition = FrontViewPositionLeft;
     _rightViewPosition = FrontViewPositionLeft;
-    _rearViewRevealWidth = 260.0f;
+    _rearViewRevealWidth = 263.0f;
     _rearViewRevealOverdraw = 60.0f;
     _rearViewRevealDisplacement = 40.0f;
     _rightViewRevealWidth = 260.0f;
