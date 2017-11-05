@@ -607,7 +607,7 @@ static NSMutableSet* hostList;
 - (void)constrainHostElements {
     // Constrain hostScrollView.
     hostScrollView.translatesAutoresizingMaskIntoConstraints = NO;
-    [hostScrollView.leftAnchor constraintEqualToAnchor:self.view.leftAnchor].active = YES;
+    [hostScrollView.leftAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leftAnchor].active = YES;
     [hostScrollView.rightAnchor constraintEqualToAnchor:self.view.rightAnchor].active = YES;
     [hostScrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor].active = YES;
     [hostScrollView.bottomAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
@@ -741,7 +741,7 @@ static NSMutableSet* hostList;
     
     [hostContentView addSubview:addComp];
     [self constrainComputers:addComp withPreviousComputer:prevComp];
-    [addComp.trailingAnchor constraintEqualToAnchor:hostContentView.trailingAnchor constant:-addComp.bounds.size.width / 2].active = YES;
+    [addComp.trailingAnchor constraintEqualToAnchor:hostContentView.trailingAnchor constant:-addComp.bounds.size.width / 3].active = YES;
 }
 
 - (void)constrainComputers:(UIView *)comp withPreviousComputer:(UIView *)prevComp {
@@ -749,9 +749,9 @@ static NSMutableSet* hostList;
     [comp.widthAnchor constraintEqualToConstant:comp.bounds.size.width].active = YES;
     [comp.heightAnchor constraintEqualToConstant:comp.bounds.size.height].active = YES;
     if (prevComp == nil) {
-        [comp.leadingAnchor constraintEqualToAnchor:hostContentView.leadingAnchor constant:comp.bounds.size.width / 2].active = YES;
+        [comp.leadingAnchor constraintEqualToAnchor:hostContentView.leadingAnchor constant:comp.bounds.size.width / 3].active = YES;
     } else {
-        [comp.leadingAnchor constraintEqualToAnchor:prevComp.trailingAnchor constant:comp.bounds.size.width / 2].active = YES;
+        [comp.leadingAnchor constraintEqualToAnchor:prevComp.trailingAnchor constant:comp.bounds.size.width / 3].active = YES;
     }
     [comp.centerYAnchor constraintEqualToAnchor:hostContentView.centerYAnchor].active = YES;
 }
