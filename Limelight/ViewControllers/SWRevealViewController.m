@@ -27,6 +27,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #import "SWRevealViewController.h"
+#import "SettingsViewController.h"
 
 
 #pragma mark - StatusBar Helper Function
@@ -166,8 +167,12 @@ static CGFloat scaledValue( CGFloat v1, CGFloat min2, CGFloat max2, CGFloat min1
     [_c _getAdjustedFrontViewPosition:&frontViewPosition forSymetry:symetry];
     
     if (@available(iOS 11.0, *)) {
+        SettingsViewController *settingsVC = ((SettingsViewController *)_c.rearViewController);
         if (self.safeAreaInsets.left > 0) {
-            revealWidth += self.safeAreaInsets.left;
+            revealWidth += self.safeAreaInsets.left - 14;
+            settingsVC.leadingContentViewConstraint.constant = 2;
+        } else {
+            settingsVC.leadingContentViewConstraint.constant = 16;
         }
     }
     
@@ -631,7 +636,7 @@ const int FrontViewPositionNone = 0xff;
     _frontViewPosition = FrontViewPositionLeft;
     _rearViewPosition = FrontViewPositionLeft;
     _rightViewPosition = FrontViewPositionLeft;
-    _rearViewRevealWidth = 263.0f;
+    _rearViewRevealWidth = 257.0f;
     _rearViewRevealOverdraw = 60.0f;
     _rearViewRevealDisplacement = 40.0f;
     _rightViewRevealWidth = 260.0f;

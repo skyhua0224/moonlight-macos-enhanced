@@ -200,6 +200,7 @@
                         <outlet property="bitrateLabel" destination="SBv-Wn-LB7" id="Wdu-me-Bvd"/>
                         <outlet property="bitrateSlider" destination="3nn-MI-9Xu" id="IuD-Rk-vPp"/>
                         <outlet property="framerateSelector" destination="dLF-qJ-2nY" id="hE3-hk-iwa"/>
+                        <outlet property="leadingContentViewConstraint" destination="KTO-9c-wE5" id="dDL-3X-fsx"/>
                         <outlet property="onscreenControlSelector" destination="WGf-9d-eAm" id="hob-se-4Sn"/>
                         <outlet property="resolutionSelector" destination="PCM-t4-Sha" id="t60-W2-wkV"/>
                     </connections>
