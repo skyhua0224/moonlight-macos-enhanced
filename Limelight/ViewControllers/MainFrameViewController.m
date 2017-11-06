@@ -852,7 +852,7 @@ static NSMutableSet* hostList;
 }
 
 - (BOOL)isSmallWindow {
-    return self.view.frame.size.width < 480;
+    return self.view.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact || self.view.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact;
 }
 
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
