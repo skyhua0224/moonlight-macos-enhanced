@@ -29,7 +29,22 @@
 }
 
 - (NSComparisonResult)compareName:(TemporaryApp *)other {
-    return [self.name caseInsensitiveCompare:other.name];
+    BOOL selfSpecial = [TemporaryApp isSpecialName:self.name];
+    BOOL otherSpecial = [TemporaryApp isSpecialName:other.name];
+
+    if (!selfSpecial && !otherSpecial) {
+        return [self.name caseInsensitiveCompare:other.name];
+    } else if (!selfSpecial && otherSpecial) {
+        return NSOrderedDescending;
+    } else if (selfSpecial && !otherSpecial) {
+        return NSOrderedAscending;
+    } else {
+        return [self.name caseInsensitiveCompare:other.name];
+    }
+}
+
++ (BOOL)isSpecialName:(NSString *)name {
+    return [name isEqualToString:@"Desktop"] || [name isEqualToString:@"Steam"];
 }
 
 - (NSUInteger)hash {
