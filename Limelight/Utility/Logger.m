@@ -25,6 +25,10 @@ void LogTag(LogLevel level, NSString* tag, NSString* fmt, ...) {
 }
 
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
+    if (level < LOG_I) {
+        return;
+    }
+
     NSString* levelPrefix = @"";
     
     switch(level) {

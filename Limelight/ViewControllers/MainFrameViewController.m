@@ -820,6 +820,33 @@ static NSMutableSet* hostList;
     [self.collectionView reloadData];
 }
 
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
+        if ([self isSmallWindow]) {
+            self.navigationItem.title = nil;
+        } else {
+            self.navigationItem.title = @"Moonlight";
+        }
+        
+        [self.collectionView.collectionViewLayout invalidateLayout];
+    } completion:nil];
+}
+
+- (BOOL)isSmallWindow {
+    return self.view.frame.size.width < 480;
+}
+
+- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+    CGSize flowSize;
+    if ([self isSmallWindow]) {
+        flowSize = CGSizeMake(118, 148);
+    } else {
+        flowSize = CGSizeMake(178, 228);
+    }
+
+    return flowSize;
+}
+
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     UICollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AppCell" forIndexPath:indexPath];
     [cell.contentView.subviews.firstObject removeFromSuperview];
@@ -831,7 +858,10 @@ static NSMutableSet* hostList;
     appContentViewFrame.origin.y += 6;
 
     UIView *appContentView = [[UIView alloc] initWithFrame:appContentViewFrame];
+    appContentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [cell.contentView addSubview:appContentView];
+    
+    NSLog(@"appContentView frame: %@", NSStringFromCGRect(appContentViewFrame));
     
     TemporaryApp* app = _sortedAppList[indexPath.row];
     UIAppView* appView = [[UIAppView alloc] initWithApp:app frame:appContentView.bounds cache:_boxArtCache andCallback:self];
@@ -844,6 +874,7 @@ static NSMutableSet* hostList;
         appView.transform = CGAffineTransformMakeScale(scale, scale);
     }
     
+    appView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [appContentView addSubview:appView];
 
     appView.clipsToBounds = YES;

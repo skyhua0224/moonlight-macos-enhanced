@@ -21,7 +21,7 @@
 static UIImage* noImage;
 
 - (id) initWithApp:(TemporaryApp*)app frame:(CGRect)frame cache:(NSCache*)cache andCallback:(id<AppCallback>)callback {
-    self = [super init];
+    self = [super initWithFrame:frame];
     _app = app;
     _callback = callback;
     _artCache = cache;
@@ -34,16 +34,15 @@ static UIImage* noImage;
     }
     
     _appButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _appButton.frame = appFrame;
+    _appButton.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    
     [_appButton setBackgroundImage:noImage forState:UIControlStateNormal];
     [_appButton setContentEdgeInsets:UIEdgeInsetsMake(0, 4, 0, 4)];
-    [_appButton sizeToFit];
     [_appButton addTarget:self action:@selector(appClicked) forControlEvents:UIControlEventTouchUpInside];
     
     [self addSubview:_appButton];
-    [self sizeToFit];
-    
-    _appButton.frame = appFrame;
-    
+
     // Rasterizing the cell layer increases rendering performance by quite a bit
     self.layer.shouldRasterize = YES;
     self.layer.rasterizationScale = [UIScreen mainScreen].scale;
