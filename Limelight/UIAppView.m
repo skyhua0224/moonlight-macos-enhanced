@@ -54,13 +54,13 @@ static UIImage* noImage;
     [_callback appClicked:_app];
 }
 
-- (void) updateAppImage {
+- (void) updateAppImageAndShouldShowRunButton:(BOOL)showRun {
     if (_appOverlay != nil) {
         [_appOverlay removeFromSuperview];
         _appOverlay = nil;
     }
     
-    if ([_app.id isEqualToString:_app.host.currentGame]) {
+    if (showRun) {
         // Only create the app overlay if needed
         _appOverlay = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"Play"]];
         [self addSubview:_appOverlay];

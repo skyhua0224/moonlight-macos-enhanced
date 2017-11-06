@@ -18,6 +18,6 @@
 @interface UIAppView : UIView
 
 - (id) initWithApp:(TemporaryApp*)app frame:(CGRect)frame cache:(NSCache*)cache andCallback:(id<AppCallback>)callback;
-- (void) updateAppImage;
+- (void) updateAppImageAndShouldShowRunButton:(BOOL)showRun;
 
 @end

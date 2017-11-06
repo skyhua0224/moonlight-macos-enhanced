@@ -41,6 +41,7 @@
     int currentPosition;
     NSArray* _sortedAppList;
     NSCache* _boxArtCache;
+    TemporaryApp *_lastClickedApp;
 }
 static NSMutableSet* hostList;
 
@@ -279,6 +280,7 @@ static NSMutableSet* hostList;
     // so that our active game data is correct.
     if (host.online && host.pairState == PairStatePaired && host.appList.count > 0 && view != nil) {
         [self alreadyPaired];
+        _lastClickedApp = [self findRunningApp:host];
         return;
     }
     
@@ -398,6 +400,8 @@ static NSMutableSet* hostList;
 }
 
 - (void) appClicked:(TemporaryApp *)app {
+    _lastClickedApp = app;
+    
     Log(LOG_D, @"Clicked app: %@", app.name);
     _streamConfig = [[StreamConfiguration alloc] init];
     _streamConfig.host = app.host.activeAddress;
@@ -474,6 +478,7 @@ static NSMutableSet* hostList;
                                             // Otherwise, display a dialog to notify the user that the app was quit
                                             else {
                                                 app.host.currentGame = @"0";
+                                                _lastClickedApp = nil;
                                                 
                                                 alert = [UIAlertController alertControllerWithTitle:@"Quitting App"
                                                                                             message:@"The app was quit successfully."
@@ -651,6 +656,20 @@ static NSMutableSet* hostList;
     [_discMan startDiscovery];
     
 //    [self handleReturnToForeground];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+
+    if (_lastClickedApp.id != nil) {
+        for (int i = 0; i < _sortedAppList.count; i++) {
+            TemporaryApp *app = (TemporaryApp *)_sortedAppList[i];
+            if ([app.id isEqualToString:_lastClickedApp.id]) {
+                [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForItem:i inSection:0]]];
+                break;
+            }
+        }
+    }
 }
 
 - (void)viewDidDisappear:(BOOL)animated
@@ -861,11 +880,9 @@ static NSMutableSet* hostList;
     appContentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [cell.contentView addSubview:appContentView];
     
-    NSLog(@"appContentView frame: %@", NSStringFromCGRect(appContentViewFrame));
-    
     TemporaryApp* app = _sortedAppList[indexPath.row];
     UIAppView* appView = [[UIAppView alloc] initWithApp:app frame:appContentView.bounds cache:_boxArtCache andCallback:self];
-    [appView updateAppImage];
+    [appView updateAppImageAndShouldShowRunButton:_lastClickedApp == app];
     appView.frame = appContentView.frame;
     
     if (appView.bounds.size.width > 10.0) {
