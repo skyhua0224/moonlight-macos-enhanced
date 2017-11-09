@@ -753,6 +753,15 @@ const int FrontViewPositionNone = 0xff;
     _userInteractionStore = _contentView.userInteractionEnabled;
 }
 
+
+#pragma mark - UIHomeIndicatorAutoHidden
+
+- (UIViewController *)childViewControllerForHomeIndicatorAutoHidden {
+    UINavigationController *navVC = (UINavigationController *)self.frontViewController;
+    return navVC.topViewController;
+}
+
+
 #pragma mark - Public methods and property accessors
 
 - (void)setFrontViewController:(UIViewController *)frontViewController
