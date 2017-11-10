@@ -343,7 +343,7 @@ static NSMutableSet* hostList;
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     [WakeOnLanManager wakeHost:host];
                 });
-                wolAlert.message = @"It may take a few seconds for your PC to wake up. If it doesn't make sure it's configured propery for Wake-on-LAN";
+                wolAlert.message = @"It may take a few seconds for your PC to wake up. If it doesn't, make sure it's configured propery for Wake-on-LAN";
             }
             [self presentViewController:wolAlert animated:YES completion:nil];
         }]];
