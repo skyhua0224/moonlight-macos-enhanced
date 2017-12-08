@@ -26,6 +26,7 @@
 #import "ComputerScrollView.h"
 #import "TemporaryApp.h"
 #import "IdManager.h"
+#import "AppCollectionViewCell.h"
 
 @implementation MainFrameViewController {
     NSOperationQueue* _opQueue;
@@ -533,6 +534,9 @@ static NSMutableSet* hostList;
     [self enableNavigation];
 }
 
+
+#pragma mark - View lifecycle
+
 - (void)viewDidLoad
 {
     [super viewDidLoad];
@@ -681,6 +685,9 @@ static NSMutableSet* hostList;
     // Purge the box art cache
     [_boxArtCache removeAllObjects];
 }
+
+
+#pragma mark -
 
 - (void)handleShortcutWithHostName:(NSString *)hostName {
     TemporaryHost *host;
@@ -855,55 +862,42 @@ static NSMutableSet* hostList;
     return self.view.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact || self.view.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact;
 }
 
-- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    CGSize flowSize;
-    if ([self isSmallWindow]) {
-        flowSize = CGSizeMake(118, 148);
-    } else {
-        flowSize = CGSizeMake(178, 228);
-    }
 
-    return flowSize;
+#pragma mark - UICollectionView
+
+- (void)addShadowToAppImageWithCell:(AppCollectionViewCell *)cell {
+    CALayer *shadowLayer = cell.shadowView.layer;
+    
+    shadowLayer.shadowColor = [UIColor blackColor].CGColor;
+    shadowLayer.shadowOpacity = 0.33;
+    shadowLayer.shadowRadius = 6;
+    shadowLayer.shadowOffset = CGSizeMake(0, 4);
+    
+    CGRect shadowRect = CGRectOffset(cell.shadowView.bounds, shadowLayer.shadowOffset.width, shadowLayer.shadowOffset.height);
+    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:shadowRect cornerRadius:shadowLayer.shadowRadius];
+    
+    shadowLayer.shadowPath = path.CGPath;
 }
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    UICollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AppCell" forIndexPath:indexPath];
-    [cell.contentView.subviews.firstObject removeFromSuperview];
-    
-    CGRect appContentViewFrame = cell.contentView.bounds;
-    appContentViewFrame.size.height -= 28;
-    appContentViewFrame.size.width -= 28;
-    appContentViewFrame.origin.x += 14;
-    appContentViewFrame.origin.y += 6;
+    AppCollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AppCell" forIndexPath:indexPath];
 
-    UIView *appContentView = [[UIView alloc] initWithFrame:appContentViewFrame];
-    appContentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [cell.contentView addSubview:appContentView];
-    
     TemporaryApp* app = _sortedAppList[indexPath.row];
-    UIAppView* appView = [[UIAppView alloc] initWithApp:app frame:appContentView.bounds cache:_boxArtCache andCallback:self];
-    [appView updateAppImageAndShouldShowRunButton:_lastClickedApp == app];
-    appView.frame = appContentView.frame;
-    
-    if (appView.bounds.size.width > 10.0) {
-        CGFloat scale = appContentView.bounds.size.width / appView.bounds.size.width;
-        [appView setCenter:CGPointMake(appView.bounds.size.width / 2 * scale, appView.bounds.size.height / 2 * scale)];
-        appView.transform = CGAffineTransformMakeScale(scale, scale);
+
+    cell.appTitle.text = app.name;
+
+    UIImage* appImage = [_boxArtCache objectForKey:app];
+    if (appImage == nil) {
+        appImage = [UIImage imageWithData:app.image];
+        [_boxArtCache setObject:appImage forKey:app];
     }
-    
-    appView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [appContentView addSubview:appView];
+    cell.imageView.image = appImage;
+    cell.imageView.clipsToBounds = YES;
+    cell.imageView.layer.cornerRadius = 8;
+    cell.shadowView.backgroundColor = [UIColor clearColor];
 
-    appView.clipsToBounds = YES;
-    appView.layer.cornerRadius = 8;
+    [self addShadowToAppImageWithCell:cell];
     
-    appContentView.layer.shadowColor = [UIColor blackColor].CGColor;
-    appContentView.layer.shadowOffset = CGSizeMake(0, 6);
-    appContentView.layer.shadowOpacity = 0.33;
-    appContentView.layer.shadowRadius = 8;
-    
-    cell.exclusiveTouch = YES;
-
     return cell;
 }
 
@@ -919,6 +913,14 @@ static NSMutableSet* hostList;
         return 0;
     }
 }
+
+- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    TemporaryApp* app = _sortedAppList[indexPath.row];
+    [self appClicked:app];
+}
+
+
+#pragma mark -
 
 - (void)didReceiveMemoryWarning
 {

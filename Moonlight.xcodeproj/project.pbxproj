@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		4C04F32B1FAF30CC0011E17A /* KTCenterFlowLayout.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */; };
+		4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */; };
 		4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
 		9832D1361BBCD5C50036EF48 /* TemporaryApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 9832D1351BBCD5C50036EF48 /* TemporaryApp.m */; };
 		98CFB82F1CAD481B0048EF74 /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
@@ -108,6 +109,8 @@
 /* Begin PBXFileReference section */
 		4C04F3291FAF30CB0011E17A /* KTCenterFlowLayout.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = KTCenterFlowLayout.h; sourceTree = "<group>"; };
 		4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KTCenterFlowLayout.m; sourceTree = "<group>"; };
+		4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCollectionViewCell.h; sourceTree = "<group>"; };
+		4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCollectionViewCell.m; sourceTree = "<group>"; };
 		4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RendererLayerContainer.h; sourceTree = "<group>"; };
 		4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RendererLayerContainer.m; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
@@ -455,6 +458,8 @@
 				FBDE86DF19F7A837001C18A8 /* UIComputerView.m */,
 				FBDE86E419F82297001C18A8 /* UIAppView.h */,
 				FBDE86E519F82297001C18A8 /* UIAppView.m */,
+				4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */,
+				4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */,
 				FB290E7A19B38036004C83CF /* Main.storyboard */,
 				FB89463719F6473800339C8A /* Launch Screen.xib */,
 				FB290D0819B2C406004C83CF /* Images.xcassets */,
@@ -973,6 +978,7 @@
 				FB9AFD3D1A7E111600872C98 /* AppAssetResponse.m in Sources */,
 				FBD349621A0089F6002D2A60 /* DataManager.m in Sources */,
 				D4746EEC1CBC740C006FB401 /* Controller.swift in Sources */,
+				4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */,
 				FBFCB3351B50B29400089F8A /* App.m in Sources */,
 				4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */,
 				FB4A23B81A9D3637004D2EF2 /* LoadingFrameViewController.m in Sources */,
