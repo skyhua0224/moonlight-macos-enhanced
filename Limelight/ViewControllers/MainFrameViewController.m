@@ -574,11 +574,6 @@ static NSMutableSet* hostList;
     
     [self setAutomaticallyAdjustsScrollViewInsets:NO];
 
-    UICollectionViewFlowLayout *flowLayout = (UICollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
-    if (@available(iOS 11.0, *)) {
-        flowLayout.sectionInsetReference = UICollectionViewFlowLayoutSectionInsetFromSafeArea;
-    }
-    
     hostScrollView = [[ComputerScrollView alloc] init];
     [hostScrollView setShowsHorizontalScrollIndicator:NO];
     hostScrollView.delaysContentTouches = NO;
@@ -616,7 +611,11 @@ static NSMutableSet* hostList;
 - (void)constrainHostElements {
     // Constrain hostScrollView.
     hostScrollView.translatesAutoresizingMaskIntoConstraints = NO;
-    [hostScrollView.leftAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leftAnchor].active = YES;
+    if (@available(iOS 11.0, *)) {
+        [hostScrollView.leftAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leftAnchor].active = YES;
+    } else {
+        [hostScrollView.leftAnchor constraintEqualToAnchor:self.view.layoutMarginsGuide.leftAnchor].active = YES;
+    }
     [hostScrollView.rightAnchor constraintEqualToAnchor:self.view.rightAnchor].active = YES;
     [hostScrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor].active = YES;
     [hostScrollView.bottomAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
@@ -684,6 +683,18 @@ static NSMutableSet* hostList;
     
     // Purge the box art cache
     [_boxArtCache removeAllObjects];
+}
+
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [self.collectionView.collectionViewLayout invalidateLayout];
+    
+    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
+        if ([self isSmallWindow]) {
+            self.navigationItem.title = nil;
+        } else {
+            self.navigationItem.title = @"Moonlight";
+        }
+    } completion:nil];
 }
 
 
@@ -846,24 +857,12 @@ static NSMutableSet* hostList;
     [self.collectionView reloadData];
 }
 
-- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
-    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
-        if ([self isSmallWindow]) {
-            self.navigationItem.title = nil;
-        } else {
-            self.navigationItem.title = @"Moonlight";
-        }
-        
-        [self.collectionView.collectionViewLayout invalidateLayout];
-    } completion:nil];
-}
-
 - (BOOL)isSmallWindow {
     return self.view.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact || self.view.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact;
 }
 
 
-#pragma mark - UICollectionView
+#pragma mark - UICollectionViewDelegate
 
 - (void)addShadowToAppImageWithCell:(AppCollectionViewCell *)cell {
     CALayer *shadowLayer = cell.shadowView.layer;
@@ -885,7 +884,7 @@ static NSMutableSet* hostList;
     TemporaryApp* app = _sortedAppList[indexPath.row];
 
     cell.appTitle.text = app.name;
-
+    
     UIImage* appImage = [_boxArtCache objectForKey:app];
     if (appImage == nil) {
         appImage = [UIImage imageWithData:app.image];
@@ -917,6 +916,31 @@ static NSMutableSet* hostList;
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     TemporaryApp* app = _sortedAppList[indexPath.row];
     [self appClicked:app];
+}
+
+
+#pragma mark - UICollectionViewDelegateFlowLayout
+
+- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+    CGSize flowSize;
+    if ([self isSmallWindow]) {
+        flowSize = CGSizeMake(118, 177);
+    } else {
+        flowSize = CGSizeMake(178, 257);
+    }
+    
+    return flowSize;
+}
+
+- (UIEdgeInsets)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout insetForSectionAtIndex:(NSInteger)section {
+    UICollectionViewFlowLayout *flowLayout = (UICollectionViewFlowLayout *)collectionViewLayout;
+    CGFloat safeWidth = collectionView.bounds.size.width;
+    if (@available(iOS 11.0, *)) {
+        safeWidth -= collectionView.safeAreaInsets.left + collectionView.safeAreaInsets.right;
+    }
+    NSInteger itemsPerRow = (NSInteger)((safeWidth + flowLayout.minimumInteritemSpacing) / (flowLayout.itemSize.width + flowLayout.minimumInteritemSpacing));
+    CGFloat extraSpace = safeWidth - itemsPerRow * flowLayout.itemSize.width - (itemsPerRow - 1) * flowLayout.minimumInteritemSpacing;
+    return UIEdgeInsetsMake(flowLayout.sectionInset.top, extraSpace / 2, flowLayout.sectionInset.bottom, extraSpace / 2);
 }
 
 
