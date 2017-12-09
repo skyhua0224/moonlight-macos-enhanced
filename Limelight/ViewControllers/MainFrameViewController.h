@@ -15,7 +15,7 @@
 #import "AppAssetManager.h"
 #import "SWRevealViewController.h"
 
-@interface MainFrameViewController : UICollectionViewController <DiscoveryCallback, PairCallback, HostCallback, AppCallback, AppAssetCallback, NSURLConnectionDelegate, SWRevealViewControllerDelegate, UICollectionViewDelegateFlowLayout>
+@interface MainFrameViewController : UICollectionViewController <DiscoveryCallback, PairCallback, HostCallback, AppCallback, AppAssetCallback, NSURLConnectionDelegate, SWRevealViewControllerDelegate, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate>
 
 @property (strong, nonatomic) IBOutlet UIButton *limelightLogoButton;
 @property (weak, nonatomic) IBOutlet UIBarButtonItem *computerNameButton;

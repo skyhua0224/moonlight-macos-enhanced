@@ -888,6 +888,31 @@ static NSMutableSet* hostList;
     return self.view.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact || self.view.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact;
 }
 
+- (void)cellTapGestureHandler:(UILongPressGestureRecognizer *)sender {
+    const CGFloat animationDuration = 0.25;
+    switch (sender.state) {
+        case UIGestureRecognizerStateBegan:
+        {
+            [UIView animateWithDuration:animationDuration animations:^{
+                sender.view.transform = CGAffineTransformMakeScale(0.92, 0.92);
+            }];
+            break;
+        }
+        case UIGestureRecognizerStateChanged:
+        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateEnded:
+        {
+            [UIView animateWithDuration:animationDuration animations:^{
+                sender.view.transform = CGAffineTransformIdentity;
+            }];
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
 
 #pragma mark - UICollectionViewDelegate
 
@@ -931,6 +956,13 @@ static NSMutableSet* hostList;
 
     TemporaryApp* app = _sortedAppList[indexPath.row];
     [self configureCell:cell atIndexPath:indexPath withApp:app];
+    
+    [cell removeGestureRecognizer:cell.tapGesture];
+    cell.tapGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(cellTapGestureHandler:)];
+    cell.tapGesture.delegate = self;
+    cell.tapGesture.minimumPressDuration = 0;
+    cell.tapGesture.cancelsTouchesInView = NO;
+    [cell addGestureRecognizer:cell.tapGesture];
     
     return cell;
 }
@@ -978,6 +1010,12 @@ static NSMutableSet* hostList;
     return UIEdgeInsetsMake(flowLayout.sectionInset.top, extraSpace / 2, flowLayout.sectionInset.bottom, extraSpace / 2);
 }
 
+
+#pragma mark - UIGestureRecognizerDelegate
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    return YES;
+}
 
 #pragma mark -
 
