@@ -289,17 +289,7 @@ static NSMutableSet* hostList;
     if (host.online && host.pairState == PairStatePaired && host.appList.count > 0 && view != nil) {
         [self alreadyPaired];
         
-        TemporaryApp *app = [self findRunningApp:host];
-        if (app != nil) {
-            NSInteger appIndex = [_sortedAppList indexOfObject:app];
-            if (appIndex >= 0) {
-                [self setRunningAppIndex:[NSIndexPath indexPathForItem:appIndex inSection:0]];
-            } else {
-                [self setRunningAppIndex:nil];
-            }
-        } else {
-            [self setRunningAppIndex:nil];
-        }
+        [self setRunningAppIndex:[self indexPathForApp:[self findRunningApp:host]]];
         
         return;
     }
@@ -447,6 +437,7 @@ static NSMutableSet* hostList;
         [alertController addAction:[UIAlertAction
                                     actionWithTitle:[app.id isEqualToString:currentApp.id] ? @"Resume App" : @"Resume Running App" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
                                         Log(LOG_I, @"Resuming application: %@", currentApp.name);
+                                        [self setRunningAppIndex:[self indexPathForApp:currentApp]];
                                         [self performSegueWithIdentifier:@"createStreamFrame" sender:nil];
                                     }]];
         [alertController addAction:[UIAlertAction actionWithTitle:
@@ -477,6 +468,10 @@ static NSMutableSet* hostList;
                                             
                                             // If it fails, display an error and stop the current operation
                                             if (quitResponse.statusCode != 200) {
+                                                dispatch_async(dispatch_get_main_queue(), ^{
+                                                    [self setRunningAppIndex:[self indexPathForApp:currentApp]];
+                                                });
+
                                                alert = [UIAlertController alertControllerWithTitle:@"Quitting App Failed"
                                                                                       message:@"Failed to quit app. If this app was started by "
                                                         "another device, you'll need to quit from that device."
@@ -488,6 +483,7 @@ static NSMutableSet* hostList;
                                                 
                                                 dispatch_async(dispatch_get_main_queue(), ^{
                                                     [self updateAppsForHost:app.host];
+                                                    [self setRunningAppIndex:[self indexPathForApp:app]];
                                                     [self performSegueWithIdentifier:@"createStreamFrame" sender:nil];
                                                 });
                                                 
@@ -515,6 +511,7 @@ static NSMutableSet* hostList;
         [alertController addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
         [self presentViewController:alertController animated:YES completion:nil];
     } else {
+        [self setRunningAppIndex:[self indexPathForApp:app]];
         [self performSegueWithIdentifier:@"createStreamFrame" sender:nil];
     }
 }
@@ -884,6 +881,16 @@ static NSMutableSet* hostList;
     [self configureCell:cell atIndexPath:path withApp:app];
 }
 
+- (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {
+    if (app != nil) {
+        NSInteger appIndex = [_sortedAppList indexOfObject:app];
+        if (appIndex >= 0) {
+            return [NSIndexPath indexPathForItem:appIndex inSection:0];
+        }
+    }
+    return nil;
+}
+
 - (BOOL)isSmallWindow {
     return self.view.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact || self.view.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact;
 }
@@ -981,7 +988,6 @@ static NSMutableSet* hostList;
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    [self setRunningAppIndex:indexPath];
     [self appClicked:_sortedAppList[indexPath.row]];
 }
 
