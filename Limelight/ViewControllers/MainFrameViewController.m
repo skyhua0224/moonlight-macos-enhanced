@@ -248,7 +248,13 @@ static NSMutableSet* hostList;
     [dataManager updateIconForExistingApp: app];
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.collectionView reloadData];
+        NSInteger appIndex = [_sortedAppList indexOfObject:app];
+        if (appIndex >= 0) {
+            AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:[NSIndexPath indexPathForItem:appIndex inSection:0]];
+            if (cell != nil) {
+                [self configureCell:app cell:cell];
+            }
+        }
     });
 }
 
@@ -878,24 +884,30 @@ static NSMutableSet* hostList;
     shadowLayer.shadowPath = path.CGPath;
 }
 
-- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    AppCollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AppCell" forIndexPath:indexPath];
-
-    TemporaryApp* app = _sortedAppList[indexPath.row];
-
+- (void)configureCell:(TemporaryApp *)app cell:(AppCollectionViewCell *)cell {
     cell.appTitle.text = app.name;
+    [cell.appTitle sizeToFit];
     
     UIImage* appImage = [_boxArtCache objectForKey:app];
     if (appImage == nil) {
         appImage = [UIImage imageWithData:app.image];
-        [_boxArtCache setObject:appImage forKey:app];
+        if (appImage != nil) {
+            [_boxArtCache setObject:appImage forKey:app];
+        }
     }
     cell.imageView.image = appImage;
     cell.imageView.clipsToBounds = YES;
     cell.imageView.layer.cornerRadius = 8;
     cell.shadowView.backgroundColor = [UIColor clearColor];
-
+    
     [self addShadowToAppImageWithCell:cell];
+}
+
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    AppCollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AppCell" forIndexPath:indexPath];
+
+    TemporaryApp* app = _sortedAppList[indexPath.row];
+    [self configureCell:app cell:cell];
     
     return cell;
 }
