@@ -256,7 +256,9 @@
         Log(LOG_E, @"Display layer rendering failed: %@", displayLayer.error);
         
         // Recreate the display layer
-        [self reinitializeDisplayLayer];
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            [self reinitializeDisplayLayer];
+        });
         
         // Request an IDR frame to initialize the new decoder
         free(data);

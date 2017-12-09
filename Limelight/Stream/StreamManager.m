@@ -87,7 +87,10 @@
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
     
-    VideoDecoderRenderer* renderer = [[VideoDecoderRenderer alloc]initWithView:_renderView];
+    __block VideoDecoderRenderer* renderer;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        renderer = [[VideoDecoderRenderer alloc]initWithView:_renderView];
+    });
     _connection = [[Connection alloc] initWithConfig:_config renderer:renderer connectionCallbacks:_callbacks];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:_connection];
