@@ -54,20 +54,26 @@
                                                object:nil];
 }
 
-- (void) returnToMainFrame {
+- (void)returnToMainFrame:(BOOL)quit {
     [_controllerSupport cleanup];
+    
+    if (quit) {
+        MainFrameViewController *mainFrameVC = (MainFrameViewController *)(self.navigationController.viewControllers[self.navigationController.viewControllers.count - 2]);
+        [mainFrameVC appDidQuit];
+    }
+    
     [self.navigationController popToRootViewControllerAnimated:YES];
 }
 
 - (void)applicationDidEnterBackground:(NSNotification *)notification {
     [_streamMan stopStream];
-    [self returnToMainFrame];
+    [self returnToMainFrame:NO];
 }
 
 - (void)edgeSwiped {
     Log(LOG_D, @"User swiped to end stream");
     [_streamMan stopStream];
-    [self returnToMainFrame];
+    [self returnToMainFrame:NO];
 }
 
 - (BOOL)prefersHomeIndicatorAutoHidden {
@@ -90,7 +96,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         UIAlertController* conTermAlert = [UIAlertController alertControllerWithTitle:@"Connection Terminated" message:@"The connection was terminated" preferredStyle:UIAlertControllerStyleAlert];
         [conTermAlert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action){
-            [self returnToMainFrame];
+            [self returnToMainFrame:YES];
         }]];
         [self presentViewController:conTermAlert animated:YES completion:nil];
     });
@@ -121,7 +127,7 @@
                                                                                 stageName, errorCode]
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action){
-            [self returnToMainFrame];
+            [self returnToMainFrame:YES];
         }]];
         [self presentViewController:alert animated:YES completion:nil];
     });
@@ -137,7 +143,7 @@
                                                                        message:message
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action){
-            [self returnToMainFrame];
+            [self returnToMainFrame:YES];
         }]];
         [self presentViewController:alert animated:YES completion:nil];
     });

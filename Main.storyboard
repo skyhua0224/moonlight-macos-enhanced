@@ -53,6 +53,13 @@
                                                 <constraint firstItem="jeB-Vj-uZK" firstAttribute="top" secondItem="GYp-Bp-vtM" secondAttribute="top" id="kYp-TZ-suC"/>
                                             </constraints>
                                         </view>
+                                        <imageView userInteractionEnabled="NO" alpha="0.84999999999999998" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Play" translatesAutoresizingMaskIntoConstraints="NO" id="x46-UZ-pNJ" userLabel="Resume Icon">
+                                            <rect key="frame" x="27" y="32" width="64" height="64"/>
+                                            <constraints>
+                                                <constraint firstAttribute="width" constant="64" id="QLm-rm-FQi"/>
+                                                <constraint firstAttribute="height" constant="64" id="Z4e-qc-8n8"/>
+                                            </constraints>
+                                        </imageView>
                                         <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="App Title" textAlignment="center" lineBreakMode="tailTruncation" numberOfLines="2" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Q11-Up-FRz" userLabel="App Title">
                                             <rect key="frame" x="30" y="136" width="58" height="17"/>
                                             <fontDescription key="fontDescription" type="system" pointSize="17"/>
@@ -69,8 +76,10 @@
                                 </view>
                                 <constraints>
                                     <constraint firstItem="Q11-Up-FRz" firstAttribute="width" relation="lessThanOrEqual" secondItem="Uqv-Di-fzX" secondAttribute="width" id="3CV-sw-iYE"/>
+                                    <constraint firstItem="x46-UZ-pNJ" firstAttribute="centerX" secondItem="GYp-Bp-vtM" secondAttribute="centerX" id="BTD-FW-dsx"/>
                                     <constraint firstItem="GYp-Bp-vtM" firstAttribute="top" secondItem="Uqv-Di-fzX" secondAttribute="top" id="H2J-e3-KKy"/>
                                     <constraint firstAttribute="bottom" relation="greaterThanOrEqual" secondItem="Q11-Up-FRz" secondAttribute="bottom" id="TFx-Z2-871"/>
+                                    <constraint firstItem="x46-UZ-pNJ" firstAttribute="centerY" secondItem="GYp-Bp-vtM" secondAttribute="centerY" id="YA5-h0-9ar"/>
                                     <constraint firstItem="Q11-Up-FRz" firstAttribute="centerX" secondItem="Uqv-Di-fzX" secondAttribute="centerX" id="Znu-cS-4nJ"/>
                                     <constraint firstItem="GYp-Bp-vtM" firstAttribute="centerX" secondItem="Uqv-Di-fzX" secondAttribute="centerX" id="e4D-L3-OzD"/>
                                     <constraint firstItem="Q11-Up-FRz" firstAttribute="top" secondItem="GYp-Bp-vtM" secondAttribute="bottom" constant="8" id="tzg-3E-zzJ"/>
@@ -79,6 +88,7 @@
                                 <connections>
                                     <outlet property="appTitle" destination="Q11-Up-FRz" id="fHu-K9-4WB"/>
                                     <outlet property="imageView" destination="jeB-Vj-uZK" id="uhc-G6-f1K"/>
+                                    <outlet property="resumeIcon" destination="x46-UZ-pNJ" id="ags-Gj-MzO"/>
                                     <outlet property="shadowView" destination="GYp-Bp-vtM" id="ASD-no-6TP"/>
                                 </connections>
                             </collectionViewCell>
@@ -331,4 +341,7 @@
             <point key="canvasLocation" x="1892.6536731634185" y="2025.6000000000001"/>
         </scene>
     </scenes>
+    <resources>
+        <image name="Play" width="128" height="128"/>
+    </resources>
 </document>

@@ -42,7 +42,7 @@
     int currentPosition;
     NSArray* _sortedAppList;
     NSCache* _boxArtCache;
-    TemporaryApp *_lastClickedApp;
+    NSIndexPath *_runningAppIndex;
 }
 static NSMutableSet* hostList;
 
@@ -250,9 +250,10 @@ static NSMutableSet* hostList;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSInteger appIndex = [_sortedAppList indexOfObject:app];
         if (appIndex >= 0) {
-            AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:[NSIndexPath indexPathForItem:appIndex inSection:0]];
+            NSIndexPath *path = [NSIndexPath indexPathForItem:appIndex inSection:0];
+            AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:path];
             if (cell != nil) {
-                [self configureCell:app cell:cell];
+                [self configureCell:cell atIndexPath:path withApp:app];
             }
         }
     });
@@ -287,7 +288,19 @@ static NSMutableSet* hostList;
     // so that our active game data is correct.
     if (host.online && host.pairState == PairStatePaired && host.appList.count > 0 && view != nil) {
         [self alreadyPaired];
-        _lastClickedApp = [self findRunningApp:host];
+        
+        TemporaryApp *app = [self findRunningApp:host];
+        if (app != nil) {
+            NSInteger appIndex = [_sortedAppList indexOfObject:app];
+            if (appIndex >= 0) {
+                [self setRunningAppIndex:[NSIndexPath indexPathForItem:appIndex inSection:0]];
+            } else {
+                [self setRunningAppIndex:nil];
+            }
+        } else {
+            [self setRunningAppIndex:nil];
+        }
+        
         return;
     }
     
@@ -407,8 +420,6 @@ static NSMutableSet* hostList;
 }
 
 - (void) appClicked:(TemporaryApp *)app {
-    _lastClickedApp = app;
-    
     Log(LOG_D, @"Clicked app: %@", app.name);
     _streamConfig = [[StreamConfiguration alloc] init];
     _streamConfig.host = app.host.activeAddress;
@@ -485,7 +496,9 @@ static NSMutableSet* hostList;
                                             // Otherwise, display a dialog to notify the user that the app was quit
                                             else {
                                                 app.host.currentGame = @"0";
-                                                _lastClickedApp = nil;
+                                                dispatch_async(dispatch_get_main_queue(), ^{
+                                                    [self setRunningAppIndex:nil];
+                                                });
                                                 
                                                 alert = [UIAlertController alertControllerWithTitle:@"Quitting App"
                                                                                             message:@"The app was quit successfully."
@@ -665,20 +678,6 @@ static NSMutableSet* hostList;
     [_discMan startDiscovery];
     
 //    [self handleReturnToForeground];
-}
-
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-
-    if (_lastClickedApp.id != nil) {
-        for (int i = 0; i < _sortedAppList.count; i++) {
-            TemporaryApp *app = (TemporaryApp *)_sortedAppList[i];
-            if ([app.id isEqualToString:_lastClickedApp.id]) {
-                [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForItem:i inSection:0]]];
-                break;
-            }
-        }
-    }
 }
 
 - (void)viewDidDisappear:(BOOL)animated
@@ -863,6 +862,28 @@ static NSMutableSet* hostList;
     [self.collectionView reloadData];
 }
 
+- (void)appDidQuit {
+    [self setRunningAppIndex:nil];
+}
+
+- (void)setRunningAppIndex:(NSIndexPath *)path {
+    NSIndexPath *oldPath = _runningAppIndex;
+    _runningAppIndex = path;
+    [self redrawCellAtIndexPath:oldPath];
+    [self redrawCellAtIndexPath:path];
+}
+
+- (void)redrawCellAtIndexPath:(NSIndexPath *)path {
+    if (path == nil) {
+        return;
+    }
+    
+    TemporaryApp* app = _sortedAppList[path.row];
+    AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:path];
+    
+    [self configureCell:cell atIndexPath:path withApp:app];
+}
+
 - (BOOL)isSmallWindow {
     return self.view.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact || self.view.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact;
 }
@@ -884,9 +905,11 @@ static NSMutableSet* hostList;
     shadowLayer.shadowPath = path.CGPath;
 }
 
-- (void)configureCell:(TemporaryApp *)app cell:(AppCollectionViewCell *)cell {
+- (void)configureCell:(AppCollectionViewCell *)cell atIndexPath:(NSIndexPath *)path withApp:(TemporaryApp *)app {
     cell.appTitle.text = app.name;
     [cell.appTitle sizeToFit];
+    
+    cell.resumeIcon.hidden = path != _runningAppIndex;
     
     UIImage* appImage = [_boxArtCache objectForKey:app];
     if (appImage == nil) {
@@ -907,7 +930,7 @@ static NSMutableSet* hostList;
     AppCollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AppCell" forIndexPath:indexPath];
 
     TemporaryApp* app = _sortedAppList[indexPath.row];
-    [self configureCell:app cell:cell];
+    [self configureCell:cell atIndexPath:indexPath withApp:app];
     
     return cell;
 }
@@ -926,8 +949,8 @@ static NSMutableSet* hostList;
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    TemporaryApp* app = _sortedAppList[indexPath.row];
-    [self appClicked:app];
+    [self setRunningAppIndex:indexPath];
+    [self appClicked:_sortedAppList[indexPath.row]];
 }
 
 

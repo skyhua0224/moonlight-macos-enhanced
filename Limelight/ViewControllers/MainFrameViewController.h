@@ -22,5 +22,6 @@
 
 - (void)handleShortcutWithHostName:(NSString *)hostName;
 - (NSArray<TemporaryHost *> *)returnSavedHosts;
+- (void)appDidQuit;
 
 @end
