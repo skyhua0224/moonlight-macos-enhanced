@@ -934,7 +934,10 @@ static NSMutableSet* hostList;
 
 - (void)configureCell:(AppCollectionViewCell *)cell atIndexPath:(NSIndexPath *)path withApp:(TemporaryApp *)app {
     cell.appTitle.text = app.name;
-    [cell.appTitle sizeToFit];
+    cell.appTitle.fadeLength = 10;
+#if DEBUG
+    cell.appTitle.holdScrolling = YES;
+#endif
     
     cell.resumeIcon.hidden = path != _runningAppIndex;
     
@@ -992,9 +995,9 @@ static NSMutableSet* hostList;
 - (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
     CGSize flowSize;
     if ([self isSmallWindow]) {
-        flowSize = CGSizeMake(118, 177);
+        flowSize = CGSizeMake(118, 160);
     } else {
-        flowSize = CGSizeMake(178, 257);
+        flowSize = CGSizeMake(178, 237);
     }
     
     return flowSize;

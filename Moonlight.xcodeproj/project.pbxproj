@@ -10,6 +10,8 @@
 		4C04F32B1FAF30CC0011E17A /* KTCenterFlowLayout.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */; };
 		4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */; };
 		4C85A7FF1FDCE1D300F28E90 /* ShadowView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */; };
+		4C85A8011FDCE49C00F28E90 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */; };
+		4C85A8041FDCE4B200F28E90 /* MarqueeLabel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */; };
 		4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
 		9832D1361BBCD5C50036EF48 /* TemporaryApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 9832D1351BBCD5C50036EF48 /* TemporaryApp.m */; };
 		98CFB82F1CAD481B0048EF74 /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
@@ -114,6 +116,9 @@
 		4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCollectionViewCell.m; sourceTree = "<group>"; };
 		4C85A7FD1FDCE1D300F28E90 /* ShadowView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowView.h; sourceTree = "<group>"; };
 		4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ShadowView.m; sourceTree = "<group>"; };
+		4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MarqueeLabel.m; sourceTree = "<group>"; };
+		4C85A8031FDCE4B200F28E90 /* MarqueeLabel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MarqueeLabel.h; sourceTree = "<group>"; };
 		4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RendererLayerContainer.h; sourceTree = "<group>"; };
 		4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RendererLayerContainer.m; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
@@ -336,6 +341,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4C85A8011FDCE49C00F28E90 /* QuartzCore.framework in Frameworks */,
 				98CFB82F1CAD481B0048EF74 /* libmoonlight-common.a in Frameworks */,
 				FB8946ED19F6AFE800339C8A /* libopus.a in Frameworks */,
 				FB8946EB19F6AFE100339C8A /* libcrypto.a in Frameworks */,
@@ -426,6 +432,7 @@
 		FB290CF019B2C406004C83CF /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */,
 				FB6DDEF31AE739100096499A /* libmoonlight-common.a */,
 				FB4679001A57048000377732 /* CoreFoundation.framework */,
 				FBD349571A003F05002D2A60 /* libsqlite3.dylib */,
@@ -473,6 +480,8 @@
 				FB1D59991BBCCD7E00F482CA /* AppCollectionView.m */,
 				4C04F3291FAF30CB0011E17A /* KTCenterFlowLayout.h */,
 				4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */,
+				4C85A8031FDCE4B200F28E90 /* MarqueeLabel.h */,
+				4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */,
 			);
 			name = Moonlight;
 			path = Limelight;
@@ -966,6 +975,7 @@
 				FB4678FA1A55FFAD00377732 /* DiscoveryManager.m in Sources */,
 				98D5856D1C0EA79600F6CC00 /* TemporaryHost.m in Sources */,
 				FB89463519F646E200339C8A /* MainFrameViewController.m in Sources */,
+				4C85A8041FDCE4B200F28E90 /* MarqueeLabel.m in Sources */,
 				FBD1C8E21A8AD71400C6703C /* Logger.m in Sources */,
 				FB1D599A1BBCCD7E00F482CA /* AppCollectionView.m in Sources */,
 				FB89463619F646E200339C8A /* StreamFrameViewController.m in Sources */,
