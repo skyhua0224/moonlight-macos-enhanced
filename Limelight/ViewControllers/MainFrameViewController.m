@@ -44,6 +44,7 @@
     NSArray* _sortedAppList;
     NSCache* _boxArtCache;
     NSIndexPath *_runningAppIndex;
+    CGPoint _savedScrollPosition;
 }
 static NSMutableSet* hostList;
 
@@ -618,7 +619,11 @@ static NSMutableSet* hostList;
                                              selector: @selector(handleReturnToForeground)
                                                  name: UIApplicationWillEnterForegroundNotification
                                                object: nil];
-    
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector(handleResignActive)
+                                                 name: UIApplicationWillResignActiveNotification
+                                               object: nil];
+
 
     [self.view addSubview:hostScrollView];
     hostContentView = [[UIView alloc] init];
@@ -664,6 +669,12 @@ static NSMutableSet* hostList;
     if (_selectedHost != nil && _selectedHost.pairState == PairStatePaired) {
         [self hostClicked:_selectedHost view:nil];
     }
+
+    self.collectionView.contentOffset = _savedScrollPosition;
+}
+
+- (void)handleResignActive {
+    _savedScrollPosition = self.collectionView.contentOffset;
 }
 
 - (void)viewDidAppear:(BOOL)animated
@@ -677,8 +688,6 @@ static NSMutableSet* hostList;
     [self.navigationController.navigationBar setBackgroundImage:fakeImage forBarPosition:UIBarPositionAny barMetrics:UIBarMetricsDefault];
     
     [_discMan startDiscovery];
-    
-//    [self handleReturnToForeground];
 }
 
 - (void)viewDidDisappear:(BOOL)animated
