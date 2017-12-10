@@ -900,8 +900,9 @@ static NSMutableSet* hostList;
     switch (sender.state) {
         case UIGestureRecognizerStateBegan:
         {
+            CGFloat scale = [self isSmallWindow] ? 0.88 : 0.92;
             [UIView animateWithDuration:animationDuration animations:^{
-                sender.view.transform = CGAffineTransformMakeScale(0.92, 0.92);
+                sender.view.transform = CGAffineTransformMakeScale(scale, scale);
             }];
             break;
         }
