@@ -935,10 +935,16 @@ static NSMutableSet* hostList;
 #pragma mark - UICollectionViewDelegate
 
 - (void)addShadowToAppImageWithCell:(AppCollectionViewCell *)cell {
-    cell.shadowView.shadowOpacity = 0.33;
+    cell.shadowView.shadowOpacity = cell.imageView.image != nil ? 0.33 : 0;
     cell.shadowView.shadowRadius = 6;
     cell.shadowView.shadowOffset = CGSizeMake(0, 4);
     
+    CABasicAnimation *anim = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
+    anim.fromValue = [NSNumber numberWithFloat:0.0];
+    anim.toValue = [NSNumber numberWithFloat:cell.shadowView.shadowOpacity];
+    anim.duration = 0.2;
+    [cell.shadowView.layer addAnimation:anim forKey:@"shadowOpacity"];
+
     [cell.shadowView updateShadow];
 }
 
@@ -958,7 +964,9 @@ static NSMutableSet* hostList;
             [_boxArtCache setObject:appImage forKey:app];
         }
     }
-    cell.imageView.image = appImage;
+    [UIView transitionWithView:cell.imageView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
+        cell.imageView.image = appImage;
+    } completion:nil];
     cell.imageView.clipsToBounds = YES;
     cell.imageView.layer.cornerRadius = 8;
     cell.shadowView.backgroundColor = [UIColor clearColor];
