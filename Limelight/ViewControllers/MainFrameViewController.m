@@ -178,6 +178,7 @@ static NSMutableSet* hostList;
                 }
                 [_appManager stopRetrieving];
                 [_appManager retrieveAssetsFromHost:host];
+                [self enableNavigation];
             });
         }
     });
