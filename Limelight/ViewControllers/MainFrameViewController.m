@@ -607,6 +607,8 @@ static NSMutableSet* hostList;
     self.collectionView.allowsMultipleSelection = NO;
     self.collectionView.multipleTouchEnabled = NO;
     
+    self.collectionView.indicatorStyle =UIScrollViewIndicatorStyleWhite;
+    
     [self retrieveSavedHosts];
     _discMan = [[DiscoveryManager alloc] initWithHosts:[hostList allObjects] andCallback:self];
     
