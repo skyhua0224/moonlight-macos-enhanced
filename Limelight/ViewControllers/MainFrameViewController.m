@@ -1007,13 +1007,25 @@ static NSMutableSet* hostList;
 
 - (UIEdgeInsets)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout insetForSectionAtIndex:(NSInteger)section {
     UICollectionViewFlowLayout *flowLayout = (UICollectionViewFlowLayout *)collectionViewLayout;
-    CGFloat safeWidth = collectionView.bounds.size.width;
+
+    CGFloat safeWidth = collectionView.bounds.size.width - (flowLayout.sectionInset.left + flowLayout.sectionInset.right);
     if (@available(iOS 11.0, *)) {
         safeWidth -= collectionView.safeAreaInsets.left + collectionView.safeAreaInsets.right;
     }
-    NSInteger itemsPerRow = (NSInteger)((safeWidth + flowLayout.minimumInteritemSpacing) / (flowLayout.itemSize.width + flowLayout.minimumInteritemSpacing));
-    CGFloat extraSpace = safeWidth - itemsPerRow * flowLayout.itemSize.width - (itemsPerRow - 1) * flowLayout.minimumInteritemSpacing;
-    return UIEdgeInsetsMake(flowLayout.sectionInset.top, extraSpace / 2, flowLayout.sectionInset.bottom, extraSpace / 2);
+
+    CGFloat itemWidth = [self collectionView:collectionView layout:collectionViewLayout sizeForItemAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]].width;
+    NSInteger n = 1;
+    while (YES) {
+        CGFloat width = n * itemWidth + (n + 1) * flowLayout.minimumInteritemSpacing;
+        if (width > safeWidth) {
+            n -= 1;
+            break;
+        }
+        n++;
+    }
+
+    CGFloat spacing = (safeWidth - n * itemWidth) / (n + 1);
+    return UIEdgeInsetsMake(flowLayout.sectionInset.top, spacing + flowLayout.sectionInset.left, flowLayout.sectionInset.bottom, spacing + flowLayout.sectionInset.right);
 }
 
 
