@@ -88,6 +88,8 @@ static NSMutableSet* hostList;
 
 - (void)pairSuccessful {
     dispatch_async(dispatch_get_main_queue(), ^{
+        [self hideLoadingFrame];
+
         [_pairAlert dismissViewControllerAnimated:YES completion:nil];
         _pairAlert = nil;
 
@@ -114,7 +116,6 @@ static NSMutableSet* hostList;
             [self.navigationController.navigationBar setNeedsLayout];
             
             [self updateAppsForHost:host];
-            [self hideLoadingFrame];
         });
     }
     Log(LOG_I, @"Using cached app list: %d", usingCachedAppList);
@@ -146,8 +147,6 @@ static NSMutableSet* hostList;
         if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
             Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self hideLoadingFrame];
-                
                 if (host != _selectedHost) {
                     return;
                 }
@@ -174,7 +173,6 @@ static NSMutableSet* hostList;
                 [self updateAppsForHost:host];
                 [_appManager stopRetrieving];
                 [_appManager retrieveAssetsFromHost:host];
-                [self hideLoadingFrame];
             });
         }
     });
@@ -295,7 +293,6 @@ static NSMutableSet* hostList;
         return;
     }
     
-    [self showLoadingFrame];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:_uniqueId deviceName:deviceName cert:_cert];
         ServerInfoResponse* serverInfoResp = [[ServerInfoResponse alloc] init];
@@ -309,8 +306,6 @@ static NSMutableSet* hostList;
         if (serverInfoResp == nil || ![serverInfoResp isStatusOk]) {
             Log(LOG_W, @"Failed to get server info: %@", serverInfoResp.statusMessage);
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self hideLoadingFrame];
-                
                 if (host != _selectedHost) {
                     return;
                 }
@@ -330,6 +325,8 @@ static NSMutableSet* hostList;
                 [self alreadyPaired];
             } else {
                 Log(LOG_I, @"Trying to pair");
+                [self showLoadingFrame];
+
                 // Polling the server while pairing causes the server to screw up
                 [_discMan stopDiscoveryBlocking];
                 PairManager* pMan = [[PairManager alloc] initWithManager:hMan andCert:_cert callback:self];
