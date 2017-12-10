@@ -171,6 +171,10 @@ static NSMutableSet* hostList;
                 [self.navigationController.navigationBar setNeedsLayout];
                 
                 [self updateAppsForHost:host];
+                if (hostScrollView.superview != nil) {
+                    [hostScrollView removeFromSuperview];
+                    [self.collectionView reloadData];
+                }
                 [_appManager stopRetrieving];
                 [_appManager retrieveAssetsFromHost:host];
             });
@@ -854,9 +858,6 @@ static NSMutableSet* hostList;
             [self updateBoxArtCacheForApp:app];
         }
     });
-    
-    [hostScrollView removeFromSuperview];
-    [self.collectionView reloadData];
 }
 
 - (void)appDidQuit {
