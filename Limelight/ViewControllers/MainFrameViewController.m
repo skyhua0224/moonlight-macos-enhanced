@@ -917,7 +917,6 @@ static NSMutableSet* hostList;
             }];
             break;
         }
-        case UIGestureRecognizerStateChanged:
         case UIGestureRecognizerStateCancelled:
         case UIGestureRecognizerStateEnded:
         {
