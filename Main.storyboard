@@ -33,7 +33,7 @@
                                     <rect key="frame" x="0.0" y="0.0" width="118" height="177"/>
                                     <autoresizingMask key="autoresizingMask"/>
                                     <subviews>
-                                        <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="GYp-Bp-vtM" userLabel="Shadow View">
+                                        <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="GYp-Bp-vtM" userLabel="Shadow View" customClass="ShadowView">
                                             <rect key="frame" x="11" y="0.0" width="96.5" height="128"/>
                                             <subviews>
                                                 <imageView userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="jeB-Vj-uZK">

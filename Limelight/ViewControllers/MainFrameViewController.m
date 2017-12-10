@@ -925,17 +925,11 @@ static NSMutableSet* hostList;
 #pragma mark - UICollectionViewDelegate
 
 - (void)addShadowToAppImageWithCell:(AppCollectionViewCell *)cell {
-    CALayer *shadowLayer = cell.shadowView.layer;
+    cell.shadowView.shadowOpacity = 0.33;
+    cell.shadowView.shadowRadius = 6;
+    cell.shadowView.shadowOffset = CGSizeMake(0, 4);
     
-    shadowLayer.shadowColor = [UIColor blackColor].CGColor;
-    shadowLayer.shadowOpacity = 0.33;
-    shadowLayer.shadowRadius = 6;
-    shadowLayer.shadowOffset = CGSizeMake(0, 4);
-    
-    CGRect shadowRect = CGRectOffset(cell.shadowView.bounds, shadowLayer.shadowOffset.width, shadowLayer.shadowOffset.height);
-    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:shadowRect cornerRadius:shadowLayer.shadowRadius];
-    
-    shadowLayer.shadowPath = path.CGPath;
+    [cell.shadowView updateShadow];
 }
 
 - (void)configureCell:(AppCollectionViewCell *)cell atIndexPath:(NSIndexPath *)path withApp:(TemporaryApp *)app {

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		4C04F32B1FAF30CC0011E17A /* KTCenterFlowLayout.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */; };
 		4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */; };
+		4C85A7FF1FDCE1D300F28E90 /* ShadowView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */; };
 		4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
 		9832D1361BBCD5C50036EF48 /* TemporaryApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 9832D1351BBCD5C50036EF48 /* TemporaryApp.m */; };
 		98CFB82F1CAD481B0048EF74 /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
@@ -111,6 +112,8 @@
 		4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KTCenterFlowLayout.m; sourceTree = "<group>"; };
 		4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCollectionViewCell.h; sourceTree = "<group>"; };
 		4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCollectionViewCell.m; sourceTree = "<group>"; };
+		4C85A7FD1FDCE1D300F28E90 /* ShadowView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowView.h; sourceTree = "<group>"; };
+		4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ShadowView.m; sourceTree = "<group>"; };
 		4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RendererLayerContainer.h; sourceTree = "<group>"; };
 		4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RendererLayerContainer.m; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
@@ -562,6 +565,8 @@
 				FBD3495219FF36FB002D2A60 /* SWRevealViewController.m */,
 				FB89462419F646E200339C8A /* MainFrameViewController.h */,
 				FB89462519F646E200339C8A /* MainFrameViewController.m */,
+				4C85A7FD1FDCE1D300F28E90 /* ShadowView.h */,
+				4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */,
 				FB89462619F646E200339C8A /* StreamFrameViewController.h */,
 				FB89462719F646E200339C8A /* StreamFrameViewController.m */,
 				FBD3494E19FF2174002D2A60 /* SettingsViewController.h */,
@@ -973,6 +978,7 @@
 				FB4678ED1A50C40900377732 /* OnScreenControls.m in Sources */,
 				FB290D0019B2C406004C83CF /* main.m in Sources */,
 				FBD3494319FC9C04002D2A60 /* AppAssetManager.m in Sources */,
+				4C85A7FF1FDCE1D300F28E90 /* ShadowView.m in Sources */,
 				FB6549561A57907E001C8F39 /* DiscoveryWorker.m in Sources */,
 				FB89462A19F646E200339C8A /* ControllerSupport.m in Sources */,
 				FB9AFD3D1A7E111600872C98 /* AppAssetResponse.m in Sources */,

@@ -7,9 +7,10 @@
 //
 
 #import <UIKit/UIKit.h>
+#import "ShadowView.h"
 
 @interface AppCollectionViewCell : UICollectionViewCell
-@property (weak, nonatomic) IBOutlet UIView *shadowView;
+@property (weak, nonatomic) IBOutlet ShadowView *shadowView;
 @property (weak, nonatomic) IBOutlet UIImageView *imageView;
 @property (weak, nonatomic) IBOutlet UILabel *appTitle;
 @property (weak, nonatomic) IBOutlet UIImageView *resumeIcon;
