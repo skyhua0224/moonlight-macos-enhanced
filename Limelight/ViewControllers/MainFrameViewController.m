@@ -27,6 +27,7 @@
 #import "TemporaryApp.h"
 #import "IdManager.h"
 #import "AppCollectionViewCell.h"
+#import "UIImage+pspdf.h"
 
 @implementation MainFrameViewController {
     NSOperationQueue* _opQueue;
@@ -809,7 +810,7 @@ static NSMutableSet* hostList;
     CGImageRelease(cgImage);
     CFRelease(source);
     
-    return boxArt;
+    return [boxArt pspdf_preloadedImage];
 }
 
 - (void) updateBoxArtCacheForApp:(TemporaryApp*)app {
