@@ -42,7 +42,7 @@
     UIView *hostContentView;
     int currentPosition;
     NSArray* _sortedAppList;
-    NSCache* _boxArtCache;
+    NSMutableDictionary<NSString *, UIImage *> *_boxArtCache;
     NSIndexPath *_runningAppIndex;
     CGPoint _savedScrollPosition;
 }
@@ -591,7 +591,7 @@ static NSMutableSet* hostList;
         hostList = [[NSMutableSet alloc] init];
     }
     
-    _boxArtCache = [[NSCache alloc] init];
+    _boxArtCache = [[NSMutableDictionary alloc] init];
     
     [self setAutomaticallyAdjustsScrollViewInsets:NO];
 
@@ -824,10 +824,10 @@ static NSMutableSet* hostList;
 
 - (void) updateBoxArtCacheForApp:(TemporaryApp*)app {
     if (app.image == nil) {
-        [_boxArtCache removeObjectForKey:app];
+        [_boxArtCache removeObjectForKey:app.id];
     }
-    else if ([_boxArtCache objectForKey:app] == nil) {
-        [_boxArtCache setObject:[MainFrameViewController loadBoxArtForCaching:app] forKey:app];
+    else if ([_boxArtCache objectForKey:app.id] == nil) {
+        [_boxArtCache setObject:[MainFrameViewController loadBoxArtForCaching:app] forKey:app.id];
     }
 }
 
@@ -934,11 +934,11 @@ static NSMutableSet* hostList;
     
     cell.resumeIcon.hidden = path != _runningAppIndex;
     
-    UIImage* appImage = [_boxArtCache objectForKey:app];
+    UIImage* appImage = [_boxArtCache objectForKey:app.id];
     if (appImage == nil) {
         appImage = [UIImage imageWithData:app.image];
         if (appImage != nil) {
-            [_boxArtCache setObject:appImage forKey:app];
+            [_boxArtCache setObject:appImage forKey:app.id];
         }
     }
     if (animated) {
@@ -1034,10 +1034,10 @@ static NSMutableSet* hostList;
 
 #pragma mark -
 
-- (void)didReceiveMemoryWarning
-{
+- (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
-    // Dispose of any resources that can be recreated.
+    
+    [_boxArtCache removeAllObjects];
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
