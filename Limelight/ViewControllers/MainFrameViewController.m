@@ -43,6 +43,7 @@
     int currentPosition;
     NSArray* _sortedAppList;
     NSMutableDictionary<NSString *, UIImage *> *_boxArtCache;
+    NSLock *_boxArtCacheLock;
     NSIndexPath *_runningAppIndex;
     CGPoint _savedScrollPosition;
 }
@@ -592,6 +593,7 @@ static NSMutableSet* hostList;
     }
     
     _boxArtCache = [[NSMutableDictionary alloc] init];
+    _boxArtCacheLock = [[NSLock alloc] init];
     
     [self setAutomaticallyAdjustsScrollViewInsets:NO];
 
@@ -607,7 +609,9 @@ static NSMutableSet* hostList;
                                  self.collectionView.frame.size.height / 6 - pullArrow.frame.size.height / 2 - self.navigationController.navigationBar.frame.size.height,
                                  pullArrow.frame.size.width,
                                  pullArrow.frame.size.height);
-    
+
+    self.collectionView.prefetchingEnabled = NO;
+
     self.collectionView.delaysContentTouches = NO;
     self.collectionView.allowsMultipleSelection = NO;
     self.collectionView.multipleTouchEnabled = NO;
@@ -824,10 +828,19 @@ static NSMutableSet* hostList;
 
 - (void) updateBoxArtCacheForApp:(TemporaryApp*)app {
     if (app.image == nil) {
+        [_boxArtCacheLock lock];
         [_boxArtCache removeObjectForKey:app.id];
-    }
-    else if ([_boxArtCache objectForKey:app.id] == nil) {
-        [_boxArtCache setObject:[MainFrameViewController loadBoxArtForCaching:app] forKey:app.id];
+        [_boxArtCacheLock unlock];
+    } else {
+        [_boxArtCacheLock lock];
+        UIImage *image = [_boxArtCache objectForKey:app.id];
+        [_boxArtCacheLock unlock];
+        if (image == nil) {
+            UIImage *image = [MainFrameViewController loadBoxArtForCaching:app];
+            [_boxArtCacheLock lock];
+            [_boxArtCache setObject:image forKey:app.id];
+            [_boxArtCacheLock unlock];
+        }
     }
 }
 
@@ -867,6 +880,30 @@ static NSMutableSet* hostList;
     AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:path];
     
     [self configureCell:cell atIndexPath:path withApp:app shouldAnimateImage:NO];
+}
+
+- (void)asyncRenderAppImage:(TemporaryApp *)app {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+
+        UIImage *appImage = [UIImage imageWithData:app.image];
+        if (appImage != nil) {
+            UIImage *image = [appImage pspdf_preloadedImage];
+            [_boxArtCacheLock lock];
+            [_boxArtCache setObject:image forKey:app.id];
+            [_boxArtCacheLock unlock];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSInteger appIndex = [_sortedAppList indexOfObject:app];
+                if (appIndex >= 0) {
+                    NSIndexPath *path = [NSIndexPath indexPathForItem:appIndex inSection:0];
+                    AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:path];
+                    if (cell != nil) {
+                        [self configureCell:cell atIndexPath:path withApp:app shouldAnimateImage:YES];
+                    }
+                }
+            });
+        }
+    });
 }
 
 - (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {
@@ -934,19 +971,20 @@ static NSMutableSet* hostList;
     
     cell.resumeIcon.hidden = path != _runningAppIndex;
     
+    [_boxArtCacheLock lock];
     UIImage* appImage = [_boxArtCache objectForKey:app.id];
-    if (appImage == nil) {
-        appImage = [UIImage imageWithData:app.image];
-        if (appImage != nil) {
-            [_boxArtCache setObject:appImage forKey:app.id];
-        }
-    }
-    if (animated) {
-        [UIView transitionWithView:cell.imageView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
+    [_boxArtCacheLock unlock];
+    if (appImage != nil) {
+        if (animated) {
+            [UIView transitionWithView:cell.imageView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
+                cell.imageView.image = appImage;
+            } completion:nil];
+        } else {
             cell.imageView.image = appImage;
-        } completion:nil];
+        }
     } else {
-        cell.imageView.image = appImage;
+        cell.imageView.image = nil;
+        [self asyncRenderAppImage:app];
     }
     cell.imageView.clipsToBounds = YES;
     cell.imageView.layer.cornerRadius = 8;
@@ -1037,7 +1075,9 @@ static NSMutableSet* hostList;
 - (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
     
+    [_boxArtCacheLock lock];
     [_boxArtCache removeAllObjects];
+    [_boxArtCacheLock unlock];
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
