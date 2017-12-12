@@ -174,11 +174,10 @@ static NSMutableSet* hostList;
                 [self showHostSelectionView];
             });
         } else {
-            [_appManager stopRetrieving];
-            [_appManager retrieveAssetsFromHost:host];
-
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self updateApplist:[appListResp getAppList] forHost:host];
+                [_appManager stopRetrieving];
+                [_appManager retrieveAssetsFromHost:host];
 
                 [self displayAppList:host];
             });
