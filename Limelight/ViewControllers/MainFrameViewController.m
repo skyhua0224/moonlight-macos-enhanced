@@ -99,6 +99,24 @@ static NSMutableSet* hostList;
     });
 }
 
+- (void)displayAppList:(TemporaryHost *)host {
+    if (host != _selectedHost) {
+        return;
+    }
+    
+    _computerNameButton.title = host.name;
+    [self.navigationController.navigationBar setNeedsLayout];
+    
+    if (hostScrollView.superview != nil) {
+        [self updateAppsForHost:host];
+
+        [hostScrollView removeFromSuperview];
+        [self.collectionView reloadData];
+    }
+    
+    [self enableNavigation];
+}
+
 - (void)alreadyPaired {
     BOOL usingCachedAppList = false;
     
@@ -109,16 +127,11 @@ static NSMutableSet* hostList;
     if ([host.appList count] > 0) {
         usingCachedAppList = true;
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (host != _selectedHost) {
-                return;
-            }
-            
-            _computerNameButton.title = host.name;
-            [self.navigationController.navigationBar setNeedsLayout];
-            
-            [self updateAppsForHost:host];
+            [self displayAppList:host];
         });
+        return;
     }
+    
     Log(LOG_I, @"Using cached app list: %d", usingCachedAppList);
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:_uniqueId deviceName:deviceName cert:_cert];
@@ -161,24 +174,13 @@ static NSMutableSet* hostList;
                 [self showHostSelectionView];
             });
         } else {
+            [_appManager stopRetrieving];
+            [_appManager retrieveAssetsFromHost:host];
+
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self updateApplist:[appListResp getAppList] forHost:host];
 
-                if (host != _selectedHost) {
-                    return;
-                }
-                
-                _computerNameButton.title = host.name;
-                [self.navigationController.navigationBar setNeedsLayout];
-                
-                [self updateAppsForHost:host];
-                if (hostScrollView.superview != nil) {
-                    [hostScrollView removeFromSuperview];
-                    [self.collectionView reloadData];
-                }
-                [_appManager stopRetrieving];
-                [_appManager retrieveAssetsFromHost:host];
-                [self enableNavigation];
+                [self displayAppList:host];
             });
         }
     });
@@ -696,9 +698,6 @@ static NSMutableSet* hostList;
     [super viewDidDisappear:animated];
     // when discovery stops, we must create a new instance because you cannot restart an NSOperation when it is finished
     [_discMan stopDiscovery];
-    
-    // Purge the box art cache
-    [_boxArtCache removeAllObjects];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
@@ -842,29 +841,8 @@ static NSMutableSet* hostList;
     _sortedAppList = [host.appList allObjects];
     _sortedAppList = [_sortedAppList sortedArrayUsingSelector:@selector(compareName:)];
     
-    // Split the sorted array in half to allow 2 jobs to process app assets at once
-    NSArray *firstHalf;
-    NSArray *secondHalf;
-    NSRange range;
-    
-    range.location = 0;
-    range.length = [_sortedAppList count] / 2;
-    
-    firstHalf = [_sortedAppList subarrayWithRange:range];
-    
-    range.location = range.length;
-    range.length = [_sortedAppList count] - range.length;
-    
-    secondHalf = [_sortedAppList subarrayWithRange:range];
-    
-    // Start 2 jobs
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        for (TemporaryApp* app in firstHalf) {
-            [self updateBoxArtCacheForApp:app];
-        }
-    });
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        for (TemporaryApp* app in secondHalf) {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+        for (TemporaryApp* app in _sortedAppList) {
             [self updateBoxArtCacheForApp:app];
         }
     });
