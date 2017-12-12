@@ -20,6 +20,8 @@ static NSOperationQueue* mainQueue;
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
+    [[NSUserDefaults standardUserDefaults] setValue:@(NO) forKey:@"_UIConstraintBasedLayoutLogUnsatisfiable"];
+    
     [[UILabel appearance] setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
     [[UIButton appearance].titleLabel setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
 
