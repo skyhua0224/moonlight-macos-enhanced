@@ -258,7 +258,7 @@ static NSMutableSet* hostList;
             NSIndexPath *path = [NSIndexPath indexPathForItem:appIndex inSection:0];
             AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:path];
             if (cell != nil) {
-                [self configureCell:cell atIndexPath:path withApp:app];
+                [self configureCell:cell atIndexPath:path withApp:app shouldAnimateImage:YES];
             }
         }
     });
@@ -889,7 +889,7 @@ static NSMutableSet* hostList;
     TemporaryApp* app = _sortedAppList[path.row];
     AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:path];
     
-    [self configureCell:cell atIndexPath:path withApp:app];
+    [self configureCell:cell atIndexPath:path withApp:app shouldAnimateImage:NO];
 }
 
 - (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {
@@ -948,7 +948,7 @@ static NSMutableSet* hostList;
     [cell.shadowView updateShadow];
 }
 
-- (void)configureCell:(AppCollectionViewCell *)cell atIndexPath:(NSIndexPath *)path withApp:(TemporaryApp *)app {
+- (void)configureCell:(AppCollectionViewCell *)cell atIndexPath:(NSIndexPath *)path withApp:(TemporaryApp *)app shouldAnimateImage:(BOOL)animated {
     cell.appTitle.text = app.name;
     cell.appTitle.fadeLength = 10;
 #if DEBUG
@@ -964,9 +964,13 @@ static NSMutableSet* hostList;
             [_boxArtCache setObject:appImage forKey:app];
         }
     }
-    [UIView transitionWithView:cell.imageView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
+    if (animated) {
+        [UIView transitionWithView:cell.imageView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
+            cell.imageView.image = appImage;
+        } completion:nil];
+    } else {
         cell.imageView.image = appImage;
-    } completion:nil];
+    }
     cell.imageView.clipsToBounds = YES;
     cell.imageView.layer.cornerRadius = 8;
     cell.shadowView.backgroundColor = [UIColor clearColor];
@@ -978,7 +982,7 @@ static NSMutableSet* hostList;
     AppCollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AppCell" forIndexPath:indexPath];
 
     TemporaryApp* app = _sortedAppList[indexPath.row];
-    [self configureCell:cell atIndexPath:indexPath withApp:app];
+    [self configureCell:cell atIndexPath:indexPath withApp:app shouldAnimateImage:NO];
     
     [cell removeGestureRecognizer:cell.tapGesture];
     cell.tapGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(cellTapGestureHandler:)];
