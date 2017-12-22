@@ -10,6 +10,11 @@
 		4C04F32B1FAF30CC0011E17A /* KTCenterFlowLayout.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */; };
 		4C09A82B1FDCF93C00A57E87 /* UIImage+pspdf.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */; };
 		4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */; };
+		4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */; };
+		4C7E0A811FECBFFD00684411 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A801FECBFFD00684411 /* ViewController.m */; };
+		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
+		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
+		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
 		4C85A7FF1FDCE1D300F28E90 /* ShadowView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */; };
 		4C85A8011FDCE49C00F28E90 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */; };
 		4C85A8041FDCE4B200F28E90 /* MarqueeLabel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */; };
@@ -117,6 +122,15 @@
 		4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "UIImage+pspdf.m"; sourceTree = "<group>"; };
 		4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCollectionViewCell.h; sourceTree = "<group>"; };
 		4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCollectionViewCell.m; sourceTree = "<group>"; };
+		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4C7E0A7C1FECBFFD00684411 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+		4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		4C7E0A7F1FECBFFD00684411 /* ViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViewController.h; sourceTree = "<group>"; };
+		4C7E0A801FECBFFD00684411 /* ViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewController.m; sourceTree = "<group>"; };
+		4C7E0A821FECBFFD00684411 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4C7E0A851FECBFFD00684411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		4C7E0A871FECBFFD00684411 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4C7E0A881FECBFFD00684411 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		4C85A7FD1FDCE1D300F28E90 /* ShadowView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowView.h; sourceTree = "<group>"; };
 		4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ShadowView.m; sourceTree = "<group>"; };
 		4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
@@ -164,7 +178,7 @@
 		FB290DB619B2C870004C83CF /* libz.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libz.dylib; path = usr/lib/libz.dylib; sourceTree = SDKROOT; };
 		FB290DB819B2C877004C83CF /* libbz2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libbz2.dylib; path = usr/lib/libbz2.dylib; sourceTree = SDKROOT; };
 		FB290DC319B2E98F004C83CF /* libxml2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libxml2.dylib; path = usr/lib/libxml2.dylib; sourceTree = SDKROOT; };
-		FB290E7A19B38036004C83CF /* Main.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = SOURCE_ROOT; };
+		FB290E7A19B38036004C83CF /* Main.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = Main.storyboard; path = Limelight/iOS/Main.storyboard; sourceTree = SOURCE_ROOT; };
 		FB4678EB1A50C40900377732 /* OnScreenControls.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = OnScreenControls.h; sourceTree = "<group>"; };
 		FB4678EC1A50C40900377732 /* OnScreenControls.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = OnScreenControls.m; sourceTree = "<group>"; };
 		FB4678F21A51BDCB00377732 /* Limelight 0.3.0.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Limelight 0.3.0.xcdatamodel"; sourceTree = "<group>"; };
@@ -211,7 +225,7 @@
 		FB89462519F646E200339C8A /* MainFrameViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MainFrameViewController.m; sourceTree = "<group>"; };
 		FB89462619F646E200339C8A /* StreamFrameViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = StreamFrameViewController.h; sourceTree = "<group>"; };
 		FB89462719F646E200339C8A /* StreamFrameViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = StreamFrameViewController.m; sourceTree = "<group>"; };
-		FB89463719F6473800339C8A /* Launch Screen.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = "Launch Screen.xib"; sourceTree = SOURCE_ROOT; };
+		FB89463719F6473800339C8A /* Launch Screen.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; name = "Launch Screen.xib"; path = "Limelight/iOS/Launch Screen.xib"; sourceTree = SOURCE_ROOT; };
 		FB89469419F6AFB800339C8A /* aes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = aes.h; sourceTree = "<group>"; };
 		FB89469519F6AFB800339C8A /* asn1.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = asn1.h; sourceTree = "<group>"; };
 		FB89469619F6AFB800339C8A /* asn1_mac.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = asn1_mac.h; sourceTree = "<group>"; };
@@ -333,6 +347,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		4C7E0A771FECBFFD00684411 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D46A739D1CBC7CB60039F1EE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -364,6 +385,83 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		4C7E0A8E1FECC22200684411 /* macOS */ = {
+			isa = PBXGroup;
+			children = (
+				4C7E0A7C1FECBFFD00684411 /* AppDelegate.h */,
+				4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */,
+				4C7E0A821FECBFFD00684411 /* Assets.xcassets */,
+				4C7E0A841FECBFFD00684411 /* Main.storyboard */,
+				4C7E0A921FECC4B500684411 /* ViewControllers */,
+				4C7E0A941FECC7A000684411 /* Supporting Files */,
+			);
+			path = macOS;
+			sourceTree = "<group>";
+		};
+		4C7E0A8F1FECC22D00684411 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				FB290D0219B2C406004C83CF /* AppDelegate.h */,
+				FB290D0319B2C406004C83CF /* AppDelegate.m */,
+				FB290E7A19B38036004C83CF /* Main.storyboard */,
+				FB89463719F6473800339C8A /* Launch Screen.xib */,
+				FB290D0819B2C406004C83CF /* Images.xcassets */,
+				FB89462319F646E200339C8A /* ViewControllers */,
+				4C7E0A911FECC3E900684411 /* Views */,
+				4C7E0A901FECC2C300684411 /* 3rd Party Code */,
+				FB290CFA19B2C406004C83CF /* Supporting Files */,
+			);
+			path = iOS;
+			sourceTree = "<group>";
+		};
+		4C7E0A901FECC2C300684411 /* 3rd Party Code */ = {
+			isa = PBXGroup;
+			children = (
+				4C04F3291FAF30CB0011E17A /* KTCenterFlowLayout.h */,
+				4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */,
+				4C85A8031FDCE4B200F28E90 /* MarqueeLabel.h */,
+				4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */,
+				4C09A8291FDCF93C00A57E87 /* UIImage+pspdf.h */,
+				4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */,
+			);
+			path = "3rd Party Code";
+			sourceTree = "<group>";
+		};
+		4C7E0A911FECC3E900684411 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				FBDE86DE19F7A837001C18A8 /* UIComputerView.h */,
+				FBDE86DF19F7A837001C18A8 /* UIComputerView.m */,
+				FBDE86E419F82297001C18A8 /* UIAppView.h */,
+				FBDE86E519F82297001C18A8 /* UIAppView.m */,
+				4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */,
+				4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */,
+				FB1D59951BBCCB6400F482CA /* ComputerScrollView.h */,
+				FB1D59961BBCCB6400F482CA /* ComputerScrollView.m */,
+				FB1D59981BBCCD7E00F482CA /* AppCollectionView.h */,
+				FB1D59991BBCCD7E00F482CA /* AppCollectionView.m */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		4C7E0A921FECC4B500684411 /* ViewControllers */ = {
+			isa = PBXGroup;
+			children = (
+				4C7E0A7F1FECBFFD00684411 /* ViewController.h */,
+				4C7E0A801FECBFFD00684411 /* ViewController.m */,
+			);
+			path = ViewControllers;
+			sourceTree = "<group>";
+		};
+		4C7E0A941FECC7A000684411 /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				4C7E0A871FECBFFD00684411 /* Info.plist */,
+				4C7E0A881FECBFFD00684411 /* main.m */,
+			);
+			path = "Supporting Files";
+			sourceTree = "<group>";
+		};
 		98AB2E801CAD46830089BB98 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -428,6 +526,7 @@
 			children = (
 				FB290CEE19B2C406004C83CF /* Moonlight.app */,
 				D46A73A01CBC7CB60039F1EE /* MoonlightUnitTests.xctest */,
+				4C7E0A7A1FECBFFD00684411 /* Moonlight.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -455,38 +554,17 @@
 		FB290CF919B2C406004C83CF /* Moonlight */ = {
 			isa = PBXGroup;
 			children = (
-				D4746EEA1CBC740C006FB401 /* Moonlight-Bridging-Header.h */,
+				4C7E0A8E1FECC22200684411 /* macOS */,
+				4C7E0A8F1FECC22D00684411 /* iOS */,
 				9E5D5FF61A5A5A3900689918 /* Font */,
 				FB89460419F646E200339C8A /* Crypto */,
 				FB89460919F646E200339C8A /* Input */,
 				FB89460E19F646E200339C8A /* Network */,
 				FB89461519F646E200339C8A /* Stream */,
 				FB89461E19F646E200339C8A /* Utility */,
-				FB89462319F646E200339C8A /* ViewControllers */,
 				FBD3495F1A004453002D2A60 /* Database */,
-				FB290CFA19B2C406004C83CF /* Supporting Files */,
-				FB290D0219B2C406004C83CF /* AppDelegate.h */,
-				FB290D0319B2C406004C83CF /* AppDelegate.m */,
-				FBDE86DE19F7A837001C18A8 /* UIComputerView.h */,
-				FBDE86DF19F7A837001C18A8 /* UIComputerView.m */,
-				FBDE86E419F82297001C18A8 /* UIAppView.h */,
-				FBDE86E519F82297001C18A8 /* UIAppView.m */,
-				4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */,
-				4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */,
-				FB290E7A19B38036004C83CF /* Main.storyboard */,
-				FB89463719F6473800339C8A /* Launch Screen.xib */,
-				FB290D0819B2C406004C83CF /* Images.xcassets */,
 				FB290D0519B2C406004C83CF /* Limelight.xcdatamodeld */,
-				FB1D59951BBCCB6400F482CA /* ComputerScrollView.h */,
-				FB1D59961BBCCB6400F482CA /* ComputerScrollView.m */,
-				FB1D59981BBCCD7E00F482CA /* AppCollectionView.h */,
-				FB1D59991BBCCD7E00F482CA /* AppCollectionView.m */,
-				4C04F3291FAF30CB0011E17A /* KTCenterFlowLayout.h */,
-				4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */,
-				4C85A8031FDCE4B200F28E90 /* MarqueeLabel.h */,
-				4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */,
-				4C09A8291FDCF93C00A57E87 /* UIImage+pspdf.h */,
-				4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */,
+				D4746EEA1CBC740C006FB401 /* Moonlight-Bridging-Header.h */,
 			);
 			name = Moonlight;
 			path = Limelight;
@@ -500,7 +578,7 @@
 				FB290CFF19B2C406004C83CF /* main.m */,
 				FB290D0119B2C406004C83CF /* Limelight-Prefix.pch */,
 			);
-			name = "Supporting Files";
+			path = "Supporting Files";
 			sourceTree = "<group>";
 		};
 		FB89460419F646E200339C8A /* Crypto */ = {
@@ -821,6 +899,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		4C7E0A791FECBFFD00684411 /* Moonlight for macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4C7E0A8D1FECBFFD00684411 /* Build configuration list for PBXNativeTarget "Moonlight for macOS" */;
+			buildPhases = (
+				4C7E0A761FECBFFD00684411 /* Sources */,
+				4C7E0A771FECBFFD00684411 /* Frameworks */,
+				4C7E0A781FECBFFD00684411 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Moonlight for macOS";
+			productName = "Moonlight for macOS";
+			productReference = 4C7E0A7A1FECBFFD00684411 /* Moonlight.app */;
+			productType = "com.apple.product-type.application";
+		};
 		D46A739F1CBC7CB60039F1EE /* MoonlightUnitTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D46A73A91CBC7CB60039F1EE /* Build configuration list for PBXNativeTarget "MoonlightUnitTests" */;
@@ -867,6 +962,16 @@
 				LastUpgradeCheck = 0800;
 				ORGANIZATIONNAME = "Moonlight Stream";
 				TargetAttributes = {
+					4C7E0A791FECBFFD00684411 = {
+						CreatedOnToolsVersion = 9.2;
+						DevelopmentTeam = KHSNQKXT55;
+						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.Sandbox = {
+								enabled = 0;
+							};
+						};
+					};
 					D46A739F1CBC7CB60039F1EE = {
 						CreatedOnToolsVersion = 7.3;
 						LastSwiftMigration = 0800;
@@ -886,6 +991,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				Base,
 			);
 			mainGroup = FB290CE519B2C406004C83CF;
 			productRefGroup = FB290CEF19B2C406004C83CF /* Products */;
@@ -900,6 +1006,7 @@
 			targets = (
 				FB290CED19B2C406004C83CF /* Moonlight */,
 				D46A739F1CBC7CB60039F1EE /* MoonlightUnitTests */,
+				4C7E0A791FECBFFD00684411 /* Moonlight for macOS */,
 			);
 		};
 /* End PBXProject section */
@@ -915,6 +1022,15 @@
 /* End PBXReferenceProxy section */
 
 /* Begin PBXResourcesBuildPhase section */
+		4C7E0A781FECBFFD00684411 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */,
+				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D46A739E1CBC7CB60039F1EE /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -943,6 +1059,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4C7E0A761FECBFFD00684411 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C7E0A811FECBFFD00684411 /* ViewController.m in Sources */,
+				4C7E0A891FECBFFD00684411 /* main.m in Sources */,
+				4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D46A739C1CBC7CB60039F1EE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1025,6 +1151,14 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
+		4C7E0A841FECBFFD00684411 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4C7E0A851FECBFFD00684411 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
 		FB290CFC19B2C406004C83CF /* InfoPlist.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
@@ -1036,6 +1170,71 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		4C7E0A8B1FECBFFD00684411 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_IDENTITY = "Mac Developer";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = KHSNQKXT55;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 10.12;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
+				PRODUCT_NAME = Moonlight;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		4C7E0A8C1FECBFFD00684411 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_IDENTITY = "Mac Developer";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = KHSNQKXT55;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 10.12;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
+				PRODUCT_NAME = Moonlight;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
 		D46A73A71CBC7CB60039F1EE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1247,6 +1446,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		4C7E0A8D1FECBFFD00684411 /* Build configuration list for PBXNativeTarget "Moonlight for macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4C7E0A8B1FECBFFD00684411 /* Debug */,
+				4C7E0A8C1FECBFFD00684411 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		D46A73A91CBC7CB60039F1EE /* Build configuration list for PBXNativeTarget "MoonlightUnitTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
