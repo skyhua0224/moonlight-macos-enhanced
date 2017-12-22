@@ -1,5 +1,5 @@
 //
-//  ViewController.h
+//  HostCell.h
 //  Moonlight for macOS
 //
 //  Created by Michael Kenny on 22/12/17.
@@ -8,8 +8,7 @@
 
 #import <Cocoa/Cocoa.h>
 
-@interface ViewController : NSViewController
-
+@interface HostCell : NSCollectionViewItem
+@property (weak) IBOutlet NSTextField *hostName;
 
 @end
-

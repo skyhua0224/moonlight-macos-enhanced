@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="13771" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="13771"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner"/>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <customView id="c22-O7-iKe" customClass="HostCellView">
+            <rect key="frame" x="0.0" y="0.0" width="50" height="50"/>
+            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+            <subviews>
+                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Zdg-fz-C9K" userLabel="Host Name">
+                    <rect key="frame" x="5" y="0.0" width="40" height="17"/>
+                    <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Name" id="QvL-Tp-Eyp">
+                        <font key="font" metaFont="system"/>
+                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+            </subviews>
+            <constraints>
+                <constraint firstItem="Zdg-fz-C9K" firstAttribute="centerX" secondItem="c22-O7-iKe" secondAttribute="centerX" id="MPs-RK-Xg7"/>
+                <constraint firstAttribute="bottom" secondItem="Zdg-fz-C9K" secondAttribute="bottom" id="Rm1-Yp-IgO"/>
+                <constraint firstItem="Zdg-fz-C9K" firstAttribute="top" relation="greaterThanOrEqual" secondItem="c22-O7-iKe" secondAttribute="top" id="exk-Pu-8L5"/>
+            </constraints>
+        </customView>
+        <collectionViewItem id="3AT-cj-ZiH" userLabel="HostCell" customClass="HostCell">
+            <connections>
+                <outlet property="hostName" destination="Zdg-fz-C9K" id="rb7-bj-Icf"/>
+                <outlet property="view" destination="c22-O7-iKe" id="W33-Ik-R4y"/>
+            </connections>
+        </collectionViewItem>
+    </objects>
+</document>
