@@ -22,11 +22,11 @@
     // HACK: Avoid calling [UIApplication delegate] off the UI thread to keep
     // Main Thread Checker happy.
     if ([NSThread isMainThread]) {
-        _appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
+        _appDelegate = [self getAppDelegate];
     }
     else {
         dispatch_sync(dispatch_get_main_queue(), ^{
-            _appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
+            _appDelegate = [self getAppDelegate];
         });
     }
     
@@ -34,6 +34,15 @@
     [_managedObjectContext setPersistentStoreCoordinator:_appDelegate.persistentStoreCoordinator];
     
     return self;
+}
+
+- (AppDelegate *)getAppDelegate {
+#if TARGET_OS_IPHONE
+    return (AppDelegate *)[[UIApplication sharedApplication] delegate];
+#else
+    return (AppDelegate *)[[NSApplication sharedApplication] delegate];
+#endif
+
 }
 
 - (void) updateUniqueId:(NSString*)uniqueId {

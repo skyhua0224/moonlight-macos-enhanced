@@ -18,6 +18,7 @@ static const double RETRY_DELAY = 2; // seconds
 static const int MAX_ATTEMPTS = 5;
 
 - (void) main {
+#if 0
     UIImage* appImage = nil;
     int attempts = 0;
     while (![self isCancelled] && appImage == nil && attempts++ < MAX_ATTEMPTS) {
@@ -34,6 +35,7 @@ static const int MAX_ATTEMPTS = 5;
         }
     }
     [self performSelectorOnMainThread:@selector(sendCallbackForApp:) withObject:self.app waitUntilDone:NO];
+#endif
 }
 
 - (void) sendCallbackForApp:(TemporaryApp*)app {
