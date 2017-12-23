@@ -10,11 +10,11 @@
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <customView id="c22-O7-iKe" customClass="HostCellView">
-            <rect key="frame" x="0.0" y="0.0" width="50" height="50"/>
+            <rect key="frame" x="0.0" y="0.0" width="72" height="72"/>
             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
             <subviews>
                 <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Zdg-fz-C9K" userLabel="Host Name">
-                    <rect key="frame" x="5" y="0.0" width="40" height="17"/>
+                    <rect key="frame" x="16" y="8" width="40" height="17"/>
                     <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Name" id="QvL-Tp-Eyp">
                         <font key="font" metaFont="system"/>
                         <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
@@ -24,7 +24,7 @@
             </subviews>
             <constraints>
                 <constraint firstItem="Zdg-fz-C9K" firstAttribute="centerX" secondItem="c22-O7-iKe" secondAttribute="centerX" id="MPs-RK-Xg7"/>
-                <constraint firstAttribute="bottom" secondItem="Zdg-fz-C9K" secondAttribute="bottom" id="Rm1-Yp-IgO"/>
+                <constraint firstAttribute="bottom" secondItem="Zdg-fz-C9K" secondAttribute="bottom" constant="8" id="Rm1-Yp-IgO"/>
                 <constraint firstItem="Zdg-fz-C9K" firstAttribute="top" relation="greaterThanOrEqual" secondItem="c22-O7-iKe" secondAttribute="top" id="exk-Pu-8L5"/>
             </constraints>
         </customView>
