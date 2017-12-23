@@ -9,5 +9,6 @@
 #import <Cocoa/Cocoa.h>
 
 @interface HostCellView : NSView
+@property (nonatomic, strong) NSColor *backgroundColor;
 
 @end

@@ -8,6 +8,8 @@
 
 #import "HostsViewController.h"
 #import "HostCell.h"
+#import "HostsViewControllerDelegate.h"
+#import "AppsViewController.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -15,12 +17,14 @@
 #import "DiscoveryManager.h"
 #import "TemporaryHost.h"
 #import "DataManager.h"
-#import "Logger.h"
+#import "PairManager.h"
 
-@interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, AppAssetCallback, DiscoveryCallback>
+@interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, HostsViewControllerDelegate, AppAssetCallback, DiscoveryCallback, PairCallback>
 
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSMutableArray<TemporaryHost *> *hosts;
+@property (nonatomic, strong) TemporaryHost *selectedHost;
+@property (nonatomic, strong) NSAlert *pairAlert;
 
 @property (nonatomic, strong) NSString *uniqueId;
 @property (nonatomic, strong) NSData *cert;
@@ -57,11 +61,23 @@
     [self.discMan stopDiscovery];
 }
 
+- (void)transitionToAppsVCWithHost:(TemporaryHost *)host {
+    AppsViewController *appsVC = [self.storyboard instantiateControllerWithIdentifier:@"appsVC"];
+    appsVC.host = host;
+    [self.parentViewController addChildViewController:appsVC];
+    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
+}
+
+
 #pragma mark - NSCollectionViewDataSource
 
 - (nonnull NSCollectionViewItem *)collectionView:(nonnull NSCollectionView *)collectionView itemForRepresentedObjectAtIndexPath:(nonnull NSIndexPath *)indexPath {
     HostCell *item = [collectionView makeItemWithIdentifier:@"HostCell" forIndexPath:indexPath];
-    item.hostName.stringValue = self.hosts[indexPath.item].name;
+    
+    TemporaryHost *host = self.hosts[indexPath.item];
+    item.hostName.stringValue = host.name;
+    item.host = host;
+    item.delegate = self;
     
     return item;
 }
@@ -70,6 +86,28 @@
     return self.hosts.count;
 }
 
+
+#pragma mark - NSCollectionViewDelegate
+
+- (void)collectionView:(NSCollectionView *)collectionView didSelectItemsAtIndexPaths:(NSSet<NSIndexPath *> *)indexPaths {
+}
+
+
+#pragma mark - HostsViewControllerDelegate
+
+- (void)openHost:(TemporaryHost *)host {
+    self.selectedHost = host;
+    
+    if (host.online) {
+        if (host.pairState == PairStatePaired) {
+            [self transitionToAppsVCWithHost:host];
+        } else {
+            [self setupPairing:host];
+        }
+    } else {
+        [self handleOfflineHost:host];
+    }
+}
 
 #pragma mark - Host Discovery
 
@@ -117,6 +155,21 @@
 }
 
 
+#pragma mark - Host Operations
+
+- (void)setupPairing:(TemporaryHost *)host {
+    // Polling the server while pairing causes the server to screw up
+    [self.discMan stopDiscoveryBlocking];
+    
+    HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:self.uniqueId deviceName:deviceName cert:self.cert];
+    PairManager* pMan = [[PairManager alloc] initWithManager:hMan andCert:self.cert callback:self];
+    [self.opQueue addOperation:pMan];
+}
+
+- (void)handleOfflineHost:(TemporaryHost *)host {
+}
+
+
 #pragma mark - AppAssetCallback
 
 - (void) receivedAssetForApp:(TemporaryApp*)app {
@@ -136,6 +189,52 @@
         }
         [self updateHosts];
     });
+}
+
+
+#pragma mark - PairCallback
+
+- (void)showPIN:(NSString *)PIN {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.pairAlert = [[NSAlert alloc] init];
+        self.pairAlert.alertStyle = NSAlertStyleInformational;
+        self.pairAlert.messageText = [NSString stringWithFormat:@"Enter the following PIN on %@: %@", self.selectedHost.name, PIN];
+        [self.pairAlert beginSheetModalForWindow:self.view.window completionHandler:nil];
+    });
+}
+
+- (void)pairSuccessful {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.view.window endSheet:self.pairAlert.window];
+        [self.discMan startDiscovery];
+        [self alreadyPaired];
+    });
+}
+
+- (void)pairFailed:(NSString*)message {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.pairAlert != nil) {
+            [self.view.window endSheet:self.pairAlert.window];
+            self.pairAlert = nil;
+        }
+        [self displayFailureDialog:message];
+    });
+}
+
+- (void)alreadyPaired {
+    [self transitionToAppsVCWithHost:self.selectedHost];
+}
+
+
+#pragma mark - Pairing UI
+
+- (void)displayFailureDialog:(NSString *)message {
+    self.pairAlert = [[NSAlert alloc] init];
+    self.pairAlert.alertStyle = NSAlertStyleInformational;
+    self.pairAlert.messageText = [NSString stringWithFormat:@"Pairing Failed: %@", message];
+    [self.pairAlert beginSheetModalForWindow:self.view.window completionHandler:nil];
+    
+    [_discMan startDiscovery];
 }
 
 @end
