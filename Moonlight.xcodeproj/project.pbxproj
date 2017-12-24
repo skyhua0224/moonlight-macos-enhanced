@@ -38,6 +38,9 @@
 		4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E80E1FEE1C81000425CD /* AppsViewController.m */; };
 		4C38E8101FEE295E000425CD /* PairManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461419F646E200339C8A /* PairManager.m */; };
 		4C38E8131FEE30F8000425CD /* ContainerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E8121FEE30F8000425CD /* ContainerViewController.m */; };
+		4C38E8171FEF36A0000425CD /* AppCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E8151FEF36A0000425CD /* AppCell.m */; };
+		4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C38E8161FEF36A0000425CD /* AppCell.xib */; };
+		4C38E81B1FEF36C5000425CD /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E81A1FEF36C5000425CD /* AppCellView.m */; };
 		4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
@@ -160,6 +163,12 @@
 		4C38E80E1FEE1C81000425CD /* AppsViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppsViewController.m; sourceTree = "<group>"; };
 		4C38E8111FEE30F8000425CD /* ContainerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ContainerViewController.h; sourceTree = "<group>"; };
 		4C38E8121FEE30F8000425CD /* ContainerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ContainerViewController.m; sourceTree = "<group>"; };
+		4C38E8141FEF36A0000425CD /* AppCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCell.h; sourceTree = "<group>"; };
+		4C38E8151FEF36A0000425CD /* AppCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCell.m; sourceTree = "<group>"; };
+		4C38E8161FEF36A0000425CD /* AppCell.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AppCell.xib; sourceTree = "<group>"; };
+		4C38E8191FEF36C5000425CD /* AppCellView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCellView.h; sourceTree = "<group>"; };
+		4C38E81A1FEF36C5000425CD /* AppCellView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCellView.m; sourceTree = "<group>"; };
+		4C38E81C1FEF3C46000425CD /* AppsViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppsViewControllerDelegate.h; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A7C1FECBFFD00684411 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -439,6 +448,7 @@
 				4C7E0A821FECBFFD00684411 /* Assets.xcassets */,
 				4C7E0A841FECBFFD00684411 /* Main.storyboard */,
 				4C7E0AA21FECE55E00684411 /* HostCell.xib */,
+				4C38E8161FEF36A0000425CD /* AppCell.xib */,
 				4C7E0A921FECC4B500684411 /* ViewControllers */,
 				4C7E0A9B1FECD2EE00684411 /* Views */,
 				4C7E0A941FECC7A000684411 /* Supporting Files */,
@@ -502,8 +512,11 @@
 				4C7E0A9C1FECD31600684411 /* HostCell.h */,
 				4C7E0A9D1FECD31600684411 /* HostCell.m */,
 				4C38E80B1FEE13FB000425CD /* HostsViewControllerDelegate.h */,
+				4C38E81C1FEF3C46000425CD /* AppsViewControllerDelegate.h */,
 				4C38E80D1FEE1C81000425CD /* AppsViewController.h */,
 				4C38E80E1FEE1C81000425CD /* AppsViewController.m */,
+				4C38E8141FEF36A0000425CD /* AppCell.h */,
+				4C38E8151FEF36A0000425CD /* AppCell.m */,
 			);
 			path = ViewControllers;
 			sourceTree = "<group>";
@@ -523,6 +536,8 @@
 			children = (
 				4C7E0A9F1FECDDEB00684411 /* HostCellView.h */,
 				4C7E0AA01FECDDEB00684411 /* HostCellView.m */,
+				4C38E8191FEF36C5000425CD /* AppCellView.h */,
+				4C38E81A1FEF36C5000425CD /* AppCellView.m */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1093,6 +1108,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */,
+				4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */,
 				4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */,
 				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
 			);
@@ -1134,6 +1150,7 @@
 				4C38E7F51FEE0121000425CD /* IdManager.m in Sources */,
 				4C38E8011FEE08AA000425CD /* Settings.m in Sources */,
 				4C38E8041FEE08C8000425CD /* TemporaryHost.m in Sources */,
+				4C38E81B1FEF36C5000425CD /* AppCellView.m in Sources */,
 				4C38E7F01FEE00F6000425CD /* Logger.m in Sources */,
 				4C38E8001FEE08A3000425CD /* ServerInfoResponse.m in Sources */,
 				4C38E80A1FEE0AED000425CD /* Limelight.xcdatamodeld in Sources */,
@@ -1148,6 +1165,7 @@
 				4C7E0AA11FECDDEB00684411 /* HostCellView.m in Sources */,
 				4C38E8081FEE09D0000425CD /* Utils.m in Sources */,
 				4C7E0A971FECCF9A00684411 /* HostsViewController.m in Sources */,
+				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
