@@ -41,6 +41,8 @@
 		4C38E8171FEF36A0000425CD /* AppCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E8151FEF36A0000425CD /* AppCell.m */; };
 		4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C38E8161FEF36A0000425CD /* AppCell.xib */; };
 		4C38E81B1FEF36C5000425CD /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E81A1FEF36C5000425CD /* AppCellView.m */; };
+		4C38E8201FEF4FC1000425CD /* AlertPresenter.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */; };
+		4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD3F1A7E127D00872C98 /* AppListResponse.m */; };
 		4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
@@ -169,6 +171,8 @@
 		4C38E8191FEF36C5000425CD /* AppCellView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCellView.h; sourceTree = "<group>"; };
 		4C38E81A1FEF36C5000425CD /* AppCellView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCellView.m; sourceTree = "<group>"; };
 		4C38E81C1FEF3C46000425CD /* AppsViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppsViewControllerDelegate.h; sourceTree = "<group>"; };
+		4C38E81E1FEF4FC1000425CD /* AlertPresenter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AlertPresenter.h; sourceTree = "<group>"; };
+		4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AlertPresenter.m; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A7C1FECBFFD00684411 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -440,6 +444,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		4C38E81D1FEF4F89000425CD /* Helpers */ = {
+			isa = PBXGroup;
+			children = (
+				4C38E81E1FEF4FC1000425CD /* AlertPresenter.h */,
+				4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */,
+			);
+			path = Helpers;
+			sourceTree = "<group>";
+		};
 		4C7E0A8E1FECC22200684411 /* macOS */ = {
 			isa = PBXGroup;
 			children = (
@@ -451,6 +464,7 @@
 				4C38E8161FEF36A0000425CD /* AppCell.xib */,
 				4C7E0A921FECC4B500684411 /* ViewControllers */,
 				4C7E0A9B1FECD2EE00684411 /* Views */,
+				4C38E81D1FEF4F89000425CD /* Helpers */,
 				4C7E0A941FECC7A000684411 /* Supporting Files */,
 			);
 			path = macOS;
@@ -1157,10 +1171,12 @@
 				4C38E7FD1FEE0887000425CD /* HttpManager.m in Sources */,
 				4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */,
 				4C38E7F41FEE011A000425CD /* DiscoveryManager.m in Sources */,
+				4C38E8201FEF4FC1000425CD /* AlertPresenter.m in Sources */,
 				4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */,
 				4C38E7FC1FEE0875000425CD /* Host.m in Sources */,
 				4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */,
 				4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */,
+				4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */,
 				4C38E8131FEE30F8000425CD /* ContainerViewController.m in Sources */,
 				4C7E0AA11FECDDEB00684411 /* HostCellView.m in Sources */,
 				4C38E8081FEE09D0000425CD /* Utils.m in Sources */,

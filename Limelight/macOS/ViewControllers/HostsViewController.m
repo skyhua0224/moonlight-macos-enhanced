@@ -10,25 +10,22 @@
 #import "HostCell.h"
 #import "HostsViewControllerDelegate.h"
 #import "AppsViewController.h"
+#import "AlertPresenter.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
-#import "AppAssetManager.h"
 #import "DiscoveryManager.h"
 #import "TemporaryHost.h"
 #import "DataManager.h"
 #import "PairManager.h"
 
-@interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, HostsViewControllerDelegate, AppAssetCallback, DiscoveryCallback, PairCallback>
+@interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
 
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
 @property (nonatomic, strong) TemporaryHost *selectedHost;
 @property (nonatomic, strong) NSAlert *pairAlert;
 
-@property (nonatomic, strong) NSString *uniqueId;
-@property (nonatomic, strong) NSData *cert;
-@property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSOperationQueue *opQueue;
 @property (nonatomic, strong) DiscoveryManager *discMan;
 
@@ -66,6 +63,11 @@
     appsVC.host = host;
     [self.parentViewController addChildViewController:appsVC];
     [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
+    
+    appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    appsVC.view.frame = self.view.bounds;
+    
+    self.view.window.title = host.name;
 }
 
 
@@ -114,10 +116,7 @@
 - (void)prepareDiscovery {
     // Set up crypto
     [CryptoManager generateKeyPairUsingSSl];
-    self.uniqueId = [IdManager getUniqueId];
-    self.cert = [CryptoManager readCertFromFile];
     
-    self.appManager = [[AppAssetManager alloc] initWithCallback:self];
     self.opQueue = [[NSOperationQueue alloc] init];
     
     [self retrieveSavedHosts];
@@ -161,18 +160,15 @@
     // Polling the server while pairing causes the server to screw up
     [self.discMan stopDiscoveryBlocking];
     
-    HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:self.uniqueId deviceName:deviceName cert:self.cert];
-    PairManager* pMan = [[PairManager alloc] initWithManager:hMan andCert:self.cert callback:self];
+    NSString *uniqueId = [IdManager getUniqueId];
+    NSData *cert = [CryptoManager readCertFromFile];
+
+    HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId deviceName:deviceName cert:cert];
+    PairManager* pMan = [[PairManager alloc] initWithManager:hMan andCert:cert callback:self];
     [self.opQueue addOperation:pMan];
 }
 
 - (void)handleOfflineHost:(TemporaryHost *)host {
-}
-
-
-#pragma mark - AppAssetCallback
-
-- (void) receivedAssetForApp:(TemporaryApp*)app {
 }
 
 
@@ -196,10 +192,7 @@
 
 - (void)showPIN:(NSString *)PIN {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.pairAlert = [[NSAlert alloc] init];
-        self.pairAlert.alertStyle = NSAlertStyleInformational;
-        self.pairAlert.messageText = [NSString stringWithFormat:@"Enter the following PIN on %@: %@", self.selectedHost.name, PIN];
-        [self.pairAlert beginSheetModalForWindow:self.view.window completionHandler:nil];
+        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational message:[NSString stringWithFormat:@"Enter the following PIN on %@: %@", self.selectedHost.name, PIN] window:self.view.window completionHandler:nil];
     });
 }
 
@@ -217,24 +210,13 @@
             [self.view.window endSheet:self.pairAlert.window];
             self.pairAlert = nil;
         }
-        [self displayFailureDialog:message];
+        [AlertPresenter displayAlert:NSAlertStyleWarning message:[NSString stringWithFormat:@"Pairing Failed: %@", message] window:self.view.window completionHandler:nil];
+        [_discMan startDiscovery];
     });
 }
 
 - (void)alreadyPaired {
     [self transitionToAppsVCWithHost:self.selectedHost];
-}
-
-
-#pragma mark - Pairing UI
-
-- (void)displayFailureDialog:(NSString *)message {
-    self.pairAlert = [[NSAlert alloc] init];
-    self.pairAlert.alertStyle = NSAlertStyleInformational;
-    self.pairAlert.messageText = [NSString stringWithFormat:@"Pairing Failed: %@", message];
-    [self.pairAlert beginSheetModalForWindow:self.view.window completionHandler:nil];
-    
-    [_discMan startDiscovery];
 }
 
 @end
