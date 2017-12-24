@@ -1501,7 +1501,7 @@
 					"$(SDKROOT)/usr/include/libxml2/**",
 					"$(PROJECT_DIR)/libs/**",
 				);
-				INFOPLIST_FILE = "Limelight/Limelight-Info.plist";
+				INFOPLIST_FILE = "Limelight/iOS/Supporting Files/Limelight-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1538,7 +1538,7 @@
 					"$(SDKROOT)/usr/include/libxml2/**",
 					"$(PROJECT_DIR)/libs/**",
 				);
-				INFOPLIST_FILE = "Limelight/Limelight-Info.plist";
+				INFOPLIST_FILE = "Limelight/iOS/Supporting Files/Limelight-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
