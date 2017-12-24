@@ -17,9 +17,14 @@
 static const double RETRY_DELAY = 2; // seconds
 static const int MAX_ATTEMPTS = 5;
 
-- (void) main {
-#if 0
-    UIImage* appImage = nil;
+#if TARGET_OS_IPHONE
+typedef UIImage ImageType;
+#else
+typedef NSImage ImageType;
+#endif
+
+- (void)main {
+    ImageType *appImage = nil;
     int attempts = 0;
     while (![self isCancelled] && appImage == nil && attempts++ < MAX_ATTEMPTS) {
         
@@ -27,18 +32,27 @@ static const int MAX_ATTEMPTS = 5;
         AppAssetResponse* appAssetResp = [[AppAssetResponse alloc] init];
         [hMan executeRequestSynchronously:[HttpRequest requestForResponse:appAssetResp withUrlRequest:[hMan newAppAssetRequestWithAppId:self.app.id]]];
         
-        appImage = [UIImage imageWithData:appAssetResp.data];
-        self.app.image = UIImagePNGRepresentation(appImage);
+        appImage = [[ImageType alloc] initWithData:appAssetResp.data];
+        self.app.image = [self pngRepresentationOfImage:appImage];
         
         if (![self isCancelled] && appImage == nil) {
             [NSThread sleepForTimeInterval:RETRY_DELAY];
         }
     }
     [self performSelectorOnMainThread:@selector(sendCallbackForApp:) withObject:self.app waitUntilDone:NO];
+}
+
+- (NSData *)pngRepresentationOfImage:(NSImage *)image {
+#if TARGET_OS_IPHONE
+    return UIImagePNGRepresentation(appImage);
+#else
+    NSData *imageData = [image TIFFRepresentation];
+    NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:imageData];
+    return [imageRep representationUsingType:NSPNGFileType properties:@{}];
 #endif
 }
 
-- (void) sendCallbackForApp:(TemporaryApp*)app {
+- (void)sendCallbackForApp:(TemporaryApp*)app {
     [self.callback receivedAssetForApp:app];
 }
 

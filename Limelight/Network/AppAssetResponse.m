@@ -17,9 +17,4 @@
     self.statusCode = -1;
 }
 
-- (UIImage*) getImage {
-    UIImage* appImage = [[UIImage alloc] initWithData:self.data];
-    return appImage;
-}
-
 @end

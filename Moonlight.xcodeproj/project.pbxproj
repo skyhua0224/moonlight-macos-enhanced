@@ -43,6 +43,7 @@
 		4C38E81B1FEF36C5000425CD /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E81A1FEF36C5000425CD /* AppCellView.m */; };
 		4C38E8201FEF4FC1000425CD /* AlertPresenter.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */; };
 		4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD3F1A7E127D00872C98 /* AppListResponse.m */; };
+		4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD3C1A7E111600872C98 /* AppAssetResponse.m */; };
 		4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
@@ -1191,6 +1192,7 @@
 				4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */,
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
+				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
 				4C38E8021FEE08B1000425CD /* TemporarySettings.m in Sources */,
 				4C38E8031FEE08BE000425CD /* MDNSManager.m in Sources */,

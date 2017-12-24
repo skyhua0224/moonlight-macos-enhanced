@@ -24,6 +24,8 @@
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
 
 @property (nonatomic, strong) AppAssetManager *appManager;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *boxArtCache;
+@property (nonatomic, strong) NSLock *boxArtCacheLock;
 
 @end
 
@@ -38,6 +40,9 @@
 
     self.apps = [NSArray array];
     [self loadApps];
+    
+    self.boxArtCache = [[NSMutableDictionary alloc] init];
+    self.boxArtCacheLock = [[NSLock alloc] init];
 }
 
 - (void)transitionToHostsVC {
@@ -47,13 +52,27 @@
 
 #pragma mark - NSCollectionViewDataSource
 
-- (nonnull NSCollectionViewItem *)collectionView:(nonnull NSCollectionView *)collectionView itemForRepresentedObjectAtIndexPath:(nonnull NSIndexPath *)indexPath {
-    AppCell *item = [collectionView makeItemWithIdentifier:@"AppCell" forIndexPath:indexPath];
-
+- (void)configureItem:(AppCell *)item atIndexPath:(NSIndexPath * _Nonnull)indexPath {
     TemporaryApp *app = self.apps[indexPath.item];
     item.appName.stringValue = app.name;
     item.app = app;
+    
+    [self.boxArtCacheLock lock];
+    NSImage* appImage = [self.boxArtCache objectForKey:app.id];
+    [self.boxArtCacheLock unlock];
+    if (appImage != nil) {
+        item.appCoverArt.image = appImage;
+    } else {
+        item.appCoverArt.image = nil;
+        [self asyncRenderAppImage:app];
+    }
+}
+
+- (nonnull NSCollectionViewItem *)collectionView:(nonnull NSCollectionView *)collectionView itemForRepresentedObjectAtIndexPath:(nonnull NSIndexPath *)indexPath {
+    AppCell *item = [collectionView makeItemWithIdentifier:@"AppCell" forIndexPath:indexPath];
     item.delegate = self;
+
+    [self configureItem:item atIndexPath:indexPath];
 
     return item;
 }
@@ -75,9 +94,18 @@
     
     if (self.host.appList.count > 0) {
         [self displayApps];
+        [self updateBoxArtForAllApps];
     } else {
         [self discoverAppsForHost:self.host];
     }
+}
+
+- (void)updateBoxArtForAllApps {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+        for (TemporaryApp* app in self.apps) {
+            [self updateBoxArtCacheForApp:app];
+        }
+    });
 }
 
 - (void)displayApps {
@@ -120,9 +148,10 @@
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self updateApplist:[appListResp getAppList] forHost:host];
+
                 [self.appManager stopRetrieving];
-                [self.appManager retrieveAssetsFromHost:host];
-                
+                [self.appManager retrieveAssetsFromHost:self.host];
+
                 [self displayApps];
             });
         }
@@ -180,9 +209,66 @@
     [database updateAppsForExistingHost:host];
 }
 
+
+#pragma mark - Image Loading
+
+- (void)asyncRenderAppImage:(TemporaryApp *)app {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        
+        NSImage *appImage = [[NSImage alloc] initWithData:app.image];
+        if (appImage != nil) {
+            [self.boxArtCacheLock lock];
+            [self.boxArtCache setObject:appImage forKey:app.id];
+            [self.boxArtCacheLock unlock];
+            
+            [self updateCellWithImageForApp:app];
+        }
+    });
+}
+
+- (void)updateCellWithImageForApp:(TemporaryApp *)app {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSInteger appIndex = [self.apps indexOfObject:app];
+        if (appIndex >= 0) {
+            NSIndexPath *path = [NSIndexPath indexPathForItem:appIndex inSection:0];
+            AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
+            if (item != nil) {
+                [self configureItem:item atIndexPath:path];
+            }
+        }
+    });
+}
+
+- (void)updateBoxArtCacheForApp:(TemporaryApp *)app {
+    if (app.image == nil) {
+        [self.boxArtCacheLock lock];
+        [self.boxArtCache removeObjectForKey:app.id];
+        [self.boxArtCacheLock unlock];
+    } else {
+        [self.boxArtCacheLock lock];
+        NSImage *image = [self.boxArtCache objectForKey:app.id];
+        [self.boxArtCacheLock unlock];
+        if (image == nil) {
+            NSImage *image = [[NSImage alloc] initWithData:app.image];
+            [self.boxArtCacheLock lock];
+            [self.boxArtCache setObject:image forKey:app.id];
+            [self.boxArtCacheLock unlock];
+        }
+    }
+}
+
+
 #pragma mark - AppAssetCallback
 
 - (void) receivedAssetForApp:(TemporaryApp*)app {
+    // Update the box art cache now so we don't have to do it
+    // on the main thread
+    [self updateBoxArtCacheForApp:app];
+    
+    DataManager *dataManager = [[DataManager alloc] init];
+    [dataManager updateIconForExistingApp:app];
+    
+    [self updateCellWithImageForApp:app];
 }
 
 @end
