@@ -22,7 +22,7 @@
 @interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, HostsViewControllerDelegate, AppAssetCallback, DiscoveryCallback, PairCallback>
 
 @property (weak) IBOutlet NSCollectionView *collectionView;
-@property (nonatomic, strong) NSMutableArray<TemporaryHost *> *hosts;
+@property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
 @property (nonatomic, strong) TemporaryHost *selectedHost;
 @property (nonatomic, strong) NSAlert *pairAlert;
 
@@ -44,7 +44,7 @@
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     
-    self.hosts = [NSMutableArray array];
+    self.hosts = [NSArray array];
     
     [self prepareDiscovery];
 }
@@ -128,7 +128,7 @@
     DataManager* dataMan = [[DataManager alloc] init];
     NSArray* hosts = [dataMan getHosts];
     @synchronized(self.hosts) {
-        [self.hosts addObjectsFromArray:hosts];
+        self.hosts = hosts;
         
         // Initialize the non-persistent host state
         for (TemporaryHost* host in self.hosts) {
@@ -149,7 +149,7 @@
     Log(LOG_I, @"Updating hosts...");
     @synchronized (self.hosts) {
         // Sort the host list in alphabetical order
-        self.hosts = [NSMutableArray arrayWithArray:[self.hosts sortedArrayUsingSelector:@selector(compareName:)]];
+        self.hosts = [self.hosts sortedArrayUsingSelector:@selector(compareName:)];
         [self.collectionView reloadData];
     }
 }
@@ -185,7 +185,7 @@
             Log(LOG_D, @"Host: \n{\n\t name:%@ \n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n}", host.name, host.address, host.localAddress, host.externalAddress, host.uuid, host.mac, host.pairState, host.online, host.activeAddress);
         }
         @synchronized(self.hosts) {
-            self.hosts = [NSMutableArray arrayWithArray:hosts];
+            self.hosts = hosts;
         }
         [self updateHosts];
     });
