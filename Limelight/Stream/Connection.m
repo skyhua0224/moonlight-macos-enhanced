@@ -86,7 +86,6 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
 
 int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, void* context, int flags)
 {
-#ifdef COOFDY
     int err;
     
     // We only support stereo for now
@@ -97,7 +96,8 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
                                       &err);
     
     audioLock = [[NSLock alloc] init];
-    
+
+#if TARGET_OS_IPHONE
     // Configure the audio session for our app
     NSError *audioSessionError = nil;
     AVAudioSession* audioSession = [AVAudioSession sharedInstance];
@@ -107,12 +107,17 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
     [audioSession setPreferredOutputNumberOfChannels:opusConfig->channelCount error:&audioSessionError];
     [audioSession setPreferredIOBufferDuration:0.005 error:&audioSessionError];
     [audioSession setActive: YES error: &audioSessionError];
+#endif
     
     OSStatus status;
     
     AudioComponentDescription audioDesc;
     audioDesc.componentType = kAudioUnitType_Output;
+#if TARGET_OS_IPHONE
     audioDesc.componentSubType = kAudioUnitSubType_RemoteIO;
+#else
+    audioDesc.componentSubType = kAudioUnitSubType_DefaultOutput;
+#endif
     audioDesc.componentFlags = 0;
     audioDesc.componentFlagsMask = 0;
     audioDesc.componentManufacturer = kAudioUnitManufacturer_Apple;
@@ -174,13 +179,10 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
     }
     
     return status;
-#endif
-    return 0;
 }
 
 void ArCleanup(void)
 {
-#ifdef COOFDY
     if (opusDecoder != NULL) {
         opus_decoder_destroy(opusDecoder);
         opusDecoder = NULL;
@@ -195,10 +197,12 @@ void ArCleanup(void)
     if (status) {
         Log(LOG_E, @"Unable to uninitialize audioUnit: %d", (int32_t)status);
     }
-    
+
+#if TARGET_OS_IPHONE
     // Audio session is now inactive
     AVAudioSession* audioSession = [AVAudioSession sharedInstance];
     [audioSession setActive: YES error: nil];
+#endif
     
     // This is safe because we're guaranteed that nobody
     // is touching this list now
@@ -209,12 +213,10 @@ void ArCleanup(void)
         audioBufferQueueLength--;
         free(entry);
     }
-#endif
 }
 
 void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 {
-#ifdef COOFDY
     int decodedLength = opus_decode(opusDecoder, (unsigned char*)sampleData, sampleLength, decodedPcmBuffer, PCM_BUFFER_SIZE / 2, 0);
     if (decodedLength > 0) {
         // Return of opus_decode is samples per channel
@@ -256,7 +258,6 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
             [audioLock unlock];
         }
     }
-#endif
 }
 
 void ClStageStarting(int stage)

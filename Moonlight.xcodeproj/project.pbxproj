@@ -1374,7 +1374,7 @@
 				MTL_ENABLE_DEBUG_INFO = YES;
 				OTHER_LDFLAGS = (
 					"-l",
-					opusenc,
+					opus,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
@@ -1425,7 +1425,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_LDFLAGS = (
 					"-l",
-					opusenc,
+					opus,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
