@@ -6,10 +6,8 @@
 //  Copyright © 2017 Moonlight Stream. All rights reserved.
 //
 
-#import <UIKit/UIKit.h>
-
 @import AVFoundation;
 
-@interface RendererLayerContainer : UIView
+@interface RendererLayerContainer : ViewType
 
 @end

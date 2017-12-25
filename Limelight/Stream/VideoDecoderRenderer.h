@@ -12,7 +12,7 @@
 
 @interface VideoDecoderRenderer : NSObject
 
-- (id)initWithView:(UIView*)view;
+- (id)initWithView:(ViewType *)view;
 
 - (void)setupWithVideoFormat:(int)videoFormat;
 

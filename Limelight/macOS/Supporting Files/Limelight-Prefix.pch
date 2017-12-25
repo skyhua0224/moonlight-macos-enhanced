@@ -11,4 +11,9 @@
     #import <Foundation/Foundation.h>
     #import <CoreData/CoreData.h>
     #import "Logger.h"
+    typedef NSView ViewType;
+    typedef NSColor ColorType;
+#define UIViewAutoresizingFlexibleHeight NSViewHeightSizable
+#define UIViewAutoresizingFlexibleWidth NSViewWidthSizable
 #endif
+

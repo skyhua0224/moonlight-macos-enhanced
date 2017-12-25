@@ -811,11 +811,25 @@
                     </view>
                     <connections>
                         <outlet property="collectionView" destination="t1H-Tz-zd9" id="Db7-bE-OSY"/>
+                        <segue destination="wJ2-hM-mn7" kind="show" identifier="streamSegue" id="6PX-Cd-n9c"/>
                     </connections>
                 </viewController>
                 <customObject id="oRP-9K-X4V" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="326" y="1140"/>
+        </scene>
+        <!--Stream View Controller-->
+        <scene sceneID="Wbf-xX-JHi">
+            <objects>
+                <viewController storyboardIdentifier="streamVC" id="wJ2-hM-mn7" customClass="StreamViewController" sceneMemberID="viewController">
+                    <view key="view" id="eg0-gN-AJf">
+                        <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </view>
+                </viewController>
+                <customObject id="fDV-hj-TtB" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="135" y="1653"/>
         </scene>
     </scenes>
 </document>

@@ -6,7 +6,6 @@
 //  Copyright (c) 2014 Moonlight Stream. All rights reserved.
 //
 
-#import <UIKit/UIKit.h>
 #import "ControllerSupport.h"
 
 @protocol EdgeDetectionDelegate <NSObject>
@@ -15,7 +14,7 @@
 
 @end
 
-@interface StreamView : UIView
+@interface StreamView : ViewType
 
 - (void) setupOnScreenControls:(ControllerSupport*)controllerSupport swipeDelegate:(id<EdgeDetectionDelegate>)swipeDelegate;
 - (void) setMouseDeltaFactors:(float)x y:(float)y;

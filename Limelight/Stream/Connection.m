@@ -86,6 +86,7 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
 
 int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, void* context, int flags)
 {
+#ifdef COOFDY
     int err;
     
     // We only support stereo for now
@@ -173,10 +174,13 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
     }
     
     return status;
+#endif
+    return 0;
 }
 
 void ArCleanup(void)
 {
+#ifdef COOFDY
     if (opusDecoder != NULL) {
         opus_decoder_destroy(opusDecoder);
         opusDecoder = NULL;
@@ -205,10 +209,12 @@ void ArCleanup(void)
         audioBufferQueueLength--;
         free(entry);
     }
+#endif
 }
 
 void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 {
+#ifdef COOFDY
     int decodedLength = opus_decode(opusDecoder, (unsigned char*)sampleData, sampleLength, decodedPcmBuffer, PCM_BUFFER_SIZE / 2, 0);
     if (decodedLength > 0) {
         // Return of opus_decode is samples per channel
@@ -250,6 +256,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
             [audioLock unlock];
         }
     }
+#endif
 }
 
 void ClStageStarting(int stage)
@@ -335,7 +342,7 @@ void ClLogMessage(const char* format, ...)
     
     // On iOS 11, we can use HEVC if the server supports encoding it
     // and this device has hardware decode for it (A9 and later)
-    if (@available(iOS 11.0, *)) {
+    if (@available(iOS 11.0, macOS 10.13, *)) {
         _streamConfig.supportsHevc = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
     }
     

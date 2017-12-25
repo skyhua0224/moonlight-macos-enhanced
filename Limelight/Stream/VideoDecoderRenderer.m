@@ -12,7 +12,7 @@
 #include "Limelight.h"
 
 @implementation VideoDecoderRenderer {
-    UIView *_view;
+    ViewType *_view;
     
     RendererLayerContainer *layerContainer;
     
@@ -33,7 +33,7 @@
     [_view addSubview:layerContainer];
     
     displayLayer = (AVSampleBufferDisplayLayer *)layerContainer.layer;
-    displayLayer.backgroundColor = [UIColor blackColor].CGColor;
+    displayLayer.backgroundColor = [ColorType blackColor].CGColor;
     
     // We need some parameter sets before we can properly start decoding frames
     waitingForSps = true;
@@ -49,7 +49,7 @@
     }
 }
 
-- (id)initWithView:(UIView*)view
+- (id)initWithView:(ViewType *)view
 {
     self = [super init];
     
@@ -218,7 +218,7 @@
                 const size_t parameterSetSizes[] = { [vpsData length], [spsData length], [ppsData length] };
                 
                 Log(LOG_I, @"Constructing new HEVC format description");
-                if (@available(iOS 11.0, *)) {
+                if (@available(iOS 11.0, macOS 10.13, *)) {
                     status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
                                                                                  3, /* count of parameter sets */
                                                                                  parameterSetPointers,

@@ -44,6 +44,15 @@
 		4C38E8201FEF4FC1000425CD /* AlertPresenter.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */; };
 		4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD3F1A7E127D00872C98 /* AppListResponse.m */; };
 		4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD3C1A7E111600872C98 /* AppAssetResponse.m */; };
+		4C38E8261FF0B609000425CD /* StreamViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E8251FF0B609000425CD /* StreamViewController.m */; };
+		4C38E8271FF0BF64000425CD /* VideoDecoderRenderer.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461D19F646E200339C8A /* VideoDecoderRenderer.m */; };
+		4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461B19F646E200339C8A /* StreamManager.m */; };
+		4C38E8291FF0BF8E000425CD /* Connection.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461719F646E200339C8A /* Connection.m */; };
+		4C38E82A1FF0BFA0000425CD /* StreamConfiguration.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461919F646E200339C8A /* StreamConfiguration.m */; };
+		4C38E82B1FF0BFAC000425CD /* ControllerSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89460B19F646E200339C8A /* ControllerSupport.m */; };
+		4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
+		4C38E82D1FF0C38E000425CD /* Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4746EEB1CBC740C006FB401 /* Controller.swift */; };
+		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
@@ -129,6 +138,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		4C38E82F1FF0C726000425CD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = FB290E2D19B37A4E004C83CF;
+			remoteInfo = "moonlight-common";
+		};
 		98AB2E831CAD46840089BB98 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */;
@@ -174,6 +190,8 @@
 		4C38E81C1FEF3C46000425CD /* AppsViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppsViewControllerDelegate.h; sourceTree = "<group>"; };
 		4C38E81E1FEF4FC1000425CD /* AlertPresenter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AlertPresenter.h; sourceTree = "<group>"; };
 		4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AlertPresenter.m; sourceTree = "<group>"; };
+		4C38E8241FF0B609000425CD /* StreamViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StreamViewController.h; sourceTree = "<group>"; };
+		4C38E8251FF0B609000425CD /* StreamViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamViewController.m; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A7C1FECBFFD00684411 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		4C7E0A7D1FECBFFD00684411 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -408,6 +426,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */,
 				4C38E8061FEE0903000425CD /* libxml2.tbd in Frameworks */,
 				4C38E7F61FEE01F4000425CD /* libssl.a in Frameworks */,
 				4C38E7F71FEE0219000425CD /* libcrypto.a in Frameworks */,
@@ -532,6 +551,8 @@
 				4C38E80E1FEE1C81000425CD /* AppsViewController.m */,
 				4C38E8141FEF36A0000425CD /* AppCell.h */,
 				4C38E8151FEF36A0000425CD /* AppCell.m */,
+				4C38E8241FF0B609000425CD /* StreamViewController.h */,
+				4C38E8251FF0B609000425CD /* StreamViewController.m */,
 			);
 			path = ViewControllers;
 			sourceTree = "<group>";
@@ -1006,6 +1027,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				4C38E8301FF0C726000425CD /* PBXTargetDependency */,
 			);
 			name = "Moonlight for macOS";
 			productName = "Moonlight for macOS";
@@ -1165,6 +1187,8 @@
 				4C38E7F51FEE0121000425CD /* IdManager.m in Sources */,
 				4C38E8011FEE08AA000425CD /* Settings.m in Sources */,
 				4C38E8041FEE08C8000425CD /* TemporaryHost.m in Sources */,
+				4C38E82A1FF0BFA0000425CD /* StreamConfiguration.m in Sources */,
+				4C38E8261FF0B609000425CD /* StreamViewController.m in Sources */,
 				4C38E81B1FEF36C5000425CD /* AppCellView.m in Sources */,
 				4C38E7F01FEE00F6000425CD /* Logger.m in Sources */,
 				4C38E8001FEE08A3000425CD /* ServerInfoResponse.m in Sources */,
@@ -1173,9 +1197,12 @@
 				4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */,
 				4C38E7F41FEE011A000425CD /* DiscoveryManager.m in Sources */,
 				4C38E8201FEF4FC1000425CD /* AlertPresenter.m in Sources */,
+				4C38E82B1FF0BFAC000425CD /* ControllerSupport.m in Sources */,
+				4C38E8271FF0BF64000425CD /* VideoDecoderRenderer.m in Sources */,
 				4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */,
 				4C38E7FC1FEE0875000425CD /* Host.m in Sources */,
 				4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */,
+				4C38E82D1FF0C38E000425CD /* Controller.swift in Sources */,
 				4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */,
 				4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */,
 				4C38E8131FEE30F8000425CD /* ContainerViewController.m in Sources */,
@@ -1185,6 +1212,7 @@
 				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
+				4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */,
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
 				4C38E8101FEE295E000425CD /* PairManager.m in Sources */,
 				4C38E7F91FEE085B000425CD /* App.m in Sources */,
@@ -1194,6 +1222,8 @@
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
+				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
+				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
 				4C38E8021FEE08B1000425CD /* TemporarySettings.m in Sources */,
 				4C38E8031FEE08BE000425CD /* MDNSManager.m in Sources */,
 			);
@@ -1268,6 +1298,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		4C38E8301FF0C726000425CD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "moonlight-common";
+			targetProxy = 4C38E82F1FF0C726000425CD /* PBXContainerItemProxy */;
+		};
 		98AB2E861CAD468B0089BB98 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = "moonlight-common";
@@ -1326,19 +1361,27 @@
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/libs/**",
 					"$(SDKROOT)/usr/include/libxml2",
+					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
 				);
 				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/libs/openssl/lib",
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = YES;
+				OTHER_LDFLAGS = (
+					"-l",
+					opusenc,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
+				SWIFT_VERSION = 3.0;
 			};
 			name = Debug;
 		};
@@ -1369,19 +1412,27 @@
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/libs/**",
 					"$(SDKROOT)/usr/include/libxml2",
+					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
 				);
 				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/libs/openssl/lib",
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = NO;
+				OTHER_LDFLAGS = (
+					"-l",
+					opusenc,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
+				SWIFT_VERSION = 3.0;
 			};
 			name = Release;
 		};

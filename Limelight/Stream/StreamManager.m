@@ -19,12 +19,12 @@
 
 @implementation StreamManager {
     StreamConfiguration* _config;
-    UIView* _renderView;
+    ViewType* _renderView;
     id<ConnectionCallbacks> _callbacks;
     Connection* _connection;
 }
 
-- (id) initWithConfig:(StreamConfiguration*)config renderView:(UIView*)view connectionCallbacks:(id<ConnectionCallbacks>)callbacks {
+- (id) initWithConfig:(StreamConfiguration*)config renderView:(ViewType*)view connectionCallbacks:(id<ConnectionCallbacks>)callbacks {
     self = [super init];
     _config = config;
     _renderView = view;
@@ -75,13 +75,15 @@
             return;
         }
     }
-    
+
+#ifdef COOFDY
     // Set mouse delta factors from the screen resolution and stream size
     CGFloat screenScale = [[UIScreen mainScreen] scale];
     CGRect screenBounds = [[UIScreen mainScreen] bounds];
     CGSize screenSize = CGSizeMake(screenBounds.size.width * screenScale, screenBounds.size.height * screenScale);
     [((StreamView*)_renderView) setMouseDeltaFactors:_config.width / screenSize.width
                                                    y:_config.height / screenSize.height];
+#endif
     
     // Populate the config's version fields from serverinfo
     _config.appVersion = appversion;

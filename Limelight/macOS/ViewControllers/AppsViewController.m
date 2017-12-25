@@ -11,6 +11,7 @@
 #import "AppsViewControllerDelegate.h"
 #import "AppCell.h"
 #import "AlertPresenter.h"
+#import "StreamViewController.h"
 
 #import "HttpManager.h"
 #import "IdManager.h"
@@ -22,6 +23,7 @@
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback>
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
+@property (nonatomic, strong) TemporaryApp *streamApp;
 
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *boxArtCache;
@@ -47,6 +49,11 @@
 
 - (void)transitionToHostsVC {
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
+}
+
+- (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
+    StreamViewController *streamVC = segue.destinationController;
+    streamVC.app = self.streamApp;
 }
 
 
@@ -84,6 +91,8 @@
 #pragma mark - AppsViewControllerDelegate
 
 - (void)openApp:(TemporaryApp *)app {
+    self.streamApp = app;
+    [self performSegueWithIdentifier:@"streamSegue" sender:nil];
 }
 
 

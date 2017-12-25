@@ -15,4 +15,6 @@
     #import <Foundation/Foundation.h>
     #import <CoreData/CoreData.h>
     #import "Logger.h"
+    typedef UIView ViewType;
+    typedef UIColor ColorType;
 #endif
