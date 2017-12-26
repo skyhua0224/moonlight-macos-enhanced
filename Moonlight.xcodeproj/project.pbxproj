@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		4C04F32B1FAF30CC0011E17A /* KTCenterFlowLayout.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */; };
 		4C09A82B1FDCF93C00A57E87 /* UIImage+pspdf.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */; };
+		4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24801FF1E99300B6A12E /* HIDSupport.m */; };
 		4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */; };
 		4C38E7F01FEE00F6000425CD /* Logger.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD1C8E11A8AD71400C6703C /* Logger.m */; };
 		4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3494219FC9C04002D2A60 /* AppAssetManager.m */; };
@@ -173,6 +174,8 @@
 		4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KTCenterFlowLayout.m; sourceTree = "<group>"; };
 		4C09A8291FDCF93C00A57E87 /* UIImage+pspdf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "UIImage+pspdf.h"; sourceTree = "<group>"; };
 		4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "UIImage+pspdf.m"; sourceTree = "<group>"; };
+		4C2E247F1FF1E99300B6A12E /* HIDSupport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HIDSupport.h; sourceTree = "<group>"; };
+		4C2E24801FF1E99300B6A12E /* HIDSupport.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HIDSupport.m; sourceTree = "<group>"; };
 		4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCollectionViewCell.h; sourceTree = "<group>"; };
 		4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCollectionViewCell.m; sourceTree = "<group>"; };
 		4C38E7F81FEE04E4000425CD /* Limelight-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Limelight-Prefix.pch"; sourceTree = "<group>"; };
@@ -721,6 +724,8 @@
 				FB89460D19F646E200339C8A /* StreamView.m */,
 				FB4678EB1A50C40900377732 /* OnScreenControls.h */,
 				FB4678EC1A50C40900377732 /* OnScreenControls.m */,
+				4C2E247F1FF1E99300B6A12E /* HIDSupport.h */,
+				4C2E24801FF1E99300B6A12E /* HIDSupport.m */,
 			);
 			path = Input;
 			sourceTree = "<group>";
@@ -1212,6 +1217,7 @@
 				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
+				4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */,
 				4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */,
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
 				4C38E8101FEE295E000425CD /* PairManager.m in Sources */,

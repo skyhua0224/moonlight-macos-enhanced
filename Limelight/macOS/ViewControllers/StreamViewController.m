@@ -14,10 +14,12 @@
 #import "ControllerSupport.h"
 #import "StreamManager.h"
 #import "VideoDecoderRenderer.h"
+#import "HIDSupport.h"
 
 @interface StreamViewController () <ConnectionCallbacks>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
+@property (nonatomic, strong) HIDSupport *hidSupport;
 @property (nonatomic, strong) StreamManager *streamMan;
 
 @end
@@ -36,8 +38,20 @@
     [super viewDidAppear];
     
     self.view.window.title = self.app.name;
+    [self.view.window makeFirstResponder:self.view];
 }
 
+- (void)flagsChanged:(NSEvent *)event {
+    [self.hidSupport flagsChanged:event];
+}
+
+- (void)keyDown:(NSEvent *)event {
+    [self.hidSupport keyDown:event];
+}
+
+- (void)keyUp:(NSEvent *)event {
+    [self.hidSupport keyUp:event];
+}
 
 #pragma mark - Streaming Operations
 
@@ -57,6 +71,7 @@
     
     
     self.controllerSupport = [[ControllerSupport alloc] init];
+    self.hidSupport = [[HIDSupport alloc] init];
     
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
