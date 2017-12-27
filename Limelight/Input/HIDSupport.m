@@ -11,6 +11,9 @@
 #include "Limelight.h"
 
 #import <Carbon/Carbon.h>
+#import <IOKit/hid/IOHIDManager.h>
+#import <IOKit/hid/IOHIDKeys.h>
+#import <IOKit/hid/IOHIDElement.h>
 
 struct KeyMapping {
     unsigned short mac;
@@ -141,6 +144,10 @@ static struct KeyMapping keys[] = {
 
 @interface HIDSupport ()
 @property (nonatomic, strong) NSDictionary *mappings;
+@property (nonatomic) IOHIDManagerRef hidManager;
+@property (nonatomic) int x;
+@property (nonatomic) int y;
+@property (nonatomic) NSTimeInterval lastTimestamp;
 @end
 
 @implementation HIDSupport
@@ -154,6 +161,8 @@ static struct KeyMapping keys[] = {
             [d setObject:@(m.windows) forKey:@(m.mac)];
         }
         _mappings = [NSDictionary dictionaryWithDictionary:d];
+        
+        [self setupHidManager];
     }
     return self;
 }
@@ -217,6 +226,60 @@ static struct KeyMapping keys[] = {
         modifiers |= MODIFIER_ALT;
     }
     return modifiers;
+}
+
+
+
+void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef value) {
+    IOHIDElementRef elem = IOHIDValueGetElement(value);
+    uint32_t usagePage = IOHIDElementGetUsagePage(elem);
+    uint32_t usage = IOHIDElementGetUsage(elem);
+    CFIndex intValue = IOHIDValueGetIntegerValue(value);
+
+    HIDSupport *self = (__bridge HIDSupport *)context;
+    
+    switch (usagePage) {
+        case kHIDPage_GenericDesktop:
+            switch (usage) {
+                case kHIDUsage_GD_X:
+                    self.x += (int)intValue;
+                    break;
+                case kHIDUsage_GD_Y:
+                    self.y += (int)intValue;
+                    break;
+
+                default:
+                    break;
+            }
+            NSTimeInterval timestamp = [NSDate timeIntervalSinceReferenceDate];
+            if (timestamp - self.lastTimestamp > 0.02) {
+                LiSendMouseMoveEvent(self.x, self.y);
+                self.x = 0;
+                self.y = 0;
+                self.lastTimestamp = timestamp;
+            }
+            break;
+        case kHIDPage_Button:
+            NSLog(@"BUTTON usage: %@, intValue: %@", @(usage), @(intValue));
+            break;
+
+        default:
+            break;
+    }
+}
+
+- (void)setupHidManager {
+    self.hidManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+    IOHIDManagerOpen(self.hidManager, kIOHIDOptionsTypeNone);
+    
+    NSArray *matches = @[
+                         @{@kIOHIDDeviceUsagePageKey: @(kHIDPage_GenericDesktop), @kIOHIDDeviceUsageKey: @(kHIDUsage_GD_Mouse)},
+                         ];
+    IOHIDManagerSetDeviceMatchingMultiple(self.hidManager, (__bridge CFArrayRef)matches);
+
+    IOHIDManagerRegisterInputValueCallback(self.hidManager, myHIDCallback, (__bridge void * _Nullable)(self));
+    
+    IOHIDManagerScheduleWithRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
 }
 
 @end
