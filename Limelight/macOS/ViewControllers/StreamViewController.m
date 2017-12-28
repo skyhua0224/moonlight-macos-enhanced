@@ -33,6 +33,20 @@
     [super viewDidLoad];
     
     [self prepareForStreaming];
+    
+    __weak typeof(self) weakSelf = self;
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if (![weakSelf isWindowInCurrentSpace]) {
+            [self uncaptureMouse];
+        }
+    }];
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf isWindowInCurrentSpace]) {
+            if ([self.view.window styleMask] & NSWindowStyleMaskFullScreen) {
+                [self captureMouse];
+            }
+        }
+    }];
 }
 
 - (void)viewDidAppear {
@@ -96,6 +110,9 @@
     [self.hidSupport scrollWheel:event];
 }
 
+
+#pragma mark - Helpers
+
 - (void)captureMouse {
     if (!self.hidSupport.shouldSendMouseEvents) {
         CGAssociateMouseAndMouseCursorPosition(NO);
@@ -118,6 +135,20 @@
         self.hidSupport.shouldSendMouseEvents = NO;
     }
 }
+
+- (BOOL)isWindowInCurrentSpace {
+    BOOL found = NO;
+    CFArrayRef windowsInSpace = CGWindowListCopyWindowInfo(kCGWindowListOptionAll | kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+    for (NSDictionary *thisWindow in (__bridge NSArray *)windowsInSpace) {
+        NSNumber *thisWindowNumber = (NSNumber *)thisWindow[(__bridge NSString *)kCGWindowNumber];
+        if (self.view.window.windowNumber == thisWindowNumber.integerValue) {
+            found = YES;
+            break;
+        }
+    }
+    return found;
+}
+
 
 #pragma mark - Streaming Operations
 
