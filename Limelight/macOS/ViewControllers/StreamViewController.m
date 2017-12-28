@@ -61,6 +61,7 @@
 - (void)viewDidDisappear {
     [super viewDidDisappear];
     
+    [self uncaptureMouse];
     [self.streamMan stopStream];
 }
 
