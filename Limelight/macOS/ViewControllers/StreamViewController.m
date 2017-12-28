@@ -15,6 +15,7 @@
 #import "StreamManager.h"
 #import "VideoDecoderRenderer.h"
 #import "HIDSupport.h"
+#include "Limelight.h"
 
 @interface StreamViewController () <ConnectionCallbacks>
 
@@ -39,6 +40,8 @@
     
     self.view.window.title = self.app.name;
     [self.view.window makeFirstResponder:self.view];
+    
+    [self captureMouse];
 }
 
 - (void)viewDidDisappear {
@@ -49,6 +52,10 @@
 
 - (void)flagsChanged:(NSEvent *)event {
     [self.hidSupport flagsChanged:event];
+    
+    if ((event.modifierFlags & NSEventModifierFlagCommand) && (event.modifierFlags & NSEventModifierFlagOption)) {
+        [self uncaptureMouse];
+    }
 }
 
 - (void)keyDown:(NSEvent *)event {
@@ -57,6 +64,59 @@
 
 - (void)keyUp:(NSEvent *)event {
     [self.hidSupport keyUp:event];
+}
+
+
+- (void)mouseDown:(NSEvent *)event {
+    [self captureMouse];
+    [self.hidSupport mouseDown:event withButton:BUTTON_LEFT];
+}
+
+- (void)mouseUp:(NSEvent *)event {
+    [self.hidSupport mouseUp:event withButton:BUTTON_LEFT];
+}
+
+- (void)rightMouseDown:(NSEvent *)event {
+    [self.hidSupport mouseDown:event withButton:BUTTON_RIGHT];
+}
+
+- (void)rightMouseUp:(NSEvent *)event {
+    [self.hidSupport mouseUp:event withButton:BUTTON_RIGHT];
+}
+
+- (void)otherMouseDown:(NSEvent *)event {
+    [self.hidSupport mouseDown:event withButton:BUTTON_MIDDLE];
+}
+
+- (void)otherMouseUp:(NSEvent *)event {
+    [self.hidSupport mouseUp:event withButton:BUTTON_MIDDLE];
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+    [self.hidSupport scrollWheel:event];
+}
+
+- (void)captureMouse {
+    if (!self.hidSupport.shouldSendMouseEvents) {
+        CGAssociateMouseAndMouseCursorPosition(NO);
+        [NSCursor hide];
+        
+        CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
+        CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
+        CGFloat screenHeight = self.view.window.screen.frame.size.height;
+        CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
+        CGWarpMouseCursorPosition(cursorPoint);
+        
+        self.hidSupport.shouldSendMouseEvents = YES;
+    }
+}
+
+- (void)uncaptureMouse {
+    if (self.hidSupport.shouldSendMouseEvents) {
+        CGAssociateMouseAndMouseCursorPosition(YES);
+        [NSCursor unhide];
+        self.hidSupport.shouldSendMouseEvents = NO;
+    }
 }
 
 #pragma mark - Streaming Operations
@@ -71,9 +131,9 @@
     TemporarySettings* streamSettings = [dataMan getSettings];
     
     streamConfig.frameRate = [streamSettings.framerate intValue];
-    streamConfig.bitRate = [streamSettings.bitrate intValue];
-    streamConfig.height = [streamSettings.height intValue];
-    streamConfig.width = [streamSettings.width intValue];
+    streamConfig.bitRate = 20000; // [streamSettings.bitrate intValue];
+    streamConfig.height = 1080; // [streamSettings.height intValue];
+    streamConfig.width = 1920; // [streamSettings.width intValue];
     
     
     self.controllerSupport = [[ControllerSupport alloc] init];

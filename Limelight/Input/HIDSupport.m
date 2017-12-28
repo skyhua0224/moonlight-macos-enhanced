@@ -11,9 +11,6 @@
 #include "Limelight.h"
 
 #import <Carbon/Carbon.h>
-#import <IOKit/hid/IOHIDManager.h>
-#import <IOKit/hid/IOHIDKeys.h>
-#import <IOKit/hid/IOHIDElement.h>
 
 struct KeyMapping {
     unsigned short mac;
@@ -141,10 +138,7 @@ static struct KeyMapping keys[] = {
 
 @interface HIDSupport ()
 @property (nonatomic, strong) NSDictionary *mappings;
-@property (nonatomic) IOHIDManagerRef hidManager;
-@property (nonatomic) int x;
-@property (nonatomic) int y;
-@property (nonatomic) NSTimeInterval lastTimestamp;
+@property (nonatomic, strong) NSTimer *mousePollingTimer;
 @end
 
 @implementation HIDSupport
@@ -159,13 +153,17 @@ static struct KeyMapping keys[] = {
         }
         _mappings = [NSDictionary dictionaryWithDictionary:d];
         
-        [self setupHidManager];
+        self.mousePollingTimer = [NSTimer scheduledTimerWithTimeInterval:0.015 repeats:YES block:^(NSTimer * _Nonnull timer) {
+            int32_t deltaX, deltaY;
+            CGGetLastMouseDelta(&deltaX, &deltaY);
+            if (deltaX != 0 || deltaY != 0) {
+                if (self.shouldSendMouseEvents) {
+                    LiSendMouseMoveEvent(deltaX, deltaY);
+                }
+            }
+        }];
     }
     return self;
-}
-
-- (void)dealloc {
-    [self tearDownHidManager];
 }
 
 - (int)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
@@ -208,6 +206,21 @@ static struct KeyMapping keys[] = {
     LiSendKeyboardEvent([self translateKeyCodeWithEvent:event], KEY_ACTION_UP, [self translateKeyModifierWithEvent:event]);
 }
 
+
+- (void)mouseDown:(NSEvent *)event withButton:(int)button {
+    LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
+}
+
+- (void)mouseUp:(NSEvent *)event withButton:(int)button {
+    LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, button);
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+    if (self.shouldSendMouseEvents) {
+        LiSendScrollEvent(event.scrollingDeltaY);
+    }
+}
+
 - (short)translateKeyCodeWithEvent:(NSEvent *)event {
     if (![self.mappings objectForKey:@(event.keyCode)]) {
         return 0;
@@ -227,88 +240,6 @@ static struct KeyMapping keys[] = {
         modifiers |= MODIFIER_ALT;
     }
     return modifiers;
-}
-
-
-
-void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef value) {
-    IOHIDElementRef elem = IOHIDValueGetElement(value);
-    uint32_t usagePage = IOHIDElementGetUsagePage(elem);
-    uint32_t usage = IOHIDElementGetUsage(elem);
-    CFIndex intValue = IOHIDValueGetIntegerValue(value);
-
-    HIDSupport *self = (__bridge HIDSupport *)context;
-    
-    switch (usagePage) {
-        case kHIDPage_GenericDesktop:
-            switch (usage) {
-                case kHIDUsage_GD_X:
-                    self.x += (int)intValue;
-                    NSTimeInterval timestamp = [NSDate timeIntervalSinceReferenceDate];
-                    if (timestamp - self.lastTimestamp > 0.015) {
-                        if (self.x != 0 || self.y != 0) {
-                            if (self.shouldSendMouseEvents) {
-                                LiSendMouseMoveEvent(self.x, self.y);
-                            }
-                            self.x = 0;
-                            self.y = 0;
-                            self.lastTimestamp = timestamp;
-                        }
-                    }
-                    break;
-                case kHIDUsage_GD_Y:
-                    self.y += (int)intValue;
-                    break;
-
-                default:
-                    break;
-            }
-            break;
-            
-        case kHIDPage_Button: {
-            int button;
-            switch (usage) {
-                case kHIDUsage_Button_1:
-                    button = BUTTON_LEFT;
-                    break;
-                case kHIDUsage_Button_2:
-                    button = BUTTON_RIGHT;
-                    break;
-                case kHIDUsage_Button_3:
-                    button = BUTTON_MIDDLE;
-                    break;
-                    
-                default:
-                    button = 0;
-                    break;
-            }
-            LiSendMouseButtonEvent(intValue ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, button);
-        }
-            break;
-
-        default:
-            break;
-    }
-}
-
-- (void)setupHidManager {
-    self.hidManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
-    IOHIDManagerOpen(self.hidManager, kIOHIDOptionsTypeNone);
-    
-    NSArray *matches = @[
-                         @{@kIOHIDDeviceUsagePageKey: @(kHIDPage_GenericDesktop), @kIOHIDDeviceUsageKey: @(kHIDUsage_GD_Mouse)},
-                         ];
-    IOHIDManagerSetDeviceMatchingMultiple(self.hidManager, (__bridge CFArrayRef)matches);
-
-    IOHIDManagerRegisterInputValueCallback(self.hidManager, myHIDCallback, (__bridge void * _Nullable)(self));
-    
-    IOHIDManagerScheduleWithRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
-}
-
-- (void)tearDownHidManager {
-    IOHIDManagerUnscheduleFromRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
-    IOHIDManagerRegisterInputValueCallback(self.hidManager, nil, (__bridge void * _Nullable)(self));
-    CFRelease(self.hidManager);
 }
 
 @end

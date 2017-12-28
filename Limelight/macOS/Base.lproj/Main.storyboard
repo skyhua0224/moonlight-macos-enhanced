@@ -822,7 +822,7 @@
         <scene sceneID="Wbf-xX-JHi">
             <objects>
                 <viewController storyboardIdentifier="streamVC" id="wJ2-hM-mn7" customClass="StreamViewController" sceneMemberID="viewController">
-                    <view key="view" id="eg0-gN-AJf">
+                    <view key="view" id="eg0-gN-AJf" customClass="StreamViewMac">
                         <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </view>
