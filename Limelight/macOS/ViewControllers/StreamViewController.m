@@ -41,6 +41,12 @@
     [self.view.window makeFirstResponder:self.view];
 }
 
+- (void)viewDidDisappear {
+    [super viewDidDisappear];
+    
+    [self.streamMan stopStream];
+}
+
 - (void)flagsChanged:(NSEvent *)event {
     [self.hidSupport flagsChanged:event];
 }
@@ -86,7 +92,8 @@
 }
 
 - (void)connectionTerminated:(long)errorCode {
-    
+    Log(LOG_I, @"Connection terminated: %ld", errorCode);
+    [self.streamMan stopStream];
 }
 
 - (void)displayMessage:(const char *)message {
@@ -106,7 +113,8 @@
 }
 
 - (void)stageFailed:(const char *)stageName withError:(long)errorCode {
-    
+    Log(LOG_I, @"Stage %s failed: %ld", stageName, errorCode);
+    [self.streamMan stopStream];
 }
 
 - (void)stageStarting:(const char *)stageName {

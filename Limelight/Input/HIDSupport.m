@@ -137,9 +137,6 @@ static struct KeyMapping keys[] = {
     {kVK_F18, 0x81},
     {kVK_F19, 0x82},
     {kVK_F20, 0x83},
-
-    
-    //    {kVK_Function, 0x},
 };
 
 @interface HIDSupport ()
@@ -165,6 +162,10 @@ static struct KeyMapping keys[] = {
         [self setupHidManager];
     }
     return self;
+}
+
+- (void)dealloc {
+    [self tearDownHidManager];
 }
 
 - (int)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
@@ -243,6 +244,17 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
             switch (usage) {
                 case kHIDUsage_GD_X:
                     self.x += (int)intValue;
+                    NSTimeInterval timestamp = [NSDate timeIntervalSinceReferenceDate];
+                    if (timestamp - self.lastTimestamp > 0.015) {
+                        if (self.x != 0 || self.y != 0) {
+                            if (self.shouldSendMouseEvents) {
+                                LiSendMouseMoveEvent(self.x, self.y);
+                            }
+                            self.x = 0;
+                            self.y = 0;
+                            self.lastTimestamp = timestamp;
+                        }
+                    }
                     break;
                 case kHIDUsage_GD_Y:
                     self.y += (int)intValue;
@@ -251,16 +263,27 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                 default:
                     break;
             }
-            NSTimeInterval timestamp = [NSDate timeIntervalSinceReferenceDate];
-            if (timestamp - self.lastTimestamp > 0.02) {
-                LiSendMouseMoveEvent(self.x, self.y);
-                self.x = 0;
-                self.y = 0;
-                self.lastTimestamp = timestamp;
-            }
             break;
-        case kHIDPage_Button:
-            NSLog(@"BUTTON usage: %@, intValue: %@", @(usage), @(intValue));
+            
+        case kHIDPage_Button: {
+            int button;
+            switch (usage) {
+                case kHIDUsage_Button_1:
+                    button = BUTTON_LEFT;
+                    break;
+                case kHIDUsage_Button_2:
+                    button = BUTTON_RIGHT;
+                    break;
+                case kHIDUsage_Button_3:
+                    button = BUTTON_MIDDLE;
+                    break;
+                    
+                default:
+                    button = 0;
+                    break;
+            }
+            LiSendMouseButtonEvent(intValue ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, button);
+        }
             break;
 
         default:
@@ -280,6 +303,12 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
     IOHIDManagerRegisterInputValueCallback(self.hidManager, myHIDCallback, (__bridge void * _Nullable)(self));
     
     IOHIDManagerScheduleWithRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+}
+
+- (void)tearDownHidManager {
+    IOHIDManagerUnscheduleFromRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+    IOHIDManagerRegisterInputValueCallback(self.hidManager, nil, (__bridge void * _Nullable)(self));
+    CFRelease(self.hidManager);
 }
 
 @end

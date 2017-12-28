@@ -9,6 +9,7 @@
 #import <Foundation/Foundation.h>
 
 @interface HIDSupport : NSObject
+@property (nonatomic) BOOL shouldSendMouseEvents;
 
 - (void)flagsChanged:(NSEvent *)event;
 - (void)keyDown:(NSEvent *)event;

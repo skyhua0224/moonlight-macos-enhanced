@@ -313,6 +313,7 @@ void ClLogMessage(const char* format, ...)
         LiStopConnection();
         [initLock unlock];
     });
+    _callbacks = nil;
 }
 
 -(id) initWithConfig:(StreamConfiguration*)config renderer:(VideoDecoderRenderer*)myRenderer connectionCallbacks:(id<ConnectionCallbacks>)callbacks
