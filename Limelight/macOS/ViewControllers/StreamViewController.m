@@ -55,6 +55,12 @@
     self.view.window.title = self.app.name;
     [self.view.window makeFirstResponder:self.view];
     
+    self.view.window.contentAspectRatio = NSMakeSize(16, 9);
+    self.view.window.frameAutosaveName = @"Stream Window";
+    if ([[NSUserDefaults standardUserDefaults] stringForKey:@"NSWindow Frame Stream Window"].length == 0) {
+        [self centerWindow];
+    }
+    
     [self captureMouse];
 }
 
@@ -148,6 +154,13 @@
         }
     }
     return found;
+}
+
+- (void)centerWindow {
+    NSWindow *window = self.view.window;
+    CGFloat xPos = NSWidth(window.screen.frame) / 2 - NSWidth(window.frame) / 2;
+    CGFloat yPos = NSHeight(window.screen.frame) / 2 - NSHeight(window.frame) / 2;
+    [window setFrame:NSMakeRect(xPos, yPos, NSWidth(window.frame), NSHeight(window.frame)) display:YES];
 }
 
 
