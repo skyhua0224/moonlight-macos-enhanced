@@ -18,11 +18,15 @@
 #import "HIDSupport.h"
 #include "Limelight.h"
 
+#import <IOKit/pwr_mgt/IOPMLib.h>
+
 @interface StreamViewController () <ConnectionCallbacks>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
 @property (nonatomic, strong) HIDSupport *hidSupport;
 @property (nonatomic, strong) StreamManager *streamMan;
+
+@property (nonatomic) IOPMAssertionID powerAssertionID;
 
 @end
 
@@ -145,6 +149,8 @@
         
         [self enableMenuItems:NO];
 
+        [self disallowDisplaySleep];
+        
         self.hidSupport.shouldSendMouseEvents = YES;
     }
 }
@@ -155,7 +161,9 @@
         [NSCursor unhide];
         
         [self enableMenuItems:YES];
-        
+
+        [self allowDisplaySleep];
+
         self.hidSupport.shouldSendMouseEvents = NO;
     }
 }
@@ -175,6 +183,31 @@
 
 - (NSMenuItem *)itemWithMenu:(NSMenu *)menu andAction:(SEL)action {
     return [menu itemAtIndex:[menu indexOfItemWithTarget:nil andAction:action]];
+}
+
+
+- (void)disallowDisplaySleep {
+    if (self.powerAssertionID != 0) {
+        return;
+    }
+    
+    CFStringRef reasonForActivity= CFSTR("Moonlight streaming");
+    
+    IOPMAssertionID assertionID;
+    IOReturn success = IOPMAssertionCreateWithName(kIOPMAssertionTypeNoDisplaySleep, kIOPMAssertionLevelOn, reasonForActivity, &assertionID);
+    
+    if (success == kIOReturnSuccess) {
+        self.powerAssertionID = assertionID;
+    } else {
+        self.powerAssertionID = 0;
+    }
+}
+
+- (void)allowDisplaySleep {
+    if (self.powerAssertionID != 0) {
+        IOPMAssertionRelease(self.powerAssertionID);
+        self.powerAssertionID = 0;
+    }
 }
 
 
