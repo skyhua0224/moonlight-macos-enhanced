@@ -47,6 +47,12 @@
     self.boxArtCacheLock = [[NSLock alloc] init];
 }
 
+- (void)viewDidAppear {
+    [super viewDidAppear];
+    
+    [self.view.window makeFirstResponder:self.view];
+}
+
 - (void)transitionToHostsVC {
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
 }
@@ -56,6 +62,12 @@
     streamVC.app = self.streamApp;
 }
 
+
+#pragma mark - Actions
+
+- (IBAction)backButtonClicked:(id)sender {
+    [self transitionToHostsVC];
+}
 
 #pragma mark - NSCollectionViewDataSource
 

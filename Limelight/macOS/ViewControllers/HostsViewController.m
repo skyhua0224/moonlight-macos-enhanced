@@ -49,6 +49,8 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
+    [self.view.window makeFirstResponder:self.view];
+    
     [self.discMan startDiscovery];
 }
 
@@ -61,6 +63,7 @@
 - (void)transitionToAppsVCWithHost:(TemporaryHost *)host {
     AppsViewController *appsVC = [self.storyboard instantiateControllerWithIdentifier:@"appsVC"];
     appsVC.host = host;
+    appsVC.hostsVC = self;
     [self.parentViewController addChildViewController:appsVC];
     [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
     
