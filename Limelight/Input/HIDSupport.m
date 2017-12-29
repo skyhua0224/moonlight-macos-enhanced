@@ -208,11 +208,15 @@ static struct KeyMapping keys[] = {
 
 
 - (void)mouseDown:(NSEvent *)event withButton:(int)button {
-    LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
+    if (self.shouldSendMouseEvents) {
+        LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
+    }
 }
 
 - (void)mouseUp:(NSEvent *)event withButton:(int)button {
-    LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, button);
+    if (self.shouldSendMouseEvents) {
+        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, button);
+    }
 }
 
 - (void)scrollWheel:(NSEvent *)event {

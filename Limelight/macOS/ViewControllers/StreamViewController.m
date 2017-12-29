@@ -83,8 +83,8 @@
 
 
 - (void)mouseDown:(NSEvent *)event {
-    [self captureMouse];
     [self.hidSupport mouseDown:event withButton:BUTTON_LEFT];
+    [self captureMouse];
 }
 
 - (void)mouseUp:(NSEvent *)event {
