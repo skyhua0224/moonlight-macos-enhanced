@@ -555,7 +555,7 @@
                                             <rect key="frame" x="0.0" y="0.0" width="450" height="158"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
                                             <collectionViewFlowLayout key="collectionViewLayout" minimumInteritemSpacing="10" minimumLineSpacing="18" id="kTU-ja-AL8">
-                                                <size key="itemSize" width="96" height="128"/>
+                                                <size key="itemSize" width="96" height="144"/>
                                                 <edgeInsets key="sectionInset" left="12" right="12" top="12" bottom="12"/>
                                             </collectionViewFlowLayout>
                                             <color key="primaryBackgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
