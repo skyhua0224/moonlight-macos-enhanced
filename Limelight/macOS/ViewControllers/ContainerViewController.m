@@ -7,6 +7,7 @@
 //
 
 #import "ContainerViewController.h"
+#import "NSWindow+Moonlight.h"
 
 @interface ContainerViewController ()
 
@@ -25,6 +26,13 @@
     
     hostsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     hostsVC.view.frame = self.view.bounds;
+}
+
+- (void)viewDidAppear {
+    [super viewDidAppear];
+    
+    self.view.window.frameAutosaveName = @"Main Window";
+    [self.view.window moonlight_centerWindowOnFirstRun];
 }
 
 @end

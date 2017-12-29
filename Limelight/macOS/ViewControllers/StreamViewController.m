@@ -7,6 +7,7 @@
 //
 
 #import "StreamViewController.h"
+#import "NSWindow+Moonlight.h"
 
 #import "Connection.h"
 #import "StreamConfiguration.h"
@@ -57,9 +58,7 @@
     
     self.view.window.contentAspectRatio = NSMakeSize(16, 9);
     self.view.window.frameAutosaveName = @"Stream Window";
-    if ([[NSUserDefaults standardUserDefaults] stringForKey:@"NSWindow Frame Stream Window"].length == 0) {
-        [self centerWindow];
-    }
+    [self.view.window moonlight_centerWindowOnFirstRun];
     
     self.view.window.styleMask |= NSWindowStyleMaskTexturedBackground;
     self.view.window.backgroundColor = [NSColor colorWithRed:0.168 green:0.18 blue:0.196 alpha:1];
@@ -172,13 +171,6 @@
         }
     }
     return found;
-}
-
-- (void)centerWindow {
-    NSWindow *window = self.view.window;
-    CGFloat xPos = NSWidth(window.screen.frame) / 2 - NSWidth(window.frame) / 2;
-    CGFloat yPos = NSHeight(window.screen.frame) / 2 - NSHeight(window.frame) / 2;
-    [window setFrame:NSMakeRect(xPos, yPos, NSWidth(window.frame), NSHeight(window.frame)) display:YES];
 }
 
 - (NSMenuItem *)itemWithMenu:(NSMenu *)menu andAction:(SEL)action {

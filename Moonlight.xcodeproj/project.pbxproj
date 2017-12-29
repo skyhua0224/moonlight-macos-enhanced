@@ -12,6 +12,7 @@
 		4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24801FF1E99300B6A12E /* HIDSupport.m */; };
 		4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24861FF3934700B6A12E /* StreamViewMac.m */; };
 		4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */; };
+		4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */; };
 		4C38E7F01FEE00F6000425CD /* Logger.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD1C8E11A8AD71400C6703C /* Logger.m */; };
 		4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3494219FC9C04002D2A60 /* AppAssetManager.m */; };
 		4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89460619F646E200339C8A /* CryptoManager.m */; };
@@ -181,6 +182,8 @@
 		4C2E24861FF3934700B6A12E /* StreamViewMac.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamViewMac.m; sourceTree = "<group>"; };
 		4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCollectionViewCell.h; sourceTree = "<group>"; };
 		4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCollectionViewCell.m; sourceTree = "<group>"; };
+		4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSWindow+Moonlight.h"; sourceTree = "<group>"; };
+		4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSWindow+Moonlight.m"; sourceTree = "<group>"; };
 		4C38E7F81FEE04E4000425CD /* Limelight-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Limelight-Prefix.pch"; sourceTree = "<group>"; };
 		4C38E8051FEE0903000425CD /* libxml2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libxml2.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.13.sdk/usr/lib/libxml2.tbd; sourceTree = DEVELOPER_DIR; };
 		4C38E80B1FEE13FB000425CD /* HostsViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HostsViewControllerDelegate.h; sourceTree = "<group>"; };
@@ -475,6 +478,8 @@
 			children = (
 				4C38E81E1FEF4FC1000425CD /* AlertPresenter.h */,
 				4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */,
+				4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */,
+				4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -1211,6 +1216,7 @@
 				4C38E8271FF0BF64000425CD /* VideoDecoderRenderer.m in Sources */,
 				4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */,
 				4C38E7FC1FEE0875000425CD /* Host.m in Sources */,
+				4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */,
 				4C7E0A7E1FECBFFD00684411 /* AppDelegate.m in Sources */,
 				4C38E82D1FF0C38E000425CD /* Controller.swift in Sources */,
 				4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */,
