@@ -7,7 +7,7 @@
 //
 
 #import "AppCell.h"
-#import "AppCellView.h"
+#import "BackgroundColorView.h"
 
 @interface AppCell ()
 
@@ -22,9 +22,9 @@
 }
 
 - (void)updateSelectedState:(BOOL)selected {
-    AppCellView *cellView = (AppCellView *)self.view;
-    cellView.backgroundColor = selected ? [NSColor selectedTextBackgroundColor] : [NSColor colorWithWhite:0.9 alpha:1];
-    [cellView setNeedsDisplay:YES];
+    BackgroundColorView *backgroundView = (BackgroundColorView *)self.view;
+    backgroundView.backgroundColor = selected ? [NSColor selectedTextBackgroundColor] : [NSColor colorWithWhite:0.9 alpha:1];
+    [backgroundView setNeedsDisplay:YES];
 }
 
 - (void)setSelected:(BOOL)selected {

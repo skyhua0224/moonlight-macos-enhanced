@@ -7,9 +7,11 @@
 //
 
 #import "HostCell.h"
-#import "HostCellView.h"
+#import "BackgroundColorView.h"
 
 @interface HostCell ()
+@property (weak) IBOutlet BackgroundColorView *imageContainer;
+@property (weak) IBOutlet BackgroundColorView *labelContainer;
 
 @end
 
@@ -18,13 +20,20 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    self.imageContainer.wantsLayer = YES;
+    self.imageContainer.layer.masksToBounds = YES;
+    self.imageContainer.layer.cornerRadius = 4;
+    self.labelContainer.wantsLayer = YES;
+    self.labelContainer.layer.masksToBounds = YES;
+    self.labelContainer.layer.cornerRadius = 3;
+    
     [self updateSelectedState:NO];
 }
 
 - (void)updateSelectedState:(BOOL)selected {
-    HostCellView *cellView = (HostCellView *)self.view;
-    cellView.backgroundColor = selected ? [NSColor selectedTextBackgroundColor] : [NSColor colorWithWhite:0.9 alpha:1];
-    [cellView setNeedsDisplay:YES];
+    self.imageContainer.backgroundColor = selected ? [NSColor colorWithWhite:0 alpha:0.1] : [NSColor clearColor];
+    self.labelContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
+    self.hostName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];
 }
 
 - (void)setSelected:(BOOL)selected {
