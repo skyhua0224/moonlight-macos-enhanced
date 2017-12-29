@@ -14,30 +14,50 @@
             <rect key="frame" x="0.0" y="0.0" width="96" height="128"/>
             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
             <subviews>
-                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="8Wu-8r-gUK" userLabel="App Name">
-                    <rect key="frame" x="31" y="2" width="35" height="14"/>
-                    <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Name" usesSingleLineMode="YES" id="EOw-Ye-IeI">
-                        <font key="font" metaFont="smallSystem"/>
-                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                    </textFieldCell>
-                </textField>
-                <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="KWV-yZ-F3P" userLabel="App Cover Art">
-                    <rect key="frame" x="9" y="22" width="79" height="106"/>
+                <customView translatesAutoresizingMaskIntoConstraints="NO" id="0O3-YC-k9a" userLabel="Content View">
+                    <rect key="frame" x="0.0" y="0.0" width="96" height="128"/>
+                    <subviews>
+                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="Dvl-ny-Fge" userLabel="App Cover Art Container">
+                            <rect key="frame" x="8" y="22" width="80" height="106"/>
+                            <subviews>
+                                <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="KWV-yZ-F3P" userLabel="App Cover Art">
+                                    <rect key="frame" x="0.0" y="0.0" width="80" height="106"/>
+                                    <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" id="o9Q-i8-aPK"/>
+                                </imageView>
+                            </subviews>
+                            <constraints>
+                                <constraint firstAttribute="height" constant="106" id="H0q-Iv-t8V"/>
+                                <constraint firstItem="KWV-yZ-F3P" firstAttribute="leading" secondItem="Dvl-ny-Fge" secondAttribute="leading" id="Rzf-K4-0WO"/>
+                                <constraint firstItem="KWV-yZ-F3P" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" id="S4o-3s-BOw"/>
+                                <constraint firstAttribute="width" secondItem="Dvl-ny-Fge" secondAttribute="height" multiplier="3:4" id="Ylp-Pm-UzC"/>
+                                <constraint firstAttribute="trailing" secondItem="KWV-yZ-F3P" secondAttribute="trailing" id="eKq-NM-blt"/>
+                                <constraint firstAttribute="bottom" secondItem="KWV-yZ-F3P" secondAttribute="bottom" id="tiR-AM-WcG"/>
+                            </constraints>
+                        </customView>
+                        <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="8Wu-8r-gUK" userLabel="App Name">
+                            <rect key="frame" x="31" y="2" width="35" height="14"/>
+                            <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Name" usesSingleLineMode="YES" id="EOw-Ye-IeI">
+                                <font key="font" metaFont="smallSystem"/>
+                                <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                            </textFieldCell>
+                        </textField>
+                    </subviews>
                     <constraints>
-                        <constraint firstAttribute="width" secondItem="KWV-yZ-F3P" secondAttribute="height" multiplier="3:4" id="str-2P-hSr"/>
-                        <constraint firstAttribute="height" constant="106" id="tAU-GN-wy5"/>
+                        <constraint firstAttribute="bottom" relation="greaterThanOrEqual" secondItem="8Wu-8r-gUK" secondAttribute="bottom" constant="2" id="Cg7-fz-wnD"/>
+                        <constraint firstItem="8Wu-8r-gUK" firstAttribute="centerX" secondItem="0O3-YC-k9a" secondAttribute="centerX" id="Oob-sv-nSx"/>
+                        <constraint firstItem="8Wu-8r-gUK" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="bottom" constant="6" id="ibr-4x-sAb"/>
+                        <constraint firstItem="Dvl-ny-Fge" firstAttribute="top" secondItem="0O3-YC-k9a" secondAttribute="top" id="l8n-Tv-r3t"/>
+                        <constraint firstItem="Dvl-ny-Fge" firstAttribute="centerX" secondItem="0O3-YC-k9a" secondAttribute="centerX" id="o5z-vB-dc0"/>
+                        <constraint firstItem="8Wu-8r-gUK" firstAttribute="width" relation="lessThanOrEqual" secondItem="0O3-YC-k9a" secondAttribute="width" constant="-4" id="oeQ-4y-WEZ"/>
                     </constraints>
-                    <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" id="o9Q-i8-aPK"/>
-                </imageView>
+                </customView>
             </subviews>
             <constraints>
-                <constraint firstItem="8Wu-8r-gUK" firstAttribute="width" relation="lessThanOrEqual" secondItem="Hz6-mo-xeY" secondAttribute="width" constant="-4" id="6Xe-D3-ZJJ"/>
-                <constraint firstItem="KWV-yZ-F3P" firstAttribute="centerX" secondItem="Hz6-mo-xeY" secondAttribute="centerX" id="7xk-Wi-UiV"/>
-                <constraint firstItem="KWV-yZ-F3P" firstAttribute="top" secondItem="Hz6-mo-xeY" secondAttribute="top" id="824-ML-85p"/>
-                <constraint firstItem="8Wu-8r-gUK" firstAttribute="centerX" secondItem="Hz6-mo-xeY" secondAttribute="centerX" id="ScE-ox-L22"/>
-                <constraint firstItem="8Wu-8r-gUK" firstAttribute="top" secondItem="KWV-yZ-F3P" secondAttribute="bottom" constant="6" id="TeN-g8-3HE"/>
-                <constraint firstAttribute="bottom" relation="greaterThanOrEqual" secondItem="8Wu-8r-gUK" secondAttribute="bottom" id="eD5-OW-ZIh"/>
+                <constraint firstItem="0O3-YC-k9a" firstAttribute="top" secondItem="Hz6-mo-xeY" secondAttribute="top" id="9Wm-Vm-Y4b"/>
+                <constraint firstAttribute="bottom" secondItem="0O3-YC-k9a" secondAttribute="bottom" id="O3D-Il-kDc"/>
+                <constraint firstItem="0O3-YC-k9a" firstAttribute="leading" secondItem="Hz6-mo-xeY" secondAttribute="leading" id="e7s-me-vj0"/>
+                <constraint firstAttribute="trailing" secondItem="0O3-YC-k9a" secondAttribute="trailing" id="zAM-T9-Gne"/>
             </constraints>
         </customView>
         <collectionViewItem id="UvQ-65-P9k" customClass="AppCell">

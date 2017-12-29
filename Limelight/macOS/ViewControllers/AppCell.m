@@ -18,6 +18,12 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    NSShadow *shadow = [[NSShadow alloc] init];
+    [shadow setShadowColor:[NSColor colorWithWhite:0 alpha:0.55]];
+    [shadow setShadowOffset:NSMakeSize(0, -4)];
+    [shadow setShadowBlurRadius:4];
+    self.appCoverArt.superview.shadow = shadow;
+
     self.appCoverArt.wantsLayer = YES;
     self.appCoverArt.layer.masksToBounds = YES;
     self.appCoverArt.layer.cornerRadius = 6;
