@@ -18,13 +18,14 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    self.appCoverArt.wantsLayer = YES;
+    self.appCoverArt.layer.masksToBounds = YES;
+    self.appCoverArt.layer.cornerRadius = 6;
+    
     [self updateSelectedState:NO];
 }
 
 - (void)updateSelectedState:(BOOL)selected {
-    BackgroundColorView *backgroundView = (BackgroundColorView *)self.view;
-    backgroundView.backgroundColor = selected ? [NSColor selectedTextBackgroundColor] : [NSColor colorWithWhite:0.9 alpha:1];
-    [backgroundView setNeedsDisplay:YES];
 }
 
 - (void)setSelected:(BOOL)selected {
