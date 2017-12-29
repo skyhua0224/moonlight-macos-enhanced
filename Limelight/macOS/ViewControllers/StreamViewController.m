@@ -37,13 +37,13 @@
     __weak typeof(self) weakSelf = self;
     [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if (![weakSelf isWindowInCurrentSpace]) {
-            [self uncaptureMouse];
+            [weakSelf uncaptureMouse];
         }
     }];
     [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isWindowInCurrentSpace]) {
-            if ([self.view.window styleMask] & NSWindowStyleMaskFullScreen) {
-                [self captureMouse];
+            if ([weakSelf.view.window styleMask] & NSWindowStyleMaskFullScreen) {
+                [weakSelf captureMouse];
             }
         }
     }];
