@@ -120,6 +120,15 @@
 
 #pragma mark - Helpers
 
+- (void)enableMenuItems:(BOOL)enable {
+    NSMenu *appMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:1000].submenu;
+    NSMenu *fileMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:2000].submenu;
+    appMenu.autoenablesItems = enable;
+    fileMenu.autoenablesItems = enable;
+    [self itemWithMenu:appMenu andAction:@selector(terminate:)].enabled = enable;
+    [self itemWithMenu:fileMenu andAction:@selector(performClose:)].enabled = enable;
+}
+
 - (void)captureMouse {
     if (!self.hidSupport.shouldSendMouseEvents) {
         CGAssociateMouseAndMouseCursorPosition(NO);
@@ -131,6 +140,8 @@
         CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
         CGWarpMouseCursorPosition(cursorPoint);
         
+        [self enableMenuItems:NO];
+
         self.hidSupport.shouldSendMouseEvents = YES;
     }
 }
@@ -139,6 +150,9 @@
     if (self.hidSupport.shouldSendMouseEvents) {
         CGAssociateMouseAndMouseCursorPosition(YES);
         [NSCursor unhide];
+        
+        [self enableMenuItems:YES];
+        
         self.hidSupport.shouldSendMouseEvents = NO;
     }
 }
@@ -161,6 +175,10 @@
     CGFloat xPos = NSWidth(window.screen.frame) / 2 - NSWidth(window.frame) / 2;
     CGFloat yPos = NSHeight(window.screen.frame) / 2 - NSHeight(window.frame) / 2;
     [window setFrame:NSMakeRect(xPos, yPos, NSWidth(window.frame), NSHeight(window.frame)) display:YES];
+}
+
+- (NSMenuItem *)itemWithMenu:(NSMenu *)menu andAction:(SEL)action {
+    return [menu itemAtIndex:[menu indexOfItemWithTarget:nil andAction:action]];
 }
 
 
