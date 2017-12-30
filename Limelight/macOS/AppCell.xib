@@ -10,7 +10,7 @@
         <customObject id="-2" userLabel="File's Owner" customClass="AppCell"/>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
-        <customView id="Hz6-mo-xeY">
+        <customView id="Hz6-mo-xeY" customClass="AppCellView">
             <rect key="frame" x="0.0" y="0.0" width="96" height="144"/>
             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
             <subviews>
