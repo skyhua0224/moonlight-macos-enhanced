@@ -134,11 +134,11 @@
 
 - (void)enableMenuItems:(BOOL)enable {
     NSMenu *appMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:1000].submenu;
-    NSMenu *fileMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:2000].submenu;
+    NSMenu *windowMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:4000].submenu;
     appMenu.autoenablesItems = enable;
-    fileMenu.autoenablesItems = enable;
+    windowMenu.autoenablesItems = enable;
     [self itemWithMenu:appMenu andAction:@selector(terminate:)].enabled = enable;
-    [self itemWithMenu:fileMenu andAction:@selector(performClose:)].enabled = enable;
+    [self itemWithMenu:windowMenu andAction:@selector(performClose:)].enabled = enable;
 }
 
 - (void)captureMouse {
