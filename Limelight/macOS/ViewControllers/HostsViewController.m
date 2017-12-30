@@ -49,7 +49,7 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
-    [self.view.window makeFirstResponder:self.view];
+    [self.view.window makeFirstResponder:self.collectionView];
     
     [self.discMan startDiscovery];
 }
