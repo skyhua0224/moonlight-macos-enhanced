@@ -8,6 +8,7 @@
 
 #import "StreamViewController.h"
 #import "NSWindow+Moonlight.h"
+#import "AlertPresenter.h"
 
 #import "Connection.h"
 #import "StreamConfiguration.h"
@@ -210,6 +211,18 @@
     }
 }
 
+- (void)closeWindowFromMainQueueWithMessage:(NSString *)message {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (message != nil) {
+            [AlertPresenter displayAlert:NSAlertStyleWarning message:message window:self.view.window completionHandler:^(NSModalResponse returnCode) {
+                [self.view.window close];
+            }];
+        } else {
+            [self.view.window close];
+        }
+    });
+}
+
 
 #pragma mark - Streaming Operations
 
@@ -239,38 +252,38 @@
 
 #pragma mark - ConnectionCallbacks
 
+- (void)stageStarting:(const char *)stageName {
+    
+}
+
+- (void)stageComplete:(const char *)stageName {
+}
+
 - (void)connectionStarted {
     
 }
 
 - (void)connectionTerminated:(long)errorCode {
     Log(LOG_I, @"Connection terminated: %ld", errorCode);
-    [self.streamMan stopStream];
-}
-
-- (void)displayMessage:(const char *)message {
-    
-}
-
-- (void)displayTransientMessage:(const char *)message {
-    
-}
-
-- (void)launchFailed:(NSString *)message {
-    
-}
-
-- (void)stageComplete:(const char *)stageName {
-    
+    [self closeWindowFromMainQueueWithMessage:nil];
 }
 
 - (void)stageFailed:(const char *)stageName withError:(long)errorCode {
     Log(LOG_I, @"Stage %s failed: %ld", stageName, errorCode);
-    [self.streamMan stopStream];
+    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %s failed with error %ld", stageName, errorCode]];
 }
 
-- (void)stageStarting:(const char *)stageName {
-    
+- (void)launchFailed:(NSString *)message {
+    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %@", message]];
 }
+
+- (void)displayMessage:(const char *)message {
+    Log(LOG_I, @"Display message: %s", message);
+}
+
+- (void)displayTransientMessage:(const char *)message {
+    Log(LOG_I, @"Display transient message: %s", message);
+}
+
 
 @end
