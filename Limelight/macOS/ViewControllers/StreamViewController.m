@@ -71,6 +71,8 @@
     self.view.window.backgroundColor = [NSColor colorWithRed:0.168 green:0.18 blue:0.196 alpha:1];
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
     
+    [self.view.window toggleFullScreen:self];
+    
     [self captureMouse];
 }
 
