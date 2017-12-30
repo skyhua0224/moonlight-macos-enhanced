@@ -32,6 +32,7 @@
 }
 
 - (void)updateSelectedState:(BOOL)selected {
+    self.appName.textColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor textColor];
 }
 
 - (void)setSelected:(BOOL)selected {
