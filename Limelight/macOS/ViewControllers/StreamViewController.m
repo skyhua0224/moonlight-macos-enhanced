@@ -7,6 +7,7 @@
 //
 
 #import "StreamViewController.h"
+#import "StreamViewMac.h"
 #import "NSWindow+Moonlight.h"
 #import "AlertPresenter.h"
 
@@ -26,6 +27,7 @@
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
 @property (nonatomic, strong) HIDSupport *hidSupport;
 @property (nonatomic, strong) StreamManager *streamMan;
+@property (nonatomic, readonly) StreamViewMac *streamView;
 
 @property (nonatomic) IOPMAssertionID powerAssertionID;
 
@@ -223,6 +225,10 @@
     });
 }
 
+- (StreamViewMac *)streamView {
+    return (StreamViewMac *)self.view;
+}
+
 
 #pragma mark - Streaming Operations
 
@@ -253,14 +259,20 @@
 #pragma mark - ConnectionCallbacks
 
 - (void)stageStarting:(const char *)stageName {
-    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *lowerCase = [NSString stringWithFormat:@"%s in progress...", stageName];
+        NSString *titleCase = [[[lowerCase substringToIndex:1] uppercaseString] stringByAppendingString:[lowerCase substringFromIndex:1]];
+        self.streamView.statusText = titleCase;
+    });
 }
 
 - (void)stageComplete:(const char *)stageName {
 }
 
 - (void)connectionStarted {
-    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.streamView.statusText = nil;
+    });
 }
 
 - (void)connectionTerminated:(long)errorCode {

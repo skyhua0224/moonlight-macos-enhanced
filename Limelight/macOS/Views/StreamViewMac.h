@@ -9,5 +9,6 @@
 #import <Cocoa/Cocoa.h>
 
 @interface StreamViewMac : NSView
+@property (nonatomic, strong) NSString *statusText;
 
 @end
