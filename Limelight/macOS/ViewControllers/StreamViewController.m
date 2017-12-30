@@ -223,9 +223,9 @@
     TemporarySettings* streamSettings = [dataMan getSettings];
     
     streamConfig.frameRate = [streamSettings.framerate intValue];
-    streamConfig.bitRate = 20000; // [streamSettings.bitrate intValue];
-    streamConfig.height = 1080; // [streamSettings.height intValue];
-    streamConfig.width = 1920; // [streamSettings.width intValue];
+    streamConfig.bitRate = [streamSettings.bitrate intValue];
+    streamConfig.height = [streamSettings.height intValue];
+    streamConfig.width = [streamSettings.width intValue];
     
     
     self.controllerSupport = [[ControllerSupport alloc] init];

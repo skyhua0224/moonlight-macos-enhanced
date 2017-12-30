@@ -9,7 +9,7 @@
 #import "AppDelegate.h"
 
 @interface AppDelegate ()
-
+@property (nonatomic, strong) NSWindowController *preferencesWC;
 @end
 
 @implementation AppDelegate
@@ -19,13 +19,22 @@
 @synthesize persistentStoreCoordinator = _persistentStoreCoordinator;
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
-    // Insert code here to initialize your application
 }
-
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
     [self saveContext];
 }
+
+- (IBAction)showPreferences:(id)sender {
+    if (self.preferencesWC == nil) {
+        self.preferencesWC = [[NSWindowController alloc] initWithWindowNibName:@"PreferencesWindow"];
+    }
+    [self.preferencesWC showWindow:nil];
+    [self.preferencesWC.window makeKeyAndOrderFront:nil];
+}
+
+
+#pragma mark - Core Data stack
 
 - (void)saveContext
 {
@@ -37,8 +46,6 @@
         }
     }
 }
-
-#pragma mark - Core Data stack
 
 // Returns the managed object context for the application.
 // If the context doesn't already exist, it is created and bound to the persistent store coordinator for the application.

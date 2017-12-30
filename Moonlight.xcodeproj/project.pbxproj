@@ -68,6 +68,8 @@
 		4C85A8041FDCE4B200F28E90 /* MarqueeLabel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */; };
 		4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
+		4CC3C02F1FF73A490029EBF5 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
+		4CC3C0321FF73A660029EBF5 /* PreferencesWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */; };
 		9832D1361BBCD5C50036EF48 /* TemporaryApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 9832D1351BBCD5C50036EF48 /* TemporaryApp.m */; };
 		98CFB82F1CAD481B0048EF74 /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		98D5856D1C0EA79600F6CC00 /* TemporaryHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856C1C0EA79600F6CC00 /* TemporaryHost.m */; };
@@ -222,6 +224,9 @@
 		4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RendererLayerContainer.m; sourceTree = "<group>"; };
 		4CC3C02B1FF72A3D0029EBF5 /* AppCellView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCellView.h; sourceTree = "<group>"; };
 		4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCellView.m; sourceTree = "<group>"; };
+		4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = PreferencesWindow.xib; sourceTree = "<group>"; };
+		4CC3C0301FF73A660029EBF5 /* PreferencesWindow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PreferencesWindow.h; sourceTree = "<group>"; };
+		4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PreferencesWindow.m; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
@@ -564,6 +569,9 @@
 				4C38E8151FEF36A0000425CD /* AppCell.m */,
 				4C38E8241FF0B609000425CD /* StreamViewController.h */,
 				4C38E8251FF0B609000425CD /* StreamViewController.m */,
+				4CC3C0301FF73A660029EBF5 /* PreferencesWindow.h */,
+				4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */,
+				4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */,
 			);
 			path = ViewControllers;
 			sourceTree = "<group>";
@@ -1160,6 +1168,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */,
+				4CC3C02F1FF73A490029EBF5 /* PreferencesWindow.xib in Resources */,
 				4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */,
 				4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */,
 				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
@@ -1232,6 +1241,7 @@
 				4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */,
 				4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */,
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
+				4CC3C0321FF73A660029EBF5 /* PreferencesWindow.m in Sources */,
 				4C38E8101FEE295E000425CD /* PairManager.m in Sources */,
 				4C38E7F91FEE085B000425CD /* App.m in Sources */,
 				4C38E7F31FEE0113000425CD /* DataManager.m in Sources */,
