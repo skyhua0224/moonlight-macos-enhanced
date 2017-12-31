@@ -19,6 +19,7 @@
 #import "AppListResponse.h"
 #import "AppAssetManager.h"
 #import "DataManager.h"
+#import "ServerInfoResponse.h"
 
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback>
 @property (weak) IBOutlet NSCollectionView *collectionView;
@@ -60,6 +61,7 @@
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
     streamVC.app = self.streamApp;
+    streamVC.delegate = self;
 }
 
 
@@ -107,6 +109,35 @@
     [self performSegueWithIdentifier:@"streamSegue" sender:nil];
 }
 
+- (void)quitApp:(TemporaryApp *)app {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSString *uniqueId = [IdManager getUniqueId];
+        NSData *cert = [CryptoManager readCertFromFile];
+
+        HttpManager *hMan = [[HttpManager alloc] initWithHost:app.host.activeAddress uniqueId:uniqueId deviceName:deviceName cert:cert];
+        HttpResponse *quitResponse = [[HttpResponse alloc] init];
+        HttpRequest *quitRequest = [HttpRequest requestForResponse:quitResponse withUrlRequest:[hMan newQuitAppRequest]];
+        
+        [hMan executeRequestSynchronously:quitRequest];
+        if (quitResponse.statusCode == 200) {
+            ServerInfoResponse *serverInfoResp = [[ServerInfoResponse alloc] init];
+            [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest] fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
+            if (![serverInfoResp isStatusOk] || [[serverInfoResp getStringTag:@"state"] hasSuffix:@"_SERVER_BUSY"]) {
+                // On newer GFE versions, the quit request succeeds even though the app doesn't
+                // really quit if another client tries to kill your app. We'll patch the response
+                // to look like the old error in that case, so the UI behaves.
+                quitResponse.statusCode = 599;
+            }
+        }
+        
+        // If it fails, display an error and stop the current operation
+        if (quitResponse.statusCode != 200) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [AlertPresenter displayAlert:NSAlertStyleWarning message:@"Failed to quit app. If this app was started by another device, you'll need to quit from that device." window:self.view.window completionHandler:nil];
+            });
+        }
+    });
+}
 
 #pragma mark - App Discovery
 

@@ -8,7 +8,9 @@
 
 #import <Cocoa/Cocoa.h>
 #import "TemporaryApp.h"
+#import "AppsViewControllerDelegate.h"
 
 @interface StreamViewController : NSViewController
 @property (nonatomic, strong) TemporaryApp *app;
+@property (nonatomic, weak) id<AppsViewControllerDelegate> delegate;
 @end

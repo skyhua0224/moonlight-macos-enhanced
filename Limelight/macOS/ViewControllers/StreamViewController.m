@@ -51,7 +51,9 @@
     [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isWindowInCurrentSpace]) {
             if ([weakSelf.view.window styleMask] & NSWindowStyleMaskFullScreen) {
-                [weakSelf captureMouse];
+                if ([weakSelf.view.window isKeyWindow]) {
+                    [weakSelf captureMouse];
+                }
             }
         }
     }];
@@ -61,7 +63,7 @@
     [super viewDidAppear];
     
     self.view.window.title = self.app.name;
-    [self.view.window makeFirstResponder:self.view];
+    [self.view.window makeFirstResponder:self];
     
     self.view.window.contentAspectRatio = NSMakeSize(16, 9);
     self.view.window.frameAutosaveName = @"Stream Window";
@@ -130,15 +132,51 @@
 }
 
 
+#pragma mark - Actions
+
+
+- (IBAction)performClose:(id)sender {
+    [self uncaptureMouse];
+    
+    NSAlert *alert = [[NSAlert alloc] init];
+    
+    alert.alertStyle = NSAlertStyleInformational;
+    alert.messageText = @"Disconnect from Stream, or Close and Quit App?";
+
+    [alert addButtonWithTitle:@"Disconnect from Stream"];
+    [alert addButtonWithTitle:@"Close and Quit App"];
+    [alert addButtonWithTitle:@"Cancel"];
+
+    NSModalResponse response = [alert runModal];
+    switch (response) {
+        case NSAlertFirstButtonReturn:
+            [self.nextResponder doCommandBySelector:@selector(performClose:)];
+            break;
+            
+        case NSAlertSecondButtonReturn:
+            [self doCommandBySelector:@selector(performCloseAndQuitApp:)];
+            break;
+
+        default:
+            break;
+    }
+}
+
+- (IBAction)performCloseStreamWindow:(id)sender {
+    [self.nextResponder doCommandBySelector:@selector(performClose:)];
+}
+
+- (IBAction)performCloseAndQuitApp:(id)sender {
+    [self.delegate quitApp:self.app];
+}
+
+
 #pragma mark - Helpers
 
 - (void)enableMenuItems:(BOOL)enable {
     NSMenu *appMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:1000].submenu;
-    NSMenu *windowMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:4000].submenu;
     appMenu.autoenablesItems = enable;
-    windowMenu.autoenablesItems = enable;
     [self itemWithMenu:appMenu andAction:@selector(terminate:)].enabled = enable;
-    [self itemWithMenu:windowMenu andAction:@selector(performClose:)].enabled = enable;
 }
 
 - (void)captureMouse {

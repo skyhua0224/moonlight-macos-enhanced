@@ -13,4 +13,6 @@
 
 - (void)openApp:(TemporaryApp *)app;
 
+- (void)quitApp:(TemporaryApp *)app;
+
 @end

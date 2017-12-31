@@ -313,6 +313,17 @@
                                                 <action selector="performClose:" target="Ady-hI-5gd" id="HmO-Ls-i7Q"/>
                                             </connections>
                                         </menuItem>
+                                        <menuItem title="Close Stream Window" alternate="YES" keyEquivalent="w" id="fwh-3l-HJN">
+                                            <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                            <connections>
+                                                <action selector="performCloseStreamWindow:" target="Ady-hI-5gd" id="raX-9U-LT7"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Close and Quit App" alternate="YES" keyEquivalent="W" id="vi8-oc-CxM">
+                                            <connections>
+                                                <action selector="performCloseAndQuitApp:" target="Ady-hI-5gd" id="kw5-Qu-bbw"/>
+                                            </connections>
+                                        </menuItem>
                                         <menuItem title="Minimize" keyEquivalent="m" id="OY7-WF-poV">
                                             <connections>
                                                 <action selector="performMiniaturize:" target="Ady-hI-5gd" id="VwT-WD-YPe"/>
