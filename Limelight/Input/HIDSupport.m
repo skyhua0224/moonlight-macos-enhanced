@@ -153,17 +153,22 @@ static struct KeyMapping keys[] = {
         }
         _mappings = [NSDictionary dictionaryWithDictionary:d];
         
-        self.mousePollingTimer = [NSTimer scheduledTimerWithTimeInterval:0.015 repeats:YES block:^(NSTimer * _Nonnull timer) {
+        __weak typeof(self) weakSelf = self;
+        _mousePollingTimer = [NSTimer scheduledTimerWithTimeInterval:0.015 repeats:YES block:^(NSTimer * _Nonnull timer) {
             int32_t deltaX, deltaY;
             CGGetLastMouseDelta(&deltaX, &deltaY);
             if (deltaX != 0 || deltaY != 0) {
-                if (self.shouldSendMouseEvents) {
+                if (weakSelf.shouldSendMouseEvents) {
                     LiSendMouseMoveEvent(deltaX, deltaY);
                 }
             }
         }];
     }
     return self;
+}
+
+- (void)dealloc {
+    [self.mousePollingTimer invalidate];
 }
 
 - (int)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
