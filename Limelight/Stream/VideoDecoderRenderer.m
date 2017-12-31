@@ -24,6 +24,20 @@
     CMVideoFormatDescriptionRef formatDesc;
 }
 
+- (void)printStreamInfo {
+    NSLog(@"SPS: %@, PPS: %@, VPS: %@", [self decodeData:spsData], [self decodeData:ppsData], [self decodeData:vpsData]);
+}
+
+- (NSString *)decodeData:(NSData *)data {
+    NSMutableString *string = [NSMutableString string];
+    const void *bytes = [data bytes];
+    for (NSInteger i = 0; i < data.length; i++) {
+        uint8_t byte = ((uint8_t *)bytes)[i];
+        [string appendFormat:@"%02x ", byte];
+    }
+    return [string copy];
+}
+
 - (void)reinitializeDisplayLayer
 {
     [layerContainer removeFromSuperview];
@@ -198,6 +212,8 @@
         // See if we've got all the parameter sets we need for our video format
         if ([self readyForPictureData]) {
             if (videoFormat & VIDEO_FORMAT_MASK_H264) {
+                [self printStreamInfo];
+                
                 const uint8_t* const parameterSetPointers[] = { [spsData bytes], [ppsData bytes] };
                 const size_t parameterSetSizes[] = { [spsData length], [ppsData length] };
                 
