@@ -12,6 +12,7 @@
 @interface AppCell : NSCollectionViewItem
 @property (weak) IBOutlet NSTextField *appName;
 @property (weak) IBOutlet NSImageView *appCoverArt;
+@property (weak) IBOutlet NSImageView *resumeIcon;
 @property (nonatomic, strong) TemporaryApp *app;
 @property (nonatomic, weak) id<AppsViewControllerDelegate> delegate;
 

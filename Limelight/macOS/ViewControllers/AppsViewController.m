@@ -25,6 +25,7 @@
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
 @property (nonatomic, strong) TemporaryApp *streamApp;
+@property (nonatomic, strong) NSIndexPath *runningAppIndex;
 
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *boxArtCache;
@@ -43,6 +44,8 @@
 
     self.apps = [NSArray array];
     [self loadApps];
+    
+    [self setRunningAppIndex:[self indexPathForApp:[self findRunningApp:self.host]]];
     
     self.boxArtCache = [[NSMutableDictionary alloc] init];
     self.boxArtCacheLock = [[NSLock alloc] init];
@@ -78,6 +81,8 @@
     item.appName.stringValue = app.name;
     item.app = app;
     
+    item.resumeIcon.hidden = indexPath != self.runningAppIndex;
+
     [self.boxArtCacheLock lock];
     NSImage* appImage = [self.boxArtCache objectForKey:app.id];
     [self.boxArtCacheLock unlock];
@@ -138,6 +143,54 @@
         }
     });
 }
+
+- (void)appDidClose:(TemporaryApp *)app {
+    [self setRunningAppIndex:nil];
+}
+
+
+#pragma mark - Running App State
+
+- (TemporaryApp*)findRunningApp:(TemporaryHost*)host {
+    for (TemporaryApp* app in host.appList) {
+        if ([app.id isEqualToString:host.currentGame]) {
+            return app;
+        }
+    }
+    
+    return nil;
+}
+
+- (void)setRunningAppIndex:(NSIndexPath *)path {
+    NSIndexPath *oldPath = self.runningAppIndex;
+    _runningAppIndex = path;
+    [self redrawCellAtIndexPath:oldPath];
+    [self redrawCellAtIndexPath:path];
+}
+
+- (void)redrawCellAtIndexPath:(NSIndexPath *)path {
+    if (path == nil) {
+        return;
+    }
+    
+    AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
+    [self configureItem:item atIndexPath:path];
+}
+
+
+#pragma mark - Helpers
+
+- (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {
+    if (app != nil) {
+        NSInteger appIndex = [self.apps indexOfObject:app];
+        if (appIndex >= 0) {
+            return [NSIndexPath indexPathForItem:appIndex inSection:0];
+        }
+    }
+    
+    return nil;
+}
+
 
 #pragma mark - App Discovery
 

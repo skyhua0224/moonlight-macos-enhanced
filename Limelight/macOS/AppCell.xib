@@ -34,6 +34,14 @@
                                 <constraint firstAttribute="bottom" secondItem="KWV-yZ-F3P" secondAttribute="bottom" id="tiR-AM-WcG"/>
                             </constraints>
                         </customView>
+                        <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="TBj-LS-qdd" userLabel="Resume Icon">
+                            <rect key="frame" x="32" y="75" width="32" height="32"/>
+                            <constraints>
+                                <constraint firstAttribute="height" constant="32" id="DND-Li-4pu"/>
+                                <constraint firstAttribute="width" constant="32" id="JLY-KU-77T"/>
+                            </constraints>
+                            <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="ResumeIcon" id="oZI-fL-CkB"/>
+                        </imageView>
                         <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="8Wu-8r-gUK" userLabel="App Name">
                             <rect key="frame" x="0.0" y="2" width="96" height="28"/>
                             <constraints>
@@ -49,10 +57,12 @@
                     </subviews>
                     <constraints>
                         <constraint firstAttribute="bottom" relation="greaterThanOrEqual" secondItem="8Wu-8r-gUK" secondAttribute="bottom" constant="2" id="Cg7-fz-wnD"/>
+                        <constraint firstItem="TBj-LS-qdd" firstAttribute="centerY" secondItem="Dvl-ny-Fge" secondAttribute="centerY" id="LlJ-fv-tPJ"/>
                         <constraint firstItem="8Wu-8r-gUK" firstAttribute="centerX" secondItem="0O3-YC-k9a" secondAttribute="centerX" id="Oob-sv-nSx"/>
                         <constraint firstItem="8Wu-8r-gUK" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="bottom" constant="8" id="ibr-4x-sAb"/>
                         <constraint firstItem="Dvl-ny-Fge" firstAttribute="top" secondItem="0O3-YC-k9a" secondAttribute="top" id="l8n-Tv-r3t"/>
                         <constraint firstItem="Dvl-ny-Fge" firstAttribute="centerX" secondItem="0O3-YC-k9a" secondAttribute="centerX" id="o5z-vB-dc0"/>
+                        <constraint firstItem="TBj-LS-qdd" firstAttribute="centerX" secondItem="Dvl-ny-Fge" secondAttribute="centerX" id="wdB-XL-JRz"/>
                     </constraints>
                 </customView>
             </subviews>
@@ -67,8 +77,12 @@
             <connections>
                 <outlet property="appCoverArt" destination="KWV-yZ-F3P" id="UhW-v9-iin"/>
                 <outlet property="appName" destination="8Wu-8r-gUK" id="wwO-nu-TRl"/>
+                <outlet property="resumeIcon" destination="TBj-LS-qdd" id="sqp-Wv-6eg"/>
                 <outlet property="view" destination="Hz6-mo-xeY" id="2dI-ni-3qs"/>
             </connections>
         </collectionViewItem>
     </objects>
+    <resources>
+        <image name="ResumeIcon" width="128" height="128"/>
+    </resources>
 </document>

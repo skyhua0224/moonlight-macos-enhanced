@@ -28,6 +28,8 @@
     self.appCoverArt.layer.masksToBounds = YES;
     self.appCoverArt.layer.cornerRadius = 6;
     
+    self.resumeIcon.alphaValue = 0.9;
+    
     [self updateSelectedState:NO];
 }
 

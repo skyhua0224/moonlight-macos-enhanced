@@ -85,6 +85,8 @@
     
     [self uncaptureMouse];
     [self.streamMan stopStream];
+    
+    [self.delegate appDidClose:self.app];
 }
 
 - (void)flagsChanged:(NSEvent *)event {

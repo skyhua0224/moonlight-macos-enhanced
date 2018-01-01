@@ -15,4 +15,6 @@
 
 - (void)quitApp:(TemporaryApp *)app;
 
+- (void)appDidClose:(TemporaryApp *)app;
+
 @end
