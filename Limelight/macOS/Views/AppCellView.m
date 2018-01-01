@@ -8,7 +8,7 @@
 
 #import "AppCellView.h"
 
-@interface AppCellView ()
+@interface AppCellView () <NSMenuDelegate>
 @property (nonatomic, strong) NSTrackingArea *trackingArea;
 
 @end
@@ -36,5 +36,9 @@
 //- (void)mouseExited:(NSEvent *)event {
 //    self.layer.transform = CATransform3DIdentity;
 //}
+
+- (void)menuWillOpen:(NSMenu *)menu {
+    [self.delegate menuWillOpen:menu];
+}
 
 @end

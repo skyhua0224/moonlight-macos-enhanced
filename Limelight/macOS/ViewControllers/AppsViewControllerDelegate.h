@@ -15,6 +15,8 @@
 
 - (void)quitApp:(TemporaryApp *)app;
 
-- (void)appDidClose:(TemporaryApp *)app;
+- (void)appDidQuit:(TemporaryApp *)app;
+
+- (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app;
 
 @end

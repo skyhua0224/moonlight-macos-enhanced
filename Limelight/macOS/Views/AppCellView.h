@@ -9,5 +9,6 @@
 #import <Cocoa/Cocoa.h>
 
 @interface AppCellView : NSView
+@property (nonatomic, weak) id<NSMenuDelegate> delegate;
 
 @end

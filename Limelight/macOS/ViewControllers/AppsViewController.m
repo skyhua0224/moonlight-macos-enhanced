@@ -107,10 +107,12 @@
     return self.apps.count;
 }
 
+
 #pragma mark - AppsViewControllerDelegate
 
 - (void)openApp:(TemporaryApp *)app {
     self.streamApp = app;
+    [self setRunningAppIndex:[self indexPathForApp:app]];
     [self performSegueWithIdentifier:@"streamSegue" sender:nil];
 }
 
@@ -144,8 +146,18 @@
     });
 }
 
-- (void)appDidClose:(TemporaryApp *)app {
+- (void)appDidQuit:(TemporaryApp *)app {
     [self setRunningAppIndex:nil];
+}
+
+- (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
+    if (self.runningAppIndex == nil) {
+        [menu cancelTrackingWithoutAnimation];
+        return;
+    }
+    if (![app.id isEqualToString:self.apps[self.runningAppIndex.item].id]) {
+        [menu cancelTrackingWithoutAnimation];
+    }
 }
 
 

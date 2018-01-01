@@ -8,8 +8,9 @@
 
 #import "AppCell.h"
 #import "BackgroundColorView.h"
+#import "AppCellView.h"
 
-@interface AppCell ()
+@interface AppCell () <NSMenuDelegate>
 
 @end
 
@@ -30,6 +31,8 @@
     
     self.resumeIcon.alphaValue = 0.9;
     
+    ((AppCellView *)self.view).delegate = self;
+    
     [self updateSelectedState:NO];
 }
 
@@ -49,6 +52,10 @@
     } else {
         [super mouseDown:theEvent];
     }
+}
+
+- (void)menuWillOpen:(NSMenu *)menu {
+    [self.delegate didOpenContextMenu:menu forApp:self.app];
 }
 
 @end

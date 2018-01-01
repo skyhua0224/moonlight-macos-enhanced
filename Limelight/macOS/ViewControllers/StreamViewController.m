@@ -85,8 +85,6 @@
     
     [self uncaptureMouse];
     [self.streamMan stopStream];
-    
-    [self.delegate appDidClose:self.app];
 }
 
 - (void)flagsChanged:(NSEvent *)event {
@@ -321,6 +319,9 @@
 
 - (void)connectionTerminated:(long)errorCode {
     Log(LOG_I, @"Connection terminated: %ld", errorCode);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.delegate appDidQuit:self.app];
+    });
     [self closeWindowFromMainQueueWithMessage:nil];
 }
 

@@ -72,6 +72,9 @@
                 <constraint firstItem="0O3-YC-k9a" firstAttribute="leading" secondItem="Hz6-mo-xeY" secondAttribute="leading" id="e7s-me-vj0"/>
                 <constraint firstAttribute="trailing" secondItem="0O3-YC-k9a" secondAttribute="trailing" id="zAM-T9-Gne"/>
             </constraints>
+            <connections>
+                <outlet property="menu" destination="eXa-bo-m2A" id="1wc-ap-qe3"/>
+            </connections>
         </customView>
         <collectionViewItem id="UvQ-65-P9k" customClass="AppCell">
             <connections>
@@ -81,6 +84,17 @@
                 <outlet property="view" destination="Hz6-mo-xeY" id="2dI-ni-3qs"/>
             </connections>
         </collectionViewItem>
+        <menu autoenablesItems="NO" id="eXa-bo-m2A">
+            <items>
+                <menuItem title="Quit App" id="rCU-F4-fg2">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                </menuItem>
+            </items>
+            <connections>
+                <outlet property="delegate" destination="Hz6-mo-xeY" id="NZg-7m-q5F"/>
+            </connections>
+            <point key="canvasLocation" x="135" y="-25"/>
+        </menu>
     </objects>
     <resources>
         <image name="ResumeIcon" width="128" height="128"/>
