@@ -24,8 +24,7 @@
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback>
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
-@property (nonatomic, strong) TemporaryApp *streamApp;
-@property (nonatomic, strong) NSIndexPath *runningAppIndex;
+@property (nonatomic, strong) TemporaryApp *runningApp;
 
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *boxArtCache;
@@ -45,7 +44,7 @@
     self.apps = [NSArray array];
     [self loadApps];
     
-    [self setRunningAppIndex:[self indexPathForApp:[self findRunningApp:self.host]]];
+    self.runningApp = [self findRunningApp:self.host];
     
     self.boxArtCache = [[NSMutableDictionary alloc] init];
     self.boxArtCacheLock = [[NSLock alloc] init];
@@ -63,7 +62,7 @@
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
-    streamVC.app = self.streamApp;
+    streamVC.app = self.runningApp;
     streamVC.delegate = self;
 }
 
@@ -81,7 +80,7 @@
     item.appName.stringValue = app.name;
     item.app = app;
     
-    item.resumeIcon.hidden = indexPath != self.runningAppIndex;
+    item.resumeIcon.hidden = app != self.runningApp;
 
     [self.boxArtCacheLock lock];
     NSImage* appImage = [self.boxArtCache objectForKey:app.id];
@@ -111,8 +110,7 @@
 #pragma mark - AppsViewControllerDelegate
 
 - (void)openApp:(TemporaryApp *)app {
-    self.streamApp = app;
-    [self setRunningAppIndex:[self indexPathForApp:app]];
+    self.runningApp = app;
     [self performSegueWithIdentifier:@"streamSegue" sender:nil];
 }
 
@@ -147,15 +145,15 @@
 }
 
 - (void)appDidQuit:(TemporaryApp *)app {
-    [self setRunningAppIndex:nil];
+    self.runningApp = nil;
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
-    if (self.runningAppIndex == nil) {
+    if (self.runningApp == nil) {
         [menu cancelTrackingWithoutAnimation];
         return;
     }
-    if (![app.id isEqualToString:self.apps[self.runningAppIndex.item].id]) {
+    if (app != self.runningApp) {
         [menu cancelTrackingWithoutAnimation];
     }
 }
@@ -173,11 +171,11 @@
     return nil;
 }
 
-- (void)setRunningAppIndex:(NSIndexPath *)path {
-    NSIndexPath *oldPath = self.runningAppIndex;
-    _runningAppIndex = path;
-    [self redrawCellAtIndexPath:oldPath];
-    [self redrawCellAtIndexPath:path];
+- (void)setRunningApp:(TemporaryApp *)runningApp {
+    TemporaryApp *oldApp = self.runningApp;
+    _runningApp = runningApp;
+    [self redrawCellAtIndexPath:[self indexPathForApp:oldApp]];
+    [self redrawCellAtIndexPath:[self indexPathForApp:runningApp]];
 }
 
 - (void)redrawCellAtIndexPath:(NSIndexPath *)path {
