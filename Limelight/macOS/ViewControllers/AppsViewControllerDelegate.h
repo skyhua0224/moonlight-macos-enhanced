@@ -13,7 +13,7 @@
 
 - (void)openApp:(TemporaryApp *)app;
 
-- (void)quitApp:(TemporaryApp *)app;
+- (void)quitApp:(TemporaryApp *)app completion:(void (^)(BOOL success))completion;
 
 - (void)appDidQuit:(TemporaryApp *)app;
 

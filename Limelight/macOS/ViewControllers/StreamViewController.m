@@ -169,7 +169,7 @@
 }
 
 - (IBAction)performCloseAndQuitApp:(id)sender {
-    [self.delegate quitApp:self.app];
+    [self.delegate quitApp:self.app completion:nil];
 }
 
 

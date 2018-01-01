@@ -74,7 +74,7 @@
 }
 
 - (IBAction)quitAppMenuItemClicked:(id)sender {
-    [self quitApp:self.runningApp];
+    [self quitApp:self.runningApp completion:nil];
 }
 
 
@@ -115,11 +115,22 @@
 #pragma mark - AppsViewControllerDelegate
 
 - (void)openApp:(TemporaryApp *)app {
-    self.runningApp = app;
-    [self performSegueWithIdentifier:@"streamSegue" sender:nil];
+    if (self.runningApp != nil && app != self.runningApp) {
+        if ([self askWhetherToStopRunningApp:self.runningApp andStartNewApp:app]) {
+            [self quitApp:self.runningApp completion:^(BOOL success) {
+                if (success) {
+                    self.runningApp = app;
+                    [self performSegueWithIdentifier:@"streamSegue" sender:nil];
+                }
+            }];
+        }
+    } else {
+        self.runningApp = app;
+        [self performSegueWithIdentifier:@"streamSegue" sender:nil];
+    }
 }
 
-- (void)quitApp:(TemporaryApp *)app {
+- (void)quitApp:(TemporaryApp *)app completion:(void (^)(BOOL success))completion {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *uniqueId = [IdManager getUniqueId];
         NSData *cert = [CryptoManager readCertFromFile];
@@ -144,8 +155,14 @@
             // If it fails, display an error and stop the current operation
             if (quitResponse.statusCode != 200) {
                 [AlertPresenter displayAlert:NSAlertStyleWarning message:@"Failed to quit app. If this app was started by another device, you'll need to quit from that device." window:self.view.window completionHandler:nil];
+                if (completion != nil) {
+                    completion(NO);
+                }
             } else {
                 self.runningApp = nil;
+                if (completion != nil) {
+                    completion(YES);
+                }
             }
         });
     });
@@ -213,6 +230,20 @@
     }
     
     return nil;
+}
+
+- (BOOL)askWhetherToStopRunningApp:(TemporaryApp *)currentApp andStartNewApp:(TemporaryApp *)newApp {
+    NSAlert *alert = [[NSAlert alloc] init];
+    
+    alert.alertStyle = NSAlertStyleInformational;
+    alert.messageText = [NSString stringWithFormat:@"%@ is still running.\n\nDo you want to quit %@ and start %@?", currentApp.name, currentApp.name, newApp.name];
+    
+    [alert addButtonWithTitle:@"Yes"];
+    [alert addButtonWithTitle:@"Cancel"];
+    
+    NSModalResponse response = [alert runModal];
+    
+    return response == NSAlertFirstButtonReturn;
 }
 
 
