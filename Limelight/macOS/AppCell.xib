@@ -88,6 +88,9 @@
             <items>
                 <menuItem title="Quit App" id="rCU-F4-fg2">
                     <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="quitAppMenuItemClicked:" target="-1" id="Y01-kY-3Bg"/>
+                    </connections>
                 </menuItem>
             </items>
             <connections>

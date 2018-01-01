@@ -73,6 +73,11 @@
     [self transitionToHostsVC];
 }
 
+- (IBAction)quitAppMenuItemClicked:(id)sender {
+    [self quitApp:self.runningApp];
+}
+
+
 #pragma mark - NSCollectionViewDataSource
 
 - (void)configureItem:(AppCell *)item atIndexPath:(NSIndexPath * _Nonnull)indexPath {
@@ -135,12 +140,14 @@
             }
         }
         
-        // If it fails, display an error and stop the current operation
-        if (quitResponse.statusCode != 200) {
-            dispatch_async(dispatch_get_main_queue(), ^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // If it fails, display an error and stop the current operation
+            if (quitResponse.statusCode != 200) {
                 [AlertPresenter displayAlert:NSAlertStyleWarning message:@"Failed to quit app. If this app was started by another device, you'll need to quit from that device." window:self.view.window completionHandler:nil];
-            });
-        }
+            } else {
+                self.runningApp = nil;
+            }
+        });
     });
 }
 
@@ -174,6 +181,13 @@
 - (void)setRunningApp:(TemporaryApp *)runningApp {
     TemporaryApp *oldApp = self.runningApp;
     _runningApp = runningApp;
+    
+    if (runningApp == nil) {
+        self.host.currentGame = @"0";
+    } else {
+        self.host.currentGame = self.runningApp.id;
+    }
+    
     [self redrawCellAtIndexPath:[self indexPathForApp:oldApp]];
     [self redrawCellAtIndexPath:[self indexPathForApp:runningApp]];
 }
