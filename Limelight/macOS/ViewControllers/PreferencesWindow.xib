@@ -17,9 +17,11 @@
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <window title="Preferences" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" oneShot="NO" releasedWhenClosed="NO" animationBehavior="default" id="QvC-M9-y7g" customClass="PreferencesWindow">
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
+            <windowCollectionBehavior key="collectionBehavior" fullScreenNone="YES"/>
             <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
-            <rect key="contentRect" x="196" y="240" width="455" height="186"/>
+            <rect key="contentRect" x="196" y="240" width="455" height="233"/>
             <rect key="screenRect" x="0.0" y="0.0" width="1440" height="877"/>
+            <value key="maxSize" type="size" width="666" height="233"/>
             <view key="contentView" wantsLayer="YES" id="EiT-Mj-1SZ">
                 <rect key="frame" x="0.0" y="0.0" width="455" height="233"/>
                 <autoresizingMask key="autoresizingMask"/>
@@ -84,7 +86,7 @@
                     </textField>
                     <slider verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="oq8-17-816">
                         <rect key="frame" x="192" y="105" width="245" height="24"/>
-                        <sliderCell key="cell" continuous="YES" state="on" alignment="left" minValue="5000" maxValue="100000" doubleValue="10000" tickMarkPosition="below" numberOfTickMarks="20" allowsTickMarkValuesOnly="YES" sliderType="linear" id="bdX-Za-QsJ"/>
+                        <sliderCell key="cell" continuous="YES" state="on" alignment="left" minValue="5000" maxValue="60000" doubleValue="10000" tickMarkPosition="below" numberOfTickMarks="12" allowsTickMarkValuesOnly="YES" sliderType="linear" id="bdX-Za-QsJ"/>
                         <connections>
                             <action selector="didChangeBitrate:" target="QvC-M9-y7g" id="cwh-59-8Nb"/>
                         </connections>
@@ -135,7 +137,7 @@
                     <constraint firstItem="Pi8-F0-aOg" firstAttribute="top" secondItem="dEl-GT-HZl" secondAttribute="bottom" constant="40" id="MYC-wR-us5"/>
                     <constraint firstItem="wRp-Rk-Vz3" firstAttribute="top" secondItem="Dvg-pl-3Im" secondAttribute="bottom" constant="20" id="Okj-vs-eSv"/>
                     <constraint firstItem="QxV-Ip-bmg" firstAttribute="centerX" secondItem="oq8-17-816" secondAttribute="centerX" id="Rez-mq-3cb"/>
-                    <constraint firstAttribute="bottom" relation="greaterThanOrEqual" secondItem="Boe-x5-WUG" secondAttribute="bottom" constant="32" id="RiH-nO-NiA"/>
+                    <constraint firstAttribute="bottom" secondItem="Boe-x5-WUG" secondAttribute="bottom" constant="32" id="RiH-nO-NiA"/>
                     <constraint firstItem="dEl-GT-HZl" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="UaH-hL-g50"/>
                     <constraint firstItem="rDN-1K-SDB" firstAttribute="leading" secondItem="Dvg-pl-3Im" secondAttribute="trailing" constant="12" id="WEn-q8-vSc"/>
                     <constraint firstItem="Boe-x5-WUG" firstAttribute="trailing" secondItem="dEl-GT-HZl" secondAttribute="trailing" id="Wfu-Rj-qdp"/>

@@ -31,6 +31,8 @@
     self.frameAutosaveName = @"Preferences Window";
     [self moonlight_centerWindowOnFirstRun];
     
+    [self standardWindowButton:NSWindowZoomButton].enabled = NO;
+    
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
