@@ -19,6 +19,9 @@
 @synthesize persistentStoreCoordinator = _persistentStoreCoordinator;
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
+    NSURL *defaultPrefsFile = [[NSBundle mainBundle] URLForResource:@"DefaultPreferences" withExtension:@"plist"];
+    NSDictionary *defaultPrefs = [NSDictionary dictionaryWithContentsOfURL:defaultPrefsFile];
+    [[NSUserDefaults standardUserDefaults] registerDefaults:defaultPrefs];
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {

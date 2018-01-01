@@ -17,7 +17,9 @@
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
 @property (weak) IBOutlet NSSlider *bitrateSlider;
 @property (weak) IBOutlet NSTextField *bitrateLabel;
+@property (weak) IBOutlet NSButton *dynamicResolutionCheckbox;
 @property (weak) IBOutlet NSButton *optimizeSettingsCheckbox;
+@property (weak) IBOutlet NSButton *autoFullscreenCheckbox;
 
 @end
 
@@ -40,7 +42,9 @@
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
     self.bitrateSlider.integerValue = [streamSettings.bitrate intValue];
     [self updateBitrateLabel];
+    self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSOnState : NSOffState;
     self.optimizeSettingsCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"optimizeSettings"] ? NSOnState : NSOffState;
+    self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSOnState : NSOffState;
 }
 
 
@@ -74,8 +78,16 @@
     [self saveSettings];
 }
 
+- (IBAction)didToggleDynamicResolution:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setBool:self.dynamicResolutionCheckbox.state == NSOnState forKey:@"dynamicResolution"];
+}
+
 - (IBAction)didToggleOptimizeSettings:(id)sender {
     [[NSUserDefaults standardUserDefaults] setBool:self.optimizeSettingsCheckbox.state == NSOnState forKey:@"optimizeSettings"];
+}
+
+- (IBAction)didToggleAutoFullscreen:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setBool:self.autoFullscreenCheckbox.state == NSOnState forKey:@"autoFullscreen"];
 }
 
 
