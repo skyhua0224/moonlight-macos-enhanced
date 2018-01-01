@@ -353,6 +353,8 @@ void ClLogMessage(const char* format, ...)
     // quality improvement.
     _streamConfig.hevcBitratePercentageMultiplier = 75;
     
+    _streamConfig.enableDynamicResolution = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"];
+    
     // FIXME: We should use 1024 when streaming remotely
     _streamConfig.packetSize = 1292;
     
