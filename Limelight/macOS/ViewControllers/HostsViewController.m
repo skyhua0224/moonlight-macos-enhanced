@@ -65,6 +65,7 @@
     appsVC.host = host;
     appsVC.hostsVC = self;
     [self.parentViewController addChildViewController:appsVC];
+    [self.parentViewController.view addSubview:appsVC.view];
     [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
     
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
