@@ -69,8 +69,6 @@
     self.view.window.frameAutosaveName = @"Stream Window";
     [self.view.window moonlight_centerWindowOnFirstRun];
     
-    self.view.window.styleMask |= NSWindowStyleMaskTexturedBackground;
-    self.view.window.backgroundColor = [NSColor colorWithRed:0.168 green:0.18 blue:0.196 alpha:1];
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"]) {
