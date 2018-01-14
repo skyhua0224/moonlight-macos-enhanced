@@ -63,6 +63,7 @@
     [super viewDidAppear];
     
     self.view.window.title = self.app.name;
+    self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
     
     self.view.window.contentAspectRatio = NSMakeSize(16, 9);
