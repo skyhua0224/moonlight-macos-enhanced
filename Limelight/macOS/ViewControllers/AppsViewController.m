@@ -255,9 +255,8 @@
     if (self.host.appList.count > 0) {
         [self displayApps];
         [self updateBoxArtForAllApps];
-    } else {
-        [self discoverAppsForHost:self.host];
     }
+    [self discoverAppsForHost:self.host];
 }
 
 - (void)updateBoxArtForAllApps {
