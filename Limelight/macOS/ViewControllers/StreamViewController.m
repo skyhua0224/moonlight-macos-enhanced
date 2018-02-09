@@ -256,6 +256,7 @@
 
 - (void)closeWindowFromMainQueueWithMessage:(NSString *)message {
     dispatch_async(dispatch_get_main_queue(), ^{
+        [self.delegate appDidQuit:self.app];
         if (message != nil) {
             [AlertPresenter displayAlert:NSAlertStyleWarning message:message window:self.view.window completionHandler:^(NSModalResponse returnCode) {
                 [self.view.window close];
@@ -318,9 +319,6 @@
 
 - (void)connectionTerminated:(long)errorCode {
     Log(LOG_I, @"Connection terminated: %ld", errorCode);
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.delegate appDidQuit:self.app];
-    });
     [self closeWindowFromMainQueueWithMessage:nil];
 }
 
