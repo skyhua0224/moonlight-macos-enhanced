@@ -67,7 +67,7 @@
     appsVC.hostsVC = self;
     [self.parentViewController addChildViewController:appsVC];
     [self.parentViewController.view addSubview:appsVC.view];
-    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
+    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionNone completionHandler:nil];
     
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
