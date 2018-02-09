@@ -23,4 +23,13 @@
     [self setFrame:NSMakeRect(xPos, yPos, NSWidth(self.frame), NSHeight(self.frame)) display:YES];
 }
 
+- (NSToolbarItem *)moonlight_toolbarItemForAction:(SEL)action {
+    for (NSToolbarItem *item in self.toolbar.items) {
+        if (item.action == action) {
+            return item;
+        }
+    }
+    return nil;
+}
+
 @end

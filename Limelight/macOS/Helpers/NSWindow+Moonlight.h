@@ -11,5 +11,6 @@
 @interface NSWindow (Moonlight)
 
 - (void)moonlight_centerWindowOnFirstRun;
+- (NSToolbarItem *)moonlight_toolbarItemForAction:(SEL)action;
 
 @end

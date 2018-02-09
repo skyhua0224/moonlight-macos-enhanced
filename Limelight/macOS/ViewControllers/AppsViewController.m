@@ -12,6 +12,7 @@
 #import "AppCell.h"
 #import "AlertPresenter.h"
 #import "StreamViewController.h"
+#import "NSWindow+Moonlight.h"
 
 #import "HttpManager.h"
 #import "IdManager.h"
@@ -55,6 +56,8 @@
     
     self.view.window.title = [self.host.name capitalizedString];
     [self.view.window makeFirstResponder:self.collectionView];
+    
+    [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
 }
 
 - (void)transitionToHostsVC {

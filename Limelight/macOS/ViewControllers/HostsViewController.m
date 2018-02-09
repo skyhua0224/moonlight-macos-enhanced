@@ -11,6 +11,7 @@
 #import "HostsViewControllerDelegate.h"
 #import "AppsViewController.h"
 #import "AlertPresenter.h"
+#import "NSWindow+Moonlight.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -51,6 +52,11 @@
     
     self.view.window.title = @"Moonlight";
     [self.view.window makeFirstResponder:self.collectionView];
+    
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wundeclared-selector"
+    [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
+#pragma clang diagnostic pop
     
     [self.discMan startDiscovery];
 }

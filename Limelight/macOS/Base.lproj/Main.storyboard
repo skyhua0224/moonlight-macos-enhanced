@@ -380,7 +380,7 @@
                         <rect key="screenRect" x="0.0" y="0.0" width="1680" height="1027"/>
                         <toolbar key="toolbar" implicitIdentifier="A60715D8-1F2C-47E5-9F9A-740F642B3D2F" autosavesConfiguration="NO" allowsUserCustomization="NO" displayMode="iconOnly" sizeMode="regular" id="3hJ-rw-Qjt">
                             <allowedToolbarItems>
-                                <toolbarItem implicitItemIdentifier="7C0FAE2A-553D-43B5-AA14-632B8D9B2E6E" label="Back" paletteLabel="Back" image="NSLeftFacingTriangleTemplate" id="xh2-9X-oTC">
+                                <toolbarItem implicitItemIdentifier="7C0FAE2A-553D-43B5-AA14-632B8D9B2E6E" label="Back" paletteLabel="Back" image="NSLeftFacingTriangleTemplate" autovalidates="NO" id="xh2-9X-oTC">
                                     <nil key="toolTip"/>
                                     <size key="minSize" width="26" height="20"/>
                                     <size key="maxSize" width="38" height="28"/>
@@ -396,14 +396,14 @@
                                         <action selector="backButtonClicked:" target="Oky-zY-oP4" id="Ypd-UY-pU7"/>
                                     </connections>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="2E9B20F6-0473-43F8-B1D2-A0A6FDF097D0" label="Add Host" paletteLabel="Add Host" image="NSAddTemplate" id="OMc-qZ-aha" userLabel="Add Host">
+                                <toolbarItem implicitItemIdentifier="2E9B20F6-0473-43F8-B1D2-A0A6FDF097D0" label="Add Host" paletteLabel="Add Host" image="NSAddTemplate" autovalidates="NO" id="OMc-qZ-aha" userLabel="Add Host">
                                     <nil key="toolTip"/>
                                     <size key="minSize" width="26" height="20"/>
                                     <size key="maxSize" width="38" height="28"/>
                                     <button key="view" verticalHuggingPriority="750" id="qTA-GV-3gD">
                                         <rect key="frame" x="9" y="14" width="38" height="28"/>
                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
-                                        <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="NSAddTemplate" imagePosition="only" alignment="center" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="GxS-Kg-hUR">
+                                        <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="NSAddTemplate" imagePosition="only" alignment="center" lineBreakMode="truncatingTail" enabled="NO" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="GxS-Kg-hUR">
                                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
                                         </buttonCell>
