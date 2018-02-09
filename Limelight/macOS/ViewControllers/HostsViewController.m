@@ -49,6 +49,7 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
+    self.view.window.title = @"Moonlight";
     [self.view.window makeFirstResponder:self.collectionView];
     
     [self.discMan startDiscovery];
@@ -70,8 +71,6 @@
     
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
-    
-    self.view.window.title = host.name;
 }
 
 
@@ -81,7 +80,7 @@
     HostCell *item = [collectionView makeItemWithIdentifier:@"HostCell" forIndexPath:indexPath];
     
     TemporaryHost *host = self.hosts[indexPath.item];
-    item.hostName.stringValue = host.name;
+    item.hostName.stringValue = [host.name capitalizedString];
     item.host = host;
     item.delegate = self;
     

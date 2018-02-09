@@ -53,6 +53,7 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
+    self.view.window.title = [self.host.name capitalizedString];
     [self.view.window makeFirstResponder:self.collectionView];
 }
 
