@@ -12,6 +12,7 @@
 #import "AppsViewController.h"
 #import "AlertPresenter.h"
 #import "NSWindow+Moonlight.h"
+#import "NSCollectionView+Moonlight.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -41,6 +42,8 @@
     
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
+    
+    [self.collectionView selectItemsAtIndexPaths:[NSSet setWithObject:[NSIndexPath indexPathForItem:0 inSection:0]] scrollPosition:NSCollectionViewScrollPositionNone];
     
     self.hosts = [NSArray array];
     
@@ -167,7 +170,7 @@
     @synchronized (self.hosts) {
         // Sort the host list in alphabetical order
         self.hosts = [self.hosts sortedArrayUsingSelector:@selector(compareName:)];
-        [self.collectionView reloadData];
+        [self.collectionView moonlight_reloadDataKeepingSelection];
     }
 }
 

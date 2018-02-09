@@ -13,6 +13,7 @@
 #import "AlertPresenter.h"
 #import "StreamViewController.h"
 #import "NSWindow+Moonlight.h"
+#import "NSCollectionView+Moonlight.h"
 
 #import "HttpManager.h"
 #import "IdManager.h"
@@ -41,6 +42,8 @@
     [super viewDidLoad];
     
     self.collectionView.dataSource = self;
+
+    [self.collectionView selectItemsAtIndexPaths:[NSSet setWithObject:[NSIndexPath indexPathForItem:0 inSection:0]] scrollPosition:NSCollectionViewScrollPositionNone];
 
     self.apps = [NSArray array];
     [self loadApps];
@@ -280,7 +283,7 @@
 
 - (void)displayApps {
     self.apps = [self.host.appList.allObjects sortedArrayUsingSelector:@selector(compareName:)];
-    [self.collectionView reloadData];
+    [self.collectionView moonlight_reloadDataKeepingSelection];
 }
 
 - (void)discoverAppsForHost:(TemporaryHost *)host {

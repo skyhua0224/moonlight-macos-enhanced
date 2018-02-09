@@ -64,6 +64,7 @@
 		4C7E0A971FECCF9A00684411 /* HostsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A961FECCF9A00684411 /* HostsViewController.m */; };
 		4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A9D1FECD31600684411 /* HostCell.m */; };
 		4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0AA21FECE55E00684411 /* HostCell.xib */; };
+		4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */; };
 		4C85A7FF1FDCE1D300F28E90 /* ShadowView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */; };
 		4C85A8011FDCE49C00F28E90 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */; };
 		4C85A8041FDCE4B200F28E90 /* MarqueeLabel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */; };
@@ -218,6 +219,8 @@
 		4C7E0A9C1FECD31600684411 /* HostCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HostCell.h; sourceTree = "<group>"; };
 		4C7E0A9D1FECD31600684411 /* HostCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HostCell.m; sourceTree = "<group>"; };
 		4C7E0AA21FECE55E00684411 /* HostCell.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = HostCell.xib; sourceTree = "<group>"; };
+		4C819438202D75EF0023F308 /* NSCollectionView+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSCollectionView+Moonlight.h"; sourceTree = "<group>"; };
+		4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSCollectionView+Moonlight.m"; sourceTree = "<group>"; };
 		4C85A7FD1FDCE1D300F28E90 /* ShadowView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowView.h; sourceTree = "<group>"; };
 		4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ShadowView.m; sourceTree = "<group>"; };
 		4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
@@ -492,6 +495,8 @@
 				4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */,
 				4CC3C0331FF76D330029EBF5 /* AMIndeterminateProgressIndicatorView.h */,
 				4CC3C0341FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m */,
+				4C819438202D75EF0023F308 /* NSCollectionView+Moonlight.h */,
+				4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -1245,6 +1250,7 @@
 				4C7E0A971FECCF9A00684411 /* HostsViewController.m in Sources */,
 				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
+				4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */,
 				4C30BA201FF5F7D600848919 /* BackgroundColorView.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
 				4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */,
