@@ -81,6 +81,13 @@
     [self quitApp:self.runningApp completion:nil];
 }
 
+- (IBAction)open:(id)sender {
+    if (self.collectionView.selectionIndexes.count != 0) {
+        TemporaryApp *app = self.apps[self.collectionView.selectionIndexes.firstIndex];
+        [self openApp:app];
+    }
+}
+
 
 #pragma mark - NSCollectionViewDataSource
 

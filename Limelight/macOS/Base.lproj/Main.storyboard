@@ -288,6 +288,11 @@
                                                 <action selector="backButtonClicked:" target="Ady-hI-5gd" id="dsA-Bc-arn"/>
                                             </connections>
                                         </menuItem>
+                                        <menuItem title="Open" hidden="YES" keyEquivalent="" allowsKeyEquivalentWhenHidden="YES" id="QsI-iR-yyt">
+                                            <connections>
+                                                <action selector="open:" target="Ady-hI-5gd" id="EjV-Ab-MC4"/>
+                                            </connections>
+                                        </menuItem>
                                         <menuItem title="Show Toolbar" keyEquivalent="t" id="snW-S8-Cw5">
                                             <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
                                             <connections>

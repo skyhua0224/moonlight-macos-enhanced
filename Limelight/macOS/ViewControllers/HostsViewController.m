@@ -79,6 +79,15 @@
     appsVC.view.frame = self.view.bounds;
 }
 
+#pragma mark - Actions
+
+- (IBAction)open:(id)sender {
+    if (self.collectionView.selectionIndexes.count != 0) {
+        TemporaryHost *host = self.hosts[self.collectionView.selectionIndexes.firstIndex];
+        [self openHost:host];
+    }
+}
+
 
 #pragma mark - NSCollectionViewDataSource
 
