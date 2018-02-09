@@ -61,7 +61,7 @@
 }
 
 - (void)transitionToHostsVC {
-    [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionNone completionHandler:nil];
+    [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
 }
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
