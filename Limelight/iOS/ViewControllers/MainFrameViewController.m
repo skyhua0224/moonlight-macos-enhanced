@@ -108,12 +108,10 @@ static NSMutableSet* hostList;
     _computerNameButton.title = host.name;
     [self.navigationController.navigationBar setNeedsLayout];
     
-    if (hostScrollView.superview != nil) {
-        [self updateAppsForHost:host];
-
-        [hostScrollView removeFromSuperview];
-        [self.collectionView reloadData];
-    }
+    [self updateAppsForHost:host];
+    
+    [hostScrollView removeFromSuperview];
+    [self.collectionView reloadData];
     
     [self enableNavigation];
 }
@@ -130,7 +128,6 @@ static NSMutableSet* hostList;
         dispatch_async(dispatch_get_main_queue(), ^{
             [self displayAppList:host];
         });
-        return;
     }
     
     Log(LOG_I, @"Using cached app list: %d", usingCachedAppList);
