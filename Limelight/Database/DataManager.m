@@ -10,39 +10,19 @@
 #import "TemporaryApp.h"
 #import "TemporarySettings.h"
 #import "Settings.h"
+#import "DatabaseSingleton.h"
 
 @implementation DataManager {
     NSManagedObjectContext *_managedObjectContext;
-    AppDelegate *_appDelegate;
 }
 
 - (id) init {
     self = [super init];
     
-    // HACK: Avoid calling [UIApplication delegate] off the UI thread to keep
-    // Main Thread Checker happy.
-    if ([NSThread isMainThread]) {
-        _appDelegate = [self getAppDelegate];
-    }
-    else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            _appDelegate = [self getAppDelegate];
-        });
-    }
-    
     _managedObjectContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
-    [_managedObjectContext setPersistentStoreCoordinator:_appDelegate.persistentStoreCoordinator];
+    [_managedObjectContext setPersistentStoreCoordinator:[DatabaseSingleton shared].persistentStoreCoordinator];
     
     return self;
-}
-
-- (AppDelegate *)getAppDelegate {
-#if TARGET_OS_IPHONE
-    return (AppDelegate *)[[UIApplication sharedApplication] delegate];
-#else
-    return (AppDelegate *)[[NSApplication sharedApplication] delegate];
-#endif
-
 }
 
 - (void) updateUniqueId:(NSString*)uniqueId {
@@ -186,7 +166,7 @@
         Log(LOG_E, @"Unable to save hosts to database: %@", error);
     }
 
-    [_appDelegate saveContext];
+    [[DatabaseSingleton shared] saveContext];
 }
 
 - (NSArray*) getHosts {

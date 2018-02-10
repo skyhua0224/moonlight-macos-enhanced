@@ -1,43 +1,30 @@
 //
-//  AppDelegate.m
-//  Moonlight for macOS
+//  DatabaseSingleton.m
+//  Moonlight
 //
-//  Created by Michael Kenny on 22/12/17.
-//  Copyright © 2017 Moonlight Stream. All rights reserved.
+//  Created by Michael Kenny on 10/2/18.
+//  Copyright © 2018 Moonlight Stream. All rights reserved.
 //
 
-#import "AppDelegate.h"
+#import "DatabaseSingleton.h"
 
-@interface AppDelegate ()
-@property (nonatomic, strong) NSWindowController *preferencesWC;
+@interface DatabaseSingleton ()
+@property (strong, nonatomic) NSManagedObjectContext *managedObjectContext;
+@property (strong, nonatomic) NSManagedObjectModel *managedObjectModel;
+@property (strong, nonatomic) NSPersistentStoreCoordinator *persistentStoreCoordinator;
 @end
 
-@implementation AppDelegate
+@implementation DatabaseSingleton
 
-@synthesize managedObjectContext = _managedObjectContext;
-@synthesize managedObjectModel = _managedObjectModel;
-@synthesize persistentStoreCoordinator = _persistentStoreCoordinator;
-
-- (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
-    NSURL *defaultPrefsFile = [[NSBundle mainBundle] URLForResource:@"DefaultPreferences" withExtension:@"plist"];
-    NSDictionary *defaultPrefs = [NSDictionary dictionaryWithContentsOfURL:defaultPrefsFile];
-    [[NSUserDefaults standardUserDefaults] registerDefaults:defaultPrefs];
++ (DatabaseSingleton *)shared {
+    static DatabaseSingleton *instance;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        instance = [[DatabaseSingleton alloc] init];
+    });
+    
+    return instance;
 }
-
-- (void)applicationWillTerminate:(NSNotification *)aNotification {
-    [self saveContext];
-}
-
-- (IBAction)showPreferences:(id)sender {
-    if (self.preferencesWC == nil) {
-        self.preferencesWC = [[NSWindowController alloc] initWithWindowNibName:@"PreferencesWindow"];
-    }
-    [self.preferencesWC showWindow:nil];
-    [self.preferencesWC.window makeKeyAndOrderFront:nil];
-}
-
-
-#pragma mark - Core Data stack
 
 - (void)saveContext
 {
@@ -106,7 +93,8 @@
     return _persistentStoreCoordinator;
 }
 
-#pragma mark - Application's Documents directory
+
+#pragma mark - Database Path
 
 // Returns the URL to the application's Documents directory.
 - (NSURL *)applicationDocumentsDirectory

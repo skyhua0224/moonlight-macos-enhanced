@@ -42,9 +42,9 @@ typedef NSImage ImageType;
     [self performSelectorOnMainThread:@selector(sendCallbackForApp:) withObject:self.app waitUntilDone:NO];
 }
 
-- (NSData *)pngRepresentationOfImage:(NSImage *)image {
+- (NSData *)pngRepresentationOfImage:(ImageType *)image {
 #if TARGET_OS_IPHONE
-    return UIImagePNGRepresentation(appImage);
+    return UIImagePNGRepresentation(image);
 #else
     NSData *imageData = [image TIFFRepresentation];
     NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:imageData];

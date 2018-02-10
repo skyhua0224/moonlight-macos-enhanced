@@ -7,6 +7,33 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4C819457202EC9070023F308 /* AudioStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1A1CAD423B0089BB98 /* AudioStream.c */; };
+		4C819458202EC9070023F308 /* ByteBuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1B1CAD423B0089BB98 /* ByteBuffer.c */; };
+		4C819459202EC9070023F308 /* Connection.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1D1CAD423B0089BB98 /* Connection.c */; };
+		4C81945A202EC9070023F308 /* ControlStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1E1CAD423B0089BB98 /* ControlStream.c */; };
+		4C81945B202EC9070023F308 /* FakeCallbacks.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1F1CAD423B0089BB98 /* FakeCallbacks.c */; };
+		4C81945C202EC9070023F308 /* InputStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E211CAD423B0089BB98 /* InputStream.c */; };
+		4C81945D202EC9070023F308 /* LinkedBlockingQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E241CAD423B0089BB98 /* LinkedBlockingQueue.c */; };
+		4C81945E202EC9070023F308 /* Misc.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E261CAD423B0089BB98 /* Misc.c */; };
+		4C81945F202EC9070023F308 /* Platform.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E311CAD423B0089BB98 /* Platform.c */; };
+		4C819460202EC9070023F308 /* PlatformSockets.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E331CAD423B0089BB98 /* PlatformSockets.c */; };
+		4C819461202EC9070023F308 /* RtpReorderQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E361CAD423B0089BB98 /* RtpReorderQueue.c */; };
+		4C819462202EC9070023F308 /* RtspConnection.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E391CAD423B0089BB98 /* RtspConnection.c */; };
+		4C819463202EC9070023F308 /* RtspParser.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E3A1CAD423B0089BB98 /* RtspParser.c */; };
+		4C819464202EC9070023F308 /* SdpGenerator.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E3B1CAD423B0089BB98 /* SdpGenerator.c */; };
+		4C819465202EC9070023F308 /* VideoDepacketizer.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E3D1CAD423B0089BB98 /* VideoDepacketizer.c */; };
+		4C819466202EC9070023F308 /* RtpFecQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 9857AEE91EBE85A20084F99E /* RtpFecQueue.c */; };
+		4C819467202EC9070023F308 /* VideoStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E3E1CAD423B0089BB98 /* VideoStream.c */; };
+		4C819468202EC9070023F308 /* callbacks.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2DF01CAD422B0089BB98 /* callbacks.c */; };
+		4C819469202EC9070023F308 /* compress.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2DF31CAD422B0089BB98 /* compress.c */; };
+		4C81946A202EC9070023F308 /* host.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E001CAD422B0089BB98 /* host.c */; };
+		4C81946B202EC9070023F308 /* list.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E0E1CAD422B0089BB98 /* list.c */; };
+		4C81946C202EC9070023F308 /* packet.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E121CAD422B0089BB98 /* packet.c */; };
+		4C81946D202EC9070023F308 /* peer.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E131CAD422B0089BB98 /* peer.c */; };
+		4C81946E202EC9070023F308 /* protocol.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E151CAD422B0089BB98 /* protocol.c */; };
+		4C81946F202EC9070023F308 /* rs.c in Sources */ = {isa = PBXBuildFile; fileRef = 9857AEEE1EBE85E10084F99E /* rs.c */; };
+		4C819470202EC9070023F308 /* unix.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E171CAD422B0089BB98 /* unix.c */; };
+		4C819471202EC9070023F308 /* win32.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E181CAD422B0089BB98 /* win32.c */; };
 		9857AEEA1EBE85A20084F99E /* RtpFecQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 9857AEE91EBE85A20084F99E /* RtpFecQueue.c */; };
 		9857AEF01EBE85E10084F99E /* rs.c in Sources */ = {isa = PBXBuildFile; fileRef = 9857AEEE1EBE85E10084F99E /* rs.c */; };
 		98AB2E401CAD425A0089BB98 /* AudioStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1A1CAD423B0089BB98 /* AudioStream.c */; };
@@ -37,6 +64,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4C819476202EC9070023F308 /* libmoonlight-common iOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libmoonlight-common iOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9857AEE91EBE85A20084F99E /* RtpFecQueue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = RtpFecQueue.c; sourceTree = "<group>"; };
 		9857AEEB1EBE85AB0084F99E /* RtpFecQueue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RtpFecQueue.h; sourceTree = "<group>"; };
 		9857AEEE1EBE85E10084F99E /* rs.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = rs.c; path = "moonlight-common-c/reedsolomon/rs.c"; sourceTree = "<group>"; };
@@ -109,6 +137,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		4C819472202EC9070023F308 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FB290E2B19B37A4E004C83CF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -256,6 +291,7 @@
 			isa = PBXGroup;
 			children = (
 				FB290E2E19B37A4E004C83CF /* libmoonlight-common.a */,
+				4C819476202EC9070023F308 /* libmoonlight-common iOS.a */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -263,6 +299,22 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		4C819455202EC9070023F308 /* moonlight-common iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4C819473202EC9070023F308 /* Build configuration list for PBXNativeTarget "moonlight-common iOS" */;
+			buildPhases = (
+				4C819456202EC9070023F308 /* Sources */,
+				4C819472202EC9070023F308 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "moonlight-common iOS";
+			productName = "limelight-common";
+			productReference = 4C819476202EC9070023F308 /* libmoonlight-common iOS.a */;
+			productType = "com.apple.product-type.library.static";
+		};
 		FB290E2D19B37A4E004C83CF /* moonlight-common */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FB290E3219B37A4E004C83CF /* Build configuration list for PBXNativeTarget "moonlight-common" */;
@@ -301,11 +353,46 @@
 			projectRoot = "";
 			targets = (
 				FB290E2D19B37A4E004C83CF /* moonlight-common */,
+				4C819455202EC9070023F308 /* moonlight-common iOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4C819456202EC9070023F308 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C819457202EC9070023F308 /* AudioStream.c in Sources */,
+				4C819458202EC9070023F308 /* ByteBuffer.c in Sources */,
+				4C819459202EC9070023F308 /* Connection.c in Sources */,
+				4C81945A202EC9070023F308 /* ControlStream.c in Sources */,
+				4C81945B202EC9070023F308 /* FakeCallbacks.c in Sources */,
+				4C81945C202EC9070023F308 /* InputStream.c in Sources */,
+				4C81945D202EC9070023F308 /* LinkedBlockingQueue.c in Sources */,
+				4C81945E202EC9070023F308 /* Misc.c in Sources */,
+				4C81945F202EC9070023F308 /* Platform.c in Sources */,
+				4C819460202EC9070023F308 /* PlatformSockets.c in Sources */,
+				4C819461202EC9070023F308 /* RtpReorderQueue.c in Sources */,
+				4C819462202EC9070023F308 /* RtspConnection.c in Sources */,
+				4C819463202EC9070023F308 /* RtspParser.c in Sources */,
+				4C819464202EC9070023F308 /* SdpGenerator.c in Sources */,
+				4C819465202EC9070023F308 /* VideoDepacketizer.c in Sources */,
+				4C819466202EC9070023F308 /* RtpFecQueue.c in Sources */,
+				4C819467202EC9070023F308 /* VideoStream.c in Sources */,
+				4C819468202EC9070023F308 /* callbacks.c in Sources */,
+				4C819469202EC9070023F308 /* compress.c in Sources */,
+				4C81946A202EC9070023F308 /* host.c in Sources */,
+				4C81946B202EC9070023F308 /* list.c in Sources */,
+				4C81946C202EC9070023F308 /* packet.c in Sources */,
+				4C81946D202EC9070023F308 /* peer.c in Sources */,
+				4C81946E202EC9070023F308 /* protocol.c in Sources */,
+				4C81946F202EC9070023F308 /* rs.c in Sources */,
+				4C819470202EC9070023F308 /* unix.c in Sources */,
+				4C819471202EC9070023F308 /* win32.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FB290E2A19B37A4E004C83CF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -343,6 +430,40 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		4C819474202EC9070023F308 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				EXECUTABLE_PREFIX = lib;
+				HEADER_SEARCH_PATHS = (
+					"moonlight-common-c/enet/include",
+					"../libs/**",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 8.0;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+			};
+			name = Debug;
+		};
+		4C819475202EC9070023F308 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "iPhone Distribution";
+				EXECUTABLE_PREFIX = lib;
+				HEADER_SEARCH_PATHS = (
+					"moonlight-common-c/enet/include",
+					"../libs/**",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 8.0;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+			};
+			name = Release;
+		};
 		FB290E3019B37A4E004C83CF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -469,6 +590,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		4C819473202EC9070023F308 /* Build configuration list for PBXNativeTarget "moonlight-common iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4C819474202EC9070023F308 /* Debug */,
+				4C819475202EC9070023F308 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FB290E2919B37A4E004C83CF /* Build configuration list for PBXProject "moonlight-common" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

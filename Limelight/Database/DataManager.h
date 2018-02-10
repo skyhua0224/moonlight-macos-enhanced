@@ -7,7 +7,6 @@
 //
 
 #import <Foundation/Foundation.h>
-#import "AppDelegate.h"
 #import "TemporaryHost.h"
 #import "TemporaryApp.h"
 #import "TemporarySettings.h"

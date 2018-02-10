@@ -1,22 +1,21 @@
 //
-//  AppDelegate.h
-//  Moonlight for macOS
+//  DatabaseSingleton.h
+//  Moonlight
 //
-//  Created by Michael Kenny on 22/12/17.
-//  Copyright © 2017 Moonlight Stream. All rights reserved.
+//  Created by Michael Kenny on 10/2/18.
+//  Copyright © 2018 Moonlight Stream. All rights reserved.
 //
 
-#import <Cocoa/Cocoa.h>
+#import <Foundation/Foundation.h>
 
-@interface AppDelegate : NSObject <NSApplicationDelegate>
+@interface DatabaseSingleton : NSObject
+
++ (DatabaseSingleton *)shared;
 
 @property (readonly, strong, nonatomic) NSManagedObjectContext *managedObjectContext;
 @property (readonly, strong, nonatomic) NSManagedObjectModel *managedObjectModel;
 @property (readonly, strong, nonatomic) NSPersistentStoreCoordinator *persistentStoreCoordinator;
 
 - (void)saveContext;
-- (NSURL *)applicationDocumentsDirectory;
-- (NSURL*) getStoreURL;
 
 @end
-
