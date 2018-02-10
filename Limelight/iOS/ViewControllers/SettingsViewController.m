@@ -27,17 +27,44 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
     
     // Bitrate is persisted in kbps
     _bitrate = [currentSettings.bitrate integerValue];
-    NSInteger framerate = [currentSettings.framerate integerValue] == 30 ? 0 : 1;
-    NSInteger resolution;
-    if ([currentSettings.height integerValue] == 720) {
-        resolution = 0;
-    } else if ([currentSettings.height integerValue] == 1080) {
-        resolution = 1;
-    } else if ([currentSettings.height integerValue] == 1440) {
-        resolution = 2;
-    } else {
-        resolution = 3;
+
+    NSInteger framerate;
+    switch (currentSettings.framerate.integerValue) {
+        case 30:
+            framerate = 0;
+            break;
+        case 59:
+            framerate = 1;
+            break;
+        case 60:
+            framerate = 2;
+            break;
+
+        default:
+            framerate = 2;
+            break;
     }
+    
+    NSInteger resolution;
+    switch ([currentSettings.height integerValue]) {
+        case 720:
+            resolution = 0;
+            break;
+        case 1080:
+            resolution = 1;
+            break;
+        case 1440:
+            resolution = 2;
+            break;
+        case 2160:
+            resolution = 3;
+            break;
+
+        default:
+            resolution = 0;
+            break;
+    }
+
     NSInteger onscreenControls = [currentSettings.onscreenControls integerValue];
     
     [self.resolutionSelector setSelectedSegmentIndex:resolution];
@@ -47,7 +74,7 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
     [self.onscreenControlSelector setSelectedSegmentIndex:onscreenControls];
 
 
-    numbers = @[@(0.5), @(1), @(1.5), @(2), @(2.5), @(3), @(3.5), @(4), @(4.5), @(5), @(5.5), @(6), @(6.5), @(7), @(7.5), @(8), @(8.5), @(9), @(9.5), @(10)];
+    numbers = @[@(0.5), @(1), @(1.5), @(2), @(2.5), @(3), @(3.5), @(4), @(4.5), @(5), @(5.5), @(6)];
     NSInteger numberOfSteps = ((float)[numbers count]);
     self.bitrateSlider.maximumValue = numberOfSteps;
     self.bitrateSlider.minimumValue = 1;
@@ -65,19 +92,19 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
     NSInteger defaultBitrate;
     
     // 2160p60 is 40 Mbps
-    if (frameRate == 60 && resHeight == 2160) {
+    if (frameRate >= 59 && resHeight == 2160) {
         defaultBitrate = 40000;
     }
     // 1440p60 is 30 Mbps
-    else if ((frameRate == 60 && resHeight == 1440) || resHeight == 2160) {
+    else if ((frameRate >= 59 && resHeight == 1440) || resHeight == 2160) {
         defaultBitrate = 30000;
     }
     // 1080p60 is 20 Mbps
-    else if ((frameRate == 60 && resHeight == 1080) || resHeight == 1440) {
+    else if ((frameRate >= 59 && resHeight == 1080) || resHeight == 1440) {
         defaultBitrate = 20000;
     }
     // 720p60 and 1080p30 are 10 Mbps
-    else if (frameRate == 60 || resHeight == 1080) {
+    else if (frameRate >= 59 || resHeight == 1080) {
         defaultBitrate = 10000;
     }
     // 720p30 is 5 Mbps
@@ -105,32 +132,62 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
 }
 
 - (NSInteger) getChosenFrameRate {
-    return [self.framerateSelector selectedSegmentIndex] == 0 ? 30 : 60;
+    switch (self.framerateSelector.selectedSegmentIndex) {
+        case 0:
+            return 30;
+            break;
+        case 1:
+            return 59;
+            break;
+        case 2:
+            return 60;
+            break;
+
+        default:
+            return 60;
+            break;
+    }
 }
 
 - (NSInteger) getChosenStreamHeight {
-    NSInteger selectedSegment = [self.resolutionSelector selectedSegmentIndex];
-    if (selectedSegment == 0) {
-        return 720;
-    } else if (selectedSegment == 1) {
-        return 1080;
-    } else if (selectedSegment == 2) {
-        return 1440;
-    } else {
-        return 2160;
+    switch (self.resolutionSelector.selectedSegmentIndex) {
+        case 0:
+            return 720;
+            break;
+        case 1:
+            return 1080;
+            break;
+        case 2:
+            return 1440;
+            break;
+        case 3:
+            return 2160;
+            break;
+
+        default:
+            return 720;
+            break;
     }
 }
 
 - (NSInteger) getChosenStreamWidth {
-    NSInteger selectedSegmentHeight = [self getChosenStreamHeight];
-    if (selectedSegmentHeight == 720) {
-        return 1280;
-    } else if (selectedSegmentHeight == 1080) {
-        return 1920;
-    } else if (selectedSegmentHeight == 1440) {
-        return 2560;
-    } else {
-        return 3840;
+    switch ([self getChosenStreamHeight]) {
+        case 720:
+            return 1280;
+            break;
+        case 1080:
+            return 1920;
+            break;
+        case 1440:
+            return 2560;
+            break;
+        case 2160:
+            return 3840;
+            break;
+
+        default:
+            return 1280;
+            break;
     }
 }
 

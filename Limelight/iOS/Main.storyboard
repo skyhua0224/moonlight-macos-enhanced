@@ -159,13 +159,14 @@
                                         <color key="textColor" red="0.96078431372549022" green="0.98039215686274506" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                         <nil key="highlightedColor"/>
                                     </label>
-                                    <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="plain" selectedSegmentIndex="1" translatesAutoresizingMaskIntoConstraints="NO" id="dLF-qJ-2nY">
+                                    <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="plain" selectedSegmentIndex="2" translatesAutoresizingMaskIntoConstraints="NO" id="dLF-qJ-2nY">
                                         <rect key="frame" x="0.0" y="96" width="225" height="29"/>
                                         <constraints>
                                             <constraint firstAttribute="height" constant="28" id="3Z6-X9-OyM"/>
                                         </constraints>
                                         <segments>
                                             <segment title="30 Hz"/>
+                                            <segment title="59 Hz"/>
                                             <segment title="60 Hz"/>
                                         </segments>
                                         <color key="tintColor" red="0.72941176470588232" green="0.69411764705882351" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
@@ -185,7 +186,7 @@
                                             <segment title="720p"/>
                                             <segment title="1080p"/>
                                             <segment title="1440p"/>
-                                            <segment title="4k"/>
+                                            <segment title="4K"/>
                                         </segments>
                                         <color key="tintColor" red="0.72941176470588232" green="0.69411764705882351" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                     </segmentedControl>
