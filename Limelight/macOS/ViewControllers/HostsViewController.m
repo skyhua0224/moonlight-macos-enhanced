@@ -98,7 +98,7 @@
     HostCell *item = [collectionView makeItemWithIdentifier:@"HostCell" forIndexPath:indexPath];
     
     TemporaryHost *host = self.hosts[indexPath.item];
-    item.hostName.stringValue = [host.name capitalizedString];
+    item.hostName.stringValue = host.name;
     item.host = host;
     item.delegate = self;
     

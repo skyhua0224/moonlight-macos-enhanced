@@ -57,7 +57,7 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
-    self.view.window.title = [self.host.name capitalizedString];
+    self.view.window.title = self.host.name;
     [self.view.window makeFirstResponder:self.collectionView];
     
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
