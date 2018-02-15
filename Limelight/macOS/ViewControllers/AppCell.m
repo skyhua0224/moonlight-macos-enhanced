@@ -81,7 +81,17 @@
 }
 
 - (void)updateSelectedState:(BOOL)selected {
-    self.appName.textColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor textColor];
+    NSShadow *shadow = [[NSShadow alloc] init];
+    shadow.shadowColor = [NSColor colorWithWhite:0 alpha:selected ? 0.64 : 0.55];
+    shadow.shadowOffset = NSMakeSize(0, selected ? -7 : -4);
+    shadow.shadowBlurRadius = 4;
+
+    [NSAnimationContext beginGrouping];
+    [NSAnimationContext currentContext].duration = 0.8;
+    self.appCoverArt.superview.animator.shadow = shadow;
+    self.appCoverArt.superview.animator.alphaValue = selected ? 1 : 0.85;
+    [NSAnimationContext endGrouping];
+
 
     [self animateSelectedAndHoveredState];
 }
