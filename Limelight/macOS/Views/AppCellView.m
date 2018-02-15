@@ -10,32 +10,46 @@
 
 @interface AppCellView () <NSMenuDelegate>
 @property (nonatomic, strong) NSTrackingArea *trackingArea;
+@property (nonatomic) BOOL currentlyHovered;
 
 @end
 
 @implementation AppCellView
 
-- (void)viewDidMoveToWindow {
-    [super viewDidMoveToWindow];
+- (void)createTrackingArea {
+    int opts = (NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways);
+    self.trackingArea = [ [NSTrackingArea alloc] initWithRect:self.bounds options:opts owner:self userInfo:nil];
+    [self addTrackingArea:self.trackingArea];
+    
+    NSPoint mouseLocation = self.window.mouseLocationOutsideOfEventStream;
+    mouseLocation = [self convertPoint:mouseLocation fromView:nil];
+    
+    if (NSPointInRect(mouseLocation, self.bounds)) {
+        if (!self.currentlyHovered) {
+            [self mouseEntered:self.window.currentEvent];
+        }
+    } else {
+        if (self.currentlyHovered) {
+            [self mouseExited:self.window.currentEvent];
+        }
+    }
 }
 
 - (void)updateTrackingAreas {
-    if (self.trackingArea != nil) {
-        [self removeTrackingArea:self.trackingArea];
-    }
-
-    int opts = (NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways);
-    self.trackingArea = [ [NSTrackingArea alloc] initWithRect:[self bounds] options:opts owner:self userInfo:nil];
-    [self addTrackingArea:self.trackingArea];
+    [self removeTrackingArea:self.trackingArea];
+    [self createTrackingArea];
+    [super updateTrackingAreas];
 }
 
-//- (void)mouseEntered:(NSEvent *)event {
-//    self.layer.transform = CATransform3DMakeScale(1.1, 1.1, 1);
-//}
-//
-//- (void)mouseExited:(NSEvent *)event {
-//    self.layer.transform = CATransform3DIdentity;
-//}
+- (void)mouseEntered:(NSEvent *)event {
+    self.currentlyHovered = YES;
+    [super mouseEntered:event];
+}
+
+- (void)mouseExited:(NSEvent *)event {
+    self.currentlyHovered = NO;
+    [super mouseExited:event];
+}
 
 - (void)menuWillOpen:(NSMenu *)menu {
     [self.delegate menuWillOpen:menu];
