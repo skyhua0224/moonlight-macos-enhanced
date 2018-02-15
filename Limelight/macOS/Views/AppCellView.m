@@ -18,7 +18,7 @@
 
 - (void)createTrackingArea {
     int opts = (NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways);
-    self.trackingArea = [ [NSTrackingArea alloc] initWithRect:self.bounds options:opts owner:self userInfo:nil];
+    self.trackingArea = [[NSTrackingArea alloc] initWithRect:self.bounds options:opts owner:self userInfo:nil];
     [self addTrackingArea:self.trackingArea];
     
     NSPoint mouseLocation = self.window.mouseLocationOutsideOfEventStream;
