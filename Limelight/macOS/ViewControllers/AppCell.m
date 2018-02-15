@@ -13,7 +13,9 @@
 #import <QuartzCore/QuartzCore.h>
 
 @interface AppCell () <NSMenuDelegate>
-
+@property (nonatomic) BOOL hovered;
+@property (nonatomic) BOOL previousHovered;
+@property (nonatomic) BOOL previousSelected;
 @end
 
 @implementation AppCell
@@ -33,25 +35,42 @@
     
     self.resumeIcon.alphaValue = 0.9;
     
-    self.view.layer.anchorPoint = CGPointMake(0.5, 0.5);
-    self.view.layer.transform = [self translationTransform];
-
     ((AppCellView *)self.view).delegate = self;
     
     [self updateSelectedState:NO];
+}
+
+- (void)viewDidAppear {
+    [super viewDidAppear];
+    
+    // TODO: Try adding tracking rect to self.view, and updating in setFrame
 }
 
 - (CATransform3D)translationTransform {
     return CATransform3DMakeTranslation(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 0);
 }
 
-- (void)updateSelectedState:(BOOL)selected {
-    self.appName.textColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor textColor];
+- (void)animateSelectedAndHoveredState {
+    CGFloat oldScale = 1;
+    if (self.previousSelected) {
+        oldScale *= 1.2;
+    }
+    if (self.previousHovered) {
+        oldScale *= 1.1;
+    }
+
+    CGFloat newScale = 1;
+    if (self.selected) {
+        newScale *= 1.2;
+    }
+    if (self.hovered) {
+        newScale *= 1.1;
+    }
 
     self.view.layer.anchorPoint = CGPointMake(0.5, 0.5);
-    CATransform3D oldTransform = selected ? [self translationTransform] : CATransform3DScale([self translationTransform], 1.2, 1.2, 1);
-    CATransform3D newTransform = selected ? CATransform3DScale([self translationTransform], 1.2, 1.2, 1) : [self translationTransform];
-
+    CATransform3D oldTransform = CATransform3DScale([self translationTransform], oldScale, oldScale, 1);
+    CATransform3D newTransform = CATransform3DScale([self translationTransform], newScale, newScale, 1);
+    
     CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"transform"];
     animation.fromValue = [NSValue valueWithCATransform3D:oldTransform];
     animation.toValue = [NSValue valueWithCATransform3D:newTransform];
@@ -61,6 +80,15 @@
     
     [self.view.layer addAnimation:animation forKey:nil];
     self.view.layer.transform = newTransform;
+    
+    self.previousSelected = self.selected;
+    self.previousHovered = self.hovered;
+}
+
+- (void)updateSelectedState:(BOOL)selected {
+    self.appName.textColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor textColor];
+
+    [self animateSelectedAndHoveredState];
 }
 
 - (void)setSelected:(BOOL)selected {
@@ -89,11 +117,13 @@
 }
 
 - (void)mouseEntered:(NSEvent *)event {
-    [self hoverStateChanged:YES];
+    self.hovered = YES;
+    [self animateSelectedAndHoveredState];
 }
 
 - (void)mouseExited:(NSEvent *)event {
-    [self hoverStateChanged:NO];
+    self.hovered = NO;
+    [self animateSelectedAndHoveredState];
 }
 
 - (void)mouseDown:(NSEvent *)theEvent {
