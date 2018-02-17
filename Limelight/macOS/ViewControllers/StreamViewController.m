@@ -289,7 +289,7 @@
     streamConfig.width = [streamSettings.width intValue];
     
     
-    self.controllerSupport = [[ControllerSupport alloc] init];
+//    self.controllerSupport = [[ControllerSupport alloc] init];
     self.hidSupport = [[HIDSupport alloc] init];
     
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];

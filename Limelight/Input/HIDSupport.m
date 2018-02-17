@@ -10,7 +10,14 @@
 
 #include "Limelight.h"
 
+// Swift
+#import "Moonlight-Swift.h"
+
 #import <Carbon/Carbon.h>
+
+#import <IOKit/hid/IOHIDManager.h>
+#import <IOKit/hid/IOHIDKeys.h>
+#import <IOKit/hid/IOHIDElement.h>
 
 struct KeyMapping {
     unsigned short mac;
@@ -139,6 +146,9 @@ static struct KeyMapping keys[] = {
 @interface HIDSupport ()
 @property (nonatomic, strong) NSDictionary *mappings;
 @property (nonatomic, strong) NSTimer *mousePollingTimer;
+@property (nonatomic) IOHIDManagerRef hidManager;
+@property (nonatomic, strong) Controller *controller;
+@property (nonatomic, strong) Controller *lastController;
 @end
 
 @implementation HIDSupport
@@ -146,6 +156,11 @@ static struct KeyMapping keys[] = {
 - (instancetype)init {
     self = [super init];
     if (self) {
+        [self setupHidManager];
+        
+        self.controller = [[Controller alloc] init];
+        self.lastController = [[Controller alloc] init];
+
         NSMutableDictionary *d = [NSMutableDictionary dictionary];
         for (size_t i = 0; i < sizeof(keys) / sizeof(struct KeyMapping); i++) {
             struct KeyMapping m = keys[i];
@@ -169,6 +184,7 @@ static struct KeyMapping keys[] = {
 
 - (void)dealloc {
     [self.mousePollingTimer invalidate];
+    [self tearDownHidManager];
 }
 
 - (int)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
@@ -250,5 +266,159 @@ static struct KeyMapping keys[] = {
     }
     return modifiers;
 }
+
+void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef value) {
+    IOHIDElementRef elem = IOHIDValueGetElement(value);
+    uint32_t usagePage = IOHIDElementGetUsagePage(elem);
+    uint32_t usage = IOHIDElementGetUsage(elem);
+    CFIndex intValue = IOHIDValueGetIntegerValue(value);
+    
+    HIDSupport *self = (__bridge HIDSupport *)context;
+    
+    switch (usagePage) {
+        case kHIDPage_GenericDesktop:
+            switch (usage) {
+                case kHIDUsage_GD_X:
+                    self.controller.lastLeftStickX = (intValue - 128) * 255 + 1;
+                    break;
+                case kHIDUsage_GD_Y:
+                    self.controller.lastLeftStickY = (intValue - 128) * -255;
+                    break;
+                case kHIDUsage_GD_Z:
+                    self.controller.lastRightStickX = (intValue - 128) * 255 + 1;
+                    break;
+                case kHIDUsage_GD_Rx:
+                    self.controller.lastLeftTrigger = intValue;
+                    break;
+                case kHIDUsage_GD_Ry:
+                    self.controller.lastRightTrigger = intValue;
+                    break;
+                case kHIDUsage_GD_Rz:
+                    self.controller.lastRightStickY = (intValue - 128) * -255;
+                    break;
+                    
+                case kHIDUsage_GD_Hatswitch:
+                    switch (intValue) {
+                        case 0:
+                            [self updateButtonFlags:UP_FLAG state:YES];
+                            break;
+                        case 1:
+                            [self updateButtonFlags:UP_FLAG | RIGHT_FLAG state:YES];
+                            break;
+                        case 2:
+                            [self updateButtonFlags:RIGHT_FLAG state:YES];
+                            break;
+                        case 3:
+                            [self updateButtonFlags:DOWN_FLAG | RIGHT_FLAG state:YES];
+                            break;
+                        case 4:
+                            [self updateButtonFlags:DOWN_FLAG state:YES];
+                            break;
+                        case 5:
+                            [self updateButtonFlags:DOWN_FLAG | LEFT_FLAG state:YES];
+                            break;
+                        case 6:
+                            [self updateButtonFlags:LEFT_FLAG state:YES];
+                            break;
+                        case 7:
+                            [self updateButtonFlags:UP_FLAG | LEFT_FLAG state:YES];
+                            break;
+
+                        case 8:
+                            [self updateButtonFlags:UP_FLAG | RIGHT_FLAG | DOWN_FLAG | LEFT_FLAG state:NO];
+                            break;
+
+                        default:
+                            break;
+                    }
+
+                default:
+                    break;
+            }
+
+        case kHIDPage_Button:
+            switch (usage) {
+                case 1:
+                    [self updateButtonFlags:X_FLAG state:intValue];
+                    break;
+                case 2:
+                    [self updateButtonFlags:A_FLAG state:intValue];
+                    break;
+                case 3:
+                    [self updateButtonFlags:B_FLAG state:intValue];
+                    break;
+                case 4:
+                    [self updateButtonFlags:Y_FLAG state:intValue];
+                    break;
+
+                case 5:
+                    [self updateButtonFlags:LB_FLAG state:intValue];
+                    break;
+                case 6:
+                    [self updateButtonFlags:RB_FLAG state:intValue];
+                    break;
+
+                case 9:
+                    [self updateButtonFlags:BACK_FLAG state:intValue];
+                    break;
+                case 10:
+                    [self updateButtonFlags:PLAY_FLAG state:intValue];
+                    break;
+
+                case 11:
+                    [self updateButtonFlags:LS_CLK_FLAG state:intValue];
+                    break;
+                case 12:
+                    [self updateButtonFlags:RS_CLK_FLAG state:intValue];
+                    break;
+
+                case 13:
+                    [self updateButtonFlags:SPECIAL_FLAG state:intValue];
+                    break;
+
+                    
+                default:
+                    break;
+            }
+            
+        default:
+            break;
+    }
+    
+    if (![self.controller isEqual:self.lastController]) {
+        LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+        self.lastController = [self.controller copy];
+    }
+}
+
+- (void)updateButtonFlags:(int)flag state:(BOOL)set {
+    if (set) {
+        self.controller.lastButtonFlags |= flag;
+    } else {
+        self.controller.lastButtonFlags &= ~flag;
+    }
+}
+
+- (void)setupHidManager {
+    self.hidManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+    IOHIDManagerOpen(self.hidManager, kIOHIDOptionsTypeNone);
+    
+    NSArray *matches = @[
+                         @{@kIOHIDDeviceUsagePageKey: @(kHIDPage_GenericDesktop), @kIOHIDDeviceUsageKey: @(kHIDUsage_GD_Joystick)},
+                         @{@kIOHIDDeviceUsagePageKey: @(kHIDPage_GenericDesktop), @kIOHIDDeviceUsageKey: @(kHIDUsage_GD_GamePad)},
+                         @{@kIOHIDDeviceUsagePageKey: @(kHIDPage_GenericDesktop), @kIOHIDDeviceUsageKey: @(kHIDUsage_GD_MultiAxisController)},
+                         ];
+    IOHIDManagerSetDeviceMatchingMultiple(self.hidManager, (__bridge CFArrayRef)matches);
+    
+    IOHIDManagerRegisterInputValueCallback(self.hidManager, myHIDCallback, (__bridge void * _Nullable)(self));
+    
+    IOHIDManagerScheduleWithRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+}
+
+- (void)tearDownHidManager {
+    IOHIDManagerUnscheduleFromRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+    IOHIDManagerClose(self.hidManager, kIOHIDOptionsTypeNone);
+}
+
 
 @end
