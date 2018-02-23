@@ -367,8 +367,11 @@ void ClLogMessage(const char* format, ...)
     _drCallbacks.setup = DrDecoderSetup;
     _drCallbacks.submitDecodeUnit = DrSubmitDecodeUnit;
     
-    // RFI doesn't work properly with HEVC on iOS 11 with an iPhone SE (at least)
+#if TARGET_OS_IPHONE
+    // RFI doesn't work properly with HEVC on iOS 11 with an iPhone SE (at least).
+    // We don't want to enable RFI on platforms like macOS as hardware decoding doesn't work at resolutions other than 4K.
     _drCallbacks.capabilities = CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC;
+#endif
     
     LiInitializeAudioCallbacks(&_arCallbacks);
     _arCallbacks.init = ArInit;
