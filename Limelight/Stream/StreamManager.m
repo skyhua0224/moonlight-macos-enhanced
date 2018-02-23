@@ -76,7 +76,7 @@
         }
     }
 
-#ifdef COOFDY
+#if TARGET_OS_IPHONE
     // Set mouse delta factors from the screen resolution and stream size
     CGFloat screenScale = [[UIScreen mainScreen] scale];
     CGRect screenBounds = [[UIScreen mainScreen] bounds];
