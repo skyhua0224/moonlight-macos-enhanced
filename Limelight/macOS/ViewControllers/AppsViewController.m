@@ -22,6 +22,7 @@
 #import "AppAssetManager.h"
 #import "DataManager.h"
 #import "ServerInfoResponse.h"
+#import "DiscoveryWorker.h"
 
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback>
 @property (weak) IBOutlet NSCollectionView *collectionView;
@@ -52,6 +53,10 @@
     
     self.boxArtCache = [[NSMutableDictionary alloc] init];
     self.boxArtCacheLock = [[NSLock alloc] init];
+    
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [self updateRunningAppState];
+    }];
 }
 
 - (void)viewDidAppear {
@@ -184,6 +189,7 @@
 
 - (void)appDidQuit:(TemporaryApp *)app {
     self.runningApp = nil;
+    [self updateRunningAppState];
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
@@ -230,6 +236,19 @@
     
     AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
     [self configureItem:item atIndexPath:path];
+}
+
+- (void)updateRunningAppState {
+    NSOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
+        DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:self.host uniqueId:[IdManager getUniqueId] cert:[CryptoManager readCertFromFile]];
+        [worker discoverHost];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            TemporaryApp *runningApp = [self findRunningApp:self.host];
+            [self setRunningApp:runningApp];
+        });
+    }];
+    NSOperationQueue *queue = [[NSOperationQueue alloc] init];
+    [queue addOperation:operation];
 }
 
 
