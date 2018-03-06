@@ -36,14 +36,13 @@
                     </textField>
                     <popUpButton verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="rDN-1K-SDB" userLabel="Framerate selector">
                         <rect key="frame" x="213" y="274" width="76" height="26"/>
-                        <popUpButtonCell key="cell" type="push" title="30 Hz" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" borderStyle="borderAndBezel" tag="30" imageScaling="proportionallyDown" inset="2" selectedItem="PWG-9b-5iB" id="UOb-zl-cKs">
+                        <popUpButtonCell key="cell" type="push" title="30 Hz" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" tag="30" imageScaling="proportionallyDown" inset="2" selectedItem="PWG-9b-5iB" id="UOb-zl-cKs">
                             <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
                             <font key="font" metaFont="menu"/>
                             <menu key="menu" id="YLu-LE-SIM">
                                 <items>
-                                    <menuItem title="30 Hz" tag="30" id="PWG-9b-5iB"/>
-                                    <menuItem title="59 Hz" tag="59" id="6mh-EH-5po"/>
-                                    <menuItem title="60 Hz" state="on" tag="60" id="e6n-75-utY"/>
+                                    <menuItem title="30 Hz" state="on" tag="30" id="PWG-9b-5iB"/>
+                                    <menuItem title="60 Hz" tag="59" id="e6n-75-utY"/>
                                 </items>
                             </menu>
                         </popUpButtonCell>
