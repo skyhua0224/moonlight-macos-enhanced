@@ -33,11 +33,8 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
         case 30:
             framerate = 0;
             break;
-        case 59:
-            framerate = 1;
-            break;
         case 60:
-            framerate = 2;
+            framerate = 1;
             break;
 
         default:
@@ -137,10 +134,11 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
             return 30;
             break;
         case 1:
-            return 59;
-            break;
-        case 2:
-            return 60;
+            if ([UIScreen mainScreen].maximumFramesPerSecond > 60) {
+                return 60;
+            } else {
+                return 59;
+            }
             break;
 
         default:
