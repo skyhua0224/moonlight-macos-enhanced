@@ -28,6 +28,11 @@
 #import "IdManager.h"
 #import "AppCollectionViewCell.h"
 #import "UIImage+pspdf.h"
+#import "DiscoveryWorker.h"
+
+@interface MainFrameViewController ()
+@property (nonatomic, strong) TemporaryApp *runningApp;
+@end
 
 @implementation MainFrameViewController {
     NSOperationQueue* _opQueue;
@@ -44,7 +49,6 @@
     NSArray* _sortedAppList;
     NSMutableDictionary<NSString *, UIImage *> *_boxArtCache;
     NSLock *_boxArtCacheLock;
-    NSIndexPath *_runningAppIndex;
     CGPoint _savedScrollPosition;
 }
 static NSMutableSet* hostList;
@@ -293,7 +297,7 @@ static NSMutableSet* hostList;
     if (host.online && host.pairState == PairStatePaired && host.appList.count > 0 && view != nil) {
         [self alreadyPaired];
         
-        [self setRunningAppIndex:[self indexPathForApp:[self findRunningApp:host]]];
+        self.runningApp = [self findRunningApp:host];
         
         return;
     }
@@ -440,7 +444,7 @@ static NSMutableSet* hostList;
         [alertController addAction:[UIAlertAction
                                     actionWithTitle:[app.id isEqualToString:currentApp.id] ? @"Resume App" : @"Resume Running App" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
                                         Log(LOG_I, @"Resuming application: %@", currentApp.name);
-                                        [self setRunningAppIndex:[self indexPathForApp:currentApp]];
+                                        self.runningApp = currentApp;
                                         [self performSegueWithIdentifier:@"createStreamFrame" sender:nil];
                                     }]];
         [alertController addAction:[UIAlertAction actionWithTitle:
@@ -472,7 +476,7 @@ static NSMutableSet* hostList;
                                             // If it fails, display an error and stop the current operation
                                             if (quitResponse.statusCode != 200) {
                                                 dispatch_async(dispatch_get_main_queue(), ^{
-                                                    [self setRunningAppIndex:[self indexPathForApp:currentApp]];
+                                                    self.runningApp = currentApp;
                                                 });
 
                                                alert = [UIAlertController alertControllerWithTitle:@"Quitting App Failed"
@@ -486,7 +490,7 @@ static NSMutableSet* hostList;
                                                 
                                                 dispatch_async(dispatch_get_main_queue(), ^{
                                                     [self updateAppsForHost:app.host];
-                                                    [self setRunningAppIndex:[self indexPathForApp:app]];
+                                                    self.runningApp = app;
                                                     [self performSegueWithIdentifier:@"createStreamFrame" sender:nil];
                                                 });
                                                 
@@ -496,7 +500,7 @@ static NSMutableSet* hostList;
                                             else {
                                                 app.host.currentGame = @"0";
                                                 dispatch_async(dispatch_get_main_queue(), ^{
-                                                    [self setRunningAppIndex:nil];
+                                                    self.runningApp = nil;
                                                 });
                                                 
                                                 alert = [UIAlertController alertControllerWithTitle:@"Quitting App"
@@ -514,7 +518,7 @@ static NSMutableSet* hostList;
         [alertController addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
         [self presentViewController:alertController animated:YES completion:nil];
     } else {
-        [self setRunningAppIndex:[self indexPathForApp:app]];
+        self.runningApp = app;
         [self performSegueWithIdentifier:@"createStreamFrame" sender:nil];
     }
 }
@@ -671,6 +675,7 @@ static NSMutableSet* hostList;
     // This will refresh the applist when a paired host is selected
     if (_selectedHost != nil && _selectedHost.pairState == PairStatePaired) {
         [self hostClicked:_selectedHost view:nil];
+        [self updateRunningAppState];
     }
 
     self.collectionView.contentOffset = _savedScrollPosition;
@@ -858,14 +863,22 @@ static NSMutableSet* hostList;
 }
 
 - (void)appDidQuit {
-    [self setRunningAppIndex:nil];
+    self.runningApp = nil;
+    [self updateRunningAppState];
 }
 
-- (void)setRunningAppIndex:(NSIndexPath *)path {
-    NSIndexPath *oldPath = _runningAppIndex;
-    _runningAppIndex = path;
-    [self redrawCellAtIndexPath:oldPath];
-    [self redrawCellAtIndexPath:path];
+- (void)setRunningApp:(TemporaryApp *)runningApp {
+    TemporaryApp *oldApp = self.runningApp;
+    _runningApp = runningApp;
+    
+    if (runningApp == nil) {
+        _selectedHost.currentGame = @"0";
+    } else {
+        _selectedHost.currentGame = self.runningApp.id;
+    }
+    
+    [self redrawCellAtIndexPath:[self indexPathForApp:oldApp]];
+    [self redrawCellAtIndexPath:[self indexPathForApp:runningApp]];
 }
 
 - (void)redrawCellAtIndexPath:(NSIndexPath *)path {
@@ -873,10 +886,22 @@ static NSMutableSet* hostList;
         return;
     }
     
+    AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:path];    
     TemporaryApp* app = _sortedAppList[path.row];
-    AppCollectionViewCell *cell = (AppCollectionViewCell *)[self.collectionView cellForItemAtIndexPath:path];
-    
     [self configureCell:cell atIndexPath:path withApp:app shouldAnimateImage:NO];
+}
+
+- (void)updateRunningAppState {
+    NSOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
+        DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:_selectedHost uniqueId:[IdManager getUniqueId] cert:[CryptoManager readCertFromFile]];
+        [worker discoverHost];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            TemporaryApp *runningApp = [self findRunningApp:_selectedHost];
+            [self setRunningApp:runningApp];
+        });
+    }];
+    NSOperationQueue *queue = [[NSOperationQueue alloc] init];
+    [queue addOperation:operation];
 }
 
 - (void)asyncRenderAppImage:(TemporaryApp *)app {
@@ -966,7 +991,7 @@ static NSMutableSet* hostList;
     cell.appTitle.holdScrolling = YES;
 #endif
     
-    cell.resumeIcon.hidden = path != _runningAppIndex;
+    cell.resumeIcon.hidden = app != self.runningApp;
     
     [_boxArtCacheLock lock];
     UIImage* appImage = [_boxArtCache objectForKey:app.id];

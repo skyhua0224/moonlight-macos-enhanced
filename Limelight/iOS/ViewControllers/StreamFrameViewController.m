@@ -54,26 +54,24 @@
                                                object:nil];
 }
 
-- (void)returnToMainFrame:(BOOL)quit {
+- (void)returnToMainFrame {
     [_controllerSupport cleanup];
     
-    if (quit) {
-        MainFrameViewController *mainFrameVC = (MainFrameViewController *)(self.navigationController.viewControllers[self.navigationController.viewControllers.count - 2]);
-        [mainFrameVC appDidQuit];
-    }
+    MainFrameViewController *mainFrameVC = (MainFrameViewController *)(self.navigationController.viewControllers[self.navigationController.viewControllers.count - 2]);
+    [mainFrameVC appDidQuit];
     
     [self.navigationController popToRootViewControllerAnimated:YES];
 }
 
 - (void)applicationDidEnterBackground:(NSNotification *)notification {
     [_streamMan stopStream];
-    [self returnToMainFrame:NO];
+    [self returnToMainFrame];
 }
 
 - (void)edgeSwiped {
     Log(LOG_D, @"User swiped to end stream");
     [_streamMan stopStream];
-    [self returnToMainFrame:NO];
+    [self returnToMainFrame];
 }
 
 - (BOOL)prefersHomeIndicatorAutoHidden {
@@ -96,7 +94,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         UIAlertController* conTermAlert = [UIAlertController alertControllerWithTitle:@"Connection Terminated" message:@"The connection was terminated" preferredStyle:UIAlertControllerStyleAlert];
         [conTermAlert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action){
-            [self returnToMainFrame:YES];
+            [self returnToMainFrame];
         }]];
         [self presentViewController:conTermAlert animated:YES completion:nil];
     });
@@ -127,7 +125,7 @@
                                                                                 stageName, errorCode]
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action){
-            [self returnToMainFrame:YES];
+            [self returnToMainFrame];
         }]];
         [self presentViewController:alert animated:YES completion:nil];
     });
@@ -143,7 +141,7 @@
                                                                        message:message
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"Ok" style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action){
-            [self returnToMainFrame:YES];
+            [self returnToMainFrame];
         }]];
         [self presentViewController:alert animated:YES completion:nil];
     });
