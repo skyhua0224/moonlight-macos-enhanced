@@ -18,11 +18,11 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-    [[NSUserDefaults standardUserDefaults] setValue:@(NO) forKey:@"_UIConstraintBasedLayoutLogUnsatisfiable"];
     
     
     [[UILabel appearance] setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
     [[UIButton appearance].titleLabel setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
+    [[NSUserDefaults standardUserDefaults] setValue:@(YES) forKey:@"_UIConstraintBasedLayoutLogUnsatisfiable"];
     
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
