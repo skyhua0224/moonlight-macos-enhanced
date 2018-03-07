@@ -20,33 +20,10 @@
 {
     [[NSUserDefaults standardUserDefaults] setValue:@(NO) forKey:@"_UIConstraintBasedLayoutLogUnsatisfiable"];
     
+    
     [[UILabel appearance] setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
     [[UIButton appearance].titleLabel setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
     
-    
-    // Generate selected segment background image
-    CGSize borderImageSize = CGSizeMake(1.f, 100.f);
-    
-    UIGraphicsBeginImageContext(borderImageSize);
-    CGContextRef context = UIGraphicsGetCurrentContext();
-    
-    CGContextSetStrokeColorWithColor(context, [UIColor whiteColor].CGColor);
-    CGContextFillRect(context, CGRectMake(0.f, borderImageSize.height * 0.8, borderImageSize.width, borderImageSize.height));
-    
-    UIImage *selectedSegmentBG = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    
-    // Clear default border and background color
-    [[UISegmentedControl appearance] setBackgroundImage:[[UIImage alloc] init] forState:UIControlStateNormal barMetrics:UIBarMetricsDefault];
-    [[UISegmentedControl appearance] setDividerImage:[[UIImage alloc] init] forLeftSegmentState:UIControlStateNormal rightSegmentState:UIControlStateNormal barMetrics:UIBarMetricsDefault];
-    
-    // Set selected segment background image
-    [[UISegmentedControl appearance] setBackgroundImage:[selectedSegmentBG imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateSelected barMetrics:UIBarMetricsDefault];
-    
-    // Change font on UISegmentedControl
-    [[UISegmentedControl appearance] setTitleTextAttributes:[NSDictionary dictionaryWithObjectsAndKeys:
-                                                             [UIColor whiteColor], NSForegroundColorAttributeName,
-                                                             [UIFont systemFontOfSize:[UIFont systemFontSize]], NSFontAttributeName, nil] forState:UIControlStateNormal];
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self setupShortcuts];
