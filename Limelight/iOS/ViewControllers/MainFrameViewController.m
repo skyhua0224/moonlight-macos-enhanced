@@ -714,6 +714,8 @@ static NSMutableSet* hostList;
         } else {
             self.navigationItem.title = @"Moonlight";
         }
+        
+        [self redrawCellAtIndexPath:[self indexPathForApp:self.runningApp]];
     } completion:nil];
 }
 
@@ -992,6 +994,7 @@ static NSMutableSet* hostList;
 #endif
     
     cell.resumeIcon.hidden = app != self.runningApp;
+    cell.resumeIconWidth.constant = [self isSmallWindow] ? 48 : 64;
     
     [_boxArtCacheLock lock];
     UIImage* appImage = [_boxArtCache objectForKey:app.id];

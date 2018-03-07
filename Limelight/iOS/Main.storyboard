@@ -54,14 +54,14 @@
                                             </constraints>
                                         </view>
                                         <imageView userInteractionEnabled="NO" alpha="0.84999999999999998" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Play" translatesAutoresizingMaskIntoConstraints="NO" id="x46-UZ-pNJ" userLabel="Resume Icon">
-                                            <rect key="frame" x="26.5" y="32" width="64.5" height="64"/>
+                                            <rect key="frame" x="26.5" y="32" width="64.5" height="64.5"/>
                                             <constraints>
                                                 <constraint firstAttribute="width" constant="64" id="QLm-rm-FQi"/>
-                                                <constraint firstAttribute="height" constant="64" id="Z4e-qc-8n8"/>
+                                                <constraint firstAttribute="width" secondItem="x46-UZ-pNJ" secondAttribute="height" multiplier="1:1" id="fDF-fy-je5"/>
                                             </constraints>
                                         </imageView>
                                         <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="App Title" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Q11-Up-FRz" userLabel="App Title" customClass="MarqueeLabel">
-                                            <rect key="frame" x="30.5" y="136" width="58" height="17"/>
+                                            <rect key="frame" x="30" y="136" width="58" height="17"/>
                                             <fontDescription key="fontDescription" type="system" pointSize="17"/>
                                             <color key="textColor" white="0.84872365552325579" alpha="1" colorSpace="calibratedWhite"/>
                                             <nil key="highlightedColor"/>
@@ -89,6 +89,7 @@
                                     <outlet property="appTitle" destination="Q11-Up-FRz" id="fHu-K9-4WB"/>
                                     <outlet property="imageView" destination="jeB-Vj-uZK" id="uhc-G6-f1K"/>
                                     <outlet property="resumeIcon" destination="x46-UZ-pNJ" id="ags-Gj-MzO"/>
+                                    <outlet property="resumeIconWidth" destination="QLm-rm-FQi" id="TY6-b7-tTx"/>
                                     <outlet property="shadowView" destination="GYp-Bp-vtM" id="ASD-no-6TP"/>
                                 </connections>
                             </collectionViewCell>

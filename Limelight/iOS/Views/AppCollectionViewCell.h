@@ -15,6 +15,7 @@
 @property (weak, nonatomic) IBOutlet UIImageView *imageView;
 @property (weak, nonatomic) IBOutlet MarqueeLabel *appTitle;
 @property (weak, nonatomic) IBOutlet UIImageView *resumeIcon;
+@property (weak, nonatomic) IBOutlet NSLayoutConstraint *resumeIconWidth;
 @property (nonatomic, strong) UILongPressGestureRecognizer *tapGesture;
 
 @end
