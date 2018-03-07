@@ -196,6 +196,7 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
     NSInteger width = [self getChosenStreamWidth];
     NSInteger onscreenControls = [self.onscreenControlSelector selectedSegmentIndex];
     [dataMan saveSettingsWithBitrate:_bitrate framerate:framerate height:height width:width onscreenControls:onscreenControls];
+    [[NSUserDefaults standardUserDefaults] setBool:self.optimizeGameSettingsSelector.selectedSegmentIndex != 0 forKey:@"optimizeSettings"];
 }
 
 - (void)didReceiveMemoryWarning {

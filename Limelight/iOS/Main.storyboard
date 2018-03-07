@@ -155,13 +155,13 @@
                                         <color key="tintColor" red="0.72941176470588232" green="0.69411764705882351" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                     </slider>
                                     <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Framerate" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Kkv-DF-MAl">
-                                        <rect key="frame" x="0.0" y="67" width="225" height="21"/>
+                                        <rect key="frame" x="0.0" y="75" width="225" height="21"/>
                                         <fontDescription key="fontDescription" type="system" pointSize="17"/>
                                         <color key="textColor" red="0.96078431372549022" green="0.98039215686274506" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                         <nil key="highlightedColor"/>
                                     </label>
                                     <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="plain" selectedSegmentIndex="1" translatesAutoresizingMaskIntoConstraints="NO" id="dLF-qJ-2nY">
-                                        <rect key="frame" x="0.0" y="96" width="225" height="29"/>
+                                        <rect key="frame" x="0.0" y="104" width="225" height="29"/>
                                         <constraints>
                                             <constraint firstAttribute="height" constant="28" id="3Z6-X9-OyM"/>
                                         </constraints>
@@ -172,13 +172,13 @@
                                         <color key="tintColor" red="0.72941176470588232" green="0.69411764705882351" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                     </segmentedControl>
                                     <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Resolution" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="8zy-ri-Dqc">
-                                        <rect key="frame" x="0.0" y="132" width="225" height="21"/>
+                                        <rect key="frame" x="0.0" y="148" width="225" height="21"/>
                                         <fontDescription key="fontDescription" type="system" pointSize="17"/>
                                         <color key="textColor" red="0.96078431372549022" green="0.98039215686274506" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                         <nil key="highlightedColor"/>
                                     </label>
                                     <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="plain" selectedSegmentIndex="0" translatesAutoresizingMaskIntoConstraints="NO" id="PCM-t4-Sha">
-                                        <rect key="frame" x="0.0" y="161" width="225" height="29"/>
+                                        <rect key="frame" x="0.0" y="177" width="225" height="29"/>
                                         <constraints>
                                             <constraint firstAttribute="height" constant="28" id="LJo-zL-Ym4"/>
                                         </constraints>
@@ -191,13 +191,13 @@
                                         <color key="tintColor" red="0.72941176470588232" green="0.69411764705882351" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                     </segmentedControl>
                                     <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="On-Screen Controls" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="HZT-dd-DuQ">
-                                        <rect key="frame" x="0.0" y="197" width="225" height="21"/>
+                                        <rect key="frame" x="0.0" y="221" width="225" height="21"/>
                                         <fontDescription key="fontDescription" type="system" pointSize="17"/>
                                         <color key="textColor" red="0.96078431372549022" green="0.98039215686274506" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                         <nil key="highlightedColor"/>
                                     </label>
                                     <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="plain" selectedSegmentIndex="1" translatesAutoresizingMaskIntoConstraints="NO" id="WGf-9d-eAm">
-                                        <rect key="frame" x="0.0" y="226" width="225" height="29"/>
+                                        <rect key="frame" x="0.0" y="250" width="225" height="29"/>
                                         <constraints>
                                             <constraint firstAttribute="height" constant="28" id="dwJ-d3-Q05"/>
                                         </constraints>
@@ -209,31 +209,54 @@
                                         </segments>
                                         <color key="tintColor" red="0.72941176470588232" green="0.69411764705882351" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                     </segmentedControl>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Game Settings" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="C9P-Ro-2Mf">
+                                        <rect key="frame" x="0.0" y="294" width="225" height="21"/>
+                                        <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                        <color key="textColor" red="0.96078431372549022" green="0.98039215686274506" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                        <nil key="highlightedColor"/>
+                                    </label>
+                                    <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="plain" selectedSegmentIndex="0" translatesAutoresizingMaskIntoConstraints="NO" id="bDP-qo-9vu">
+                                        <rect key="frame" x="0.0" y="323" width="225" height="29"/>
+                                        <constraints>
+                                            <constraint firstAttribute="height" constant="28" id="oLs-fl-02y"/>
+                                        </constraints>
+                                        <segments>
+                                            <segment title="Off"/>
+                                            <segment title="Optimize"/>
+                                        </segments>
+                                        <color key="tintColor" red="0.72941176470588232" green="0.69411764705882351" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                    </segmentedControl>
                                 </subviews>
                                 <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                                 <constraints>
                                     <constraint firstItem="3nn-MI-9Xu" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="0EO-eI-A3p"/>
+                                    <constraint firstItem="C9P-Ro-2Mf" firstAttribute="top" secondItem="WGf-9d-eAm" secondAttribute="bottom" constant="16" id="0Sb-E0-wdF"/>
                                     <constraint firstAttribute="trailing" secondItem="PCM-t4-Sha" secondAttribute="trailing" id="1gJ-rs-agv"/>
-                                    <constraint firstItem="8zy-ri-Dqc" firstAttribute="top" secondItem="dLF-qJ-2nY" secondAttribute="bottom" constant="8" id="1mV-X5-1qE"/>
+                                    <constraint firstItem="8zy-ri-Dqc" firstAttribute="top" secondItem="dLF-qJ-2nY" secondAttribute="bottom" constant="16" id="1mV-X5-1qE"/>
+                                    <constraint firstAttribute="trailing" secondItem="bDP-qo-9vu" secondAttribute="trailing" id="Cc8-nn-078"/>
                                     <constraint firstAttribute="trailing" secondItem="SBv-Wn-LB7" secondAttribute="trailing" id="DVT-se-jpT"/>
                                     <constraint firstAttribute="trailing" secondItem="HZT-dd-DuQ" secondAttribute="trailing" id="Fkx-lC-rsy"/>
                                     <constraint firstItem="PCM-t4-Sha" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="HGn-AF-Tek"/>
+                                    <constraint firstItem="bDP-qo-9vu" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="J08-ss-kld"/>
                                     <constraint firstItem="8zy-ri-Dqc" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="NEi-ea-NSb"/>
                                     <constraint firstAttribute="trailing" secondItem="8zy-ri-Dqc" secondAttribute="trailing" id="OWM-eL-J8S"/>
                                     <constraint firstAttribute="trailing" secondItem="dLF-qJ-2nY" secondAttribute="trailing" id="Stg-ln-kIO"/>
                                     <constraint firstAttribute="trailing" secondItem="3nn-MI-9Xu" secondAttribute="trailing" id="UWt-tQ-P1l"/>
                                     <constraint firstAttribute="trailing" secondItem="Kkv-DF-MAl" secondAttribute="trailing" id="W6g-mV-orV"/>
-                                    <constraint firstItem="HZT-dd-DuQ" firstAttribute="top" secondItem="PCM-t4-Sha" secondAttribute="bottom" constant="8" id="Wh5-EI-JQj"/>
+                                    <constraint firstItem="HZT-dd-DuQ" firstAttribute="top" secondItem="PCM-t4-Sha" secondAttribute="bottom" constant="16" id="Wh5-EI-JQj"/>
+                                    <constraint firstItem="bDP-qo-9vu" firstAttribute="top" secondItem="C9P-Ro-2Mf" secondAttribute="bottom" constant="8" id="X6Q-hU-e2e"/>
                                     <constraint firstAttribute="trailing" secondItem="WGf-9d-eAm" secondAttribute="trailing" id="XJ7-mJ-SyR"/>
                                     <constraint firstItem="3nn-MI-9Xu" firstAttribute="top" secondItem="SBv-Wn-LB7" secondAttribute="bottom" constant="8" id="YKo-8S-Bfu"/>
                                     <constraint firstItem="dLF-qJ-2nY" firstAttribute="top" secondItem="Kkv-DF-MAl" secondAttribute="bottom" constant="8" id="b3A-Mc-5P4"/>
                                     <constraint firstItem="WGf-9d-eAm" firstAttribute="top" secondItem="HZT-dd-DuQ" secondAttribute="bottom" constant="8" id="bkT-QS-Gwt"/>
+                                    <constraint firstAttribute="trailing" secondItem="C9P-Ro-2Mf" secondAttribute="trailing" id="bw3-yd-87y"/>
                                     <constraint firstItem="Kkv-DF-MAl" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="bx1-o2-JYG"/>
+                                    <constraint firstItem="C9P-Ro-2Mf" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="ctQ-Aj-QWd"/>
                                     <constraint firstItem="dLF-qJ-2nY" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="fg7-dA-aDc"/>
                                     <constraint firstItem="PCM-t4-Sha" firstAttribute="top" secondItem="8zy-ri-Dqc" secondAttribute="bottom" constant="8" id="ggX-RL-La0"/>
                                     <constraint firstItem="WGf-9d-eAm" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="jUB-NZ-Jlz"/>
                                     <constraint firstAttribute="width" constant="225" id="jeX-cR-Xsy"/>
-                                    <constraint firstItem="Kkv-DF-MAl" firstAttribute="top" secondItem="3nn-MI-9Xu" secondAttribute="bottom" constant="8" id="kFZ-1e-bTJ"/>
+                                    <constraint firstItem="Kkv-DF-MAl" firstAttribute="top" secondItem="3nn-MI-9Xu" secondAttribute="bottom" constant="16" id="kFZ-1e-bTJ"/>
                                     <constraint firstItem="HZT-dd-DuQ" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="oF4-BW-mnA"/>
                                     <constraint firstItem="SBv-Wn-LB7" firstAttribute="top" secondItem="Em0-Dd-mhU" secondAttribute="top" id="v0B-tf-A6n"/>
                                     <constraint firstItem="SBv-Wn-LB7" firstAttribute="leading" secondItem="Em0-Dd-mhU" secondAttribute="leading" id="yp3-B2-IAD"/>
@@ -254,12 +277,13 @@
                         <outlet property="framerateSelector" destination="dLF-qJ-2nY" id="hE3-hk-iwa"/>
                         <outlet property="leadingContentViewConstraint" destination="KTO-9c-wE5" id="dDL-3X-fsx"/>
                         <outlet property="onscreenControlSelector" destination="WGf-9d-eAm" id="hob-se-4Sn"/>
+                        <outlet property="optimizeGameSettingsSelector" destination="bDP-qo-9vu" id="nZ6-uX-UAm"/>
                         <outlet property="resolutionSelector" destination="PCM-t4-Sha" id="t60-W2-wkV"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="RWc-Km-KG5" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="1226.0869565217392" y="2025.6000000000001"/>
+            <point key="canvasLocation" x="1224.8" y="2025.3373313343329"/>
         </scene>
         <!--Navigation Controller-->
         <scene sceneID="pfX-8A-htT">
