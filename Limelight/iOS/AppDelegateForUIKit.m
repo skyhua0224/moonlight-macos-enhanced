@@ -18,10 +18,6 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-    
-    
-    [[UILabel appearance] setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
-    [[UIButton appearance].titleLabel setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
     [[NSUserDefaults standardUserDefaults] setValue:@(YES) forKey:@"_UIConstraintBasedLayoutLogUnsatisfiable"];
     
     
