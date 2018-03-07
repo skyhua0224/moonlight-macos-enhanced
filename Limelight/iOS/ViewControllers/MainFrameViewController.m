@@ -30,9 +30,11 @@
 #import "UIImage+pspdf.h"
 #import "DiscoveryWorker.h"
 
-@interface MainFrameViewController ()
+@interface MainFrameViewController () <UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate, UIScrollViewDelegate>
 @property (nonatomic, strong) TemporaryApp *runningApp;
 @end
+
+static const CGFloat animationDuration = 0.25;
 
 @implementation MainFrameViewController {
     NSOperationQueue* _opQueue;
@@ -947,11 +949,10 @@ static NSMutableSet* hostList;
 }
 
 - (void)cellTapGestureHandler:(UILongPressGestureRecognizer *)sender {
-    const CGFloat animationDuration = 0.25;
     switch (sender.state) {
         case UIGestureRecognizerStateBegan:
         {
-            CGFloat scale = [self isSmallWindow] ? 0.88 : 0.92;
+            CGFloat scale = 0.92;
             [UIView animateWithDuration:animationDuration animations:^{
                 sender.view.transform = CGAffineTransformMakeScale(scale, scale);
             }];
@@ -969,6 +970,17 @@ static NSMutableSet* hostList;
         default:
             break;
     }
+}
+
+
+#pragma mark - UIScrollViewDelegate
+
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+    [UIView animateWithDuration:animationDuration animations:^{
+        for (UICollectionViewCell *cell in self.collectionView.visibleCells) {
+            cell.transform = CGAffineTransformIdentity;
+        }
+    }];
 }
 
 
