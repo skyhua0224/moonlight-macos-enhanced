@@ -25,13 +25,14 @@ static const int LABEL_DY = 20;
     _hostButton = [UIButton buttonWithType:UIButtonTypeCustom];
     [_hostButton setContentEdgeInsets:UIEdgeInsetsMake(0, 4, 0, 4)];
     [_hostButton setBackgroundImage:[UIImage imageNamed:@"Computer"] forState:UIControlStateNormal];
+    _hostButton.tintColor = [UIColor colorWithWhite:0.85 alpha:1];
     [_hostButton sizeToFit];
     
     _hostLabel = [[UILabel alloc] init];
     _hostStatus = [[UILabel alloc] init];
     _hostPairState = [[UILabel alloc] init];
     [_hostLabel setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
-    [_hostStatus setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
+    [_hostStatus setFont:[UIFont boldSystemFontOfSize:[UIFont systemFontSize]]];
 	[_hostPairState setFont:[UIFont systemFontOfSize:[UIFont systemFontSize]]];
     return self;
 }
@@ -48,7 +49,7 @@ static const int LABEL_DY = 20;
     [_hostLabel setText:@"Add Host"];
     [_hostLabel sizeToFit];
     _hostLabel.textColor = [UIColor whiteColor];
-    _hostLabel.center = CGPointMake(_hostButton.frame.origin.x + (_hostButton.frame.size.width / 2), _hostButton.frame.origin.y + _hostButton.frame.size.height + LABEL_DY);
+    _hostLabel.center = CGPointMake(_hostButton.frame.origin.x + (_hostButton.frame.size.width / 2) - 3, _hostButton.frame.origin.y + _hostButton.frame.size.height + _hostLabel.frame.size.height / 2);
     
     UIImageView* addIcon = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"AddComputerIcon"]];
     [addIcon sizeToFit];
@@ -140,15 +141,15 @@ static const int LABEL_DY = 20;
     
     if (host.online) {
         _hostStatus.text = @"Online";
-        _hostStatus.textColor = [UIColor greenColor];
+        _hostStatus.textColor = [UIColor colorWithRed:0.043 green:0.827 blue:0.094 alpha:1];
     } else {
         _hostStatus.text = @"Offline";
         _hostStatus.textColor = [UIColor grayColor];
     }
     [_hostStatus sizeToFit];
     
-    float x = _hostButton.frame.origin.x + _hostButton.frame.size.width / 2;
-    _hostLabel.center = CGPointMake(x, _hostButton.frame.origin.y + _hostButton.frame.size.height + LABEL_DY);
+    float x = _hostButton.frame.origin.x + _hostButton.frame.size.width / 2 - 3;
+    _hostLabel.center = CGPointMake(x, _hostButton.frame.origin.y + _hostButton.frame.size.height + _hostLabel.frame.size.height / 2);
     _hostPairState.center = CGPointMake(x, _hostLabel.center.y + LABEL_DY);
     _hostStatus.center = CGPointMake(x, _hostPairState.center.y + LABEL_DY);
 }
