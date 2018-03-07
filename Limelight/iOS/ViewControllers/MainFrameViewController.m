@@ -715,7 +715,9 @@ static NSMutableSet* hostList;
             self.navigationItem.title = @"Moonlight";
         }
         
-        [self redrawCellAtIndexPath:[self indexPathForApp:self.runningApp]];
+        for (NSIndexPath *path in self.collectionView.indexPathsForVisibleItems) {
+            [self redrawCellAtIndexPath:path];
+        }
     } completion:nil];
 }
 
@@ -1012,7 +1014,7 @@ static NSMutableSet* hostList;
         [self asyncRenderAppImage:app];
     }
     cell.imageView.clipsToBounds = YES;
-    cell.imageView.layer.cornerRadius = 8;
+    cell.imageView.layer.cornerRadius = [self isSmallWindow] ? 8 : 12;
     cell.shadowView.backgroundColor = [UIColor clearColor];
     
     [self addShadowToAppImageWithCell:cell];
@@ -1063,6 +1065,10 @@ static NSMutableSet* hostList;
     }
     
     return flowSize;
+}
+
+- (CGFloat)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout minimumLineSpacingForSectionAtIndex:(NSInteger)section {
+    return [self isSmallWindow] ? 20 : 30;
 }
 
 - (UIEdgeInsets)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout insetForSectionAtIndex:(NSInteger)section {
