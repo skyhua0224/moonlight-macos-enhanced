@@ -49,7 +49,7 @@ static const int LABEL_DY = 20;
     [_hostLabel setText:@"Add Host"];
     [_hostLabel sizeToFit];
     _hostLabel.textColor = [UIColor whiteColor];
-    _hostLabel.center = CGPointMake(_hostButton.frame.origin.x + (_hostButton.frame.size.width / 2) - 3, _hostButton.frame.origin.y + _hostButton.frame.size.height + _hostLabel.frame.size.height / 2);
+    _hostLabel.center = CGPointMake(_hostButton.frame.origin.x + (_hostButton.frame.size.width / 2) - 5, _hostButton.frame.origin.y + _hostButton.frame.size.height + _hostLabel.frame.size.height / 2);
     
     UIImageView* addIcon = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"AddComputerIcon"]];
     [addIcon sizeToFit];
@@ -148,7 +148,7 @@ static const int LABEL_DY = 20;
     }
     [_hostStatus sizeToFit];
     
-    float x = _hostButton.frame.origin.x + _hostButton.frame.size.width / 2 - 3;
+    float x = _hostButton.frame.origin.x + _hostButton.frame.size.width / 2 - 5;
     _hostLabel.center = CGPointMake(x, _hostButton.frame.origin.y + _hostButton.frame.size.height + _hostLabel.frame.size.height / 2);
     _hostPairState.center = CGPointMake(x, _hostLabel.center.y + LABEL_DY);
     _hostStatus.center = CGPointMake(x, _hostPairState.center.y + LABEL_DY);
