@@ -185,7 +185,7 @@
                                         <segments>
                                             <segment title="720p"/>
                                             <segment title="1080p"/>
-                                            <segment title="1440p"/>
+                                            <segment title="21:9"/>
                                             <segment title="4K"/>
                                         </segments>
                                         <color key="tintColor" red="0.72941176470588232" green="0.69411764705882351" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>

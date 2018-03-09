@@ -86,25 +86,30 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
 - (void) newResolutionFpsChosen {
     NSInteger frameRate = [self getChosenFrameRate];
     NSInteger resHeight = [self getChosenStreamHeight];
+    NSInteger resWidth = [self getChosenStreamWidth];
     NSInteger defaultBitrate;
     
-    // 2160p60 is 40 Mbps
+    // 2160p@60 is 60 Mbps
     if (frameRate >= 59 && resHeight == 2160) {
+        defaultBitrate = 60000;
+    }
+    // 2560x1080p@60 is 40 Mbps
+    else if ((frameRate >= 59 && resWidth == 2560) || resHeight == 2160) {
         defaultBitrate = 40000;
     }
-    // 1440p60 is 30 Mbps
-    else if ((frameRate >= 59 && resHeight == 1440) || resHeight == 2160) {
+    // 1440p@60 is 30 Mbps
+    else if ((frameRate >= 59 && resHeight == 1440) || resWidth == 2560) {
         defaultBitrate = 30000;
     }
-    // 1080p60 is 20 Mbps
+    // 1080p@60 is 20 Mbps
     else if ((frameRate >= 59 && resHeight == 1080) || resHeight == 1440) {
         defaultBitrate = 20000;
     }
-    // 720p60 and 1080p30 are 10 Mbps
+    // 720p@60 is 10 Mbps
     else if (frameRate >= 59 || resHeight == 1080) {
         defaultBitrate = 10000;
     }
-    // 720p30 is 5 Mbps
+    // 720p@30 is 5 Mbps
     else {
         defaultBitrate = 5000;
     }
@@ -156,7 +161,7 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
             return 1080;
             break;
         case 2:
-            return 1440;
+            return 1080;
             break;
         case 3:
             return 2160;
@@ -169,20 +174,20 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
 }
 
 - (NSInteger) getChosenStreamWidth {
-    switch ([self getChosenStreamHeight]) {
-        case 720:
+    switch (self.resolutionSelector.selectedSegmentIndex) {
+        case 0:
             return 1280;
             break;
-        case 1080:
+        case 1:
             return 1920;
             break;
-        case 1440:
+        case 2:
             return 2560;
             break;
-        case 2160:
+        case 3:
             return 3840;
             break;
-
+            
         default:
             return 1280;
             break;
