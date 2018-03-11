@@ -48,10 +48,11 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
             resolution = 0;
             break;
         case 1080:
-            resolution = 1;
-            break;
-        case 1440:
-            resolution = 2;
+            if ([currentSettings.width integerValue] == 2560 && [currentSettings.height integerValue] == 1080) {
+                resolution = 2;
+            } else {
+                resolution = 1;
+            }
             break;
         case 2160:
             resolution = 3;
