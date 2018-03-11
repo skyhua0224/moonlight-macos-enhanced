@@ -20,7 +20,7 @@
             <windowCollectionBehavior key="collectionBehavior" fullScreenNone="YES"/>
             <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
             <rect key="contentRect" x="196" y="240" width="507" height="329"/>
-            <rect key="screenRect" x="0.0" y="0.0" width="1440" height="878"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1440" height="877"/>
             <value key="maxSize" type="size" width="666" height="332"/>
             <view key="contentView" wantsLayer="YES" id="EiT-Mj-1SZ">
                 <rect key="frame" x="0.0" y="0.0" width="507" height="329"/>
@@ -67,6 +67,7 @@
                                 <items>
                                     <menuItem title="720p" state="on" tag="720" id="crC-5t-alY"/>
                                     <menuItem title="1080p" tag="1080" id="RbE-zQ-UrL"/>
+                                    <menuItem title="21:9" tag="219" id="q6M-Rt-cCZ"/>
                                     <menuItem title="1440p" tag="1440" id="OSd-bp-Gq9"/>
                                     <menuItem title="4K" tag="2160" id="aWJ-d7-MNr"/>
                                 </items>

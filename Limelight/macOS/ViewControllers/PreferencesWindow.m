@@ -39,7 +39,11 @@
     TemporarySettings* streamSettings = [dataMan getSettings];
     
     [self.framerateSelector selectItemWithTag:[streamSettings.framerate intValue]];
-    [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
+    if ([streamSettings.height intValue] == 1080 && [streamSettings.width intValue] == 2560) {
+        [self.resolutionSelector selectItemWithTag:219];
+    } else {
+        [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
+    }
     self.bitrateSlider.integerValue = [streamSettings.bitrate intValue];
     [self updateBitrateLabel];
     self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSOnState : NSOffState;
@@ -57,8 +61,15 @@
 
 - (void)saveSettings {
     DataManager* dataMan = [[DataManager alloc] init];
-    NSInteger resolutionHeight = self.resolutionSelector.selectedTag;
-    NSInteger resolutionWidth = resolutionHeight * 16 / 9;
+    NSInteger resolutionHeight;
+    NSInteger resolutionWidth;
+    if (self.resolutionSelector.selectedTag == 219) {
+        resolutionHeight = 1080;
+        resolutionWidth = 2560;
+    } else {
+        resolutionHeight = self.resolutionSelector.selectedTag;
+        resolutionWidth = resolutionHeight * 16 / 9;
+    }
     [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0];
 }
 
