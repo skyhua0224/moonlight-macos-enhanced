@@ -1127,8 +1127,8 @@
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 0730;
-				LastUpgradeCheck = 0800;
-				ORGANIZATIONNAME = "Moonlight Stream";
+				LastUpgradeCheck = 0920;
+				ORGANIZATIONNAME = "Moonlight Game Streaming Project";
 				TargetAttributes = {
 					4C7E0A791FECBFFD00684411 = {
 						CreatedOnToolsVersion = 9.2;
