@@ -341,26 +341,41 @@ void ClLogMessage(const char* format, ...)
     _streamConfig.height = config.height;
     _streamConfig.fps = config.frameRate;
     _streamConfig.bitrate = config.bitRate;
-    
+
+    // This will activate the remote streaming optimization in moonlight-common if needed
+    _streamConfig.streamingRemotely = config.streamingRemotely;
+
+#if TARGET_OS_IPHONE
     // On iOS 11, we can use HEVC if the server supports encoding it
-    // and this device has hardware decode for it (A9 and later)
-    if (@available(iOS 11.0, macOS 10.13, *)) {
-        // FIXME: Disabled due to incompatibility with iPhone X causing video
-        // to freeze. Additionally, RFI is not supported so packet loss recovery
-        // is worse with HEVC than H.264.
-        //_streamConfig.supportsHevc = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
+    // and this device has hardware decode for it (A9 and later).
+    // Additionally, iPhone X had a bug which would cause video
+    // to freeze after a few minutes with HEVC prior to iOS 11.3.
+    // As a result, we will only use HEVC on iOS 11.3 or later.
+    if (@available(iOS 11.3, *)) {
+        _streamConfig.supportsHevc = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
     }
+#else
+    if (@available(macOS 10.13, *)) {
+        // Streaming with limited bandwidth will result in better quality with HEVC
+        if (VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) || _streamConfig.streamingRemotely != 0)
+            _streamConfig.supportsHevc = true;
+    }
+#endif
     
     // Use some of the HEVC encoding efficiency improvements to
     // reduce bandwidth usage while still gaining some image
     // quality improvement.
-    _streamConfig.hevcBitratePercentageMultiplier = 75;
-    
-    _streamConfig.enableDynamicResolution = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"];
-    
-    // FIXME: We should use 1024 when streaming remotely
-    _streamConfig.packetSize = 1292;
-    
+    if (config.streamingRemotely) {
+        // In the case of remotely streaming, we want the best possible qualtity for a limited bandwidth, so we set the multiplier to 0
+        _streamConfig.hevcBitratePercentageMultiplier = 0;
+        // When streaming remotely we want to use a packet size of 1024
+        _streamConfig.packetSize = 1024;
+    }
+    else {
+        _streamConfig.hevcBitratePercentageMultiplier = 75;
+        _streamConfig.packetSize = 1292;
+    }
+
     memcpy(_streamConfig.remoteInputAesKey, [config.riKey bytes], [config.riKey length]);
     memset(_streamConfig.remoteInputAesIv, 0, 16);
     int riKeyId = htonl(config.riKeyId);
