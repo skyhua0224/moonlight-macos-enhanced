@@ -1401,10 +1401,10 @@ const int FrontViewPositionNone = 0xff;
         
         // We call the layoutSubviews method on the contentView view and send a delegate, which will
         // occur inside of an animation block if any animated transition is being performed
-        [_contentView layoutSubviews];
+        [self->_contentView layoutSubviews];
     
-        if ([_delegate respondsToSelector:@selector(revealController:animateToPosition:)])
-            [_delegate revealController:self animateToPosition:_frontViewPosition];
+        if ([self->_delegate respondsToSelector:@selector(revealController:animateToPosition:)])
+            [self->_delegate revealController:self animateToPosition:self->_frontViewPosition];
     };
     
     void (^completion)(BOOL) = ^(BOOL finished)
@@ -1460,8 +1460,8 @@ const int FrontViewPositionNone = 0xff;
     void (^animationCompletion)() = ^
     {
         completion();
-        if ( [_delegate respondsToSelector:@selector(revealController:didAddViewController:forOperation:animated:)] )
-            [_delegate revealController:self didAddViewController:new forOperation:operation animated:animated];
+        if ( [self->_delegate respondsToSelector:@selector(revealController:didAddViewController:forOperation:animated:)] )
+            [self->_delegate revealController:self didAddViewController:new forOperation:operation animated:animated];
     
         [self _dequeue];
     };
@@ -1527,8 +1527,8 @@ const int FrontViewPositionNone = 0xff;
         deploymentCompletion();
         if ( positionIsChanging )
         {
-            if ( [_delegate respondsToSelector:@selector(revealController:didMoveToPosition:)] )
-                [_delegate revealController:self didMoveToPosition:newPosition];
+            if ( [self->_delegate respondsToSelector:@selector(revealController:didMoveToPosition:)] )
+                [self->_delegate revealController:self didMoveToPosition:newPosition];
         }
     };
 
