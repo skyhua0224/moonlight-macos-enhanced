@@ -7,7 +7,7 @@
 //
 
 #import <Foundation/Foundation.h>
-#import "Settings.h"
+#import "Settings+CoreDataClass.h"
 
 @interface TemporarySettings : NSObject
 
@@ -19,6 +19,7 @@
 @property (nonatomic, retain) NSNumber * width;
 @property (nonatomic, retain) NSNumber * onscreenControls;
 @property (nonatomic, retain) NSString * uniqueId;
+@property (nonatomic, retain) NSNumber * streamingRemotely;
 
 - (id) initFromSettings:(Settings*)settings;
 

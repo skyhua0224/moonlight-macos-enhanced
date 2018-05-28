@@ -9,7 +9,6 @@
 #import "DataManager.h"
 #import "TemporaryApp.h"
 #import "TemporarySettings.h"
-#import "Settings.h"
 #import "DatabaseSingleton.h"
 
 @implementation DataManager {
@@ -42,7 +41,8 @@
     return uid;
 }
 
-- (void) saveSettingsWithBitrate:(NSInteger)bitrate framerate:(NSInteger)framerate height:(NSInteger)height width:(NSInteger)width onscreenControls:(NSInteger)onscreenControls {
+- (void) saveSettingsWithBitrate:(NSInteger)bitrate framerate:(NSInteger)framerate height:(NSInteger)height width:(NSInteger)width onscreenControls:(NSInteger)onscreenControls remote:
+    (NSInteger) streamingRemotely {
     
     [_managedObjectContext performBlockAndWait:^{
         Settings* settingsToSave = [self retrieveSettings];
@@ -52,6 +52,7 @@
         settingsToSave.height = [NSNumber numberWithInteger:height];
         settingsToSave.width = [NSNumber numberWithInteger:width];
         settingsToSave.onscreenControls = [NSNumber numberWithInteger:onscreenControls];
+        settingsToSave.streamingRemotely = [NSNumber numberWithInteger:streamingRemotely];
         
         [self saveData];
     }];
@@ -62,8 +63,8 @@
         // Add a new persistent managed object if one doesn't exist
         Host* parent = [self getHostForTemporaryHost:host withHostRecords:[self fetchRecords:@"Host"]];
         if (parent == nil) {
-            NSEntityDescription* entity = [NSEntityDescription entityForName:@"Host" inManagedObjectContext:_managedObjectContext];
-            parent = [[Host alloc] initWithEntity:entity insertIntoManagedObjectContext:_managedObjectContext];
+            NSEntityDescription* entity = [NSEntityDescription entityForName:@"Host" inManagedObjectContext:self->_managedObjectContext];
+            parent = [[Host alloc] initWithEntity:entity insertIntoManagedObjectContext:self->_managedObjectContext];
         }
         
         // Push changes from the temp host to the persistent one
@@ -87,8 +88,8 @@
             // Add a new persistent managed object if one doesn't exist
             App* parentApp = [self getAppForTemporaryApp:app withAppRecords:appRecords];
             if (parentApp == nil) {
-                NSEntityDescription* entity = [NSEntityDescription entityForName:@"App" inManagedObjectContext:_managedObjectContext];
-                parentApp = [[App alloc] initWithEntity:entity insertIntoManagedObjectContext:_managedObjectContext];
+                NSEntityDescription* entity = [NSEntityDescription entityForName:@"App" inManagedObjectContext:self->_managedObjectContext];
+                parentApp = [[App alloc] initWithEntity:entity insertIntoManagedObjectContext:self->_managedObjectContext];
             }
             
             [app propagateChangesToParent:parentApp withHost:parent];
@@ -144,7 +145,7 @@
     [_managedObjectContext performBlockAndWait:^{
         App* managedApp = [self getAppForTemporaryApp:app withAppRecords:[self fetchRecords:@"App"]];
         if (managedApp != nil) {
-            [_managedObjectContext deleteObject:managedApp];
+            [self->_managedObjectContext deleteObject:managedApp];
             [self saveData];
         }
     }];
@@ -154,7 +155,7 @@
     [_managedObjectContext performBlockAndWait:^{
         Host* managedHost = [self getHostForTemporaryHost:host withHostRecords:[self fetchRecords:@"Host"]];
         if (managedHost != nil) {
-            [_managedObjectContext deleteObject:managedHost];
+            [self->_managedObjectContext deleteObject:managedHost];
             [self saveData];
         }
     }];

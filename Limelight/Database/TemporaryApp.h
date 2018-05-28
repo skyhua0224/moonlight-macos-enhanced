@@ -8,7 +8,7 @@
 
 #import <Foundation/Foundation.h>
 #import "TemporaryHost.h"
-#import "App.h"
+#import "App+CoreDataClass.h"
 
 @interface TemporaryApp : NSObject
 
