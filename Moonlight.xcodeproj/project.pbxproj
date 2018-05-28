@@ -245,6 +245,7 @@
 		4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PreferencesWindow.m; sourceTree = "<group>"; };
 		4CC3C0331FF76D330029EBF5 /* AMIndeterminateProgressIndicatorView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AMIndeterminateProgressIndicatorView.h; sourceTree = "<group>"; };
 		4CC3C0341FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AMIndeterminateProgressIndicatorView.m; sourceTree = "<group>"; };
+        98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
@@ -1745,13 +1746,14 @@
 		FB290D0519B2C406004C83CF /* Limelight.xcdatamodeld */ = {
 			isa = XCVersionGroup;
 			children = (
+				98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */,
 				FB53E1441BE5DCBC00CD6ECE /* Moonlight v1.0-2.xcdatamodel */,
 				FBB460391B50ACE400F3099C /* Moonlight v1.0.xcdatamodel */,
 				FB6549621A60B4A9001C8F39 /* Limelight 0.3.1.xcdatamodel */,
 				FB4678F21A51BDCB00377732 /* Limelight 0.3.0.xcdatamodel */,
 				FB290D0619B2C406004C83CF /* Limelight.xcdatamodel */,
 			);
-			currentVersion = FB53E1441BE5DCBC00CD6ECE /* Moonlight v1.0-2.xcdatamodel */;
+			currentVersion = 98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */;
 			path = Limelight.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;
