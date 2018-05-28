@@ -14,6 +14,7 @@
 @property (strong, nonatomic) IBOutlet UISegmentedControl *framerateSelector;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *resolutionSelector;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *onscreenControlSelector;
+@property (strong, nonatomic) IBOutlet UIScrollView *scrollView;
 @property (weak, nonatomic) IBOutlet UISegmentedControl *optimizeGameSettingsSelector;
 @property (weak, nonatomic) IBOutlet NSLayoutConstraint *leadingContentViewConstraint;
 

@@ -196,6 +196,7 @@
                         <outlet property="framerateSelector" destination="dLF-qJ-2nY" id="hE3-hk-iwa"/>
                         <outlet property="onscreenControlSelector" destination="WGf-9d-eAm" id="hob-se-4Sn"/>
                         <outlet property="resolutionSelector" destination="PCM-t4-Sha" id="t60-W2-wkV"/>
+                        <outlet property="scrollView" destination="iNk-qF-gIr" id="h7U-Xp-ULQ"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="RWc-Km-KG5" userLabel="First Responder" sceneMemberID="firstResponder"/>
