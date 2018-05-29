@@ -64,13 +64,15 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
     }
 
     NSInteger onscreenControls = [currentSettings.onscreenControls integerValue];
-    
+    NSInteger streamingRemotely = [currentSettings.streamingRemotely integerValue];
+
     [self.resolutionSelector setSelectedSegmentIndex:resolution];
     [self.resolutionSelector addTarget:self action:@selector(newResolutionFpsChosen) forControlEvents:UIControlEventValueChanged];
     [self.framerateSelector setSelectedSegmentIndex:framerate];
     [self.framerateSelector addTarget:self action:@selector(newResolutionFpsChosen) forControlEvents:UIControlEventValueChanged];
     [self.onscreenControlSelector setSelectedSegmentIndex:onscreenControls];
-
+    [self.remoteSelector setSelectedSegmentIndex:streamingRemotely];
+    [self.remoteSelector addTarget:self action:@selector(remoteStreamingChanged) forControlEvents:UIControlEventValueChanged];
 
     numbers = @[@(0.5), @(1), @(1.5), @(2), @(2.5), @(3), @(3.5), @(4), @(4.5), @(5), @(5.5), @(6)];
     NSInteger numberOfSteps = ((float)[numbers count]);
@@ -82,6 +84,10 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
     [self.bitrateSlider setValue:(_bitrate / BITRATE_INTERVAL) animated:YES];
     [self.bitrateSlider addTarget:self action:@selector(bitrateSliderMoved) forControlEvents:UIControlEventValueChanged];
     [self updateBitrateText];
+}
+
+- (void) remoteStreamingChanged {
+    // This function can be used to reconfigure the settings view to offer more remote streaming options (i.e. reduce the audio frequency to 24kHz, enable/disable the HEVC bitrate multiplier, ...)
 }
 
 - (void) newResolutionFpsChosen {
@@ -201,7 +207,9 @@ static NSString* bitrateFormat = @"Bitrate: %d Mbps";
     NSInteger height = [self getChosenStreamHeight];
     NSInteger width = [self getChosenStreamWidth];
     NSInteger onscreenControls = [self.onscreenControlSelector selectedSegmentIndex];
-    [dataMan saveSettingsWithBitrate:_bitrate framerate:framerate height:height width:width onscreenControls:onscreenControls];
+    NSInteger streamingRemotely = [self.remoteSelector selectedSegmentIndex];
+    [dataMan saveSettingsWithBitrate:_bitrate framerate:framerate height:height width:width onscreenControls:onscreenControls
+                              remote: streamingRemotely];
     [[NSUserDefaults standardUserDefaults] setBool:self.optimizeGameSettingsSelector.selectedSegmentIndex != 0 forKey:@"optimizeSettings"];
 }
 

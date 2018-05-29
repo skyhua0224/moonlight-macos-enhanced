@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 47;
+	objectVersion = 48;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -23,15 +23,15 @@
 		4C38E7F51FEE0121000425CD /* IdManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB53E1421BE5DC4400CD6ECE /* IdManager.m */; };
 		4C38E7F61FEE01F4000425CD /* libssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946E119F6AFB800339C8A /* libssl.a */; };
 		4C38E7F71FEE0219000425CD /* libcrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946E019F6AFB800339C8A /* libcrypto.a */; };
-		4C38E7F91FEE085B000425CD /* App.m in Sources */ = {isa = PBXBuildFile; fileRef = FBFCB3341B50B29400089F8A /* App.m */; };
+		4C38E7F91FEE085B000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
 		4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD311A7D867C00872C98 /* AppAssetRetriever.m */; };
 		4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */ = {isa = PBXBuildFile; fileRef = FB6549551A57907E001C8F39 /* DiscoveryWorker.m */; };
-		4C38E7FC1FEE0875000425CD /* Host.m in Sources */ = {isa = PBXBuildFile; fileRef = FBFCB3301B50B29400089F8A /* Host.m */; };
+		4C38E7FC1FEE0875000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
 		4C38E7FD1FEE0887000425CD /* HttpManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461019F646E200339C8A /* HttpManager.m */; };
 		4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD361A7E02DB00872C98 /* HttpRequest.m */; };
 		4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD271A7C84ED00872C98 /* HttpResponse.m */; };
 		4C38E8001FEE08A3000425CD /* ServerInfoResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD391A7E05CE00872C98 /* ServerInfoResponse.m */; };
-		4C38E8011FEE08AA000425CD /* Settings.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3495D1A004412002D2A60 /* Settings.m */; };
+		4C38E8011FEE08AA000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
 		4C38E8021FEE08B1000425CD /* TemporarySettings.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856F1C0ED0E800F6CC00 /* TemporarySettings.m */; };
 		4C38E8031FEE08BE000425CD /* MDNSManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461219F646E200339C8A /* MDNSManager.m */; };
 		4C38E8041FEE08C8000425CD /* TemporaryHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856C1C0EA79600F6CC00 /* TemporaryHost.m */; };
@@ -57,6 +57,8 @@
 		4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
 		4C38E82D1FF0C38E000425CD /* Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4746EEB1CBC740C006FB401 /* Controller.swift */; };
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
+		4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
+		4C3C619F20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
 		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
@@ -64,8 +66,6 @@
 		4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A9D1FECD31600684411 /* HostCell.m */; };
 		4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0AA21FECE55E00684411 /* HostCell.xib */; };
 		4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */; };
-		4C81944C202EBFEC0023F308 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C81944B202EBFEC0023F308 /* DatabaseSingleton.m */; };
-		4C81944D202EBFEC0023F308 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C81944B202EBFEC0023F308 /* DatabaseSingleton.m */; };
 		4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C81944F202EC3230023F308 /* AppDelegateForAppKit.m */; };
 		4C819453202EC3900023F308 /* AppDelegateForUIKit.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C819452202EC3900023F308 /* AppDelegateForUIKit.m */; };
 		4C81947A202EC9AA0023F308 /* libmoonlight-common iOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C819479202EC9A50023F308 /* libmoonlight-common iOS.a */; };
@@ -213,6 +213,8 @@
 		4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AlertPresenter.m; sourceTree = "<group>"; };
 		4C38E8241FF0B609000425CD /* StreamViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StreamViewController.h; sourceTree = "<group>"; };
 		4C38E8251FF0B609000425CD /* StreamViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamViewController.m; sourceTree = "<group>"; };
+		4C3C619C20BD2D4A0045FE30 /* DatabaseSingleton.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DatabaseSingleton.h; sourceTree = "<group>"; };
+		4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DatabaseSingleton.m; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A821FECBFFD00684411 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4C7E0A851FECBFFD00684411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -225,8 +227,6 @@
 		4C7E0AA21FECE55E00684411 /* HostCell.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = HostCell.xib; sourceTree = "<group>"; };
 		4C819438202D75EF0023F308 /* NSCollectionView+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSCollectionView+Moonlight.h"; sourceTree = "<group>"; };
 		4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSCollectionView+Moonlight.m"; sourceTree = "<group>"; };
-		4C81944A202EBFEC0023F308 /* DatabaseSingleton.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DatabaseSingleton.h; sourceTree = "<group>"; };
-		4C81944B202EBFEC0023F308 /* DatabaseSingleton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = DatabaseSingleton.m; sourceTree = "<group>"; };
 		4C81944E202EC3230023F308 /* AppDelegateForAppKit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegateForAppKit.h; sourceTree = "<group>"; };
 		4C81944F202EC3230023F308 /* AppDelegateForAppKit.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegateForAppKit.m; sourceTree = "<group>"; };
 		4C819451202EC3900023F308 /* AppDelegateForUIKit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegateForUIKit.h; sourceTree = "<group>"; };
@@ -245,7 +245,7 @@
 		4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PreferencesWindow.m; sourceTree = "<group>"; };
 		4CC3C0331FF76D330029EBF5 /* AMIndeterminateProgressIndicatorView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AMIndeterminateProgressIndicatorView.h; sourceTree = "<group>"; };
 		4CC3C0341FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AMIndeterminateProgressIndicatorView.m; sourceTree = "<group>"; };
-        98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
+		98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
@@ -689,7 +689,6 @@
 				4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */,
 				FB6DDEF31AE739100096499A /* libmoonlight-common.a */,
 				FB4679001A57048000377732 /* CoreFoundation.framework */,
-				FBD349571A003F05002D2A60 /* libsqlite3.dylib */,
 				FB89468F19F6AFB800339C8A /* libs */,
 				FB7E794319C8B71B00A15F68 /* libiconv.dylib */,
 				FB290DC319B2E98F004C83CF /* libxml2.dylib */,
@@ -715,6 +714,8 @@
 				FB89461519F646E200339C8A /* Stream */,
 				FB89461E19F646E200339C8A /* Utility */,
 				FBD3495F1A004453002D2A60 /* Database */,
+				4C3C619C20BD2D4A0045FE30 /* DatabaseSingleton.h */,
+				4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */,
 				FB290D0519B2C406004C83CF /* Limelight.xcdatamodeld */,
 				D4746EEA1CBC740C006FB401 /* Moonlight-Bridging-Header.h */,
 			);
@@ -1223,13 +1224,13 @@
 			files = (
 				4C7E0A891FECBFFD00684411 /* main.m in Sources */,
 				4C38E7F51FEE0121000425CD /* IdManager.m in Sources */,
-				4C38E8011FEE08AA000425CD /* Settings.m in Sources */,
+				4C38E8011FEE08AA000425CD /* (null) in Sources */,
 				4C38E8041FEE08C8000425CD /* TemporaryHost.m in Sources */,
 				4C38E82A1FF0BFA0000425CD /* StreamConfiguration.m in Sources */,
-				4C81944C202EBFEC0023F308 /* DatabaseSingleton.m in Sources */,
 				4C38E8261FF0B609000425CD /* StreamViewController.m in Sources */,
 				4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */,
 				4C38E7F01FEE00F6000425CD /* Logger.m in Sources */,
+				4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */,
 				4C38E8001FEE08A3000425CD /* ServerInfoResponse.m in Sources */,
 				4C38E80A1FEE0AED000425CD /* Limelight.xcdatamodeld in Sources */,
 				4C38E7FD1FEE0887000425CD /* HttpManager.m in Sources */,
@@ -1239,7 +1240,7 @@
 				4C38E82B1FF0BFAC000425CD /* ControllerSupport.m in Sources */,
 				4C38E8271FF0BF64000425CD /* VideoDecoderRenderer.m in Sources */,
 				4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */,
-				4C38E7FC1FEE0875000425CD /* Host.m in Sources */,
+				4C38E7FC1FEE0875000425CD /* (null) in Sources */,
 				4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */,
 				4C38E82D1FF0C38E000425CD /* Controller.swift in Sources */,
 				4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */,
@@ -1258,7 +1259,7 @@
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
 				4CC3C0321FF73A660029EBF5 /* PreferencesWindow.m in Sources */,
 				4C38E8101FEE295E000425CD /* PairManager.m in Sources */,
-				4C38E7F91FEE085B000425CD /* App.m in Sources */,
+				4C38E7F91FEE085B000425CD /* (null) in Sources */,
 				4CC3C0351FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m in Sources */,
 				4C38E7F31FEE0113000425CD /* DataManager.m in Sources */,
 				4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */,
@@ -1318,6 +1319,7 @@
 				98D585701C0ED0E800F6CC00 /* TemporarySettings.m in Sources */,
 				FB89462819F646E200339C8A /* CryptoManager.m in Sources */,
 				FB89462E19F646E200339C8A /* PairManager.m in Sources */,
+				4C3C619F20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */,
 				FB9AFD371A7E02DB00872C98 /* HttpRequest.m in Sources */,
 				FB4678ED1A50C40900377732 /* OnScreenControls.m in Sources */,
 				FB290D0019B2C406004C83CF /* main.m in Sources */,
@@ -1333,7 +1335,6 @@
 				FB4A23B81A9D3637004D2EF2 /* LoadingFrameViewController.m in Sources */,
 				FB9AFD3A1A7E05CE00872C98 /* ServerInfoResponse.m in Sources */,
 				4C09A82B1FDCF93C00A57E87 /* UIImage+pspdf.m in Sources */,
-				4C81944D202EBFEC0023F308 /* DatabaseSingleton.m in Sources */,
 				FB89463119F646E200339C8A /* StreamManager.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1657,7 +1658,7 @@
 				SKIP_INSTALL = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_SWIFT3_OBJC_INFERENCE = Default;
+				SWIFT_SWIFT3_OBJC_INFERENCE = On;
 				SWIFT_VERSION = 4.0;
 				WRAPPER_EXTENSION = app;
 			};
@@ -1695,7 +1696,7 @@
 				SKIP_INSTALL = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
-				SWIFT_SWIFT3_OBJC_INFERENCE = Default;
+				SWIFT_SWIFT3_OBJC_INFERENCE = On;
 				SWIFT_VERSION = 4.0;
 				WRAPPER_EXTENSION = app;
 			};
