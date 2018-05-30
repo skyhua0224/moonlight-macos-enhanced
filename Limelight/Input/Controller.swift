@@ -8,7 +8,7 @@
 
 import Foundation
 
-@objc
+@objcMembers
 /**
  Defines a controller layout
  */
