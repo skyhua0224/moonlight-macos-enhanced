@@ -8,6 +8,8 @@
 
 #import "Logger.h"
 
+static LogLevel LoggerLogLevel = LOG_I;
+
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args);
 
 void Log(LogLevel level, NSString* fmt, ...) {
@@ -31,6 +33,10 @@ void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
 
     NSString* levelPrefix = @"";
     
+    if (level < LoggerLogLevel) {
+        return;
+    }
+    
     switch(level) {
         case LOG_D:
             levelPrefix = PRFX_DEBUG;
@@ -45,6 +51,8 @@ void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
             levelPrefix = PRFX_ERROR;
             break;
         default:
+            levelPrefix = @"";
+            assert(false);
             break;
     }
     NSString* prefixedString;
