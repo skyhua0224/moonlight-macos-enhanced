@@ -91,7 +91,7 @@
     
     __block VideoDecoderRenderer* renderer;
     dispatch_sync(dispatch_get_main_queue(), ^{
-        renderer = [[VideoDecoderRenderer alloc]initWithView:_renderView];
+        renderer = [[VideoDecoderRenderer alloc]initWithView:self->_renderView];
     });
     _connection = [[Connection alloc] initWithConfig:_config renderer:renderer connectionCallbacks:_callbacks];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
