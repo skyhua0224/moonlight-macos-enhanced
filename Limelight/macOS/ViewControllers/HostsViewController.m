@@ -232,7 +232,7 @@
             self.pairAlert = nil;
         }
         [AlertPresenter displayAlert:NSAlertStyleWarning message:[NSString stringWithFormat:@"Pairing Failed: %@", message] window:self.view.window completionHandler:nil];
-        [_discMan startDiscovery];
+        [self->_discMan startDiscovery];
     });
 }
 
