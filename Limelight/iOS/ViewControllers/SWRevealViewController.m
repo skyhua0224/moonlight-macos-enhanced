@@ -171,8 +171,10 @@ static CGFloat scaledValue( CGFloat v1, CGFloat min2, CGFloat max2, CGFloat min1
         if (self.safeAreaInsets.left > 0) {
             revealWidth += self.safeAreaInsets.left - 14;
             settingsVC.leadingContentViewConstraint.constant = 2;
+            settingsVC.scrollViewWidthConstraint.constant = 243;
         } else {
             settingsVC.leadingContentViewConstraint.constant = 16;
+            settingsVC.scrollViewWidthConstraint.constant = 259;
         }
     }
     
