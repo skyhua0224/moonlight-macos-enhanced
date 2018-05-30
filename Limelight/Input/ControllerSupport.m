@@ -9,11 +9,6 @@
 #import "ControllerSupport.h"
 
 #import "OnScreenControls.h"
-#if !TARGET_OS_IPHONE
-#import "Gamepad.h"
-#import "Control.h"
-#endif
-
 #import "DataManager.h"
 #include "Limelight.h"
 
@@ -313,35 +308,6 @@
 -(Controller*) getOscController {
     return _player0osc;
 }
-#else
--(NSMutableDictionary*) getControllers {
-    return _controllers;
-}
-
--(void) assignGamepad:(struct Gamepad_device *)gamepad {
-    for (int i = 0; i < 4; i++) {
-        if (!(_controllerNumbers & (1 << i))) {
-            _controllerNumbers |= (1 << i);
-            gamepad->deviceID = i;
-            NSLog(@"Gamepad device id: %u assigned", gamepad->deviceID);
-            Controller* limeController;
-            limeController = [[Controller alloc] init];
-            limeController.playerIndex = i;
-            
-            [_controllers setObject:limeController forKey:[NSNumber numberWithInteger:i]];
-            break;
-        }
-    }
-}
-
--(void) removeGamepad:(struct Gamepad_device *)gamepad {
-    _controllerNumbers &= ~(1 << gamepad->deviceID);
-    Log(LOG_I, @"Unassigning controller index: %ld", (long)gamepad->deviceID);
-    
-    // Inform the server of the updated active gamepads before removing this controller
-    [self updateFinished:[_controllers objectForKey:[NSNumber numberWithInteger:gamepad->deviceID]]];
-    [_controllers removeObjectForKey:[NSNumber numberWithInteger:gamepad->deviceID]];
-}
 #endif
 
 +(bool) isSupportedGamepad:(GCController*) controller {
@@ -397,19 +363,15 @@
 #if TARGET_OS_IPHONE
     DataManager* dataMan = [[DataManager alloc] init];
     _oscEnabled = (OnScreenControlsLevel)[[dataMan getSettings].onscreenControls integerValue] != OnScreenControlsLevelOff;
-#else
-    _oscEnabled = false;
-    initGamepad(self);
-    Gamepad_detectDevices();
 #endif
     
     Log(LOG_I, @"Number of supported controllers connected: %d", [ControllerSupport getGamepadCount]);
     for (GCController* controller in [GCController controllers]) {
         if ([ControllerSupport isSupportedGamepad:controller]) {
-            [self assignController:controller];
-            [self registerControllerCallbacks:controller];
-            [self updateAutoOnScreenControlMode];
-        }
+        [self assignController:controller];
+        [self registerControllerCallbacks:controller];
+        [self updateAutoOnScreenControlMode];
+    }
     }
     
     self.connectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidConnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
@@ -462,8 +424,8 @@
     _controllerNumbers = 0;
     for (GCController* controller in [GCController controllers]) {
         if ([ControllerSupport isSupportedGamepad:controller]) {
-            [self unregisterControllerCallbacks:controller];
-        }
+        [self unregisterControllerCallbacks:controller];
+    }
     }
 }
 
