@@ -70,7 +70,7 @@
         resolutionHeight = self.resolutionSelector.selectedTag;
         resolutionWidth = resolutionHeight * 16 / 9;
     }
-    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0];
+    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:0];
 }
 
 
