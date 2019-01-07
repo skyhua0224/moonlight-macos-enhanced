@@ -20,6 +20,7 @@
     self = [super initWithCoder:coder];
     if (self) {
         self.spinner = [[NSProgressIndicator alloc] init];
+        self.spinner.style = NSProgressIndicatorStyleSpinning;
         [self.spinner startAnimation:self];
         [self addSubview:self.spinner];
         self.spinner.translatesAutoresizingMaskIntoConstraints = NO;
