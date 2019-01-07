@@ -7,10 +7,9 @@
 //
 
 #import "StreamViewMac.h"
-#import "AMIndeterminateProgressIndicatorView.h"
 
 @interface StreamViewMac ()
-@property (nonatomic, strong) AMIndeterminateProgressIndicatorView *spinner;
+@property (nonatomic, strong) NSProgressIndicator *spinner;
 @property (nonatomic, strong) NSTextField *statusLabel;
 
 @end
@@ -20,9 +19,8 @@
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super initWithCoder:coder];
     if (self) {
-        self.spinner = [[AMIndeterminateProgressIndicatorView alloc] init];
-        self.spinner.color = [NSColor whiteColor];
-        [self.spinner startAnimation];
+        self.spinner = [[NSProgressIndicator alloc] init];
+        [self.spinner startAnimation:self];
         [self addSubview:self.spinner];
         self.spinner.translatesAutoresizingMaskIntoConstraints = NO;
         [self.spinner.centerXAnchor constraintEqualToAnchor:self.centerXAnchor].active = YES;
@@ -47,7 +45,7 @@
 
 - (void)setStatusText:(NSString *)statusText {
     if (statusText == nil) {
-        [self.spinner stopAnimation];
+        [self.spinner stopAnimation:self];
         self.spinner.hidden = YES;
     } else {
         self.statusLabel.stringValue = statusText;

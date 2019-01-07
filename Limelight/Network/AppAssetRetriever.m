@@ -48,7 +48,7 @@ typedef NSImage ImageType;
 #else
     NSData *imageData = [image TIFFRepresentation];
     NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:imageData];
-    return [imageRep representationUsingType:NSPNGFileType properties:@{}];
+    return [imageRep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
 #endif
 }
 

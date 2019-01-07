@@ -66,7 +66,6 @@
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
 		4CC3C02F1FF73A490029EBF5 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
 		4CC3C0321FF73A660029EBF5 /* PreferencesWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */; };
-		4CC3C0351FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0341FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -142,8 +141,6 @@
 		4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = PreferencesWindow.xib; sourceTree = "<group>"; };
 		4CC3C0301FF73A660029EBF5 /* PreferencesWindow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PreferencesWindow.h; sourceTree = "<group>"; };
 		4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PreferencesWindow.m; sourceTree = "<group>"; };
-		4CC3C0331FF76D330029EBF5 /* AMIndeterminateProgressIndicatorView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AMIndeterminateProgressIndicatorView.h; sourceTree = "<group>"; };
-		4CC3C0341FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AMIndeterminateProgressIndicatorView.m; sourceTree = "<group>"; };
 		98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
@@ -337,8 +334,6 @@
 				4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */,
 				4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */,
 				4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */,
-				4CC3C0331FF76D330029EBF5 /* AMIndeterminateProgressIndicatorView.h */,
-				4CC3C0341FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m */,
 				4C819438202D75EF0023F308 /* NSCollectionView+Moonlight.h */,
 				4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */,
 			);
@@ -951,7 +946,6 @@
 				4CC3C0321FF73A660029EBF5 /* PreferencesWindow.m in Sources */,
 				4C38E8101FEE295E000425CD /* PairManager.m in Sources */,
 				4C38E7F91FEE085B000425CD /* (null) in Sources */,
-				4CC3C0351FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m in Sources */,
 				4C38E7F31FEE0113000425CD /* DataManager.m in Sources */,
 				4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */,
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
