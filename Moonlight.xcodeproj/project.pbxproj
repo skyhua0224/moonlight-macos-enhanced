@@ -7,11 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4C04F32B1FAF30CC0011E17A /* KTCenterFlowLayout.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */; };
-		4C09A82B1FDCF93C00A57E87 /* UIImage+pspdf.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */; };
 		4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24801FF1E99300B6A12E /* HIDSupport.m */; };
 		4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24861FF3934700B6A12E /* StreamViewMac.m */; };
-		4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */; };
 		4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */; };
 		4C30BA201FF5F7D600848919 /* BackgroundColorView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C30BA1F1FF5F7D600848919 /* BackgroundColorView.m */; };
 		4C30BFD91FF9D57F00AD09E6 /* DefaultPreferences.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4C30BFD81FF9D57F00AD09E6 /* DefaultPreferences.plist */; };
@@ -58,7 +55,6 @@
 		4C38E82D1FF0C38E000425CD /* Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4746EEB1CBC740C006FB401 /* Controller.swift */; };
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
-		4C3C619F20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
 		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
@@ -67,81 +63,10 @@
 		4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0AA21FECE55E00684411 /* HostCell.xib */; };
 		4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */; };
 		4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C81944F202EC3230023F308 /* AppDelegateForAppKit.m */; };
-		4C819453202EC3900023F308 /* AppDelegateForUIKit.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C819452202EC3900023F308 /* AppDelegateForUIKit.m */; };
-		4C81947A202EC9AA0023F308 /* libmoonlight-common iOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C819479202EC9A50023F308 /* libmoonlight-common iOS.a */; };
-		4C85A7FF1FDCE1D300F28E90 /* ShadowView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */; };
-		4C85A8011FDCE49C00F28E90 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */; };
-		4C85A8041FDCE4B200F28E90 /* MarqueeLabel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */; };
-		4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
 		4CC3C02F1FF73A490029EBF5 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
 		4CC3C0321FF73A660029EBF5 /* PreferencesWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */; };
 		4CC3C0351FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0341FF76D340029EBF5 /* AMIndeterminateProgressIndicatorView.m */; };
-		9832D1361BBCD5C50036EF48 /* TemporaryApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 9832D1351BBCD5C50036EF48 /* TemporaryApp.m */; };
-		98D5856D1C0EA79600F6CC00 /* TemporaryHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856C1C0EA79600F6CC00 /* TemporaryHost.m */; };
-		98D585701C0ED0E800F6CC00 /* TemporarySettings.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856F1C0ED0E800F6CC00 /* TemporarySettings.m */; };
-		9E5D600B1A5A5A3900689918 /* Apache License.txt in Resources */ = {isa = PBXBuildFile; fileRef = 9E5D5FF81A5A5A3900689918 /* Apache License.txt */; };
-		9E5D600C1A5A5A3900689918 /* Roboto-Black.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 9E5D5FF91A5A5A3900689918 /* Roboto-Black.ttf */; };
-		9E5D600E1A5A5A3900689918 /* Roboto-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 9E5D5FFB1A5A5A3900689918 /* Roboto-Bold.ttf */; };
-		9E5D60111A5A5A3900689918 /* Roboto-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 9E5D5FFE1A5A5A3900689918 /* Roboto-Light.ttf */; };
-		9E5D60131A5A5A3900689918 /* Roboto-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 9E5D60001A5A5A3900689918 /* Roboto-Medium.ttf */; };
-		9E5D60151A5A5A3900689918 /* Roboto-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 9E5D60021A5A5A3900689918 /* Roboto-Regular.ttf */; };
-		9E5D60161A5A5A3900689918 /* Roboto-Thin.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 9E5D60031A5A5A3900689918 /* Roboto-Thin.ttf */; };
-		D46A73AD1CBC7D090039F1EE /* ControllerUnitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D46A73AC1CBC7D090039F1EE /* ControllerUnitTests.swift */; };
-		D4746EEC1CBC740C006FB401 /* Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4746EEB1CBC740C006FB401 /* Controller.swift */; };
-		FB1D59971BBCCB6400F482CA /* ComputerScrollView.m in Sources */ = {isa = PBXBuildFile; fileRef = FB1D59961BBCCB6400F482CA /* ComputerScrollView.m */; };
-		FB1D599A1BBCCD7E00F482CA /* AppCollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = FB1D59991BBCCD7E00F482CA /* AppCollectionView.m */; };
-		FB290CF219B2C406004C83CF /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FB290CF119B2C406004C83CF /* Foundation.framework */; };
-		FB290CF419B2C406004C83CF /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FB290CF319B2C406004C83CF /* CoreGraphics.framework */; };
-		FB290CF619B2C406004C83CF /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FB290CF519B2C406004C83CF /* UIKit.framework */; };
-		FB290CF819B2C406004C83CF /* CoreData.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FB290CF719B2C406004C83CF /* CoreData.framework */; };
-		FB290CFE19B2C406004C83CF /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = FB290CFC19B2C406004C83CF /* InfoPlist.strings */; };
-		FB290D0019B2C406004C83CF /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = FB290CFF19B2C406004C83CF /* main.m */; };
-		FB290D0719B2C406004C83CF /* Limelight.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = FB290D0519B2C406004C83CF /* Limelight.xcdatamodeld */; };
-		FB290D0919B2C406004C83CF /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FB290D0819B2C406004C83CF /* Images.xcassets */; };
-		FB290DB719B2C870004C83CF /* libz.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = FB290DB619B2C870004C83CF /* libz.dylib */; };
-		FB290DB919B2C877004C83CF /* libbz2.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = FB290DB819B2C877004C83CF /* libbz2.dylib */; };
-		FB290DC419B2E98F004C83CF /* libxml2.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = FB290DC319B2E98F004C83CF /* libxml2.dylib */; };
-		FB290E7B19B38036004C83CF /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FB290E7A19B38036004C83CF /* Main.storyboard */; };
-		FB4678ED1A50C40900377732 /* OnScreenControls.m in Sources */ = {isa = PBXBuildFile; fileRef = FB4678EC1A50C40900377732 /* OnScreenControls.m */; };
-		FB4678FA1A55FFAD00377732 /* DiscoveryManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB4678F91A55FFAD00377732 /* DiscoveryManager.m */; };
-		FB4678FF1A565DAC00377732 /* WakeOnLanManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB4678FE1A565DAC00377732 /* WakeOnLanManager.m */; };
-		FB4679011A57048000377732 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FB4679001A57048000377732 /* CoreFoundation.framework */; };
-		FB4A23B81A9D3637004D2EF2 /* LoadingFrameViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = FB4A23B71A9D3637004D2EF2 /* LoadingFrameViewController.m */; };
-		FB53E1431BE5DC4400CD6ECE /* IdManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB53E1421BE5DC4400CD6ECE /* IdManager.m */; };
-		FB6549561A57907E001C8F39 /* DiscoveryWorker.m in Sources */ = {isa = PBXBuildFile; fileRef = FB6549551A57907E001C8F39 /* DiscoveryWorker.m */; };
-		FB7E794419C8B71B00A15F68 /* libiconv.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = FB7E794319C8B71B00A15F68 /* libiconv.dylib */; };
-		FB89462819F646E200339C8A /* CryptoManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89460619F646E200339C8A /* CryptoManager.m */; };
-		FB89462919F646E200339C8A /* mkcert.c in Sources */ = {isa = PBXBuildFile; fileRef = FB89460719F646E200339C8A /* mkcert.c */; };
-		FB89462A19F646E200339C8A /* ControllerSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89460B19F646E200339C8A /* ControllerSupport.m */; };
-		FB89462B19F646E200339C8A /* StreamView.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89460D19F646E200339C8A /* StreamView.m */; };
-		FB89462C19F646E200339C8A /* HttpManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461019F646E200339C8A /* HttpManager.m */; };
-		FB89462D19F646E200339C8A /* MDNSManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461219F646E200339C8A /* MDNSManager.m */; };
-		FB89462E19F646E200339C8A /* PairManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461419F646E200339C8A /* PairManager.m */; };
-		FB89462F19F646E200339C8A /* Connection.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461719F646E200339C8A /* Connection.m */; };
-		FB89463019F646E200339C8A /* StreamConfiguration.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461919F646E200339C8A /* StreamConfiguration.m */; };
-		FB89463119F646E200339C8A /* StreamManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461B19F646E200339C8A /* StreamManager.m */; };
-		FB89463219F646E200339C8A /* VideoDecoderRenderer.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461D19F646E200339C8A /* VideoDecoderRenderer.m */; };
-		FB89463419F646E200339C8A /* Utils.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89462219F646E200339C8A /* Utils.m */; };
-		FB89463519F646E200339C8A /* MainFrameViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89462519F646E200339C8A /* MainFrameViewController.m */; };
-		FB89463619F646E200339C8A /* StreamFrameViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89462719F646E200339C8A /* StreamFrameViewController.m */; };
-		FB89463819F6473800339C8A /* Launch Screen.xib in Resources */ = {isa = PBXBuildFile; fileRef = FB89463719F6473800339C8A /* Launch Screen.xib */; };
-		FB8946EB19F6AFE100339C8A /* libcrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946E019F6AFB800339C8A /* libcrypto.a */; };
-		FB8946EC19F6AFE400339C8A /* libssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946E119F6AFB800339C8A /* libssl.a */; };
-		FB8946ED19F6AFE800339C8A /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946EA19F6AFB800339C8A /* libopus.a */; };
-		FB9AFD281A7C84ED00872C98 /* HttpResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD271A7C84ED00872C98 /* HttpResponse.m */; };
-		FB9AFD321A7D867C00872C98 /* AppAssetRetriever.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD311A7D867C00872C98 /* AppAssetRetriever.m */; };
-		FB9AFD371A7E02DB00872C98 /* HttpRequest.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD361A7E02DB00872C98 /* HttpRequest.m */; };
-		FB9AFD3A1A7E05CE00872C98 /* ServerInfoResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD391A7E05CE00872C98 /* ServerInfoResponse.m */; };
-		FB9AFD3D1A7E111600872C98 /* AppAssetResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD3C1A7E111600872C98 /* AppAssetResponse.m */; };
-		FB9AFD401A7E127D00872C98 /* AppListResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = FB9AFD3F1A7E127D00872C98 /* AppListResponse.m */; };
-		FBD1C8E21A8AD71400C6703C /* Logger.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD1C8E11A8AD71400C6703C /* Logger.m */; };
-		FBD3494319FC9C04002D2A60 /* AppAssetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3494219FC9C04002D2A60 /* AppAssetManager.m */; };
-		FBD3495019FF2174002D2A60 /* SettingsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3494F19FF2174002D2A60 /* SettingsViewController.m */; };
-		FBD3495319FF36FB002D2A60 /* SWRevealViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3495219FF36FB002D2A60 /* SWRevealViewController.m */; };
-		FBD349621A0089F6002D2A60 /* DataManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD349611A0089F6002D2A60 /* DataManager.m */; };
-		FBDE86E019F7A837001C18A8 /* UIComputerView.m in Sources */ = {isa = PBXBuildFile; fileRef = FBDE86DF19F7A837001C18A8 /* UIComputerView.m */; };
-		FBDE86E619F82297001C18A8 /* UIAppView.m in Sources */ = {isa = PBXBuildFile; fileRef = FBDE86E519F82297001C18A8 /* UIAppView.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -159,13 +84,6 @@
 			remoteGlobalIDString = 4C819476202EC9070023F308;
 			remoteInfo = "moonlight-common iOS";
 		};
-		4C81947B202ECA610023F308 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */;
-			proxyType = 1;
-			remoteGlobalIDString = 4C819455202EC9070023F308;
-			remoteInfo = "moonlight-common iOS";
-		};
 		98AB2E831CAD46840089BB98 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */;
@@ -173,26 +91,13 @@
 			remoteGlobalIDString = FB290E2E19B37A4E004C83CF;
 			remoteInfo = "moonlight-common";
 		};
-		D46A73A51CBC7CB60039F1EE /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = FB290CE619B2C406004C83CF /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = FB290CED19B2C406004C83CF;
-			remoteInfo = Moonlight;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		4C04F3291FAF30CB0011E17A /* KTCenterFlowLayout.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = KTCenterFlowLayout.h; sourceTree = "<group>"; };
-		4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KTCenterFlowLayout.m; sourceTree = "<group>"; };
-		4C09A8291FDCF93C00A57E87 /* UIImage+pspdf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "UIImage+pspdf.h"; sourceTree = "<group>"; };
-		4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "UIImage+pspdf.m"; sourceTree = "<group>"; };
 		4C2E247F1FF1E99300B6A12E /* HIDSupport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HIDSupport.h; sourceTree = "<group>"; };
 		4C2E24801FF1E99300B6A12E /* HIDSupport.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HIDSupport.m; sourceTree = "<group>"; };
 		4C2E24851FF3934700B6A12E /* StreamViewMac.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StreamViewMac.h; sourceTree = "<group>"; };
 		4C2E24861FF3934700B6A12E /* StreamViewMac.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamViewMac.m; sourceTree = "<group>"; };
-		4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCollectionViewCell.h; sourceTree = "<group>"; };
-		4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCollectionViewCell.m; sourceTree = "<group>"; };
 		4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSWindow+Moonlight.h"; sourceTree = "<group>"; };
 		4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSWindow+Moonlight.m"; sourceTree = "<group>"; };
 		4C30BA1E1FF5F7D600848919 /* BackgroundColorView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BackgroundColorView.h; sourceTree = "<group>"; };
@@ -229,13 +134,7 @@
 		4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSCollectionView+Moonlight.m"; sourceTree = "<group>"; };
 		4C81944E202EC3230023F308 /* AppDelegateForAppKit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegateForAppKit.h; sourceTree = "<group>"; };
 		4C81944F202EC3230023F308 /* AppDelegateForAppKit.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegateForAppKit.m; sourceTree = "<group>"; };
-		4C819451202EC3900023F308 /* AppDelegateForUIKit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegateForUIKit.h; sourceTree = "<group>"; };
-		4C819452202EC3900023F308 /* AppDelegateForUIKit.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegateForUIKit.m; sourceTree = "<group>"; };
-		4C85A7FD1FDCE1D300F28E90 /* ShadowView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShadowView.h; sourceTree = "<group>"; };
-		4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ShadowView.m; sourceTree = "<group>"; };
 		4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
-		4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MarqueeLabel.m; sourceTree = "<group>"; };
-		4C85A8031FDCE4B200F28E90 /* MarqueeLabel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MarqueeLabel.h; sourceTree = "<group>"; };
 		4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RendererLayerContainer.h; sourceTree = "<group>"; };
 		4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RendererLayerContainer.m; sourceTree = "<group>"; };
 		4CC3C02B1FF72A3D0029EBF5 /* AppCellView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCellView.h; sourceTree = "<group>"; };
@@ -260,31 +159,19 @@
 		9E5D60001A5A5A3900689918 /* Roboto-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Roboto-Medium.ttf"; sourceTree = "<group>"; };
 		9E5D60021A5A5A3900689918 /* Roboto-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Roboto-Regular.ttf"; sourceTree = "<group>"; };
 		9E5D60031A5A5A3900689918 /* Roboto-Thin.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Roboto-Thin.ttf"; sourceTree = "<group>"; };
-		D46A73A01CBC7CB60039F1EE /* MoonlightUnitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MoonlightUnitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D46A73A41CBC7CB60039F1EE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D46A73AB1CBC7D080039F1EE /* MoonlightUnitTests-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "MoonlightUnitTests-Bridging-Header.h"; sourceTree = "<group>"; };
 		D46A73AC1CBC7D090039F1EE /* ControllerUnitTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ControllerUnitTests.swift; path = Input/ControllerUnitTests.swift; sourceTree = "<group>"; };
 		D4746EEA1CBC740C006FB401 /* Moonlight-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Moonlight-Bridging-Header.h"; path = "Input/Moonlight-Bridging-Header.h"; sourceTree = "<group>"; };
 		D4746EEB1CBC740C006FB401 /* Controller.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Controller.swift; sourceTree = "<group>"; };
-		FB1D59951BBCCB6400F482CA /* ComputerScrollView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ComputerScrollView.h; sourceTree = "<group>"; };
-		FB1D59961BBCCB6400F482CA /* ComputerScrollView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ComputerScrollView.m; sourceTree = "<group>"; };
-		FB1D59981BBCCD7E00F482CA /* AppCollectionView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppCollectionView.h; sourceTree = "<group>"; };
-		FB1D59991BBCCD7E00F482CA /* AppCollectionView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AppCollectionView.m; sourceTree = "<group>"; };
-		FB290CEE19B2C406004C83CF /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FB290CF119B2C406004C83CF /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		FB290CF319B2C406004C83CF /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		FB290CF519B2C406004C83CF /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		FB290CF719B2C406004C83CF /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = SDKROOT; };
-		FB290CFB19B2C406004C83CF /* Limelight-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Limelight-Info.plist"; sourceTree = "<group>"; };
-		FB290CFD19B2C406004C83CF /* en */ = {isa = PBXFileReference; explicitFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		FB290CFF19B2C406004C83CF /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
-		FB290D0119B2C406004C83CF /* Limelight-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Limelight-Prefix.pch"; sourceTree = "<group>"; };
 		FB290D0619B2C406004C83CF /* Limelight.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Limelight.xcdatamodel; sourceTree = "<group>"; };
-		FB290D0819B2C406004C83CF /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
 		FB290DB619B2C870004C83CF /* libz.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libz.dylib; path = usr/lib/libz.dylib; sourceTree = SDKROOT; };
 		FB290DB819B2C877004C83CF /* libbz2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libbz2.dylib; path = usr/lib/libbz2.dylib; sourceTree = SDKROOT; };
 		FB290DC319B2E98F004C83CF /* libxml2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libxml2.dylib; path = usr/lib/libxml2.dylib; sourceTree = SDKROOT; };
-		FB290E7A19B38036004C83CF /* Main.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = Main.storyboard; path = Limelight/iOS/Main.storyboard; sourceTree = SOURCE_ROOT; };
 		FB4678EB1A50C40900377732 /* OnScreenControls.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = OnScreenControls.h; sourceTree = "<group>"; };
 		FB4678EC1A50C40900377732 /* OnScreenControls.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = OnScreenControls.m; sourceTree = "<group>"; };
 		FB4678F21A51BDCB00377732 /* Limelight 0.3.0.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Limelight 0.3.0.xcdatamodel"; sourceTree = "<group>"; };
@@ -293,8 +180,6 @@
 		FB4678FD1A565DAC00377732 /* WakeOnLanManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WakeOnLanManager.h; sourceTree = "<group>"; };
 		FB4678FE1A565DAC00377732 /* WakeOnLanManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = WakeOnLanManager.m; sourceTree = "<group>"; };
 		FB4679001A57048000377732 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
-		FB4A23B61A9D3637004D2EF2 /* LoadingFrameViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = LoadingFrameViewController.h; sourceTree = "<group>"; };
-		FB4A23B71A9D3637004D2EF2 /* LoadingFrameViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = LoadingFrameViewController.m; sourceTree = "<group>"; };
 		FB53E1411BE5DC4400CD6ECE /* IdManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IdManager.h; sourceTree = "<group>"; };
 		FB53E1421BE5DC4400CD6ECE /* IdManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = IdManager.m; sourceTree = "<group>"; };
 		FB53E1441BE5DCBC00CD6ECE /* Moonlight v1.0-2.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.0-2.xcdatamodel"; sourceTree = "<group>"; };
@@ -327,11 +212,6 @@
 		FB89461D19F646E200339C8A /* VideoDecoderRenderer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = VideoDecoderRenderer.m; sourceTree = "<group>"; };
 		FB89462119F646E200339C8A /* Utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Utils.h; sourceTree = "<group>"; };
 		FB89462219F646E200339C8A /* Utils.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = Utils.m; sourceTree = "<group>"; };
-		FB89462419F646E200339C8A /* MainFrameViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MainFrameViewController.h; sourceTree = "<group>"; };
-		FB89462519F646E200339C8A /* MainFrameViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MainFrameViewController.m; sourceTree = "<group>"; };
-		FB89462619F646E200339C8A /* StreamFrameViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = StreamFrameViewController.h; sourceTree = "<group>"; };
-		FB89462719F646E200339C8A /* StreamFrameViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = StreamFrameViewController.m; sourceTree = "<group>"; };
-		FB89463719F6473800339C8A /* Launch Screen.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; name = "Launch Screen.xib"; path = "Limelight/iOS/Launch Screen.xib"; sourceTree = SOURCE_ROOT; };
 		FB89469419F6AFB800339C8A /* aes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = aes.h; sourceTree = "<group>"; };
 		FB89469519F6AFB800339C8A /* asn1.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = asn1.h; sourceTree = "<group>"; };
 		FB89469619F6AFB800339C8A /* asn1_mac.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = asn1_mac.h; sourceTree = "<group>"; };
@@ -431,16 +311,8 @@
 		FBD1C8E11A8AD71400C6703C /* Logger.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = Logger.m; sourceTree = "<group>"; };
 		FBD3494119FC9C04002D2A60 /* AppAssetManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppAssetManager.h; sourceTree = "<group>"; };
 		FBD3494219FC9C04002D2A60 /* AppAssetManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AppAssetManager.m; sourceTree = "<group>"; };
-		FBD3494E19FF2174002D2A60 /* SettingsViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SettingsViewController.h; sourceTree = "<group>"; };
-		FBD3494F19FF2174002D2A60 /* SettingsViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SettingsViewController.m; sourceTree = "<group>"; };
-		FBD3495119FF36FB002D2A60 /* SWRevealViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SWRevealViewController.h; sourceTree = "<group>"; };
-		FBD3495219FF36FB002D2A60 /* SWRevealViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SWRevealViewController.m; sourceTree = "<group>"; };
 		FBD349601A0089F6002D2A60 /* DataManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DataManager.h; path = Database/DataManager.h; sourceTree = "<group>"; };
 		FBD349611A0089F6002D2A60 /* DataManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = DataManager.m; path = Database/DataManager.m; sourceTree = "<group>"; };
-		FBDE86DE19F7A837001C18A8 /* UIComputerView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = UIComputerView.h; sourceTree = "<group>"; };
-		FBDE86DF19F7A837001C18A8 /* UIComputerView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = UIComputerView.m; sourceTree = "<group>"; };
-		FBDE86E419F82297001C18A8 /* UIAppView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = UIAppView.h; sourceTree = "<group>"; };
-		FBDE86E519F82297001C18A8 /* UIAppView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = UIAppView.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -452,34 +324,6 @@
 				4C38E8061FEE0903000425CD /* libxml2.tbd in Frameworks */,
 				4C38E7F61FEE01F4000425CD /* libssl.a in Frameworks */,
 				4C38E7F71FEE0219000425CD /* libcrypto.a in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		D46A739D1CBC7CB60039F1EE /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		FB290CEB19B2C406004C83CF /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				4C81947A202EC9AA0023F308 /* libmoonlight-common iOS.a in Frameworks */,
-				4C85A8011FDCE49C00F28E90 /* QuartzCore.framework in Frameworks */,
-				FB8946ED19F6AFE800339C8A /* libopus.a in Frameworks */,
-				FB8946EB19F6AFE100339C8A /* libcrypto.a in Frameworks */,
-				FB8946EC19F6AFE400339C8A /* libssl.a in Frameworks */,
-				FB7E794419C8B71B00A15F68 /* libiconv.dylib in Frameworks */,
-				FB290DC419B2E98F004C83CF /* libxml2.dylib in Frameworks */,
-				FB290DB919B2C877004C83CF /* libbz2.dylib in Frameworks */,
-				FB290DB719B2C870004C83CF /* libz.dylib in Frameworks */,
-				FB290CF419B2C406004C83CF /* CoreGraphics.framework in Frameworks */,
-				FB290CF819B2C406004C83CF /* CoreData.framework in Frameworks */,
-				FB290CF619B2C406004C83CF /* UIKit.framework in Frameworks */,
-				FB290CF219B2C406004C83CF /* Foundation.framework in Frameworks */,
-				FB4679011A57048000377732 /* CoreFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -516,52 +360,6 @@
 				4C7E0A941FECC7A000684411 /* Supporting Files */,
 			);
 			path = macOS;
-			sourceTree = "<group>";
-		};
-		4C7E0A8F1FECC22D00684411 /* iOS */ = {
-			isa = PBXGroup;
-			children = (
-				4C819451202EC3900023F308 /* AppDelegateForUIKit.h */,
-				4C819452202EC3900023F308 /* AppDelegateForUIKit.m */,
-				FB290E7A19B38036004C83CF /* Main.storyboard */,
-				FB89463719F6473800339C8A /* Launch Screen.xib */,
-				FB290D0819B2C406004C83CF /* Images.xcassets */,
-				FB89462319F646E200339C8A /* ViewControllers */,
-				4C7E0A911FECC3E900684411 /* Views */,
-				4C7E0A901FECC2C300684411 /* 3rd Party Code */,
-				FB290CFA19B2C406004C83CF /* Supporting Files */,
-			);
-			path = iOS;
-			sourceTree = "<group>";
-		};
-		4C7E0A901FECC2C300684411 /* 3rd Party Code */ = {
-			isa = PBXGroup;
-			children = (
-				4C04F3291FAF30CB0011E17A /* KTCenterFlowLayout.h */,
-				4C04F32A1FAF30CB0011E17A /* KTCenterFlowLayout.m */,
-				4C85A8031FDCE4B200F28E90 /* MarqueeLabel.h */,
-				4C85A8021FDCE4B200F28E90 /* MarqueeLabel.m */,
-				4C09A8291FDCF93C00A57E87 /* UIImage+pspdf.h */,
-				4C09A82A1FDCF93C00A57E87 /* UIImage+pspdf.m */,
-			);
-			path = "3rd Party Code";
-			sourceTree = "<group>";
-		};
-		4C7E0A911FECC3E900684411 /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				FBDE86DE19F7A837001C18A8 /* UIComputerView.h */,
-				FBDE86DF19F7A837001C18A8 /* UIComputerView.m */,
-				FBDE86E419F82297001C18A8 /* UIAppView.h */,
-				FBDE86E519F82297001C18A8 /* UIAppView.m */,
-				4C2EF8A51FDA6CFF00C15D00 /* AppCollectionViewCell.h */,
-				4C2EF8A61FDA6CFF00C15D00 /* AppCollectionViewCell.m */,
-				FB1D59951BBCCB6400F482CA /* ComputerScrollView.h */,
-				FB1D59961BBCCB6400F482CA /* ComputerScrollView.m */,
-				FB1D59981BBCCD7E00F482CA /* AppCollectionView.h */,
-				FB1D59991BBCCD7E00F482CA /* AppCollectionView.m */,
-			);
-			path = Views;
 			sourceTree = "<group>";
 		};
 		4C7E0A921FECC4B500684411 /* ViewControllers */ = {
@@ -675,8 +473,6 @@
 		FB290CEF19B2C406004C83CF /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				FB290CEE19B2C406004C83CF /* Moonlight.app */,
-				D46A73A01CBC7CB60039F1EE /* MoonlightUnitTests.xctest */,
 				4C7E0A7A1FECBFFD00684411 /* Moonlight.app */,
 			);
 			name = Products;
@@ -706,7 +502,6 @@
 			isa = PBXGroup;
 			children = (
 				4C7E0A8E1FECC22200684411 /* macOS */,
-				4C7E0A8F1FECC22D00684411 /* iOS */,
 				9E5D5FF61A5A5A3900689918 /* Font */,
 				FB89460419F646E200339C8A /* Crypto */,
 				FB89460919F646E200339C8A /* Input */,
@@ -721,17 +516,6 @@
 			);
 			name = Moonlight;
 			path = Limelight;
-			sourceTree = "<group>";
-		};
-		FB290CFA19B2C406004C83CF /* Supporting Files */ = {
-			isa = PBXGroup;
-			children = (
-				FB290CFB19B2C406004C83CF /* Limelight-Info.plist */,
-				FB290CFC19B2C406004C83CF /* InfoPlist.strings */,
-				FB290CFF19B2C406004C83CF /* main.m */,
-				FB290D0119B2C406004C83CF /* Limelight-Prefix.pch */,
-			);
-			path = "Supporting Files";
 			sourceTree = "<group>";
 		};
 		FB89460419F646E200339C8A /* Crypto */ = {
@@ -803,25 +587,6 @@
 				FBD1C8E11A8AD71400C6703C /* Logger.m */,
 			);
 			path = Utility;
-			sourceTree = "<group>";
-		};
-		FB89462319F646E200339C8A /* ViewControllers */ = {
-			isa = PBXGroup;
-			children = (
-				FBD3495119FF36FB002D2A60 /* SWRevealViewController.h */,
-				FBD3495219FF36FB002D2A60 /* SWRevealViewController.m */,
-				FB89462419F646E200339C8A /* MainFrameViewController.h */,
-				FB89462519F646E200339C8A /* MainFrameViewController.m */,
-				4C85A7FD1FDCE1D300F28E90 /* ShadowView.h */,
-				4C85A7FE1FDCE1D300F28E90 /* ShadowView.m */,
-				FB89462619F646E200339C8A /* StreamFrameViewController.h */,
-				FB89462719F646E200339C8A /* StreamFrameViewController.m */,
-				FBD3494E19FF2174002D2A60 /* SettingsViewController.h */,
-				FBD3494F19FF2174002D2A60 /* SettingsViewController.m */,
-				FB4A23B61A9D3637004D2EF2 /* LoadingFrameViewController.h */,
-				FB4A23B71A9D3637004D2EF2 /* LoadingFrameViewController.m */,
-			);
-			path = ViewControllers;
 			sourceTree = "<group>";
 		};
 		FB89468F19F6AFB800339C8A /* libs */ = {
@@ -1064,42 +829,6 @@
 			productReference = 4C7E0A7A1FECBFFD00684411 /* Moonlight.app */;
 			productType = "com.apple.product-type.application";
 		};
-		D46A739F1CBC7CB60039F1EE /* MoonlightUnitTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = D46A73A91CBC7CB60039F1EE /* Build configuration list for PBXNativeTarget "MoonlightUnitTests" */;
-			buildPhases = (
-				D46A739C1CBC7CB60039F1EE /* Sources */,
-				D46A739D1CBC7CB60039F1EE /* Frameworks */,
-				D46A739E1CBC7CB60039F1EE /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				D46A73A61CBC7CB60039F1EE /* PBXTargetDependency */,
-			);
-			name = MoonlightUnitTests;
-			productName = MoonlightUnitTests;
-			productReference = D46A73A01CBC7CB60039F1EE /* MoonlightUnitTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		FB290CED19B2C406004C83CF /* Moonlight */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = FB290D2019B2C406004C83CF /* Build configuration list for PBXNativeTarget "Moonlight" */;
-			buildPhases = (
-				FB290CEA19B2C406004C83CF /* Sources */,
-				FB290CEB19B2C406004C83CF /* Frameworks */,
-				FB290CEC19B2C406004C83CF /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				4C81947C202ECA610023F308 /* PBXTargetDependency */,
-			);
-			name = Moonlight;
-			productName = Limelight;
-			productReference = FB290CEE19B2C406004C83CF /* Moonlight.app */;
-			productType = "com.apple.product-type.application";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -1119,17 +848,6 @@
 								enabled = 0;
 							};
 						};
-					};
-					D46A739F1CBC7CB60039F1EE = {
-						CreatedOnToolsVersion = 7.3;
-						LastSwiftMigration = 0800;
-						TestTargetID = FB290CED19B2C406004C83CF;
-					};
-					FB290CED19B2C406004C83CF = {
-						DevelopmentTeam = KHSNQKXT55;
-						DevelopmentTeamName = "Martin Kenny";
-						LastSwiftMigration = 0800;
-						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -1153,8 +871,6 @@
 			projectRoot = "";
 			targets = (
 				4C7E0A791FECBFFD00684411 /* Moonlight for macOS */,
-				FB290CED19B2C406004C83CF /* Moonlight */,
-				D46A739F1CBC7CB60039F1EE /* MoonlightUnitTests */,
 			);
 		};
 /* End PBXProject section */
@@ -1187,31 +903,6 @@
 				4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */,
 				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
 				4C30BFD91FF9D57F00AD09E6 /* DefaultPreferences.plist in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		D46A739E1CBC7CB60039F1EE /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		FB290CEC19B2C406004C83CF /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				9E5D60161A5A5A3900689918 /* Roboto-Thin.ttf in Resources */,
-				9E5D60151A5A5A3900689918 /* Roboto-Regular.ttf in Resources */,
-				9E5D600B1A5A5A3900689918 /* Apache License.txt in Resources */,
-				9E5D60111A5A5A3900689918 /* Roboto-Light.ttf in Resources */,
-				FB290CFE19B2C406004C83CF /* InfoPlist.strings in Resources */,
-				FB290E7B19B38036004C83CF /* Main.storyboard in Resources */,
-				9E5D600C1A5A5A3900689918 /* Roboto-Black.ttf in Resources */,
-				9E5D600E1A5A5A3900689918 /* Roboto-Bold.ttf in Resources */,
-				FB290D0919B2C406004C83CF /* Images.xcassets in Resources */,
-				FB89463819F6473800339C8A /* Launch Screen.xib in Resources */,
-				9E5D60131A5A5A3900689918 /* Roboto-Medium.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1275,70 +966,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D46A739C1CBC7CB60039F1EE /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				D46A73AD1CBC7D090039F1EE /* ControllerUnitTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		FB290CEA19B2C406004C83CF /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				FB290D0719B2C406004C83CF /* Limelight.xcdatamodeld in Sources */,
-				FB89463219F646E200339C8A /* VideoDecoderRenderer.m in Sources */,
-				FB9AFD401A7E127D00872C98 /* AppListResponse.m in Sources */,
-				FB89463419F646E200339C8A /* Utils.m in Sources */,
-				FBDE86E619F82297001C18A8 /* UIAppView.m in Sources */,
-				FB89462F19F646E200339C8A /* Connection.m in Sources */,
-				FB9AFD321A7D867C00872C98 /* AppAssetRetriever.m in Sources */,
-				FB4678FF1A565DAC00377732 /* WakeOnLanManager.m in Sources */,
-				FB53E1431BE5DC4400CD6ECE /* IdManager.m in Sources */,
-				FB89462919F646E200339C8A /* mkcert.c in Sources */,
-				FB9AFD281A7C84ED00872C98 /* HttpResponse.m in Sources */,
-				FBDE86E019F7A837001C18A8 /* UIComputerView.m in Sources */,
-				FB89463019F646E200339C8A /* StreamConfiguration.m in Sources */,
-				4C819453202EC3900023F308 /* AppDelegateForUIKit.m in Sources */,
-				FBD3495319FF36FB002D2A60 /* SWRevealViewController.m in Sources */,
-				FB1D59971BBCCB6400F482CA /* ComputerScrollView.m in Sources */,
-				FBD3495019FF2174002D2A60 /* SettingsViewController.m in Sources */,
-				FB89462C19F646E200339C8A /* HttpManager.m in Sources */,
-				FB89462D19F646E200339C8A /* MDNSManager.m in Sources */,
-				FB89462B19F646E200339C8A /* StreamView.m in Sources */,
-				FB4678FA1A55FFAD00377732 /* DiscoveryManager.m in Sources */,
-				98D5856D1C0EA79600F6CC00 /* TemporaryHost.m in Sources */,
-				FB89463519F646E200339C8A /* MainFrameViewController.m in Sources */,
-				4C85A8041FDCE4B200F28E90 /* MarqueeLabel.m in Sources */,
-				FBD1C8E21A8AD71400C6703C /* Logger.m in Sources */,
-				FB1D599A1BBCCD7E00F482CA /* AppCollectionView.m in Sources */,
-				FB89463619F646E200339C8A /* StreamFrameViewController.m in Sources */,
-				9832D1361BBCD5C50036EF48 /* TemporaryApp.m in Sources */,
-				4C04F32B1FAF30CC0011E17A /* KTCenterFlowLayout.m in Sources */,
-				98D585701C0ED0E800F6CC00 /* TemporarySettings.m in Sources */,
-				FB89462819F646E200339C8A /* CryptoManager.m in Sources */,
-				FB89462E19F646E200339C8A /* PairManager.m in Sources */,
-				4C3C619F20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */,
-				FB9AFD371A7E02DB00872C98 /* HttpRequest.m in Sources */,
-				FB4678ED1A50C40900377732 /* OnScreenControls.m in Sources */,
-				FB290D0019B2C406004C83CF /* main.m in Sources */,
-				FBD3494319FC9C04002D2A60 /* AppAssetManager.m in Sources */,
-				4C85A7FF1FDCE1D300F28E90 /* ShadowView.m in Sources */,
-				FB6549561A57907E001C8F39 /* DiscoveryWorker.m in Sources */,
-				FB89462A19F646E200339C8A /* ControllerSupport.m in Sources */,
-				FB9AFD3D1A7E111600872C98 /* AppAssetResponse.m in Sources */,
-				FBD349621A0089F6002D2A60 /* DataManager.m in Sources */,
-				D4746EEC1CBC740C006FB401 /* Controller.swift in Sources */,
-				4C2EF8A71FDA6CFF00C15D00 /* AppCollectionViewCell.m in Sources */,
-				4CC26AC51F03904C0079DB56 /* RendererLayerContainer.m in Sources */,
-				FB4A23B81A9D3637004D2EF2 /* LoadingFrameViewController.m in Sources */,
-				FB9AFD3A1A7E05CE00872C98 /* ServerInfoResponse.m in Sources */,
-				4C09A82B1FDCF93C00A57E87 /* UIImage+pspdf.m in Sources */,
-				FB89463119F646E200339C8A /* StreamManager.m in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -1346,16 +973,6 @@
 			isa = PBXTargetDependency;
 			name = "moonlight-common";
 			targetProxy = 4C38E82F1FF0C726000425CD /* PBXContainerItemProxy */;
-		};
-		4C81947C202ECA610023F308 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = "moonlight-common iOS";
-			targetProxy = 4C81947B202ECA610023F308 /* PBXContainerItemProxy */;
-		};
-		D46A73A61CBC7CB60039F1EE /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = FB290CED19B2C406004C83CF /* Moonlight */;
-			targetProxy = D46A73A51CBC7CB60039F1EE /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1366,14 +983,6 @@
 				4C7E0A851FECBFFD00684411 /* Base */,
 			);
 			name = Main.storyboard;
-			sourceTree = "<group>";
-		};
-		FB290CFC19B2C406004C83CF /* InfoPlist.strings */ = {
-			isa = PBXVariantGroup;
-			children = (
-				FB290CFD19B2C406004C83CF /* en */,
-			);
-			name = InfoPlist.strings;
 			sourceTree = "<group>";
 		};
 /* End PBXVariantGroup section */
@@ -1471,56 +1080,6 @@
 				SDKROOT = macosx;
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 3.0;
-			};
-			name = Release;
-		};
-		D46A73A71CBC7CB60039F1EE /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_NO_COMMON_BLOCKS = YES;
-				INFOPLIST_FILE = MoonlightUnitTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 9.3;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
-				MTL_ENABLE_DEBUG_INFO = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.moonlight-stream.MoonlightUnitTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_OBJC_BRIDGING_HEADER = "MoonlightUnitTests/MoonlightUnitTests-Bridging-Header.h";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_SWIFT3_OBJC_INFERENCE = On;
-				SWIFT_VERSION = 4.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Moonlight.app/Moonlight";
-			};
-			name = Debug;
-		};
-		D46A73A81CBC7CB60039F1EE /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_NO_COMMON_BLOCKS = YES;
-				INFOPLIST_FILE = MoonlightUnitTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 9.3;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
-				MTL_ENABLE_DEBUG_INFO = NO;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.moonlight-stream.MoonlightUnitTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_OBJC_BRIDGING_HEADER = "MoonlightUnitTests/MoonlightUnitTests-Bridging-Header.h";
-				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
-				SWIFT_SWIFT3_OBJC_INFERENCE = On;
-				SWIFT_VERSION = 4.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Moonlight.app/Moonlight";
 			};
 			name = Release;
 		};
@@ -1626,82 +1185,6 @@
 			};
 			name = Release;
 		};
-		FB290D2119B2C406004C83CF /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
-				ENABLE_BITCODE = NO;
-				GCC_PRECOMPILE_PREFIX_HEADER = YES;
-				GCC_PREFIX_HEADER = "Limelight/iOS/Supporting Files/Limelight-Prefix.pch";
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
-					"$(SDKROOT)/usr/include/libxml2/**",
-					"$(PROJECT_DIR)/libs/**",
-				);
-				INFOPLIST_FILE = "Limelight/iOS/Supporting Files/Limelight-Info.plist";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/libs/opus/lib",
-					"$(PROJECT_DIR)/libs/openssl/lib",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.Moonlight;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SKIP_INSTALL = NO;
-				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_SWIFT3_OBJC_INFERENCE = Default;
-				SWIFT_VERSION = 4.0;
-				WRAPPER_EXTENSION = app;
-			};
-			name = Debug;
-		};
-		FB290D2219B2C406004C83CF /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
-				ENABLE_BITCODE = NO;
-				GCC_PRECOMPILE_PREFIX_HEADER = YES;
-				GCC_PREFIX_HEADER = "Limelight/iOS/Supporting Files/Limelight-Prefix.pch";
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
-					"$(SDKROOT)/usr/include/libxml2/**",
-					"$(PROJECT_DIR)/libs/**",
-				);
-				INFOPLIST_FILE = "Limelight/iOS/Supporting Files/Limelight-Info.plist";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/libs/opus/lib",
-					"$(PROJECT_DIR)/libs/openssl/lib",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.Moonlight;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SKIP_INSTALL = NO;
-				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
-				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
-				SWIFT_SWIFT3_OBJC_INFERENCE = Default;
-				SWIFT_VERSION = 4.0;
-				WRAPPER_EXTENSION = app;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1714,29 +1197,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D46A73A91CBC7CB60039F1EE /* Build configuration list for PBXNativeTarget "MoonlightUnitTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				D46A73A71CBC7CB60039F1EE /* Debug */,
-				D46A73A81CBC7CB60039F1EE /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		FB290CE919B2C406004C83CF /* Build configuration list for PBXProject "Moonlight" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				FB290D1E19B2C406004C83CF /* Debug */,
 				FB290D1F19B2C406004C83CF /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		FB290D2019B2C406004C83CF /* Build configuration list for PBXNativeTarget "Moonlight" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				FB290D2119B2C406004C83CF /* Debug */,
-				FB290D2219B2C406004C83CF /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
