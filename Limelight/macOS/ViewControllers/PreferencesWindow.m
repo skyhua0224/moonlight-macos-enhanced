@@ -46,9 +46,9 @@
     }
     self.bitrateSlider.integerValue = [streamSettings.bitrate intValue];
     [self updateBitrateLabel];
-    self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSOnState : NSOffState;
-    self.optimizeSettingsCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"optimizeSettings"] ? NSOnState : NSOffState;
-    self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSOnState : NSOffState;
+    self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
+    self.optimizeSettingsCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"optimizeSettings"] ? NSControlStateValueOn : NSControlStateValueOff;
+    self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
 
@@ -90,15 +90,15 @@
 }
 
 - (IBAction)didToggleDynamicResolution:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setBool:self.dynamicResolutionCheckbox.state == NSOnState forKey:@"dynamicResolution"];
+    [[NSUserDefaults standardUserDefaults] setBool:self.dynamicResolutionCheckbox.state == NSControlStateValueOn forKey:@"dynamicResolution"];
 }
 
 - (IBAction)didToggleOptimizeSettings:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setBool:self.optimizeSettingsCheckbox.state == NSOnState forKey:@"optimizeSettings"];
+    [[NSUserDefaults standardUserDefaults] setBool:self.optimizeSettingsCheckbox.state == NSControlStateValueOn forKey:@"optimizeSettings"];
 }
 
 - (IBAction)didToggleAutoFullscreen:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setBool:self.autoFullscreenCheckbox.state == NSOnState forKey:@"autoFullscreen"];
+    [[NSUserDefaults standardUserDefaults] setBool:self.autoFullscreenCheckbox.state == NSControlStateValueOn forKey:@"autoFullscreen"];
 }
 
 
