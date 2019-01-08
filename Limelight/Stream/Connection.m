@@ -276,6 +276,8 @@ void ClLogMessage(const char* format, ...)
     _streamConfig.height = config.height;
     _streamConfig.fps = config.frameRate;
     _streamConfig.bitrate = config.bitRate;
+    
+    [renderer setStreamConfig:config];
 
     // This will activate the remote streaming optimization in moonlight-common if needed
     _streamConfig.streamingRemotely = config.streamingRemotely;

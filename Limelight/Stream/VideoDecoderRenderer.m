@@ -11,8 +11,16 @@
 
 #include "Limelight.h"
 
+#define TIMER_SLACK_MS 3
+#define FRAME_HISTORY_ENTRIES 8
+
 @implementation VideoDecoderRenderer {
     ViewType *_view;
+    CVDisplayLinkRef _displayLink;
+    StreamConfiguration *_config;
+    os_unfair_lock _frameQueueLock;
+    NSMutableArray<NSNumber *> *_frameQueueHistory;
+    NSMutableArray<NSDictionary *> *_frameQueue;
     
     RendererLayerContainer *layerContainer;
     
@@ -63,20 +71,161 @@
     }
 }
 
+static CGDirectDisplayID getDisplayID(NSScreen* screen)
+{
+    NSNumber *screenNumber = [screen deviceDescription][@"NSScreenNumber"];
+    return [screenNumber unsignedIntValue];
+}
+
+static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
+                                          const CVTimeStamp *now,
+                                          const CVTimeStamp *vsyncTime,
+                                          CVOptionFlags flagsIn,
+                                          CVOptionFlags *flagsOut,
+                                          void *displayLinkContext)
+{
+    VideoDecoderRenderer *me = (__bridge VideoDecoderRenderer *)(displayLinkContext);
+    
+    [me vsyncCallback:(500 / me->_config.frameRate)];
+    
+    return kCVReturnSuccess;
+}
+
+- (BOOL)initializeDisplayLink
+{
+    CGDirectDisplayID displayId = getDisplayID(_view.window.screen);
+    CVReturn status = CVDisplayLinkCreateWithCGDisplay(displayId, &_displayLink);
+    if (status != kCVReturnSuccess) {
+        Log(LOG_E, @"Failed to create CVDisplayLink: %d", status);
+        return NO;
+    }
+    
+    status = CVDisplayLinkSetOutputCallback(_displayLink, displayLinkOutputCallback, (__bridge void * _Nullable)(self));
+    if (status != kCVReturnSuccess) {
+        Log(LOG_E, @"CVDisplayLinkSetOutputCallback() failed: %d", status);
+        return NO;
+    }
+    
+    status = CVDisplayLinkStart(_displayLink);
+    if (status != kCVReturnSuccess) {
+        Log(LOG_E, @"CVDisplayLinkStart() failed: %d", status);
+        return NO;
+    }
+    
+    return YES;
+}
+
 - (id)initWithView:(ViewType *)view
 {
     self = [super init];
     
     _view = view;
     
+    _frameQueueHistory = [NSMutableArray arrayWithCapacity:FRAME_HISTORY_ENTRIES];
+    _frameQueue = [NSMutableArray arrayWithCapacity:3];
+    
     [self reinitializeDisplayLayer];
     
+    [self initializeDisplayLink];
+    
     return self;
+}
+
+- (void)dealloc
+{
+    if (_displayLink != NULL) {
+        CVDisplayLinkStop(_displayLink);
+        CVDisplayLinkRelease(_displayLink);
+    }
+    
+    _frameQueueHistory = nil;
+    _frameQueue = nil;
 }
 
 - (void)setupWithVideoFormat:(int)videoFormat
 {
     self->videoFormat = videoFormat;
+}
+
+- (void)setStreamConfig:(StreamConfiguration *)config
+{
+    _config = config;
+}
+
+- (void)vsyncCallback:(int)timeUntilNextVsyncMillis
+{
+    int maxVideoFps = _config.frameRate;
+    int displayFps = 1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(_displayLink);
+    
+    // Make sure initialize() has been called
+    assert(maxVideoFps != 0);
+    
+    assert(timeUntilNextVsyncMillis >= TIMER_SLACK_MS);
+    
+    uint64_t vsyncCallbackStartTime = mach_absolute_time() / 1000000;
+    
+    os_unfair_lock_lock(&_frameQueueLock);
+    
+    // If the queue length history entries are large, be strict
+    // about dropping excess frames.
+    int frameDropTarget = 1;
+    
+    // If we may get more frames per second than we can display, use
+    // frame history to drop frames only if consistently above the
+    // one queued frame mark.
+    if (maxVideoFps >= displayFps) {
+        for (int i = 0; i < _frameQueueHistory.count; i++) {
+            if (_frameQueueHistory[i].integerValue <= 1) {
+                // Be lenient as long as the queue length
+                // resolves before the end of frame history
+                frameDropTarget = 3;
+                break;
+            }
+        }
+        
+        if (_frameQueueHistory.count == FRAME_HISTORY_ENTRIES) {
+            [_frameQueueHistory removeLastObject];
+        }
+        
+        [_frameQueueHistory insertObject:@(_frameQueue.count) atIndex:0];
+    }
+    
+    // Catch up if we're several frames ahead
+    while (_frameQueue.count > frameDropTarget) {
+        [_frameQueue removeLastObject];
+    }
+    
+    
+    if (_frameQueue.count == 0) {
+        os_unfair_lock_unlock(&_frameQueueLock);
+        
+        while (mach_absolute_time() / 1000000 < vsyncCallbackStartTime + timeUntilNextVsyncMillis - TIMER_SLACK_MS) {
+            sleep(1);
+            
+            os_unfair_lock_lock(&_frameQueueLock);
+            if (_frameQueue.count > 0) {
+                // Don't release the lock
+                goto RenderNextFrame;
+            }
+            os_unfair_lock_unlock(&_frameQueueLock);
+        }
+        
+        // Nothing to render at this time
+        return;
+    }
+    
+RenderNextFrame:
+    {
+        // Grab the first frame
+        NSDictionary *frame = _frameQueue.lastObject;
+        os_unfair_lock_unlock(&_frameQueueLock);
+        
+        // Render it
+        [self renderFrameAtVsync:frame];
+        
+        // Free the frame
+        frame = nil;
+    }
 }
 
 #define FRAME_START_PREFIX_SIZE 4
@@ -312,18 +461,37 @@
     
     // From now on, CMBlockBuffer owns the data pointer and will free it when it's dereferenced
     
+    NSDictionary *frame = @{@"buffer": CFBridgingRelease(blockBuffer), @"nalType": @(nalType)};
+    os_unfair_lock_lock(&_frameQueueLock);
+    [_frameQueue insertObject:frame atIndex:0];
+    os_unfair_lock_unlock(&_frameQueueLock);
+    
+    return DR_OK;
+}
+
+- (void)renderFrameAtVsync:(NSDictionary *)frame {
+    CMBlockBufferRef blockBuffer = (CMBlockBufferRef)CFBridgingRetain(frame[@"buffer"]);
+    unsigned char nalType = ((NSNumber *)frame[@"nalType"]).unsignedCharValue;
+    
+    // Queue this sample for the next v-sync
+    CMSampleTimingInfo timingInfo = {
+        .duration = kCMTimeInvalid,
+        .decodeTimeStamp = kCMTimeInvalid,
+        .presentationTimeStamp = CMTimeMake(mach_absolute_time(), 1000 * 1000 * 1000)
+    };
+    
     CMSampleBufferRef sampleBuffer;
     
-    status = CMSampleBufferCreate(kCFAllocatorDefault,
+    OSStatus status = CMSampleBufferCreate(kCFAllocatorDefault,
                                   blockBuffer,
                                   true, NULL,
-                                  NULL, formatDesc, 1, 0,
-                                  NULL, 0, NULL,
+                                  NULL, formatDesc, 1, 1,
+                                  &timingInfo, 0, NULL,
                                   &sampleBuffer);
     if (status != noErr) {
         Log(LOG_E, @"CMSampleBufferCreate failed: %d", (int)status);
         CFRelease(blockBuffer);
-        return DR_NEED_IDR;
+        return;
     }
     
     CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, YES);
@@ -347,8 +515,6 @@
     // Dereference the buffers
     CFRelease(blockBuffer);
     CFRelease(sampleBuffer);
-    
-    return DR_OK;
 }
 
 @end

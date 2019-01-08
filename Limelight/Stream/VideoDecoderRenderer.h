@@ -8,6 +8,8 @@
 
 #import <Foundation/Foundation.h>
 
+#import "StreamConfiguration.h"
+
 @import AVFoundation;
 
 @interface VideoDecoderRenderer : NSObject
@@ -15,6 +17,8 @@
 - (id)initWithView:(ViewType *)view;
 
 - (void)setupWithVideoFormat:(int)videoFormat;
+
+- (void)setStreamConfig:(StreamConfiguration *)config;
 
 - (void)updateBufferForRange:(CMBlockBufferRef)existingBuffer data:(unsigned char *)data offset:(int)offset length:(int)nalLength;
 
