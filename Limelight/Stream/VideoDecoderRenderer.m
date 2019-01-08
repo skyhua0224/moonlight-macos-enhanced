@@ -155,7 +155,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 - (void)vsyncCallback:(int)timeUntilNextVsyncMillis
 {
     int maxVideoFps = _config.frameRate;
-    int displayFps = 1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(_displayLink);
+    int displayFps = ceil(1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(_displayLink));
     
     // Make sure initialize() has been called
     assert(maxVideoFps != 0);
@@ -192,6 +192,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     
     // Catch up if we're several frames ahead
     while (_frameQueue.count > frameDropTarget) {
+        Log(LOG_I, @"Discarding");
+        [self printNaluTypeWithFrame:_frameQueue.lastObject];
         [_frameQueue removeLastObject];
     }
     
@@ -200,7 +202,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         os_unfair_lock_unlock(&_frameQueueLock);
         
         while (mach_absolute_time() / 1000000 < vsyncCallbackStartTime + timeUntilNextVsyncMillis - TIMER_SLACK_MS) {
-            sleep(1);
+            usleep(1000);
             
             os_unfair_lock_lock(&_frameQueueLock);
             if (_frameQueue.count > 0) {
@@ -221,11 +223,20 @@ RenderNextFrame:
         os_unfair_lock_unlock(&_frameQueueLock);
         
         // Render it
+        [self printNaluTypeWithFrame:frame];
         [self renderFrameAtVsync:frame];
         
         // Free the frame
         frame = nil;
     }
+}
+
+- (void)printNaluTypeWithFrame:(NSDictionary *)frame {
+    CMBlockBufferRef blockBuffer = (CMBlockBufferRef)CFBridgingRetain(frame[@"buffer"]);
+    size_t length = 1;
+    char *pointer;
+    CMBlockBufferGetDataPointer(blockBuffer, 4, &length, NULL, &pointer);
+    Log(LOG_I, @"Frame nalu type: %c", pointer[0]);
 }
 
 #define FRAME_START_PREFIX_SIZE 4
@@ -335,7 +346,7 @@ RenderNextFrame:
 {
     unsigned char nalType = data[FRAME_START_PREFIX_SIZE];
     OSStatus status;
-    
+    Log(LOG_I, @"nalType: %c", nalType);
     if (bufferType != BUFFER_TYPE_PICDATA) {
         if (bufferType == BUFFER_TYPE_VPS) {
             Log(LOG_I, @"Got VPS");
@@ -502,10 +513,12 @@ RenderNextFrame:
     
     if (![self isNalReferencePicture:nalType]) {
         // P-frame
+        Log(LOG_I, @"P-frame");
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanTrue);
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanTrue);
     } else {
         // I-frame
+        Log(LOG_I, @"I-frame");
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanFalse);
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanFalse);
     }
