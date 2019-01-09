@@ -192,8 +192,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     
     // Catch up if we're several frames ahead
     while (_frameQueue.count > frameDropTarget) {
-        Log(LOG_I, @"Discarding");
-        [self printNaluTypeWithFrame:_frameQueue.lastObject];
+//        Log(LOG_I, @"Discarding");
+//        [self printNaluTypeWithFrame:_frameQueue.lastObject];
         [_frameQueue removeLastObject];
     }
     
@@ -223,7 +223,7 @@ RenderNextFrame:
         os_unfair_lock_unlock(&_frameQueueLock);
         
         // Render it
-        [self printNaluTypeWithFrame:frame];
+//        [self printNaluTypeWithFrame:frame];
         [self renderFrameAtVsync:frame];
         
         // Free the frame
@@ -232,7 +232,7 @@ RenderNextFrame:
 }
 
 - (void)printNaluTypeWithFrame:(NSDictionary *)frame {
-    CMBlockBufferRef blockBuffer = (CMBlockBufferRef)CFBridgingRetain(frame[@"buffer"]);
+    CMBlockBufferRef blockBuffer = (__bridge CMBlockBufferRef)frame[@"buffer"];
     size_t length = 1;
     char *pointer;
     CMBlockBufferGetDataPointer(blockBuffer, 4, &length, NULL, &pointer);
@@ -346,7 +346,7 @@ RenderNextFrame:
 {
     unsigned char nalType = data[FRAME_START_PREFIX_SIZE];
     OSStatus status;
-    Log(LOG_I, @"nalType: %c", nalType);
+//    Log(LOG_I, @"nalType: %c", nalType);
     if (bufferType != BUFFER_TYPE_PICDATA) {
         if (bufferType == BUFFER_TYPE_VPS) {
             Log(LOG_I, @"Got VPS");
@@ -492,7 +492,6 @@ RenderNextFrame:
     };
     
     CMSampleBufferRef sampleBuffer;
-    
     OSStatus status = CMSampleBufferCreate(kCFAllocatorDefault,
                                   blockBuffer,
                                   true, NULL,
@@ -513,12 +512,12 @@ RenderNextFrame:
     
     if (![self isNalReferencePicture:nalType]) {
         // P-frame
-        Log(LOG_I, @"P-frame");
+//        Log(LOG_I, @"P-frame");
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanTrue);
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanTrue);
     } else {
         // I-frame
-        Log(LOG_I, @"I-frame");
+//        Log(LOG_I, @"I-frame");
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanFalse);
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanFalse);
     }
