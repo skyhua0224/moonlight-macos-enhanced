@@ -9,6 +9,8 @@
 #import "VideoDecoderRenderer.h"
 #import "RendererLayerContainer.h"
 
+#import <VideoToolbox/VideoToolbox.h>
+
 #include "Limelight.h"
 
 #define TIMER_SLACK_MS 3
@@ -20,7 +22,10 @@
     StreamConfiguration *_config;
     os_unfair_lock _frameQueueLock;
     NSMutableArray<NSNumber *> *_frameQueueHistory;
-    NSMutableArray<NSDictionary *> *_frameQueue;
+    CFMutableArrayRef _frameQueue;
+    CMVideoFormatDescriptionRef _imageFormatDesc;
+
+    VTDecompressionSessionRef _decompressionSession;
     
     RendererLayerContainer *layerContainer;
     
@@ -122,7 +127,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     _view = view;
     
     _frameQueueHistory = [NSMutableArray arrayWithCapacity:FRAME_HISTORY_ENTRIES];
-    _frameQueue = [NSMutableArray arrayWithCapacity:3];
+    _frameQueue = CFArrayCreateMutable(NULL, 3, &kCFTypeArrayCallBacks);
     
     [self reinitializeDisplayLayer];
     
@@ -139,7 +144,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
     
     _frameQueueHistory = nil;
-    _frameQueue = nil;
+    CFRelease(_frameQueue);
+    VTDecompressionSessionInvalidate(_decompressionSession);
 }
 
 - (void)setupWithVideoFormat:(int)videoFormat
@@ -187,25 +193,25 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             [_frameQueueHistory removeLastObject];
         }
         
-        [_frameQueueHistory insertObject:@(_frameQueue.count) atIndex:0];
+        [_frameQueueHistory insertObject:@(CFArrayGetCount(_frameQueue)) atIndex:0];
     }
     
     // Catch up if we're several frames ahead
-    while (_frameQueue.count > frameDropTarget) {
+    while (CFArrayGetCount(_frameQueue) > frameDropTarget) {
 //        Log(LOG_I, @"Discarding");
 //        [self printNaluTypeWithFrame:_frameQueue.lastObject];
-        [_frameQueue removeLastObject];
+        CFArrayRemoveValueAtIndex(_frameQueue, CFArrayGetCount(_frameQueue) - 1);
     }
     
     
-    if (_frameQueue.count == 0) {
+    if (CFArrayGetCount(_frameQueue) == 0) {
         os_unfair_lock_unlock(&_frameQueueLock);
         
         while (mach_absolute_time() / 1000000 < vsyncCallbackStartTime + timeUntilNextVsyncMillis - TIMER_SLACK_MS) {
             usleep(1000);
             
             os_unfair_lock_lock(&_frameQueueLock);
-            if (_frameQueue.count > 0) {
+            if (CFArrayGetCount(_frameQueue) > 0) {
                 // Don't release the lock
                 goto RenderNextFrame;
             }
@@ -219,15 +225,14 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 RenderNextFrame:
     {
         // Grab the first frame
-        NSDictionary *frame = _frameQueue.lastObject;
+        CVImageBufferRef frame = (CVImageBufferRef)CFArrayGetValueAtIndex(_frameQueue, CFArrayGetCount(_frameQueue) - 1);
+        CFRetain(frame);
+        CFArrayRemoveValueAtIndex(_frameQueue, CFArrayGetCount(_frameQueue) - 1);
         os_unfair_lock_unlock(&_frameQueueLock);
         
         // Render it
 //        [self printNaluTypeWithFrame:frame];
         [self renderFrameAtVsync:frame];
-        
-        // Free the frame
-        frame = nil;
     }
 }
 
@@ -344,8 +349,8 @@ RenderNextFrame:
 // This function must free data for bufferType == BUFFER_TYPE_PICDATA
 - (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType
 {
-    unsigned char nalType = data[FRAME_START_PREFIX_SIZE];
     OSStatus status;
+
 //    Log(LOG_I, @"nalType: %c", nalType);
     if (bufferType != BUFFER_TYPE_PICDATA) {
         if (bufferType == BUFFER_TYPE_VPS) {
@@ -413,6 +418,13 @@ RenderNextFrame:
                     formatDesc = NULL;
                 }
             }
+            
+            VTDecompressionOutputCallbackRecord callbackRecord = {outputCallback, (__bridge void * _Nullable)(self)};
+            status = VTDecompressionSessionCreate(NULL, formatDesc, CFBridgingRetain(@{(NSString *)kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder: @(YES)}), NULL, &callbackRecord, &_decompressionSession);
+            if (status != noErr) {
+                Log(LOG_E, @"Failed to create decompressionSession: %d", (int)status);
+                _decompressionSession = NULL;
+            }
         }
         
         // Data is NOT to be freed here. It's a direct usage of the caller's buffer.
@@ -472,18 +484,45 @@ RenderNextFrame:
     
     // From now on, CMBlockBuffer owns the data pointer and will free it when it's dereferenced
     
-    NSDictionary *frame = @{@"buffer": CFBridgingRelease(blockBuffer), @"nalType": @(nalType)};
-    os_unfair_lock_lock(&_frameQueueLock);
-    [_frameQueue insertObject:frame atIndex:0];
-    os_unfair_lock_unlock(&_frameQueueLock);
+    CMSampleBufferRef sampleBuffer;
+    status = CMSampleBufferCreate(kCFAllocatorDefault,
+                                  blockBuffer,
+                                  true, NULL,
+                                  NULL, formatDesc, 1, 0,
+                                  NULL, 0, NULL,
+                                  &sampleBuffer);
+    if (status != noErr) {
+        Log(LOG_E, @"CMSampleBufferCreate failed: %d", (int)status);
+        CFRelease(blockBuffer);
+    }
+    
+    VTDecodeInfoFlags infoFlags;
+    status = VTDecompressionSessionDecodeFrame(_decompressionSession, sampleBuffer, kVTDecodeFrame_EnableAsynchronousDecompression | kVTDecodeFrame_EnableTemporalProcessing, NULL, &infoFlags);
+    if (status != noErr) {
+        Log(LOG_E, @"VTDecompressionSessionDecodeFrame failed: %d", (int)status);
+    }
+
+    CFRelease(sampleBuffer);
+    CFRelease(blockBuffer);
     
     return DR_OK;
 }
 
-- (void)renderFrameAtVsync:(NSDictionary *)frame {
-    CMBlockBufferRef blockBuffer = (CMBlockBufferRef)CFBridgingRetain(frame[@"buffer"]);
-    unsigned char nalType = ((NSNumber *)frame[@"nalType"]).unsignedCharValue;
-    
+void outputCallback(void * CM_NULLABLE decompressionOutputRefCon,
+                    void * CM_NULLABLE sourceFrameRefCon,
+                    OSStatus status,
+                    VTDecodeInfoFlags infoFlags,
+                    CM_NULLABLE CVImageBufferRef imageBuffer,
+                    CMTime presentationTimeStamp,
+                    CMTime presentationDuration) {
+    VideoDecoderRenderer *me = (__bridge VideoDecoderRenderer *)(decompressionOutputRefCon);
+    os_unfair_lock_lock(&(me->_frameQueueLock));
+    CFArrayInsertValueAtIndex(me->_frameQueue, 0, imageBuffer);
+    os_unfair_lock_unlock(&(me->_frameQueueLock));
+}
+
+
+- (void)renderFrameAtVsync:(CVImageBufferRef)frame {
     // Queue this sample for the next v-sync
     CMSampleTimingInfo timingInfo = {
         .duration = kCMTimeInvalid,
@@ -491,41 +530,31 @@ RenderNextFrame:
         .presentationTimeStamp = CMTimeMake(mach_absolute_time(), 1000 * 1000 * 1000)
     };
     
-    CMSampleBufferRef sampleBuffer;
-    OSStatus status = CMSampleBufferCreate(kCFAllocatorDefault,
-                                  blockBuffer,
-                                  true, NULL,
-                                  NULL, formatDesc, 1, 1,
-                                  &timingInfo, 0, NULL,
-                                  &sampleBuffer);
-    if (status != noErr) {
-        Log(LOG_E, @"CMSampleBufferCreate failed: %d", (int)status);
-        CFRelease(blockBuffer);
-        return;
+    OSStatus status;
+    
+    if (!_imageFormatDesc || !CMVideoFormatDescriptionMatchesImageBuffer(_imageFormatDesc, frame)) {
+        if (_imageFormatDesc != NULL) {
+            CFRelease(_imageFormatDesc);
+        }
+        status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, frame, &_imageFormatDesc);
+        if (status != noErr) {
+            Log(LOG_E, @"CMVideoFormatDescriptionCreateForImageBuffer() failed: %d", (int)status);
+            return;
+        }
     }
     
-    CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, YES);
-    CFMutableDictionaryRef dict = (CFMutableDictionaryRef)CFArrayGetValueAtIndex(attachments, 0);
-    
-    CFDictionarySetValue(dict, kCMSampleAttachmentKey_DisplayImmediately, kCFBooleanTrue);
-    CFDictionarySetValue(dict, kCMSampleAttachmentKey_IsDependedOnByOthers, kCFBooleanTrue);
-    
-    if (![self isNalReferencePicture:nalType]) {
-        // P-frame
-//        Log(LOG_I, @"P-frame");
-        CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanTrue);
-        CFDictionarySetValue(dict, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanTrue);
-    } else {
-        // I-frame
-//        Log(LOG_I, @"I-frame");
-        CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanFalse);
-        CFDictionarySetValue(dict, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanFalse);
+    CMSampleBufferRef sampleBuffer;
+    status = CMSampleBufferCreateReadyWithImageBuffer(NULL, frame, _imageFormatDesc, &timingInfo, &sampleBuffer);
+    if (status != noErr) {
+        Log(LOG_E, @"CMSampleBufferCreateReadyWithImageBuffer failed: %d", (int)status);
+        CFRelease(frame);
+        return;
     }
     
     [displayLayer enqueueSampleBuffer:sampleBuffer];
     
     // Dereference the buffers
-    CFRelease(blockBuffer);
+    CFRelease(frame);
     CFRelease(sampleBuffer);
 }
 
