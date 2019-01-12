@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="13771" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="14460.31" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
-        <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="13771"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="14460.31"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -10,45 +9,45 @@
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <customView id="c22-O7-iKe" userLabel="Host Cell View">
-            <rect key="frame" x="0.0" y="0.0" width="92" height="92"/>
+            <rect key="frame" x="0.0" y="0.0" width="192" height="192"/>
             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
             <subviews>
                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="uCl-gZ-IFJ" userLabel="Content View">
-                    <rect key="frame" x="0.0" y="0.0" width="92" height="92"/>
+                    <rect key="frame" x="0.0" y="0.0" width="192" height="192"/>
                     <subviews>
                         <customView translatesAutoresizingMaskIntoConstraints="NO" id="7bI-bK-K3N" userLabel="Image Container" customClass="BackgroundColorView">
-                            <rect key="frame" x="10" y="20" width="72" height="72"/>
+                            <rect key="frame" x="6" y="36" width="180" height="156"/>
                             <subviews>
                                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="5Fb-TZ-b9m">
-                                    <rect key="frame" x="4" y="4" width="64" height="64"/>
-                                    <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="HostIcon" id="jAl-gI-gzt"/>
+                                    <rect key="frame" x="4" y="4" width="172" height="148"/>
+                                    <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="HostIcon" id="jAl-gI-gzt"/>
                                 </imageView>
                             </subviews>
                             <constraints>
                                 <constraint firstItem="5Fb-TZ-b9m" firstAttribute="leading" secondItem="7bI-bK-K3N" secondAttribute="leading" constant="4" id="DKc-nU-SdH"/>
-                                <constraint firstAttribute="width" constant="72" id="IEw-Hp-qHs"/>
+                                <constraint firstAttribute="width" constant="180" id="IEw-Hp-qHs"/>
                                 <constraint firstAttribute="bottom" secondItem="5Fb-TZ-b9m" secondAttribute="bottom" constant="4" id="Osj-qN-bDH"/>
                                 <constraint firstItem="5Fb-TZ-b9m" firstAttribute="top" secondItem="7bI-bK-K3N" secondAttribute="top" constant="4" id="abH-nT-DT7"/>
-                                <constraint firstAttribute="height" constant="72" id="fCx-KP-RCw"/>
+                                <constraint firstAttribute="height" constant="156" id="fCx-KP-RCw"/>
                                 <constraint firstAttribute="trailing" secondItem="5Fb-TZ-b9m" secondAttribute="trailing" constant="4" id="rzH-Uv-Joh"/>
                             </constraints>
                         </customView>
                         <customView translatesAutoresizingMaskIntoConstraints="NO" id="pDm-4f-wlV" userLabel="Label Container" customClass="BackgroundColorView">
-                            <rect key="frame" x="26" y="1" width="41" height="17"/>
+                            <rect key="frame" x="72" y="5" width="49" height="23"/>
                             <subviews>
                                 <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Zdg-fz-C9K" userLabel="Host Name">
-                                    <rect key="frame" x="0.0" y="1" width="41" height="16"/>
+                                    <rect key="frame" x="0.0" y="2" width="49" height="19"/>
                                     <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="center" title="Name" id="QvL-Tp-Eyp">
-                                        <font key="font" metaFont="system" size="12"/>
+                                        <font key="font" metaFont="system" size="15"/>
                                         <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                         <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                     </textFieldCell>
                                 </textField>
                             </subviews>
                             <constraints>
-                                <constraint firstItem="Zdg-fz-C9K" firstAttribute="top" secondItem="pDm-4f-wlV" secondAttribute="top" id="3RR-Pu-NOc"/>
+                                <constraint firstItem="Zdg-fz-C9K" firstAttribute="centerY" secondItem="pDm-4f-wlV" secondAttribute="centerY" id="VzV-Wx-dZq"/>
                                 <constraint firstItem="Zdg-fz-C9K" firstAttribute="centerX" secondItem="pDm-4f-wlV" secondAttribute="centerX" id="XDx-1m-fND"/>
-                                <constraint firstAttribute="height" secondItem="Zdg-fz-C9K" secondAttribute="height" constant="1" id="kVI-pt-ioB"/>
+                                <constraint firstAttribute="height" secondItem="Zdg-fz-C9K" secondAttribute="height" constant="4" id="kVI-pt-ioB"/>
                                 <constraint firstAttribute="width" secondItem="Zdg-fz-C9K" secondAttribute="width" constant="4" id="qJ1-4w-WRB"/>
                             </constraints>
                         </customView>
@@ -57,7 +56,7 @@
                         <constraint firstItem="pDm-4f-wlV" firstAttribute="centerX" secondItem="uCl-gZ-IFJ" secondAttribute="centerX" id="EHh-mO-cqM"/>
                         <constraint firstItem="7bI-bK-K3N" firstAttribute="centerX" secondItem="uCl-gZ-IFJ" secondAttribute="centerX" id="WG0-PG-XQI"/>
                         <constraint firstAttribute="bottom" relation="greaterThanOrEqual" secondItem="pDm-4f-wlV" secondAttribute="bottom" id="m8d-2X-oCD"/>
-                        <constraint firstItem="pDm-4f-wlV" firstAttribute="top" secondItem="7bI-bK-K3N" secondAttribute="bottom" constant="2" id="nOY-eI-gY6"/>
+                        <constraint firstItem="pDm-4f-wlV" firstAttribute="top" secondItem="7bI-bK-K3N" secondAttribute="bottom" constant="8" id="nOY-eI-gY6"/>
                         <constraint firstItem="7bI-bK-K3N" firstAttribute="top" secondItem="uCl-gZ-IFJ" secondAttribute="top" id="wx2-4s-i7B"/>
                     </constraints>
                 </customView>

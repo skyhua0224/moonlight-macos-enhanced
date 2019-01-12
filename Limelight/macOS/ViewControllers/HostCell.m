@@ -22,10 +22,10 @@
     
     self.imageContainer.wantsLayer = YES;
     self.imageContainer.layer.masksToBounds = YES;
-    self.imageContainer.layer.cornerRadius = 4;
+    self.imageContainer.layer.cornerRadius = 10;
     self.labelContainer.wantsLayer = YES;
     self.labelContainer.layer.masksToBounds = YES;
-    self.labelContainer.layer.cornerRadius = 3;
+    self.labelContainer.layer.cornerRadius = 4;
     
     [self updateSelectedState:NO];
 }

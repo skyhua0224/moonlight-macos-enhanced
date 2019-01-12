@@ -451,8 +451,8 @@
                                         <collectionView selectable="YES" id="iKf-WV-arz">
                                             <rect key="frame" x="0.0" y="0.0" width="450" height="158"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
-                                            <collectionViewFlowLayout key="collectionViewLayout" minimumInteritemSpacing="10" minimumLineSpacing="10" id="on9-o4-Mos">
-                                                <size key="itemSize" width="92" height="92"/>
+                                            <collectionViewFlowLayout key="collectionViewLayout" minimumInteritemSpacing="20" minimumLineSpacing="20" id="on9-o4-Mos">
+                                                <size key="itemSize" width="192" height="192"/>
                                                 <edgeInsets key="sectionInset" left="12" right="12" top="12" bottom="12"/>
                                             </collectionViewFlowLayout>
                                             <color key="primaryBackgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
