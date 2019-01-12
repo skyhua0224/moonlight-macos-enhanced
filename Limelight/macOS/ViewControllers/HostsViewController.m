@@ -53,7 +53,7 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
-    self.view.window.title = @"Moonlight";
+    self.parentViewController.title = @"Moonlight";
     [self.view.window makeFirstResponder:self.collectionView];
     
 #pragma clang diagnostic push

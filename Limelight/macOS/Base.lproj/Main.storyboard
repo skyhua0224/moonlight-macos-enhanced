@@ -512,7 +512,35 @@
                     <view key="view" id="P1D-TY-v3M">
                         <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
                         <autoresizingMask key="autoresizingMask"/>
+                        <subviews>
+                            <customView translatesAutoresizingMaskIntoConstraints="NO" id="R1i-Lw-Z2x" userLabel="Title Container" customClass="BackgroundColorView">
+                                <rect key="frame" x="163" y="48" width="125" height="31"/>
+                                <subviews>
+                                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mXZ-Qg-vua" userLabel="Title">
+                                        <rect key="frame" x="22" y="6" width="81" height="19"/>
+                                        <textFieldCell key="cell" lineBreakMode="clipping" title="Moonlight" id="40k-3O-hDH">
+                                            <font key="font" metaFont="systemSemibold" size="16"/>
+                                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                        </textFieldCell>
+                                    </textField>
+                                </subviews>
+                                <constraints>
+                                    <constraint firstAttribute="height" secondItem="mXZ-Qg-vua" secondAttribute="height" constant="12" id="2jS-5L-1Wo"/>
+                                    <constraint firstItem="mXZ-Qg-vua" firstAttribute="centerX" secondItem="R1i-Lw-Z2x" secondAttribute="centerX" id="QSg-vq-bCp"/>
+                                    <constraint firstAttribute="width" secondItem="mXZ-Qg-vua" secondAttribute="width" constant="48" id="cH0-sW-wYz"/>
+                                    <constraint firstItem="mXZ-Qg-vua" firstAttribute="centerY" secondItem="R1i-Lw-Z2x" secondAttribute="centerY" id="cIm-b1-KnT"/>
+                                </constraints>
+                            </customView>
+                        </subviews>
+                        <constraints>
+                            <constraint firstItem="R1i-Lw-Z2x" firstAttribute="centerX" secondItem="P1D-TY-v3M" secondAttribute="centerX" id="DDP-bi-viE"/>
+                            <constraint firstAttribute="bottom" secondItem="R1i-Lw-Z2x" secondAttribute="bottom" constant="48" id="Fj7-iT-PM4"/>
+                        </constraints>
                     </view>
+                    <connections>
+                        <outlet property="titleContainer" destination="R1i-Lw-Z2x" id="W4b-BQ-nLH"/>
+                    </connections>
                 </viewController>
                 <customObject id="yNp-MY-pIq" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
