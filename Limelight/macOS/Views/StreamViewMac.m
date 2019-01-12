@@ -10,7 +10,6 @@
 
 @interface StreamViewMac ()
 @property (nonatomic, strong) NSProgressIndicator *spinner;
-@property (nonatomic, strong) NSTextField *statusLabel;
 
 @end
 
@@ -29,18 +28,6 @@
         [self.spinner.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active = YES;
         [self.spinner.widthAnchor constraintEqualToConstant:32].active = YES;
         [self.spinner.heightAnchor constraintEqualToConstant:32].active = YES;
-        
-        self.statusLabel = [[NSTextField alloc] init];
-        self.statusLabel.selectable = NO;
-        self.statusLabel.bordered = NO;
-        self.statusLabel.textColor = [NSColor whiteColor];
-        self.statusLabel.backgroundColor = [NSColor clearColor];
-        self.statusLabel.font = [NSFont systemFontOfSize:14];
-        self.statusLabel.stringValue = @"Starting App";
-        [self addSubview:self.statusLabel];
-        self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.statusLabel.centerXAnchor constraintEqualToAnchor:self.centerXAnchor].active = YES;
-        [self.statusLabel.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-32].active = YES;
     }
     return self;
 }
@@ -50,8 +37,7 @@
         [self.spinner stopAnimation:self];
         self.spinner.hidden = YES;
     } else {
-        self.statusLabel.stringValue = statusText;
-        [self.statusLabel sizeToFit];
+        self.window.title = [[self.appName stringByAppendingString:@" - "] stringByAppendingString:statusText];
     }
 }
 

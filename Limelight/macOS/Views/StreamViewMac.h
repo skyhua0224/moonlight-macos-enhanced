@@ -10,5 +10,6 @@
 
 @interface StreamViewMac : NSView
 @property (nonatomic, strong) NSString *statusText;
+@property (nonatomic, strong) NSString *appName;
 
 @end

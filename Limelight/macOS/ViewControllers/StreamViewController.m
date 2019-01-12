@@ -62,7 +62,8 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
-    self.view.window.title = self.app.name;
+    self.streamView.appName = self.app.name;
+    self.streamView.statusText = @"Starting";
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
     
@@ -71,10 +72,6 @@
     [self.view.window moonlight_centerWindowOnFirstRun];
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
-    
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"]) {
-        [self.view.window toggleFullScreen:self];
-    }
     
     [self captureMouse];
 }
@@ -314,6 +311,10 @@
 - (void)connectionStarted {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
+        
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"]) {
+            [self.view.window toggleFullScreen:self];
+        }
     });
 }
 
