@@ -292,12 +292,6 @@
                                                 <action selector="open:" target="Ady-hI-5gd" id="EjV-Ab-MC4"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem title="Show Toolbar" keyEquivalent="t" id="snW-S8-Cw5">
-                                            <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
-                                            <connections>
-                                                <action selector="toggleToolbarShown:" target="Ady-hI-5gd" id="BXY-wc-z0C"/>
-                                            </connections>
-                                        </menuItem>
                                         <menuItem isSeparatorItem="YES" id="hB3-LF-h0Y"/>
                                         <menuItem title="Enter Full Screen" keyEquivalent="f" id="4J7-dP-txa">
                                             <modifierMask key="keyEquivalentModifierMask" control="YES" command="YES"/>
@@ -377,7 +371,7 @@
         <scene sceneID="R2V-B0-nI4">
             <objects>
                 <windowController id="B8D-0N-5wS" sceneMemberID="viewController">
-                    <window key="window" title="Moonlight" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" animationBehavior="default" tabbingMode="disallowed" id="IQv-IB-iLA">
+                    <window key="window" title="Moonlight" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" animationBehavior="default" tabbingMode="disallowed" titleVisibility="hidden" id="IQv-IB-iLA">
                         <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES" fullSizeContentView="YES"/>
                         <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
                         <rect key="contentRect" x="196" y="240" width="480" height="270"/>
@@ -400,7 +394,7 @@
                                         <action selector="backButtonClicked:" target="Oky-zY-oP4" id="Ypd-UY-pU7"/>
                                     </connections>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="2E9B20F6-0473-43F8-B1D2-A0A6FDF097D0" label="Add Host" paletteLabel="Add Host" image="NSAddTemplate" autovalidates="NO" id="OMc-qZ-aha" userLabel="Add Host">
+                                <toolbarItem implicitItemIdentifier="55F221B6-1DE1-43F5-98A6-608F20E26144" label="Add Host" paletteLabel="Add Host" image="NSAddTemplate" autovalidates="NO" id="OMc-qZ-aha" userLabel="Add Host">
                                     <nil key="toolTip"/>
                                     <size key="minSize" width="26" height="20"/>
                                     <size key="maxSize" width="38" height="28"/>
@@ -413,13 +407,43 @@
                                         </buttonCell>
                                     </button>
                                 </toolbarItem>
+                                <toolbarItem implicitItemIdentifier="8C27E677-8D1E-445E-9023-F2F0F4DEFEE8" label="Custom View" paletteLabel="Custom View" sizingBehavior="auto" id="kug-1F-hjp" userLabel="Search">
+                                    <nil key="toolTip"/>
+                                    <searchField key="view" wantsLayer="YES" verticalHuggingPriority="750" textCompletion="NO" id="uyw-GU-j24">
+                                        <rect key="frame" x="0.0" y="14" width="96" height="22"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <searchFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" editable="YES" borderStyle="bezel" usesSingleLineMode="YES" bezelStyle="round" id="YNw-yv-saG">
+                                            <font key="font" metaFont="system"/>
+                                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                        </searchFieldCell>
+                                    </searchField>
+                                </toolbarItem>
+                                <toolbarItem implicitItemIdentifier="625FEC2C-9013-493E-B4DF-A82F76D51732" label="Preferences" paletteLabel="Preferences" image="PreferencesIcon" autovalidates="NO" id="kFp-fw-Y3f">
+                                    <nil key="toolTip"/>
+                                    <size key="minSize" width="26" height="20"/>
+                                    <size key="maxSize" width="38" height="28"/>
+                                    <button key="view" verticalHuggingPriority="750" id="4FV-YB-30y">
+                                        <rect key="frame" x="16" y="14" width="38" height="28"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="PreferencesIcon" imagePosition="only" alignment="center" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="1zM-rI-dNr">
+                                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                                            <font key="font" metaFont="system"/>
+                                        </buttonCell>
+                                    </button>
+                                    <connections>
+                                        <action selector="showPreferences:" target="Oky-zY-oP4" id="jhy-fz-dt0"/>
+                                    </connections>
+                                </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="NSToolbarSpaceItem" id="wul-D5-QE3"/>
                                 <toolbarItem implicitItemIdentifier="NSToolbarFlexibleSpaceItem" id="DlI-3g-HXX"/>
                             </allowedToolbarItems>
                             <defaultToolbarItems>
                                 <toolbarItem reference="xh2-9X-oTC"/>
-                                <toolbarItem reference="DlI-3g-HXX"/>
                                 <toolbarItem reference="OMc-qZ-aha"/>
+                                <toolbarItem reference="DlI-3g-HXX"/>
+                                <toolbarItem reference="kug-1F-hjp"/>
+                                <toolbarItem reference="kFp-fw-Y3f"/>
                             </defaultToolbarItems>
                         </toolbar>
                         <connections>
@@ -565,5 +589,6 @@
     <resources>
         <image name="NSAddTemplate" width="11" height="11"/>
         <image name="NSLeftFacingTriangleTemplate" width="9" height="12"/>
+        <image name="PreferencesIcon" width="22" height="22"/>
     </resources>
 </document>
