@@ -66,6 +66,7 @@
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
 		4CC3C02F1FF73A490029EBF5 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
 		4CC3C0321FF73A660029EBF5 /* PreferencesWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */; };
+		4CF7C06221E9851500F38DC4 /* WhiteSpinner.car in Resources */ = {isa = PBXBuildFile; fileRef = 4CF7C06021E982E400F38DC4 /* WhiteSpinner.car */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -141,6 +142,7 @@
 		4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = PreferencesWindow.xib; sourceTree = "<group>"; };
 		4CC3C0301FF73A660029EBF5 /* PreferencesWindow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PreferencesWindow.h; sourceTree = "<group>"; };
 		4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PreferencesWindow.m; sourceTree = "<group>"; };
+		4CF7C06021E982E400F38DC4 /* WhiteSpinner.car */ = {isa = PBXFileReference; lastKnownFileType = file; path = WhiteSpinner.car; sourceTree = "<group>"; };
 		98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
@@ -384,6 +386,7 @@
 		4C7E0A941FECC7A000684411 /* Supporting Files */ = {
 			isa = PBXGroup;
 			children = (
+				4CF7C06021E982E400F38DC4 /* WhiteSpinner.car */,
 				4C7E0A871FECBFFD00684411 /* Info.plist */,
 				4C7E0A881FECBFFD00684411 /* main.m */,
 				4C38E7F81FEE04E4000425CD /* Limelight-Prefix.pch */,
@@ -899,6 +902,7 @@
 				4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */,
 				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
 				4C30BFD91FF9D57F00AD09E6 /* DefaultPreferences.plist in Resources */,
+				4CF7C06221E9851500F38DC4 /* WhiteSpinner.car in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
