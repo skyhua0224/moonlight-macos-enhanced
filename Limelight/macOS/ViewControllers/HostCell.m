@@ -31,7 +31,7 @@
 }
 
 - (void)updateSelectedState:(BOOL)selected {
-    self.imageContainer.backgroundColor = selected ? [NSColor colorWithWhite:0 alpha:0.1] : [NSColor clearColor];
+    self.imageContainer.backgroundColor = selected ? [NSColor alternatingContentBackgroundColors][1] : [NSColor clearColor];
     self.labelContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
     self.hostName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];
 }
