@@ -378,8 +378,7 @@
                         <rect key="screenRect" x="0.0" y="0.0" width="1680" height="1027"/>
                         <toolbar key="toolbar" implicitIdentifier="A60715D8-1F2C-47E5-9F9A-740F642B3D2F" autosavesConfiguration="NO" allowsUserCustomization="NO" displayMode="iconOnly" sizeMode="regular" id="3hJ-rw-Qjt">
                             <allowedToolbarItems>
-                                <toolbarItem implicitItemIdentifier="7C0FAE2A-553D-43B5-AA14-632B8D9B2E6E" label="Back" paletteLabel="Back" image="NSLeftFacingTriangleTemplate" autovalidates="NO" id="xh2-9X-oTC">
-                                    <nil key="toolTip"/>
+                                <toolbarItem implicitItemIdentifier="7C0FAE2A-553D-43B5-AA14-632B8D9B2E6E" label="Back" paletteLabel="Back" toolTip="Back" image="NSLeftFacingTriangleTemplate" autovalidates="NO" id="xh2-9X-oTC">
                                     <size key="minSize" width="26" height="20"/>
                                     <size key="maxSize" width="38" height="28"/>
                                     <button key="view" verticalHuggingPriority="750" id="E3Q-LX-jfj">
@@ -394,8 +393,7 @@
                                         <action selector="backButtonClicked:" target="Oky-zY-oP4" id="Ypd-UY-pU7"/>
                                     </connections>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="55F221B6-1DE1-43F5-98A6-608F20E26144" label="Add Host" paletteLabel="Add Host" image="NSAddTemplate" autovalidates="NO" id="OMc-qZ-aha" userLabel="Add Host">
-                                    <nil key="toolTip"/>
+                                <toolbarItem implicitItemIdentifier="55F221B6-1DE1-43F5-98A6-608F20E26144" label="Add Host" paletteLabel="Add Host" toolTip="Add Host" image="NSAddTemplate" autovalidates="NO" id="OMc-qZ-aha" userLabel="Add Host">
                                     <size key="minSize" width="26" height="20"/>
                                     <size key="maxSize" width="38" height="28"/>
                                     <button key="view" verticalHuggingPriority="750" id="qTA-GV-3gD">
@@ -419,8 +417,7 @@
                                         </searchFieldCell>
                                     </searchField>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="625FEC2C-9013-493E-B4DF-A82F76D51732" label="Preferences" paletteLabel="Preferences" image="PreferencesIcon" autovalidates="NO" id="kFp-fw-Y3f">
-                                    <nil key="toolTip"/>
+                                <toolbarItem implicitItemIdentifier="625FEC2C-9013-493E-B4DF-A82F76D51732" label="Preferences" paletteLabel="Preferences" toolTip="Preferences" image="PreferencesIcon" autovalidates="NO" id="kFp-fw-Y3f">
                                     <size key="minSize" width="26" height="20"/>
                                     <size key="maxSize" width="38" height="28"/>
                                     <button key="view" verticalHuggingPriority="750" id="4FV-YB-30y">
