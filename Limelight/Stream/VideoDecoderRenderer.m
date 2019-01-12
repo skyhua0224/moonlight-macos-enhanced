@@ -136,7 +136,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     return self;
 }
 
-- (void)dealloc
+- (void)teardown
 {
     if (_displayLink != NULL) {
         CVDisplayLinkStop(_displayLink);
@@ -146,6 +146,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     _frameQueueHistory = nil;
     CFRelease(_frameQueue);
     VTDecompressionSessionInvalidate(_decompressionSession);
+    CFRelease(_decompressionSession);
 }
 
 - (void)setupWithVideoFormat:(int)videoFormat

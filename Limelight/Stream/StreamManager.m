@@ -22,6 +22,7 @@
     ViewType* _renderView;
     id<ConnectionCallbacks> _callbacks;
     Connection* _connection;
+    VideoDecoderRenderer *_renderer;
 }
 
 - (id) initWithConfig:(StreamConfiguration*)config renderView:(ViewType*)view connectionCallbacks:(id<ConnectionCallbacks>)callbacks {
@@ -89,11 +90,10 @@
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
     
-    __block VideoDecoderRenderer* renderer;
     dispatch_sync(dispatch_get_main_queue(), ^{
-        renderer = [[VideoDecoderRenderer alloc]initWithView:self->_renderView];
+        self->_renderer = [[VideoDecoderRenderer alloc]initWithView:self->_renderView];
     });
-    _connection = [[Connection alloc] initWithConfig:_config renderer:renderer connectionCallbacks:_callbacks];
+    _connection = [[Connection alloc] initWithConfig:_config renderer:self->_renderer connectionCallbacks:_callbacks];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:_connection];
 }
@@ -102,6 +102,8 @@
 {
     [_connection terminate];
     _callbacks = nil;
+    [_renderer teardown];
+    _renderer = nil;
 }
 
 - (BOOL) launchApp:(HttpManager*)hMan {

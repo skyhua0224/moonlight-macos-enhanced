@@ -249,6 +249,7 @@ void ClLogMessage(const char* format, ...)
         [initLock unlock];
     });
     _callbacks = nil;
+    renderer = nil;
 }
 
 -(id) initWithConfig:(StreamConfiguration*)config renderer:(VideoDecoderRenderer*)myRenderer connectionCallbacks:(id<ConnectionCallbacks>)callbacks
