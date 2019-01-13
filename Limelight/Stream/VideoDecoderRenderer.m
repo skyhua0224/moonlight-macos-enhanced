@@ -136,7 +136,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     return self;
 }
 
-- (void)teardown
+- (void)dealloc
 {
     if (_displayLink != NULL) {
         CVDisplayLinkStop(_displayLink);

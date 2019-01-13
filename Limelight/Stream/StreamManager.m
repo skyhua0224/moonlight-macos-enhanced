@@ -102,7 +102,6 @@
 {
     [_connection terminate];
     _callbacks = nil;
-    [_renderer teardown];
     _renderer = nil;
 }
 
