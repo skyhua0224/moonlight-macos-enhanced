@@ -89,7 +89,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                                           CVOptionFlags *flagsOut,
                                           void *displayLinkContext)
 {
-    VideoDecoderRenderer *me = (__bridge VideoDecoderRenderer *)(displayLinkContext);
+    VideoDecoderRenderer *me = (__bridge VideoDecoderRenderer *)displayLinkContext;
     
     [me vsyncCallback:(500 / me->_config.frameRate)];
     

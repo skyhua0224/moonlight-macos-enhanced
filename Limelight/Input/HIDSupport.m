@@ -149,6 +149,7 @@ static struct KeyMapping keys[] = {
 @property (nonatomic) IOHIDManagerRef hidManager;
 @property (nonatomic, strong) Controller *controller;
 @property (nonatomic, strong) Controller *lastController;
+@property (nonatomic) CVDisplayLinkRef displayLink;
 @end
 
 @implementation HIDSupport
@@ -168,16 +169,7 @@ static struct KeyMapping keys[] = {
         }
         _mappings = [NSDictionary dictionaryWithDictionary:d];
         
-        __weak typeof(self) weakSelf = self;
-        _mousePollingTimer = [NSTimer scheduledTimerWithTimeInterval:0.015 repeats:YES block:^(NSTimer * _Nonnull timer) {
-            int32_t deltaX, deltaY;
-            CGGetLastMouseDelta(&deltaX, &deltaY);
-            if (deltaX != 0 || deltaY != 0) {
-                if (weakSelf.shouldSendMouseEvents) {
-                    LiSendMouseMoveEvent(deltaX, deltaY);
-                }
-            }
-        }];
+        [self initializeDisplayLink];
     }
     return self;
 }
@@ -185,6 +177,59 @@ static struct KeyMapping keys[] = {
 - (void)dealloc {
     [self.mousePollingTimer invalidate];
     [self tearDownHidManager];
+    
+    if (self.displayLink != NULL) {
+        CVDisplayLinkStop(self.displayLink);
+        CVDisplayLinkRelease(self.displayLink);
+    }
+}
+
+static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
+                                          const CVTimeStamp *now,
+                                          const CVTimeStamp *vsyncTime,
+                                          CVOptionFlags flagsIn,
+                                          CVOptionFlags *flagsOut,
+                                          void *displayLinkContext)
+{
+    HIDSupport *me = (__bridge HIDSupport *)displayLinkContext;
+    
+    int32_t deltaX, deltaY;
+    CGGetLastMouseDelta(&deltaX, &deltaY);
+    if (deltaX != 0 || deltaY != 0) {
+        if (me.shouldSendMouseEvents) {
+            LiSendMouseMoveEvent(deltaX, deltaY);
+        }
+    }
+
+    return kCVReturnSuccess;
+}
+
+- (BOOL)initializeDisplayLink
+{
+    NSNumber *screenNumber = [[NSScreen mainScreen] deviceDescription][@"NSScreenNumber"];
+
+    CGDirectDisplayID displayId = [screenNumber unsignedIntValue];
+    CVDisplayLinkRef displayLink;
+    CVReturn status = CVDisplayLinkCreateWithCGDisplay(displayId, &displayLink);
+    if (status != kCVReturnSuccess) {
+        Log(LOG_E, @"Failed to create CVDisplayLink: %d", status);
+        return NO;
+    }
+    self.displayLink = displayLink;
+    
+    status = CVDisplayLinkSetOutputCallback(self.displayLink, displayLinkOutputCallback, (__bridge void * _Nullable)(self));
+    if (status != kCVReturnSuccess) {
+        Log(LOG_E, @"CVDisplayLinkSetOutputCallback() failed: %d", status);
+        return NO;
+    }
+    
+    status = CVDisplayLinkStart(self.displayLink);
+    if (status != kCVReturnSuccess) {
+        Log(LOG_E, @"CVDisplayLinkStart() failed: %d", status);
+        return NO;
+    }
+    
+    return YES;
 }
 
 - (int)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
