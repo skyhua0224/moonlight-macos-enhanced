@@ -44,6 +44,7 @@
 
 - (void)setTitle:(NSString *)title {
     ((NSTextField *)self.titleContainer.subviews.firstObject).stringValue = title;
+    self.view.window.title = title;
 }
 
 @end
