@@ -145,7 +145,6 @@ static struct KeyMapping keys[] = {
 
 @interface HIDSupport ()
 @property (nonatomic, strong) NSDictionary *mappings;
-@property (nonatomic, strong) NSTimer *mousePollingTimer;
 @property (nonatomic) IOHIDManagerRef hidManager;
 @property (nonatomic, strong) Controller *controller;
 @property (nonatomic, strong) Controller *lastController;
@@ -175,7 +174,6 @@ static struct KeyMapping keys[] = {
 }
 
 - (void)dealloc {
-    [self.mousePollingTimer invalidate];
     [self tearDownHidManager];
     
     if (self.displayLink != NULL) {
