@@ -36,6 +36,7 @@
     if (statusText == nil) {
         [self.spinner stopAnimation:self];
         self.spinner.hidden = YES;
+        self.window.title = self.appName;
     } else {
         self.window.title = [[self.appName stringByAppendingString:@" - "] stringByAppendingString:statusText];
     }
