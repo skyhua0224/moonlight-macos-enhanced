@@ -15,7 +15,6 @@
 @interface VideoDecoderRenderer : NSObject
 
 - (id)initWithView:(ViewType *)view;
-- (void)teardown;
 
 - (void)setupWithVideoFormat:(int)videoFormat;
 

@@ -1022,9 +1022,9 @@
 					"$(PROJECT_DIR)/libs/openssl/lib",
 					/usr/local/lib,
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				MTL_ENABLE_DEBUG_INFO = YES;
-				OTHER_LDFLAGS = /usr/local/lib/libopus.a;
+				OTHER_LDFLAGS = "$(PROJECT_DIR)/libs/opus/lib/libopus.a";
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1071,9 +1071,9 @@
 					"$(PROJECT_DIR)/libs/openssl/lib",
 					/usr/local/lib,
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				OTHER_LDFLAGS = /usr/local/lib/libopus.a;
+				OTHER_LDFLAGS = "$(PROJECT_DIR)/libs/opus/lib/libopus.a";
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
