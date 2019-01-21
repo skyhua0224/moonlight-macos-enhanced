@@ -94,6 +94,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		4C2556A121F56F280009838E /* Moonlight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Moonlight.entitlements; sourceTree = "<group>"; };
 		4C2E247F1FF1E99300B6A12E /* HIDSupport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HIDSupport.h; sourceTree = "<group>"; };
 		4C2E24801FF1E99300B6A12E /* HIDSupport.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HIDSupport.m; sourceTree = "<group>"; };
 		4C2E24851FF3934700B6A12E /* StreamViewMac.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StreamViewMac.h; sourceTree = "<group>"; };
@@ -460,6 +461,7 @@
 		FB290CE519B2C406004C83CF = {
 			isa = PBXGroup;
 			children = (
+				4C2556A121F56F280009838E /* Moonlight.entitlements */,
 				98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */,
 				FB290CF919B2C406004C83CF /* Moonlight */,
 				D46A73A11CBC7CB60039F1EE /* MoonlightUnitTests */,
@@ -844,7 +846,7 @@
 						ProvisioningStyle = Automatic;
 						SystemCapabilities = {
 							com.apple.Sandbox = {
-								enabled = 0;
+								enabled = 1;
 							};
 						};
 					};
@@ -1002,6 +1004,7 @@
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = Moonlight.entitlements;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -1050,6 +1053,7 @@
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = Moonlight.entitlements;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
