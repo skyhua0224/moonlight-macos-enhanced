@@ -222,9 +222,11 @@ static NSData* p12 = nil;
     static dispatch_once_t pred;
     dispatch_once(&pred, ^{
         if (![CryptoManager keyPairExists]) {
+            [self deleteKeychainCertificate];
             
             Log(LOG_I, @"Generating Certificate... ");
-            CertKeyPair certKeyPair = generateCertKeyPair();
+            NSString *bundleId = [NSBundle mainBundle].bundleIdentifier;
+            CertKeyPair certKeyPair = generateCertKeyPair(bundleId.UTF8String);
             
             NSArray* paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
             NSString* documentsDirectory = [paths objectAtIndex:0];
@@ -238,6 +240,18 @@ static NSData* p12 = nil;
             Log(LOG_I, @"Certificate created");
         }
     });
+}
+
++ (void)deleteKeychainCertificate {
+    NSDictionary *query = @{
+                            (NSString *)kSecClass: (NSString *)kSecClassCertificate,
+                            (NSString *)kSecAttrLabel: (NSString *)[NSBundle mainBundle].bundleIdentifier,
+                            (NSString *)kSecMatchLimit: (NSString *)kSecMatchLimitOne
+                            };
+    OSStatus status = SecItemDelete((CFDictionaryRef)query);
+    if (status != errSecSuccess) {
+        Log(LOG_E, @"Couldn't delete old certificate (%d)", status);
+    }
 }
 
 @end
