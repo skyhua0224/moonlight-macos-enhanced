@@ -17,6 +17,7 @@
     TemporaryHost* _host;
     NSString* _uniqueId;
     NSData* _cert;
+    HttpManager* _hMan;
 }
 
 static const float POLL_RATE = 2.0f; // Poll every 2 seconds
@@ -128,15 +129,22 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
 }
 
 - (ServerInfoResponse*) requestInfoAtAddress:(NSString*)address {
-    HttpManager* hMan = [[HttpManager alloc] initWithHost:address
+    _hMan = [[HttpManager alloc] initWithHost:address
                                                  uniqueId:_uniqueId
                                                deviceName:deviceName
                                                      cert:_cert];
     ServerInfoResponse* response = [[ServerInfoResponse alloc] init];
-    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:response
-                                                       withUrlRequest:[hMan newServerInfoRequest]
-                                       fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
+    [_hMan executeRequestSynchronously:[HttpRequest requestForResponse:response
+                                                       withUrlRequest:[_hMan newServerInfoRequest]
+                                       fallbackError:401 fallbackRequest:[_hMan newHttpServerInfoRequest]]];
+    _hMan = nil;
     return response;
+}
+
+- (void)cancel {
+    [super cancel];
+    
+    [_hMan cancel];
 }
 
 - (BOOL) checkResponse:(ServerInfoResponse*)response {

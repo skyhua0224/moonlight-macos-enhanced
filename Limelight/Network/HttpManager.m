@@ -27,6 +27,8 @@
     dispatch_semaphore_t _requestLock;
     
     BOOL _errorOccurred;
+    
+    BOOL _cancelled;
 }
 
 static const NSString* HTTP_PORT = @"47989";
@@ -81,7 +83,7 @@ static const NSString* HTTPS_PORT = @"47984";
     }] resume];
     dispatch_semaphore_wait(_requestLock, DISPATCH_TIME_FOREVER);
     
-    if (!_errorOccurred && request.response) {
+    if (!_errorOccurred && request.response && !_cancelled) {
         [request.response populateWithData:_requestResp];
         
         // If the fallback error code was detected, issue the fallback request
@@ -94,6 +96,10 @@ static const NSString* HTTPS_PORT = @"47984";
         }
     }
     _errorOccurred = false;
+}
+
+- (void)cancel {
+    _cancelled = YES;
 }
 
 - (NSURLRequest*) createRequestFromString:(NSString*) urlString enableTimeout:(BOOL)normalTimeout {
