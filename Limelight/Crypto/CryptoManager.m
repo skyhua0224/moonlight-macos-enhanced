@@ -225,8 +225,7 @@ static NSData* p12 = nil;
             [self deleteKeychainCertificate];
             
             Log(LOG_I, @"Generating Certificate... ");
-            NSString *bundleId = [NSBundle mainBundle].bundleIdentifier;
-            CertKeyPair certKeyPair = generateCertKeyPair(bundleId.UTF8String);
+            CertKeyPair certKeyPair = generateCertKeyPair();
             
             NSArray* paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
             NSString* documentsDirectory = [paths objectAtIndex:0];
@@ -245,7 +244,7 @@ static NSData* p12 = nil;
 + (void)deleteKeychainCertificate {
     NSDictionary *query = @{
                             (NSString *)kSecClass: (NSString *)kSecClassCertificate,
-                            (NSString *)kSecAttrLabel: (NSString *)[NSBundle mainBundle].bundleIdentifier,
+                            (NSString *)kSecAttrLabel: (NSString *)@"NVIDIA GameStream Client",
                             (NSString *)kSecMatchLimit: (NSString *)kSecMatchLimitOne
                             };
     OSStatus status = SecItemDelete((CFDictionaryRef)query);

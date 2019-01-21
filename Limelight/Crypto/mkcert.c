@@ -16,10 +16,10 @@ static const int NUM_BITS = 2048;
 static const int SERIAL = 0;
 static const int NUM_YEARS = 10;
 
-int mkcert(X509 **x509p, EVP_PKEY **pkeyp, int bits, int serial, int years, const char *commonName);
+int mkcert(X509 **x509p, EVP_PKEY **pkeyp, int bits, int serial, int years);
 int add_ext(X509 *cert, int nid, char *value);
 
-struct CertKeyPair generateCertKeyPair(const char *commonName) {
+struct CertKeyPair generateCertKeyPair(void) {
     BIO *bio_err;
     X509 *x509 = NULL;
     EVP_PKEY *pkey = NULL;
@@ -31,7 +31,7 @@ struct CertKeyPair generateCertKeyPair(const char *commonName) {
     SSLeay_add_all_algorithms();
     ERR_load_crypto_strings();
     
-    mkcert(&x509, &pkey, NUM_BITS, SERIAL, NUM_YEARS, commonName);
+    mkcert(&x509, &pkey, NUM_BITS, SERIAL, NUM_YEARS);
 
     p12 = PKCS12_create("limelight", "GameStream", pkey, x509, NULL, 0, 0, 0, 0, 0);
     if (p12 == NULL) {
@@ -77,7 +77,7 @@ void saveCertKeyPair(const char* certFile, const char* p12File, const char* keyP
     fclose(keyPairFilePtr);
 }
 
-int mkcert(X509 **x509p, EVP_PKEY **pkeyp, int bits, int serial, int years, const char *commonName) {
+int mkcert(X509 **x509p, EVP_PKEY **pkeyp, int bits, int serial, int years) {
     X509 *x;
     EVP_PKEY *pk;
     RSA *rsa;
@@ -115,8 +115,8 @@ int mkcert(X509 **x509p, EVP_PKEY **pkeyp, int bits, int serial, int years, cons
     /* This function creates and adds the entry, working out the
      * correct string type and performing checks on its length.
      */
-    X509_NAME_add_entry_by_txt(name,"CN", MBSTRING_ASC, (unsigned char*)commonName, -1, -1, 0);
-    
+    X509_NAME_add_entry_by_txt(name,"CN", MBSTRING_ASC, (unsigned char*)"NVIDIA GameStream Client", -1, -1, 0);
+
     /* Its self signed so set the issuer name to be the same as the
      * subject.
      */
