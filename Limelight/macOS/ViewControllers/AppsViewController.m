@@ -32,8 +32,11 @@
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *boxArtCache;
 @property (nonatomic, strong) NSLock *boxArtCacheLock;
+@property (nonatomic) CGFloat itemScale;
 
 @end
+
+const CGFloat scaleBase = 1.125;
 
 @implementation AppsViewController
 
@@ -45,6 +48,12 @@
     self.collectionView.dataSource = self;
 
     [self.collectionView selectItemsAtIndexPaths:[NSSet setWithObject:[NSIndexPath indexPathForItem:0 inSection:0]] scrollPosition:NSCollectionViewScrollPositionNone];
+
+    self.itemScale = [[NSUserDefaults standardUserDefaults] floatForKey:@"itemScale"];
+    if (self.itemScale == 0) {
+        self.itemScale = pow(scaleBase, 2);
+    }
+    [self updateCollectionViewItemSize];
 
     self.apps = [NSArray array];
     [self loadApps];
@@ -94,6 +103,31 @@
         TemporaryApp *app = self.apps[self.collectionView.selectionIndexes.firstIndex];
         [self openApp:app];
     }
+}
+
+- (void)updateCollectionViewItemSize {
+    NSCollectionViewFlowLayout *flowLayout = (NSCollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
+
+    flowLayout.itemSize = NSMakeSize(85 * self.itemScale, 128 * self.itemScale);
+    [flowLayout invalidateLayout];
+    
+    [[NSUserDefaults standardUserDefaults] setFloat:self.itemScale forKey:@"itemScale"];
+}
+
+- (IBAction)increaseItemSize:(id)sender {
+    if (self.itemScale > pow(scaleBase, 7)) {
+        return;
+    }
+    self.itemScale *= scaleBase;
+    [self updateCollectionViewItemSize];
+}
+
+- (IBAction)decreaseItemSize:(id)sender {
+    if (self.itemScale < pow(scaleBase, 0)) {
+        return;
+    }
+    self.itemScale /= scaleBase;
+    [self updateCollectionViewItemSize];
 }
 
 
