@@ -54,7 +54,6 @@
     [super viewDidAppear];
     
     self.parentViewController.title = @"Moonlight";
-    [self.view.window makeFirstResponder:self.collectionView];
     
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
@@ -81,6 +80,16 @@
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
 }
+
+
+#pragma mark - NSResponder
+
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
+    // Forward validate to collectionView, because for some reason it doesn't get called
+    // automatically by the system when expected (even though it's firstResponder).
+    return [self.collectionView validateMenuItem:menuItem];
+}
+
 
 #pragma mark - Actions
 

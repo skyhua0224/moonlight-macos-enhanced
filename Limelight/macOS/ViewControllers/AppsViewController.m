@@ -79,12 +79,22 @@ const CGFloat scaleBase = 1.125;
 
 - (void)transitionToHostsVC {
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
+    [self.view.window makeFirstResponder:self.hostsVC];
 }
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
     streamVC.app = self.runningApp;
     streamVC.delegate = self;
+}
+
+
+#pragma mark - NSResponder
+
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
+    // Forward validate to collectionView, because for some reason it doesn't get called
+    // automatically by the system when expected (even though it's firstResponder).
+    return [self.collectionView validateMenuItem:menuItem];
 }
 
 

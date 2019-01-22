@@ -288,9 +288,23 @@
                                                 <action selector="backButtonClicked:" target="Ady-hI-5gd" id="dsA-Bc-arn"/>
                                             </connections>
                                         </menuItem>
+                                        <menuItem title="Back" hidden="YES" keyEquivalent="" allowsKeyEquivalentWhenHidden="YES" id="fqe-CV-X5P">
+                                            <connections>
+                                                <action selector="backButtonClicked:" target="Ady-hI-5gd" id="oqx-Nw-FGA"/>
+                                            </connections>
+                                        </menuItem>
                                         <menuItem title="Open" hidden="YES" keyEquivalent="" allowsKeyEquivalentWhenHidden="YES" id="QsI-iR-yyt">
                                             <connections>
-                                                <action selector="open:" target="Ady-hI-5gd" id="EjV-Ab-MC4"/>
+                                                <action selector="open:" target="Ady-hI-5gd" id="4vh-6H-wNQ"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Open" hidden="YES" allowsKeyEquivalentWhenHidden="YES" id="KJB-lK-Qfp">
+                                            <string key="keyEquivalent" base64-UTF8="YES">
+DQ
+</string>
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="open:" target="Ady-hI-5gd" id="Mui-HD-Q3k"/>
                                             </connections>
                                         </menuItem>
                                         <menuItem isSeparatorItem="YES" id="4fZ-Ix-46X"/>
@@ -383,7 +397,7 @@
         <scene sceneID="R2V-B0-nI4">
             <objects>
                 <windowController id="B8D-0N-5wS" sceneMemberID="viewController">
-                    <window key="window" title="Moonlight" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" animationBehavior="default" tabbingMode="disallowed" titleVisibility="hidden" id="IQv-IB-iLA">
+                    <window key="window" title="Moonlight" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" restorable="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" animationBehavior="default" tabbingMode="disallowed" titleVisibility="hidden" id="IQv-IB-iLA">
                         <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES" fullSizeContentView="YES"/>
                         <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
                         <rect key="contentRect" x="196" y="240" width="480" height="270"/>
@@ -481,7 +495,7 @@
                                     <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
-                                        <collectionView selectable="YES" id="iKf-WV-arz">
+                                        <collectionView selectable="YES" id="iKf-WV-arz" customClass="CollectionView">
                                             <rect key="frame" x="0.0" y="0.0" width="450" height="158"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
                                             <collectionViewFlowLayout key="collectionViewLayout" minimumInteritemSpacing="20" minimumLineSpacing="20" id="on9-o4-Mos">
@@ -572,7 +586,7 @@
                                     <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
-                                        <collectionView selectable="YES" id="t1H-Tz-zd9">
+                                        <collectionView selectable="YES" id="t1H-Tz-zd9" customClass="CollectionView">
                                             <rect key="frame" x="0.0" y="0.0" width="450" height="158"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
                                             <collectionViewFlowLayout key="collectionViewLayout" minimumInteritemSpacing="10" minimumLineSpacing="24" id="kTU-ja-AL8">

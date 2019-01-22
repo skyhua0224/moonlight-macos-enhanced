@@ -63,6 +63,7 @@
 		4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0AA21FECE55E00684411 /* HostCell.xib */; };
 		4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */; };
 		4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C81944F202EC3230023F308 /* AppDelegateForAppKit.m */; };
+		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
 		4CC3C02F1FF73A490029EBF5 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
 		4CC3C0321FF73A660029EBF5 /* PreferencesWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */; };
@@ -136,6 +137,8 @@
 		4C81944E202EC3230023F308 /* AppDelegateForAppKit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegateForAppKit.h; sourceTree = "<group>"; };
 		4C81944F202EC3230023F308 /* AppDelegateForAppKit.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegateForAppKit.m; sourceTree = "<group>"; };
 		4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		4CABABB021F6C8A3008576A4 /* CollectionView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CollectionView.h; sourceTree = "<group>"; };
+		4CABABB121F6C8A4008576A4 /* CollectionView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CollectionView.m; sourceTree = "<group>"; };
 		4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RendererLayerContainer.h; sourceTree = "<group>"; };
 		4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RendererLayerContainer.m; sourceTree = "<group>"; };
 		4CC3C02B1FF72A3D0029EBF5 /* AppCellView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCellView.h; sourceTree = "<group>"; };
@@ -365,6 +368,8 @@
 			children = (
 				4C38E8111FEE30F8000425CD /* ContainerViewController.h */,
 				4C38E8121FEE30F8000425CD /* ContainerViewController.m */,
+				4CABABB021F6C8A3008576A4 /* CollectionView.h */,
+				4CABABB121F6C8A4008576A4 /* CollectionView.m */,
 				4C7E0A951FECCF9A00684411 /* HostsViewController.h */,
 				4C7E0A961FECCF9A00684411 /* HostsViewController.m */,
 				4C7E0A9C1FECD31600684411 /* HostCell.h */,
@@ -927,6 +932,7 @@
 				4C38E8001FEE08A3000425CD /* ServerInfoResponse.m in Sources */,
 				4C38E80A1FEE0AED000425CD /* Limelight.xcdatamodeld in Sources */,
 				4C38E7FD1FEE0887000425CD /* HttpManager.m in Sources */,
+				4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */,
 				4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */,
 				4C38E7F41FEE011A000425CD /* DiscoveryManager.m in Sources */,
 				4C38E8201FEF4FC1000425CD /* AlertPresenter.m in Sources */,
