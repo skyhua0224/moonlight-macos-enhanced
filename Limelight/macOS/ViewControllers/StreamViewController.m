@@ -313,7 +313,9 @@
         self.streamView.statusText = nil;
         
         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"]) {
-            [self.view.window toggleFullScreen:self];
+            if (!(self.view.window.styleMask & NSWindowStyleMaskFullScreen)) {
+                [self.view.window toggleFullScreen:self];
+            }
         }
     });
 }
