@@ -43,8 +43,6 @@
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     
-    [self.collectionView selectItemsAtIndexPaths:[NSSet setWithObject:[NSIndexPath indexPathForItem:0 inSection:0]] scrollPosition:NSCollectionViewScrollPositionNone];
-    
     self.hosts = [NSArray array];
     
     [self prepareDiscovery];

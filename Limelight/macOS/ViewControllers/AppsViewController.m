@@ -47,8 +47,6 @@ const CGFloat scaleBase = 1.125;
     
     self.collectionView.dataSource = self;
 
-    [self.collectionView selectItemsAtIndexPaths:[NSSet setWithObject:[NSIndexPath indexPathForItem:0 inSection:0]] scrollPosition:NSCollectionViewScrollPositionNone];
-
     self.itemScale = [[NSUserDefaults standardUserDefaults] floatForKey:@"itemScale"];
     if (self.itemScale == 0) {
         self.itemScale = pow(scaleBase, 2);
