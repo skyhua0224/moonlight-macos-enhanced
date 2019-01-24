@@ -44,7 +44,9 @@ static const NSString* HTTPS_PORT = @"47984";
 - (id) initWithHost:(NSString*) host uniqueId:(NSString*) uniqueId deviceName:(NSString*) deviceName cert:(NSData*) cert {
     self = [super init];
     _host = host;
-    _uniqueId = uniqueId;
+    // Use the same UID for all Moonlight clients to allow them
+    // quit games started on another Moonlight client.
+    _uniqueId = @"0123456789ABCDEF";
     _deviceName = deviceName;
     _cert = cert;
     _baseHTTPURL = [NSString stringWithFormat:@"http://%@:%@", host, HTTP_PORT];
