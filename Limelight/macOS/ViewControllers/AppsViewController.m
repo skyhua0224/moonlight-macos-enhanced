@@ -79,7 +79,7 @@ const CGFloat scaleBase = 1.125;
 
 - (void)transitionToHostsVC {
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
-    [self.view.window makeFirstResponder:self.hostsVC];
+    [self.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
 }
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
