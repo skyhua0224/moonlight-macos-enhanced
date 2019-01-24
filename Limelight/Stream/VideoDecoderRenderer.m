@@ -145,8 +145,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     
     _frameQueueHistory = nil;
     CFRelease(_frameQueue);
+    _frameQueue = nil;
     VTDecompressionSessionInvalidate(_decompressionSession);
     CFRelease(_decompressionSession);
+    _decompressionSession = nil;
 }
 
 - (void)setupWithVideoFormat:(int)videoFormat
@@ -517,9 +519,11 @@ void outputCallback(void * CM_NULLABLE decompressionOutputRefCon,
                     CMTime presentationTimeStamp,
                     CMTime presentationDuration) {
     VideoDecoderRenderer *me = (__bridge VideoDecoderRenderer *)(decompressionOutputRefCon);
-    os_unfair_lock_lock(&(me->_frameQueueLock));
-    CFArrayInsertValueAtIndex(me->_frameQueue, 0, imageBuffer);
-    os_unfair_lock_unlock(&(me->_frameQueueLock));
+    if (me->_frameQueue != nil) {
+        os_unfair_lock_lock(&(me->_frameQueueLock));
+        CFArrayInsertValueAtIndex(me->_frameQueue, 0, imageBuffer);
+        os_unfair_lock_unlock(&(me->_frameQueueLock));
+    }
 }
 
 
