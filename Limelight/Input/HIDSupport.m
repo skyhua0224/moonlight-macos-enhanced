@@ -270,6 +270,16 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     LiSendKeyboardEvent([self translateKeyCodeWithEvent:event], KEY_ACTION_UP, [self translateKeyModifierWithEvent:event]);
 }
 
+- (void)releaseAllModifierKeys {
+    LiSendKeyboardEvent(0x5B, KEY_ACTION_UP, 0);
+    LiSendKeyboardEvent(0x5C, KEY_ACTION_UP, 0);
+    LiSendKeyboardEvent(0xA0, KEY_ACTION_UP, 0);
+    LiSendKeyboardEvent(0xA1, KEY_ACTION_UP, 0);
+    LiSendKeyboardEvent(0xA2, KEY_ACTION_UP, 0);
+    LiSendKeyboardEvent(0xA3, KEY_ACTION_UP, 0);
+    LiSendKeyboardEvent(0xA4, KEY_ACTION_UP, 0);
+    LiSendKeyboardEvent(0xA5, KEY_ACTION_UP, 0);
+}
 
 - (void)mouseDown:(NSEvent *)event withButton:(int)button {
     if (self.shouldSendMouseEvents) {

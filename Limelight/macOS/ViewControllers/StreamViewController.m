@@ -148,7 +148,7 @@
     NSModalResponse response = [alert runModal];
     switch (response) {
         case NSAlertFirstButtonReturn:
-            [self.nextResponder doCommandBySelector:@selector(performClose:)];
+            [self doCommandBySelector:@selector(performCloseStreamWindow:)];
             break;
             
         case NSAlertSecondButtonReturn:
@@ -161,10 +161,14 @@
 }
 
 - (IBAction)performCloseStreamWindow:(id)sender {
+    [self.hidSupport releaseAllModifierKeys];
+
     [self.nextResponder doCommandBySelector:@selector(performClose:)];
 }
 
 - (IBAction)performCloseAndQuitApp:(id)sender {
+    [self.hidSupport releaseAllModifierKeys];
+    
     [self.delegate quitApp:self.app completion:nil];
 }
 
@@ -252,6 +256,8 @@
 }
 
 - (void)closeWindowFromMainQueueWithMessage:(NSString *)message {
+    [self.hidSupport releaseAllModifierKeys];
+    
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.delegate appDidQuit:self.app];
         if (message != nil) {
