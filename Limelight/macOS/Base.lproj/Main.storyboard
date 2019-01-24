@@ -293,6 +293,15 @@
                                                 <action selector="backButtonClicked:" target="Ady-hI-5gd" id="oqx-Nw-FGA"/>
                                             </connections>
                                         </menuItem>
+                                        <menuItem title="Back" hidden="YES" allowsKeyEquivalentWhenHidden="YES" id="qXz-gC-uXq">
+                                            <string key="keyEquivalent" base64-UTF8="YES">
+CA
+</string>
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="backButtonClicked:" target="Ady-hI-5gd" id="2VS-UZ-HaF"/>
+                                            </connections>
+                                        </menuItem>
                                         <menuItem title="Open" hidden="YES" keyEquivalent="" allowsKeyEquivalentWhenHidden="YES" id="QsI-iR-yyt">
                                             <connections>
                                                 <action selector="open:" target="Ady-hI-5gd" id="4vh-6H-wNQ"/>

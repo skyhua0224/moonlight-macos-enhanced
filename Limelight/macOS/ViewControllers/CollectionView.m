@@ -14,7 +14,7 @@
 @implementation CollectionView
 
 - (void)keyDown:(NSEvent *)event {
-    if (event.keyCode == kVK_Return) {
+    if (event.keyCode == kVK_Return || event.keyCode == kVK_Delete) {
         [self.nextResponder keyDown:event];
     } else {
         [super keyDown:event];
