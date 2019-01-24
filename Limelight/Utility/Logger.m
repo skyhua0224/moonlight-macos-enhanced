@@ -27,15 +27,19 @@ void LogTag(LogLevel level, NSString* tag, NSString* fmt, ...) {
 }
 
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
-    if (level < LOG_I) {
-        return;
-    }
-
-    NSString* levelPrefix = @"";
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSString *logLevel = [NSProcessInfo processInfo].environment[@"LOG_LEVEL"];
+        if (logLevel != nil) {
+            LoggerLogLevel = logLevel.intValue;
+        }
+    });
     
     if (level < LoggerLogLevel) {
         return;
     }
+
+    NSString* levelPrefix = @"";
     
     switch(level) {
         case LOG_D:
