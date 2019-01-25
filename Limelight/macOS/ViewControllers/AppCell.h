@@ -16,4 +16,6 @@
 @property (nonatomic, strong) TemporaryApp *app;
 @property (nonatomic, weak) id<AppsViewControllerDelegate> delegate;
 
+- (void)updateSelectedState:(BOOL)selected;
+
 @end

@@ -64,6 +64,8 @@ const CGFloat scaleBase = 1.125;
     [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [self updateRunningAppState];
     }];
+    
+    [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
 }
 
 - (void)viewDidAppear {
@@ -73,6 +75,15 @@ const CGFloat scaleBase = 1.125;
     [self.view.window makeFirstResponder:self.collectionView];
     
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
+    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
+        for (int i = 0; i < self.apps.count; i++) {
+            AppCell *cell = (AppCell *)[self.collectionView itemAtIndex:i];
+            [cell updateSelectedState:cell.selected];
+        }
+    }
 }
 
 - (void)transitionToHostsVC {
