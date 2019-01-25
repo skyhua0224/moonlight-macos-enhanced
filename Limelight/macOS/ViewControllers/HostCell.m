@@ -8,6 +8,7 @@
 
 #import "HostCell.h"
 #import "BackgroundColorView.h"
+#import "NSAppearance+Moonlight.h"
 
 @interface HostCell ()
 @property (weak) IBOutlet BackgroundColorView *imageContainer;
@@ -31,11 +32,16 @@
 }
 
 - (void)updateSelectedState:(BOOL)selected {
-    if (@available(macOS 10.14, *)) {
-        self.imageContainer.backgroundColor = selected ? [NSColor alternatingContentBackgroundColors][1] : [NSColor clearColor];
+    if (selected) {
+        if ([[NSApplication sharedApplication].effectiveAppearance moonlight_isDark]) {
+            self.imageContainer.backgroundColor = [NSColor colorWithWhite:1 alpha:0.095];
+        } else {
+            self.imageContainer.backgroundColor = [NSColor colorWithWhite:0 alpha:0.1];
+        }
     } else {
-        self.imageContainer.backgroundColor = selected ? [NSColor colorWithWhite:0 alpha:0.1] : [NSColor clearColor];
+        self.imageContainer.backgroundColor = [NSColor clearColor];
     }
+    
     self.labelContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
     self.hostName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];
 }

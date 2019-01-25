@@ -15,4 +15,6 @@
 @property (nonatomic, strong) TemporaryHost *host;
 @property (nonatomic, weak) id<HostsViewControllerDelegate> delegate;
 
+- (void)updateSelectedState:(BOOL)selected;
+
 @end

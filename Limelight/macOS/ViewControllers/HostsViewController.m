@@ -46,6 +46,8 @@
     self.hosts = [NSArray array];
     
     [self prepareDiscovery];
+    
+    [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
 }
 
 - (void)viewDidAppear {
@@ -77,6 +79,16 @@
     
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
+    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
+        if (self.collectionView.selectionIndexes.count > 0) {
+            NSUInteger selectedIndex = self.collectionView.selectionIndexes.firstIndex;
+            HostCell *cell = (HostCell *)[self.collectionView itemAtIndex:selectedIndex];
+            [cell updateSelectedState:YES];
+        }
+    }
 }
 
 

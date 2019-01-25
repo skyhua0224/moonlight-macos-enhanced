@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4C205F0E21FAB7E1003AE388 /* NSAppearance+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C205F0D21FAB7E1003AE388 /* NSAppearance+Moonlight.m */; };
 		4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24801FF1E99300B6A12E /* HIDSupport.m */; };
 		4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24861FF3934700B6A12E /* StreamViewMac.m */; };
 		4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */; };
@@ -95,6 +96,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		4C205F0C21FAB7E1003AE388 /* NSAppearance+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSAppearance+Moonlight.h"; sourceTree = "<group>"; };
+		4C205F0D21FAB7E1003AE388 /* NSAppearance+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSAppearance+Moonlight.m"; sourceTree = "<group>"; };
 		4C2556A121F56F280009838E /* Moonlight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Moonlight.entitlements; sourceTree = "<group>"; };
 		4C2E247F1FF1E99300B6A12E /* HIDSupport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HIDSupport.h; sourceTree = "<group>"; };
 		4C2E24801FF1E99300B6A12E /* HIDSupport.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HIDSupport.m; sourceTree = "<group>"; };
@@ -342,6 +345,8 @@
 				4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */,
 				4C819438202D75EF0023F308 /* NSCollectionView+Moonlight.h */,
 				4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */,
+				4C205F0C21FAB7E1003AE388 /* NSAppearance+Moonlight.h */,
+				4C205F0D21FAB7E1003AE388 /* NSAppearance+Moonlight.m */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -964,6 +969,7 @@
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
+				4C205F0E21FAB7E1003AE388 /* NSAppearance+Moonlight.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
 				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
