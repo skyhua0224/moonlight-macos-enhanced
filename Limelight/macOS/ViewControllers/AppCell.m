@@ -9,7 +9,7 @@
 #import "AppCell.h"
 #import "BackgroundColorView.h"
 #import "AppCellView.h"
-#import "NSAppearance+Moonlight.h"
+#import "NSApplication+Moonlight.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -88,9 +88,9 @@
 
 - (CGFloat)shadowAlphaWithSelected:(BOOL)selected {
     if (selected) {
-        return [[NSApplication sharedApplication].effectiveAppearance moonlight_isDark] ? 0.75 : 0.64;
+        return [NSApplication moonlight_isDarkAppearance] ? 0.75 : 0.64;
     } else {
-        return [[NSApplication sharedApplication].effectiveAppearance moonlight_isDark] ? 0.7 : 0.55;
+        return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.55;
     }
 }
 
@@ -99,9 +99,9 @@
         return 1;
     } else {
         if (hovered) {
-            return [[NSApplication sharedApplication].effectiveAppearance moonlight_isDark] ? 0.9 : 0.9;
+            return [NSApplication moonlight_isDarkAppearance] ? 0.9 : 0.9;
         } else {
-            return [[NSApplication sharedApplication].effectiveAppearance moonlight_isDark] ? 0.65 : 0.75;
+            return [NSApplication moonlight_isDarkAppearance] ? 0.65 : 0.75;
         }
     }
 }

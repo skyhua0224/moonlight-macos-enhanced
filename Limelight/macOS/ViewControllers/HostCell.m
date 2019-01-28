@@ -8,7 +8,7 @@
 
 #import "HostCell.h"
 #import "BackgroundColorView.h"
-#import "NSAppearance+Moonlight.h"
+#import "NSApplication+Moonlight.h"
 
 @interface HostCell ()
 @property (weak) IBOutlet BackgroundColorView *imageContainer;
@@ -33,7 +33,7 @@
 
 - (void)updateSelectedState:(BOOL)selected {
     if (selected) {
-        if ([[NSApplication sharedApplication].effectiveAppearance moonlight_isDark]) {
+        if ([NSApplication moonlight_isDarkAppearance]) {
             self.imageContainer.backgroundColor = [NSColor colorWithWhite:1 alpha:0.095];
         } else {
             self.imageContainer.backgroundColor = [NSColor colorWithWhite:0 alpha:0.1];

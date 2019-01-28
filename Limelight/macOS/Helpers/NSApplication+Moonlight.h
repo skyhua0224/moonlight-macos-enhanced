@@ -1,8 +1,8 @@
 //
-//  NSAppearance+Moonlight.h
+//  NSApplication+Moonlight.h
 //  Moonlight for macOS
 //
-//  Created by Michael Kenny on 25/1/19.
+//  Created by Michael Kenny on 28/1/19.
 //  Copyright © 2019 Moonlight Game Streaming Project. All rights reserved.
 //
 
@@ -10,9 +10,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSAppearance (Moonlight)
+@interface NSApplication (Moonlight)
 
-- (BOOL)moonlight_isDark;
++ (BOOL)moonlight_isDarkAppearance;
 
 @end
 
