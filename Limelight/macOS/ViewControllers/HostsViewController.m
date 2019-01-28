@@ -47,7 +47,9 @@
     
     [self prepareDiscovery];
     
-    [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
+    if (@available(macOS 10.14, *)) {
+        [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
+    }
 }
 
 - (void)viewDidAppear {

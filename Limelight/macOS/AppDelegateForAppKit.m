@@ -17,7 +17,7 @@ typedef enum : NSUInteger {
 
 @interface AppDelegateForAppKit () <NSApplicationDelegate>
 @property (nonatomic, strong) NSWindowController *preferencesWC;
-@property (weak) IBOutlet NSMenu *themeMenu;
+@property (weak) IBOutlet NSMenuItem *themeMenuItem;
 @end
 
 @implementation AppDelegateForAppKit
@@ -29,8 +29,12 @@ typedef enum : NSUInteger {
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
-    Theme theme = [[NSUserDefaults standardUserDefaults] integerForKey:@"theme"];
-    [self changeTheme:theme withMenuItem:[self menuItemForTheme:theme forMenu:self.themeMenu]];
+    if (@available(macOS 10.14, *)) {
+        Theme theme = [[NSUserDefaults standardUserDefaults] integerForKey:@"theme"];
+        [self changeTheme:theme withMenuItem:[self menuItemForTheme:theme forMenu:self.themeMenuItem.submenu]];
+    } else {
+        [self.themeMenuItem.submenu.supermenu removeItem:self.themeMenuItem];
+    }
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
@@ -71,19 +75,19 @@ typedef enum : NSUInteger {
     
     [[NSUserDefaults standardUserDefaults] setInteger:theme forKey:@"theme"];
     
-    NSApplication *app = [NSApplication sharedApplication];
-    switch (theme) {
-        case SystemTheme:
-            app.appearance = nil;
-            break;
-        case LightTheme:
-            app.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
-            break;
-        case DarkTheme:
-            if (@available(macOS 10.14, *)) {
+    if (@available(macOS 10.14, *)) {
+        NSApplication *app = [NSApplication sharedApplication];
+        switch (theme) {
+            case SystemTheme:
+                app.appearance = nil;
+                break;
+            case LightTheme:
+                app.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+                break;
+            case DarkTheme:
                 app.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-            }
-            break;
+                break;
+        }
     }
 }
 
