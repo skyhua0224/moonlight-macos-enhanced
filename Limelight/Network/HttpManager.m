@@ -53,38 +53,47 @@ static const NSString* HTTPS_PORT = @"47984";
     _baseHTTPSURL = [NSString stringWithFormat:@"https://%@:%@", host, HTTPS_PORT];
     _requestLock = dispatch_semaphore_create(0);
     _respData = [[NSMutableData alloc] init];
-    NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-    _urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
     return self;
 }
 
 - (void) executeRequestSynchronously:(HttpRequest*)request {
     Log(LOG_D, @"Making Request: %@", request);
+
+    NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    _urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+
     [_respData setLength:0];
+    __weak typeof(self) weakSelf = self;
     [[_urlSession dataTaskWithRequest:request.request completionHandler:^(NSData * __nullable data, NSURLResponse * __nullable response, NSError * __nullable error) {
+        
+        assert(weakSelf != nil);
+        typeof(self) strongSelf = weakSelf;
         
         if (error != NULL) {
             Log(LOG_D, @"Connection error: %@", error);
-            self->_errorOccurred = true;
+            strongSelf->_errorOccurred = true;
         }
         else {
             Log(LOG_D, @"Received response: %@", response);
 
             if (data != NULL) {
                 Log(LOG_D, @"\n\nReceived data: %@\n\n", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
-                [self->_respData appendData:data];
-                if ([[NSString alloc] initWithData:self->_respData encoding:NSUTF8StringEncoding] != nil) {
-                    self->_requestResp = [HttpManager fixXmlVersion:self->_respData];
+                [strongSelf->_respData appendData:data];
+                if ([[NSString alloc] initWithData:strongSelf->_respData encoding:NSUTF8StringEncoding] != nil) {
+                    strongSelf->_requestResp = [HttpManager fixXmlVersion:strongSelf->_respData];
                 } else {
-                    self->_requestResp = self->_respData;
+                    strongSelf->_requestResp = strongSelf->_respData;
                 }
             }
         }
         
-        dispatch_semaphore_signal(self->_requestLock);
+        dispatch_semaphore_signal(strongSelf->_requestLock);
     }] resume];
     dispatch_semaphore_wait(_requestLock, DISPATCH_TIME_FOREVER);
-    
+
+    [_urlSession finishTasksAndInvalidate];
+    _urlSession = nil;
+
     if (!_errorOccurred && request.response && !_cancelled) {
         [request.response populateWithData:_requestResp];
         
@@ -102,6 +111,9 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (void)cancel {
     _cancelled = YES;
+    
+    [_urlSession invalidateAndCancel];
+    _urlSession = nil;
 }
 
 - (NSURLRequest*) createRequestFromString:(NSString*) urlString enableTimeout:(BOOL)normalTimeout {

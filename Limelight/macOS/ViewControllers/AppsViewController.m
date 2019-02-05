@@ -294,12 +294,13 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)updateRunningAppState {
+    __weak typeof(self) weakSelf = self;
     NSOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
-        DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:self.host uniqueId:[IdManager getUniqueId] cert:[CryptoManager readCertFromFile]];
+        DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:weakSelf.host uniqueId:[IdManager getUniqueId] cert:[CryptoManager readCertFromFile]];
         [worker discoverHost];
         dispatch_async(dispatch_get_main_queue(), ^{
-            TemporaryApp *runningApp = [self findRunningApp:self.host];
-            [self setRunningApp:runningApp];
+            TemporaryApp *runningApp = [weakSelf findRunningApp:weakSelf.host];
+            [weakSelf setRunningApp:runningApp];
         });
     }];
     NSOperationQueue *queue = [[NSOperationQueue alloc] init];
