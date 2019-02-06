@@ -7,7 +7,6 @@
 //
 
 #import "AppCell.h"
-#import "BackgroundColorView.h"
 #import "AppCellView.h"
 #import "NSApplication+Moonlight.h"
 
