@@ -217,7 +217,7 @@ static const NSString* HTTPS_PORT = @"47984";
     
     SecIdentityCopyCertificate(identity, &certificate);
     
-    return [[NSArray alloc] initWithObjects:(__bridge id)certificate, nil];
+    return [[NSArray alloc] initWithObjects:CFBridgingRelease(certificate), nil];
 }
 
 // Returns the identity
@@ -236,10 +236,12 @@ static const NSString* HTTPS_PORT = @"47984";
         //Log(LOG_D, @"Success opening p12 certificate. Items: %ld", CFArrayGetCount(items));
         CFDictionaryRef identityDict = CFArrayGetValueAtIndex(items, 0);
         identityApp = (SecIdentityRef)CFDictionaryGetValue(identityDict, kSecImportItemIdentity);
+        CFRetain(identityApp);
     } else {
         Log(LOG_E, @"Error opening Certificate.");
     }
     
+    CFRelease(items);
     CFRelease(options);
     CFRelease(password);
     
@@ -260,6 +262,7 @@ static const NSString* HTTPS_PORT = @"47984";
         NSArray* certArray = [self getCertificate:identity];
         NSURLCredential* newCredential = [NSURLCredential credentialWithIdentity:identity certificates:certArray persistence:NSURLCredentialPersistencePermanent];
         completionHandler(NSURLSessionAuthChallengeUseCredential, newCredential);
+        CFRelease(identity);
     }
     else
     {
