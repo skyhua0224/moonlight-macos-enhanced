@@ -34,6 +34,8 @@
 @property (nonatomic, strong) NSLock *boxArtCacheLock;
 @property (nonatomic) CGFloat itemScale;
 
+@property (nonatomic) id windowDidBecomeKeyObserver;
+
 @end
 
 const CGFloat scaleBase = 1.125;
@@ -61,8 +63,9 @@ const CGFloat scaleBase = 1.125;
     self.boxArtCache = [[NSMutableDictionary alloc] init];
     self.boxArtCacheLock = [[NSLock alloc] init];
     
-    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        [self updateRunningAppState];
+    __weak typeof(self) weakSelf = self;
+    self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf updateRunningAppState];
     }];
     
     if (@available(macOS 10.14, *)) {
@@ -79,6 +82,17 @@ const CGFloat scaleBase = 1.125;
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
 }
 
+- (void)viewWillDisappear {
+    [super viewWillDisappear];
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
+    if (@available(macOS 10.14, *)) {
+        [[NSApplication sharedApplication] removeObserver:self forKeyPath:@"effectiveAppearance"];
+    }
+    
+    self.appManager = nil;
+}
+
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
     if ([keyPath isEqualToString:@"effectiveAppearance"]) {
         for (int i = 0; i < self.apps.count; i++) {
@@ -91,6 +105,7 @@ const CGFloat scaleBase = 1.125;
 - (void)transitionToHostsVC {
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
     [self.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
+    [self removeFromParentViewController];
 }
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
