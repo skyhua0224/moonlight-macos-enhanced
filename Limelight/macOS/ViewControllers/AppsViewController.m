@@ -15,6 +15,7 @@
 #import "NSWindow+Moonlight.h"
 #import "NSCollectionView+Moonlight.h"
 #import "NSApplication+Moonlight.h"
+#import "BackgroundColorView.h"
 
 #import "HttpManager.h"
 #import "IdManager.h"
@@ -331,14 +332,16 @@ const CGFloat scaleBase = 1.125;
 #pragma mark - Helpers
 
 - (void)updateColors {
-    self.collectionView.backgroundColors = @[[NSColor controlBackgroundColor]];
-    self.collectionView.enclosingScrollView.backgroundColor = [NSColor controlBackgroundColor];
+    NSColor *backgroundColor = [NSColor textBackgroundColor];
     if (@available(macOS 10.14, *)) {
         if ([NSApplication moonlight_isDarkAppearance]) {
-            self.collectionView.backgroundColors = @[[NSColor windowBackgroundColor]];
-            self.collectionView.enclosingScrollView.backgroundColor = [NSColor windowBackgroundColor];
+            backgroundColor = [NSColor windowBackgroundColor];
         }
     }
+
+    // Set containerView subclass's background color, because collectionView's backgroundColors property is unreliable.
+    // In the storyboard, collectionView's first backgroundColors item is set to 0 alpha.
+    ((BackgroundColorView *)self.parentViewController.view).backgroundColor = backgroundColor;
 }
 
 - (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {
