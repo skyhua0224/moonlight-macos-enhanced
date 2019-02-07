@@ -544,6 +544,7 @@ DQ
                                             <color key="primaryBackgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                         </collectionView>
                                     </subviews>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </clipView>
                                 <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="jCn-mS-GIa">
                                     <rect key="frame" x="1" y="144" width="233" height="15"/>
@@ -632,10 +633,10 @@ DQ
                                                 <size key="itemSize" width="96" height="144"/>
                                                 <edgeInsets key="sectionInset" left="16" right="16" top="28" bottom="28"/>
                                             </collectionViewFlowLayout>
-                                            <color key="primaryBackgroundColor" name="windowBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                            <color key="primaryBackgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                         </collectionView>
                                     </subviews>
-                                    <color key="backgroundColor" name="windowBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </clipView>
                                 <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="9Zi-dy-efy">
                                     <rect key="frame" x="1" y="283" width="448" height="16"/>

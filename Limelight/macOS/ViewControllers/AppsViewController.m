@@ -14,6 +14,7 @@
 #import "StreamViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "NSCollectionView+Moonlight.h"
+#import "NSApplication+Moonlight.h"
 
 #import "HttpManager.h"
 #import "IdManager.h"
@@ -49,6 +50,8 @@ const CGFloat scaleBase = 1.125;
     
     self.collectionView.dataSource = self;
 
+    [self updateColors];
+    
     self.itemScale = [[NSUserDefaults standardUserDefaults] floatForKey:@"itemScale"];
     if (self.itemScale == 0) {
         self.itemScale = pow(scaleBase, 2);
@@ -95,6 +98,8 @@ const CGFloat scaleBase = 1.125;
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
     if ([keyPath isEqualToString:@"effectiveAppearance"]) {
+        [self updateColors];
+        
         for (int i = 0; i < self.apps.count; i++) {
             AppCell *cell = (AppCell *)[self.collectionView itemAtIndex:i];
             [cell updateSelectedState:cell.selected];
@@ -324,6 +329,17 @@ const CGFloat scaleBase = 1.125;
 
 
 #pragma mark - Helpers
+
+- (void)updateColors {
+    self.collectionView.backgroundColors = @[[NSColor controlBackgroundColor]];
+    self.collectionView.enclosingScrollView.backgroundColor = [NSColor controlBackgroundColor];
+    if (@available(macOS 10.14, *)) {
+        if ([NSApplication moonlight_isDarkAppearance]) {
+            self.collectionView.backgroundColors = @[[NSColor windowBackgroundColor]];
+            self.collectionView.enclosingScrollView.backgroundColor = [NSColor windowBackgroundColor];
+        }
+    }
+}
 
 - (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {
     if (app != nil) {
