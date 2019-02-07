@@ -150,7 +150,7 @@ const CGFloat scaleBase = 1.125;
 - (void)updateCollectionViewItemSize {
     NSCollectionViewFlowLayout *flowLayout = (NSCollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
 
-    flowLayout.itemSize = NSMakeSize(85 * self.itemScale, 128 * self.itemScale);
+    flowLayout.itemSize = NSMakeSize((int)(90 * self.itemScale + 6 + 2), (int)(128 * self.itemScale + 6 + 2));
     [flowLayout invalidateLayout];
     
     [[NSUserDefaults standardUserDefaults] setFloat:self.itemScale forKey:@"itemScale"];
@@ -180,7 +180,7 @@ const CGFloat scaleBase = 1.125;
     item.appName.stringValue = app.name;
     item.app = app;
     
-    item.resumeIcon.hidden = app != self.runningApp;
+    item.runningIcon.hidden = app != self.runningApp;
 
     [self.boxArtCacheLock lock];
     NSImage* appImage = [self.boxArtCache objectForKey:app.id];

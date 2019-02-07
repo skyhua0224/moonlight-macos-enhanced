@@ -17,10 +17,10 @@
                     <rect key="frame" x="0.0" y="0.0" width="173" height="144"/>
                     <subviews>
                         <customView translatesAutoresizingMaskIntoConstraints="NO" id="Dvl-ny-Fge" userLabel="App Cover Art Container">
-                            <rect key="frame" x="47" y="38" width="79" height="106"/>
+                            <rect key="frame" x="50" y="38" width="74" height="98"/>
                             <subviews>
                                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="KWV-yZ-F3P" userLabel="App Cover Art">
-                                    <rect key="frame" x="0.0" y="0.0" width="79" height="106"/>
+                                    <rect key="frame" x="0.0" y="0.0" width="74" height="98"/>
                                     <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" id="o9Q-i8-aPK"/>
                                 </imageView>
                             </subviews>
@@ -32,13 +32,13 @@
                                 <constraint firstAttribute="bottom" secondItem="KWV-yZ-F3P" secondAttribute="bottom" id="tiR-AM-WcG"/>
                             </constraints>
                         </customView>
-                        <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="TBj-LS-qdd" userLabel="Resume Icon">
-                            <rect key="frame" x="71" y="75" width="32" height="32"/>
+                        <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="TBj-LS-qdd" userLabel="Running Icon">
+                            <rect key="frame" x="106" y="118" width="24" height="24"/>
                             <constraints>
-                                <constraint firstAttribute="height" constant="32" id="DND-Li-4pu"/>
-                                <constraint firstAttribute="width" constant="32" id="JLY-KU-77T"/>
+                                <constraint firstAttribute="width" secondItem="TBj-LS-qdd" secondAttribute="height" multiplier="1:1" id="DkP-9w-jfL"/>
+                                <constraint firstAttribute="width" constant="24" id="JLY-KU-77T"/>
                             </constraints>
-                            <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="ResumeIcon" id="oZI-fL-CkB"/>
+                            <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="RunningIcon" id="oZI-fL-CkB"/>
                         </imageView>
                         <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="8Wu-8r-gUK" userLabel="App Name">
                             <rect key="frame" x="0.0" y="2" width="173" height="28"/>
@@ -53,15 +53,17 @@
                         </textField>
                     </subviews>
                     <constraints>
+                        <constraint firstItem="Dvl-ny-Fge" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="0O3-YC-k9a" secondAttribute="leading" constant="8" id="5JE-VO-fCh"/>
+                        <constraint firstItem="TBj-LS-qdd" firstAttribute="top" secondItem="0O3-YC-k9a" secondAttribute="top" constant="2" id="6Ty-L4-2QH"/>
                         <constraint firstAttribute="bottom" secondItem="8Wu-8r-gUK" secondAttribute="bottom" constant="2" id="Cg7-fz-wnD"/>
                         <constraint firstItem="8Wu-8r-gUK" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="0O3-YC-k9a" secondAttribute="leading" constant="2" id="Cxo-ZU-Fur"/>
                         <constraint firstItem="8Wu-8r-gUK" firstAttribute="trailing" relation="lessThanOrEqual" secondItem="0O3-YC-k9a" secondAttribute="trailing" constant="-2" id="HwQ-AU-IEE"/>
-                        <constraint firstItem="TBj-LS-qdd" firstAttribute="centerY" secondItem="Dvl-ny-Fge" secondAttribute="centerY" id="LlJ-fv-tPJ"/>
                         <constraint firstItem="8Wu-8r-gUK" firstAttribute="centerX" secondItem="0O3-YC-k9a" secondAttribute="centerX" id="Oob-sv-nSx"/>
+                        <constraint firstItem="TBj-LS-qdd" firstAttribute="trailing" secondItem="Dvl-ny-Fge" secondAttribute="trailing" constant="6" id="be0-dk-JjC"/>
+                        <constraint firstItem="TBj-LS-qdd" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" constant="-6" id="eXj-Gk-ux7"/>
                         <constraint firstItem="8Wu-8r-gUK" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="bottom" constant="8" id="ibr-4x-sAb"/>
-                        <constraint firstItem="Dvl-ny-Fge" firstAttribute="top" secondItem="0O3-YC-k9a" secondAttribute="top" id="l8n-Tv-r3t"/>
+                        <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="TBj-LS-qdd" secondAttribute="trailing" constant="2" id="jI0-BS-Y9i"/>
                         <constraint firstItem="Dvl-ny-Fge" firstAttribute="centerX" secondItem="0O3-YC-k9a" secondAttribute="centerX" id="o5z-vB-dc0"/>
-                        <constraint firstItem="TBj-LS-qdd" firstAttribute="centerX" secondItem="Dvl-ny-Fge" secondAttribute="centerX" id="wdB-XL-JRz"/>
                     </constraints>
                 </customView>
             </subviews>
@@ -74,12 +76,13 @@
             <connections>
                 <outlet property="menu" destination="eXa-bo-m2A" id="1wc-ap-qe3"/>
             </connections>
+            <point key="canvasLocation" x="133.5" y="145"/>
         </customView>
         <collectionViewItem id="UvQ-65-P9k" customClass="AppCell">
             <connections>
                 <outlet property="appCoverArt" destination="KWV-yZ-F3P" id="UhW-v9-iin"/>
                 <outlet property="appName" destination="8Wu-8r-gUK" id="wwO-nu-TRl"/>
-                <outlet property="resumeIcon" destination="TBj-LS-qdd" id="sqp-Wv-6eg"/>
+                <outlet property="runningIcon" destination="TBj-LS-qdd" id="sqp-Wv-6eg"/>
                 <outlet property="view" destination="Hz6-mo-xeY" id="2dI-ni-3qs"/>
             </connections>
         </collectionViewItem>
@@ -99,6 +102,6 @@
         </menu>
     </objects>
     <resources>
-        <image name="ResumeIcon" width="128" height="128"/>
+        <image name="RunningIcon" width="32" height="32"/>
     </resources>
 </document>

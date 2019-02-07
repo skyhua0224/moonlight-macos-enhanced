@@ -23,6 +23,12 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    NSShadow *runningShadow = [[NSShadow alloc] init];
+    [runningShadow setShadowColor:[NSColor colorWithRed:0.06 green:0.204 blue:0.5 alpha:0.75]];
+    [runningShadow setShadowOffset:NSMakeSize(0, -2)];
+    [runningShadow setShadowBlurRadius:2];
+    self.runningIcon.shadow = runningShadow;
+    
     NSShadow *shadow = [[NSShadow alloc] init];
     [shadow setShadowColor:[NSColor colorWithWhite:0 alpha:[self shadowAlphaWithSelected:NO]]];
     [shadow setShadowOffset:NSMakeSize(0, -4)];
@@ -32,8 +38,6 @@
     self.appCoverArt.wantsLayer = YES;
     self.appCoverArt.layer.masksToBounds = YES;
     self.appCoverArt.layer.cornerRadius = 6;
-    
-    self.resumeIcon.alphaValue = 0.9;
     
     ((AppCellView *)self.view).delegate = self;
     
