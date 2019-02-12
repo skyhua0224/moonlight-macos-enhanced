@@ -147,7 +147,9 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     CFRelease(_frameQueue);
     _frameQueue = nil;
     VTDecompressionSessionInvalidate(_decompressionSession);
-    CFRelease(_decompressionSession);
+    if (_decompressionSession != nil) {
+        CFRelease(_decompressionSession);
+    }
     _decompressionSession = nil;
 }
 
