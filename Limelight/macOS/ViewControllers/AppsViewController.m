@@ -89,11 +89,6 @@ const CGFloat scaleBase = 1.125;
 - (void)viewWillDisappear {
     [super viewWillDisappear];
     
-    [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
-    if (@available(macOS 10.14, *)) {
-        [[NSApplication sharedApplication] removeObserver:self forKeyPath:@"effectiveAppearance"];
-    }
-    
     self.appManager = nil;
 }
 
@@ -109,6 +104,11 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)transitionToHostsVC {
+    [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
+    if (@available(macOS 10.14, *)) {
+        [[NSApplication sharedApplication] removeObserver:self forKeyPath:@"effectiveAppearance"];
+    }
+    
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
     [self.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
     [self removeFromParentViewController];
