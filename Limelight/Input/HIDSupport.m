@@ -149,6 +149,8 @@ static struct KeyMapping keys[] = {
 @property (nonatomic, strong) Controller *controller;
 @property (nonatomic, strong) Controller *lastController;
 @property (nonatomic) CVDisplayLinkRef displayLink;
+@property (nonatomic) CGFloat mouseDeltaX;
+@property (nonatomic) CGFloat mouseDeltaY;
 @end
 
 @implementation HIDSupport
@@ -191,9 +193,13 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 {
     HIDSupport *me = (__bridge HIDSupport *)displayLinkContext;
     
+    
     int32_t deltaX, deltaY;
-    CGGetLastMouseDelta(&deltaX, &deltaY);
+    deltaX = me.mouseDeltaX;
+    deltaY = me.mouseDeltaY;
     if (deltaX != 0 || deltaY != 0) {
+        me.mouseDeltaX = 0;
+        me.mouseDeltaY = 0;
         if (me.shouldSendMouseEvents) {
             LiSendMouseMoveEvent(deltaX, deltaY);
         }
@@ -291,6 +297,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     if (self.shouldSendMouseEvents) {
         LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, button);
     }
+}
+
+- (void)mouseMoved:(NSEvent *)event {
+    self.mouseDeltaX += event.deltaX;
+    self.mouseDeltaY += event.deltaY;
 }
 
 - (void)scrollWheel:(NSEvent *)event {

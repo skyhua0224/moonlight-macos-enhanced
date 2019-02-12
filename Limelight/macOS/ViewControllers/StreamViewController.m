@@ -125,6 +125,22 @@
     [self.hidSupport mouseUp:event withButton:BUTTON_MIDDLE];
 }
 
+- (void)mouseMoved:(NSEvent *)event {
+    [self.hidSupport mouseMoved:event];
+}
+
+- (void)mouseDragged:(NSEvent *)event {
+    [self.hidSupport mouseMoved:event];
+}
+
+- (void)rightMouseDragged:(NSEvent *)event {
+    [self.hidSupport mouseMoved:event];
+}
+
+- (void)otherMouseDragged:(NSEvent *)event {
+    [self.hidSupport mouseMoved:event];
+}
+
 - (void)scrollWheel:(NSEvent *)event {
     [self.hidSupport scrollWheel:event];
 }
@@ -197,6 +213,7 @@
         [self disallowDisplaySleep];
         
         self.hidSupport.shouldSendMouseEvents = YES;
+        self.view.window.acceptsMouseMovedEvents = YES;
     }
 }
 
@@ -210,6 +227,7 @@
         [self allowDisplaySleep];
 
         self.hidSupport.shouldSendMouseEvents = NO;
+        self.view.window.acceptsMouseMovedEvents = NO;
     }
 }
 

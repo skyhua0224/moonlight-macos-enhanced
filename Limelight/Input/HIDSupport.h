@@ -19,6 +19,7 @@
 
 - (void)mouseDown:(NSEvent *)event withButton:(int)button;
 - (void)mouseUp:(NSEvent *)event withButton:(int)button;
+- (void)mouseMoved:(NSEvent *)event;
 - (void)scrollWheel:(NSEvent *)event;
 
 @end
