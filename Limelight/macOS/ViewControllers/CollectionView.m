@@ -51,13 +51,27 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
     if (self.selectionIndexes.count == 0) {
         switch (event.keyCode) {
             case kVK_UpArrow:
-            case kVK_LeftArrow:
-                [self selectItemAtIndex:[self numberOfItemsInSection:0] - 1 atPosition:NSCollectionViewScrollPositionBottom];
+            case kVK_LeftArrow: {
+                NSCollectionViewScrollPosition scrollPosition;
+                if (self.enclosingScrollView.contentView.bounds.origin.y <= 29) {
+                    scrollPosition = NSCollectionViewScrollPositionBottom;
+                } else {
+                    scrollPosition = NSCollectionViewScrollPositionNone;
+                }
+                [self selectItemAtIndex:[self numberOfItemsInSection:0] - 1 atPosition:scrollPosition];
+            }
                 break;
                 
             case kVK_DownArrow:
-            case kVK_RightArrow:
-                [self selectItemAtIndex:0 atPosition:NSCollectionViewScrollPositionTop];
+            case kVK_RightArrow: {
+                NSCollectionViewScrollPosition scrollPosition;
+                if (self.enclosingScrollView.contentView.bounds.origin.y >= -10) {
+                    scrollPosition = NSCollectionViewScrollPositionTop;
+                } else {
+                    scrollPosition = NSCollectionViewScrollPositionNone;
+                }
+                [self selectItemAtIndex:0 atPosition:scrollPosition];
+            }
                 break;
                 
             default:
