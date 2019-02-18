@@ -9,32 +9,59 @@
 #import "VideoDecoderRenderer.h"
 #import "RendererLayerContainer.h"
 
-#import <VideoToolbox/VideoToolbox.h>
-
 #include "Limelight.h"
+
+@import VideoToolbox;
+
 
 #define TIMER_SLACK_MS 3
 #define FRAME_HISTORY_ENTRIES 8
 
+@interface NSMutableArray (Moonlight)
+- (void)enqueue:(NSObject *)object;
+- (NSObject *)dequeue;
+@end
+
+@implementation NSMutableArray (Moonlight)
+
+- (void)enqueue:(NSObject *)object {
+    [self insertObject:object atIndex:0];
+}
+
+- (NSObject *)dequeue {
+    NSObject *object = self.lastObject;
+    [self removeLastObject];
+    
+    return object;
+}
+
+@end
+
+
+@interface VideoDecoderRenderer ()
+@property (nonatomic, strong) StreamConfiguration *config;
+
+@property (nonatomic, strong) NSMutableArray *frameQueue;
+@property (nonatomic, strong) NSMutableArray<NSNumber *> *frameQueueHistory;
+
+@end
+
 @implementation VideoDecoderRenderer {
     ViewType *_view;
-    CVDisplayLinkRef _displayLink;
-    StreamConfiguration *_config;
-    os_unfair_lock _frameQueueLock;
-    NSMutableArray<NSNumber *> *_frameQueueHistory;
-    CFMutableArrayRef _frameQueue;
-    CMVideoFormatDescriptionRef _imageFormatDesc;
 
-    VTDecompressionSessionRef _decompressionSession;
-    
-    RendererLayerContainer *layerContainer;
-    
     AVSampleBufferDisplayLayer* displayLayer;
+    RendererLayerContainer *layerContainer;
     Boolean waitingForSps, waitingForPps, waitingForVps;
     int videoFormat;
     
     NSData *spsData, *ppsData, *vpsData;
+    CMVideoFormatDescriptionRef _imageFormatDesc;
+
+    CVDisplayLinkRef _displayLink;
+
+    os_unfair_lock _frameQueueLock;
     CMVideoFormatDescriptionRef formatDesc;
+    VTDecompressionSessionRef _decompressionSession;
 }
 
 - (void)printStreamInfo {
@@ -89,9 +116,9 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                                           CVOptionFlags *flagsOut,
                                           void *displayLinkContext)
 {
-    VideoDecoderRenderer *me = (__bridge VideoDecoderRenderer *)displayLinkContext;
+    VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)displayLinkContext;
     
-    [me vsyncCallback:(500 / me->_config.frameRate)];
+    [self vsyncCallback:(500 / self.config.frameRate)];
     
     return kCVReturnSuccess;
 }
@@ -127,8 +154,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     _view = view;
     
     _frameQueueHistory = [NSMutableArray arrayWithCapacity:FRAME_HISTORY_ENTRIES];
-    _frameQueue = CFArrayCreateMutable(NULL, 3, &kCFTypeArrayCallBacks);
-    
+    _frameQueue = [NSMutableArray array];
+
     [self reinitializeDisplayLayer];
     
     [self initializeDisplayLink];
@@ -143,9 +170,9 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         CVDisplayLinkRelease(_displayLink);
     }
     
-    _frameQueueHistory = nil;
-    CFRelease(_frameQueue);
-    _frameQueue = nil;
+    self.frameQueueHistory = nil;
+    self.frameQueue = nil;
+    
     VTDecompressionSessionInvalidate(_decompressionSession);
     if (_decompressionSession != nil) {
         CFRelease(_decompressionSession);
@@ -160,12 +187,12 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 
 - (void)setStreamConfig:(StreamConfiguration *)config
 {
-    _config = config;
+    self.config = config;
 }
 
 - (void)vsyncCallback:(int)timeUntilNextVsyncMillis
 {
-    int maxVideoFps = _config.frameRate;
+    int maxVideoFps = self.config.frameRate;
     int displayFps = ceil(1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(_displayLink));
     
     // Make sure initialize() has been called
@@ -185,8 +212,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     // frame history to drop frames only if consistently above the
     // one queued frame mark.
     if (maxVideoFps >= displayFps) {
-        for (int i = 0; i < _frameQueueHistory.count; i++) {
-            if (_frameQueueHistory[i].integerValue <= 1) {
+        for (int i = 0; i < self.frameQueueHistory.count; i++) {
+            if (self.frameQueueHistory[i].integerValue <= 1) {
                 // Be lenient as long as the queue length
                 // resolves before the end of frame history
                 frameDropTarget = 3;
@@ -194,29 +221,27 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             }
         }
         
-        if (_frameQueueHistory.count == FRAME_HISTORY_ENTRIES) {
-            [_frameQueueHistory removeLastObject];
+        if (self.frameQueueHistory.count == FRAME_HISTORY_ENTRIES) {
+            [self.frameQueueHistory dequeue];
         }
         
-        [_frameQueueHistory insertObject:@(CFArrayGetCount(_frameQueue)) atIndex:0];
+        [self.frameQueueHistory enqueue:@(self.frameQueue.count)];
     }
     
     // Catch up if we're several frames ahead
-    while (CFArrayGetCount(_frameQueue) > frameDropTarget) {
-//        Log(LOG_I, @"Discarding");
-//        [self printNaluTypeWithFrame:_frameQueue.lastObject];
-        CFArrayRemoveValueAtIndex(_frameQueue, CFArrayGetCount(_frameQueue) - 1);
+    while (self.frameQueue.count > frameDropTarget) {
+        [self.frameQueue dequeue];
     }
+
     
-    
-    if (CFArrayGetCount(_frameQueue) == 0) {
+    if (self.frameQueue.count == 0) {
         os_unfair_lock_unlock(&_frameQueueLock);
         
         while (mach_absolute_time() / 1000000 < vsyncCallbackStartTime + timeUntilNextVsyncMillis - TIMER_SLACK_MS) {
             usleep(1000);
             
             os_unfair_lock_lock(&_frameQueueLock);
-            if (CFArrayGetCount(_frameQueue) > 0) {
+            if (self.frameQueue.count > 0) {
                 // Don't release the lock
                 goto RenderNextFrame;
             }
@@ -230,13 +255,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 RenderNextFrame:
     {
         // Grab the first frame
-        CVImageBufferRef frame = (CVImageBufferRef)CFArrayGetValueAtIndex(_frameQueue, CFArrayGetCount(_frameQueue) - 1);
-        CFRetain(frame);
-        CFArrayRemoveValueAtIndex(_frameQueue, CFArrayGetCount(_frameQueue) - 1);
+        CVImageBufferRef frame = (CVImageBufferRef)CFBridgingRetain([self.frameQueue dequeue]);
         os_unfair_lock_unlock(&_frameQueueLock);
-        
+
         // Render it
-//        [self printNaluTypeWithFrame:frame];
         [self renderFrameAtVsync:frame];
     }
 }
@@ -356,7 +378,6 @@ RenderNextFrame:
 {
     OSStatus status;
 
-//    Log(LOG_I, @"nalType: %c", nalType);
     if (bufferType != BUFFER_TYPE_PICDATA) {
         if (bufferType == BUFFER_TYPE_VPS) {
             Log(LOG_I, @"Got VPS");
@@ -520,11 +541,12 @@ void outputCallback(void * CM_NULLABLE decompressionOutputRefCon,
                     CM_NULLABLE CVImageBufferRef imageBuffer,
                     CMTime presentationTimeStamp,
                     CMTime presentationDuration) {
-    VideoDecoderRenderer *me = (__bridge VideoDecoderRenderer *)(decompressionOutputRefCon);
-    if (me->_frameQueue != nil) {
-        os_unfair_lock_lock(&(me->_frameQueueLock));
-        CFArrayInsertValueAtIndex(me->_frameQueue, 0, imageBuffer);
-        os_unfair_lock_unlock(&(me->_frameQueueLock));
+    VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)(decompressionOutputRefCon);
+    if (self.frameQueue != nil) {
+        
+        os_unfair_lock_lock(&(self->_frameQueueLock));
+        [self.frameQueue enqueue:(__bridge NSObject *)(imageBuffer)];
+        os_unfair_lock_unlock(&(self->_frameQueueLock));
     }
 }
 
