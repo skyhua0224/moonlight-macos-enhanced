@@ -62,7 +62,8 @@ typedef enum : NSUInteger {
 }
 
 - (NSMenuItem *)menuItemForTheme:(Theme)theme forMenu:(NSMenu *)menu {
-    return menu.itemArray[theme];
+    static NSUInteger menuIndexes[] = {0, 2, 3};
+    return menu.itemArray[menuIndexes[theme]];
 }
 
 - (void)changeTheme:(Theme)theme withMenuItem:(NSMenuItem *)menuItem {
