@@ -220,16 +220,6 @@ void ClConnectionTerminated(long errorCode)
     [_callbacks connectionTerminated: errorCode];
 }
 
-void ClDisplayMessage(const char* message)
-{
-    [_callbacks displayMessage: message];
-}
-
-void ClDisplayTransientMessage(const char* message)
-{
-    [_callbacks displayTransientMessage: message];
-}
-
 void ClLogMessage(const char* format, ...)
 {
     va_list va;
@@ -343,8 +333,6 @@ void ClLogMessage(const char* format, ...)
     _clCallbacks.stageFailed = ClStageFailed;
     _clCallbacks.connectionStarted = ClConnectionStarted;
     _clCallbacks.connectionTerminated = ClConnectionTerminated;
-    _clCallbacks.displayMessage = ClDisplayMessage;
-    _clCallbacks.displayTransientMessage = ClDisplayTransientMessage;
     _clCallbacks.logMessage = ClLogMessage;
     
     return self;

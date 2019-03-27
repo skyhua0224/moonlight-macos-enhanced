@@ -358,13 +358,4 @@
     [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %@", message]];
 }
 
-- (void)displayMessage:(const char *)message {
-    Log(LOG_I, @"Display message: %s", message);
-}
-
-- (void)displayTransientMessage:(const char *)message {
-    Log(LOG_I, @"Display transient message: %s", message);
-}
-
-
 @end

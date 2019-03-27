@@ -18,8 +18,6 @@
 - (void) stageComplete:(const char*)stageName;
 - (void) stageFailed:(const char*)stageName withError:(long)errorCode;
 - (void) launchFailed:(NSString*)message;
-- (void) displayMessage:(const char*)message;
-- (void) displayTransientMessage:(const char*)message;
 
 @end
 
