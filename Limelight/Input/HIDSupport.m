@@ -306,7 +306,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 
 - (void)scrollWheel:(NSEvent *)event {
     if (self.shouldSendMouseEvents) {
-        LiSendScrollEvent(event.scrollingDeltaY);
+        if (event.hasPreciseScrollingDeltas) {
+            LiSendHighResScrollEvent(event.scrollingDeltaY);
+        } else {
+            LiSendScrollEvent(event.scrollingDeltaY);
+        }
     }
 }
 
