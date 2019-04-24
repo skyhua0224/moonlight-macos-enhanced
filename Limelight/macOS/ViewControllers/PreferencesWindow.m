@@ -37,7 +37,7 @@
     TemporarySettings* streamSettings = [dataMan getSettings];
     
     [self.framerateSelector selectItemWithTag:[streamSettings.framerate intValue]];
-    if ([streamSettings.height intValue] == 1080 && [streamSettings.width intValue] == 2560) {
+    if ([streamSettings.height intValue] == 1640 && [streamSettings.width intValue] == 3840) {
         [self.resolutionSelector selectItemWithTag:219];
     } else {
         [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
@@ -62,8 +62,8 @@
     NSInteger resolutionHeight;
     NSInteger resolutionWidth;
     if (self.resolutionSelector.selectedTag == 219) {
-        resolutionHeight = 1080;
-        resolutionWidth = 2560;
+        resolutionHeight = 1640;
+        resolutionWidth = 3840;
     } else {
         resolutionHeight = self.resolutionSelector.selectedTag;
         resolutionWidth = resolutionHeight * 16 / 9;
