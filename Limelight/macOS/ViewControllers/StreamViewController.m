@@ -309,8 +309,9 @@
     streamConfig.height = [streamSettings.height intValue];
     streamConfig.width = [streamSettings.width intValue];
     
-    
-//    self.controllerSupport = [[ControllerSupport alloc] init];
+    if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
+        self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig];
+    }
     self.hidSupport = [[HIDSupport alloc] init];
     
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];

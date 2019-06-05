@@ -6,15 +6,14 @@
 //  Copyright (c) 2014 Moonlight Stream. All rights reserved.
 //
 
-// Swift
-#import "Moonlight-Swift.h"
-@class Controller;
+#import "StreamConfiguration.h"
+#import "Controller.h"
 
 @class OnScreenControls;
 
 @interface ControllerSupport : NSObject
 
--(id) init;
+-(id) initWithConfig:(StreamConfiguration*)streamConfig;
 
 #if TARGET_OS_IPHONE
 -(void) initAutoOnScreenControlMode:(OnScreenControls*)osc;
@@ -35,7 +34,9 @@
 
 -(void) updateFinished:(Controller*)controller;
 
-+(int) getConnectedGamepadMask;
+-(void) rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor;
+
++(int) getConnectedGamepadMask:(StreamConfiguration*)streamConfig;
 
 @property (nonatomic, strong) id connectObserver;
 @property (nonatomic, strong) id disconnectObserver;

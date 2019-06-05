@@ -52,9 +52,9 @@
 		4C38E82A1FF0BFA0000425CD /* StreamConfiguration.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461919F646E200339C8A /* StreamConfiguration.m */; };
 		4C38E82B1FF0BFAC000425CD /* ControllerSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89460B19F646E200339C8A /* ControllerSupport.m */; };
 		4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */; };
-		4C38E82D1FF0C38E000425CD /* Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4746EEB1CBC740C006FB401 /* Controller.swift */; };
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
+		4C48B56222A7F06500B61DCF /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C48B55F22A7F06500B61DCF /* Controller.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
 		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
@@ -123,6 +123,8 @@
 		4C38E8251FF0B609000425CD /* StreamViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamViewController.m; sourceTree = "<group>"; };
 		4C3C619C20BD2D4A0045FE30 /* DatabaseSingleton.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DatabaseSingleton.h; sourceTree = "<group>"; };
 		4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DatabaseSingleton.m; sourceTree = "<group>"; };
+		4C48B55F22A7F06500B61DCF /* Controller.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Controller.m; path = ../../../../Downloads/Controller.m; sourceTree = "<group>"; };
+		4C48B56122A7F06500B61DCF /* Controller.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Controller.h; path = ../../../../Downloads/Controller.h; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A821FECBFFD00684411 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4C7E0A851FECBFFD00684411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -169,7 +171,6 @@
 		D46A73AB1CBC7D080039F1EE /* MoonlightUnitTests-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "MoonlightUnitTests-Bridging-Header.h"; sourceTree = "<group>"; };
 		D46A73AC1CBC7D090039F1EE /* ControllerUnitTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ControllerUnitTests.swift; path = Input/ControllerUnitTests.swift; sourceTree = "<group>"; };
 		D4746EEA1CBC740C006FB401 /* Moonlight-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Moonlight-Bridging-Header.h"; path = "Input/Moonlight-Bridging-Header.h"; sourceTree = "<group>"; };
-		D4746EEB1CBC740C006FB401 /* Controller.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Controller.swift; sourceTree = "<group>"; };
 		FB290CF119B2C406004C83CF /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		FB290CF319B2C406004C83CF /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		FB290CF519B2C406004C83CF /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
@@ -546,7 +547,8 @@
 			children = (
 				FB89460A19F646E200339C8A /* ControllerSupport.h */,
 				FB89460B19F646E200339C8A /* ControllerSupport.m */,
-				D4746EEB1CBC740C006FB401 /* Controller.swift */,
+				4C48B56122A7F06500B61DCF /* Controller.h */,
+				4C48B55F22A7F06500B61DCF /* Controller.m */,
 				FB89460C19F646E200339C8A /* StreamView.h */,
 				FB89460D19F646E200339C8A /* StreamView.m */,
 				FB4678EB1A50C40900377732 /* OnScreenControls.h */,
@@ -947,11 +949,11 @@
 				4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */,
 				4C38E7FC1FEE0875000425CD /* (null) in Sources */,
 				4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */,
-				4C38E82D1FF0C38E000425CD /* Controller.swift in Sources */,
 				4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */,
 				4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */,
 				4C38E8131FEE30F8000425CD /* ContainerViewController.m in Sources */,
 				4C38E8081FEE09D0000425CD /* Utils.m in Sources */,
+				4C48B56222A7F06500B61DCF /* Controller.m in Sources */,
 				4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */,
 				4C7E0A971FECCF9A00684411 /* HostsViewController.m in Sources */,
 				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,

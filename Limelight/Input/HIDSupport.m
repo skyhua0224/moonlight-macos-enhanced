@@ -7,11 +7,9 @@
 //
 
 #import "HIDSupport.h"
+#import "Controller.h"
 
 #include "Limelight.h"
-
-// Swift
-#import "Moonlight-Swift.h"
 
 #import <Carbon/Carbon.h>
 
@@ -147,7 +145,6 @@ static struct KeyMapping keys[] = {
 @property (nonatomic, strong) NSDictionary *mappings;
 @property (nonatomic) IOHIDManagerRef hidManager;
 @property (nonatomic, strong) Controller *controller;
-@property (nonatomic, strong) Controller *lastController;
 @property (nonatomic) CVDisplayLinkRef displayLink;
 @property (nonatomic) CGFloat mouseDeltaX;
 @property (nonatomic) CGFloat mouseDeltaY;
@@ -161,7 +158,6 @@ static struct KeyMapping keys[] = {
         [self setupHidManager];
         
         self.controller = [[Controller alloc] init];
-        self.lastController = [[Controller alloc] init];
 
         NSMutableDictionary *d = [NSMutableDictionary dictionary];
         for (size_t i = 0; i < sizeof(keys) / sizeof(struct KeyMapping); i++) {
@@ -452,10 +448,10 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
         default:
             break;
     }
-    
-    if (![self.controller isEqual:self.lastController]) {
+
+    if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
+    } else {
         LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-        self.lastController = [self.controller copy];
     }
 }
 
