@@ -9,6 +9,7 @@
 #import <Foundation/Foundation.h>
 #import "HttpResponse.h"
 #import "HttpRequest.h"
+#import "StreamConfiguration.h"
 
 @interface HttpManager : NSObject <NSURLSessionDelegate>
 
@@ -22,7 +23,7 @@
 - (NSURLRequest*) newAppListRequest;
 - (NSURLRequest*) newServerInfoRequest;
 - (NSURLRequest*) newHttpServerInfoRequest;
-- (NSURLRequest*) newLaunchRequest:(NSString*)appId width:(int)width height:(int)height refreshRate:(int)refreshRate rikey:(NSString*)rikey rikeyid:(int)rikeyid;
+- (NSURLRequest*) newLaunchRequest:(StreamConfiguration*)config;
 - (NSURLRequest*) newResumeRequestWithRiKey:(NSString*)riKey riKeyId:(int)riKeyId;
 - (NSURLRequest*) newQuitAppRequest;
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString*)appId;

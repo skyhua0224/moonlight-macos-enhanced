@@ -44,7 +44,7 @@
     [self updateBitrateLabel];
     [self.videoCodecSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"videoCodec"]];
     self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
-    self.optimizeSettingsCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"optimizeSettings"] ? NSControlStateValueOn : NSControlStateValueOff;
+    self.optimizeSettingsCheckbox.state = streamSettings.optimizeGames ? NSControlStateValueOn : NSControlStateValueOff;
     self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
@@ -77,7 +77,7 @@
         break;
     }
     
-    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth optimizeGames:NO audioOnPC:NO useHevc:useHevc];
+    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn audioOnPC:NO useHevc:useHevc];
 }
 
 
@@ -106,7 +106,7 @@
 }
 
 - (IBAction)didToggleOptimizeSettings:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setBool:self.optimizeSettingsCheckbox.state == NSControlStateValueOn forKey:@"optimizeSettings"];
+    [self saveSettings];
 }
 
 - (IBAction)didToggleAutoFullscreen:(id)sender {
