@@ -19,7 +19,9 @@
     self.framerate = settings.framerate;
     self.height = settings.height;
     self.width = settings.width;
-    self.onscreenControls = settings.onscreenControls;
+    self.useHevc = settings.useHevc;
+    self.playAudioOnPC = settings.playAudioOnPC;
+    self.optimizeGames = settings.optimizeGames;
     self.uniqueId = settings.uniqueId;
     
     return self;

@@ -308,6 +308,7 @@
     streamConfig.bitRate = [streamSettings.bitrate intValue];
     streamConfig.height = [streamSettings.height intValue];
     streamConfig.width = [streamSettings.width intValue];
+    streamConfig.allowHevc = streamSettings.useHevc;
     
     
 //    self.controllerSupport = [[ControllerSupport alloc] init];

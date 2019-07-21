@@ -10,6 +10,7 @@
 #import "NSWindow+Moonlight.h"
 
 #import "DataManager.h"
+#import <VideoToolbox/VideoToolbox.h>
 
 @interface PreferencesWindow ()
 
@@ -17,6 +18,7 @@
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
 @property (weak) IBOutlet NSSlider *bitrateSlider;
 @property (weak) IBOutlet NSTextField *bitrateLabel;
+@property (weak) IBOutlet NSPopUpButton *videoCodecSelector;
 @property (weak) IBOutlet NSButton *dynamicResolutionCheckbox;
 @property (weak) IBOutlet NSButton *optimizeSettingsCheckbox;
 @property (weak) IBOutlet NSButton *autoFullscreenCheckbox;
@@ -40,6 +42,7 @@
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
     self.bitrateSlider.integerValue = [streamSettings.bitrate intValue];
     [self updateBitrateLabel];
+    [self.videoCodecSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"videoCodec"]];
     self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
     self.optimizeSettingsCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"optimizeSettings"] ? NSControlStateValueOn : NSControlStateValueOff;
     self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
@@ -59,7 +62,22 @@
     NSInteger resolutionWidth;
     resolutionHeight = self.resolutionSelector.selectedTag;
     resolutionWidth = resolutionHeight * 16 / 9;
-    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:0];
+    
+    BOOL useHevc;
+    switch (self.videoCodecSelector.selectedTag) {
+    case 1:
+        useHevc = NO;
+        break;
+    case 2:
+        useHevc = YES;
+        break;
+    case 0:
+    default:
+        useHevc = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
+        break;
+    }
+    
+    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth optimizeGames:NO audioOnPC:NO useHevc:useHevc];
 }
 
 
@@ -76,6 +94,11 @@
 - (IBAction)didChangeBitrate:(id)sender {
     [self updateBitrateLabel];
     [self saveSettings];
+}
+
+- (IBAction)didChangeVideoCodec:(id)sender {
+    [self saveSettings];
+    [[NSUserDefaults standardUserDefaults] setInteger:self.videoCodecSelector.selectedTag forKey:@"videoCodec"];
 }
 
 - (IBAction)didToggleDynamicResolution:(id)sender {

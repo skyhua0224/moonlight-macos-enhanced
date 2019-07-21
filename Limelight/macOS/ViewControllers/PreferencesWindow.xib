@@ -13,13 +13,11 @@
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
-        <window title="Preferences" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" tabbingMode="disallowed" id="QvC-M9-y7g" customClass="PreferencesWindow">
-            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
+        <window title="Preferences" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" tabbingMode="disallowed" titlebarAppearsTransparent="YES" id="QvC-M9-y7g" customClass="PreferencesWindow">
+            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES"/>
             <windowCollectionBehavior key="collectionBehavior" fullScreenNone="YES"/>
-            <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
-            <rect key="contentRect" x="196" y="240" width="507" height="329"/>
+            <rect key="contentRect" x="196" y="240" width="507" height="370"/>
             <rect key="screenRect" x="0.0" y="0.0" width="1440" height="877"/>
-            <value key="maxSize" type="size" width="666" height="332"/>
             <view key="contentView" wantsLayer="YES" id="EiT-Mj-1SZ">
                 <rect key="frame" x="0.0" y="0.0" width="507" height="365"/>
                 <autoresizingMask key="autoresizingMask"/>
@@ -110,19 +108,19 @@
                         <constraints>
                             <constraint firstAttribute="width" constant="118" id="48S-dl-4TO"/>
                         </constraints>
-                        <popUpButtonCell key="cell" type="push" title="Automatic" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" tag="720" imageScaling="proportionallyDown" inset="2" selectedItem="IxP-5c-Sm9" id="HY5-un-HBx">
+                        <popUpButtonCell key="cell" type="push" title="Automatic" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" selectedItem="IxP-5c-Sm9" id="HY5-un-HBx">
                             <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
                             <font key="font" metaFont="menu"/>
                             <menu key="menu" id="dpa-LA-5A0">
                                 <items>
-                                    <menuItem title="Automatic" state="on" tag="720" id="IxP-5c-Sm9"/>
-                                    <menuItem title="H.264" tag="1080" id="z7q-Jc-WtY"/>
-                                    <menuItem title="H.265 (HEVC)" tag="1440" id="hJR-qN-083"/>
+                                    <menuItem title="Automatic" state="on" id="IxP-5c-Sm9"/>
+                                    <menuItem title="H.264" tag="1" id="z7q-Jc-WtY"/>
+                                    <menuItem title="H.265 (HEVC)" tag="2" id="hJR-qN-083"/>
                                 </items>
                             </menu>
                         </popUpButtonCell>
                         <connections>
-                            <action selector="didChangeResolution:" target="QvC-M9-y7g" id="r3y-y0-n5M"/>
+                            <action selector="didChangeVideoCodec:" target="QvC-M9-y7g" id="rQM-jo-3Uv"/>
                         </connections>
                     </popUpButton>
                     <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="wuf-Qy-tmh">
@@ -146,14 +144,6 @@
                     <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="Pi8-F0-aOg">
                         <rect key="frame" x="12" y="122" width="483" height="5"/>
                     </box>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Boe-x5-WUG">
-                        <rect key="frame" x="-2" y="88" width="207" height="16"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Game Settings:" id="8Qy-eE-s4d">
-                            <font key="font" metaFont="system"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
                     <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="JEy-kX-VZR">
                         <rect key="frame" x="213" y="87" width="161" height="18"/>
                         <buttonCell key="cell" type="check" title="Let GFE make changes" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="4y7-7N-Unj">
@@ -185,6 +175,14 @@
                             <action selector="didToggleAutoFullscreen:" target="QvC-M9-y7g" id="A7z-LI-F1q"/>
                         </connections>
                     </button>
+                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Boe-x5-WUG">
+                        <rect key="frame" x="-2" y="88" width="207" height="16"/>
+                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Game Settings:" id="8Qy-eE-s4d">
+                            <font key="font" metaFont="system"/>
+                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
                 </subviews>
                 <constraints>
                     <constraint firstItem="Boe-x5-WUG" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="1wr-2G-qCK"/>
@@ -248,6 +246,7 @@
                 <outlet property="framerateSelector" destination="rDN-1K-SDB" id="BdX-uU-WgE"/>
                 <outlet property="optimizeSettingsCheckbox" destination="JEy-kX-VZR" id="Vxd-dO-ahV"/>
                 <outlet property="resolutionSelector" destination="KK1-tM-HtR" id="NN9-Lc-D4p"/>
+                <outlet property="videoCodecSelector" destination="chY-ex-kib" id="h0H-WP-Ncq"/>
             </connections>
             <point key="canvasLocation" x="130.5" y="194"/>
         </window>

@@ -20,6 +20,8 @@
 @property int bitRate;
 @property int riKeyId;
 @property NSData* riKey;
-@property int streamingRemotely;
+@property BOOL optimizeGameSettings;
+@property BOOL playAudioOnPC;
+@property BOOL allowHevc;
 
 @end

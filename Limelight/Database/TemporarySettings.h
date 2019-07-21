@@ -17,9 +17,10 @@
 @property (nonatomic, retain) NSNumber * framerate;
 @property (nonatomic, retain) NSNumber * height;
 @property (nonatomic, retain) NSNumber * width;
-@property (nonatomic, retain) NSNumber * onscreenControls;
 @property (nonatomic, retain) NSString * uniqueId;
-@property (nonatomic, retain) NSNumber * streamingRemotely;
+@property (nonatomic) BOOL useHevc;
+@property (nonatomic) BOOL playAudioOnPC;
+@property (nonatomic) BOOL optimizeGames;
 
 - (id) initFromSettings:(Settings*)settings;
 
