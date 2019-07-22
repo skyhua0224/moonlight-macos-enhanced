@@ -32,4 +32,13 @@
     return nil;
 }
 
+- (NSToolbarItem *)moonlight_toolbarItemForTag:(NSInteger)tag {
+    for (NSToolbarItem *item in self.toolbar.items) {
+        if (item.tag == tag) {
+            return item;
+        }
+    }
+    return nil;
+}
+
 @end

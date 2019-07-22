@@ -26,10 +26,13 @@
 #import "ServerInfoResponse.h"
 #import "DiscoveryWorker.h"
 
-@interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback>
+@interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, NSSearchFieldDelegate>
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
+@property (nonatomic, strong) NSString *filterText;
 @property (nonatomic, strong) TemporaryApp *runningApp;
+
+@property (nonatomic) NSSearchField *getSearchField;
 
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *boxArtCache;
@@ -84,6 +87,7 @@ const CGFloat scaleBase = 1.125;
     [self.view.window makeFirstResponder:self.collectionView];
     
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
+    self.getSearchField.delegate = self;
 }
 
 - (void)viewWillDisappear {
@@ -131,6 +135,10 @@ const CGFloat scaleBase = 1.125;
 
 
 #pragma mark - Actions
+
+- (IBAction)filterList:(id)sender {
+    [self.view.window makeFirstResponder:self.getSearchField];
+}
 
 - (IBAction)backButtonClicked:(id)sender {
     [self transitionToHostsVC];
@@ -204,6 +212,14 @@ const CGFloat scaleBase = 1.125;
 
 - (NSInteger)collectionView:(nonnull NSCollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
     return self.apps.count;
+}
+
+
+#pragma mark - NSSearchFieldDelegate
+
+- (void)controlTextDidChange:(NSNotification *)obj {
+    self.filterText = ((NSTextField *)obj.object).stringValue;
+    [self displayApps];
 }
 
 
@@ -331,6 +347,10 @@ const CGFloat scaleBase = 1.125;
 
 #pragma mark - Helpers
 
+- (NSSearchField *)getSearchField {
+    return ((NSSearchField *)[self.view.window moonlight_toolbarItemForTag:42].view);
+}
+
 - (void)updateColors {
     NSColor *backgroundColor = [NSColor textBackgroundColor];
     if (@available(macOS 10.14, *)) {
@@ -391,7 +411,14 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)displayApps {
-    self.apps = [self.host.appList.allObjects sortedArrayUsingSelector:@selector(compareName:)];
+    NSPredicate *predicate;
+    if (self.filterText.length != 0) {
+        predicate = [NSPredicate predicateWithFormat:@"name CONTAINS[cd] %@", self.filterText];
+    } else {
+        predicate = [NSPredicate predicateWithValue:YES];
+    }
+    NSArray<TemporaryApp *> *filteredApps = [self.host.appList.allObjects filteredArrayUsingPredicate:predicate];
+    self.apps = [filteredApps sortedArrayUsingSelector:@selector(compareName:)];
     [self.collectionView moonlight_reloadDataKeepingSelection];
 }
 
