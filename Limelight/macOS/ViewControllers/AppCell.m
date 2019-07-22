@@ -37,8 +37,12 @@
 
     self.appCoverArt.wantsLayer = YES;
     self.appCoverArt.layer.masksToBounds = YES;
-    self.appCoverArt.layer.cornerRadius = 6;
+    self.appCoverArt.layer.cornerRadius = 10;
     
+    self.appNameContainer.wantsLayer = YES;
+    self.appNameContainer.layer.masksToBounds = YES;
+    self.appNameContainer.layer.cornerRadius = 4;
+
     ((AppCellView *)self.view).delegate = self;
     
     [self updateSelectedState:NO];
@@ -50,10 +54,7 @@
 
 - (CGFloat)scaleForSelected:(BOOL)selected hovered:(BOOL)hovered {
     CGFloat scale = 1;
-    if (selected) {
-        scale *= 1.2;
-    }
-    if (hovered) {
+    if (hovered || selected) {
         scale *= 1.1;
     }
     return scale;
@@ -90,11 +91,11 @@
 }
 
 - (CGFloat)shadowAlphaWithSelected:(BOOL)selected {
-    if (selected) {
-        return [NSApplication moonlight_isDarkAppearance] ? 0.75 : 0.64;
-    } else {
+//    if (selected) {
+//        return [NSApplication moonlight_isDarkAppearance] ? 0.75 : 0.64;
+//    } else {
         return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.55;
-    }
+//    }
 }
 
 - (CGFloat)appCoverArtAlphaWithHovered:(BOOL)hovered {
@@ -102,9 +103,9 @@
         return 1;
     } else {
         if (hovered) {
-            return [NSApplication moonlight_isDarkAppearance] ? 0.9 : 0.9;
+            return [NSApplication moonlight_isDarkAppearance] ? 1 : 1;
         } else {
-            return [NSApplication moonlight_isDarkAppearance] ? 0.65 : 0.75;
+            return [NSApplication moonlight_isDarkAppearance] ? 0.75 : 0.85;
         }
     }
 }
@@ -112,11 +113,13 @@
 - (void)updateSelectedState:(BOOL)selected {
     NSShadow *shadow = [[NSShadow alloc] init];
     shadow.shadowColor = [NSColor colorWithWhite:0 alpha:[self shadowAlphaWithSelected:selected]];
-    shadow.shadowOffset = NSMakeSize(0, selected ? -7 : -4);
+    shadow.shadowOffset = NSMakeSize(0, -4);
     shadow.shadowBlurRadius = 4;
 
+    self.appNameContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
+
     [NSAnimationContext beginGrouping];
-    [NSAnimationContext currentContext].duration = 0.8;
+    [NSAnimationContext currentContext].duration = 0.4;
     self.appCoverArt.superview.animator.shadow = shadow;
     self.appCoverArt.superview.animator.alphaValue = [self appCoverArtAlphaWithHovered:NO];
     [NSAnimationContext endGrouping];
