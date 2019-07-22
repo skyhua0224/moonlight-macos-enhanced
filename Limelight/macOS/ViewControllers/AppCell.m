@@ -117,13 +117,13 @@
     shadow.shadowBlurRadius = 4;
 
     self.appNameContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
+    self.appName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];
 
     [NSAnimationContext beginGrouping];
     [NSAnimationContext currentContext].duration = 0.4;
     self.appCoverArt.superview.animator.shadow = shadow;
     self.appCoverArt.superview.animator.alphaValue = [self appCoverArtAlphaWithHovered:NO];
     [NSAnimationContext endGrouping];
-
 
     [self animateSelectedAndHoveredState];
 }
