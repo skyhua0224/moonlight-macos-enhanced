@@ -29,12 +29,6 @@
     [runningShadow setShadowBlurRadius:2];
     self.runningIcon.shadow = runningShadow;
     
-    NSShadow *shadow = [[NSShadow alloc] init];
-    [shadow setShadowColor:[NSColor colorWithWhite:0 alpha:[self shadowAlphaWithSelected:NO]]];
-    [shadow setShadowOffset:NSMakeSize(0, -4)];
-    [shadow setShadowBlurRadius:4];
-    self.appCoverArt.superview.shadow = shadow;
-
     self.appCoverArt.wantsLayer = YES;
     self.appCoverArt.layer.masksToBounds = YES;
     self.appCoverArt.layer.cornerRadius = 10;
@@ -94,7 +88,7 @@
 //    if (selected) {
 //        return [NSApplication moonlight_isDarkAppearance] ? 0.75 : 0.64;
 //    } else {
-        return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.55;
+        return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.33;
 //    }
 }
 
@@ -113,8 +107,8 @@
 - (void)updateSelectedState:(BOOL)selected {
     NSShadow *shadow = [[NSShadow alloc] init];
     shadow.shadowColor = [NSColor colorWithWhite:0 alpha:[self shadowAlphaWithSelected:selected]];
-    shadow.shadowOffset = NSMakeSize(0, -4);
-    shadow.shadowBlurRadius = 4;
+    shadow.shadowOffset = NSMakeSize(0, -5);
+    shadow.shadowBlurRadius = 5;
 
     self.appNameContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
     self.appName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];
