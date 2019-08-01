@@ -13,7 +13,13 @@
 
 @interface DataManager : NSObject
 
-- (void) saveSettingsWithBitrate:(NSInteger)bitrate framerate:(NSInteger)framerate height:(NSInteger)height width:(NSInteger)width onscreenControls:(NSInteger)onscreenControls remote:(NSInteger)streamingRemotely;
+- (void) saveSettingsWithBitrate:(NSInteger)bitrate
+                       framerate:(NSInteger)framerate
+                          height:(NSInteger)height
+                           width:(NSInteger)width
+                   optimizeGames:(BOOL)optimizeGames
+                       audioOnPC:(BOOL)audioOnPC
+                         useHevc:(BOOL)useHevc;
 
 - (NSArray*) getHosts;
 - (void) updateHost:(TemporaryHost*)host;

@@ -41,18 +41,23 @@
     return uid;
 }
 
-- (void) saveSettingsWithBitrate:(NSInteger)bitrate framerate:(NSInteger)framerate height:(NSInteger)height width:(NSInteger)width onscreenControls:(NSInteger)onscreenControls remote:
-    (NSInteger) streamingRemotely {
+- (void) saveSettingsWithBitrate:(NSInteger)bitrate
+                       framerate:(NSInteger)framerate
+                          height:(NSInteger)height
+                           width:(NSInteger)width
+                   optimizeGames:(BOOL)optimizeGames
+                       audioOnPC:(BOOL)audioOnPC
+                         useHevc:(BOOL)useHevc {
     
     [_managedObjectContext performBlockAndWait:^{
         Settings* settingsToSave = [self retrieveSettings];
         settingsToSave.framerate = [NSNumber numberWithInteger:framerate];
-        // Bitrate is persisted in kbps
         settingsToSave.bitrate = [NSNumber numberWithInteger:bitrate];
         settingsToSave.height = [NSNumber numberWithInteger:height];
         settingsToSave.width = [NSNumber numberWithInteger:width];
-        settingsToSave.onscreenControls = [NSNumber numberWithInteger:onscreenControls];
-        settingsToSave.streamingRemotely = [NSNumber numberWithInteger:streamingRemotely];
+        settingsToSave.optimizeGames = optimizeGames;
+        settingsToSave.playAudioOnPC = audioOnPC;
+        settingsToSave.useHevc = useHevc;
         
         [self saveData];
     }];

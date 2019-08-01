@@ -107,13 +107,7 @@
 
 - (BOOL) launchApp:(HttpManager*)hMan {
     HttpResponse* launchResp = [[HttpResponse alloc] init];
-    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:launchResp withUrlRequest:
-                          [hMan newLaunchRequest:_config.appID
-                                           width:_config.width
-                                          height:_config.height
-                                     refreshRate:_config.frameRate
-                                           rikey:[Utils bytesToHex:_config.riKey]
-                                         rikeyid:_config.riKeyId]]];
+    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:launchResp withUrlRequest:[hMan newLaunchRequest:_config]]];
     NSString *gameSession = [launchResp getStringTag:@"gamesession"];
     if (launchResp == NULL || ![launchResp isStatusOk]) {
         [_callbacks launchFailed:@"Failed to launch app"];

@@ -308,6 +308,7 @@
     streamConfig.bitRate = [streamSettings.bitrate intValue];
     streamConfig.height = [streamSettings.height intValue];
     streamConfig.width = [streamSettings.width intValue];
+    streamConfig.allowHevc = streamSettings.useHevc;
     
     if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
         self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig];
