@@ -399,19 +399,19 @@
 +(int) getConnectedGamepadMask:(StreamConfiguration*)streamConfig {
     int mask = 0;
     
-    if (streamConfig.multiController) {
-        int i = 0;
-        for (GCController* controller in [GCController controllers]) {
-            if ([ControllerSupport isSupportedGamepad:controller]) {
-                mask |= 1 << i++;
-            }
-        }
-    }
-    else {
+//    if (streamConfig.multiController) {
+//        int i = 0;
+//        for (GCController* controller in [GCController controllers]) {
+//            if ([ControllerSupport isSupportedGamepad:controller]) {
+//                mask |= 1 << i++;
+//            }
+//        }
+//    }
+//    else {
         // Some games don't deal with having controller reconnected
         // properly so always report controller 1 if not in MC mode
         mask = 0x1;
-    }
+//    }
     
 #if TARGET_OS_IPHONE
     DataManager* dataMan = [[DataManager alloc] init];
@@ -451,7 +451,7 @@
     _controllerStreamLock = [[NSLock alloc] init];
     _controllers = [[NSMutableDictionary alloc] init];
     _controllerNumbers = 0;
-    _multiController = streamConfig.multiController;
+//    _multiController = streamConfig.multiController;
 
     _player0osc = [[Controller alloc] init];
     _player0osc.playerIndex = 0;
