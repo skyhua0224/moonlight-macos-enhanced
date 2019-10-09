@@ -22,6 +22,8 @@
 
 #import <IOKit/pwr_mgt/IOPMLib.h>
 
+#import "Moonlight-Swift.h"
+
 @interface StreamViewController () <ConnectionCallbacks>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
@@ -286,6 +288,8 @@
             [self.view.window close];
         }
     });
+    
+    [ResolutionSyncRequester resetResolution];
 }
 
 - (StreamViewMac *)streamView {
@@ -304,10 +308,17 @@
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
+    BOOL syncEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
+    if (syncEnabled) {
+        streamConfig.height = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncHeight"];
+        streamConfig.width = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncWidth"];
+    } else {
+        streamConfig.height = [streamSettings.height intValue];
+        streamConfig.width = [streamSettings.width intValue];
+    }
+
     streamConfig.frameRate = [streamSettings.framerate intValue];
     streamConfig.bitRate = [streamSettings.bitrate intValue];
-    streamConfig.height = [streamSettings.height intValue];
-    streamConfig.width = [streamSettings.width intValue];
     streamConfig.allowHevc = streamSettings.useHevc;
     
     if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
@@ -335,6 +346,8 @@
 }
 
 - (void)connectionStarted {
+    [ResolutionSyncRequester setResolution];
+    
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
         

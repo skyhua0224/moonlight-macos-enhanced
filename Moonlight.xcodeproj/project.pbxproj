@@ -55,6 +55,7 @@
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
 		4C48B56222A7F06500B61DCF /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C48B55F22A7F06500B61DCF /* Controller.m */; };
+		4C4B8351234D8F0A00D174F5 /* ResolutionSyncRequester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
 		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
@@ -125,6 +126,7 @@
 		4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DatabaseSingleton.m; sourceTree = "<group>"; };
 		4C48B55F22A7F06500B61DCF /* Controller.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Controller.m; path = ../../../../Downloads/Controller.m; sourceTree = "<group>"; };
 		4C48B56122A7F06500B61DCF /* Controller.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Controller.h; path = ../../../../Downloads/Controller.h; sourceTree = "<group>"; };
+		4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolutionSyncRequester.swift; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A821FECBFFD00684411 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4C7E0A851FECBFFD00684411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -348,6 +350,7 @@
 				4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */,
 				4C84385821FE9453000A77CD /* NSApplication+Moonlight.h */,
 				4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */,
+				4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -968,6 +971,7 @@
 				4C38E8101FEE295E000425CD /* PairManager.m in Sources */,
 				4C38E7F91FEE085B000425CD /* (null) in Sources */,
 				4C38E7F31FEE0113000425CD /* DataManager.m in Sources */,
+				4C4B8351234D8F0A00D174F5 /* ResolutionSyncRequester.swift in Sources */,
 				4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */,
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
