@@ -6,7 +6,7 @@
 //  Copyright © 2019 Moonlight Game Streaming Project. All rights reserved.
 //
 
-import Cocoa
+import Foundation
 
 class ResolutionSyncRequester: NSObject {
     @objc static public func setResolution() {
