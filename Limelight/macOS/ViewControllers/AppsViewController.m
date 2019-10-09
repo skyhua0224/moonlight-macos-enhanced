@@ -26,6 +26,8 @@
 #import "ServerInfoResponse.h"
 #import "DiscoveryWorker.h"
 
+#import "Moonlight-Swift.h"
+
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, NSSearchFieldDelegate>
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
@@ -271,6 +273,9 @@ const CGFloat scaleBase = 1.125;
                 }
             } else {
                 self.runningApp = nil;
+                
+                [ResolutionSyncRequester resetResolution];
+                
                 if (completion != nil) {
                     completion(YES);
                 }
