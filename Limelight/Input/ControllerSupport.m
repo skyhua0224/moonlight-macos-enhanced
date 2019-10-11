@@ -15,6 +15,142 @@
 #include "Limelight.h"
 
 @import GameController;
+@import AudioToolbox;
+
+enum ButtonDebouncerState {
+    BDS_none,
+    BDS_initialPress,
+    BDS_down,
+    BDS_replicatedPress,
+    BDS_chord
+};
+
+@interface ButtonDebouncer : NSObject
+@property (nonatomic) unsigned int button;
+@property (nonatomic, strong) GCControllerButtonInput *input;
+@property (nonatomic, strong) ControllerSupport *support;
+@property (nonatomic) unsigned int chordButton;
+
+@property (nonatomic, weak) ButtonDebouncer *other;
+
+@property (nonatomic) enum ButtonDebouncerState state;
+@property (nonatomic, strong) NSDate *buttonDownTime;
+@property (nonatomic, strong) NSTimer *buttonDebounceTimer;
+@property (nonatomic, strong) NSTimer *replicatedButtonTimeTimer;
+
+@end
+
+@implementation ButtonDebouncer
+
+- (instancetype)initWithButton:(unsigned int)button input:(GCControllerButtonInput *)input controllerSupport:(ControllerSupport *)support chordButton:(unsigned int)chordButton {
+    self = [super init];
+    if (self) {
+        self.button = button;
+        self.input = input;
+        self.support = support;
+        self.chordButton = chordButton;
+    }
+    return self;
+}
+
+- (void)handlePress:(Controller *)controller pressedButtons:(int)pressedButtons {
+    if (controller.lastButtonFlags & self.button) {
+        if (self.state == BDS_none) {
+            
+            // If we are 2nd button and 1st button is in initialPress state, then:
+            //   turn on chord button
+            //   put 1st and 2nd buttons into special chord state
+            if (self.other.state == BDS_initialPress) {
+                
+                [self transitionToChordState];
+                [self.other transitionToChordState];
+
+                [self updateLastButtonFlagsForChordState:controller];
+            } else {
+
+                self.state = BDS_initialPress;
+                self.buttonDownTime = [[NSDate alloc] init];
+                controller.lastButtonFlags &= ~self.button;
+                
+                [self.buttonDebounceTimer invalidate];
+                self.buttonDebounceTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:NO block:^(NSTimer * _Nonnull timer) {
+                    [self initialPressTimeout:controller];
+                }];
+            }
+        } else if (self.state == BDS_initialPress) {
+            controller.lastButtonFlags &= ~self.button;
+        } else if (self.state == BDS_chord) {
+            [self updateLastButtonFlagsForChordState:controller];
+        }
+    }
+}
+
+- (void)handleRelease:(Controller *)controller releasedButtons:(int)releasedButtons {
+    if (releasedButtons & self.button) {
+        
+        if (self.state == BDS_down && !self.input.pressed) {
+            self.state = BDS_none;
+            
+        } else if (self.state == BDS_initialPress && !self.input.pressed) {
+            
+            controller.lastButtonFlags |= self.button;
+            [self.support updateFinished:controller];
+            
+            self.state = BDS_replicatedPress;
+            
+            NSTimeInterval pressDuration = -[self.buttonDownTime timeIntervalSinceNow];
+            
+            [self.buttonDebounceTimer invalidate];
+            [self.replicatedButtonTimeTimer invalidate];
+            self.replicatedButtonTimeTimer = [NSTimer scheduledTimerWithTimeInterval:pressDuration repeats:NO block:^(NSTimer * _Nonnull timer) {
+                
+                controller.lastButtonFlags &= ~self.button;
+                [self.support updateFinished:controller];
+
+                self.state = BDS_none;
+            }];
+
+        } else if (self.state == BDS_chord && !self.input.pressed) {
+            if (self.other.state == BDS_chord && !self.other.input.pressed) {
+
+                controller.lastButtonFlags &= ~self.chordButton;
+
+                [self transitionToNoneState];
+                [self.other transitionToNoneState];
+            } else if (self.other.state == BDS_chord && self.other.input.pressed) {
+                
+                [self updateLastButtonFlagsForChordState:controller];
+            }
+        }
+    }
+}
+
+- (void)initialPressTimeout:(Controller *)controller {
+    if (self.state == BDS_initialPress) {
+        if (self.input.pressed) {
+            self.state = BDS_down;
+            controller.lastButtonFlags |= self.button;
+            [self.support updateFinished:controller];
+        }
+    }
+}
+
+- (void)transitionToChordState {
+    self.state = BDS_chord;
+}
+
+- (void)transitionToNoneState {
+    self.state = BDS_none;
+}
+
+- (void)updateLastButtonFlagsForChordState:(Controller *)controller {
+    controller.lastButtonFlags |= self.chordButton;
+    
+    controller.lastButtonFlags &= ~self.button;
+    controller.lastButtonFlags &= ~self.other.button;
+}
+
+@end
 
 @implementation ControllerSupport {
     NSLock *_controllerStreamLock;
@@ -33,6 +169,8 @@
     bool _oscEnabled;
     char _controllerNumbers;
     bool _multiController;
+
+    NSMutableDictionary<NSNumber * /* key flag */, NSMutableDictionary<NSNumber * /* player index */, ButtonDebouncer *> *> *_debouncers;
 }
 
 // UPDATE_BUTTON_FLAG(controller, flag, pressed)
@@ -46,9 +184,9 @@
     if (controller.lowFreqMotor > 0x5000 || controller.highFreqMotor > 0x5000) {
         // If the gamepad is nil (on-screen controls) or it's attached to the device,
         // then vibrate the device itself
-        if (controller.gamepad == nil || [controller.gamepad isAttachedToDevice]) {
-            AudioServicesPlayAlertSound(kSystemSoundID_Vibrate);
-        }
+        UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
+        [feedback prepare];
+        [feedback impactOccurred];
     }
 #endif
 }
@@ -113,37 +251,18 @@
 
 -(void) handleSpecialCombosReleased:(Controller*)controller releasedButtons:(int)releasedButtons
 {
-    if ((controller.emulatingButtonFlags & EMULATING_SELECT) &&
-        ((releasedButtons & LB_FLAG) || (releasedButtons & PLAY_FLAG))) {
-        controller.lastButtonFlags &= ~BACK_FLAG;
-        controller.emulatingButtonFlags &= ~EMULATING_SELECT;
-    }
-    if ((controller.emulatingButtonFlags & EMULATING_SPECIAL) &&
-        ((releasedButtons & RB_FLAG) || (releasedButtons & PLAY_FLAG) ||
-         (releasedButtons & BACK_FLAG))) {
-            controller.lastButtonFlags &= ~SPECIAL_FLAG;
-            controller.emulatingButtonFlags &= ~EMULATING_SPECIAL;
-        }
+    [self->_debouncers enumerateKeysAndObjectsUsingBlock:^(NSNumber * _Nonnull keyFlag, NSMutableDictionary<NSNumber *,ButtonDebouncer *> * _Nonnull debouncers, BOOL * _Nonnull stop) {
+        ButtonDebouncer *debouncer = debouncers[@(controller.playerIndex)];
+        [debouncer handleRelease:controller releasedButtons:releasedButtons];
+    }];
 }
 
 -(void) handleSpecialCombosPressed:(Controller*)controller pressedButtons:(int)pressedButtons
 {
-    // Special button combos for select and special
-    if (controller.lastButtonFlags & PLAY_FLAG) {
-        // If LB and start are down, trigger select
-        if (controller.lastButtonFlags & LB_FLAG) {
-            controller.lastButtonFlags |= BACK_FLAG;
-            controller.lastButtonFlags &= ~(pressedButtons & (PLAY_FLAG | LB_FLAG));
-            controller.emulatingButtonFlags |= EMULATING_SELECT;
-        }
-        // If (RB or select) and start are down, trigger special
-        else if ((controller.lastButtonFlags & RB_FLAG) || (controller.lastButtonFlags & BACK_FLAG)) {
-            controller.lastButtonFlags |= SPECIAL_FLAG;
-            controller.lastButtonFlags &= ~(pressedButtons & (PLAY_FLAG | RB_FLAG | BACK_FLAG));
-            controller.emulatingButtonFlags |= EMULATING_SPECIAL;
-        }
-    }
-    
+    [self->_debouncers enumerateKeysAndObjectsUsingBlock:^(NSNumber * _Nonnull keyFlag, NSMutableDictionary<NSNumber *,ButtonDebouncer *> * _Nonnull debouncers, BOOL * _Nonnull stop) {
+        ButtonDebouncer *debouncer = debouncers[@(controller.playerIndex)];
+        [debouncer handlePress:controller pressedButtons:pressedButtons];
+    }];
 }
 
 -(void) updateButtonFlags:(Controller*)controller flags:(int)flags
@@ -156,11 +275,9 @@
         int releasedButtons = (controller.lastButtonFlags ^ flags) & ~flags;
         int pressedButtons = (controller.lastButtonFlags ^ flags) & flags;
         
-        if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-        } else {
-            [self handleSpecialCombosReleased:controller releasedButtons:releasedButtons];
-            [self handleSpecialCombosPressed:controller pressedButtons:pressedButtons];
-        }
+        [self handleSpecialCombosReleased:controller releasedButtons:releasedButtons];
+        
+        [self handleSpecialCombosPressed:controller pressedButtons:pressedButtons];
     }
 }
 
@@ -168,10 +285,7 @@
 {
     @synchronized(controller) {
         controller.lastButtonFlags |= flags;
-        if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-        } else {
-            [self handleSpecialCombosPressed:controller pressedButtons:flags];
-        }
+        [self handleSpecialCombosPressed:controller pressedButtons:flags];
     }
 }
 
@@ -179,10 +293,7 @@
 {
     @synchronized(controller) {
         controller.lastButtonFlags &= ~flags;
-        if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-        } else {
-            [self handleSpecialCombosReleased:controller releasedButtons:flags];
-        }
+        [self handleSpecialCombosReleased:controller releasedButtons:flags];
     }
 }
 
@@ -197,6 +308,9 @@
     [_controllerStreamLock unlock];
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 -(void) unregisterControllerCallbacks:(GCController*) controller
 {
     if (controller != NULL) {
@@ -205,8 +319,8 @@
         if (controller.extendedGamepad != NULL) {
             controller.extendedGamepad.valueChangedHandler = NULL;
         }
-        else if (controller.extendedGamepad != NULL) {
-            controller.extendedGamepad.valueChangedHandler = NULL;
+        else if (controller.gamepad != NULL) {
+            controller.gamepad.valueChangedHandler = NULL;
         }
     }
 }
@@ -214,21 +328,37 @@
 -(void) registerControllerCallbacks:(GCController*) controller
 {
     if (controller != NULL) {
-        controller.controllerPausedHandler = ^(GCController *controller) {
-            Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
-            
-            // Get off the main thread
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-                [self setButtonFlag:limeController flags:PLAY_FLAG];
-                [self updateFinished:limeController];
+        // iOS 13 allows the Start button to behave like a normal button, however
+        // older MFi controllers can send an instant down+up event for the start button
+        // which means the button will not be down long enough to register on the PC.
+        // To work around this issue, use the old controllerPausedHandler if the controller
+        // doesn't have a Select button (which indicates it probably doesn't have a proper
+        // Start button either).
+        BOOL useLegacyPausedHandler = YES;
+        if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
+            if (controller.extendedGamepad != nil &&
+                controller.extendedGamepad.buttonOptions != nil) {
+                useLegacyPausedHandler = NO;
+            }
+        }
+        
+        if (useLegacyPausedHandler) {
+            controller.controllerPausedHandler = ^(GCController *controller) {
+                Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
                 
-                // Pause for 100 ms
-                usleep(100 * 1000);
-                
-                [self clearButtonFlag:limeController flags:PLAY_FLAG];
-                [self updateFinished:limeController];
-            });
-        };
+                // Get off the main thread
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+                    [self setButtonFlag:limeController flags:PLAY_FLAG];
+                    [self updateFinished:limeController];
+                    
+                    // Pause for 100 ms
+                    usleep(100 * 1000);
+                    
+                    [self clearButtonFlag:limeController flags:PLAY_FLAG];
+                    [self updateFinished:limeController];
+                });
+            };
+        }
         
         if (controller.extendedGamepad != NULL) {
             controller.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *gamepad, GCControllerElement *element) {
@@ -260,9 +390,15 @@
                     }
                 }
                 
-                if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-                    UPDATE_BUTTON_FLAG(limeController, PLAY_FLAG, gamepad.buttonMenu.pressed);
-                    UPDATE_BUTTON_FLAG(limeController, BACK_FLAG, gamepad.buttonOptions.pressed);
+                if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
+                    // Options button is optional (only present on Xbox One S and PS4 gamepads)
+                    if (gamepad.buttonOptions != nil) {
+                        UPDATE_BUTTON_FLAG(limeController, BACK_FLAG, gamepad.buttonOptions.pressed);
+
+                        // For older MFi gamepads, the menu button will already be handled by
+                        // the controllerPausedHandler.
+                        UPDATE_BUTTON_FLAG(limeController, PLAY_FLAG, gamepad.buttonMenu.pressed);
+                    }
                 }
                 
                 leftStickX = gamepad.leftThumbstick.xAxis.value * 0x7FFE;
@@ -280,8 +416,8 @@
                 [self updateFinished:limeController];
             };
         }
-        else if (controller.extendedGamepad != NULL) {
-            controller.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *gamepad, GCControllerElement *element) {
+        else if (controller.gamepad != NULL) {
+            controller.gamepad.valueChangedHandler = ^(GCGamepad *gamepad, GCControllerElement *element) {
                 Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:gamepad.controller.playerIndex]];
                 UPDATE_BUTTON_FLAG(limeController, A_FLAG, gamepad.buttonA.pressed);
                 UPDATE_BUTTON_FLAG(limeController, B_FLAG, gamepad.buttonB.pressed);
@@ -325,11 +461,17 @@
                     if (controller.extendedGamepad.leftThumbstickButton != nil &&
                         controller.extendedGamepad.rightThumbstickButton != nil) {
                         level = OnScreenControlsLevelAutoGCExtendedGamepad;
+                        if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
+                            if (controller.extendedGamepad.buttonOptions != nil) {
+                                // Has L3/R3 and Select, so we can show nothing :)
+                                level = OnScreenControlsLevelOff;
+                            }
+                        }
                     }
                 }
                 break;
             }
-            else if (controller.extendedGamepad != NULL) {
+            else if (controller.gamepad != NULL) {
                 level = OnScreenControlsLevelAutoGCGamepad;
                 break;
             }
@@ -381,8 +523,10 @@
 #endif
 
 +(bool) isSupportedGamepad:(GCController*) controller {
-    return controller.extendedGamepad != nil || controller.extendedGamepad != nil;
+    return controller.extendedGamepad != nil || controller.gamepad != nil;
 }
+
+#pragma clang diagnostic pop
 
 +(int) getGamepadCount {
     int count = 0;
@@ -453,6 +597,10 @@
     _controllerNumbers = 0;
 //    _multiController = streamConfig.multiController;
 
+    _debouncers = [[NSMutableDictionary alloc] init];
+    _debouncers[@(PLAY_FLAG)] = [[NSMutableDictionary alloc] init];
+    _debouncers[@(BACK_FLAG)] = [[NSMutableDictionary alloc] init];
+
     _player0osc = [[Controller alloc] init];
     _player0osc.playerIndex = 0;
 
@@ -475,6 +623,15 @@
             [self assignController:controller];
             [self registerControllerCallbacks:controller];
             [self updateAutoOnScreenControlMode];
+
+            if (@available(iOS 13.0, macOS 10.15, *)) {
+                ButtonDebouncer *play = [[ButtonDebouncer alloc] initWithButton:PLAY_FLAG input:controller.extendedGamepad.buttonMenu controllerSupport:self chordButton:SPECIAL_FLAG];
+                ButtonDebouncer *back = [[ButtonDebouncer alloc] initWithButton:BACK_FLAG input:controller.extendedGamepad.buttonOptions controllerSupport:self chordButton:SPECIAL_FLAG];
+                play.other = back;
+                back.other = play;
+                _debouncers[@(PLAY_FLAG)][@(controller.playerIndex)] = play;
+                _debouncers[@(BACK_FLAG)][@(controller.playerIndex)] = back;
+            }
         }
     }
     
