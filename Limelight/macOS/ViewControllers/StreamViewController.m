@@ -243,6 +243,9 @@
             break;
         }
     }
+    if (windowsInSpace != NULL) {
+        CFRelease(windowsInSpace);
+    }
     return found;
 }
 

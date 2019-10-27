@@ -402,6 +402,12 @@ RenderNextFrame:
         
         // See if we've got all the parameter sets we need for our video format
         if ([self readyForPictureData]) {
+            
+            if (formatDesc != nil) {
+                CFRelease(formatDesc);
+                formatDesc = nil;
+            }
+            
             if (videoFormat & VIDEO_FORMAT_MASK_H264) {
                 [self printStreamInfo];
                 
