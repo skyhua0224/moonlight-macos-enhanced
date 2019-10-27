@@ -170,14 +170,20 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         CVDisplayLinkRelease(_displayLink);
     }
     
+    os_unfair_lock_lock(&_frameQueueLock);
     self.frameQueueHistory = nil;
     self.frameQueue = nil;
-    
-    VTDecompressionSessionInvalidate(_decompressionSession);
+    os_unfair_lock_unlock(&_frameQueueLock);
+
+    [self releaseDecompressionSession];
+}
+
+- (void)releaseDecompressionSession {
     if (_decompressionSession != nil) {
+        VTDecompressionSessionInvalidate(_decompressionSession);
         CFRelease(_decompressionSession);
+        _decompressionSession = nil;
     }
-    _decompressionSession = nil;
 }
 
 - (void)setupWithVideoFormat:(int)videoFormat
@@ -230,7 +236,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     
     // Catch up if we're several frames ahead
     while (self.frameQueue.count > frameDropTarget) {
-        [self.frameQueue dequeue];
+        CFTypeRef frame = CFBridgingRetain([self.frameQueue dequeue]);
+        CFRelease(frame);
     }
 
     
@@ -451,6 +458,8 @@ RenderNextFrame:
                 }
             }
             
+            [self releaseDecompressionSession];
+
             VTDecompressionOutputCallbackRecord callbackRecord = {outputCallback, (__bridge void * _Nullable)(self)};
             status = VTDecompressionSessionCreate(NULL, formatDesc, CFBridgingRetain(@{(NSString *)kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder: @(YES)}), NULL, &callbackRecord, &_decompressionSession);
             if (status != noErr) {
@@ -588,7 +597,7 @@ void outputCallback(void * CM_NULLABLE decompressionOutputRefCon,
     
     [displayLayer enqueueSampleBuffer:sampleBuffer];
     
-    // Dereference the buffers
+    // Release the buffers
     CFRelease(frame);
     CFRelease(sampleBuffer);
 }
