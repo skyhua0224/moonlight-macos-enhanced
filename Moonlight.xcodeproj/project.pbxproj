@@ -169,9 +169,6 @@
 		9E5D60001A5A5A3900689918 /* Roboto-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Roboto-Medium.ttf"; sourceTree = "<group>"; };
 		9E5D60021A5A5A3900689918 /* Roboto-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Roboto-Regular.ttf"; sourceTree = "<group>"; };
 		9E5D60031A5A5A3900689918 /* Roboto-Thin.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Roboto-Thin.ttf"; sourceTree = "<group>"; };
-		D46A73A41CBC7CB60039F1EE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		D46A73AB1CBC7D080039F1EE /* MoonlightUnitTests-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "MoonlightUnitTests-Bridging-Header.h"; sourceTree = "<group>"; };
-		D46A73AC1CBC7D090039F1EE /* ControllerUnitTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ControllerUnitTests.swift; path = Input/ControllerUnitTests.swift; sourceTree = "<group>"; };
 		D4746EEA1CBC740C006FB401 /* Moonlight-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Moonlight-Bridging-Header.h"; path = "Input/Moonlight-Bridging-Header.h"; sourceTree = "<group>"; };
 		FB290CF119B2C406004C83CF /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		FB290CF319B2C406004C83CF /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
@@ -195,7 +192,6 @@
 		FB6549541A57907E001C8F39 /* DiscoveryWorker.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DiscoveryWorker.h; sourceTree = "<group>"; };
 		FB6549551A57907E001C8F39 /* DiscoveryWorker.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DiscoveryWorker.m; sourceTree = "<group>"; };
 		FB6549621A60B4A9001C8F39 /* Limelight 0.3.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Limelight 0.3.1.xcdatamodel"; sourceTree = "<group>"; };
-		FB6DDEF31AE739100096499A /* libmoonlight-common.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libmoonlight-common.a"; path = "limelight-common-c/build/Debug-iphoneos/libmoonlight-common.a"; sourceTree = "<group>"; };
 		FB7E794319C8B71B00A15F68 /* libiconv.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libiconv.dylib; path = usr/lib/libiconv.dylib; sourceTree = SDKROOT; };
 		FB89460519F646E200339C8A /* CryptoManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CryptoManager.h; sourceTree = "<group>"; };
 		FB89460619F646E200339C8A /* CryptoManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CryptoManager.m; sourceTree = "<group>"; };
@@ -454,31 +450,12 @@
 			path = Roboto;
 			sourceTree = "<group>";
 		};
-		D46A73A11CBC7CB60039F1EE /* MoonlightUnitTests */ = {
-			isa = PBXGroup;
-			children = (
-				D46A73AB1CBC7D080039F1EE /* MoonlightUnitTests-Bridging-Header.h */,
-				D46A73AA1CBC7CEF0039F1EE /* Input */,
-				D46A73A41CBC7CB60039F1EE /* Info.plist */,
-			);
-			path = MoonlightUnitTests;
-			sourceTree = "<group>";
-		};
-		D46A73AA1CBC7CEF0039F1EE /* Input */ = {
-			isa = PBXGroup;
-			children = (
-				D46A73AC1CBC7D090039F1EE /* ControllerUnitTests.swift */,
-			);
-			name = Input;
-			sourceTree = "<group>";
-		};
 		FB290CE519B2C406004C83CF = {
 			isa = PBXGroup;
 			children = (
 				4C2556A121F56F280009838E /* Moonlight.entitlements */,
 				98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */,
 				FB290CF919B2C406004C83CF /* Moonlight */,
-				D46A73A11CBC7CB60039F1EE /* MoonlightUnitTests */,
 				FB290CF019B2C406004C83CF /* Frameworks */,
 				FB290CEF19B2C406004C83CF /* Products */,
 			);
@@ -496,14 +473,13 @@
 			isa = PBXGroup;
 			children = (
 				4C38E8051FEE0903000425CD /* libxml2.tbd */,
-				4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */,
-				FB6DDEF31AE739100096499A /* libmoonlight-common.a */,
-				FB4679001A57048000377732 /* CoreFoundation.framework */,
-				FB89468F19F6AFB800339C8A /* libs */,
 				FB7E794319C8B71B00A15F68 /* libiconv.dylib */,
 				FB290DC319B2E98F004C83CF /* libxml2.dylib */,
 				FB290DB819B2C877004C83CF /* libbz2.dylib */,
 				FB290DB619B2C870004C83CF /* libz.dylib */,
+				FB89468F19F6AFB800339C8A /* libs */,
+				4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */,
+				FB4679001A57048000377732 /* CoreFoundation.framework */,
 				FB290CF119B2C406004C83CF /* Foundation.framework */,
 				FB290CF319B2C406004C83CF /* CoreGraphics.framework */,
 				FB290CF519B2C406004C83CF /* UIKit.framework */,
@@ -607,18 +583,10 @@
 		FB89468F19F6AFB800339C8A /* libs */ = {
 			isa = PBXGroup;
 			children = (
-				FB89469019F6AFB800339C8A /* limelight-common */,
 				FB89469119F6AFB800339C8A /* openssl */,
 				FB8946E219F6AFB800339C8A /* opus */,
 			);
 			path = libs;
-			sourceTree = "<group>";
-		};
-		FB89469019F6AFB800339C8A /* limelight-common */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = "limelight-common";
 			sourceTree = "<group>";
 		};
 		FB89469119F6AFB800339C8A /* openssl */ = {
@@ -1049,7 +1017,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SDKROOT = macosx;
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
@@ -1098,7 +1065,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SDKROOT = macosx;
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
@@ -1107,7 +1073,6 @@
 		FB290D1E19B2C406004C83CF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -1134,7 +1099,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1152,7 +1116,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = iphoneos;
+				SDKROOT = macosx;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -1160,7 +1124,6 @@
 		FB290D1F19B2C406004C83CF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -1198,7 +1161,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				PROVISIONING_PROFILE = "";
-				SDKROOT = iphoneos;
+				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
