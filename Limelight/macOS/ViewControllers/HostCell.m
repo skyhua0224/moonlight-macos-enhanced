@@ -92,29 +92,36 @@
 
 - (void)updateHostState {
     NSColor *statusColor;
+    NSString *toolTipText;
     
     switch (self.host.state) {
         case StateOnline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemGrayColor];
+                toolTipText = @"Online, but not paired";
             } else {
                 statusColor = [NSColor systemGreenColor];
+                toolTipText = @"Online, and paired";
             }
             break;
         case StateOffline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemGrayColor];
+                toolTipText = @"Offline, but not paired";
             } else {
                 statusColor = [NSColor systemRedColor];
+                toolTipText = @"Offline, and paired";
             }
             break;
         case StateUnknown:
             statusColor = [NSColor systemGrayColor];
+            toolTipText = @"Unknown";
             break;
     }
 
     
     self.statusLightView.backgroundColor = statusColor;
+    self.statusLightView.toolTip = toolTipText;
 }
 
 @end
