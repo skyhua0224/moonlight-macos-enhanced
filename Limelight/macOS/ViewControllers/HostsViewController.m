@@ -228,6 +228,23 @@
 }
 
 - (void)handleOfflineHost:(TemporaryHost *)host {
+    NSAlert *alert = [[NSAlert alloc] init];
+
+    alert.alertStyle = NSAlertStyleInformational;
+    alert.messageText = [NSString stringWithFormat:@"%@ is offline, do want to try and wake it?", host.name];
+    [alert addButtonWithTitle:@"Wake"];
+    [alert addButtonWithTitle:@"Cancel"];
+
+    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+        switch (returnCode) {
+            case NSAlertFirstButtonReturn:
+                [WakeOnLanManager wakeHost:self.selectedHost];
+                break;
+            case NSAlertSecondButtonReturn:
+                [self.view.window endSheet:alert.window];
+                break;
+        }
+    }];
 }
 
 
