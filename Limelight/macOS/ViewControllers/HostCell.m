@@ -22,12 +22,20 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    [self startUpdateLoop];
+    
     self.imageContainer.wantsLayer = YES;
     self.imageContainer.layer.masksToBounds = YES;
     self.imageContainer.layer.cornerRadius = 10;
     self.labelContainer.wantsLayer = YES;
     self.labelContainer.layer.masksToBounds = YES;
     self.labelContainer.layer.cornerRadius = 4;
+    
+    self.statusLightView.wantsLayer = YES;
+    self.statusLightView.layer.masksToBounds = YES;
+    self.statusLightView.layer.cornerRadius = self.statusLightView.bounds.size.width / 2;
+    self.statusLightView.backgroundColor = [NSColor systemGrayColor];
+    self.statusLightView.alphaValue = 0.66;
     
     ((HostCellView *)self.view).delegate = self;
     
@@ -65,6 +73,48 @@
 
 - (void)menuWillOpen:(NSMenu *)menu {
     [self.delegate didOpenContextMenu:menu forHost:self.host];
+}
+
+
+#pragma mark - Host Updating
+
+- (void)startUpdateLoop {
+    [self performSelector:@selector(updateLoop) withObject:self afterDelay:2];
+}
+
+- (void)updateLoop {
+    [self updateHostState];
+    
+    if (self != nil) {
+        [self startUpdateLoop];
+    }
+}
+
+- (void)updateHostState {
+    NSColor *statusColor;
+    
+    switch (self.host.state) {
+        case StateOnline:
+            if (self.host.pairState == PairStateUnpaired) {
+                statusColor = [NSColor systemGrayColor];
+            } else {
+                statusColor = [NSColor systemGreenColor];
+            }
+            break;
+        case StateOffline:
+            if (self.host.pairState == PairStateUnpaired) {
+                statusColor = [NSColor systemGrayColor];
+            } else {
+                statusColor = [NSColor systemRedColor];
+            }
+            break;
+        case StateUnknown:
+            statusColor = [NSColor systemGrayColor];
+            break;
+    }
+
+    
+    self.statusLightView.backgroundColor = statusColor;
 }
 
 @end

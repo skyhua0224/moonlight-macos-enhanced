@@ -52,18 +52,28 @@
                                 <constraint firstAttribute="width" secondItem="Zdg-fz-C9K" secondAttribute="width" constant="4" id="qJ1-4w-WRB"/>
                             </constraints>
                         </customView>
+                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="O0I-Co-5lc" userLabel="Status Light View" customClass="BackgroundColorView">
+                            <rect key="frame" x="125" y="11" width="12" height="12"/>
+                            <constraints>
+                                <constraint firstAttribute="width" secondItem="O0I-Co-5lc" secondAttribute="height" multiplier="1:1" id="1DE-xS-fZz"/>
+                                <constraint firstAttribute="width" constant="12" id="6TW-4c-sQx"/>
+                            </constraints>
+                        </customView>
                     </subviews>
                     <constraints>
                         <constraint firstItem="pDm-4f-wlV" firstAttribute="centerX" secondItem="uCl-gZ-IFJ" secondAttribute="centerX" id="EHh-mO-cqM"/>
                         <constraint firstItem="7bI-bK-K3N" firstAttribute="centerX" secondItem="uCl-gZ-IFJ" secondAttribute="centerX" id="WG0-PG-XQI"/>
+                        <constraint firstItem="O0I-Co-5lc" firstAttribute="centerY" secondItem="pDm-4f-wlV" secondAttribute="centerY" id="fAN-fS-78f"/>
                         <constraint firstAttribute="bottom" relation="greaterThanOrEqual" secondItem="pDm-4f-wlV" secondAttribute="bottom" id="m8d-2X-oCD"/>
                         <constraint firstItem="pDm-4f-wlV" firstAttribute="top" secondItem="7bI-bK-K3N" secondAttribute="bottom" constant="8" id="nOY-eI-gY6"/>
+                        <constraint firstItem="O0I-Co-5lc" firstAttribute="leading" secondItem="pDm-4f-wlV" secondAttribute="trailing" constant="4" id="tlX-fb-bho"/>
                         <constraint firstItem="7bI-bK-K3N" firstAttribute="top" secondItem="uCl-gZ-IFJ" secondAttribute="top" id="wx2-4s-i7B"/>
                     </constraints>
                 </customView>
             </subviews>
             <constraints>
                 <constraint firstItem="uCl-gZ-IFJ" firstAttribute="leading" secondItem="c22-O7-iKe" secondAttribute="leading" id="0Qh-9a-tfw"/>
+                <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="O0I-Co-5lc" secondAttribute="trailing" constant="8" id="1b5-TG-GtZ"/>
                 <constraint firstAttribute="trailing" secondItem="uCl-gZ-IFJ" secondAttribute="trailing" id="NTQ-dk-zaW"/>
                 <constraint firstAttribute="bottom" secondItem="uCl-gZ-IFJ" secondAttribute="bottom" id="hGM-of-7uK"/>
                 <constraint firstItem="uCl-gZ-IFJ" firstAttribute="top" secondItem="c22-O7-iKe" secondAttribute="top" id="jzI-nE-ghf"/>
@@ -79,6 +89,7 @@
                 <outlet property="hostName" destination="Zdg-fz-C9K" id="rb7-bj-Icf"/>
                 <outlet property="imageContainer" destination="7bI-bK-K3N" id="5eR-Jj-97N"/>
                 <outlet property="labelContainer" destination="pDm-4f-wlV" id="oyB-Ev-aPM"/>
+                <outlet property="statusLightView" destination="O0I-Co-5lc" id="cgm-Fn-zDh"/>
                 <outlet property="view" destination="c22-O7-iKe" id="W33-Ik-R4y"/>
             </connections>
         </collectionViewItem>

@@ -8,10 +8,12 @@
 
 #import <Cocoa/Cocoa.h>
 #import "HostsViewControllerDelegate.h"
+#import "BackgroundColorView.h"
 
 @interface HostCell : NSCollectionViewItem
 @property (weak) IBOutlet NSImageView *hostImageView;
 @property (weak) IBOutlet NSTextField *hostName;
+@property (weak) IBOutlet BackgroundColorView *statusLightView;
 @property (nonatomic, strong) TemporaryHost *host;
 @property (nonatomic, weak) id<HostsViewControllerDelegate> delegate;
 
