@@ -455,7 +455,7 @@ const CGFloat scaleBase = 1.125;
             Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
             dispatch_async(dispatch_get_main_queue(), ^{
                 [AlertPresenter displayAlert:NSAlertStyleWarning message:@"Fetching App List Failed\nThe connection to the PC was interrupted." window:self.view.window completionHandler:^(NSModalResponse returnCode) {
-                    host.online = NO;
+                    host.state = StateOffline;
                     [self transitionToHostsVC];
                 }];
             });

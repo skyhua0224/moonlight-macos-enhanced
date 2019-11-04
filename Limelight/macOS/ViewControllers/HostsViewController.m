@@ -20,6 +20,7 @@
 #import "TemporaryHost.h"
 #import "DataManager.h"
 #import "PairManager.h"
+#import "WakeOnLanManager.h"
 
 @interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
 
@@ -105,6 +106,12 @@
 
 #pragma mark - Actions
 
+- (IBAction)wakeMenuItemClicked:(id)sender {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [WakeOnLanManager wakeHost:self.selectedHost];
+    });
+}
+
 - (IBAction)open:(id)sender {
     if (self.collectionView.selectionIndexes.count != 0) {
         TemporaryHost *host = self.hosts[self.collectionView.selectionIndexes.firstIndex];
@@ -142,7 +149,7 @@
 - (void)openHost:(TemporaryHost *)host {
     self.selectedHost = host;
     
-    if (host.online) {
+    if (host.state == StateOnline) {
         if (host.pairState == PairStatePaired) {
             [self transitionToAppsVCWithHost:host];
         } else {
@@ -152,6 +159,16 @@
         [self handleOfflineHost:host];
     }
 }
+
+- (void)didOpenContextMenu:(NSMenu *)menu forHost:(TemporaryHost *)host {
+    self.selectedHost = host;
+    
+    if (host.state == StateOnline) {
+        [menu cancelTrackingWithoutAnimation];
+        return;
+    }
+}
+
 
 #pragma mark - Host Discovery
 
@@ -220,7 +237,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         Log(LOG_D, @"New host list:");
         for (TemporaryHost* host in hosts) {
-            Log(LOG_D, @"Host: \n{\n\t name:%@ \n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n}", host.name, host.address, host.localAddress, host.externalAddress, host.uuid, host.mac, host.pairState, host.online, host.activeAddress);
+            Log(LOG_D, @"Host: \n{\n\t name:%@ \n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n}", host.name, host.address, host.localAddress, host.externalAddress, host.uuid, host.mac, host.pairState, host.state, host.activeAddress);
         }
         @synchronized(self.hosts) {
             self.hosts = hosts;

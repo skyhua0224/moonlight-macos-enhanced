@@ -9,8 +9,9 @@
 #import "HostCell.h"
 #import "BackgroundColorView.h"
 #import "NSApplication+Moonlight.h"
+#import "HostCellView.h"
 
-@interface HostCell ()
+@interface HostCell () <NSMenuDelegate>
 @property (weak) IBOutlet BackgroundColorView *imageContainer;
 @property (weak) IBOutlet BackgroundColorView *labelContainer;
 
@@ -27,6 +28,8 @@
     self.labelContainer.wantsLayer = YES;
     self.labelContainer.layer.masksToBounds = YES;
     self.labelContainer.layer.cornerRadius = 4;
+    
+    ((HostCellView *)self.view).delegate = self;
     
     [self updateSelectedState:NO];
 }
@@ -58,6 +61,10 @@
     } else {
         [super mouseDown:theEvent];
     }
+}
+
+- (void)menuWillOpen:(NSMenu *)menu {
+    [self.delegate didOpenContextMenu:menu forHost:self.host];
 }
 
 @end

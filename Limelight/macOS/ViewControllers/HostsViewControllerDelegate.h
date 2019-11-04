@@ -13,4 +13,6 @@
 
 - (void)openHost:(TemporaryHost *)host;
 
+- (void)didOpenContextMenu:(NSMenu *)menu forHost:(TemporaryHost *)host;
+
 @end
