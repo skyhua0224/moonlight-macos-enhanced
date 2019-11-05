@@ -89,7 +89,9 @@ const CGFloat scaleBase = 1.125;
     [self.view.window makeFirstResponder:self.collectionView];
     
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
+
     self.getSearchField.delegate = self;
+    self.getSearchField.placeholderString = @"Filter Apps";
 }
 
 - (void)viewWillDisappear {

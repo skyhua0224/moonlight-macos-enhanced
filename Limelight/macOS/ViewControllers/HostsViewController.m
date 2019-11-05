@@ -68,6 +68,7 @@
 #pragma clang diagnostic pop
     
     self.getSearchField.delegate = self;
+    self.getSearchField.placeholderString = @"Filter Hosts";
     
     [self.discMan startDiscovery];
 }
