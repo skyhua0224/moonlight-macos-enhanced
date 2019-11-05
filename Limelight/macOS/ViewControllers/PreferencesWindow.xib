@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="14845" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="15505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="14845"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="15505"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -34,7 +34,7 @@
                         <rect key="frame" x="213" y="311" width="123" height="25"/>
                         <popUpButtonCell key="cell" type="push" title="30 Hz" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" tag="30" imageScaling="proportionallyDown" inset="2" selectedItem="PWG-9b-5iB" id="UOb-zl-cKs">
                             <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
-                            <font key="font" metaFont="menu"/>
+                            <font key="font" metaFont="system"/>
                             <menu key="menu" id="YLu-LE-SIM">
                                 <items>
                                     <menuItem title="30 Hz" state="on" tag="30" id="PWG-9b-5iB"/>
@@ -58,7 +58,7 @@
                         <rect key="frame" x="213" y="275" width="123" height="25"/>
                         <popUpButtonCell key="cell" type="push" title="720p" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" tag="720" imageScaling="proportionallyDown" inset="2" selectedItem="crC-5t-alY" id="xAy-WE-0l1">
                             <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
-                            <font key="font" metaFont="menu"/>
+                            <font key="font" metaFont="system"/>
                             <menu key="menu" id="xeH-A5-bE6">
                                 <items>
                                     <menuItem title="720p" state="on" tag="720" id="crC-5t-alY"/>
@@ -90,7 +90,7 @@
                     <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="QxV-Ip-bmg">
                         <rect key="frame" x="326" y="222" width="49" height="14"/>
                         <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="10 Mbps" id="jKH-1P-PZs">
-                            <font key="font" metaFont="smallSystem"/>
+                            <font key="font" metaFont="menu" size="11"/>
                             <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                             <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                         </textFieldCell>
@@ -110,7 +110,7 @@
                         </constraints>
                         <popUpButtonCell key="cell" type="push" title="Automatic" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" selectedItem="IxP-5c-Sm9" id="HY5-un-HBx">
                             <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
-                            <font key="font" metaFont="menu"/>
+                            <font key="font" metaFont="system"/>
                             <menu key="menu" id="dpa-LA-5A0">
                                 <items>
                                     <menuItem title="Automatic" state="on" id="IxP-5c-Sm9"/>

@@ -17,6 +17,7 @@ typedef enum : NSUInteger {
 
 @interface AppDelegateForAppKit () <NSApplicationDelegate>
 @property (nonatomic, strong) NSWindowController *preferencesWC;
+@property (nonatomic, strong) NSWindowController *aboutWC;
 @property (weak) IBOutlet NSMenuItem *themeMenuItem;
 @end
 
@@ -47,6 +48,14 @@ typedef enum : NSUInteger {
     }
     [self.preferencesWC showWindow:nil];
     [self.preferencesWC.window makeKeyAndOrderFront:nil];
+}
+
+- (IBAction)showAbout:(id)sender {
+    if (self.aboutWC == nil) {
+        self.aboutWC = [[NSWindowController alloc] initWithWindowNibName:@"AboutWindow"];
+    }
+    [self.aboutWC showWindow:nil];
+    [self.aboutWC.window makeKeyAndOrderFront:nil];
 }
 
 - (IBAction)setSystemTheme:(id)sender {

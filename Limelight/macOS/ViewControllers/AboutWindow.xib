@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="15505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="15505"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="NSWindowController">
+            <connections>
+                <outlet property="window" destination="QvC-M9-y7g" id="eCu-Ub-xM1"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <window title="Moonlight" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" tabbingMode="disallowed" titlebarAppearsTransparent="YES" titleVisibility="hidden" id="QvC-M9-y7g" customClass="AboutWindow">
+            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" fullSizeContentView="YES"/>
+            <windowCollectionBehavior key="collectionBehavior" fullScreenNone="YES"/>
+            <rect key="contentRect" x="196" y="240" width="480" height="270"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1440" height="877"/>
+            <view key="contentView" wantsLayer="YES" id="EiT-Mj-1SZ">
+                <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
+                <autoresizingMask key="autoresizingMask"/>
+                <subviews>
+                    <visualEffectView blendingMode="behindWindow" material="sheet" state="active" translatesAutoresizingMaskIntoConstraints="NO" id="iOh-4a-66e" userLabel="Background Effect View">
+                        <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
+                        <subviews>
+                            <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="ApL-Ab-Zmz" userLabel="App Icon">
+                                <rect key="frame" x="20" y="0.0" width="160" height="270"/>
+                                <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="NSApplicationIcon" id="9Wa-l1-7mw"/>
+                            </imageView>
+                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="It2-D4-fo8" userLabel="App Name">
+                                <rect key="frame" x="194" y="195" width="272" height="43"/>
+                                <textFieldCell key="cell" lineBreakMode="clipping" alignment="center" title="Moonlight" id="ora-UR-2if">
+                                    <font key="font" metaFont="systemBold" size="36"/>
+                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                </textFieldCell>
+                            </textField>
+                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="uFp-vM-KQf" userLabel="Version Number">
+                                <rect key="frame" x="194" y="163" width="272" height="16"/>
+                                <textFieldCell key="cell" lineBreakMode="clipping" alignment="center" title="Version 1.0 (1)" id="Tjb-ac-Vlq">
+                                    <font key="font" metaFont="system"/>
+                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                </textFieldCell>
+                            </textField>
+                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mbX-8p-Ti4" userLabel="Copyright">
+                                <rect key="frame" x="194" y="62" width="272" height="16"/>
+                                <textFieldCell key="cell" lineBreakMode="clipping" alignment="center" title="Copyright © 2019 Coofdy Labs" id="olJ-32-eEE">
+                                    <font key="font" metaFont="system"/>
+                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                </textFieldCell>
+                            </textField>
+                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" verticalCompressionResistancePriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="9rX-Jc-4IF" userLabel="Moonlight Stream Credits Link" customClass="LinkTextField">
+                                <rect key="frame" x="194" y="24" width="272" height="34"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="34" id="hhE-2n-9cL"/>
+                                </constraints>
+                                <textFieldCell key="cell" truncatesLastVisibleLine="YES" alignment="center" title="Based on original Moonlight iOS project by Moonlight Stream" id="lCE-bG-724">
+                                    <font key="font" metaFont="system"/>
+                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                </textFieldCell>
+                            </textField>
+                        </subviews>
+                        <constraints>
+                            <constraint firstItem="ApL-Ab-Zmz" firstAttribute="centerY" secondItem="iOh-4a-66e" secondAttribute="centerY" id="5XL-Wf-hv7"/>
+                            <constraint firstAttribute="bottom" secondItem="9rX-Jc-4IF" secondAttribute="bottom" constant="24" id="CXe-bY-bB7"/>
+                            <constraint firstItem="uFp-vM-KQf" firstAttribute="width" secondItem="It2-D4-fo8" secondAttribute="width" multiplier="1:1" id="HKN-Zn-1I2"/>
+                            <constraint firstItem="uFp-vM-KQf" firstAttribute="centerX" secondItem="It2-D4-fo8" secondAttribute="centerX" id="KV8-wX-lea"/>
+                            <constraint firstItem="9rX-Jc-4IF" firstAttribute="centerX" secondItem="It2-D4-fo8" secondAttribute="centerX" id="Npw-am-aLj"/>
+                            <constraint firstItem="ApL-Ab-Zmz" firstAttribute="width" secondItem="iOh-4a-66e" secondAttribute="width" multiplier="1:3" id="T3S-kP-2lR"/>
+                            <constraint firstItem="ApL-Ab-Zmz" firstAttribute="leading" secondItem="iOh-4a-66e" secondAttribute="leading" constant="20" id="Udi-IK-yAT"/>
+                            <constraint firstItem="mbX-8p-Ti4" firstAttribute="centerX" secondItem="It2-D4-fo8" secondAttribute="centerX" id="Ylb-gb-4wn"/>
+                            <constraint firstItem="It2-D4-fo8" firstAttribute="top" secondItem="iOh-4a-66e" secondAttribute="top" constant="32" id="ahj-do-MkC"/>
+                            <constraint firstItem="9rX-Jc-4IF" firstAttribute="top" secondItem="mbX-8p-Ti4" secondAttribute="bottom" constant="4" id="d8C-bz-Qft"/>
+                            <constraint firstAttribute="trailing" secondItem="It2-D4-fo8" secondAttribute="trailing" constant="16" id="gZo-Gn-FxQ"/>
+                            <constraint firstItem="It2-D4-fo8" firstAttribute="leading" secondItem="ApL-Ab-Zmz" secondAttribute="trailing" constant="16" id="hnW-lr-NAe"/>
+                            <constraint firstItem="mbX-8p-Ti4" firstAttribute="width" secondItem="It2-D4-fo8" secondAttribute="width" multiplier="1:1" id="ieE-mu-u56"/>
+                            <constraint firstItem="uFp-vM-KQf" firstAttribute="top" secondItem="It2-D4-fo8" secondAttribute="bottom" constant="16" id="pNI-z3-mpr"/>
+                            <constraint firstItem="ApL-Ab-Zmz" firstAttribute="height" secondItem="iOh-4a-66e" secondAttribute="height" id="pnn-Nf-3LX"/>
+                            <constraint firstItem="9rX-Jc-4IF" firstAttribute="width" secondItem="It2-D4-fo8" secondAttribute="width" id="qPK-LQ-CEB"/>
+                        </constraints>
+                    </visualEffectView>
+                </subviews>
+                <constraints>
+                    <constraint firstAttribute="bottom" secondItem="iOh-4a-66e" secondAttribute="bottom" id="4eo-Lg-pyr"/>
+                    <constraint firstItem="iOh-4a-66e" firstAttribute="top" secondItem="EiT-Mj-1SZ" secondAttribute="top" id="BcL-UG-byU"/>
+                    <constraint firstAttribute="trailing" secondItem="iOh-4a-66e" secondAttribute="trailing" id="fQs-Z3-YXu"/>
+                    <constraint firstItem="iOh-4a-66e" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="j5g-qo-CCn"/>
+                </constraints>
+            </view>
+            <connections>
+                <outlet property="appIconImageView" destination="ApL-Ab-Zmz" id="79i-W9-LkS"/>
+                <outlet property="creditsTextFieldLink" destination="9rX-Jc-4IF" id="CMG-HJ-7i7"/>
+            </connections>
+            <point key="canvasLocation" x="139" y="147"/>
+        </window>
+    </objects>
+    <resources>
+        <image name="NSApplicationIcon" width="32" height="32"/>
+    </resources>
+</document>

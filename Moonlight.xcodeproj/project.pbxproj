@@ -57,6 +57,9 @@
 		4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
 		4C4B02EC236FF5F200B63AE6 /* WakeOnLanManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB4678FE1A565DAC00377732 /* WakeOnLanManager.m */; };
 		4C4B8351234D8F0A00D174F5 /* ResolutionSyncRequester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */; };
+		4C4FB2B323713AA100D0FCE3 /* AboutWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B223713AA100D0FCE3 /* AboutWindow.m */; };
+		4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */; };
+		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
 		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
@@ -129,6 +132,11 @@
 		4C3C619C20BD2D4A0045FE30 /* DatabaseSingleton.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DatabaseSingleton.h; sourceTree = "<group>"; };
 		4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DatabaseSingleton.m; sourceTree = "<group>"; };
 		4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolutionSyncRequester.swift; sourceTree = "<group>"; };
+		4C4FB2B123713AA100D0FCE3 /* AboutWindow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AboutWindow.h; sourceTree = "<group>"; };
+		4C4FB2B223713AA100D0FCE3 /* AboutWindow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AboutWindow.m; sourceTree = "<group>"; };
+		4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutWindow.xib; sourceTree = "<group>"; };
+		4C4FB2B923715A9000D0FCE3 /* LinkTextField.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LinkTextField.h; sourceTree = "<group>"; };
+		4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LinkTextField.m; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A821FECBFFD00684411 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4C7E0A851FECBFFD00684411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -394,6 +402,9 @@
 				4CC3C0301FF73A660029EBF5 /* PreferencesWindow.h */,
 				4CC3C0311FF73A660029EBF5 /* PreferencesWindow.m */,
 				4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */,
+				4C4FB2B123713AA100D0FCE3 /* AboutWindow.h */,
+				4C4FB2B223713AA100D0FCE3 /* AboutWindow.m */,
+				4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */,
 			);
 			path = ViewControllers;
 			sourceTree = "<group>";
@@ -415,6 +426,8 @@
 			children = (
 				4C30BA1E1FF5F7D600848919 /* BackgroundColorView.h */,
 				4C30BA1F1FF5F7D600848919 /* BackgroundColorView.m */,
+				4C4FB2B923715A9000D0FCE3 /* LinkTextField.h */,
+				4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */,
 				4C12130C236FF750005A60A0 /* HostCellView.h */,
 				4C12130D236FF750005A60A0 /* HostCellView.m */,
 				4CC3C02B1FF72A3D0029EBF5 /* AppCellView.h */,
@@ -890,6 +903,7 @@
 				4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */,
 				4CC3C02F1FF73A490029EBF5 /* PreferencesWindow.xib in Resources */,
 				4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */,
+				4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */,
 				4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */,
 				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
 				4C30BFD91FF9D57F00AD09E6 /* DefaultPreferences.plist in Resources */,
@@ -921,6 +935,7 @@
 				4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */,
 				4C38E7F41FEE011A000425CD /* DiscoveryManager.m in Sources */,
 				4C38E8201FEF4FC1000425CD /* AlertPresenter.m in Sources */,
+				4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */,
 				4C38E82B1FF0BFAC000425CD /* ControllerSupport.m in Sources */,
 				4C38E8271FF0BF64000425CD /* VideoDecoderRenderer.m in Sources */,
 				4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */,
@@ -949,6 +964,7 @@
 				4C38E7F31FEE0113000425CD /* DataManager.m in Sources */,
 				4C4B8351234D8F0A00D174F5 /* ResolutionSyncRequester.swift in Sources */,
 				4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */,
+				4C4FB2B323713AA100D0FCE3 /* AboutWindow.m in Sources */,
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
