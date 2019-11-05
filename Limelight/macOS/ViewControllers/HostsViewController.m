@@ -57,6 +57,12 @@
     }
 }
 
+- (void)viewWillAppear {
+    [super viewWillAppear];
+    
+    [self updateHostCellsStatusStates];
+}
+
 - (void)viewDidAppear {
     [super viewDidAppear];
     
@@ -239,6 +245,14 @@
     }
 }
 
+- (void)updateHostCellsStatusStates {
+    NSInteger numberOfItems = [self.collectionView numberOfItemsInSection:0];
+    for (NSInteger itemIndex = 0; itemIndex < numberOfItems; itemIndex++) {
+        HostCell *cell = (HostCell *)[self.collectionView itemAtIndex:itemIndex];
+        [cell updateHostState];
+    }
+}
+
 - (void)displayHosts {
     NSPredicate *predicate;
     if (self.filterText.length != 0) {
@@ -248,13 +262,9 @@
     }
     NSArray<TemporaryHost *> *filteredHosts = [self.hostlist filteredArrayUsingPredicate:predicate];
     self.hosts = [filteredHosts sortedArrayUsingSelector:@selector(compareName:)];
+
     [self.collectionView moonlight_reloadDataKeepingSelection];
-    
-    NSInteger numberOfItems = [self.collectionView numberOfItemsInSection:0];
-    for (NSInteger itemIndex = 0; itemIndex < numberOfItems; itemIndex++) {
-        HostCell *cell = (HostCell *)[self.collectionView itemAtIndex:itemIndex];
-        [cell updateHostState];
-    }
+    [self updateHostCellsStatusStates];
 }
 
 
