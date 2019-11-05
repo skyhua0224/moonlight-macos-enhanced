@@ -22,12 +22,16 @@
 #import "PairManager.h"
 #import "WakeOnLanManager.h"
 
-@interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
+@interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, NSSearchFieldDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
 
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
 @property (nonatomic, strong) TemporaryHost *selectedHost;
 @property (nonatomic, strong) NSAlert *pairAlert;
+
+@property (nonatomic, strong) NSArray *hostlist;
+@property (nonatomic, strong) NSString *filterText;
+@property (nonatomic) NSSearchField *getSearchField;
 
 @property (nonatomic, strong) NSOperationQueue *opQueue;
 @property (nonatomic, strong) DiscoveryManager *discMan;
@@ -62,6 +66,8 @@
 #pragma clang diagnostic ignored "-Wundeclared-selector"
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
 #pragma clang diagnostic pop
+    
+    self.getSearchField.delegate = self;
     
     [self.discMan startDiscovery];
 }
@@ -106,6 +112,10 @@
 
 #pragma mark - Actions
 
+- (IBAction)filterList:(id)sender {
+    [self.view.window makeFirstResponder:self.getSearchField];
+}
+
 - (IBAction)wakeMenuItemClicked:(id)sender {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [WakeOnLanManager wakeHost:self.selectedHost];
@@ -144,6 +154,14 @@
 }
 
 
+#pragma mark - NSSearchFieldDelegate
+
+- (void)controlTextDidChange:(NSNotification *)obj {
+    self.filterText = ((NSTextField *)obj.object).stringValue;
+    [self displayHosts];
+}
+
+
 #pragma mark - HostsViewControllerDelegate
 
 - (void)openHost:(TemporaryHost *)host {
@@ -167,6 +185,13 @@
         [menu cancelTrackingWithoutAnimation];
         return;
     }
+}
+
+
+#pragma mark - Helpers
+
+- (NSSearchField *)getSearchField {
+    return ((NSSearchField *)[self.view.window moonlight_toolbarItemForTag:42].view);
 }
 
 
@@ -208,7 +233,26 @@
     @synchronized (self.hosts) {
         // Sort the host list in alphabetical order
         self.hosts = [self.hosts sortedArrayUsingSelector:@selector(compareName:)];
+        self.hostlist = self.hosts;
         [self.collectionView moonlight_reloadDataKeepingSelection];
+    }
+}
+
+- (void)displayHosts {
+    NSPredicate *predicate;
+    if (self.filterText.length != 0) {
+        predicate = [NSPredicate predicateWithFormat:@"name CONTAINS[cd] %@", self.filterText];
+    } else {
+        predicate = [NSPredicate predicateWithValue:YES];
+    }
+    NSArray<TemporaryHost *> *filteredHosts = [self.hostlist filteredArrayUsingPredicate:predicate];
+    self.hosts = [filteredHosts sortedArrayUsingSelector:@selector(compareName:)];
+    [self.collectionView moonlight_reloadDataKeepingSelection];
+    
+    NSInteger numberOfItems = [self.collectionView numberOfItemsInSection:0];
+    for (NSInteger itemIndex = 0; itemIndex < numberOfItems; itemIndex++) {
+        HostCell *cell = (HostCell *)[self.collectionView itemAtIndex:itemIndex];
+        [cell updateHostState];
     }
 }
 

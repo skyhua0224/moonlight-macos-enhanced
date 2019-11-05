@@ -31,9 +31,9 @@
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, NSSearchFieldDelegate>
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
-@property (nonatomic, strong) NSString *filterText;
 @property (nonatomic, strong) TemporaryApp *runningApp;
 
+@property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
 
 @property (nonatomic, strong) AppAssetManager *appManager;

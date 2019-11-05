@@ -19,4 +19,6 @@
 
 - (void)updateSelectedState:(BOOL)selected;
 
+- (void)updateHostState;
+
 @end
