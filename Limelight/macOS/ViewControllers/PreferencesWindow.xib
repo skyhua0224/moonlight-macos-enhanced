@@ -8,253 +8,15 @@
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="NSWindowController">
             <connections>
-                <outlet property="window" destination="QvC-M9-y7g" id="2K3-QW-qb1"/>
+                <outlet property="window" destination="GN0-MM-rkh" id="Df5-Mm-fFJ"/>
             </connections>
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
-        <window title="Preferences" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" tabbingMode="disallowed" titlebarAppearsTransparent="YES" id="QvC-M9-y7g">
-            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES"/>
-            <windowCollectionBehavior key="collectionBehavior" fullScreenNone="YES"/>
-            <rect key="contentRect" x="196" y="240" width="507" height="370"/>
-            <rect key="screenRect" x="0.0" y="0.0" width="1920" height="1057"/>
-            <view key="contentView" wantsLayer="YES" id="EiT-Mj-1SZ">
-                <rect key="frame" x="0.0" y="0.0" width="507" height="365"/>
-                <autoresizingMask key="autoresizingMask"/>
-                <subviews>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Dvg-pl-3Im">
-                        <rect key="frame" x="-2" y="317" width="207" height="16"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Framerate:" id="6RP-cq-7yS">
-                            <font key="font" metaFont="system"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                    <popUpButton verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="rDN-1K-SDB" userLabel="Framerate selector">
-                        <rect key="frame" x="213" y="311" width="123" height="25"/>
-                        <popUpButtonCell key="cell" type="push" title="30 Hz" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" tag="30" imageScaling="proportionallyDown" inset="2" selectedItem="PWG-9b-5iB" id="UOb-zl-cKs">
-                            <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
-                            <font key="font" metaFont="system"/>
-                            <menu key="menu" id="YLu-LE-SIM">
-                                <items>
-                                    <menuItem title="30 Hz" state="on" tag="30" id="PWG-9b-5iB"/>
-                                    <menuItem title="60 Hz" tag="60" id="e6n-75-utY"/>
-                                </items>
-                            </menu>
-                        </popUpButtonCell>
-                        <connections>
-                            <action selector="didChangeFramerate:" target="QvC-M9-y7g" id="uQh-a8-RwV"/>
-                        </connections>
-                    </popUpButton>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="wRp-Rk-Vz3">
-                        <rect key="frame" x="-2" y="281" width="207" height="16"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Resolution:" id="kSP-p6-I9w">
-                            <font key="font" metaFont="system"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                    <popUpButton verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="KK1-tM-HtR" userLabel="Resolution selector">
-                        <rect key="frame" x="213" y="275" width="123" height="25"/>
-                        <popUpButtonCell key="cell" type="push" title="720p" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" tag="720" imageScaling="proportionallyDown" inset="2" selectedItem="crC-5t-alY" id="xAy-WE-0l1">
-                            <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
-                            <font key="font" metaFont="system"/>
-                            <menu key="menu" id="xeH-A5-bE6">
-                                <items>
-                                    <menuItem title="720p" state="on" tag="720" id="crC-5t-alY"/>
-                                    <menuItem title="1080p" tag="1080" id="RbE-zQ-UrL"/>
-                                    <menuItem title="1440p" tag="1440" id="OSd-bp-Gq9"/>
-                                    <menuItem title="4K" tag="2160" id="aWJ-d7-MNr"/>
-                                </items>
-                            </menu>
-                        </popUpButtonCell>
-                        <connections>
-                            <action selector="didChangeResolution:" target="QvC-M9-y7g" id="REa-sq-Soo"/>
-                        </connections>
-                    </popUpButton>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="dEl-GT-HZl">
-                        <rect key="frame" x="-2" y="245" width="207" height="16"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Bitrate:" id="FVN-Ls-2gd">
-                            <font key="font" metaFont="system"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                    <slider verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="oq8-17-816">
-                        <rect key="frame" x="213" y="239" width="276" height="24"/>
-                        <sliderCell key="cell" continuous="YES" state="on" alignment="left" minValue="5000" maxValue="60000" doubleValue="10000" tickMarkPosition="below" numberOfTickMarks="12" allowsTickMarkValuesOnly="YES" sliderType="linear" id="bdX-Za-QsJ"/>
-                        <connections>
-                            <action selector="didChangeBitrate:" target="QvC-M9-y7g" id="cwh-59-8Nb"/>
-                        </connections>
-                    </slider>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="QxV-Ip-bmg">
-                        <rect key="frame" x="326" y="222" width="49" height="14"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="10 Mbps" id="jKH-1P-PZs">
-                            <font key="font" metaFont="message" size="11"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6Hs-eV-Wem">
-                        <rect key="frame" x="-2" y="184" width="207" height="16"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Video Codec:" id="D6b-aT-eJY">
-                            <font key="font" metaFont="system"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                    <popUpButton verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="chY-ex-kib" userLabel="Video Codec selector">
-                        <rect key="frame" x="213" y="178" width="123" height="25"/>
-                        <constraints>
-                            <constraint firstAttribute="width" constant="118" id="48S-dl-4TO"/>
-                        </constraints>
-                        <popUpButtonCell key="cell" type="push" title="Automatic" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" selectedItem="IxP-5c-Sm9" id="HY5-un-HBx">
-                            <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
-                            <font key="font" metaFont="system"/>
-                            <menu key="menu" id="dpa-LA-5A0">
-                                <items>
-                                    <menuItem title="Automatic" state="on" id="IxP-5c-Sm9"/>
-                                    <menuItem title="H.264" tag="1" id="z7q-Jc-WtY"/>
-                                    <menuItem title="H.265 (HEVC)" tag="2" id="hJR-qN-083"/>
-                                </items>
-                            </menu>
-                        </popUpButtonCell>
-                        <connections>
-                            <action selector="didChangeVideoCodec:" target="QvC-M9-y7g" id="rQM-jo-3Uv"/>
-                        </connections>
-                    </popUpButton>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="wuf-Qy-tmh">
-                        <rect key="frame" x="-2" y="145" width="207" height="16"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Dynamic Resolution:" id="jxx-Ra-7lX">
-                            <font key="font" metaFont="system"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                    <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="NwN-1d-VgO" userLabel="Dynamic Resolution Checkbox">
-                        <rect key="frame" x="213" y="144" width="276" height="18"/>
-                        <buttonCell key="cell" type="check" title="Allow variable resolution during streaming" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="chT-Fq-bVJ">
-                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
-                            <font key="font" metaFont="system"/>
-                        </buttonCell>
-                        <connections>
-                            <action selector="didToggleDynamicResolution:" target="QvC-M9-y7g" id="Knf-b2-AWG"/>
-                        </connections>
-                    </button>
-                    <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="Pi8-F0-aOg">
-                        <rect key="frame" x="12" y="122" width="483" height="5"/>
-                    </box>
-                    <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="JEy-kX-VZR">
-                        <rect key="frame" x="213" y="87" width="161" height="18"/>
-                        <buttonCell key="cell" type="check" title="Let GFE make changes" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="4y7-7N-Unj">
-                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
-                            <font key="font" metaFont="system"/>
-                        </buttonCell>
-                        <connections>
-                            <action selector="didToggleOptimizeSettings:" target="QvC-M9-y7g" id="pdB-9J-CEs"/>
-                        </connections>
-                    </button>
-                    <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="qdh-XA-wop">
-                        <rect key="frame" x="12" y="66" width="483" height="5"/>
-                    </box>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="AKi-RN-Y2N" userLabel="Auto Fullscreen">
-                        <rect key="frame" x="-2" y="32" width="207" height="16"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Auto Fullscreen:" id="Czo-p7-nag">
-                            <font key="font" metaFont="system"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                    <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Sr5-kR-i1y" userLabel="Auto Fullscreen Checkbox">
-                        <rect key="frame" x="213" y="31" width="262" height="18"/>
-                        <buttonCell key="cell" type="check" title="Automatically fullscreen stream window" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="IhK-nf-OMz">
-                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
-                            <font key="font" metaFont="system"/>
-                        </buttonCell>
-                        <connections>
-                            <action selector="didToggleAutoFullscreen:" target="QvC-M9-y7g" id="A7z-LI-F1q"/>
-                        </connections>
-                    </button>
-                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Boe-x5-WUG">
-                        <rect key="frame" x="-2" y="88" width="207" height="16"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Game Settings:" id="8Qy-eE-s4d">
-                            <font key="font" metaFont="system"/>
-                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                </subviews>
-                <constraints>
-                    <constraint firstItem="Boe-x5-WUG" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="1wr-2G-qCK"/>
-                    <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="JEy-kX-VZR" secondAttribute="trailing" constant="20" symbolic="YES" id="2We-rR-H1y"/>
-                    <constraint firstItem="dEl-GT-HZl" firstAttribute="top" secondItem="wRp-Rk-Vz3" secondAttribute="bottom" constant="20" id="2XR-6X-ddq"/>
-                    <constraint firstAttribute="bottom" secondItem="AKi-RN-Y2N" secondAttribute="bottom" constant="32" id="4w3-aY-WDK"/>
-                    <constraint firstItem="chY-ex-kib" firstAttribute="width" secondItem="rDN-1K-SDB" secondAttribute="width" id="50t-Tg-26X"/>
-                    <constraint firstItem="Sr5-kR-i1y" firstAttribute="leading" secondItem="JEy-kX-VZR" secondAttribute="leading" id="6cT-Zd-qoK"/>
-                    <constraint firstAttribute="trailing" secondItem="Pi8-F0-aOg" secondAttribute="trailing" constant="12" symbolic="YES" id="7ze-e3-zOW"/>
-                    <constraint firstItem="rDN-1K-SDB" firstAttribute="baseline" secondItem="Dvg-pl-3Im" secondAttribute="firstBaseline" id="9jc-eg-idk"/>
-                    <constraint firstItem="dEl-GT-HZl" firstAttribute="trailing" secondItem="wRp-Rk-Vz3" secondAttribute="trailing" id="9mK-oG-9TX"/>
-                    <constraint firstItem="chY-ex-kib" firstAttribute="baseline" secondItem="6Hs-eV-Wem" secondAttribute="firstBaseline" id="BMY-mW-8hW"/>
-                    <constraint firstItem="Dvg-pl-3Im" firstAttribute="width" secondItem="EiT-Mj-1SZ" secondAttribute="width" multiplier="0.4" id="D9n-wO-hq0"/>
-                    <constraint firstItem="6Hs-eV-Wem" firstAttribute="firstBaseline" secondItem="chY-ex-kib" secondAttribute="firstBaseline" id="DHx-mf-OJA"/>
-                    <constraint firstItem="chY-ex-kib" firstAttribute="width" secondItem="KK1-tM-HtR" secondAttribute="width" id="IIb-am-vXW"/>
-                    <constraint firstItem="JEy-kX-VZR" firstAttribute="leading" secondItem="oq8-17-816" secondAttribute="leading" id="IpP-xV-vJx"/>
-                    <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="NwN-1d-VgO" secondAttribute="trailing" constant="20" symbolic="YES" id="J4h-Vp-jjz"/>
-                    <constraint firstItem="AKi-RN-Y2N" firstAttribute="baseline" secondItem="Sr5-kR-i1y" secondAttribute="baseline" id="JhB-Na-S9z"/>
-                    <constraint firstItem="wRp-Rk-Vz3" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="LDY-d4-gVB"/>
-                    <constraint firstItem="NwN-1d-VgO" firstAttribute="baseline" secondItem="wuf-Qy-tmh" secondAttribute="baseline" id="LLi-wI-3aN"/>
-                    <constraint firstItem="oq8-17-816" firstAttribute="centerY" secondItem="dEl-GT-HZl" secondAttribute="centerY" constant="2" id="M7v-XH-A5V"/>
-                    <constraint firstItem="KK1-tM-HtR" firstAttribute="baseline" secondItem="wRp-Rk-Vz3" secondAttribute="firstBaseline" id="MTS-aa-zLP"/>
-                    <constraint firstItem="Pi8-F0-aOg" firstAttribute="top" secondItem="wuf-Qy-tmh" secondAttribute="bottom" constant="20" id="MYC-wR-us5"/>
-                    <constraint firstItem="wuf-Qy-tmh" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="OSN-Dp-sru"/>
-                    <constraint firstItem="wRp-Rk-Vz3" firstAttribute="top" secondItem="Dvg-pl-3Im" secondAttribute="bottom" constant="20" id="Okj-vs-eSv"/>
-                    <constraint firstItem="QxV-Ip-bmg" firstAttribute="centerX" secondItem="oq8-17-816" secondAttribute="centerX" id="Rez-mq-3cb"/>
-                    <constraint firstItem="qdh-XA-wop" firstAttribute="bottom" secondItem="Boe-x5-WUG" secondAttribute="bottom" constant="20" id="RiH-nO-NiA"/>
-                    <constraint firstItem="wuf-Qy-tmh" firstAttribute="top" secondItem="chY-ex-kib" secondAttribute="bottom" constant="20" id="Ruc-3s-HdZ"/>
-                    <constraint firstItem="dEl-GT-HZl" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="UaH-hL-g50"/>
-                    <constraint firstItem="rDN-1K-SDB" firstAttribute="leading" secondItem="Dvg-pl-3Im" secondAttribute="trailing" constant="12" id="WEn-q8-vSc"/>
-                    <constraint firstItem="Boe-x5-WUG" firstAttribute="top" secondItem="Pi8-F0-aOg" secondAttribute="bottom" constant="20" id="XXT-V3-NJ8"/>
-                    <constraint firstAttribute="trailing" secondItem="oq8-17-816" secondAttribute="trailing" constant="20" symbolic="YES" id="XrL-ov-fns"/>
-                    <constraint firstItem="Dvg-pl-3Im" firstAttribute="trailing" secondItem="wRp-Rk-Vz3" secondAttribute="trailing" id="ZGo-hD-oc2"/>
-                    <constraint firstItem="KK1-tM-HtR" firstAttribute="leading" secondItem="rDN-1K-SDB" secondAttribute="leading" id="ZrM-fC-Tlc"/>
-                    <constraint firstItem="AKi-RN-Y2N" firstAttribute="trailing" secondItem="Boe-x5-WUG" secondAttribute="trailing" id="bVZ-QI-oQh"/>
-                    <constraint firstItem="6Hs-eV-Wem" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="bte-JQ-DB7"/>
-                    <constraint firstItem="Pi8-F0-aOg" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" constant="12" symbolic="YES" id="byN-hx-QAF"/>
-                    <constraint firstItem="Dvg-pl-3Im" firstAttribute="top" secondItem="EiT-Mj-1SZ" secondAttribute="top" constant="32" id="cV7-h9-7QO"/>
-                    <constraint firstItem="NwN-1d-VgO" firstAttribute="leading" secondItem="chY-ex-kib" secondAttribute="leading" id="d6n-J9-nsK"/>
-                    <constraint firstItem="oq8-17-816" firstAttribute="leading" secondItem="KK1-tM-HtR" secondAttribute="leading" id="fgD-85-Am9"/>
-                    <constraint firstItem="AKi-RN-Y2N" firstAttribute="top" secondItem="qdh-XA-wop" secondAttribute="bottom" constant="20" id="i9M-oG-Ivh"/>
-                    <constraint firstItem="qdh-XA-wop" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" constant="12" symbolic="YES" id="ioI-bd-M0T"/>
-                    <constraint firstItem="chY-ex-kib" firstAttribute="leading" secondItem="oq8-17-816" secondAttribute="leading" id="kxj-AP-ucF"/>
-                    <constraint firstItem="Boe-x5-WUG" firstAttribute="trailing" secondItem="wuf-Qy-tmh" secondAttribute="trailing" id="lId-0D-WMa"/>
-                    <constraint firstItem="QxV-Ip-bmg" firstAttribute="top" secondItem="oq8-17-816" secondAttribute="bottom" constant="4" id="mQi-74-ELk"/>
-                    <constraint firstItem="6Hs-eV-Wem" firstAttribute="trailing" secondItem="dEl-GT-HZl" secondAttribute="trailing" id="nW9-ca-Diw"/>
-                    <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="Sr5-kR-i1y" secondAttribute="trailing" constant="20" symbolic="YES" id="pmh-q2-XrW"/>
-                    <constraint firstItem="AKi-RN-Y2N" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="tTc-cR-RGX"/>
-                    <constraint firstAttribute="trailing" secondItem="qdh-XA-wop" secondAttribute="trailing" constant="12" symbolic="YES" id="to4-Xz-TfO"/>
-                    <constraint firstItem="Dvg-pl-3Im" firstAttribute="leading" secondItem="EiT-Mj-1SZ" secondAttribute="leading" id="wDP-bb-vXO"/>
-                    <constraint firstItem="wuf-Qy-tmh" firstAttribute="trailing" secondItem="6Hs-eV-Wem" secondAttribute="trailing" id="x5r-kn-X9M"/>
-                    <constraint firstItem="chY-ex-kib" firstAttribute="top" secondItem="QxV-Ip-bmg" secondAttribute="bottom" constant="20" id="xh3-rc-IM4"/>
-                    <constraint firstItem="JEy-kX-VZR" firstAttribute="baseline" secondItem="Boe-x5-WUG" secondAttribute="firstBaseline" id="xwn-NF-eQf"/>
-                </constraints>
-            </view>
-            <connections>
-                <outlet property="autoFullscreenCheckbox" destination="Sr5-kR-i1y" id="F6W-M0-f4w"/>
-                <outlet property="bitrateLabel" destination="QxV-Ip-bmg" id="gvT-yg-8It"/>
-                <outlet property="bitrateSlider" destination="oq8-17-816" id="Mfk-LX-Cs9"/>
-                <outlet property="dynamicResolutionCheckbox" destination="NwN-1d-VgO" id="QXB-63-hQa"/>
-                <outlet property="framerateSelector" destination="rDN-1K-SDB" id="BdX-uU-WgE"/>
-                <outlet property="optimizeSettingsCheckbox" destination="JEy-kX-VZR" id="Vxd-dO-ahV"/>
-                <outlet property="resolutionSelector" destination="KK1-tM-HtR" id="NN9-Lc-D4p"/>
-                <outlet property="videoCodecSelector" destination="chY-ex-kib" id="h0H-WP-Ncq"/>
-            </connections>
-            <point key="canvasLocation" x="130.5" y="194"/>
-        </window>
         <window title="Preferences" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" frameAutosaveName="" animationBehavior="default" tabbingMode="disallowed" titlebarAppearsTransparent="YES" id="GN0-MM-rkh" customClass="PreferencesWindow">
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES"/>
             <windowCollectionBehavior key="collectionBehavior" fullScreenNone="YES"/>
-            <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
-            <rect key="contentRect" x="196" y="207" width="686" height="442"/>
+            <rect key="contentRect" x="196" y="207" width="464" height="277"/>
             <rect key="screenRect" x="0.0" y="0.0" width="1920" height="1057"/>
             <view key="contentView" id="zoO-uq-Mpq">
                 <rect key="frame" x="0.0" y="0.0" width="464" height="277"/>
@@ -308,7 +70,7 @@
                                                 </menu>
                                             </popUpButtonCell>
                                             <connections>
-                                                <action selector="didChangeFramerate:" target="QvC-M9-y7g" id="6OZ-2h-T19"/>
+                                                <action selector="didChangeFramerate:" target="GN0-MM-rkh" id="SHq-PG-vD2"/>
                                             </connections>
                                         </popUpButton>
                                     </gridCell>
@@ -338,7 +100,7 @@
                                                 </menu>
                                             </popUpButtonCell>
                                             <connections>
-                                                <action selector="didChangeResolution:" target="QvC-M9-y7g" id="ZBt-te-G0S"/>
+                                                <action selector="didChangeResolution:" target="GN0-MM-rkh" id="6zj-oZ-utU"/>
                                             </connections>
                                         </popUpButton>
                                     </gridCell>
@@ -360,13 +122,13 @@
                                                     <rect key="frame" x="-2" y="17" width="276" height="24"/>
                                                     <sliderCell key="cell" continuous="YES" state="on" alignment="left" minValue="5000" maxValue="60000" doubleValue="10000" tickMarkPosition="below" numberOfTickMarks="12" allowsTickMarkValuesOnly="YES" sliderType="linear" id="4hP-33-IQZ"/>
                                                     <connections>
-                                                        <action selector="didChangeBitrate:" target="QvC-M9-y7g" id="xZS-7y-Yrz"/>
+                                                        <action selector="didChangeBitrate:" target="GN0-MM-rkh" id="pX5-vf-zSb"/>
                                                     </connections>
                                                 </slider>
                                                 <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="uRs-UJ-g2m">
                                                     <rect key="frame" x="111" y="0.0" width="49" height="14"/>
                                                     <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="10 Mbps" id="YYM-VY-RpH">
-                                                        <font key="font" metaFont="message" size="11"/>
+                                                        <font key="font" metaFont="label" size="11"/>
                                                         <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                                     </textFieldCell>
@@ -410,7 +172,7 @@
                                                 </menu>
                                             </popUpButtonCell>
                                             <connections>
-                                                <action selector="didChangeVideoCodec:" target="QvC-M9-y7g" id="HO5-AQ-JD6"/>
+                                                <action selector="didChangeVideoCodec:" target="GN0-MM-rkh" id="DBU-9z-bzD"/>
                                             </connections>
                                         </popUpButton>
                                     </gridCell>
@@ -432,7 +194,7 @@
                                                 <font key="font" metaFont="system"/>
                                             </buttonCell>
                                             <connections>
-                                                <action selector="didToggleDynamicResolution:" target="QvC-M9-y7g" id="nG6-Ub-qgJ"/>
+                                                <action selector="didToggleDynamicResolution:" target="GN0-MM-rkh" id="zvx-cC-AXh"/>
                                             </connections>
                                         </button>
                                     </gridCell>
@@ -454,7 +216,7 @@
                                                 <font key="font" metaFont="system"/>
                                             </buttonCell>
                                             <connections>
-                                                <action selector="didToggleOptimizeSettings:" target="QvC-M9-y7g" id="0YF-0r-5Lm"/>
+                                                <action selector="didToggleOptimizeSettings:" target="GN0-MM-rkh" id="NEb-gv-O4B"/>
                                             </connections>
                                         </button>
                                     </gridCell>
@@ -476,7 +238,7 @@
                                                 <font key="font" metaFont="system"/>
                                             </buttonCell>
                                             <connections>
-                                                <action selector="didToggleAutoFullscreen:" target="QvC-M9-y7g" id="ewL-oL-JGZ"/>
+                                                <action selector="didToggleAutoFullscreen:" target="GN0-MM-rkh" id="13S-Sc-vK7"/>
                                             </connections>
                                         </button>
                                     </gridCell>
@@ -498,6 +260,16 @@
                     <constraint firstItem="5cx-Ke-p85" firstAttribute="top" secondItem="zoO-uq-Mpq" secondAttribute="top" constant="20" symbolic="YES" id="v99-Yd-hIM"/>
                 </constraints>
             </view>
+            <connections>
+                <outlet property="autoFullscreenCheckbox" destination="lGY-LD-88C" id="YRb-X4-6eu"/>
+                <outlet property="bitrateLabel" destination="uRs-UJ-g2m" id="0ZW-ck-E5v"/>
+                <outlet property="bitrateSlider" destination="eaf-SL-FVh" id="724-3y-dvd"/>
+                <outlet property="dynamicResolutionCheckbox" destination="2Qf-PH-rrm" id="K3X-yV-Beq"/>
+                <outlet property="framerateSelector" destination="7gZ-Mt-4R1" id="bE4-Ms-D6O"/>
+                <outlet property="optimizeSettingsCheckbox" destination="u1Z-bU-yoJ" id="WQo-iq-HqU"/>
+                <outlet property="resolutionSelector" destination="mgA-pB-zVA" id="y3U-GB-qws"/>
+                <outlet property="videoCodecSelector" destination="cno-lw-OQf" id="5ug-AN-Ad8"/>
+            </connections>
             <point key="canvasLocation" x="237" y="688"/>
         </window>
     </objects>
