@@ -18,6 +18,11 @@
 
 @property (weak) IBOutlet NSPopUpButton *framerateSelector;
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
+@property (weak) IBOutlet NSButton *shouldSyncCheckbox;
+@property (weak) IBOutlet NSTextField *syncHostNameTextField;
+@property (weak) IBOutlet NSTextField *customResWidthTextField;
+@property (weak) IBOutlet NSTextField *customResHeightTextField;
+@property (weak) IBOutlet NSButtonCell *disablePointerPrecisionCheckbox;
 @property (weak) IBOutlet NSSlider *bitrateSlider;
 @property (weak) IBOutlet NSTextField *bitrateLabel;
 @property (weak) IBOutlet NSPopUpButton *videoCodecSelector;
@@ -41,6 +46,12 @@
     
     [self.framerateSelector selectItemWithTag:[streamSettings.framerate intValue]];
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
+    self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
+    self.shouldSyncCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
+    self.syncHostNameTextField.stringValue = [[NSUserDefaults standardUserDefaults] stringForKey:@"syncHostName"];
+    self.customResWidthTextField.stringValue = [[NSUserDefaults standardUserDefaults] stringForKey:@"syncWidth"];
+    self.customResHeightTextField.stringValue = [[NSUserDefaults standardUserDefaults] stringForKey:@"syncHeight"];
+    self.disablePointerPrecisionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecison"];
     self.bitrateSlider.integerValue = [streamSettings.bitrate intValue];
     [self updateBitrateLabel];
     [self.videoCodecSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"videoCodec"]];
@@ -90,6 +101,27 @@
 
 - (IBAction)didChangeResolution:(id)sender {
     [self saveSettings];
+}
+
+- (IBAction)didChangeShouldSync:(id)sender {
+    self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
+    [[NSUserDefaults standardUserDefaults] setBool:self.shouldSyncCheckbox.state == NSControlStateValueOn forKey:@"shouldSync"];
+}
+
+- (IBAction)didChangeSyncHostName:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setObject:self.syncHostNameTextField.stringValue forKey:@"syncHostName"];
+}
+
+- (IBAction)didChangeCustomResWidth:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setObject:self.customResWidthTextField.stringValue forKey:@"syncWidth"];
+}
+
+- (IBAction)didChangeCustomResHeight:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setObject:self.customResHeightTextField.stringValue forKey:@"syncHeight"];
+}
+
+- (IBAction)didChangeDisablePointerPrecision:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setBool:self.disablePointerPrecisionCheckbox.state == NSControlStateValueOn forKey:@"disablePointerPrecison"];
 }
 
 - (IBAction)didChangeBitrate:(id)sender {

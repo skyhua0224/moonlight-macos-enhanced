@@ -19,21 +19,20 @@ class ResolutionSyncRequester: NSObject {
         guard let host = UserDefaults.standard.string(forKey: "syncHostName") else { return }
         let width = UserDefaults.standard.integer(forKey: "syncWidth")
         let height = UserDefaults.standard.integer(forKey: "syncHeight")
-        
-        if let url = URL(string: "http://\(host):8080/resolutionsync/set?\(width)&\(height)") {
+        let mouseAcceleration = !UserDefaults.standard.bool(forKey: "disablePointerPrecison")
+
+        if let url = URL(string: "http://\(host):8080/resolutionsync/set?\(width)&\(height)&\(mouseAcceleration ? 1 : 0)") {
             ResolutionSyncRequester.makeRequest(url)
             print("ResolutionSync URL: \(url.absoluteString)")
         }
     }
     
     @objc static public func resetResolution() {
-
-        let enabled = UserDefaults.standard.bool(forKey: "shouldSync")
-        if !enabled {
-            return
-        }
-        
         ResolutionSyncRequester.makeRequest(URL(string: "http://gaming-i7:8080/resolutionsync/reset")!)
+    }
+
+    @objc static public func disableMouseAcceleration() {
+        ResolutionSyncRequester.makeRequest(URL(string: "http://gaming-i7:8080/resolutionsync/disableMouseAcceleration")!)
     }
 
     private static func makeRequest(_ url: URL) {

@@ -350,7 +350,10 @@
 
 - (void)connectionStarted {
     [ResolutionSyncRequester setResolution];
-    
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"] && [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecison"]) {
+        [ResolutionSyncRequester disableMouseAcceleration];
+    }
+
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
         

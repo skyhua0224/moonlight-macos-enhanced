@@ -11,10 +11,15 @@
                 <outlet property="autoFullscreenCheckbox" destination="7ME-vj-ZVX" id="rfe-OD-fAy"/>
                 <outlet property="bitrateLabel" destination="h5W-G6-oe9" id="II5-5j-UUZ"/>
                 <outlet property="bitrateSlider" destination="qVP-i5-z4z" id="CXa-XI-002"/>
+                <outlet property="customResHeightTextField" destination="EEy-k7-oTD" id="o37-t5-7UP"/>
+                <outlet property="customResWidthTextField" destination="F7n-q3-xCL" id="wBr-QH-GFO"/>
+                <outlet property="disablePointerPrecisionCheckbox" destination="rGo-cA-PPj" id="MKP-Dz-1hv"/>
                 <outlet property="dynamicResolutionCheckbox" destination="Abn-cm-fC8" id="8EV-g2-muK"/>
                 <outlet property="framerateSelector" destination="hef-cx-cbH" id="XND-fc-loI"/>
                 <outlet property="optimizeSettingsCheckbox" destination="g6c-U8-VxX" id="qTz-pa-M7a"/>
                 <outlet property="resolutionSelector" destination="CDM-EN-PEn" id="CdY-3D-UzS"/>
+                <outlet property="shouldSyncCheckbox" destination="vJe-jH-dWn" id="4Ah-Za-DeY"/>
+                <outlet property="syncHostNameTextField" destination="CMb-r0-zKo" id="9a3-Q8-Y7U"/>
                 <outlet property="videoCodecSelector" destination="eUF-iT-PsL" id="G4N-Ra-1py"/>
                 <outlet property="view" destination="RJx-AI-6VT" id="Ve7-Y9-fzb"/>
             </connections>
@@ -129,6 +134,9 @@
                                             <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
                                             <font key="font" metaFont="system"/>
                                         </buttonCell>
+                                        <connections>
+                                            <action selector="didChangeShouldSync:" target="-2" id="FPd-FI-lOv"/>
+                                        </connections>
                                     </button>
                                 </gridCell>
                                 <gridCell row="Vc7-R6-qgl" column="Vyn-XC-Vk8" id="Sut-NJ-s8y">
@@ -148,6 +156,9 @@
                                             <font key="font" usesAppearanceFont="YES"/>
                                             <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
                                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                            <connections>
+                                                <action selector="didChangeSyncHostName:" target="-2" id="E9k-9q-LY3"/>
+                                            </connections>
                                         </textFieldCell>
                                     </textField>
                                 </gridCell>
@@ -186,6 +197,9 @@
                                                             <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
                                                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                         </textFieldCell>
+                                                        <connections>
+                                                            <action selector="didChangeCustomResWidth:" target="-2" id="FuL-Rg-vCA"/>
+                                                        </connections>
                                                     </textField>
                                                 </subviews>
                                                 <visibilityPriorities>
@@ -218,6 +232,9 @@
                                                             <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
                                                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                         </textFieldCell>
+                                                        <connections>
+                                                            <action selector="didChangeCustomResHeight:" target="-2" id="64U-12-11I"/>
+                                                        </connections>
                                                     </textField>
                                                 </subviews>
                                                 <visibilityPriorities>
@@ -256,6 +273,9 @@
                                         <buttonCell key="cell" type="check" title="Disable Enhance Pointer Precision" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="rGo-cA-PPj">
                                             <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
                                             <font key="font" metaFont="system"/>
+                                            <connections>
+                                                <action selector="didChangeDisablePointerPrecision:" target="-2" id="ea2-vA-iGY"/>
+                                            </connections>
                                         </buttonCell>
                                     </button>
                                 </gridCell>
@@ -283,7 +303,7 @@
                                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="h5W-G6-oe9">
                                                 <rect key="frame" x="111" y="0.0" width="49" height="14"/>
                                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="10 Mbps" id="b4y-39-49p">
-                                                    <font key="font" metaFont="menu" size="11"/>
+                                                    <font key="font" metaFont="label" size="11"/>
                                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                                     <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                                 </textFieldCell>

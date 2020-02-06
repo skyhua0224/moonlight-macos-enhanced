@@ -150,6 +150,8 @@ const CGFloat scaleBase = 1.125;
 
 - (IBAction)quitAppMenuItemClicked:(id)sender {
     [self quitApp:self.runningApp completion:nil];
+    
+    [ResolutionSyncRequester resetResolution];
 }
 
 - (IBAction)open:(id)sender {
