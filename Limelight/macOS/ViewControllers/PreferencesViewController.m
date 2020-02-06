@@ -1,18 +1,20 @@
 //
-//  PreferencesWindow.m
+//  PreferencesViewController.m
 //  Moonlight for macOS
 //
 //  Created by Michael Kenny on 30/12/17.
 //  Copyright © 2017 Moonlight Stream. All rights reserved.
 //
 
-#import "PreferencesWindow.h"
+#import "PreferencesViewController.h"
 #import "NSWindow+Moonlight.h"
 
 #import "DataManager.h"
 #import <VideoToolbox/VideoToolbox.h>
 
-@interface PreferencesWindow ()
+@interface PreferencesViewController ()
+
+@property (weak) IBOutlet NSView *preferencesContentView;
 
 @property (weak) IBOutlet NSPopUpButton *framerateSelector;
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
@@ -25,15 +27,14 @@
 
 @end
 
-@implementation PreferencesWindow
+@implementation PreferencesViewController
 
 #pragma mark - Lifecycle
 
-- (void)awakeFromNib {
-    [super awakeFromNib];
-    
-    self.frameAutosaveName = @"Preferences Window";
-    [self moonlight_centerWindowOnFirstRun];
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    [self setPreferredContentSize:NSMakeSize(self.view.bounds.size.width, self.view.bounds.size.height)];
     
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];

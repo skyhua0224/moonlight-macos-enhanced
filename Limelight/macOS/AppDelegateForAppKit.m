@@ -8,6 +8,8 @@
 
 #import "AppDelegateForAppKit.h"
 #import "DatabaseSingleton.h"
+#import "PreferencesViewController.h"
+#import "NSWindow+Moonlight.h"
 
 typedef enum : NSUInteger {
     SystemTheme,
@@ -45,7 +47,12 @@ typedef enum : NSUInteger {
 - (IBAction)showPreferences:(id)sender {
     if (self.preferencesWC == nil) {
         self.preferencesWC = [[NSWindowController alloc] initWithWindowNibName:@"PreferencesWindow"];
+        self.preferencesWC.contentViewController = [[PreferencesViewController alloc] initWithNibName:@"PreferencesView" bundle:nil];
     }
+    
+    self.preferencesWC.window.frameAutosaveName = @"Preferences Window";
+    [self.preferencesWC.window moonlight_centerWindowOnFirstRun];
+    
     [self.preferencesWC showWindow:nil];
     [self.preferencesWC.window makeKeyAndOrderFront:nil];
 }

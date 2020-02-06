@@ -1,5 +1,5 @@
 //
-//  PreferencesWindow.h
+//  PreferencesViewController.h
 //  Moonlight for macOS
 //
 //  Created by Michael Kenny on 30/12/17.
@@ -8,6 +8,6 @@
 
 #import <Cocoa/Cocoa.h>
 
-@interface PreferencesWindow : NSWindow
+@interface PreferencesViewController : NSViewController
 
 @end
