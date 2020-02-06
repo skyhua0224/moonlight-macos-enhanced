@@ -259,6 +259,13 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             [self sendKeyboardModifierEvent:event withKeyCode:0xA5 andModifierFlag:NSEventModifierFlagOption];
             break;
             
+        case kVK_Command:
+            [self sendKeyboardModifierEvent:event withKeyCode:0x5B andModifierFlag:NSEventModifierFlagCommand];
+            break;
+        case kVK_RightCommand:
+            [self sendKeyboardModifierEvent:event withKeyCode:0x5C andModifierFlag:NSEventModifierFlagCommand];
+            break;
+
         default:
             break;
     }
@@ -327,6 +334,9 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
     if (event.modifierFlags & NSEventModifierFlagOption) {
         modifiers |= MODIFIER_ALT;
+    }
+    if (event.modifierFlags & NSEventModifierFlagCommand) {
+        modifiers |= MODIFIER_META;
     }
     return modifiers;
 }
