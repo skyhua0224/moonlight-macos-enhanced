@@ -12,6 +12,22 @@
 #import "DataManager.h"
 #import <VideoToolbox/VideoToolbox.h>
 
+
+@interface NSUserDefaults (Moonlight)
+- (NSString *)safeStringForKey:(NSString *)key;
+@end
+
+@implementation NSUserDefaults (Moonlight)
+- (NSString *)safeStringForKey:(NSString *)key {
+    NSString *value = [self stringForKey:key];
+    if (value != nil) {
+        return value;
+    }
+    return @"";
+}
+@end
+
+
 @interface PreferencesViewController ()
 
 @property (weak) IBOutlet NSView *preferencesContentView;
@@ -48,9 +64,9 @@
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
     self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
     self.shouldSyncCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
-    self.syncHostNameTextField.stringValue = [[NSUserDefaults standardUserDefaults] stringForKey:@"syncHostName"];
-    self.customResWidthTextField.stringValue = [[NSUserDefaults standardUserDefaults] stringForKey:@"syncWidth"];
-    self.customResHeightTextField.stringValue = [[NSUserDefaults standardUserDefaults] stringForKey:@"syncHeight"];
+    self.syncHostNameTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHostName"];
+    self.customResWidthTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncWidth"];
+    self.customResHeightTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHeight"];
     self.disablePointerPrecisionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecison"];
     self.bitrateSlider.integerValue = [streamSettings.bitrate intValue];
     [self updateBitrateLabel];
