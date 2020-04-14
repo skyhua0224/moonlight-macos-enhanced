@@ -28,11 +28,13 @@ class ResolutionSyncRequester: NSObject {
     }
     
     @objc static public func resetResolution() {
-        ResolutionSyncRequester.makeRequest(URL(string: "http://gaming-i7:8080/resolutionsync/reset")!)
+        guard let host = UserDefaults.standard.string(forKey: "syncHostName") else { return }
+        ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):8080/resolutionsync/reset")!)
     }
 
     @objc static public func disableMouseAcceleration() {
-        ResolutionSyncRequester.makeRequest(URL(string: "http://gaming-i7:8080/resolutionsync/disableMouseAcceleration")!)
+        guard let host = UserDefaults.standard.string(forKey: "syncHostName") else { return }
+        ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):8080/resolutionsync/disableMouseAcceleration")!)
     }
 
     private static func makeRequest(_ url: URL) {
