@@ -19,6 +19,8 @@
 static const char* TAG_APP = "App";
 static const char* TAG_APP_TITLE = "AppTitle";
 static const char* TAG_APP_ID = "ID";
+static const char* TAG_HDR_SUPPORTED = "IsHdrSupported";
+static const char* TAG_APP_INSTALL_PATH = "AppInstallPath";
 
 - (void)populateWithData:(NSData *)xml {
     self.data = xml;
@@ -58,8 +60,6 @@ static const char* TAG_APP_ID = "ID";
     }
     self.statusMessage = statusMsg;
     
-    NSMutableSet<NSString *> *appNames = [[NSMutableSet alloc] init];
-    
     node = node->children;
     
     while (node != NULL) {
@@ -68,14 +68,14 @@ static const char* TAG_APP_ID = "ID";
             xmlNodePtr appInfoNode = node->xmlChildrenNode;
             NSString* appName = @"";
             NSString* appId = nil;
+            NSString* hdrSupported = @"0";
+            NSString* appInstallPath = nil;
             while (appInfoNode != NULL) {
                 if (!xmlStrcmp(appInfoNode->name, (xmlChar*)TAG_APP_TITLE)) {
                     xmlChar* nodeVal = xmlNodeListGetString(docPtr, appInfoNode->xmlChildrenNode, 1);
                     if (nodeVal != NULL) {
                         appName = [[NSString alloc] initWithCString:(const char*)nodeVal encoding:NSUTF8StringEncoding];
                         xmlFree(nodeVal);
-                    } else {
-                        appName = @"";
                     }
                 } else if (!xmlStrcmp(appInfoNode->name, (xmlChar*)TAG_APP_ID)) {
                     xmlChar* nodeVal = xmlNodeListGetString(docPtr, appInfoNode->xmlChildrenNode, 1);
@@ -83,17 +83,29 @@ static const char* TAG_APP_ID = "ID";
                         appId = [[NSString alloc] initWithCString:(const char*)nodeVal encoding:NSUTF8StringEncoding];
                         xmlFree(nodeVal);
                     }
+                } else if (!xmlStrcmp(appInfoNode->name, (xmlChar*)TAG_HDR_SUPPORTED)) {
+                    xmlChar* nodeVal = xmlNodeListGetString(docPtr, appInfoNode->xmlChildrenNode, 1);
+                    if (nodeVal != NULL) {
+                        hdrSupported = [[NSString alloc] initWithCString:(const char*)nodeVal encoding:NSUTF8StringEncoding];
+                        xmlFree(nodeVal);
+                    }
+                } else if (!xmlStrcmp(appInfoNode->name, (xmlChar*)TAG_APP_INSTALL_PATH)) {
+                    xmlChar* nodeVal = xmlNodeListGetString(docPtr, appInfoNode->xmlChildrenNode, 1);
+                    if (nodeVal != NULL) {
+                        appInstallPath = [[NSString alloc] initWithCString:(const char*)nodeVal encoding:NSUTF8StringEncoding];
+                        xmlFree(nodeVal);
+                    }
                 }
+
                 appInfoNode = appInfoNode->next;
             }
             if (appId != nil) {
-                if (![appNames containsObject:appName]) {
-                    [appNames addObject:appName];
-                    
-                    TemporaryApp* app = [[TemporaryApp alloc] init];
-                    app.name = appName;
-                    app.id = appId;
-                    [_appList addObject:app];
+                TemporaryApp* app = [[TemporaryApp alloc] init];
+                app.name = appName;
+                app.id = appId;
+                app.hdrSupported = [hdrSupported intValue] != 0;
+                app.installPath = appInstallPath;
+                [_appList addObject:app];
                 }
             }
         }

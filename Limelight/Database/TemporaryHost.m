@@ -27,10 +27,15 @@
     self.address = host.address;
     self.externalAddress = host.externalAddress;
     self.localAddress = host.localAddress;
+    self.ipv6Address = host.ipv6Address;
     self.mac = host.mac;
     self.name = host.name;
     self.uuid = host.uuid;
-    self.pairState = [host.pairState intValue];
+    self.serverCodecModeSupport = host.serverCodecModeSupport;
+    self.serverCert = host.serverCert;
+    
+    // Ensure we don't use a stale cached pair state if we haven't pinned the cert yet
+    self.pairState = host.serverCert ? [host.pairState intValue] : PairStateUnpaired;
     
     NSMutableSet *appList = [[NSMutableSet alloc] init];
 
@@ -57,11 +62,18 @@
     if (self.localAddress != nil) {
         parentHost.localAddress = self.localAddress;
     }
+    if (self.ipv6Address != nil) {
+        parentHost.ipv6Address = self.ipv6Address;
+    }
     if (self.mac != nil) {
         parentHost.mac = self.mac;
     }
+    if (self.serverCert != nil) {
+        parentHost.serverCert = self.serverCert;
+    }
     parentHost.name = self.name;
     parentHost.uuid = self.uuid;
+    parentHost.serverCodecModeSupport = self.serverCodecModeSupport;
     parentHost.pairState = [NSNumber numberWithInt:self.pairState];
 }
 

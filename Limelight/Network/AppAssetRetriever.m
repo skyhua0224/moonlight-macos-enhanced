@@ -26,11 +26,18 @@ typedef NSImage ImageType;
 - (void)main {
     ImageType *appImage = nil;
     int attempts = 0;
-    while (![self isCancelled] && appImage == nil && attempts++ < MAX_ATTEMPTS) {
+    while (![self isCancelled] && attempts++ < MAX_ATTEMPTS) {
         
-        HttpManager* hMan = [[HttpManager alloc] initWithHost:_host.activeAddress uniqueId:[IdManager getUniqueId] deviceName:deviceName cert:[CryptoManager readCertFromFile]];
+        HttpManager* hMan = [[HttpManager alloc] initWithHost:_host.activeAddress uniqueId:[IdManager getUniqueId] serverCert:_host.serverCert];
         AppAssetResponse* appAssetResp = [[AppAssetResponse alloc] init];
         [hMan executeRequestSynchronously:[HttpRequest requestForResponse:appAssetResp withUrlRequest:[hMan newAppAssetRequestWithAppId:self.app.id]]];
+
+        if (appAssetResp.data != nil) {
+            NSString* boxArtPath = [AppAssetManager boxArtPathForApp:self.app];
+            [[NSFileManager defaultManager] createDirectoryAtPath:[boxArtPath stringByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
+            [appAssetResp.data writeToFile:boxArtPath atomically:NO];
+            break;
+        }
         
         appImage = [[ImageType alloc] initWithData:appAssetResp.data];
         self.app.image = [self pngRepresentationOfImage:appImage];

@@ -16,17 +16,14 @@
 @implementation DiscoveryWorker {
     TemporaryHost* _host;
     NSString* _uniqueId;
-    NSData* _cert;
-    HttpManager* _hMan;
 }
 
 static const float POLL_RATE = 2.0f; // Poll every 2 seconds
 
-- (id) initWithHost:(TemporaryHost*)host uniqueId:(NSString*)uniqueId cert:(NSData*)cert {
+- (id) initWithHost:(TemporaryHost*)host uniqueId:(NSString*)uniqueId {
     self = [super init];
     _host = host;
     _uniqueId = uniqueId;
-    _cert = cert;
     return self;
 }
 
@@ -49,11 +46,14 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
     if (_host.localAddress != nil) {
         [array addObject:_host.localAddress];
     }
+    if (_host.address != nil) {
+        [array addObject:_host.address];
+    }
     if (_host.externalAddress != nil) {
         [array addObject:_host.externalAddress];
     }
-    if (_host.address != nil) {
-        [array addObject:_host.address];
+    if (_host.ipv6Address != nil) {
+        [array addObject:_host.ipv6Address];
     }
     
     // Remove duplicate addresses from the list.
@@ -89,8 +89,9 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
     
     Log(LOG_D, @"%@ has %d unique addresses", _host.name, [addresses count]);
     
-    // Give the PC 3 tries to respond before declaring it offline
-    for (int i = 0; i < 3; i++) {
+    // Give the PC 2 tries to respond before declaring it offline if we've seen it before.
+    // If this is an unknown PC, update the status after 1 attempt to get the UI refreshed quickly.
+    for (int i = 0; i < (_host.state == StateUnknown ? 1 : 2); i++) {
         for (NSString *address in addresses) {
             if (self.cancelled) {
                 // Get out without updating the status because
@@ -99,7 +100,7 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
                 return;
             }
             
-            ServerInfoResponse* serverInfoResp = [self requestInfoAtAddress:address];
+            ServerInfoResponse* serverInfoResp = [self requestInfoAtAddress:address cert:_host.serverCert];
             receivedResponse = [self checkResponse:serverInfoResp];
             if (receivedResponse) {
                 [serverInfoResp populateHost:_host];
@@ -116,35 +117,23 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
             Log(LOG_D, @"Received serverinfo response on try %d", i);
             break;
         }
-        else {
-            // Wait for one second then retry
-            [NSThread sleepForTimeInterval:1];
-        }
     }
 
     _host.state = receivedResponse ? StateOnline : StateOffline;
     if (receivedResponse) {
-        Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress);
+        Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t ipv6Address:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.ipv6Address, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress);
     }
 }
 
-- (ServerInfoResponse*) requestInfoAtAddress:(NSString*)address {
-    _hMan = [[HttpManager alloc] initWithHost:address
+- (ServerInfoResponse*) requestInfoAtAddress:(NSString*)address cert:(NSData*)cert {
+    HttpManager* hMan = [[HttpManager alloc] initWithHost:address
                                                  uniqueId:_uniqueId
-                                               deviceName:deviceName
-                                                     cert:_cert];
+                                                     serverCert:cert];
     ServerInfoResponse* response = [[ServerInfoResponse alloc] init];
-    [_hMan executeRequestSynchronously:[HttpRequest requestForResponse:response
-                                                       withUrlRequest:[_hMan newServerInfoRequest]
-                                       fallbackError:401 fallbackRequest:[_hMan newHttpServerInfoRequest]]];
-    _hMan = nil;
+    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:response
+                                                       withUrlRequest:[hMan newServerInfoRequest:true]
+                                       fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
     return response;
-}
-
-- (void)cancel {
-    [super cancel];
-    
-    [_hMan cancel];
 }
 
 - (BOOL) checkResponse:(ServerInfoResponse*)response {
