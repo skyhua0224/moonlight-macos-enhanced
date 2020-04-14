@@ -6,8 +6,6 @@
 //  Copyright (c) 2014 Moonlight Stream. All rights reserved.
 //
 
-#import <Foundation/Foundation.h>
-
 @interface Utils : NSObject
 
 typedef NS_ENUM(int, PairState) {
@@ -27,7 +25,8 @@ FOUNDATION_EXPORT NSString *const deviceName;
 + (NSData*) randomBytes:(NSInteger)length;
 + (NSString*) bytesToHex:(NSData*)data;
 + (NSData*) hexToBytes:(NSString*) hex;
-+ (int) resolveHost:(NSString*)host;
++ (void) addHelpOptionToDialog:(UIAlertController*)dialog;
++ (BOOL) isActiveNetworkVPN;
 
 @end
 
