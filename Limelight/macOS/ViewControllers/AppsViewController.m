@@ -407,7 +407,7 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)updateBoxArtForAllApps {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         for (TemporaryApp* app in self.apps) {
             [self updateBoxArtCacheForApp:app];
         }
