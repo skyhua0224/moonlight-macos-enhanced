@@ -248,7 +248,7 @@ const CGFloat scaleBase = 1.125;
         NSString *uniqueId = [IdManager getUniqueId];
         NSData *cert = [CryptoManager readCertFromFile];
 
-        HttpManager *hMan = [[HttpManager alloc] initWithHost:app.host.activeAddress uniqueId:uniqueId serverCert:cert];
+        HttpManager *hMan = [[HttpManager alloc] initWithHost:app.host.activeAddress uniqueId:uniqueId serverCert:app.host.serverCert];
         HttpResponse *quitResponse = [[HttpResponse alloc] init];
         HttpRequest *quitRequest = [HttpRequest requestForResponse:quitResponse withUrlRequest:[hMan newQuitAppRequest]];
         
