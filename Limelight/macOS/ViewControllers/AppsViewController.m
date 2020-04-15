@@ -195,7 +195,7 @@ const CGFloat scaleBase = 1.125;
     
     item.runningIcon.hidden = app != self.runningApp;
 
-    NSImage* appImage = [self.boxArtCache objectForKey:app.id];
+    NSImage* appImage = [self.boxArtCache objectForKey:app];
     if (appImage != nil) {
         item.appCoverArt.image = appImage;
     } else {
