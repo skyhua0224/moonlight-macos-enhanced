@@ -246,7 +246,6 @@ const CGFloat scaleBase = 1.125;
 - (void)quitApp:(TemporaryApp *)app completion:(void (^)(BOOL success))completion {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *uniqueId = [IdManager getUniqueId];
-        NSData *cert = [CryptoManager readCertFromFile];
 
         HttpManager *hMan = [[HttpManager alloc] initWithHost:app.host.activeAddress uniqueId:uniqueId serverCert:app.host.serverCert];
         HttpResponse *quitResponse = [[HttpResponse alloc] init];
