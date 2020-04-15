@@ -25,6 +25,7 @@
 #import "DataManager.h"
 #import "ServerInfoResponse.h"
 #import "DiscoveryWorker.h"
+#import "ConnectionHelper.h"
 
 #import "Moonlight-Swift.h"
 
@@ -429,26 +430,8 @@ const CGFloat scaleBase = 1.125;
 - (void)discoverAppsForHost:(TemporaryHost *)host {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *uniqueId = [IdManager getUniqueId];
-        NSData *cert = [CryptoManager readCertFromFile];
         
-        HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId serverCert:cert];
-        
-        // Try up to 5 times to get the app list
-        AppListResponse* appListResp;
-        for (int i = 0; i < 5; i++) {
-            appListResp = [[AppListResponse alloc] init];
-            [hMan executeRequestSynchronously:[HttpRequest requestForResponse:appListResp withUrlRequest:[hMan newAppListRequest]]];
-            if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
-                Log(LOG_W, @"Failed to get applist on try %d: %@", i, appListResp.statusMessage);
-                
-                // Wait for one second then retry
-                [NSThread sleepForTimeInterval:1];
-            }
-            else {
-                Log(LOG_I, @"App list successfully retreived - took %d tries", i);
-                break;
-            }
-        }
+        AppListResponse* appListResp = [ConnectionHelper getAppListForHostWithHostIP:host.activeAddress serverCert:host.serverCert uniqueID:uniqueId];
         
         if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
             Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
