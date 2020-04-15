@@ -307,6 +307,7 @@
     
     streamConfig.host = self.app.host.activeAddress;
     streamConfig.appID = self.app.id;
+    streamConfig.appName = self.app.name;
     streamConfig.serverCert = self.app.host.serverCert;
     
     DataManager* dataMan = [[DataManager alloc] init];
@@ -325,6 +326,8 @@
     streamConfig.bitRate = [streamSettings.bitrate intValue];
     streamConfig.allowHevc = streamSettings.useHevc;
     
+    streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
+
     if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
         self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig];
     }
