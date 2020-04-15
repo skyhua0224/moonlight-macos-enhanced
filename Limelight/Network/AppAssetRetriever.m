@@ -17,14 +17,7 @@
 static const double RETRY_DELAY = 2; // seconds
 static const int MAX_ATTEMPTS = 5;
 
-#if TARGET_OS_IPHONE
-typedef UIImage ImageType;
-#else
-typedef NSImage ImageType;
-#endif
-
-- (void)main {
-    ImageType *appImage = nil;
+- (void) main {
     int attempts = 0;
     while (![self isCancelled] && attempts++ < MAX_ATTEMPTS) {
         
@@ -39,27 +32,14 @@ typedef NSImage ImageType;
             break;
         }
         
-        appImage = [[ImageType alloc] initWithData:appAssetResp.data];
-        self.app.image = [self pngRepresentationOfImage:appImage];
-        
-        if (![self isCancelled] && appImage == nil) {
+        if (![self isCancelled]) {
             [NSThread sleepForTimeInterval:RETRY_DELAY];
         }
     }
     [self performSelectorOnMainThread:@selector(sendCallbackForApp:) withObject:self.app waitUntilDone:NO];
 }
 
-- (NSData *)pngRepresentationOfImage:(ImageType *)image {
-#if TARGET_OS_IPHONE
-    return UIImagePNGRepresentation(image);
-#else
-    NSData *imageData = [image TIFFRepresentation];
-    NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:imageData];
-    return [imageRep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-#endif
-}
-
-- (void)sendCallbackForApp:(TemporaryApp*)app {
+- (void) sendCallbackForApp:(TemporaryApp*)app {
     [self.callback receivedAssetForApp:app];
 }
 

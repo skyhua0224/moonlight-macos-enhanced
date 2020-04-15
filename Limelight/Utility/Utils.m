@@ -64,6 +64,7 @@ NSString *const deviceName = @"roth";
     return NO;
 }
 
+#if TARGET_OS_IPHONE
 + (void) addHelpOptionToDialog:(UIAlertController*)dialog {
 #if !TARGET_OS_TV
     // tvOS doesn't have a browser
@@ -72,6 +73,7 @@ NSString *const deviceName = @"roth";
     }]];
 #endif
 }
+#endif
 
 @end
 

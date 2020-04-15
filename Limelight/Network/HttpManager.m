@@ -58,13 +58,6 @@ static const NSString* HTTPS_PORT = @"47984";
     _serverCert = serverCert;
     _requestLock = dispatch_semaphore_create(0);
     _respData = [[NSMutableData alloc] init];
-    return self;
-}
-
-- (void) executeRequestSynchronously:(HttpRequest*)request {
-
-    NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-    _urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
     
     // If this is an IPv6 literal, we must properly enclose it in brackets
     NSString* urlSafeHost;
@@ -76,7 +69,13 @@ static const NSString* HTTPS_PORT = @"47984";
     
     _baseHTTPURL = [NSString stringWithFormat:@"http://%@:%@", urlSafeHost, HTTP_PORT];
     _baseHTTPSURL = [NSString stringWithFormat:@"https://%@:%@", urlSafeHost, HTTPS_PORT];
-    
+
+    return self;
+}
+
+- (void) executeRequestSynchronously:(HttpRequest*)request {
+    NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    _urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
 
     [_respData setLength:0];
     _error = nil;

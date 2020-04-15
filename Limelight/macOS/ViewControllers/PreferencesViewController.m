@@ -105,7 +105,7 @@
         break;
     }
     
-    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn audioOnPC:NO useHevc:useHevc];
+    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:NO optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn multiController:NO audioOnPC:NO useHevc:useHevc enableHdr:NO btMouseSupport:NO];
 }
 
 

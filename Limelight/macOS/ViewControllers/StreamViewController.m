@@ -365,18 +365,24 @@
     });
 }
 
-- (void)connectionTerminated:(long)errorCode {
+- (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld", errorCode);
     [self closeWindowFromMainQueueWithMessage:nil];
 }
 
-- (void)stageFailed:(const char *)stageName withError:(long)errorCode {
+- (void)stageFailed:(const char *)stageName withError:(int)errorCode {
     Log(LOG_I, @"Stage %s failed: %ld", stageName, errorCode);
-    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %s failed with error %ld", stageName, errorCode]];
+    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %s failed with error %d", stageName, errorCode]];
 }
 
 - (void)launchFailed:(NSString *)message {
     [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %@", message]];
+}
+
+- (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
+}
+
+- (void)connectionStatusUpdate:(int)status {
 }
 
 @end

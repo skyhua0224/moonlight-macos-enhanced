@@ -106,7 +106,6 @@ static const char* TAG_APP_INSTALL_PATH = "AppInstallPath";
                 app.hdrSupported = [hdrSupported intValue] != 0;
                 app.installPath = appInstallPath;
                 [_appList addObject:app];
-                }
             }
         }
         node = node->next;

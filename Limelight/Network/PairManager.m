@@ -56,14 +56,17 @@
     }
 }
 
-- (void) finishPairing:(UIBackgroundTaskIdentifier)bgId
+- (void) finishPairing:(OSBackgroundTaskIdentifier)bgId
            forResponse:(HttpResponse*)resp
      withFallbackError:(NSString*)errorMsg {
     [_httpManager executeRequestSynchronously:[HttpRequest requestWithUrlRequest:[_httpManager newUnpairRequest]]];
     
+    
+#if TARGET_OS_IPHONE
     if (bgId != UIBackgroundTaskInvalid) {
         [[UIApplication sharedApplication] endBackgroundTask:bgId];
     }
+#endif
     
     if (![resp isStatusOk]) {
         // Use the response error if the request failed
@@ -73,10 +76,12 @@
     [_callback pairFailed:errorMsg];
 }
 
-- (void) finishPairing:(UIBackgroundTaskIdentifier)bgId withSuccess:(NSData*)derCertBytes {
+- (void) finishPairing:(OSBackgroundTaskIdentifier)bgId withSuccess:(NSData*)derCertBytes {
+#if TARGET_OS_IPHONE
     if (bgId != UIBackgroundTaskInvalid) {
         [[UIApplication sharedApplication] endBackgroundTask:bgId];
     }
+#endif
     
     [_callback pairSuccessful:derCertBytes];
 }
@@ -85,11 +90,14 @@
 - (void) initiatePairWithPin:(NSString*)PIN forServerMajorVersion:(int)serverMajorVersion {
     Log(LOG_I, @"Pairing with generation %d server", serverMajorVersion);
     
+    OSBackgroundTaskIdentifier bgId = 0;
+#if TARGET_OS_IPHONE
     // Start a background task to help prevent the app from being killed
     // while pairing is in progress.
-    UIBackgroundTaskIdentifier bgId = [[UIApplication sharedApplication] beginBackgroundTaskWithName:@"Pairing PC" expirationHandler:^{
+    bgId = [[UIApplication sharedApplication] beginBackgroundTaskWithName:@"Pairing PC" expirationHandler:^{
         Log(LOG_W, @"Background pairing time has expired!");
     }];
+#endif
     
     NSData* salt = [self saltPIN:PIN];
     Log(LOG_I, @"PIN: %@, saltedPIN: %@", PIN, salt);

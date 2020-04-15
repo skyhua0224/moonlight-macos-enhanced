@@ -25,7 +25,9 @@ FOUNDATION_EXPORT NSString *const deviceName;
 + (NSData*) randomBytes:(NSInteger)length;
 + (NSString*) bytesToHex:(NSData*)data;
 + (NSData*) hexToBytes:(NSString*) hex;
+#if TARGET_OS_IPHONE
 + (void) addHelpOptionToDialog:(UIAlertController*)dialog;
+#endif
 + (BOOL) isActiveNetworkVPN;
 
 @end

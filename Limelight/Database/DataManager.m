@@ -118,20 +118,6 @@
     }];
 }
 
-- (void) updateIconForExistingApp:(TemporaryApp*)app {
-    [_managedObjectContext performBlockAndWait:^{
-        App* parentApp = [self getAppForTemporaryApp:app withAppRecords:[self fetchRecords:@"App"]];
-        if (parentApp == nil) {
-            // The app must exist to be updated
-            return;
-        }
-        
-        parentApp.image = app.image;
-        
-        [self saveData];
-    }];
-}
-
 - (TemporarySettings*) getSettings {
     __block TemporarySettings *tempSettings;
     
@@ -178,7 +164,7 @@
 
 - (void) saveData {
     NSError* error;
-    if (![_managedObjectContext save:&error]) {
+    if ([_managedObjectContext hasChanges] && ![_managedObjectContext save:&error]) {
         Log(LOG_E, @"Unable to save hosts to database: %@", error);
     }
 
@@ -214,7 +200,7 @@
 - (App*) getAppForTemporaryApp:(TemporaryApp*)tempApp withAppRecords:(NSArray*)apps {
     for (App* app in apps) {
         if ([app.id isEqualToString:tempApp.id] &&
-            [app.host.uuid isEqualToString:app.host.uuid]) {
+            [app.host.uuid isEqualToString:tempApp.host.uuid]) {
             return app;
         }
     }

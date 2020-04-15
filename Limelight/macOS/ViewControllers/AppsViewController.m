@@ -37,8 +37,7 @@
 @property (nonatomic) NSSearchField *getSearchField;
 
 @property (nonatomic, strong) AppAssetManager *appManager;
-@property (nonatomic, strong) NSMutableDictionary<NSString *, NSImage *> *boxArtCache;
-@property (nonatomic, strong) NSLock *boxArtCacheLock;
+@property (nonatomic, strong) NSCache *boxArtCache;
 @property (nonatomic) CGFloat itemScale;
 
 @property (nonatomic) id windowDidBecomeKeyObserver;
@@ -69,8 +68,7 @@ const CGFloat scaleBase = 1.125;
     
     self.runningApp = [self findRunningApp:self.host];
     
-    self.boxArtCache = [[NSMutableDictionary alloc] init];
-    self.boxArtCacheLock = [[NSLock alloc] init];
+    self.boxArtCache = [[NSCache alloc] init];
     
     __weak typeof(self) weakSelf = self;
     self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
@@ -196,14 +194,11 @@ const CGFloat scaleBase = 1.125;
     
     item.runningIcon.hidden = app != self.runningApp;
 
-    [self.boxArtCacheLock lock];
     NSImage* appImage = [self.boxArtCache objectForKey:app.id];
-    [self.boxArtCacheLock unlock];
     if (appImage != nil) {
         item.appCoverArt.image = appImage;
     } else {
         item.appCoverArt.image = nil;
-        [self asyncRenderAppImage:app];
     }
 }
 
@@ -252,14 +247,14 @@ const CGFloat scaleBase = 1.125;
         NSString *uniqueId = [IdManager getUniqueId];
         NSData *cert = [CryptoManager readCertFromFile];
 
-        HttpManager *hMan = [[HttpManager alloc] initWithHost:app.host.activeAddress uniqueId:uniqueId deviceName:deviceName cert:cert];
+        HttpManager *hMan = [[HttpManager alloc] initWithHost:app.host.activeAddress uniqueId:uniqueId serverCert:cert];
         HttpResponse *quitResponse = [[HttpResponse alloc] init];
         HttpRequest *quitRequest = [HttpRequest requestForResponse:quitResponse withUrlRequest:[hMan newQuitAppRequest]];
         
         [hMan executeRequestSynchronously:quitRequest];
         if (quitResponse.statusCode == 200) {
             ServerInfoResponse *serverInfoResp = [[ServerInfoResponse alloc] init];
-            [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest] fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
+            [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest:NO] fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
             if (![serverInfoResp isStatusOk] || [[serverInfoResp getStringTag:@"state"] hasSuffix:@"_SERVER_BUSY"]) {
                 // On newer GFE versions, the quit request succeeds even though the app doesn't
                 // really quit if another client tries to kill your app. We'll patch the response
@@ -342,7 +337,7 @@ const CGFloat scaleBase = 1.125;
 - (void)updateRunningAppState {
     __weak typeof(self) weakSelf = self;
     NSOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
-        DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:weakSelf.host uniqueId:[IdManager getUniqueId] cert:[CryptoManager readCertFromFile]];
+        DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:weakSelf.host uniqueId:[IdManager getUniqueId]];
         [worker discoverHost];
         dispatch_async(dispatch_get_main_queue(), ^{
             TemporaryApp *runningApp = [weakSelf findRunningApp:weakSelf.host];
@@ -436,7 +431,7 @@ const CGFloat scaleBase = 1.125;
         NSString *uniqueId = [IdManager getUniqueId];
         NSData *cert = [CryptoManager readCertFromFile];
         
-        HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId deviceName:deviceName cert:cert];
+        HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId serverCert:cert];
         
         // Try up to 5 times to get the app list
         AppListResponse* appListResp;
@@ -478,6 +473,7 @@ const CGFloat scaleBase = 1.125;
 
 - (void) updateApplist:(NSSet*) newList forHost:(TemporaryHost*)host {
     DataManager *database = [[DataManager alloc] init];
+    NSMutableSet *newHostAppList = [NSMutableSet setWithSet:host.appList];
     
     for (TemporaryApp* app in newList) {
         BOOL appAlreadyInList = NO;
@@ -490,7 +486,7 @@ const CGFloat scaleBase = 1.125;
         }
         if (!appAlreadyInList) {
             app.host = host;
-            [host.appList addObject:app];
+            [newHostAppList addObject:app];
         }
     }
     
@@ -510,7 +506,7 @@ const CGFloat scaleBase = 1.125;
                 // Removing the app mutates the list we're iterating (which isn't legal).
                 // We need to jump out of this loop and restart enumeration.
                 
-                [host.appList removeObject:app];
+                [newHostAppList removeObject:app];
                 
                 // It's important to remove the app record from the database
                 // since we'll have a constraint violation now that appList
@@ -524,25 +520,13 @@ const CGFloat scaleBase = 1.125;
         // Keep looping until the list is no longer being mutated
     } while (appWasRemoved);
     
+    host.appList = [newHostAppList copy];
+    
     [database updateAppsForExistingHost:host];
 }
 
 
 #pragma mark - Image Loading
-
-- (void)asyncRenderAppImage:(TemporaryApp *)app {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        
-        NSImage *appImage = [[NSImage alloc] initWithData:app.image];
-        if (appImage != nil) {
-            [self.boxArtCacheLock lock];
-            [self.boxArtCache setObject:appImage forKey:app.id];
-            [self.boxArtCacheLock unlock];
-            
-            [self updateCellWithImageForApp:app];
-        }
-    });
-}
 
 - (void)updateCellWithImageForApp:(TemporaryApp *)app {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -557,20 +541,53 @@ const CGFloat scaleBase = 1.125;
     });
 }
 
-- (void)updateBoxArtCacheForApp:(TemporaryApp *)app {
-    if (app.image == nil) {
-        [self.boxArtCacheLock lock];
-        [self.boxArtCache removeObjectForKey:app.id];
-        [self.boxArtCacheLock unlock];
-    } else {
-        [self.boxArtCacheLock lock];
-        NSImage *image = [self.boxArtCache objectForKey:app.id];
-        [self.boxArtCacheLock unlock];
-        if (image == nil) {
-            NSImage *image = [[NSImage alloc] initWithData:app.image];
-            [self.boxArtCacheLock lock];
-            [self.boxArtCache setObject:image forKey:app.id];
-            [self.boxArtCacheLock unlock];
+// This function forces immediate decoding of the UIImage, rather
+// than the default lazy decoding that results in janky scrolling.
++ (OSImage*) loadBoxArtForCaching:(TemporaryApp*)app {
+    OSImage* boxArt;
+    
+    NSData* imageData = [NSData dataWithContentsOfFile:[AppAssetManager boxArtPathForApp:app]];
+    if (imageData == nil) {
+        // No box art on disk
+        return nil;
+    }
+    
+    CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)imageData, NULL);
+    CGImageRef cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil);
+    
+    size_t width = CGImageGetWidth(cgImage);
+    size_t height = CGImageGetHeight(cgImage);
+    
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef imageContext =  CGBitmapContextCreate(NULL, width, height, 8, width * 4, colorSpace,
+                                                       kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGColorSpaceRelease(colorSpace);
+
+    CGContextDrawImage(imageContext, CGRectMake(0, 0, width, height), cgImage);
+    
+    CGImageRef outputImage = CGBitmapContextCreateImage(imageContext);
+
+#if TARGET_OS_IPHONE
+    boxArt = [UIImage imageWithCGImage:outputImage];
+#else
+    boxArt = [[NSImage alloc] initWithCGImage:outputImage size:NSMakeSize(width, height)];
+#endif
+
+    CGImageRelease(outputImage);
+    CGContextRelease(imageContext);
+    
+    CGImageRelease(cgImage);
+    CFRelease(source);
+    
+    return boxArt;
+}
+
+- (void) updateBoxArtCacheForApp:(TemporaryApp*)app {
+    if ([_boxArtCache objectForKey:app] == nil) {
+        OSImage* image = [AppsViewController loadBoxArtForCaching:app];
+        if (image != nil) {
+            // Add the image to our cache if it was present
+            [_boxArtCache setObject:image forKey:app];
         }
     }
 }
@@ -582,9 +599,6 @@ const CGFloat scaleBase = 1.125;
     // Update the box art cache now so we don't have to do it
     // on the main thread
     [self updateBoxArtCacheForApp:app];
-    
-    DataManager *dataManager = [[DataManager alloc] init];
-    [dataManager updateIconForExistingApp:app];
     
     [self updateCellWithImageForApp:app];
 }

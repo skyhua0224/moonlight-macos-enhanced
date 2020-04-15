@@ -5,15 +5,21 @@
 //
 
 #import <Availability.h>
+#include <TargetConditionals.h>
 
-#ifdef __OBJC__
-    #import <AppKit/AppKit.h>
-    #import <Foundation/Foundation.h>
-    #import <CoreData/CoreData.h>
-    #import "Logger.h"
-    typedef NSView ViewType;
-    typedef NSColor ColorType;
-#define UIViewAutoresizingFlexibleHeight NSViewHeightSizable
-#define UIViewAutoresizingFlexibleWidth NSViewWidthSizable
+#ifndef __IPHONE_3_0
+#warning "This project uses features only available in iOS SDK 3.0 and later."
 #endif
 
+#ifdef __OBJC__
+
+#if TARGET_OS_IPHONE
+    #import <UIKit/UIKit.h>
+#elif TARGET_OS_MAC
+    #import <AppKit/AppKit.h>
+#endif
+#import <Foundation/Foundation.h>
+#import <CoreData/CoreData.h>
+#import "Logger.h"
+#include "OSPortabilityDefs.h"
+#endif

@@ -29,7 +29,6 @@
 - (NSArray*) getHosts;
 - (void) updateHost:(TemporaryHost*)host;
 - (void) updateAppsForExistingHost:(TemporaryHost *)host;
-- (void) updateIconForExistingApp:(TemporaryApp*)app;
 - (void) removeHost:(TemporaryHost*)host;
 - (void) removeApp:(TemporaryApp*)app;
 

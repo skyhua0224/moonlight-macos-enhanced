@@ -39,7 +39,7 @@
 
 
 @interface VideoDecoderRenderer ()
-@property (nonatomic, strong) StreamConfiguration *config;
+@property (nonatomic) int refreshRate;
 
 @property (nonatomic, strong) NSMutableArray *frameQueue;
 @property (nonatomic, strong) NSMutableArray<NSNumber *> *frameQueueHistory;
@@ -47,7 +47,7 @@
 @end
 
 @implementation VideoDecoderRenderer {
-    ViewType *_view;
+    OSView *_view;
 
     AVSampleBufferDisplayLayer* displayLayer;
     RendererLayerContainer *layerContainer;
@@ -87,7 +87,7 @@
     [_view addSubview:layerContainer];
     
     displayLayer = (AVSampleBufferDisplayLayer *)layerContainer.layer;
-    displayLayer.backgroundColor = [ColorType blackColor].CGColor;
+    displayLayer.backgroundColor = [OSColor blackColor].CGColor;
     
     // We need some parameter sets before we can properly start decoding frames
     waitingForSps = true;
@@ -118,7 +118,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 {
     VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)displayLinkContext;
     
-    [self vsyncCallback:(500 / self.config.frameRate)];
+    [self vsyncCallback:(500 / self.refreshRate)];
     
     return kCVReturnSuccess;
 }
@@ -147,7 +147,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     return YES;
 }
 
-- (id)initWithView:(ViewType *)view
+- (id)initWithView:(OSView *)view
 {
     self = [super init];
     
@@ -186,19 +186,15 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
 }
 
-- (void)setupWithVideoFormat:(int)videoFormat
+- (void)setupWithVideoFormat:(int)videoFormat refreshRate:(int)refreshRate
 {
     self->videoFormat = videoFormat;
-}
-
-- (void)setStreamConfig:(StreamConfiguration *)config
-{
-    self.config = config;
+    self.refreshRate = refreshRate;
 }
 
 - (void)vsyncCallback:(int)timeUntilNextVsyncMillis
 {
-    int maxVideoFps = self.config.frameRate;
+    int maxVideoFps = self.refreshRate;
     int displayFps = ceil(1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(_displayLink));
     
     // Make sure initialize() has been called
@@ -276,6 +272,9 @@ RenderNextFrame:
     char *pointer;
     CMBlockBufferGetDataPointer(blockBuffer, 4, &length, NULL, &pointer);
     Log(LOG_I, @"Frame nalu type: %c", pointer[0]);
+}
+
+- (void)cleanup {
 }
 
 #define FRAME_START_PREFIX_SIZE 4
@@ -381,7 +380,7 @@ RenderNextFrame:
 }
 
 // This function must free data for bufferType == BUFFER_TYPE_PICDATA
-- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType
+- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType pts:(unsigned int)pts
 {
     OSStatus status;
 

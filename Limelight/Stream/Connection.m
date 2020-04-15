@@ -363,8 +363,6 @@ void ClConnectionStatusUpdate(int status)
     _streamConfig.enableHdr = config.enableHdr;
     _streamConfig.audioConfiguration = config.audioConfiguration;
     
-    [renderer setStreamConfig:config];
-    
     // Use some of the HEVC encoding efficiency improvements to
     // reduce bandwidth usage while still gaining some image
     // quality improvement.
