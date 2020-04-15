@@ -307,6 +307,7 @@
     
     streamConfig.host = self.app.host.activeAddress;
     streamConfig.appID = self.app.id;
+    streamConfig.serverCert = self.app.host.serverCert;
     
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];

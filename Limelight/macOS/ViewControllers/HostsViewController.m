@@ -277,7 +277,7 @@
     NSString *uniqueId = [IdManager getUniqueId];
     NSData *cert = [CryptoManager readCertFromFile];
 
-    HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId serverCert:cert];
+    HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId serverCert:host.serverCert];
     PairManager* pMan = [[PairManager alloc] initWithManager:hMan clientCert:cert callback:self];
     [self.opQueue addOperation:pMan];
 }
@@ -329,6 +329,8 @@
 
 - (void)pairSuccessful:(NSData *)serverCert {
     dispatch_async(dispatch_get_main_queue(), ^{
+        self.selectedHost.serverCert = serverCert;
+        
         [self.view.window endSheet:self.pairAlert.window];
         [self.discMan startDiscovery];
         [self alreadyPaired];
