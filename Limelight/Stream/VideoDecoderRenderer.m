@@ -157,9 +157,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     _frameQueue = [NSMutableArray array];
 
     [self reinitializeDisplayLayer];
-    
-    [self initializeDisplayLink];
-    
+        
     return self;
 }
 
@@ -190,6 +188,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 {
     self->videoFormat = videoFormat;
     self.refreshRate = refreshRate;
+    
+    [self initializeDisplayLink];
 }
 
 - (void)vsyncCallback:(int)timeUntilNextVsyncMillis
