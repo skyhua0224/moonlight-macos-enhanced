@@ -570,6 +570,8 @@ const CGFloat scaleBase = 1.125;
         if (image != nil) {
             // Add the image to our cache if it was present
             [_boxArtCache setObject:image forKey:app];
+            
+            [self updateCellWithImageForApp:app];
         }
     }
 }
@@ -581,8 +583,6 @@ const CGFloat scaleBase = 1.125;
     // Update the box art cache now so we don't have to do it
     // on the main thread
     [self updateBoxArtCacheForApp:app];
-    
-    [self updateCellWithImageForApp:app];
 }
 
 @end
