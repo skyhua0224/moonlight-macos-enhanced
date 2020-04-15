@@ -7,6 +7,7 @@
 //
 
 #import "Connection.h"
+#import "Utils.h"
 
 #import <AudioUnit/AudioUnit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -21,6 +22,9 @@
     CONNECTION_LISTENER_CALLBACKS _clCallbacks;
     DECODER_RENDERER_CALLBACKS _drCallbacks;
     AUDIO_RENDERER_CALLBACKS _arCallbacks;
+    char _hostString[256];
+    char _appVersionString[32];
+    char _gfeVersionString[32];
 }
 
 static NSLock* initLock;
@@ -29,17 +33,19 @@ static id<ConnectionCallbacks> _callbacks;
 
 #define OUTPUT_BUS 0
 
-#define MAX_CHANNEL_COUNT 2
-#define FRAME_SIZE 240
+// My iPod touch 5th Generation seems to really require 80 ms
+// of buffering to deliver glitch-free playback :(
+// FIXME: Maybe we can use a smaller buffer on more modern iOS versions?
+#define CIRCULAR_BUFFER_DURATION 80
 
-#define CIRCULAR_BUFFER_SIZE 32
-
+static int audioBufferEntries;
 static int audioBufferWriteIndex;
 static int audioBufferReadIndex;
-static int activeChannelCount;
-static short audioCircularBuffer[CIRCULAR_BUFFER_SIZE][FRAME_SIZE * MAX_CHANNEL_COUNT];
+static int audioBufferStride;
+static int audioSamplesPerFrame;
+static short* audioCircularBuffer;
 
-#define AUDIO_QUEUE_BUFFERS 4
+#define AUDIO_QUEUE_BUFFERS 3
 
 static AudioQueueRef audioQueue;
 static AudioQueueBufferRef audioBuffers[AUDIO_QUEUE_BUFFERS];
@@ -47,8 +53,13 @@ static VideoDecoderRenderer* renderer;
 
 int DrDecoderSetup(int videoFormat, int width, int height, int redrawRate, void* context, int drFlags)
 {
-    [renderer setupWithVideoFormat:videoFormat];
+    [renderer setupWithVideoFormat:videoFormat refreshRate:redrawRate];
     return 0;
+}
+
+void DrCleanup(void)
+{
+    [renderer cleanup];
 }
 
 int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
@@ -60,12 +71,15 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
         // A frame was lost due to OOM condition
         return DR_NEED_IDR;
     }
-    
+
     PLENTRY entry = decodeUnit->bufferList;
     while (entry != NULL) {
         // Submit parameter set NALUs directly since no copy is required by the decoder
         if (entry->bufferType != BUFFER_TYPE_PICDATA) {
-            ret = [renderer submitDecodeBuffer:(unsigned char*)entry->data length:entry->length bufferType:entry->bufferType];
+            ret = [renderer submitDecodeBuffer:(unsigned char*)entry->data
+                                        length:entry->length
+                                    bufferType:entry->bufferType
+                                           pts:decodeUnit->presentationTimeMs];
             if (ret != DR_OK) {
                 free(data);
                 return ret;
@@ -75,52 +89,91 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
             memcpy(&data[offset], entry->data, entry->length);
             offset += entry->length;
         }
-        
+
         entry = entry->next;
     }
-    
+
     // This function will take our picture data buffer
-    return [renderer submitDecodeBuffer:data length:offset bufferType:BUFFER_TYPE_PICDATA];
+    return [renderer submitDecodeBuffer:data
+                                 length:offset
+                             bufferType:BUFFER_TYPE_PICDATA
+                                    pts:decodeUnit->presentationTimeMs];
 }
 
-int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, void* context, int flags)
+int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusConfig, void* context, int flags)
 {
     int err;
+    AudioChannelLayout channelLayout = {};
+    OPUS_MULTISTREAM_CONFIGURATION opusConfig = *originalOpusConfig;
     
-    // Clear the circular buffer
+    // Initialize the circular buffer
     audioBufferWriteIndex = audioBufferReadIndex = 0;
-
-    // We only support stereo for now
-    assert(audioConfiguration == AUDIO_CONFIGURATION_STEREO);
-
-    activeChannelCount = opusConfig->channelCount;
-    opusDecoder = opus_multistream_decoder_create(opusConfig->sampleRate,
-                                                  opusConfig->channelCount,
-                                                  opusConfig->streams,
-                                                  opusConfig->coupledStreams,
-                                                  opusConfig->mapping,
+    audioSamplesPerFrame = opusConfig.samplesPerFrame;
+    audioBufferStride = opusConfig.channelCount * opusConfig.samplesPerFrame;
+    audioBufferEntries = CIRCULAR_BUFFER_DURATION / (opusConfig.samplesPerFrame / (opusConfig.sampleRate / 1000));
+    audioCircularBuffer = malloc(audioBufferEntries * audioBufferStride * sizeof(short));
+    if (audioCircularBuffer == NULL) {
+        Log(LOG_E, @"Error allocating output queue\n");
+        return -1;
+    }
+    
+    switch (opusConfig.channelCount) {
+        case 2:
+            channelLayout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo;
+            break;
+        case 4:
+            channelLayout.mChannelLayoutTag = kAudioChannelLayoutTag_Quadraphonic;
+            break;
+        case 6:
+            channelLayout.mChannelLayoutTag = kAudioChannelLayoutTag_AudioUnit_5_1;
+            break;
+        case 8:
+            channelLayout.mChannelLayoutTag = kAudioChannelLayoutTag_AudioUnit_7_1;
+            
+            // Swap SL/SR and RL/RR to match the selected channel layout
+            opusConfig.mapping[4] = originalOpusConfig->mapping[6];
+            opusConfig.mapping[5] = originalOpusConfig->mapping[7];
+            opusConfig.mapping[6] = originalOpusConfig->mapping[4];
+            opusConfig.mapping[7] = originalOpusConfig->mapping[5];
+            break;
+        default:
+            // Unsupported channel layout
+            Log(LOG_E, @"Unsupported channel layout: %d\n", opusConfig.channelCount);
+            abort();
+    }
+    
+    opusDecoder = opus_multistream_decoder_create(opusConfig.sampleRate,
+                                                  opusConfig.channelCount,
+                                                  opusConfig.streams,
+                                                  opusConfig.coupledStreams,
+                                                  opusConfig.mapping,
                                                   &err);
 
 #if TARGET_OS_IPHONE
     // Configure the audio session for our app
     NSError *audioSessionError = nil;
     AVAudioSession* audioSession = [AVAudioSession sharedInstance];
-    
-    [audioSession setPreferredSampleRate:opusConfig->sampleRate error:&audioSessionError];
-    [audioSession setCategory: AVAudioSessionCategoryAmbient error: &audioSessionError];
-    [audioSession setPreferredOutputNumberOfChannels:opusConfig->channelCount error:&audioSessionError];
-    [audioSession setPreferredIOBufferDuration:0.005 error:&audioSessionError];
+
+    [audioSession setPreferredSampleRate:opusConfig.sampleRate error:&audioSessionError];
+    [audioSession setCategory:AVAudioSessionCategoryPlayback
+                  withOptions:AVAudioSessionCategoryOptionMixWithOthers
+                        error:&audioSessionError];
+    [audioSession setPreferredIOBufferDuration:(opusConfig.samplesPerFrame / (opusConfig.sampleRate / 1000)) / 1000.0
+                                         error:&audioSessionError];
     [audioSession setActive: YES error: &audioSessionError];
-#endif
     
+    // FIXME: Calling this breaks surround audio for some reason
+    //[audioSession setPreferredOutputNumberOfChannels:opusConfig->channelCount error:&audioSessionError];
+#endif
+
     OSStatus status;
     
     AudioStreamBasicDescription audioFormat = {0};
-    audioFormat.mSampleRate = opusConfig->sampleRate;
+    audioFormat.mSampleRate = opusConfig.sampleRate;
     audioFormat.mBitsPerChannel = 16;
     audioFormat.mFormatID = kAudioFormatLinearPCM;
     audioFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked;
-    audioFormat.mChannelsPerFrame = opusConfig->channelCount;
+    audioFormat.mChannelsPerFrame = opusConfig.channelCount;
     audioFormat.mBytesPerFrame = audioFormat.mChannelsPerFrame * (audioFormat.mBitsPerChannel / 8);
     audioFormat.mBytesPerPacket = audioFormat.mBytesPerFrame;
     audioFormat.mFramesPerPacket = audioFormat.mBytesPerPacket / audioFormat.mBytesPerFrame;
@@ -132,8 +185,15 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, v
         return status;
     }
     
+    // We need to specify a channel layout for surround sound configurations
+    status = AudioQueueSetProperty(audioQueue, kAudioQueueProperty_ChannelLayout, &channelLayout, sizeof(channelLayout));
+    if (status != noErr) {
+        Log(LOG_E, @"Error configuring surround channel layout: %d\n", status);
+        return status;
+    }
+    
     for (int i = 0; i < AUDIO_QUEUE_BUFFERS; i++) {
-        status = AudioQueueAllocateBuffer(audioQueue, audioFormat.mBytesPerFrame * FRAME_SIZE, &audioBuffers[i]);
+        status = AudioQueueAllocateBuffer(audioQueue, audioFormat.mBytesPerFrame * opusConfig.samplesPerFrame, &audioBuffers[i]);
         if (status != noErr) {
             Log(LOG_E, @"Error allocating output buffer: %d\n", status);
             return status;
@@ -165,10 +225,15 @@ void ArCleanup(void)
     // Also frees buffers
     AudioQueueDispose(audioQueue, true);
     
+    // Must be freed after the queue is stopped
+    if (audioCircularBuffer != NULL) {
+        free(audioCircularBuffer);
+        audioCircularBuffer = NULL;
+    }
+    
 #if TARGET_OS_IPHONE
     // Audio session is now inactive
-    AVAudioSession* audioSession = [AVAudioSession sharedInstance];
-    [audioSession setActive: YES error: nil];
+    [[AVAudioSession sharedInstance] setActive: NO error: nil];
 #endif
 }
 
@@ -178,12 +243,12 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     
     // Check if there is space for this sample in the buffer. Again, this can race
     // but in the worst case, we'll not see the sample callback having consumed a sample.
-    if (((audioBufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE) == audioBufferReadIndex) {
+    if (((audioBufferWriteIndex + 1) % audioBufferEntries) == audioBufferReadIndex) {
         return;
     }
     
     decodeLen = opus_multistream_decode(opusDecoder, (unsigned char *)sampleData, sampleLength,
-                                        audioCircularBuffer[audioBufferWriteIndex], FRAME_SIZE, 0);
+                                        (short*)&audioCircularBuffer[audioBufferWriteIndex * audioBufferStride], audioSamplesPerFrame, 0);
     if (decodeLen > 0) {
         // Use a full memory barrier to ensure the circular buffer is written before incrementing the index
         __sync_synchronize();
@@ -191,7 +256,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         // This can race with the reader in the sample callback, however this is a benign
         // race since we'll either read the original value of s_WriteIndex (which is safe,
         // we just won't consider this sample) or the new value of s_WriteIndex
-        audioBufferWriteIndex = (audioBufferWriteIndex + 1) % CIRCULAR_BUFFER_SIZE;
+        audioBufferWriteIndex = (audioBufferWriteIndex + 1) % audioBufferEntries;
     }
 }
 
@@ -205,7 +270,7 @@ void ClStageComplete(int stage)
     [_callbacks stageComplete:LiGetStageName(stage)];
 }
 
-void ClStageFailed(int stage, long errorCode)
+void ClStageFailed(int stage, int errorCode)
 {
     [_callbacks stageFailed:LiGetStageName(stage) withError:errorCode];
 }
@@ -215,7 +280,7 @@ void ClConnectionStarted(void)
     [_callbacks connectionStarted];
 }
 
-void ClConnectionTerminated(long errorCode)
+void ClConnectionTerminated(int errorCode)
 {
     [_callbacks connectionTerminated: errorCode];
 }
@@ -228,8 +293,24 @@ void ClLogMessage(const char* format, ...)
     va_end(va);
 }
 
+void ClRumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor)
+{
+    [_callbacks rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+}
+
+void ClConnectionStatusUpdate(int status)
+{
+    [_callbacks connectionStatusUpdate:status];
+}
+
 -(void) terminate
 {
+    // Interrupt any action blocking LiStartConnection(). This is
+    // thread-safe and done outside initLock on purpose, since we
+    // won't be able to acquire it if LiStartConnection is in
+    // progress.
+    LiInterruptConnection();
+    
     // We dispatch this async to get out because this can be invoked
     // on a thread inside common and we don't want to deadlock. It also avoids
     // blocking on the caller's thread waiting to acquire initLock.
@@ -245,79 +326,101 @@ void ClLogMessage(const char* format, ...)
 -(id) initWithConfig:(StreamConfiguration*)config renderer:(VideoDecoderRenderer*)myRenderer connectionCallbacks:(id<ConnectionCallbacks>)callbacks
 {
     self = [super init];
-    
+
     // Use a lock to ensure that only one thread is initializing
     // or deinitializing a connection at a time.
     if (initLock == nil) {
         initLock = [[NSLock alloc] init];
     }
     
-    LiInitializeServerInformation(&_serverInfo);
-    _serverInfo.address = [config.host cStringUsingEncoding:NSUTF8StringEncoding];
-    _serverInfo.serverInfoAppVersion = [config.appVersion cStringUsingEncoding:NSUTF8StringEncoding];
+    strncpy(_hostString,
+            [config.host cStringUsingEncoding:NSUTF8StringEncoding],
+            sizeof(_hostString));
+    strncpy(_appVersionString,
+            [config.appVersion cStringUsingEncoding:NSUTF8StringEncoding],
+            sizeof(_appVersionString));
     if (config.gfeVersion != nil) {
-        _serverInfo.serverInfoGfeVersion = [config.gfeVersion cStringUsingEncoding:NSUTF8StringEncoding];
+        strncpy(_gfeVersionString,
+                [config.gfeVersion cStringUsingEncoding:NSUTF8StringEncoding],
+                sizeof(_gfeVersionString));
     }
-    
+
+    LiInitializeServerInformation(&_serverInfo);
+    _serverInfo.address = _hostString;
+    _serverInfo.serverInfoAppVersion = _appVersionString;
+    if (config.gfeVersion != nil) {
+        _serverInfo.serverInfoGfeVersion = _gfeVersionString;
+    }
+
     renderer = myRenderer;
     _callbacks = callbacks;
-    
+
     LiInitializeStreamConfiguration(&_streamConfig);
     _streamConfig.width = config.width;
     _streamConfig.height = config.height;
     _streamConfig.fps = config.frameRate;
     _streamConfig.bitrate = config.bitRate;
+    _streamConfig.enableHdr = config.enableHdr;
+    _streamConfig.audioConfiguration = config.audioConfiguration;
     
     [renderer setStreamConfig:config];
-
-    // This will activate the remote streaming optimization in moonlight-common if needed
-//    _streamConfig.streamingRemotely = config.streamingRemotely;
+    
+    // Use some of the HEVC encoding efficiency improvements to
+    // reduce bandwidth usage while still gaining some image
+    // quality improvement.
+    _streamConfig.hevcBitratePercentageMultiplier = 75;
+    
+    if ([Utils isActiveNetworkVPN]) {
+        // Force remote streaming mode when a VPN is connected
+        _streamConfig.streamingRemotely = STREAM_CFG_REMOTE;
+        _streamConfig.packetSize = 1024;
+    }
+    else {
+        // Detect remote streaming automatically based on the IP address of the target
+        _streamConfig.streamingRemotely = STREAM_CFG_AUTO;
+        _streamConfig.packetSize = 1392;
+    }
+    
+    // HDR implies HEVC allowed
+    if (config.enableHdr) {
+        config.allowHevc = YES;
+    }
 
     // On iOS 11, we can use HEVC if the server supports encoding it
     // and this device has hardware decode for it (A9 and later).
     // Additionally, iPhone X had a bug which would cause video
     // to freeze after a few minutes with HEVC prior to iOS 11.3.
     // As a result, we will only use HEVC on iOS 11.3 or later.
-    if (@available(iOS 11.3, macOS 10.13, *)) {
+    if (@available(iOS 11.3, tvOS 11.3, macOS 10.13, *)) {
         _streamConfig.supportsHevc = config.allowHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
     }
     
-    _streamConfig.enableDynamicResolution = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"];
-    
-    // Use some of the HEVC encoding efficiency improvements to
-    // reduce bandwidth usage while still gaining some image
-    // quality improvement.
-//    if (config.streamingRemotely) {
-//        // In the case of remotely streaming, we want the best possible qualtity for a limited bandwidth, so we set the multiplier to 0
-//        _streamConfig.hevcBitratePercentageMultiplier = 0;
-//        // When streaming remotely we want to use a packet size of 1024
-//        _streamConfig.packetSize = 1024;
-//    }
-//    else {
-        _streamConfig.hevcBitratePercentageMultiplier = 75;
-        _streamConfig.packetSize = 1292;
-//    }
+    // HEVC must be supported when HDR is enabled
+    assert(!_streamConfig.enableHdr || _streamConfig.supportsHevc);
 
     memcpy(_streamConfig.remoteInputAesKey, [config.riKey bytes], [config.riKey length]);
     memset(_streamConfig.remoteInputAesIv, 0, 16);
     int riKeyId = htonl(config.riKeyId);
     memcpy(_streamConfig.remoteInputAesIv, &riKeyId, sizeof(riKeyId));
-    
+
     LiInitializeVideoCallbacks(&_drCallbacks);
     _drCallbacks.setup = DrDecoderSetup;
+    _drCallbacks.cleanup = DrCleanup;
     _drCallbacks.submitDecodeUnit = DrSubmitDecodeUnit;
-    
+
 #if TARGET_OS_IPHONE
-    // RFI doesn't work properly with HEVC on iOS 11 with an iPhone SE (at least).
-    // We don't want to enable RFI on platforms like macOS as hardware decoding doesn't work at resolutions other than 4K.
-    _drCallbacks.capabilities = CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC;
+    // RFI doesn't work properly with HEVC on iOS 11 with an iPhone SE (at least)
+    // It doesnt work on macOS either, tested with Network Link Conditioner.
+    _drCallbacks.capabilities = CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC |
+                                CAPABILITY_DIRECT_SUBMIT;
 #endif
-    
+
     LiInitializeAudioCallbacks(&_arCallbacks);
     _arCallbacks.init = ArInit;
     _arCallbacks.cleanup = ArCleanup;
     _arCallbacks.decodeAndPlaySample = ArDecodeAndPlaySample;
-    _arCallbacks.capabilities = CAPABILITY_DIRECT_SUBMIT;
+    _arCallbacks.capabilities = CAPABILITY_DIRECT_SUBMIT |
+                                CAPABILITY_SUPPORTS_ARBITRARY_AUDIO_DURATION;
 
     LiInitializeConnectionCallbacks(&_clCallbacks);
     _clCallbacks.stageStarting = ClStageStarting;
@@ -326,14 +429,16 @@ void ClLogMessage(const char* format, ...)
     _clCallbacks.connectionStarted = ClConnectionStarted;
     _clCallbacks.connectionTerminated = ClConnectionTerminated;
     _clCallbacks.logMessage = ClLogMessage;
-    
+    _clCallbacks.rumble = ClRumble;
+    _clCallbacks.connectionStatusUpdate = ClConnectionStatusUpdate;
+
     return self;
 }
 
 static void FillOutputBuffer(void *aqData,
                              AudioQueueRef inAQ,
                              AudioQueueBufferRef inBuffer) {
-    inBuffer->mAudioDataByteSize = activeChannelCount * FRAME_SIZE * sizeof(short);
+    inBuffer->mAudioDataByteSize = audioBufferStride * sizeof(short);
     
     assert(inBuffer->mAudioDataByteSize == inBuffer->mAudioDataBytesCapacity);
     
@@ -341,7 +446,7 @@ static void FillOutputBuffer(void *aqData,
     if (audioBufferWriteIndex != audioBufferReadIndex) {
         // Copy data to the audio buffer
         memcpy(inBuffer->mAudioData,
-               audioCircularBuffer[audioBufferReadIndex],
+               &audioCircularBuffer[audioBufferReadIndex * audioBufferStride],
                inBuffer->mAudioDataByteSize);
         
         // Use a full memory barrier to ensure the circular buffer is read before incrementing the index
@@ -349,7 +454,7 @@ static void FillOutputBuffer(void *aqData,
         
         // This can race with the reader in the AudDecDecodeAndPlaySample function. This is
         // not a problem because at worst, it just won't see that we've consumed this sample yet.
-        audioBufferReadIndex = (audioBufferReadIndex + 1) % CIRCULAR_BUFFER_SIZE;
+        audioBufferReadIndex = (audioBufferReadIndex + 1) % audioBufferEntries;
     }
     else {
         // No data, so play silence
