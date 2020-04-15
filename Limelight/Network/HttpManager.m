@@ -285,7 +285,7 @@ static const NSString* HTTPS_PORT = @"47984";
     CFArrayRef items;
     OSStatus securityError = SecPKCS12Import(p12Data, options, &items);
 
-    if (securityError == errSecSuccess) {
+    if (securityError == errSecSuccess && CFArrayGetCount(items) > 0) {
         //Log(LOG_D, @"Success opening p12 certificate. Items: %ld", CFArrayGetCount(items));
         CFDictionaryRef identityDict = CFArrayGetValueAtIndex(items, 0);
         identityApp = (SecIdentityRef)CFDictionaryGetValue(identityDict, kSecImportItemIdentity);
