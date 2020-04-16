@@ -188,8 +188,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 {
     self->videoFormat = videoFormat;
     self.refreshRate = refreshRate;
-    
-    [self initializeDisplayLink];
+ 
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self initializeDisplayLink];
+    });
 }
 
 - (void)vsyncCallback:(int)timeUntilNextVsyncMillis
