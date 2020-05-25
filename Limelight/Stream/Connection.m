@@ -45,7 +45,7 @@ static int audioBufferStride;
 static int audioSamplesPerFrame;
 static short* audioCircularBuffer;
 
-#define AUDIO_QUEUE_BUFFERS 3
+#define AUDIO_QUEUE_BUFFERS 4
 
 static AudioQueueRef audioQueue;
 static AudioQueueBufferRef audioBuffers[AUDIO_QUEUE_BUFFERS];
