@@ -307,6 +307,8 @@
     
     streamConfig.host = self.app.host.activeAddress;
     streamConfig.appID = self.app.id;
+    streamConfig.appName = self.app.name;
+    streamConfig.serverCert = self.app.host.serverCert;
     
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
@@ -324,6 +326,8 @@
     streamConfig.bitRate = [streamSettings.bitrate intValue];
     streamConfig.allowHevc = streamSettings.useHevc;
     
+    streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
+
     if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
         self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig];
     }
@@ -350,9 +354,6 @@
 
 - (void)connectionStarted {
     [ResolutionSyncRequester setResolution];
-    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"] && [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecison"]) {
-        [ResolutionSyncRequester disableMouseAcceleration];
-    }
 
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
@@ -365,18 +366,24 @@
     });
 }
 
-- (void)connectionTerminated:(long)errorCode {
+- (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld", errorCode);
     [self closeWindowFromMainQueueWithMessage:nil];
 }
 
-- (void)stageFailed:(const char *)stageName withError:(long)errorCode {
+- (void)stageFailed:(const char *)stageName withError:(int)errorCode {
     Log(LOG_I, @"Stage %s failed: %ld", stageName, errorCode);
-    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %s failed with error %ld", stageName, errorCode]];
+    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %s failed with error %d", stageName, errorCode]];
 }
 
 - (void)launchFailed:(NSString *)message {
     [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %@", message]];
+}
+
+- (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
+}
+
+- (void)connectionStatusUpdate:(int)status {
 }
 
 @end

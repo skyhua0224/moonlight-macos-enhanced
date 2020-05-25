@@ -45,9 +45,14 @@
                        framerate:(NSInteger)framerate
                           height:(NSInteger)height
                            width:(NSInteger)width
+                onscreenControls:(NSInteger)onscreenControls
+                          remote:(BOOL)streamingRemotely
                    optimizeGames:(BOOL)optimizeGames
+                 multiController:(BOOL)multiController
                        audioOnPC:(BOOL)audioOnPC
-                         useHevc:(BOOL)useHevc {
+                         useHevc:(BOOL)useHevc
+                       enableHdr:(BOOL)enableHdr
+                  btMouseSupport:(BOOL)btMouseSupport {
     
     [_managedObjectContext performBlockAndWait:^{
         Settings* settingsToSave = [self retrieveSettings];
@@ -55,9 +60,14 @@
         settingsToSave.bitrate = [NSNumber numberWithInteger:bitrate];
         settingsToSave.height = [NSNumber numberWithInteger:height];
         settingsToSave.width = [NSNumber numberWithInteger:width];
+        settingsToSave.onscreenControls = [NSNumber numberWithInteger:onscreenControls];
+        settingsToSave.streamingRemotely = streamingRemotely;
         settingsToSave.optimizeGames = optimizeGames;
+        settingsToSave.multiController = multiController;
         settingsToSave.playAudioOnPC = audioOnPC;
         settingsToSave.useHevc = useHevc;
+        settingsToSave.enableHdr = enableHdr;
+        settingsToSave.btMouseSupport = btMouseSupport;
         
         [self saveData];
     }];
@@ -103,20 +113,6 @@
         }
         
         parent.appList = applist;
-        
-        [self saveData];
-    }];
-}
-
-- (void) updateIconForExistingApp:(TemporaryApp*)app {
-    [_managedObjectContext performBlockAndWait:^{
-        App* parentApp = [self getAppForTemporaryApp:app withAppRecords:[self fetchRecords:@"App"]];
-        if (parentApp == nil) {
-            // The app must exist to be updated
-            return;
-        }
-        
-        parentApp.image = app.image;
         
         [self saveData];
     }];
@@ -168,7 +164,7 @@
 
 - (void) saveData {
     NSError* error;
-    if (![_managedObjectContext save:&error]) {
+    if ([_managedObjectContext hasChanges] && ![_managedObjectContext save:&error]) {
         Log(LOG_E, @"Unable to save hosts to database: %@", error);
     }
 
@@ -204,7 +200,7 @@
 - (App*) getAppForTemporaryApp:(TemporaryApp*)tempApp withAppRecords:(NSArray*)apps {
     for (App* app in apps) {
         if ([app.id isEqualToString:tempApp.id] &&
-            [app.host.uuid isEqualToString:app.host.uuid]) {
+            [app.host.uuid isEqualToString:tempApp.host.uuid]) {
             return app;
         }
     }

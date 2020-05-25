@@ -206,7 +206,7 @@
 
 - (void)prepareDiscovery {
     // Set up crypto
-    [CryptoManager generateKeyPairUsingSSl];
+    [CryptoManager generateKeyPairUsingSSL];
     
     self.opQueue = [[NSOperationQueue alloc] init];
     
@@ -277,8 +277,8 @@
     NSString *uniqueId = [IdManager getUniqueId];
     NSData *cert = [CryptoManager readCertFromFile];
 
-    HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId deviceName:deviceName cert:cert];
-    PairManager* pMan = [[PairManager alloc] initWithManager:hMan andCert:cert callback:self];
+    HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId serverCert:host.serverCert];
+    PairManager* pMan = [[PairManager alloc] initWithManager:hMan clientCert:cert callback:self];
     [self.opQueue addOperation:pMan];
 }
 
@@ -321,14 +321,16 @@
 
 #pragma mark - PairCallback
 
-- (void)showPIN:(NSString *)PIN {
+- (void)startPairing:(NSString *)PIN {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational message:[NSString stringWithFormat:@"Enter the following PIN on %@: %@", self.selectedHost.name, PIN] window:self.view.window completionHandler:nil];
     });
 }
 
-- (void)pairSuccessful {
+- (void)pairSuccessful:(NSData *)serverCert {
     dispatch_async(dispatch_get_main_queue(), ^{
+        self.selectedHost.serverCert = serverCert;
+        
         [self.view.window endSheet:self.pairAlert.window];
         [self.discMan startDiscovery];
         [self alreadyPaired];

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4C7CB91A2446D19D002B8D4E /* SimpleStun.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB9192446D19D002B8D4E /* SimpleStun.c */; };
+		4C7CB91B2446D19D002B8D4E /* SimpleStun.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB9192446D19D002B8D4E /* SimpleStun.c */; };
 		4C819457202EC9070023F308 /* AudioStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1A1CAD423B0089BB98 /* AudioStream.c */; };
 		4C819458202EC9070023F308 /* ByteBuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1B1CAD423B0089BB98 /* ByteBuffer.c */; };
 		4C819459202EC9070023F308 /* Connection.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1D1CAD423B0089BB98 /* Connection.c */; };
@@ -64,6 +66,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4C7CB9192446D19D002B8D4E /* SimpleStun.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = SimpleStun.c; sourceTree = "<group>"; };
 		4C819476202EC9070023F308 /* libmoonlight-common iOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libmoonlight-common iOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9857AEE91EBE85A20084F99E /* RtpFecQueue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = RtpFecQueue.c; sourceTree = "<group>"; };
 		9857AEEB1EBE85AB0084F99E /* RtpFecQueue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RtpFecQueue.h; sourceTree = "<group>"; };
@@ -269,6 +272,7 @@
 				98AB2E391CAD423B0089BB98 /* RtspConnection.c */,
 				98AB2E3A1CAD423B0089BB98 /* RtspParser.c */,
 				98AB2E3B1CAD423B0089BB98 /* SdpGenerator.c */,
+				4C7CB9192446D19D002B8D4E /* SimpleStun.c */,
 				98AB2E3C1CAD423B0089BB98 /* Video.h */,
 				98AB2E3D1CAD423B0089BB98 /* VideoDepacketizer.c */,
 				98AB2E3E1CAD423B0089BB98 /* VideoStream.c */,
@@ -385,6 +389,7 @@
 				4C819469202EC9070023F308 /* compress.c in Sources */,
 				4C81946A202EC9070023F308 /* host.c in Sources */,
 				4C81946B202EC9070023F308 /* list.c in Sources */,
+				4C7CB91B2446D19D002B8D4E /* SimpleStun.c in Sources */,
 				4C81946C202EC9070023F308 /* packet.c in Sources */,
 				4C81946D202EC9070023F308 /* peer.c in Sources */,
 				4C81946E202EC9070023F308 /* protocol.c in Sources */,
@@ -419,6 +424,7 @@
 				98AB2E511CAD427A0089BB98 /* compress.c in Sources */,
 				98AB2E521CAD427A0089BB98 /* host.c in Sources */,
 				98AB2E531CAD427A0089BB98 /* list.c in Sources */,
+				4C7CB91A2446D19D002B8D4E /* SimpleStun.c in Sources */,
 				98AB2E541CAD427A0089BB98 /* packet.c in Sources */,
 				98AB2E551CAD427A0089BB98 /* peer.c in Sources */,
 				98AB2E561CAD427A0089BB98 /* protocol.c in Sources */,

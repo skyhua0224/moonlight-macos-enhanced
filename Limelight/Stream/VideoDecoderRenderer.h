@@ -14,14 +14,14 @@
 
 @interface VideoDecoderRenderer : NSObject
 
-- (id)initWithView:(ViewType *)view;
+- (id)initWithView:(OSView *)view;
 
-- (void)setupWithVideoFormat:(int)videoFormat;
+- (void)setupWithVideoFormat:(int)videoFormat refreshRate:(int)refreshRate;
 
-- (void)setStreamConfig:(StreamConfiguration *)config;
+- (void)cleanup;
 
 - (void)updateBufferForRange:(CMBlockBufferRef)existingBuffer data:(unsigned char *)data offset:(int)offset length:(int)nalLength;
 
-- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType;
+- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType pts:(unsigned int)pts;
 
 @end

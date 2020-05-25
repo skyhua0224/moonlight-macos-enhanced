@@ -9,24 +9,35 @@
 import Foundation
 
 class ResolutionSyncRequester: NSObject {
+    
     @objc static public func setResolution() {
+        guard let host = UserDefaults.standard.string(forKey: "syncHostName") else { return }
         
+        let disableMouseAcceleration = UserDefaults.standard.bool(forKey: "disablePointerPrecison")
+        if disableMouseAcceleration {
+            Self.disableMouseAcceleration()
+        }
+
         let enabled = UserDefaults.standard.bool(forKey: "shouldSync")
         if !enabled {
+            Self.setRefreshRate()
             return
         }
         
-        guard let host = UserDefaults.standard.string(forKey: "syncHostName") else { return }
         let width = UserDefaults.standard.integer(forKey: "syncWidth")
         let height = UserDefaults.standard.integer(forKey: "syncHeight")
-        let mouseAcceleration = !UserDefaults.standard.bool(forKey: "disablePointerPrecison")
 
-        if let url = URL(string: "http://\(host):8080/resolutionsync/set?\(width)&\(height)&\(mouseAcceleration ? 1 : 0)") {
+        if let url = URL(string: "http://\(host):8080/resolutionsync/set?\(width)&\(height)&\(60)") {
             ResolutionSyncRequester.makeRequest(url)
             print("ResolutionSync URL: \(url.absoluteString)")
         }
     }
-    
+
+    @objc static public func setRefreshRate() {
+        guard let host = UserDefaults.standard.string(forKey: "syncHostName") else { return }
+        ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):8080/resolutionsync/setRefreshRate?\(60)")!)
+    }
+
     @objc static public func resetResolution() {
         guard let host = UserDefaults.standard.string(forKey: "syncHostName") else { return }
         ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):8080/resolutionsync/reset")!)
@@ -52,4 +63,5 @@ class ResolutionSyncRequester: NSObject {
         
         task.resume()
     }
+    
 }

@@ -14,7 +14,7 @@
 
 @end
 
-@interface StreamView : ViewType
+@interface StreamView : OSView
 
 - (void) setupOnScreenControls:(ControllerSupport*)controllerSupport swipeDelegate:(id<EdgeDetectionDelegate>)swipeDelegate;
 - (void) setMouseDeltaFactors:(float)x y:(float)y;

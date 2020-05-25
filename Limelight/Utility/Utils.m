@@ -50,28 +50,30 @@ NSString *const deviceName = @"roth";
     return hex;
 }
 
-+ (int) resolveHost:(NSString*)host {
-    struct hostent *hostent;
-    
-    if (inet_addr([host UTF8String]) != INADDR_NONE) {
-        // Already an IP address
-        int addr = inet_addr([host UTF8String]);
-        Log(LOG_I, @"host address: %d", addr);
-        return addr;
-    } else {
-        hostent = gethostbyname([host UTF8String]);
-        if (hostent != NULL) {
-            char* ipstr = inet_ntoa(*(struct in_addr*)hostent->h_addr_list[0]);
-            Log(LOG_I, @"Resolved %@ -> %s", host, ipstr);
-            int addr = inet_addr(ipstr);
-            Log(LOG_I, @"host address: %d", addr);
-            return addr;
-        } else {
-            Log(LOG_W, @"Failed to resolve host: %d", h_errno);
-            return 0;
++ (BOOL)isActiveNetworkVPN {
+    NSDictionary *dict = CFBridgingRelease(CFNetworkCopySystemProxySettings());
+    NSArray *keys = [dict[@"__SCOPED__"] allKeys];
+    for (NSString *key in keys) {
+        if ([key containsString:@"tap"] ||
+            [key containsString:@"tun"] ||
+            [key containsString:@"ppp"] ||
+            [key containsString:@"ipsec"]) {
+            return YES;
         }
     }
+    return NO;
 }
+
+#if TARGET_OS_IPHONE
++ (void) addHelpOptionToDialog:(UIAlertController*)dialog {
+#if !TARGET_OS_TV
+    // tvOS doesn't have a browser
+    [dialog addAction:[UIAlertAction actionWithTitle:@"Help" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/moonlight-stream/moonlight-docs/wiki/Troubleshooting"]];
+    }]];
+#endif
+}
+#endif
 
 @end
 

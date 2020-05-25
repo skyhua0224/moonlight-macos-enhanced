@@ -37,7 +37,6 @@
 		4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 9832D1351BBCD5C50036EF48 /* TemporaryApp.m */; };
 		4C38E8081FEE09D0000425CD /* Utils.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89462219F646E200339C8A /* Utils.m */; };
 		4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */ = {isa = PBXBuildFile; fileRef = FB89460719F646E200339C8A /* mkcert.c */; };
-		4C38E80A1FEE0AED000425CD /* Limelight.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = FB290D0519B2C406004C83CF /* Limelight.xcdatamodeld */; };
 		4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E80E1FEE1C81000425CD /* AppsViewController.m */; };
 		4C38E8101FEE295E000425CD /* PairManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461419F646E200339C8A /* PairManager.m */; };
 		4C38E8131FEE30F8000425CD /* ContainerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C38E8121FEE30F8000425CD /* ContainerViewController.m */; };
@@ -62,6 +61,8 @@
 		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
 		4C65704A23EBE9F4000D1601 /* PreferencesView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* PreferencesView.xib */; };
 		4C65704C23EBEE66000D1601 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
+		4C7CB9162446A982002B8D4E /* Limelight.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB90B2446A981002B8D4E /* Limelight.xcdatamodeld */; };
+		4C7CB91E2446E05D002B8D4E /* ConnectionHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB91D2446E05D002B8D4E /* ConnectionHelper.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
 		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
@@ -140,6 +141,19 @@
 		4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LinkTextField.m; sourceTree = "<group>"; };
 		4C65704923EBE9F4000D1601 /* PreferencesView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = PreferencesView.xib; sourceTree = "<group>"; };
 		4C65704B23EBEB3D000D1601 /* PreferencesViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PreferencesViewController.h; sourceTree = "<group>"; };
+		4C7CB90C2446A981002B8D4E /* Moonlight v1.4.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.4.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB90D2446A981002B8D4E /* Limelight.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Limelight.xcdatamodel; sourceTree = "<group>"; };
+		4C7CB90E2446A981002B8D4E /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB90F2446A981002B8D4E /* Moonlight v1.2.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.2.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB9102446A981002B8D4E /* Moonlight v1.0-2.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.0-2.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB9112446A981002B8D4E /* Limelight 0.3.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Limelight 0.3.1.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB9122446A981002B8D4E /* Moonlight v1.0.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.0.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB9132446A981002B8D4E /* Moonlight v1.5.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.5.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB9142446A981002B8D4E /* Limelight 0.3.0.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Limelight 0.3.0.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB9152446A981002B8D4E /* Moonlight v1.3.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.3.xcdatamodel"; sourceTree = "<group>"; };
+		4C7CB9182446B061002B8D4E /* OSPortabilityDefs.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OSPortabilityDefs.h; sourceTree = "<group>"; };
+		4C7CB91C2446E05D002B8D4E /* ConnectionHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ConnectionHelper.h; sourceTree = "<group>"; };
+		4C7CB91D2446E05D002B8D4E /* ConnectionHelper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ConnectionHelper.m; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A821FECBFFD00684411 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4C7E0A851FECBFFD00684411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -168,7 +182,6 @@
 		4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = PreferencesWindow.xib; sourceTree = "<group>"; };
 		4CC3C0311FF73A660029EBF5 /* PreferencesViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PreferencesViewController.m; sourceTree = "<group>"; };
 		4CF7C06021E982E400F38DC4 /* WhiteSpinner.car */ = {isa = PBXFileReference; lastKnownFileType = file; path = WhiteSpinner.car; sourceTree = "<group>"; };
-		98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
@@ -188,13 +201,11 @@
 		FB290CF319B2C406004C83CF /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		FB290CF519B2C406004C83CF /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		FB290CF719B2C406004C83CF /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = SDKROOT; };
-		FB290D0619B2C406004C83CF /* Limelight.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Limelight.xcdatamodel; sourceTree = "<group>"; };
 		FB290DB619B2C870004C83CF /* libz.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libz.dylib; path = usr/lib/libz.dylib; sourceTree = SDKROOT; };
 		FB290DB819B2C877004C83CF /* libbz2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libbz2.dylib; path = usr/lib/libbz2.dylib; sourceTree = SDKROOT; };
 		FB290DC319B2E98F004C83CF /* libxml2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libxml2.dylib; path = usr/lib/libxml2.dylib; sourceTree = SDKROOT; };
 		FB4678EB1A50C40900377732 /* OnScreenControls.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = OnScreenControls.h; sourceTree = "<group>"; };
 		FB4678EC1A50C40900377732 /* OnScreenControls.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = OnScreenControls.m; sourceTree = "<group>"; };
-		FB4678F21A51BDCB00377732 /* Limelight 0.3.0.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Limelight 0.3.0.xcdatamodel"; sourceTree = "<group>"; };
 		FB4678F81A55FFAD00377732 /* DiscoveryManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DiscoveryManager.h; sourceTree = "<group>"; };
 		FB4678F91A55FFAD00377732 /* DiscoveryManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DiscoveryManager.m; sourceTree = "<group>"; };
 		FB4678FD1A565DAC00377732 /* WakeOnLanManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WakeOnLanManager.h; sourceTree = "<group>"; };
@@ -202,10 +213,8 @@
 		FB4679001A57048000377732 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
 		FB53E1411BE5DC4400CD6ECE /* IdManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IdManager.h; sourceTree = "<group>"; };
 		FB53E1421BE5DC4400CD6ECE /* IdManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = IdManager.m; sourceTree = "<group>"; };
-		FB53E1441BE5DCBC00CD6ECE /* Moonlight v1.0-2.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.0-2.xcdatamodel"; sourceTree = "<group>"; };
 		FB6549541A57907E001C8F39 /* DiscoveryWorker.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DiscoveryWorker.h; sourceTree = "<group>"; };
 		FB6549551A57907E001C8F39 /* DiscoveryWorker.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DiscoveryWorker.m; sourceTree = "<group>"; };
-		FB6549621A60B4A9001C8F39 /* Limelight 0.3.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Limelight 0.3.1.xcdatamodel"; sourceTree = "<group>"; };
 		FB7E794319C8B71B00A15F68 /* libiconv.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libiconv.dylib; path = usr/lib/libiconv.dylib; sourceTree = SDKROOT; };
 		FB89460519F646E200339C8A /* CryptoManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CryptoManager.h; sourceTree = "<group>"; };
 		FB89460619F646E200339C8A /* CryptoManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CryptoManager.m; sourceTree = "<group>"; };
@@ -325,7 +334,6 @@
 		FB9AFD3C1A7E111600872C98 /* AppAssetResponse.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AppAssetResponse.m; sourceTree = "<group>"; };
 		FB9AFD3E1A7E127D00872C98 /* AppListResponse.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppListResponse.h; sourceTree = "<group>"; };
 		FB9AFD3F1A7E127D00872C98 /* AppListResponse.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AppListResponse.m; sourceTree = "<group>"; };
-		FBB460391B50ACE400F3099C /* Moonlight v1.0.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.0.xcdatamodel"; sourceTree = "<group>"; };
 		FBD1C8E01A8AD69E00C6703C /* Logger.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Logger.h; sourceTree = "<group>"; };
 		FBD1C8E11A8AD71400C6703C /* Logger.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = Logger.m; sourceTree = "<group>"; };
 		FBD3494119FC9C04002D2A60 /* AppAssetManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppAssetManager.h; sourceTree = "<group>"; };
@@ -521,9 +529,10 @@
 				FB89461519F646E200339C8A /* Stream */,
 				FB89461E19F646E200339C8A /* Utility */,
 				FBD3495F1A004453002D2A60 /* Database */,
+				4C7CB90B2446A981002B8D4E /* Limelight.xcdatamodeld */,
 				4C3C619C20BD2D4A0045FE30 /* DatabaseSingleton.h */,
 				4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */,
-				FB290D0519B2C406004C83CF /* Limelight.xcdatamodeld */,
+				4C7CB9182446B061002B8D4E /* OSPortabilityDefs.h */,
 				D4746EEA1CBC740C006FB401 /* Moonlight-Bridging-Header.h */,
 			);
 			name = Moonlight;
@@ -570,6 +579,8 @@
 				FB89461419F646E200339C8A /* PairManager.m */,
 				FB4678FD1A565DAC00377732 /* WakeOnLanManager.h */,
 				FB4678FE1A565DAC00377732 /* WakeOnLanManager.m */,
+				4C7CB91C2446E05D002B8D4E /* ConnectionHelper.h */,
+				4C7CB91D2446E05D002B8D4E /* ConnectionHelper.m */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -922,6 +933,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4C7CB91E2446E05D002B8D4E /* ConnectionHelper.m in Sources */,
 				4C7E0A891FECBFFD00684411 /* main.m in Sources */,
 				4C38E7F51FEE0121000425CD /* IdManager.m in Sources */,
 				4C38E8011FEE08AA000425CD /* (null) in Sources */,
@@ -933,7 +945,6 @@
 				4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */,
 				4C84385A21FE9453000A77CD /* NSApplication+Moonlight.m in Sources */,
 				4C38E8001FEE08A3000425CD /* ServerInfoResponse.m in Sources */,
-				4C38E80A1FEE0AED000425CD /* Limelight.xcdatamodeld in Sources */,
 				4C38E7FD1FEE0887000425CD /* HttpManager.m in Sources */,
 				4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */,
 				4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */,
@@ -944,6 +955,7 @@
 				4C38E8271FF0BF64000425CD /* VideoDecoderRenderer.m in Sources */,
 				4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */,
 				4C38E7FC1FEE0875000425CD /* (null) in Sources */,
+				4C7CB9162446A982002B8D4E /* Limelight.xcdatamodeld in Sources */,
 				4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */,
 				4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */,
 				4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */,
@@ -1223,17 +1235,21 @@
 /* End XCConfigurationList section */
 
 /* Begin XCVersionGroup section */
-		FB290D0519B2C406004C83CF /* Limelight.xcdatamodeld */ = {
+		4C7CB90B2446A981002B8D4E /* Limelight.xcdatamodeld */ = {
 			isa = XCVersionGroup;
 			children = (
-				98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */,
-				FB53E1441BE5DCBC00CD6ECE /* Moonlight v1.0-2.xcdatamodel */,
-				FBB460391B50ACE400F3099C /* Moonlight v1.0.xcdatamodel */,
-				FB6549621A60B4A9001C8F39 /* Limelight 0.3.1.xcdatamodel */,
-				FB4678F21A51BDCB00377732 /* Limelight 0.3.0.xcdatamodel */,
-				FB290D0619B2C406004C83CF /* Limelight.xcdatamodel */,
+				4C7CB90C2446A981002B8D4E /* Moonlight v1.4.xcdatamodel */,
+				4C7CB90D2446A981002B8D4E /* Limelight.xcdatamodel */,
+				4C7CB90E2446A981002B8D4E /* Moonlight v1.1.xcdatamodel */,
+				4C7CB90F2446A981002B8D4E /* Moonlight v1.2.xcdatamodel */,
+				4C7CB9102446A981002B8D4E /* Moonlight v1.0-2.xcdatamodel */,
+				4C7CB9112446A981002B8D4E /* Limelight 0.3.1.xcdatamodel */,
+				4C7CB9122446A981002B8D4E /* Moonlight v1.0.xcdatamodel */,
+				4C7CB9132446A981002B8D4E /* Moonlight v1.5.xcdatamodel */,
+				4C7CB9142446A981002B8D4E /* Limelight 0.3.0.xcdatamodel */,
+				4C7CB9152446A981002B8D4E /* Moonlight v1.3.xcdatamodel */,
 			);
-			currentVersion = 98132E8C20BC9A62007A053F /* Moonlight v1.1.xcdatamodel */;
+			currentVersion = 4C7CB9132446A981002B8D4E /* Moonlight v1.5.xcdatamodel */;
 			path = Limelight.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;

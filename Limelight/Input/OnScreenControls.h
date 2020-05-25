@@ -24,7 +24,7 @@ typedef NS_ENUM(NSInteger, OnScreenControlsLevel) {
     OnScreenControlsLevelAutoGCExtendedGamepad,
 };
 
-- (id) initWithView:(ViewType*)view controllerSup:(ControllerSupport*)controllerSupport swipeDelegate:(id<EdgeDetectionDelegate>)edgeDelegate;
+- (id) initWithView:(OSView*)view controllerSup:(ControllerSupport*)controllerSupport swipeDelegate:(id<EdgeDetectionDelegate>)edgeDelegate;
 - (BOOL) handleTouchDownEvent:(NSSet*)touches;
 - (BOOL) handleTouchUpEvent:(NSSet*)touches;
 - (BOOL) handleTouchMovedEvent:(NSSet*)touches;

@@ -6,15 +6,15 @@
 //  Copyright © 2015 Moonlight Stream. All rights reserved.
 //
 
-#import <Foundation/Foundation.h>
 #import "TemporaryHost.h"
 #import "App+CoreDataClass.h"
 
 @interface TemporaryApp : NSObject
 
 @property (nullable, nonatomic, retain) NSString *id;
-@property (nullable, nonatomic, retain) NSData *image;
 @property (nullable, nonatomic, retain) NSString *name;
+@property (nullable, nonatomic, retain) NSString *installPath;
+@property (nonatomic)                   BOOL hdrSupported;
 @property (nullable, nonatomic, retain) TemporaryHost *host;
 
 NS_ASSUME_NONNULL_BEGIN

@@ -14,8 +14,8 @@
     self = [self init];
     
     self.id = app.id;
-    self.image = app.image;
     self.name = app.name;
+    self.hdrSupported = app.hdrSupported;
     self.host = tempHost;
     
     return self;
@@ -24,26 +24,12 @@
 - (void) propagateChangesToParent:(App*)parent withHost:(Host*)host {
     parent.id = self.id;
     parent.name = self.name;
+    parent.hdrSupported = self.hdrSupported;
     parent.host = host;
 }
 
 - (NSComparisonResult)compareName:(TemporaryApp *)other {
-    BOOL selfSpecial = [TemporaryApp isSpecialName:self.name];
-    BOOL otherSpecial = [TemporaryApp isSpecialName:other.name];
-
-    if (!selfSpecial && !otherSpecial) {
-        return [self.name caseInsensitiveCompare:other.name];
-    } else if (!selfSpecial && otherSpecial) {
-        return NSOrderedDescending;
-    } else if (selfSpecial && !otherSpecial) {
-        return NSOrderedAscending;
-    } else {
-        return [self.name caseInsensitiveCompare:other.name];
-    }
-}
-
-+ (BOOL)isSpecialName:(NSString *)name {
-    return [name isEqualToString:@"Desktop"] || [name isEqualToString:@"Steam"];
+    return [self.name caseInsensitiveCompare:other.name];
 }
 
 - (NSUInteger)hash {

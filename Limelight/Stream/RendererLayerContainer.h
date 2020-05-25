@@ -8,6 +8,6 @@
 
 @import AVFoundation;
 
-@interface RendererLayerContainer : ViewType
+@interface RendererLayerContainer : OSView
 
 @end

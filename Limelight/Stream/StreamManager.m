@@ -10,7 +10,7 @@
 #import "CryptoManager.h"
 #import "HttpManager.h"
 #import "Utils.h"
-#import "OnScreenControls.h"
+
 #import "StreamView.h"
 #import "ServerInfoResponse.h"
 #import "HttpResponse.h"
@@ -19,13 +19,13 @@
 
 @implementation StreamManager {
     StreamConfiguration* _config;
-    ViewType* _renderView;
+
+    OSView* _renderView;
     id<ConnectionCallbacks> _callbacks;
     Connection* _connection;
-    VideoDecoderRenderer *_renderer;
 }
 
-- (id) initWithConfig:(StreamConfiguration*)config renderView:(ViewType*)view connectionCallbacks:(id<ConnectionCallbacks>)callbacks {
+- (id) initWithConfig:(StreamConfiguration*)config renderView:(OSView*)view connectionCallbacks:(id<ConnectionCallbacks>)callbacks {
     self = [super init];
     _config = config;
     _renderView = view;
@@ -35,25 +35,26 @@
     return self;
 }
 
-
 - (void)main {
-    [CryptoManager generateKeyPairUsingSSl];
+    [CryptoManager generateKeyPairUsingSSL];
     NSString* uniqueId = [IdManager getUniqueId];
-    NSData* cert = [CryptoManager readCertFromFile];
     
     HttpManager* hMan = [[HttpManager alloc] initWithHost:_config.host
                                                  uniqueId:uniqueId
-                                               deviceName:@"roth"
-                                                     cert:cert];
+                                                     serverCert:_config.serverCert];
     
     ServerInfoResponse* serverInfoResp = [[ServerInfoResponse alloc] init];
-    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest]
+    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest:false]
                                        fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
     NSString* pairStatus = [serverInfoResp getStringTag:@"PairStatus"];
     NSString* appversion = [serverInfoResp getStringTag:@"appversion"];
     NSString* gfeVersion = [serverInfoResp getStringTag:@"GfeVersion"];
     NSString* serverState = [serverInfoResp getStringTag:@"state"];
-    if (![serverInfoResp isStatusOk] || pairStatus == NULL || appversion == NULL || serverState == NULL) {
+    if (![serverInfoResp isStatusOk]) {
+        [_callbacks launchFailed:serverInfoResp.statusMessage];
+        return;
+    }
+    else if (pairStatus == NULL || appversion == NULL || serverState == NULL) {
         [_callbacks launchFailed:@"Failed to connect to PC"];
         return;
     }
@@ -90,32 +91,32 @@
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
     
-    dispatch_sync(dispatch_get_main_queue(), ^{
-        self->_renderer = [[VideoDecoderRenderer alloc]initWithView:self->_renderView];
+    // Initializing the renderer must be done on the main thread
+    dispatch_async(dispatch_get_main_queue(), ^{
+        VideoDecoderRenderer* renderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView];
+        self->_connection = [[Connection alloc] initWithConfig:self->_config renderer:renderer connectionCallbacks:self->_callbacks];
+        NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
+        [opQueue addOperation:self->_connection];
     });
-    _connection = [[Connection alloc] initWithConfig:_config renderer:self->_renderer connectionCallbacks:_callbacks];
-    NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
-    [opQueue addOperation:_connection];
 }
 
 - (void) stopStream
 {
     [_connection terminate];
     _callbacks = nil;
-    _renderer = nil;
 }
 
 - (BOOL) launchApp:(HttpManager*)hMan {
     HttpResponse* launchResp = [[HttpResponse alloc] init];
     [hMan executeRequestSynchronously:[HttpRequest requestForResponse:launchResp withUrlRequest:[hMan newLaunchRequest:_config]]];
     NSString *gameSession = [launchResp getStringTag:@"gamesession"];
-    if (launchResp == NULL || ![launchResp isStatusOk]) {
-        [_callbacks launchFailed:@"Failed to launch app"];
+    if (![launchResp isStatusOk]) {
+        [_callbacks launchFailed:launchResp.statusMessage];
         Log(LOG_E, @"Failed Launch Response: %@", launchResp.statusMessage);
         return FALSE;
     } else if (gameSession == NULL || [gameSession isEqualToString:@"0"]) {
-        [_callbacks launchFailed:launchResp.statusMessage];
-        Log(LOG_E, @"Failed to parse game session. Code: %ld Response: %@", (long)launchResp.statusCode, launchResp.statusMessage);
+        [_callbacks launchFailed:@"Failed to launch app"];
+        Log(LOG_E, @"Failed to parse game session");
         return FALSE;
     }
     
@@ -124,17 +125,15 @@
 
 - (BOOL) resumeApp:(HttpManager*)hMan {
     HttpResponse* resumeResp = [[HttpResponse alloc] init];
-    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:resumeResp withUrlRequest:
-                          [hMan newResumeRequestWithRiKey:[Utils bytesToHex:_config.riKey]
-                                                  riKeyId:_config.riKeyId]]];
+    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:resumeResp withUrlRequest:[hMan newResumeRequest:_config]]];
     NSString* resume = [resumeResp getStringTag:@"resume"];
-    if (resumeResp == NULL || ![resumeResp isStatusOk]) {
-        [_callbacks launchFailed:@"Failed to resume app"];
+    if (![resumeResp isStatusOk]) {
+        [_callbacks launchFailed:resumeResp.statusMessage];
         Log(LOG_E, @"Failed Resume Response: %@", resumeResp.statusMessage);
         return FALSE;
     } else if (resume == NULL || [resume isEqualToString:@"0"]) {
-        [_callbacks launchFailed:resumeResp.statusMessage];
-        Log(LOG_E, @"Failed to parse resume response. Code: %ld Response: %@", (long)resumeResp.statusCode, resumeResp.statusMessage);
+        [_callbacks launchFailed:@"Failed to resume app"];
+        Log(LOG_E, @"Failed to parse resume response");
         return FALSE;
     }
     

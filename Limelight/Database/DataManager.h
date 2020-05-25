@@ -17,14 +17,18 @@
                        framerate:(NSInteger)framerate
                           height:(NSInteger)height
                            width:(NSInteger)width
+                onscreenControls:(NSInteger)onscreenControls
+                          remote:(BOOL)streamingRemotely
                    optimizeGames:(BOOL)optimizeGames
+                 multiController:(BOOL)multiController
                        audioOnPC:(BOOL)audioOnPC
-                         useHevc:(BOOL)useHevc;
+                         useHevc:(BOOL)useHevc
+                       enableHdr:(BOOL)enableHdr
+                  btMouseSupport:(BOOL)btMouseSupport;
 
 - (NSArray*) getHosts;
 - (void) updateHost:(TemporaryHost*)host;
 - (void) updateAppsForExistingHost:(TemporaryHost *)host;
-- (void) updateIconForExistingApp:(TemporaryApp*)app;
 - (void) removeHost:(TemporaryHost*)host;
 - (void) removeApp:(TemporaryApp*)app;
 
