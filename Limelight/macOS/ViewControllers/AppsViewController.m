@@ -224,6 +224,7 @@ const CGFloat scaleBase = 1.125;
 - (void)controlTextDidChange:(NSNotification *)obj {
     self.filterText = ((NSTextField *)obj.object).stringValue;
     [self displayApps];
+    [self.collectionView moonlight_reloadDataKeepingSelection];
 }
 
 
@@ -422,6 +423,67 @@ const CGFloat scaleBase = 1.125;
     return response == NSAlertFirstButtonReturn;
 }
 
+- (NSDictionary *)calculateUpateIndexPathsFromOld:(NSArray<TemporaryApp *> *)old toNew:(NSArray<TemporaryApp *> *)new {
+    NSMutableSet<NSIndexPath *> *deletions = [NSMutableSet set];
+    NSMutableSet<NSIndexPath *> *insertions = [NSMutableSet set];
+    NSMutableSet<NSString *> *alreadyAdded = [NSMutableSet setWithCapacity:new.count];
+    
+    NSUInteger oldIndex = 0;
+    NSUInteger newIndex = 0;
+    
+    while (oldIndex < old.count || newIndex < new.count) {
+        if (oldIndex >= old.count) {
+            [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:0]];
+            TemporaryApp *newItem = new[newIndex];
+            [alreadyAdded addObject:newItem.id];
+            newIndex++;
+        } else if (newIndex >= new.count) {
+            [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+            oldIndex++;
+        } else {
+            TemporaryApp *oldItem = old[oldIndex];
+            TemporaryApp *newItem = new[newIndex];
+            if ([alreadyAdded containsObject:oldItem.id]) {
+                [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+                oldIndex++;
+            } else {
+                NSComparisonResult comparison = [oldItem compareName:newItem];
+                if (comparison == NSOrderedSame) {
+                    [alreadyAdded addObject:newItem.id];
+                    oldIndex++;
+                    newIndex++;
+                } else if (comparison == NSOrderedAscending) {
+                    [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+                    oldIndex++;
+                } else if (comparison == NSOrderedDescending) {
+                    [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:0]];
+                    [alreadyAdded addObject:newItem.id];
+                    newIndex++;
+                }
+            }
+        }
+    }
+    
+    return @{@"deletions": deletions, @"insertions": insertions};
+}
+
+- (void)updateCollectionViewDataWithOld:(NSArray<TemporaryApp *> *)old new:(NSArray<TemporaryApp *> *)new {
+    NSDictionary *updates = [self calculateUpateIndexPathsFromOld:old toNew:new];
+    NSSet<NSIndexPath *> *deletions = updates[@"deletions"];
+    NSSet<NSIndexPath *> *insertions = updates[@"insertions"];
+    
+    if (deletions.count != 0 || insertions.count != 0) {
+        self.apps = new;
+        
+        [self.collectionView.animator performBatchUpdates:^{
+            [self.collectionView deleteItemsAtIndexPaths:deletions];
+            [self.collectionView insertItemsAtIndexPaths:insertions];
+        } completionHandler:^(BOOL finished) {
+            
+        }];
+    }
+}
+
 
 #pragma mark - App Discovery
 
@@ -443,7 +505,7 @@ const CGFloat scaleBase = 1.125;
     });
 }
 
-- (void)displayApps {
+- (NSArray<TemporaryApp *> *)fetchApps {
     NSPredicate *predicate;
     if (self.filterText.length != 0) {
         predicate = [NSPredicate predicateWithFormat:@"name CONTAINS[cd] %@", self.filterText];
@@ -451,8 +513,11 @@ const CGFloat scaleBase = 1.125;
         predicate = [NSPredicate predicateWithValue:YES];
     }
     NSArray<TemporaryApp *> *filteredApps = [self.host.appList.allObjects filteredArrayUsingPredicate:predicate];
-    self.apps = [filteredApps sortedArrayUsingSelector:@selector(compareName:)];
-    [self.collectionView moonlight_reloadDataKeepingSelection];
+    return [filteredApps sortedArrayUsingSelector:@selector(compareName:)];
+}
+
+- (void)displayApps {
+    self.apps = [self fetchApps];
 }
 
 - (void)discoverAppsForHost:(TemporaryHost *)host {
@@ -470,13 +535,15 @@ const CGFloat scaleBase = 1.125;
                 }];
             });
         } else {
+            NSArray<TemporaryApp *> *oldItems = [self fetchApps];
+
             [self updateApplist:[appListResp getAppList] forHost:host];
             
             [self.appManager stopRetrieving];
             [self.appManager retrieveAssetsFromHost:self.host];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self displayApps];
+                [self updateCollectionViewDataWithOld:oldItems new:[self fetchApps]];
             });
         }
     });
