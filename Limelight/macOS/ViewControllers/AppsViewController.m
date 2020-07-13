@@ -441,12 +441,12 @@ const CGFloat scaleBase = 1.125;
                 }];
             });
         } else {
+            [self updateApplist:[appListResp getAppList] forHost:host];
+            
+            [self.appManager stopRetrieving];
+            [self.appManager retrieveAssetsFromHost:self.host];
+            
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self updateApplist:[appListResp getAppList] forHost:host];
-
-                [self.appManager stopRetrieving];
-                [self.appManager retrieveAssetsFromHost:self.host];
-
                 [self displayApps];
             });
         }
