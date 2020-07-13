@@ -488,7 +488,7 @@ const CGFloat scaleBase = 1.125;
     
     for (TemporaryApp* app in newList) {
         BOOL appAlreadyInList = NO;
-        for (TemporaryApp* savedApp in host.appList) {
+        for (TemporaryApp* savedApp in newHostAppList) {
             if ([app.id isEqualToString:savedApp.id]) {
                 savedApp.name = app.name;
                 appAlreadyInList = YES;
@@ -505,7 +505,7 @@ const CGFloat scaleBase = 1.125;
     do {
         appWasRemoved = NO;
         
-        for (TemporaryApp* app in host.appList) {
+        for (TemporaryApp* app in newHostAppList) {
             appWasRemoved = YES;
             for (TemporaryApp* mergedApp in newList) {
                 if ([mergedApp.id isEqualToString:app.id]) {
