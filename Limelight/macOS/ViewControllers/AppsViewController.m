@@ -43,6 +43,8 @@
 
 @property (nonatomic) id windowDidBecomeKeyObserver;
 
+@property (nonatomic, strong) TemporaryApp *currentlyHoveredApp;
+
 @end
 
 const CGFloat scaleBase = 1.125;
@@ -298,6 +300,24 @@ const CGFloat scaleBase = 1.125;
     }
 }
 
+- (void)didHover:(BOOL)hovered forApp:(TemporaryApp *)app {
+    AppCell *currentCell = [self cellForApp:self.currentlyHoveredApp];
+    AppCell *cell = [self cellForApp:app];
+    if (hovered) {
+        if (self.currentlyHoveredApp == app) {
+            return;
+        }
+
+        [currentCell exitHoveredState];
+        [cell enterHoveredState];
+        
+        self.currentlyHoveredApp = app;
+    } else {
+        [cell exitHoveredState];
+        self.currentlyHoveredApp = nil;
+    }
+}
+
 
 #pragma mark - Running App State
 
@@ -377,6 +397,15 @@ const CGFloat scaleBase = 1.125;
     }
     
     return nil;
+}
+
+- (AppCell *)cellForApp:(TemporaryApp *)app {
+    if (app == nil) {
+        return nil;
+    }
+    
+    NSIndexPath *indexPath = [self indexPathForApp:app];
+    return (AppCell *)[self.collectionView itemAtIndex:indexPath.item];
 }
 
 - (BOOL)askWhetherToStopRunningApp:(TemporaryApp *)currentApp andStartNewApp:(TemporaryApp *)newApp {

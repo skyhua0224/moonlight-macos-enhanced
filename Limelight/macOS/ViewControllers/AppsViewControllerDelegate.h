@@ -19,4 +19,6 @@
 
 - (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app;
 
+- (void)didHover:(BOOL)hovered forApp:(TemporaryApp *)app;
+
 @end

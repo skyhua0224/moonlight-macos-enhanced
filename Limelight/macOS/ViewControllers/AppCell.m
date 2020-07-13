@@ -54,13 +54,23 @@
     return scale;
 }
 
+- (void)enterHoveredState {
+    self.hovered = YES;
+    [self animateSelectedAndHoveredState];
+}
+
+- (void)exitHoveredState {
+    self.hovered = NO;
+    [self animateSelectedAndHoveredState];
+}
+
 - (void)animateSelectedAndHoveredState {
     CGFloat oldScale = [self scaleForSelected:self.previousSelected hovered:self.previousHovered];
     CGFloat newScale = [self scaleForSelected:self.selected hovered:self.hovered];
     if (fabs(oldScale - newScale) < 0.0001) {
         return;
     }
-
+    
     self.view.layer.anchorPoint = CGPointMake(0.5, 0.5);
     CATransform3D oldTransform = CATransform3DScale([self translationTransform], oldScale, oldScale, 1);
     CATransform3D newTransform = CATransform3DScale([self translationTransform], newScale, newScale, 1);
@@ -137,13 +147,11 @@
 }
 
 - (void)mouseEntered:(NSEvent *)event {
-    self.hovered = YES;
-    [self animateSelectedAndHoveredState];
+    [self.delegate didHover:YES forApp:self.app];
 }
 
 - (void)mouseExited:(NSEvent *)event {
-    self.hovered = NO;
-    [self animateSelectedAndHoveredState];
+    [self.delegate didHover:NO forApp:self.app];
 }
 
 - (void)mouseDown:(NSEvent *)theEvent {

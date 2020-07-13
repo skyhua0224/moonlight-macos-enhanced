@@ -10,7 +10,6 @@
 
 @interface AppCellView () <NSMenuDelegate>
 @property (nonatomic, strong) NSTrackingArea *trackingArea;
-@property (nonatomic) BOOL currentlyHovered;
 
 @end
 
@@ -23,32 +22,12 @@
     
     NSPoint mouseLocation = self.window.mouseLocationOutsideOfEventStream;
     mouseLocation = [self convertPoint:mouseLocation fromView:nil];
-    
-    if (NSPointInRect(mouseLocation, self.bounds)) {
-        if (!self.currentlyHovered) {
-            [self mouseEntered:self.window.currentEvent];
-        }
-    } else {
-        if (self.currentlyHovered) {
-            [self mouseExited:self.window.currentEvent];
-        }
-    }
 }
 
 - (void)updateTrackingAreas {
     [self removeTrackingArea:self.trackingArea];
     [self createTrackingArea];
     [super updateTrackingAreas];
-}
-
-- (void)mouseEntered:(NSEvent *)event {
-    self.currentlyHovered = YES;
-    [super mouseEntered:event];
-}
-
-- (void)mouseExited:(NSEvent *)event {
-    self.currentlyHovered = NO;
-    [super mouseExited:event];
 }
 
 - (void)menuWillOpen:(NSMenu *)menu {
