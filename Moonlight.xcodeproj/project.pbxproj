@@ -73,6 +73,7 @@
 		4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C81944F202EC3230023F308 /* AppDelegateForAppKit.m */; };
 		4C84385A21FE9453000A77CD /* NSApplication+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */; };
 		4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C8E7EC2236EF0040075DE78 /* Controller.m */; };
+		4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */; };
 		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
 		4CC3C0321FF73A660029EBF5 /* PreferencesViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0311FF73A660029EBF5 /* PreferencesViewController.m */; };
@@ -173,6 +174,8 @@
 		4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		4C8E7EC2236EF0040075DE78 /* Controller.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Controller.m; sourceTree = "<group>"; };
 		4C8E7EC3236EF0040075DE78 /* Controller.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Controller.h; sourceTree = "<group>"; };
+		4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KPCScaleToFillNSImageView.m; sourceTree = "<group>"; };
+		4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = KPCScaleToFillNSImageView.h; sourceTree = "<group>"; };
 		4CABABB021F6C8A3008576A4 /* CollectionView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CollectionView.h; sourceTree = "<group>"; };
 		4CABABB121F6C8A4008576A4 /* CollectionView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CollectionView.m; sourceTree = "<group>"; };
 		4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RendererLayerContainer.h; sourceTree = "<group>"; };
@@ -360,6 +363,8 @@
 		4C38E81D1FEF4F89000425CD /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
+				4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */,
+				4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */,
 				4C38E81E1FEF4FC1000425CD /* AlertPresenter.h */,
 				4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */,
 				4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */,
@@ -984,6 +989,7 @@
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
+				4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
 				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
