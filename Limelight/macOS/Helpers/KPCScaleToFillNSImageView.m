@@ -80,7 +80,7 @@
 
                                             [image drawInRect:dstRect // Interestingly, here needs to be dstRect and not self.bounds
 													 fromRect:srcRect
-													operation:NSCompositeCopy
+                                                    operation:NSCompositingOperationCopy
 													 fraction:1.0
 											   respectFlipped:YES
 														hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}];
