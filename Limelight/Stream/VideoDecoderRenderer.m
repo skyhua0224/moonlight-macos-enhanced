@@ -574,7 +574,10 @@ void outputCallback(void * CM_NULLABLE decompressionOutputRefCon,
         .decodeTimeStamp = kCMTimeInvalid,
         .presentationTimeStamp = CMTimeMake(mach_absolute_time(), 1000 * 1000 * 1000)
     };
-    
+
+    CVBufferRemoveAttachment(frame, kCVImageBufferCGColorSpaceKey);
+    CVBufferSetAttachment(frame, kCVImageBufferCGColorSpaceKey, CGColorSpaceCreateWithName([NSScreen.mainScreen canRepresentDisplayGamut:NSDisplayGamutP3] ? kCGColorSpaceDisplayP3 : kCGColorSpaceSRGB), kCVAttachmentMode_ShouldPropagate);
+
     OSStatus status;
     
     if (!_imageFormatDesc || !CMVideoFormatDescriptionMatchesImageBuffer(_imageFormatDesc, frame)) {
