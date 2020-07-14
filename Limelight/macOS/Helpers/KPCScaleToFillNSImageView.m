@@ -49,6 +49,15 @@
 		return;
 	}
 
+    NSSize imageSize = [image size];
+    NSSize imageViewSize = self.bounds.size;
+    CGFloat imageAspectRatio = imageSize.height / imageSize.width;
+    CGFloat imageViewAspectRatio = imageViewSize.height / imageViewSize.width;
+    if (fabs(imageAspectRatio - imageViewAspectRatio) < 0.01) {
+        [super setImage:image];
+        return;
+    }
+
     __weak KPCScaleToFillNSImageView *weakSelf = self;
 	NSImage *scaleToFillImage = [NSImage imageWithSize:self.bounds.size
 											   flipped:NO
@@ -87,8 +96,6 @@
 
                                             return YES;
                                         }];
-
-		[scaleToFillImage setCacheMode:NSImageCacheNever]; // Hence it will automatically redraw with new frame size of the image view.
 
         [super setImage:scaleToFillImage];
 }
