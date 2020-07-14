@@ -62,8 +62,8 @@
     
     [self.framerateSelector selectItemWithTag:[streamSettings.framerate intValue]];
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
-    self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
     self.shouldSyncCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
+    self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
     self.syncHostNameTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHostName"];
     self.customResWidthTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncWidth"];
     self.customResHeightTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHeight"];
