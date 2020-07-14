@@ -224,7 +224,7 @@ const CGFloat scaleBase = 1.125;
 - (void)controlTextDidChange:(NSNotification *)obj {
     self.filterText = ((NSTextField *)obj.object).stringValue;
     [self displayApps];
-    [self.collectionView moonlight_reloadDataKeepingSelection];
+    [self.collectionView reloadData];
 }
 
 
