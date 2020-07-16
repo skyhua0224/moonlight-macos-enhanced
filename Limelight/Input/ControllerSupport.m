@@ -16,6 +16,7 @@
 
 @import GameController;
 @import AudioToolbox;
+@import CoreHaptics;
 
 enum ButtonDebouncerState {
     BDS_none,
@@ -157,6 +158,9 @@ enum ButtonDebouncerState {
     NSMutableDictionary *_controllers;
     NSTimer *_rumbleTimer;
     
+    API_AVAILABLE(macos(10.16))
+    CHHapticEngine *hapticEngine;
+
     OnScreenControls *_osc;
     
     // This controller object is shared between on-screen controls
@@ -177,18 +181,32 @@ enum ButtonDebouncerState {
 #define UPDATE_BUTTON_FLAG(controller, x, y) \
 ((y) ? [self setButtonFlag:controller flags:x] : [self clearButtonFlag:controller flags:x])
 
+- (CHHapticEngine *)createEngineWithGCController:(GCController *)controller API_AVAILABLE(macos(10.16)) {
+    if (hapticEngine == nil) {
+        hapticEngine = [controller.haptics createEngineWithLocality:GCHapticsLocalityDefault];
+    }
+    return hapticEngine;
+}
+
 -(void) rumbleController: (Controller*)controller
 {
-#if 0
     // Only vibrate if the amplitude is large enough
     if (controller.lowFreqMotor > 0x5000 || controller.highFreqMotor > 0x5000) {
-        // If the gamepad is nil (on-screen controls) or it's attached to the device,
-        // then vibrate the device itself
-        UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
-        [feedback prepare];
-        [feedback impactOccurred];
+        
+        if (@available(macOS 10.16, *)) {
+            
+            CHHapticEngine *engine = [self createEngineWithGCController:GCController.controllers[controller.playerIndex]];
+            if (engine != nil) {
+                
+                NSError *error;
+                [engine playPatternFromURL:[NSBundle.mainBundle URLForResource:@"Rumble" withExtension:@"ahap"] error:&error];
+                
+                if (error != Nil) {
+                    NSLog(@"Haptic failed with error: %@", error);
+                }
+            }
+        }
     }
-#endif
 }
 
 -(void) rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor
