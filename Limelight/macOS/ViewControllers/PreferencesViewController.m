@@ -45,6 +45,7 @@
 @property (weak) IBOutlet NSButton *dynamicResolutionCheckbox;
 @property (weak) IBOutlet NSButton *optimizeSettingsCheckbox;
 @property (weak) IBOutlet NSButton *autoFullscreenCheckbox;
+@property (weak) IBOutlet NSPopUpButton *controllerDriverSelector;
 
 @end
 
@@ -74,6 +75,7 @@
     self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
     self.optimizeSettingsCheckbox.state = streamSettings.optimizeGames ? NSControlStateValueOn : NSControlStateValueOff;
     self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
+    [self.controllerDriverSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"]];
 }
 
 
@@ -160,6 +162,10 @@
 
 - (IBAction)didToggleAutoFullscreen:(id)sender {
     [[NSUserDefaults standardUserDefaults] setBool:self.autoFullscreenCheckbox.state == NSControlStateValueOn forKey:@"autoFullscreen"];
+}
+
+- (IBAction)didChangeControllerDriver:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setInteger:self.controllerDriverSelector.selectedTag forKey:@"controllerDriver"];
 }
 
 

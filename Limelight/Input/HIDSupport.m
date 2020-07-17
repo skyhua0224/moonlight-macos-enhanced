@@ -589,10 +589,10 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
         }
     }
 
-//    if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-//    } else {
+    BOOL useHIDControllerDriver = [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"] == 0;
+    if (useHIDControllerDriver) {
         LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-//    }
+    }
 }
 
 - (void)updateButtonFlags:(int)flag state:(BOOL)set {
