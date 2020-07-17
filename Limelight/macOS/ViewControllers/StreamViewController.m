@@ -328,9 +328,9 @@
     
     streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
 
-    if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-        self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig];
-    }
+//    if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
+//        self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig];
+//    }
     self.hidSupport = [[HIDSupport alloc] init];
     
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];

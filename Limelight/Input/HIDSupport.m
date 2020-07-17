@@ -349,120 +349,250 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
     
     HIDSupport *self = (__bridge HIDSupport *)context;
     
-    switch (usagePage) {
-        case kHIDPage_GenericDesktop:
-            switch (usage) {
-                case kHIDUsage_GD_X:
-                    self.controller.lastLeftStickX = (intValue - 128) * 255 + 1;
-                    break;
-                case kHIDUsage_GD_Y:
-                    self.controller.lastLeftStickY = (intValue - 128) * -255;
-                    break;
-                case kHIDUsage_GD_Z:
-                    self.controller.lastRightStickX = (intValue - 128) * 255 + 1;
-                    break;
-                case kHIDUsage_GD_Rx:
-                    self.controller.lastLeftTrigger = intValue;
-                    break;
-                case kHIDUsage_GD_Ry:
-                    self.controller.lastRightTrigger = intValue;
-                    break;
-                case kHIDUsage_GD_Rz:
-                    self.controller.lastRightStickY = (intValue - 128) * -255;
-                    break;
-                    
-                case kHIDUsage_GD_Hatswitch:
-                    switch (intValue) {
-                        case 0:
-                            [self updateButtonFlags:UP_FLAG state:YES];
-                            break;
-                        case 1:
-                            [self updateButtonFlags:UP_FLAG | RIGHT_FLAG state:YES];
-                            break;
-                        case 2:
-                            [self updateButtonFlags:RIGHT_FLAG state:YES];
-                            break;
-                        case 3:
-                            [self updateButtonFlags:DOWN_FLAG | RIGHT_FLAG state:YES];
-                            break;
-                        case 4:
-                            [self updateButtonFlags:DOWN_FLAG state:YES];
-                            break;
-                        case 5:
-                            [self updateButtonFlags:DOWN_FLAG | LEFT_FLAG state:YES];
-                            break;
-                        case 6:
-                            [self updateButtonFlags:LEFT_FLAG state:YES];
-                            break;
-                        case 7:
-                            [self updateButtonFlags:UP_FLAG | LEFT_FLAG state:YES];
-                            break;
+    IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
+    
+    CFNumberRef vendor = (CFNumberRef)(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)));
+    UInt16 vendorId = [(NSNumber *)CFBridgingRelease(vendor) unsignedShortValue];
+    
+    CFNumberRef product = (CFNumberRef)(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)));
+    UInt16 productId = [(NSNumber *)CFBridgingRelease(product) unsignedShortValue];
 
-                        case 8:
-                            [self updateButtonFlags:UP_FLAG | RIGHT_FLAG | DOWN_FLAG | LEFT_FLAG state:NO];
-                            break;
+    if (vendorId == 0x045E && productId == 0x02FD) { // Xbox One S Wireless
+        switch (usagePage) {
+            case kHIDPage_GenericDesktop:
+                switch (usage) {
+                    case kHIDUsage_GD_X:
+                        self.controller.lastLeftStickX = MIN((intValue - 32768), 32767);
+                        break;
+                    case kHIDUsage_GD_Y:
+                        self.controller.lastLeftStickY = MIN(-(intValue - 32768), 32767);
+                        break;
+                    case kHIDUsage_GD_Z:
+                        self.controller.lastRightStickX = MIN((intValue - 32768), 32767);
+                        break;
+                    case kHIDUsage_GD_Rz:
+                        self.controller.lastRightStickY = MIN(-(intValue - 32768), 32767);
+                        break;
+                        
+                    case kHIDUsage_GD_Hatswitch:
+                        switch (intValue) {
+                            case 1:
+                                [self updateButtonFlags:UP_FLAG state:YES];
+                                break;
+                            case 2:
+                                [self updateButtonFlags:UP_FLAG | RIGHT_FLAG state:YES];
+                                break;
+                            case 3:
+                                [self updateButtonFlags:RIGHT_FLAG state:YES];
+                                break;
+                            case 4:
+                                [self updateButtonFlags:DOWN_FLAG | RIGHT_FLAG state:YES];
+                                break;
+                            case 5:
+                                [self updateButtonFlags:DOWN_FLAG state:YES];
+                                break;
+                            case 6:
+                                [self updateButtonFlags:DOWN_FLAG | LEFT_FLAG state:YES];
+                                break;
+                            case 7:
+                                [self updateButtonFlags:LEFT_FLAG state:YES];
+                                break;
+                            case 8:
+                                [self updateButtonFlags:UP_FLAG | LEFT_FLAG state:YES];
+                                break;
 
-                        default:
-                            break;
-                    }
+                            case 0:
+                                [self updateButtonFlags:UP_FLAG | RIGHT_FLAG | DOWN_FLAG | LEFT_FLAG state:NO];
+                                break;
 
-                default:
-                    break;
-            }
+                            default:
+                                break;
+                        }
 
-        case kHIDPage_Button:
-            switch (usage) {
-                case 1:
-                    [self updateButtonFlags:X_FLAG state:intValue];
-                    break;
-                case 2:
-                    [self updateButtonFlags:A_FLAG state:intValue];
-                    break;
-                case 3:
-                    [self updateButtonFlags:B_FLAG state:intValue];
-                    break;
-                case 4:
-                    [self updateButtonFlags:Y_FLAG state:intValue];
-                    break;
+                    default:
+                        break;
+                }
+            case kHIDPage_Simulation:
+                switch (usage) {
+                    case kHIDUsage_Sim_Brake:
+                        self.controller.lastLeftTrigger = intValue;
+                        break;
+                    case kHIDUsage_Sim_Accelerator:
+                        self.controller.lastRightTrigger = intValue;
+                        break;
 
-                case 5:
-                    [self updateButtonFlags:LB_FLAG state:intValue];
-                    break;
-                case 6:
-                    [self updateButtonFlags:RB_FLAG state:intValue];
-                    break;
+                    default:
+                        break;
+                }
 
-                case 9:
-                    [self updateButtonFlags:BACK_FLAG state:intValue];
-                    break;
-                case 10:
-                    [self updateButtonFlags:PLAY_FLAG state:intValue];
-                    break;
+            case kHIDPage_Button:
+                switch (usage) {
+                    case 1:
+                        [self updateButtonFlags:A_FLAG state:intValue];
+                        break;
+                    case 2:
+                        [self updateButtonFlags:B_FLAG state:intValue];
+                        break;
+                    case 4:
+                        [self updateButtonFlags:X_FLAG state:intValue];
+                        break;
+                    case 5:
+                        [self updateButtonFlags:Y_FLAG state:intValue];
+                        break;
+                    case 7:
+                        [self updateButtonFlags:LB_FLAG state:intValue];
+                        break;
+                    case 8:
+                        [self updateButtonFlags:RB_FLAG state:intValue];
+                        break;
+                    case 12:
+                        [self updateButtonFlags:PLAY_FLAG state:intValue];
+                        break;
 
-                case 11:
-                    [self updateButtonFlags:LS_CLK_FLAG state:intValue];
-                    break;
-                case 12:
-                    [self updateButtonFlags:RS_CLK_FLAG state:intValue];
-                    break;
+                        
+                    default:
+                        break;
+                }
+                
+            case kHIDPage_Consumer:
+                switch (usage) {
+                    case kHIDUsage_Csmr_ACBack:
+                        [self updateButtonFlags:BACK_FLAG state:intValue];
+                        break;
+                    case kHIDUsage_Csmr_ACHome:
+                        [self updateButtonFlags:SPECIAL_FLAG state:intValue];
+                        break;
+                    case 14:
+                        [self updateButtonFlags:LS_CLK_FLAG state:intValue];
+                        break;
+                    case 15:
+                        [self updateButtonFlags:RS_CLK_FLAG state:intValue];
+                        break;
 
-                case 13:
-                    [self updateButtonFlags:SPECIAL_FLAG state:intValue];
-                    break;
+                    default:
+                        break;
+                }
+                
+            default:
+                break;
+        }
 
-                    
-                default:
-                    break;
-            }
-            
-        default:
-            break;
+    } else if (vendorId == 0x054C && productId == 0x09CC) { // Dualshock 4
+        switch (usagePage) {
+            case kHIDPage_GenericDesktop:
+                switch (usage) {
+                    case kHIDUsage_GD_X:
+                        self.controller.lastLeftStickX = (intValue - 128) * 255 + 1;
+                        break;
+                    case kHIDUsage_GD_Y:
+                        self.controller.lastLeftStickY = (intValue - 128) * -255;
+                        break;
+                    case kHIDUsage_GD_Z:
+                        self.controller.lastRightStickX = (intValue - 128) * 255 + 1;
+                        break;
+                    case kHIDUsage_GD_Rx:
+                        self.controller.lastLeftTrigger = intValue;
+                        break;
+                    case kHIDUsage_GD_Ry:
+                        self.controller.lastRightTrigger = intValue;
+                        break;
+                    case kHIDUsage_GD_Rz:
+                        self.controller.lastRightStickY = (intValue - 128) * -255;
+                        break;
+                        
+                    case kHIDUsage_GD_Hatswitch:
+                        switch (intValue) {
+                            case 0:
+                                [self updateButtonFlags:UP_FLAG state:YES];
+                                break;
+                            case 1:
+                                [self updateButtonFlags:UP_FLAG | RIGHT_FLAG state:YES];
+                                break;
+                            case 2:
+                                [self updateButtonFlags:RIGHT_FLAG state:YES];
+                                break;
+                            case 3:
+                                [self updateButtonFlags:DOWN_FLAG | RIGHT_FLAG state:YES];
+                                break;
+                            case 4:
+                                [self updateButtonFlags:DOWN_FLAG state:YES];
+                                break;
+                            case 5:
+                                [self updateButtonFlags:DOWN_FLAG | LEFT_FLAG state:YES];
+                                break;
+                            case 6:
+                                [self updateButtonFlags:LEFT_FLAG state:YES];
+                                break;
+                            case 7:
+                                [self updateButtonFlags:UP_FLAG | LEFT_FLAG state:YES];
+                                break;
+
+                            case 8:
+                                [self updateButtonFlags:UP_FLAG | RIGHT_FLAG | DOWN_FLAG | LEFT_FLAG state:NO];
+                                break;
+
+                            default:
+                                break;
+                        }
+
+                    default:
+                        break;
+                }
+
+            case kHIDPage_Button:
+                switch (usage) {
+                    case 1:
+                        [self updateButtonFlags:X_FLAG state:intValue];
+                        break;
+                    case 2:
+                        [self updateButtonFlags:A_FLAG state:intValue];
+                        break;
+                    case 3:
+                        [self updateButtonFlags:B_FLAG state:intValue];
+                        break;
+                    case 4:
+                        [self updateButtonFlags:Y_FLAG state:intValue];
+                        break;
+
+                    case 5:
+                        [self updateButtonFlags:LB_FLAG state:intValue];
+                        break;
+                    case 6:
+                        [self updateButtonFlags:RB_FLAG state:intValue];
+                        break;
+
+                    case 9:
+                        [self updateButtonFlags:BACK_FLAG state:intValue];
+                        break;
+                    case 10:
+                        [self updateButtonFlags:PLAY_FLAG state:intValue];
+                        break;
+
+                    case 11:
+                        [self updateButtonFlags:LS_CLK_FLAG state:intValue];
+                        break;
+                    case 12:
+                        [self updateButtonFlags:RS_CLK_FLAG state:intValue];
+                        break;
+
+                    case 13:
+                        [self updateButtonFlags:SPECIAL_FLAG state:intValue];
+                        break;
+
+                        
+                    default:
+                        break;
+                }
+                
+            default:
+                break;
+        }
     }
 
-    if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-    } else {
+//    if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
+//    } else {
         LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-    }
+//    }
 }
 
 - (void)updateButtonFlags:(int)flag state:(BOOL)set {
