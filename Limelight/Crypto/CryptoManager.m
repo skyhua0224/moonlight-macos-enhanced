@@ -285,6 +285,8 @@ static NSData* p12 = nil;
     static dispatch_once_t pred;
     dispatch_once(&pred, ^{
         if (![CryptoManager keyPairExists]) {
+            [self deleteKeychainCertificate];
+            
             Log(LOG_I, @"Generating Certificate... ");
             CertKeyPair certKeyPair = generateCertKeyPair();
             
@@ -301,6 +303,18 @@ static NSData* p12 = nil;
             Log(LOG_I, @"Certificate created");
         }
     });
+}
+
++ (void)deleteKeychainCertificate {
+    NSDictionary *query = @{
+                            (NSString *)kSecClass: (NSString *)kSecClassCertificate,
+                            (NSString *)kSecAttrLabel: (NSString *)@"NVIDIA GameStream Client",
+                            (NSString *)kSecMatchLimit: (NSString *)kSecMatchLimitOne
+                            };
+    OSStatus status = SecItemDelete((CFDictionaryRef)query);
+    if (status != errSecSuccess) {
+        Log(LOG_E, @"Couldn't delete old certificate (%d)", status);
+    }
 }
 
 @end
