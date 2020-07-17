@@ -9,6 +9,8 @@
 #import "CryptoManager.h"
 #import "mkcert.h"
 
+#import "DatabaseSingleton.h"
+
 #include <openssl/aes.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
@@ -172,10 +174,9 @@ static NSData* p12 = nil;
 #if TARGET_OS_TV
     return [[NSUserDefaults standardUserDefaults] dataForKey:item];
 #else
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-    NSString *documentsDirectory = [paths objectAtIndex:0];
-    NSString *file = [documentsDirectory stringByAppendingPathComponent:item];
-    return [NSData dataWithContentsOfFile:file];
+    NSURL *applicationSupportDirectory = [DatabaseSingleton applicationSupportDirectory];
+    NSURL *file = [applicationSupportDirectory URLByAppendingPathComponent:item isDirectory:NO];
+    return [NSData dataWithContentsOfURL:file];
 #endif
 }
 
@@ -183,10 +184,9 @@ static NSData* p12 = nil;
 #if TARGET_OS_TV
     [[NSUserDefaults standardUserDefaults] setObject:data forKey:item];
 #else
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-    NSString *documentsDirectory = [paths objectAtIndex:0];
-    NSString *file = [documentsDirectory stringByAppendingPathComponent:item];
-    [data writeToFile:file atomically:NO];
+    NSURL *applicationSupportDirectory = [DatabaseSingleton applicationSupportDirectory];
+    NSURL *file = [applicationSupportDirectory URLByAppendingPathComponent:item isDirectory:NO];
+    [data writeToURL:file atomically:NO];
 #endif
 }
 

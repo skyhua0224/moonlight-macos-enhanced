@@ -96,14 +96,20 @@
 
 #pragma mark - Database Path
 
-// Returns the URL to the application's Documents directory.
-- (NSURL *)applicationDocumentsDirectory
-{
-    return [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] lastObject];
++ (NSURL *)applicationSupportDirectory {
+    
+    NSURL *directoryUrl = [[[[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask] firstObject]
+            URLByAppendingPathComponent:@"Moonlight"];
+    NSError *error;
+    if (![[NSFileManager defaultManager] fileExistsAtPath:directoryUrl.path]) {
+        [[NSFileManager defaultManager] createDirectoryAtPath:directoryUrl.path withIntermediateDirectories:YES attributes:nil error:&error];
+    }
+    
+    return directoryUrl;
 }
 
-- (NSURL*) getStoreURL {
-    return [[self applicationDocumentsDirectory] URLByAppendingPathComponent:@"Limelight_iOS.sqlite"];
+- (NSURL *)getStoreURL {
+    return [[DatabaseSingleton applicationSupportDirectory] URLByAppendingPathComponent:@"Moonlight_macOS.sqlite"];
 }
 
 @end
