@@ -33,7 +33,6 @@
 		4C38E8021FEE08B1000425CD /* TemporarySettings.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856F1C0ED0E800F6CC00 /* TemporarySettings.m */; };
 		4C38E8031FEE08BE000425CD /* MDNSManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89461219F646E200339C8A /* MDNSManager.m */; };
 		4C38E8041FEE08C8000425CD /* TemporaryHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856C1C0EA79600F6CC00 /* TemporaryHost.m */; };
-		4C38E8061FEE0903000425CD /* libxml2.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C38E8051FEE0903000425CD /* libxml2.tbd */; };
 		4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 9832D1351BBCD5C50036EF48 /* TemporaryApp.m */; };
 		4C38E8081FEE09D0000425CD /* Utils.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89462219F646E200339C8A /* Utils.m */; };
 		4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */ = {isa = PBXBuildFile; fileRef = FB89460719F646E200339C8A /* mkcert.c */; };
@@ -73,6 +72,7 @@
 		4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C81944F202EC3230023F308 /* AppDelegateForAppKit.m */; };
 		4C84385A21FE9453000A77CD /* NSApplication+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */; };
 		4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C8E7EC2236EF0040075DE78 /* Controller.m */; };
+		4C97FE5E24CD3C1A001F3064 /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946EA19F6AFB800339C8A /* libopus.a */; };
 		4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */; };
 		4CA27E8724C033C100ACEA27 /* Rumble.ahap in Resources */ = {isa = PBXBuildFile; fileRef = 4CA27E8524C033C100ACEA27 /* Rumble.ahap */; };
 		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
@@ -119,7 +119,6 @@
 		4C30BA1F1FF5F7D600848919 /* BackgroundColorView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BackgroundColorView.m; sourceTree = "<group>"; };
 		4C30BFD81FF9D57F00AD09E6 /* DefaultPreferences.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = DefaultPreferences.plist; sourceTree = "<group>"; };
 		4C38E7F81FEE04E4000425CD /* Limelight-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Limelight-Prefix.pch"; sourceTree = "<group>"; };
-		4C38E8051FEE0903000425CD /* libxml2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libxml2.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.13.sdk/usr/lib/libxml2.tbd; sourceTree = DEVELOPER_DIR; };
 		4C38E80B1FEE13FB000425CD /* HostsViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HostsViewControllerDelegate.h; sourceTree = "<group>"; };
 		4C38E80D1FEE1C81000425CD /* AppsViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppsViewController.h; sourceTree = "<group>"; };
 		4C38E80E1FEE1C81000425CD /* AppsViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppsViewController.m; sourceTree = "<group>"; };
@@ -204,11 +203,7 @@
 		D4746EEA1CBC740C006FB401 /* Moonlight-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Moonlight-Bridging-Header.h"; path = "Input/Moonlight-Bridging-Header.h"; sourceTree = "<group>"; };
 		FB290CF119B2C406004C83CF /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		FB290CF319B2C406004C83CF /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
-		FB290CF519B2C406004C83CF /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		FB290CF719B2C406004C83CF /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = SDKROOT; };
-		FB290DB619B2C870004C83CF /* libz.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libz.dylib; path = usr/lib/libz.dylib; sourceTree = SDKROOT; };
-		FB290DB819B2C877004C83CF /* libbz2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libbz2.dylib; path = usr/lib/libbz2.dylib; sourceTree = SDKROOT; };
-		FB290DC319B2E98F004C83CF /* libxml2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libxml2.dylib; path = usr/lib/libxml2.dylib; sourceTree = SDKROOT; };
 		FB4678EB1A50C40900377732 /* OnScreenControls.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = OnScreenControls.h; sourceTree = "<group>"; };
 		FB4678EC1A50C40900377732 /* OnScreenControls.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = OnScreenControls.m; sourceTree = "<group>"; };
 		FB4678F81A55FFAD00377732 /* DiscoveryManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DiscoveryManager.h; sourceTree = "<group>"; };
@@ -220,7 +215,6 @@
 		FB53E1421BE5DC4400CD6ECE /* IdManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = IdManager.m; sourceTree = "<group>"; };
 		FB6549541A57907E001C8F39 /* DiscoveryWorker.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DiscoveryWorker.h; sourceTree = "<group>"; };
 		FB6549551A57907E001C8F39 /* DiscoveryWorker.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DiscoveryWorker.m; sourceTree = "<group>"; };
-		FB7E794319C8B71B00A15F68 /* libiconv.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libiconv.dylib; path = usr/lib/libiconv.dylib; sourceTree = SDKROOT; };
 		FB89460519F646E200339C8A /* CryptoManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CryptoManager.h; sourceTree = "<group>"; };
 		FB89460619F646E200339C8A /* CryptoManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CryptoManager.m; sourceTree = "<group>"; };
 		FB89460719F646E200339C8A /* mkcert.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mkcert.c; sourceTree = "<group>"; };
@@ -353,9 +347,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */,
-				4C38E8061FEE0903000425CD /* libxml2.tbd in Frameworks */,
-				4C38E7F61FEE01F4000425CD /* libssl.a in Frameworks */,
+				4C97FE5E24CD3C1A001F3064 /* libopus.a in Frameworks */,
 				4C38E7F71FEE0219000425CD /* libcrypto.a in Frameworks */,
+				4C38E7F61FEE01F4000425CD /* libssl.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -510,17 +504,11 @@
 		FB290CF019B2C406004C83CF /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				4C38E8051FEE0903000425CD /* libxml2.tbd */,
-				FB7E794319C8B71B00A15F68 /* libiconv.dylib */,
-				FB290DC319B2E98F004C83CF /* libxml2.dylib */,
-				FB290DB819B2C877004C83CF /* libbz2.dylib */,
-				FB290DB619B2C870004C83CF /* libz.dylib */,
 				FB89468F19F6AFB800339C8A /* libs */,
 				4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */,
 				FB4679001A57048000377732 /* CoreFoundation.framework */,
 				FB290CF119B2C406004C83CF /* Foundation.framework */,
 				FB290CF319B2C406004C83CF /* CoreGraphics.framework */,
-				FB290CF519B2C406004C83CF /* UIKit.framework */,
 				FB290CF719B2C406004C83CF /* CoreData.framework */,
 			);
 			name = Frameworks;
@@ -1061,11 +1049,10 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/libs/openssl/lib",
-					/usr/local/lib,
+					"$(PROJECT_DIR)/libs/opus/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				MTL_ENABLE_DEBUG_INFO = YES;
-				OTHER_LDFLAGS = "$(PROJECT_DIR)/libs/opus/lib/libopus.a";
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1111,11 +1098,10 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/libs/openssl/lib",
-					/usr/local/lib,
+					"$(PROJECT_DIR)/libs/opus/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				OTHER_LDFLAGS = "$(PROJECT_DIR)/libs/opus/lib/libopus.a";
 				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
