@@ -35,7 +35,6 @@
 @property (weak) IBOutlet NSPopUpButton *framerateSelector;
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
 @property (weak) IBOutlet NSButton *shouldSyncCheckbox;
-@property (weak) IBOutlet NSTextField *syncHostNameTextField;
 @property (weak) IBOutlet NSTextField *customResWidthTextField;
 @property (weak) IBOutlet NSTextField *customResHeightTextField;
 @property (weak) IBOutlet NSButtonCell *disablePointerPrecisionCheckbox;
@@ -65,7 +64,6 @@
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
     self.shouldSyncCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
     self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
-    self.syncHostNameTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHostName"];
     self.customResWidthTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncWidth"];
     self.customResHeightTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHeight"];
     self.disablePointerPrecisionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecison"];
@@ -124,10 +122,6 @@
 - (IBAction)didChangeShouldSync:(id)sender {
     self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
     [[NSUserDefaults standardUserDefaults] setBool:self.shouldSyncCheckbox.state == NSControlStateValueOn forKey:@"shouldSync"];
-}
-
-- (IBAction)didChangeSyncHostName:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setObject:self.syncHostNameTextField.stringValue forKey:@"syncHostName"];
 }
 
 - (IBAction)didChangeCustomResWidth:(id)sender {

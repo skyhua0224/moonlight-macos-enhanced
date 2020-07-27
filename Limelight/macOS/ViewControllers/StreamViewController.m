@@ -292,7 +292,7 @@
         }
     });
     
-    [ResolutionSyncRequester resetResolution];
+    [ResolutionSyncRequester resetResolutionFor:self.app.host.activeAddress];
 }
 
 - (StreamViewMac *)streamView {
@@ -356,7 +356,7 @@
 }
 
 - (void)connectionStarted {
-    [ResolutionSyncRequester setResolution];
+    [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress];
 
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;

@@ -152,7 +152,7 @@ const CGFloat scaleBase = 1.125;
 - (IBAction)quitAppMenuItemClicked:(id)sender {
     [self quitApp:self.runningApp completion:nil];
     
-    [ResolutionSyncRequester resetResolution];
+    [ResolutionSyncRequester resetResolutionFor:self.host.activeAddress];
 }
 
 - (IBAction)open:(id)sender {
@@ -276,7 +276,7 @@ const CGFloat scaleBase = 1.125;
             } else {
                 self.runningApp = nil;
                 
-                [ResolutionSyncRequester resetResolution];
+                [ResolutionSyncRequester resetResolutionFor:self.host.activeAddress];
                 
                 if (completion != nil) {
                     completion(YES);
