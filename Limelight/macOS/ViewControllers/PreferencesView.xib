@@ -17,11 +17,13 @@
                 <outlet property="disablePointerPrecisionCheckbox" destination="rGo-cA-PPj" id="MKP-Dz-1hv"/>
                 <outlet property="dynamicResolutionCheckbox" destination="Abn-cm-fC8" id="8EV-g2-muK"/>
                 <outlet property="framerateSelector" destination="hef-cx-cbH" id="XND-fc-loI"/>
+                <outlet property="heightLabel" destination="MuR-JH-Avq" id="mZF-Yp-XC6"/>
                 <outlet property="optimizeSettingsCheckbox" destination="g6c-U8-VxX" id="qTz-pa-M7a"/>
                 <outlet property="resolutionSelector" destination="CDM-EN-PEn" id="CdY-3D-UzS"/>
                 <outlet property="shouldSyncCheckbox" destination="vJe-jH-dWn" id="4Ah-Za-DeY"/>
                 <outlet property="videoCodecSelector" destination="eUF-iT-PsL" id="G4N-Ra-1py"/>
                 <outlet property="view" destination="RJx-AI-6VT" id="Ve7-Y9-fzb"/>
+                <outlet property="widthLabel" destination="901-zy-NZj" id="B5d-cs-u8p"/>
             </connections>
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>

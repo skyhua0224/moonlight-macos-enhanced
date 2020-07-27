@@ -35,6 +35,8 @@
 @property (weak) IBOutlet NSPopUpButton *framerateSelector;
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
 @property (weak) IBOutlet NSButton *shouldSyncCheckbox;
+@property (weak) IBOutlet NSTextField *widthLabel;
+@property (weak) IBOutlet NSTextField *heightLabel;
 @property (weak) IBOutlet NSTextField *customResWidthTextField;
 @property (weak) IBOutlet NSTextField *customResHeightTextField;
 @property (weak) IBOutlet NSButtonCell *disablePointerPrecisionCheckbox;
@@ -63,7 +65,7 @@
     [self.framerateSelector selectItemWithTag:[streamSettings.framerate intValue]];
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
     self.shouldSyncCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
-    self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
+    [self UpdateShoucldSyncCheckboxRelatedControlStates];
     self.customResWidthTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncWidth"];
     self.customResHeightTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHeight"];
     self.disablePointerPrecisionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecison"];
@@ -78,6 +80,14 @@
 
 
 #pragma mark - Helpers
+
+- (void)UpdateShoucldSyncCheckboxRelatedControlStates {
+    self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
+    self.widthLabel.textColor = self.shouldSyncCheckbox.state == NSControlStateValueOn ? NSColor.labelColor : NSColor.secondaryLabelColor;
+    self.heightLabel.textColor = self.shouldSyncCheckbox.state == NSControlStateValueOn ? NSColor.labelColor : NSColor.secondaryLabelColor;
+    self.customResWidthTextField.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOn;
+    self.customResHeightTextField.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOn;
+}
 
 - (void)updateBitrateLabel {
     NSInteger bitrate = self.bitrateSlider.integerValue / 1000;
@@ -120,7 +130,7 @@
 }
 
 - (IBAction)didChangeShouldSync:(id)sender {
-    self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
+    [self UpdateShoucldSyncCheckboxRelatedControlStates];
     [[NSUserDefaults standardUserDefaults] setBool:self.shouldSyncCheckbox.state == NSControlStateValueOn forKey:@"shouldSync"];
 }
 
