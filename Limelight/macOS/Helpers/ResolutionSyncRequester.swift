@@ -13,7 +13,7 @@ class ResolutionSyncRequester: NSObject {
     static let port = 8080
     
     @objc static public func setResolution(for host: String) {
-        let disableMouseAcceleration = UserDefaults.standard.bool(forKey: "disablePointerPrecison")
+        let disableMouseAcceleration = UserDefaults.standard.bool(forKey: "disablePointerPrecision")
         if disableMouseAcceleration {
             Self.disableMouseAcceleration(for: host)
         }

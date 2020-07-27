@@ -4,7 +4,7 @@
 <dict>
 	<key>shouldSync</key>
 	<false/>
-	<key>disablePointerPrecison</key>
+	<key>disablePointerPrecision</key>
 	<false/>
 	<key>videoCodec</key>
 	<integer>0</integer>
