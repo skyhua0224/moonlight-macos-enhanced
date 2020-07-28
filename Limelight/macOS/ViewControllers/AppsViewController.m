@@ -377,15 +377,31 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)updateColors {
-    NSColor *backgroundColor = [NSColor textBackgroundColor];
-    if (@available(macOS 10.14, *)) {
+    NSColor *backgroundColor = [NSColor controlBackgroundColor];
+    
+    if (@available(macOS 11.0, *)) {
+
+        self.collectionView.enclosingScrollView.backgroundColor = backgroundColor;
+
+        NSMutableArray<NSColor *> *backgroundColors = [self.collectionView.backgroundColors mutableCopy];
+        backgroundColors[0] = backgroundColor;
+        
+        self.collectionView.backgroundColors = [backgroundColors copy];
+                
+    } else if (@available(macOS 10.14, *)) {
+        
         if ([NSApplication moonlight_isDarkAppearance]) {
             backgroundColor = [NSColor windowBackgroundColor];
         }
     }
 
+    // Only applies on macOSs older than 11.0
     // Set containerView subclass's background color, because collectionView's backgroundColors property is unreliable.
     // In the storyboard, collectionView's first backgroundColors item is set to 0 alpha.
+    
+    // * In macOS 11.0, I set the scrollView's background color, collectionView's first background color, and the containerView's background color.
+    // This is to make sure you see the same color when rubber banding the scrollView, and see the expected color underneath the toolbar's visualEffectView.
+    
     ((BackgroundColorView *)self.parentViewController.view).backgroundColor = backgroundColor;
 }
 
