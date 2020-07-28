@@ -55,7 +55,7 @@
 		4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
 		4C4B02EC236FF5F200B63AE6 /* WakeOnLanManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB4678FE1A565DAC00377732 /* WakeOnLanManager.m */; };
 		4C4B8351234D8F0A00D174F5 /* ResolutionSyncRequester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */; };
-		4C4FB2B323713AA100D0FCE3 /* AboutWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B223713AA100D0FCE3 /* AboutWindow.m */; };
+		4C4FB2B323713AA100D0FCE3 /* AboutViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B223713AA100D0FCE3 /* AboutViewController.m */; };
 		4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */; };
 		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
 		4C65704A23EBE9F4000D1601 /* PreferencesView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* PreferencesView.xib */; };
@@ -76,6 +76,7 @@
 		4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */; };
 		4CA27E8724C033C100ACEA27 /* Rumble.ahap in Resources */ = {isa = PBXBuildFile; fileRef = 4CA27E8524C033C100ACEA27 /* Rumble.ahap */; };
 		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
+		4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CBBE13A24CFF7B700B4706E /* AboutView.xib */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
 		4CC3C0321FF73A660029EBF5 /* PreferencesViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0311FF73A660029EBF5 /* PreferencesViewController.m */; };
 		4CF7C06221E9851500F38DC4 /* WhiteSpinner.car in Resources */ = {isa = PBXBuildFile; fileRef = 4CF7C06021E982E400F38DC4 /* WhiteSpinner.car */; };
@@ -135,8 +136,8 @@
 		4C3C619C20BD2D4A0045FE30 /* DatabaseSingleton.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DatabaseSingleton.h; sourceTree = "<group>"; };
 		4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DatabaseSingleton.m; sourceTree = "<group>"; };
 		4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolutionSyncRequester.swift; sourceTree = "<group>"; };
-		4C4FB2B123713AA100D0FCE3 /* AboutWindow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AboutWindow.h; sourceTree = "<group>"; };
-		4C4FB2B223713AA100D0FCE3 /* AboutWindow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AboutWindow.m; sourceTree = "<group>"; };
+		4C4FB2B123713AA100D0FCE3 /* AboutViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AboutViewController.h; sourceTree = "<group>"; };
+		4C4FB2B223713AA100D0FCE3 /* AboutViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AboutViewController.m; sourceTree = "<group>"; };
 		4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutWindow.xib; sourceTree = "<group>"; };
 		4C4FB2B923715A9000D0FCE3 /* LinkTextField.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LinkTextField.h; sourceTree = "<group>"; };
 		4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LinkTextField.m; sourceTree = "<group>"; };
@@ -179,6 +180,7 @@
 		4CA27E8524C033C100ACEA27 /* Rumble.ahap */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Rumble.ahap; sourceTree = "<group>"; };
 		4CABABB021F6C8A3008576A4 /* CollectionView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CollectionView.h; sourceTree = "<group>"; };
 		4CABABB121F6C8A4008576A4 /* CollectionView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CollectionView.m; sourceTree = "<group>"; };
+		4CBBE13A24CFF7B700B4706E /* AboutView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutView.xib; sourceTree = "<group>"; };
 		4CC26AC31F03904C0079DB56 /* RendererLayerContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RendererLayerContainer.h; sourceTree = "<group>"; };
 		4CC26AC41F03904C0079DB56 /* RendererLayerContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RendererLayerContainer.m; sourceTree = "<group>"; };
 		4CC3C02B1FF72A3D0029EBF5 /* AppCellView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCellView.h; sourceTree = "<group>"; };
@@ -414,9 +416,10 @@
 				4CC3C0311FF73A660029EBF5 /* PreferencesViewController.m */,
 				4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */,
 				4C65704923EBE9F4000D1601 /* PreferencesView.xib */,
-				4C4FB2B123713AA100D0FCE3 /* AboutWindow.h */,
-				4C4FB2B223713AA100D0FCE3 /* AboutWindow.m */,
+				4C4FB2B123713AA100D0FCE3 /* AboutViewController.h */,
+				4C4FB2B223713AA100D0FCE3 /* AboutViewController.m */,
 				4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */,
+				4CBBE13A24CFF7B700B4706E /* AboutView.xib */,
 			);
 			path = ViewControllers;
 			sourceTree = "<group>";
@@ -911,6 +914,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */,
+				4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */,
 				4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */,
 				4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */,
 				4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */,
@@ -977,7 +981,7 @@
 				4C38E7F31FEE0113000425CD /* DataManager.m in Sources */,
 				4C4B8351234D8F0A00D174F5 /* ResolutionSyncRequester.swift in Sources */,
 				4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */,
-				4C4FB2B323713AA100D0FCE3 /* AboutWindow.m in Sources */,
+				4C4FB2B323713AA100D0FCE3 /* AboutViewController.m in Sources */,
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,

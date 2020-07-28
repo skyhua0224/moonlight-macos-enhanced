@@ -1,5 +1,5 @@
 //
-//  AboutWindow.h
+//  AboutViewController.h
 //  Moonlight for macOS
 //
 //  Created by Michael Kenny on 5/11/19.
@@ -8,6 +8,6 @@
 
 #import <Cocoa/Cocoa.h>
 
-@interface AboutWindow : NSWindow
+@interface AboutViewController : NSViewController
 
 @end

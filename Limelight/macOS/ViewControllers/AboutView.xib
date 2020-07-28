@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="17140" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17140"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="AboutViewController">
+            <connections>
+                <outlet property="appIconImageView" destination="4v7-WK-Lvz" id="Xfi-WJ-Btk"/>
+                <outlet property="backgroundEffectView" destination="Qjc-iK-n84" id="meF-Y4-7Tu"/>
+                <outlet property="creditsTextFieldLink" destination="Y2V-lg-zjm" id="av4-zv-0jr"/>
+                <outlet property="view" destination="c22-O7-iKe" id="g3z-tA-AzQ"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <customView id="c22-O7-iKe" userLabel="About View">
+            <rect key="frame" x="0.0" y="0.0" width="480" height="272"/>
+            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+            <subviews>
+                <view wantsLayer="YES" translatesAutoresizingMaskIntoConstraints="NO" id="QSm-xQ-RaS" userLabel="Content View">
+                    <rect key="frame" x="0.0" y="0.0" width="480" height="272"/>
+                    <subviews>
+                        <visualEffectView blendingMode="behindWindow" material="sheet" state="followsWindowActiveState" translatesAutoresizingMaskIntoConstraints="NO" id="Qjc-iK-n84" userLabel="Background Effect View">
+                            <rect key="frame" x="0.0" y="0.0" width="480" height="272"/>
+                            <subviews>
+                                <imageView wantsLayer="YES" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="4v7-WK-Lvz" userLabel="App Icon">
+                                    <rect key="frame" x="20" y="0.0" width="160" height="272"/>
+                                    <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="NSApplicationIcon" id="eWJ-z9-wee"/>
+                                </imageView>
+                                <textField wantsLayer="YES" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="c8S-4z-oNh" userLabel="App Name">
+                                    <rect key="frame" x="194" y="197" width="272" height="43"/>
+                                    <textFieldCell key="cell" lineBreakMode="clipping" alignment="center" title="Moonlight" id="1dj-Bs-JF3">
+                                        <font key="font" metaFont="systemBold" size="36"/>
+                                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                        <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                    </textFieldCell>
+                                </textField>
+                                <textField wantsLayer="YES" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="stN-27-Kd2" userLabel="Version Number">
+                                    <rect key="frame" x="194" y="165" width="272" height="16"/>
+                                    <textFieldCell key="cell" lineBreakMode="clipping" alignment="center" title="Version 1.0 (1)" id="9VL-af-LKM">
+                                        <font key="font" metaFont="system"/>
+                                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                        <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                    </textFieldCell>
+                                </textField>
+                                <textField wantsLayer="YES" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="fIC-dx-4lV" userLabel="Copyright">
+                                    <rect key="frame" x="194" y="62" width="272" height="16"/>
+                                    <textFieldCell key="cell" lineBreakMode="clipping" alignment="center" title="Copyright © 2019 Coofdy Labs" id="bow-M0-JTv">
+                                        <font key="font" metaFont="system"/>
+                                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                        <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                    </textFieldCell>
+                                </textField>
+                                <textField wantsLayer="YES" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" verticalCompressionResistancePriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="Y2V-lg-zjm" userLabel="Moonlight Stream Credits Link" customClass="LinkTextField">
+                                    <rect key="frame" x="194" y="24" width="272" height="34"/>
+                                    <constraints>
+                                        <constraint firstAttribute="height" constant="34" id="lnf-aE-ZJd"/>
+                                    </constraints>
+                                    <textFieldCell key="cell" truncatesLastVisibleLine="YES" alignment="center" title="Based on original Moonlight iOS project by Moonlight Stream" id="7fE-Pg-Eff">
+                                        <font key="font" metaFont="system"/>
+                                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                        <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                    </textFieldCell>
+                                </textField>
+                            </subviews>
+                            <constraints>
+                                <constraint firstItem="stN-27-Kd2" firstAttribute="centerX" secondItem="c8S-4z-oNh" secondAttribute="centerX" id="7gc-Ie-D2f"/>
+                                <constraint firstAttribute="bottom" secondItem="Y2V-lg-zjm" secondAttribute="bottom" constant="24" id="A6F-3m-wNY"/>
+                                <constraint firstAttribute="trailing" secondItem="c8S-4z-oNh" secondAttribute="trailing" constant="16" id="Frd-2X-R9r"/>
+                                <constraint firstItem="fIC-dx-4lV" firstAttribute="centerX" secondItem="c8S-4z-oNh" secondAttribute="centerX" id="L5c-ea-GZm"/>
+                                <constraint firstItem="Y2V-lg-zjm" firstAttribute="width" secondItem="c8S-4z-oNh" secondAttribute="width" id="Lnc-LS-9LT"/>
+                                <constraint firstItem="4v7-WK-Lvz" firstAttribute="width" secondItem="Qjc-iK-n84" secondAttribute="width" multiplier="1:3" id="Qbn-jA-g4V"/>
+                                <constraint firstItem="c8S-4z-oNh" firstAttribute="top" secondItem="Qjc-iK-n84" secondAttribute="top" constant="32" id="UHq-Ia-xU0"/>
+                                <constraint firstItem="c8S-4z-oNh" firstAttribute="leading" secondItem="4v7-WK-Lvz" secondAttribute="trailing" constant="16" id="YnY-rM-8Ie"/>
+                                <constraint firstItem="4v7-WK-Lvz" firstAttribute="height" secondItem="Qjc-iK-n84" secondAttribute="height" id="ZRU-ab-XPD"/>
+                                <constraint firstItem="4v7-WK-Lvz" firstAttribute="leading" secondItem="Qjc-iK-n84" secondAttribute="leading" constant="20" id="Zhf-t8-JKa"/>
+                                <constraint firstItem="Y2V-lg-zjm" firstAttribute="centerX" secondItem="c8S-4z-oNh" secondAttribute="centerX" id="bG0-pq-1g6"/>
+                                <constraint firstItem="4v7-WK-Lvz" firstAttribute="centerY" secondItem="Qjc-iK-n84" secondAttribute="centerY" id="bRb-Ot-exq"/>
+                                <constraint firstItem="fIC-dx-4lV" firstAttribute="width" secondItem="c8S-4z-oNh" secondAttribute="width" multiplier="1:1" id="dg6-88-KgM"/>
+                                <constraint firstItem="stN-27-Kd2" firstAttribute="width" secondItem="c8S-4z-oNh" secondAttribute="width" multiplier="1:1" id="v19-Se-rFx"/>
+                                <constraint firstItem="Y2V-lg-zjm" firstAttribute="top" secondItem="fIC-dx-4lV" secondAttribute="bottom" constant="4" id="vml-f5-lNT"/>
+                                <constraint firstItem="stN-27-Kd2" firstAttribute="top" secondItem="c8S-4z-oNh" secondAttribute="bottom" constant="16" id="wkw-bZ-6iy"/>
+                            </constraints>
+                        </visualEffectView>
+                    </subviews>
+                    <constraints>
+                        <constraint firstItem="Qjc-iK-n84" firstAttribute="leading" secondItem="QSm-xQ-RaS" secondAttribute="leading" id="Pne-9l-hWc"/>
+                        <constraint firstItem="Qjc-iK-n84" firstAttribute="top" secondItem="QSm-xQ-RaS" secondAttribute="top" id="Zni-ET-tkU"/>
+                        <constraint firstAttribute="trailing" secondItem="Qjc-iK-n84" secondAttribute="trailing" id="eC6-3o-6SR"/>
+                        <constraint firstAttribute="bottom" secondItem="Qjc-iK-n84" secondAttribute="bottom" id="jQR-XQ-1fd"/>
+                    </constraints>
+                </view>
+            </subviews>
+            <constraints>
+                <constraint firstAttribute="bottom" secondItem="QSm-xQ-RaS" secondAttribute="bottom" id="E5N-Gh-KO5"/>
+                <constraint firstItem="QSm-xQ-RaS" firstAttribute="leading" secondItem="c22-O7-iKe" secondAttribute="leading" id="UEF-EV-zQe"/>
+                <constraint firstAttribute="trailing" secondItem="QSm-xQ-RaS" secondAttribute="trailing" id="fry-A0-BLV"/>
+                <constraint firstItem="QSm-xQ-RaS" firstAttribute="top" secondItem="c22-O7-iKe" secondAttribute="top" id="mfH-al-HCn"/>
+            </constraints>
+            <point key="canvasLocation" x="-169" y="61"/>
+        </customView>
+    </objects>
+    <resources>
+        <image name="NSApplicationIcon" width="32" height="32"/>
+    </resources>
+</document>

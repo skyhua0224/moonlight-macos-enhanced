@@ -9,6 +9,7 @@
 #import "AppDelegateForAppKit.h"
 #import "DatabaseSingleton.h"
 #import "PreferencesViewController.h"
+#import "AboutViewController.h"
 #import "NSWindow+Moonlight.h"
 
 typedef enum : NSUInteger {
@@ -60,7 +61,12 @@ typedef enum : NSUInteger {
 - (IBAction)showAbout:(id)sender {
     if (self.aboutWC == nil) {
         self.aboutWC = [[NSWindowController alloc] initWithWindowNibName:@"AboutWindow"];
+        self.aboutWC.contentViewController = [[AboutViewController alloc] initWithNibName:@"AboutView" bundle:nil];
     }
+
+    self.aboutWC.window.frameAutosaveName = @"About Window";
+    [self.aboutWC.window moonlight_centerWindowOnFirstRun];
+    
     [self.aboutWC showWindow:nil];
     [self.aboutWC.window makeKeyAndOrderFront:nil];
 }

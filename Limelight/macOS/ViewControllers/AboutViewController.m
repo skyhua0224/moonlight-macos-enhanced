@@ -1,33 +1,34 @@
 //
-//  AboutWindow.m
+//  AboutViewController.m
 //  Moonlight for macOS
 //
 //  Created by Michael Kenny on 5/11/19.
 //  Copyright © 2019 Moonlight Game Streaming Project. All rights reserved.
 //
 
-#import "AboutWindow.h"
+#import "AboutViewController.h"
 #import "NSWindow+Moonlight.h"
 
-@interface AboutWindow ()
+@interface AboutViewController ()
 @property (weak) IBOutlet NSVisualEffectView *backgroundEffectView;
+@property (weak) IBOutlet NSImageView *appIconImageView;
 @property (weak) IBOutlet NSTextField *creditsTextFieldLink;
 @end
 
-@implementation AboutWindow
+@implementation AboutViewController
 
 #pragma mark - Lifecycle
 
-- (void)awakeFromNib {
-    [super awakeFromNib];
+- (void)viewDidLoad {
+    [super viewDidLoad];
 
     if (@available(macOS 11.0, *)) {
         self.backgroundEffectView.material = NSVisualEffectMaterialHUDWindow;
     }
 
-    self.frameAutosaveName = @"About Window";
-    [self moonlight_centerWindowOnFirstRun];
-
+    [self setPreferredContentSize:NSMakeSize(self.view.bounds.size.width, self.view.bounds.size.height)];
+  
+    self.appIconImageView.image = [NSApp applicationIconImage];
     self.creditsTextFieldLink.attributedStringValue = [self makeTextFieldLink:self.creditsTextFieldLink];
 }
 
