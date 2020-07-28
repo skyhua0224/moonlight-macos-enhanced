@@ -10,7 +10,7 @@
 #import "NSWindow+Moonlight.h"
 
 @interface AboutWindow ()
-@property (weak) IBOutlet NSImageView *appIconImageView;
+@property (weak) IBOutlet NSVisualEffectView *backgroundEffectView;
 @property (weak) IBOutlet NSTextField *creditsTextFieldLink;
 @end
 
@@ -21,10 +21,13 @@
 - (void)awakeFromNib {
     [super awakeFromNib];
 
+    if (@available(macOS 11.0, *)) {
+        self.backgroundEffectView.material = NSVisualEffectMaterialHUDWindow;
+    }
+
     self.frameAutosaveName = @"About Window";
     [self moonlight_centerWindowOnFirstRun];
 
-    self.appIconImageView.image = [NSApp applicationIconImage];
     self.creditsTextFieldLink.attributedStringValue = [self makeTextFieldLink:self.creditsTextFieldLink];
 }
 
