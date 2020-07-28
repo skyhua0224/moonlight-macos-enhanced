@@ -30,8 +30,6 @@
 
 @interface PreferencesViewController ()
 
-@property (weak) IBOutlet NSView *preferencesContentView;
-
 @property (weak) IBOutlet NSPopUpButton *framerateSelector;
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
 @property (weak) IBOutlet NSButton *shouldSyncCheckbox;
