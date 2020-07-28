@@ -67,6 +67,9 @@
     [super viewDidAppear];
     
     self.parentViewController.title = @"Moonlight";
+    if (@available(macOS 11.0, *)) {
+        self.view.window.subtitle = @"";
+    }
     
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
@@ -198,7 +201,7 @@
 #pragma mark - Helpers
 
 - (NSSearchField *)getSearchField {
-    return ((NSSearchField *)[self.view.window moonlight_toolbarItemForTag:42].view);
+    return [self.view.window moonlight_searchFieldInToolbar];
 }
 
 

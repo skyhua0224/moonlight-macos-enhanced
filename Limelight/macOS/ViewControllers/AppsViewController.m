@@ -87,6 +87,9 @@ const CGFloat scaleBase = 1.125;
     [super viewDidAppear];
     
     self.parentViewController.title = self.host.name;
+    if (@available(macOS 11.0, *)) {
+        self.view.window.subtitle = self.host.activeAddress;
+    }
     [self.view.window makeFirstResponder:self.collectionView];
     
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
@@ -373,7 +376,7 @@ const CGFloat scaleBase = 1.125;
 #pragma mark - Helpers
 
 - (NSSearchField *)getSearchField {
-    return ((NSSearchField *)[self.view.window moonlight_toolbarItemForTag:42].view);
+    return [self.view.window moonlight_searchFieldInToolbar];
 }
 
 - (void)updateColors {

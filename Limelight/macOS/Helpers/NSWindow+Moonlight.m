@@ -32,10 +32,21 @@
     return nil;
 }
 
-- (NSToolbarItem *)moonlight_toolbarItemForTag:(NSInteger)tag {
+- (NSToolbarItem *)moonlight_toolbarItemForIdentifier:(NSToolbarItemIdentifier)identifier {
     for (NSToolbarItem *item in self.toolbar.items) {
-        if (item.tag == tag) {
+        if ([identifier isEqualToString:item.itemIdentifier]) {
             return item;
+        }
+    }
+    return nil;
+}
+
+- (NSSearchField *)moonlight_searchFieldInToolbar {
+    for (NSToolbarItem *item in self.toolbar.items) {
+        if (@available(macOS 11.0, *)) {
+            if ([item isKindOfClass:NSSearchToolbarItem.class]) {
+                return ((NSSearchToolbarItem *)item).searchField;
+            }
         }
     }
     return nil;

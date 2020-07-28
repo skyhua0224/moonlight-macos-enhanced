@@ -12,6 +12,7 @@
 
 - (void)moonlight_centerWindowOnFirstRun;
 - (NSToolbarItem *)moonlight_toolbarItemForAction:(SEL)action;
-- (NSToolbarItem *)moonlight_toolbarItemForTag:(NSInteger)tag;
+- (NSToolbarItem *)moonlight_toolbarItemForIdentifier:(NSToolbarItemIdentifier)identifier;
+- (NSSearchField *)moonlight_searchFieldInToolbar;
 
 @end
