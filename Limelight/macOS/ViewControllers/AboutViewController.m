@@ -23,7 +23,7 @@
     [super viewDidLoad];
 
     if (@available(macOS 11.0, *)) {
-        self.backgroundEffectView.material = NSVisualEffectMaterialHUDWindow;
+        self.backgroundEffectView.material = NSVisualEffectMaterialMenu;
     }
 
     [self setPreferredContentSize:NSMakeSize(self.view.bounds.size.width, self.view.bounds.size.height)];
