@@ -58,6 +58,8 @@ const CGFloat scaleBase = 1.125;
     
     self.collectionView.dataSource = self;
 
+    self.apps = @[];
+
     [self updateColors];
     
     self.itemScale = [[NSUserDefaults standardUserDefaults] floatForKey:@"itemScale"];
@@ -66,7 +68,6 @@ const CGFloat scaleBase = 1.125;
     }
     [self updateCollectionViewItemSize];
 
-    self.apps = [NSArray array];
     [self loadApps];
     
     self.runningApp = [self findRunningApp:self.host];
@@ -102,6 +103,8 @@ const CGFloat scaleBase = 1.125;
     [super viewWillDisappear];
     
     self.appManager = nil;
+    self.apps = @[];
+    [self.collectionView reloadData];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
