@@ -62,17 +62,17 @@
 - (void)viewWillAppear {
     [super viewWillAppear];
     
+    self.parentViewController.title = @"Moonlight";
+    if (@available(macOS 11.0, *)) {
+        self.parentViewController.view.window.subtitle = [Helpers versionNumberString];
+    }
+
     [self updateHostCellsStatusStates];
 }
 
 - (void)viewDidAppear {
     [super viewDidAppear];
-    
-    self.parentViewController.title = @"Moonlight";
-    if (@available(macOS 11.0, *)) {
-        self.view.window.subtitle = [Helpers versionNumberString];
-    }
-    
+        
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
