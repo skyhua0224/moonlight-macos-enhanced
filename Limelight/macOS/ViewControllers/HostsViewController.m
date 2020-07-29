@@ -67,20 +67,20 @@
         self.parentViewController.view.window.subtitle = [Helpers versionNumberString];
     }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wundeclared-selector"
+    [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
+    [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(addHostButtonClicked:)].enabled = NO;
+#pragma clang diagnostic pop
+    
+    self.getSearchField.delegate = self;
+    self.getSearchField.placeholderString = @"Filter Hosts";
+
     [self updateHostCellsStatusStates];
 }
 
 - (void)viewDidAppear {
     [super viewDidAppear];
-        
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wundeclared-selector"
-    [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
-    [self.view.window moonlight_toolbarItemForAction:@selector(addHostButtonClicked:)].enabled = NO;
-#pragma clang diagnostic pop
-    
-    self.getSearchField.delegate = self;
-    self.getSearchField.placeholderString = @"Filter Hosts";
     
     [self.discMan startDiscovery];
 }
@@ -207,7 +207,7 @@
 #pragma mark - Helpers
 
 - (NSSearchField *)getSearchField {
-    return [self.view.window moonlight_searchFieldInToolbar];
+    return [self.parentViewController.view.window moonlight_searchFieldInToolbar];
 }
 
 
