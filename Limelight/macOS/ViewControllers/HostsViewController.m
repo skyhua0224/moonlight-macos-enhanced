@@ -13,6 +13,7 @@
 #import "AlertPresenter.h"
 #import "NSWindow+Moonlight.h"
 #import "NSCollectionView+Moonlight.h"
+#import "Helpers.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -68,7 +69,7 @@
     
     self.parentViewController.title = @"Moonlight";
     if (@available(macOS 11.0, *)) {
-        self.view.window.subtitle = @"";
+        self.view.window.subtitle = [Helpers versionNumberString];
     }
     
 #pragma clang diagnostic push

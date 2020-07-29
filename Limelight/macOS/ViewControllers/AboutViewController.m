@@ -8,10 +8,12 @@
 
 #import "AboutViewController.h"
 #import "NSWindow+Moonlight.h"
+#import "Helpers.h"
 
 @interface AboutViewController ()
 @property (weak) IBOutlet NSVisualEffectView *backgroundEffectView;
 @property (weak) IBOutlet NSImageView *appIconImageView;
+@property (weak) IBOutlet NSTextField *versionNumberTextField;
 @property (weak) IBOutlet NSTextField *creditsTextFieldLink;
 @end
 
@@ -29,6 +31,7 @@
     [self setPreferredContentSize:NSMakeSize(self.view.bounds.size.width, self.view.bounds.size.height)];
   
     self.appIconImageView.image = [NSApp applicationIconImage];
+    self.versionNumberTextField.stringValue = [Helpers versionNumberString];
     self.creditsTextFieldLink.attributedStringValue = [self makeTextFieldLink:self.creditsTextFieldLink];
 }
 

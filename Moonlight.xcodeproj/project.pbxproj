@@ -60,6 +60,7 @@
 		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
 		4C65704A23EBE9F4000D1601 /* PreferencesView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* PreferencesView.xib */; };
 		4C65704C23EBEE66000D1601 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
+		4C682BD124D1227600A70C44 /* Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C682BD024D1227600A70C44 /* Helpers.m */; };
 		4C7CB9162446A982002B8D4E /* Limelight.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB90B2446A981002B8D4E /* Limelight.xcdatamodeld */; };
 		4C7CB91E2446E05D002B8D4E /* ConnectionHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB91D2446E05D002B8D4E /* ConnectionHelper.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
@@ -143,6 +144,8 @@
 		4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LinkTextField.m; sourceTree = "<group>"; };
 		4C65704923EBE9F4000D1601 /* PreferencesView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = PreferencesView.xib; sourceTree = "<group>"; };
 		4C65704B23EBEB3D000D1601 /* PreferencesViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PreferencesViewController.h; sourceTree = "<group>"; };
+		4C682BCF24D1227600A70C44 /* Helpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Helpers.h; sourceTree = "<group>"; };
+		4C682BD024D1227600A70C44 /* Helpers.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Helpers.m; sourceTree = "<group>"; };
 		4C7CB90C2446A981002B8D4E /* Moonlight v1.4.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.4.xcdatamodel"; sourceTree = "<group>"; };
 		4C7CB90D2446A981002B8D4E /* Limelight.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Limelight.xcdatamodel; sourceTree = "<group>"; };
 		4C7CB90E2446A981002B8D4E /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
@@ -367,6 +370,8 @@
 				4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */,
 				4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */,
 				4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */,
+				4C682BCF24D1227600A70C44 /* Helpers.h */,
+				4C682BD024D1227600A70C44 /* Helpers.m */,
 				4C819438202D75EF0023F308 /* NSCollectionView+Moonlight.h */,
 				4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */,
 				4C84385821FE9453000A77CD /* NSApplication+Moonlight.h */,
@@ -833,6 +838,7 @@
 				4C7E0A761FECBFFD00684411 /* Sources */,
 				4C7E0A771FECBFFD00684411 /* Frameworks */,
 				4C7E0A781FECBFFD00684411 /* Resources */,
+				4C682BD324D1264100A70C44 /* Set Build Number */,
 			);
 			buildRules = (
 			);
@@ -929,6 +935,27 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		4C682BD324D1264100A70C44 /* Set Build Number */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Set Build Number";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "git=`sh /etc/profile; which git`\nbundleVersion=`\"$git\" rev-list --all |wc -l`\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $bundleVersion\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		4C7E0A761FECBFFD00684411 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -990,6 +1017,7 @@
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
 				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
 				4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */,
+				4C682BD124D1227600A70C44 /* Helpers.m in Sources */,
 				4C38E8021FEE08B1000425CD /* TemporarySettings.m in Sources */,
 				4C38E8031FEE08BE000425CD /* MDNSManager.m in Sources */,
 			);

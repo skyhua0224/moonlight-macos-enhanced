@@ -11,6 +11,7 @@
                 <outlet property="appIconImageView" destination="4v7-WK-Lvz" id="Xfi-WJ-Btk"/>
                 <outlet property="backgroundEffectView" destination="Qjc-iK-n84" id="meF-Y4-7Tu"/>
                 <outlet property="creditsTextFieldLink" destination="Y2V-lg-zjm" id="av4-zv-0jr"/>
+                <outlet property="versionNumberTextField" destination="stN-27-Kd2" id="DPX-5q-sJS"/>
                 <outlet property="view" destination="c22-O7-iKe" id="g3z-tA-AzQ"/>
             </connections>
         </customObject>
