@@ -100,14 +100,6 @@ const CGFloat scaleBase = 1.125;
     self.getSearchField.placeholderString = @"Filter Apps";
 }
 
-- (void)viewWillDisappear {
-    [super viewWillDisappear];
-    
-    self.appManager = nil;
-    self.apps = @[];
-    [self.collectionView reloadData];
-}
-
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
     if ([keyPath isEqualToString:@"effectiveAppearance"]) {
         [self updateColors];
@@ -128,6 +120,10 @@ const CGFloat scaleBase = 1.125;
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
     [self.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
     [self removeFromParentViewController];
+    
+    self.appManager = nil;
+    self.apps = @[];
+    [self.collectionView reloadData];
 }
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
