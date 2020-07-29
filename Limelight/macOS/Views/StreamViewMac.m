@@ -20,7 +20,10 @@
     if (self) {
         self.spinner = [[NSProgressIndicator alloc] init];
         self.spinner.style = NSProgressIndicatorStyleSpinning;
-        self.spinner.appearance = [NSAppearance appearanceNamed:@"WhiteSpinner"];
+        if (@available(macOS 10.14, *)) {
+        } else {
+            self.spinner.appearance = [NSAppearance appearanceNamed:@"WhiteSpinner"];
+        }
         [self.spinner startAnimation:self];
         [self addSubview:self.spinner];
         self.spinner.translatesAutoresizingMaskIntoConstraints = NO;
