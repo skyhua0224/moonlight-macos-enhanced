@@ -48,7 +48,8 @@
     
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
-    
+    [self.collectionView registerNib:[[NSNib alloc] initWithNibNamed:@"HostCell" bundle:nil] forItemWithIdentifier:@"HostCell"];
+
     self.hosts = [NSArray array];
     
     [self prepareDiscovery];
