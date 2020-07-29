@@ -173,9 +173,9 @@ const CGFloat scaleBase = 1.125;
     NSCollectionViewFlowLayout *flowLayout = (NSCollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
 
     flowLayout.itemSize = NSMakeSize((int)(90 * self.itemScale + 6 + 2), (int)(128 * self.itemScale + 6 + 2));
-        [flowLayout invalidateLayout];
-        
-        [[NSUserDefaults standardUserDefaults] setFloat:self.itemScale forKey:@"itemScale"];
+    [flowLayout invalidateLayout];
+    
+    [[NSUserDefaults standardUserDefaults] setFloat:self.itemScale forKey:@"itemScale"];
 }
 
 - (IBAction)increaseItemSize:(id)sender {
