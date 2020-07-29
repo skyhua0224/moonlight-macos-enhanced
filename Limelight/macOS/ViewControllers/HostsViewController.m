@@ -74,6 +74,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
     [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
+    [self.view.window moonlight_toolbarItemForAction:@selector(addHostButtonClicked:)].enabled = NO;
 #pragma clang diagnostic pop
     
     self.getSearchField.delegate = self;
@@ -137,6 +138,9 @@
         TemporaryHost *host = self.hosts[self.collectionView.selectionIndexes.firstIndex];
         [self openHost:host];
     }
+}
+
+- (IBAction)addHostButtonClicked:(id)sender {
 }
 
 

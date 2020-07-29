@@ -60,7 +60,10 @@
     
     if (@available(macOS 11.0, *)) {
         NSToolbarItem *preferencesToolbarItem = [window moonlight_toolbarItemForIdentifier:@"PreferencesToolbarItem"];
-        preferencesToolbarItem.image = [NSImage imageWithSystemSymbolName:@"gear" accessibilityDescription:nil];
+        NSSegmentedControl *preferencesSegmentedControl = (NSSegmentedControl *)preferencesToolbarItem.view;
+
+        NSImageSymbolConfiguration *imgConfig = [NSImageSymbolConfiguration configurationWithPointSize:13 weight:NSFontWeightMedium scale:NSImageSymbolScaleLarge];
+        [preferencesSegmentedControl setImage:[[NSImage imageWithSystemSymbolName:@"gear" accessibilityDescription:nil] imageWithSymbolConfiguration:imgConfig] forSegment:0];
     }
 }
 
