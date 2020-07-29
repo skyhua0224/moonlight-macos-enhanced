@@ -26,6 +26,7 @@
     [self addChildViewController:hostsVC];
 
     if (@available(macOS 11.0, *)) {
+        [self.titleContainer removeFromSuperview];
         [self.view addSubview:hostsVC.view];
     } else {
         [self.view addSubview:hostsVC.view positioned:NSWindowBelow relativeTo:self.titleContainer];
