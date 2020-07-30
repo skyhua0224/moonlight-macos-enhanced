@@ -95,12 +95,15 @@
     AppsViewController *appsVC = [self.storyboard instantiateControllerWithIdentifier:@"appsVC"];
     appsVC.host = host;
     appsVC.hostsVC = self;
+    
     [self.parentViewController addChildViewController:appsVC];
     [self.parentViewController.view addSubview:appsVC.view];
-    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
     
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
+    
+    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:nil];
+    
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {

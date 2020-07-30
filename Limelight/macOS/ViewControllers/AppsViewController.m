@@ -85,19 +85,24 @@ const CGFloat scaleBase = 1.125;
     }
 }
 
-- (void)viewDidAppear {
-    [super viewDidAppear];
+- (void)viewWillAppear {
+    [super viewWillAppear];
     
     self.parentViewController.title = self.host.name;
     if (@available(macOS 11.0, *)) {
-        self.view.window.subtitle = self.host.activeAddress;
+        self.parentViewController.view.window.subtitle = self.host.activeAddress;
     }
-    [self.view.window makeFirstResponder:self.collectionView];
     
-    [self.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
+    [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
 
     self.getSearchField.delegate = self;
     self.getSearchField.placeholderString = @"Filter Apps";
+}
+
+- (void)viewDidAppear {
+    [super viewDidAppear];
+    
+    [self.parentViewController.view.window makeFirstResponder:self.collectionView];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
@@ -117,13 +122,16 @@ const CGFloat scaleBase = 1.125;
         [[NSApplication sharedApplication] removeObserver:self forKeyPath:@"effectiveAppearance"];
     }
     
-    [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionCrossfade completionHandler:nil];
-    [self.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
-    [self removeFromParentViewController];
-    
-    self.appManager = nil;
-    self.apps = @[];
-    [self.collectionView reloadData];
+    [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionSlideRight completionHandler:^{
+        [self.parentViewController.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
+        
+        [self.view removeFromSuperview];
+        [self removeFromParentViewController];
+        
+        self.appManager = nil;
+        self.apps = @[];
+        [self.collectionView reloadData];
+    }];
 }
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
@@ -376,7 +384,7 @@ const CGFloat scaleBase = 1.125;
 #pragma mark - Helpers
 
 - (NSSearchField *)getSearchField {
-    return [self.view.window moonlight_searchFieldInToolbar];
+    return [self.parentViewController.view.window moonlight_searchFieldInToolbar];
 }
 
 - (void)updateColors {
