@@ -10,6 +10,8 @@
 
 @interface Helpers : NSObject
 
++ (NSWindow *)getMainWindow;
+
 + (NSString *)versionNumberString;
 + (NSString *)copyrightString;
 

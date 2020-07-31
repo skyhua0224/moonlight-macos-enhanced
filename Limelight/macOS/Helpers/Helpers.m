@@ -10,6 +10,17 @@
 
 @implementation Helpers
 
++ (NSWindow *)getMainWindow {
+    for (NSWindow *window in [NSApplication sharedApplication].windows) {
+        if ([window.identifier isEqualToString:@"MainWindow"]) {
+            return window;
+        }
+    }
+    
+    return nil;
+}
+
+
 + (NSString *)versionNumberString {
     NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
     NSString *version = [info objectForKey:@"CFBundleShortVersionString"];

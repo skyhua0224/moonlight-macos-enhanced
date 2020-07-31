@@ -48,7 +48,7 @@
                 return ((NSSearchToolbarItem *)item).searchField;
             }
         } else {
-            return ((NSSearchField *)[self moonlight_toolbarItemForIdentifier:@"SearchToolbarItem"].view);
+            return ((NSSearchField *)[self moonlight_toolbarItemForIdentifier:@"OldSearchToolbarItem"].view);
         }
     }
     return nil;

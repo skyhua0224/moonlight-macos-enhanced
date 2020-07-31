@@ -9,6 +9,7 @@
 #import "ContainerViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "BackgroundColorView.h"
+#import "Helpers.h"
 
 @interface ContainerViewController () <NSToolbarDelegate>
 @property (weak) IBOutlet BackgroundColorView *titleContainer;
@@ -44,6 +45,19 @@
     }
 }
 
+- (void)viewWillAppear {
+    [super viewWillAppear];
+    
+    NSToolbar *toolbar = [Helpers getMainWindow].toolbar;
+    toolbar.delegate = self;
+    
+    if (@available(macOS 11.0, *)) {
+        [toolbar insertItemWithItemIdentifier:@"NewSearchToolbarItem" atIndex:toolbar.items.count];
+    } else {
+        [toolbar insertItemWithItemIdentifier:@"OldSearchToolbarItem" atIndex:toolbar.items.count];
+    }
+}
+
 - (void)viewDidAppear {
     [super viewDidAppear];
 
@@ -56,9 +70,6 @@
         [window setTitleVisibility:NSWindowTitleVisible];
     }
 
-    NSToolbar *toolbar = window.toolbar;
-    toolbar.delegate = self;
-    
     if (@available(macOS 11.0, *)) {
         NSToolbarItem *preferencesToolbarItem = [window moonlight_toolbarItemForIdentifier:@"PreferencesToolbarItem"];
         NSSegmentedControl *preferencesSegmentedControl = (NSSegmentedControl *)preferencesToolbarItem.view;
@@ -74,6 +85,23 @@
         ((NSTextField *)self.titleContainer.subviews.firstObject).stringValue = title;
     }
     self.view.window.title = title;
+}
+
+
+- (NSToolbarItem *)toolbar:(NSToolbar *)toolbar itemForItemIdentifier:(NSToolbarItemIdentifier)itemIdentifier willBeInsertedIntoToolbar:(BOOL)flag {
+    if (@available(macOS 11.0, *)) {
+        NSSearchToolbarItem *newSearchItem = [[NSSearchToolbarItem alloc] initWithItemIdentifier:@"NewSearchToolbarItem"];
+        return newSearchItem;
+    } else {
+        NSToolbarItem *OldSearchItem = [[NSToolbarItem alloc] initWithItemIdentifier:@"OldSearchToolbarItem"];
+        OldSearchItem.minSize = NSMakeSize(96, 22);
+        OldSearchItem.maxSize = NSMakeSize(256, 22);
+        
+        NSSearchField *searchField = [[NSSearchField alloc] init];
+        [OldSearchItem setView:searchField];
+        
+        return OldSearchItem;;
+    }
 }
 
 @end
