@@ -14,6 +14,7 @@
 @property (weak) IBOutlet NSVisualEffectView *backgroundEffectView;
 @property (weak) IBOutlet NSImageView *appIconImageView;
 @property (weak) IBOutlet NSTextField *versionNumberTextField;
+@property (weak) IBOutlet NSTextField *copyrightTextField;
 @property (weak) IBOutlet NSTextField *creditsTextFieldLink;
 @end
 
@@ -32,6 +33,7 @@
   
     self.appIconImageView.image = [NSApp applicationIconImage];
     self.versionNumberTextField.stringValue = [Helpers versionNumberString];
+    self.copyrightTextField.stringValue = [Helpers copyrightString];
     self.creditsTextFieldLink.attributedStringValue = [self makeTextFieldLink:self.creditsTextFieldLink];
 }
 

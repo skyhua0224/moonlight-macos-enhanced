@@ -18,4 +18,11 @@
     return [NSString stringWithFormat:@"Version %@ (%@)", version, buildNumber];
 }
 
++ (NSString *)copyrightString {
+    NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
+    NSString *copyright = [info objectForKey:@"NSHumanReadableCopyright"];
+    
+    return copyright;
+}
+
 @end

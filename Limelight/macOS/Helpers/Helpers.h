@@ -11,5 +11,6 @@
 @interface Helpers : NSObject
 
 + (NSString *)versionNumberString;
++ (NSString *)copyrightString;
 
 @end
