@@ -51,10 +51,15 @@
     NSToolbar *toolbar = [Helpers getMainWindow].toolbar;
     toolbar.delegate = self;
     
-    if (@available(macOS 11.0, *)) {
-        [toolbar insertItemWithItemIdentifier:@"NewSearchToolbarItem" atIndex:toolbar.items.count];
+    NSString *searchToolbarItemIdentifier;
+    if (@available(macOS 11.0, *))  {
+        searchToolbarItemIdentifier = @"NewSearchToolbarItem";
     } else {
-        [toolbar insertItemWithItemIdentifier:@"OldSearchToolbarItem" atIndex:toolbar.items.count];
+        searchToolbarItemIdentifier = @"OldSearchToolbarItem";
+    }
+    
+    if (![toolbar.items.lastObject.itemIdentifier isEqualToString:searchToolbarItemIdentifier]) {
+        [toolbar insertItemWithItemIdentifier:searchToolbarItemIdentifier atIndex:toolbar.items.count];
     }
 }
 
