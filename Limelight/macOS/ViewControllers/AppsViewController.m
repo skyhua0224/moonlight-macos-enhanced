@@ -61,8 +61,6 @@ const CGFloat scaleBase = 1.125;
 
     self.apps = @[];
 
-    [self updateColors];
-    
     self.itemScale = [[NSUserDefaults standardUserDefaults] floatForKey:@"itemScale"];
     if (self.itemScale == 0) {
         self.itemScale = pow(scaleBase, 2);
@@ -107,8 +105,6 @@ const CGFloat scaleBase = 1.125;
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
     if ([keyPath isEqualToString:@"effectiveAppearance"]) {
-        [self updateColors];
-        
         for (int i = 0; i < self.apps.count; i++) {
             AppCell *cell = (AppCell *)[self.collectionView itemAtIndex:i];
             [cell updateSelectedState:cell.selected];
@@ -385,35 +381,6 @@ const CGFloat scaleBase = 1.125;
 
 - (NSSearchField *)getSearchField {
     return [self.parentViewController.view.window moonlight_searchFieldInToolbar];
-}
-
-- (void)updateColors {
-    NSColor *backgroundColor = [NSColor controlBackgroundColor];
-    
-    if (@available(macOS 11.0, *)) {
-
-        self.collectionView.enclosingScrollView.backgroundColor = backgroundColor;
-
-        NSMutableArray<NSColor *> *backgroundColors = [self.collectionView.backgroundColors mutableCopy];
-        backgroundColors[0] = backgroundColor;
-        
-        self.collectionView.backgroundColors = [backgroundColors copy];
-                
-    } else if (@available(macOS 10.14, *)) {
-        
-        if ([NSApplication moonlight_isDarkAppearance]) {
-            backgroundColor = [NSColor windowBackgroundColor];
-        }
-    }
-
-    // Only applies on macOSs older than 11.0
-    // Set containerView subclass's background color, because collectionView's backgroundColors property is unreliable.
-    // In the storyboard, collectionView's first backgroundColors item is set to 0 alpha.
-    
-    // * In macOS 11.0, I set the scrollView's background color, collectionView's first background color, and the containerView's background color.
-    // This is to make sure you see the same color when rubber banding the scrollView, and see the expected color underneath the toolbar's visualEffectView.
-    
-    ((BackgroundColorView *)self.parentViewController.view).backgroundColor = backgroundColor;
 }
 
 - (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {

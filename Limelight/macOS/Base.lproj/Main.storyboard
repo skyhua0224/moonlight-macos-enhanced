@@ -448,7 +448,7 @@ DQ
                                 <toolbarItem implicitItemIdentifier="DF5251A7-38A2-46EE-844C-B78A58198848" explicitItemIdentifier="BackToolbarItem" label="Back" paletteLabel="Back" toolTip="Back" sizingBehavior="auto" navigational="YES" id="2mt-bL-D2g">
                                     <segmentedControl key="view" verticalHuggingPriority="750" springLoaded="YES" id="e7z-ib-aC9">
                                         <rect key="frame" x="0.0" y="14" width="40" height="26"/>
-                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <autoresizingMask key="autoresizingMask"/>
                                         <segmentedCell key="cell" borderStyle="border" alignment="left" style="capsule" trackingMode="momentary" id="elu-gB-GOU">
                                             <font key="font" metaFont="system"/>
                                             <segments>
@@ -463,7 +463,7 @@ DQ
                                 <toolbarItem implicitItemIdentifier="CA5B61DD-EF6F-4A21-A354-B8511F9598EF" explicitItemIdentifier="AddHostToolbarItem" label="Add Host" paletteLabel="Add Host" toolTip="Add Host" sizingBehavior="auto" id="rP0-dD-McP" userLabel="Add Host">
                                     <segmentedControl key="view" verticalHuggingPriority="750" springLoaded="YES" id="WSa-bc-gpL">
                                         <rect key="frame" x="8" y="14" width="40" height="26"/>
-                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <autoresizingMask key="autoresizingMask"/>
                                         <segmentedCell key="cell" borderStyle="border" alignment="left" style="capsule" trackingMode="momentary" id="U5k-FM-fk5">
                                             <font key="font" metaFont="system"/>
                                             <segments>
@@ -479,7 +479,7 @@ DQ
                                 <toolbarItem implicitItemIdentifier="80FC4FF8-110E-492B-9133-F6953F736443" explicitItemIdentifier="PreferencesToolbarItem" label="Preferences" paletteLabel="Preferences" toolTip="Preferences" sizingBehavior="auto" id="kHr-CS-QsW" userLabel="Preferences">
                                     <segmentedControl key="view" verticalHuggingPriority="750" springLoaded="YES" id="dia-sd-YfW">
                                         <rect key="frame" x="15" y="14" width="40" height="26"/>
-                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <autoresizingMask key="autoresizingMask"/>
                                         <segmentedCell key="cell" borderStyle="border" alignment="left" style="capsule" trackingMode="momentary" id="5ME-hs-ooe">
                                             <font key="font" metaFont="system"/>
                                             <segments>
@@ -579,7 +579,7 @@ DQ
         <scene sceneID="oK5-9I-bcH">
             <objects>
                 <viewController id="46Z-Xx-oCa" customClass="ContainerViewController" sceneMemberID="viewController">
-                    <view key="view" id="P1D-TY-v3M" customClass="BackgroundColorView">
+                    <view key="view" id="P1D-TY-v3M">
                         <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
@@ -626,7 +626,7 @@ DQ
                         <subviews>
                             <scrollView wantsLayer="YES" borderType="none" autohidesScrollers="YES" horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="QvP-KV-Z4z">
                                 <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
-                                <clipView key="contentView" drawsBackground="NO" id="OX6-oz-tsS">
+                                <clipView key="contentView" id="OX6-oz-tsS">
                                     <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
@@ -637,9 +637,10 @@ DQ
                                                 <size key="itemSize" width="96" height="144"/>
                                                 <edgeInsets key="sectionInset" left="16" right="16" top="28" bottom="28"/>
                                             </collectionViewFlowLayout>
-                                            <color key="primaryBackgroundColor" white="1" alpha="0.0" colorSpace="calibratedWhite"/>
+                                            <color key="primaryBackgroundColor" name="windowBackgroundColor" catalog="System" colorSpace="catalog"/>
                                         </collectionView>
                                     </subviews>
+                                    <color key="backgroundColor" name="windowBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </clipView>
                                 <scroller key="horizontalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="9Zi-dy-efy">
                                     <rect key="frame" x="1" y="283" width="448" height="16"/>
@@ -682,7 +683,7 @@ DQ
         </scene>
     </scenes>
     <resources>
-        <image name="NSAddTemplate" width="14" height="13"/>
+        <image name="NSAddTemplate" width="15" height="13"/>
         <image name="NSLeftFacingTriangleTemplate" width="10" height="14"/>
         <image name="PreferencesIcon" width="32" height="32"/>
     </resources>
