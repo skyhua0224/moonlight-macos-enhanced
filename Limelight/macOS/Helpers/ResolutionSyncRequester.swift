@@ -17,6 +17,8 @@ class ResolutionSyncRequester: NSObject {
         if disableMouseAcceleration {
             Self.disableMouseAcceleration(for: host)
         }
+        
+        Self.setScrollLines(for: host, lines: 1)
 
         let enabled = UserDefaults.standard.bool(forKey: "shouldSync")
         if !enabled {
@@ -37,14 +39,18 @@ class ResolutionSyncRequester: NSObject {
         ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/reset")!)
     }
 
-    @objc static public func setRefreshRate(for host: String, refreshRate: Int) {
+    static private func setRefreshRate(for host: String, refreshRate: Int) {
         ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setRefreshRate?\(refreshRate)")!)
     }
 
-    @objc static public func disableMouseAcceleration(for host: String) {
+    static private func disableMouseAcceleration(for host: String) {
         ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/disableMouseAcceleration")!)
     }
-    
+
+    static private func setScrollLines(for host: String, lines: Int) {
+        ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setScrollLines?\(lines)")!)
+    }
+
     private static func makeRequest(_ url: URL) {
 
         let task = URLSession.shared.dataTask(with: url) {(data, response, error) in
