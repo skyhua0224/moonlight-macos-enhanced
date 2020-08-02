@@ -356,7 +356,7 @@
 }
 
 - (void)connectionStarted {
-    [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress];
+    [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:60];
 
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;

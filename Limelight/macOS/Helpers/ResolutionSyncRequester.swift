@@ -12,7 +12,7 @@ class ResolutionSyncRequester: NSObject {
     
     static let port = 8080
     
-    @objc static public func setResolution(for host: String) {
+    @objc static public func setResolution(for host: String, refreshRate: Int) {
         let disableMouseAcceleration = UserDefaults.standard.bool(forKey: "disablePointerPrecision")
         if disableMouseAcceleration {
             Self.disableMouseAcceleration(for: host)
@@ -20,14 +20,14 @@ class ResolutionSyncRequester: NSObject {
 
         let enabled = UserDefaults.standard.bool(forKey: "shouldSync")
         if !enabled {
-            Self.setRefreshRate(for: host)
+            Self.setRefreshRate(for: host, refreshRate: refreshRate)
             return
         }
         
         let width = UserDefaults.standard.integer(forKey: "syncWidth")
         let height = UserDefaults.standard.integer(forKey: "syncHeight")
 
-        if let url = URL(string: "http://\(host):\(port)/resolutionsync/set?\(width)&\(height)&\(60)") {
+        if let url = URL(string: "http://\(host):\(port)/resolutionsync/set?\(width)&\(height)&\(refreshRate)") {
             ResolutionSyncRequester.makeRequest(url)
             print("ResolutionSync URL: \(url.absoluteString)")
         }
@@ -37,8 +37,8 @@ class ResolutionSyncRequester: NSObject {
         ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/reset")!)
     }
 
-    @objc static public func setRefreshRate(for host: String) {
-        ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setRefreshRate?\(60)")!)
+    @objc static public func setRefreshRate(for host: String, refreshRate: Int) {
+        ResolutionSyncRequester.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setRefreshRate?\(refreshRate)")!)
     }
 
     @objc static public func disableMouseAcceleration(for host: String) {
