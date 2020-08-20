@@ -6,7 +6,7 @@
 //  Copyright © 2020 Moonlight Game Streaming Project. All rights reserved.
 //
 
-#import <Foundation/Foundation.h>
+@import Cocoa;
 
 @interface Helpers : NSObject
 
