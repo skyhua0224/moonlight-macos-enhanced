@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="17140" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="B8D-0N-5wS">
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="17154" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="B8D-0N-5wS">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17140"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17154"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -444,58 +444,52 @@ DQ
                         <rect key="screenRect" x="0.0" y="0.0" width="1680" height="1027"/>
                         <toolbar key="toolbar" implicitIdentifier="A60715D8-1F2C-47E5-9F9A-740F642B3D2F" autosavesConfiguration="NO" allowsUserCustomization="NO" displayMode="iconOnly" sizeMode="regular" id="3hJ-rw-Qjt">
                             <allowedToolbarItems>
-                                <toolbarItem implicitItemIdentifier="DF5251A7-38A2-46EE-844C-B78A58198848" explicitItemIdentifier="BackToolbarItem" label="Back" paletteLabel="Back" toolTip="Back" sizingBehavior="auto" navigational="YES" id="2mt-bL-D2g">
-                                    <segmentedControl key="view" verticalHuggingPriority="750" springLoaded="YES" id="e7z-ib-aC9">
-                                        <rect key="frame" x="0.0" y="14" width="38" height="23"/>
-                                        <autoresizingMask key="autoresizingMask"/>
-                                        <segmentedCell key="cell" borderStyle="border" alignment="left" style="capsule" trackingMode="momentary" id="elu-gB-GOU">
+                                <toolbarItem implicitItemIdentifier="42B48997-D762-4496-B238-914561D9F2DA" explicitItemIdentifier="BackToolbarItem" label="Back" paletteLabel="Back" toolTip="Back" image="NSLeftFacingTriangleTemplate" sizingBehavior="auto" navigational="YES" id="acz-Dh-U70">
+                                    <button key="view" verticalHuggingPriority="750" id="F3n-81-eHQ">
+                                        <rect key="frame" x="4" y="14" width="25" height="25"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="NSLeftFacingTriangleTemplate" imagePosition="only" alignment="center" controlSize="large" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="Ald-vP-dX8">
+                                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
-                                            <segments>
-                                                <segment image="NSLeftFacingTriangleTemplate" width="32"/>
-                                            </segments>
-                                        </segmentedCell>
-                                    </segmentedControl>
+                                        </buttonCell>
+                                    </button>
                                     <connections>
-                                        <action selector="backButtonClicked:" target="Oky-zY-oP4" id="rMT-Br-yCb"/>
+                                        <action selector="backButtonClicked:" target="Oky-zY-oP4" id="fau-zm-Q2N"/>
                                     </connections>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="CA5B61DD-EF6F-4A21-A354-B8511F9598EF" explicitItemIdentifier="AddHostToolbarItem" label="Add Host" paletteLabel="Add Host" toolTip="Add Host" sizingBehavior="auto" id="rP0-dD-McP" userLabel="Add Host">
-                                    <segmentedControl key="view" verticalHuggingPriority="750" springLoaded="YES" id="WSa-bc-gpL">
-                                        <rect key="frame" x="9" y="14" width="38" height="23"/>
-                                        <autoresizingMask key="autoresizingMask"/>
-                                        <segmentedCell key="cell" borderStyle="border" alignment="left" style="capsule" trackingMode="momentary" id="U5k-FM-fk5">
+                                <toolbarItem implicitItemIdentifier="92AFD66A-D582-4D34-B4BD-A82B7C3AAED2" explicitItemIdentifier="AddHostToolbarItem" label="Add Host" paletteLabel="Add Host" toolTip="Add Host" image="NSAddTemplate" sizingBehavior="auto" id="LpS-n7-CuI">
+                                    <button key="view" verticalHuggingPriority="750" id="ca8-YB-UCk">
+                                        <rect key="frame" x="16" y="14" width="25" height="25"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="NSAddTemplate" imagePosition="only" alignment="center" controlSize="large" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="rqX-fx-OIt">
+                                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
-                                            <segments>
-                                                <segment image="NSAddTemplate" width="32"/>
-                                            </segments>
-                                        </segmentedCell>
-                                    </segmentedControl>
+                                        </buttonCell>
+                                    </button>
                                     <connections>
-                                        <action selector="addHostButtonClicked:" target="Oky-zY-oP4" id="W7W-KU-F1m"/>
+                                        <action selector="addHostButtonClicked:" target="Oky-zY-oP4" id="yBD-6w-NXT"/>
                                     </connections>
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="NSToolbarFlexibleSpaceItem" id="DlI-3g-HXX"/>
-                                <toolbarItem implicitItemIdentifier="80FC4FF8-110E-492B-9133-F6953F736443" explicitItemIdentifier="PreferencesToolbarItem" label="Preferences" paletteLabel="Preferences" toolTip="Preferences" sizingBehavior="auto" id="kHr-CS-QsW" userLabel="Preferences">
-                                    <segmentedControl key="view" verticalHuggingPriority="750" springLoaded="YES" id="dia-sd-YfW">
-                                        <rect key="frame" x="16" y="14" width="38" height="23"/>
-                                        <autoresizingMask key="autoresizingMask"/>
-                                        <segmentedCell key="cell" borderStyle="border" alignment="left" style="capsule" trackingMode="momentary" id="5ME-hs-ooe">
+                                <toolbarItem implicitItemIdentifier="D100550D-C94A-447F-A352-02ADD096B0AA" explicitItemIdentifier="PreferencesToolbarItem" label="Preferences" paletteLabel="Preferences" toolTip="Preferences" image="PreferencesIcon" sizingBehavior="auto" id="INJ-zl-Jmu">
+                                    <button key="view" verticalHuggingPriority="750" id="gFh-st-nIN">
+                                        <rect key="frame" x="23" y="14" width="25" height="25"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="PreferencesIcon" imagePosition="only" alignment="center" controlSize="large" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="52J-6t-vDC">
+                                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
-                                            <segments>
-                                                <segment image="PreferencesIcon" width="32"/>
-                                            </segments>
-                                        </segmentedCell>
-                                    </segmentedControl>
+                                        </buttonCell>
+                                    </button>
                                     <connections>
-                                        <action selector="showPreferences:" target="Oky-zY-oP4" id="xfp-xU-4pf"/>
+                                        <action selector="showPreferences:" target="Oky-zY-oP4" id="EqS-rJ-Y5o"/>
                                     </connections>
                                 </toolbarItem>
                             </allowedToolbarItems>
                             <defaultToolbarItems>
-                                <toolbarItem reference="2mt-bL-D2g"/>
-                                <toolbarItem reference="rP0-dD-McP"/>
+                                <toolbarItem reference="acz-Dh-U70"/>
+                                <toolbarItem reference="LpS-n7-CuI"/>
                                 <toolbarItem reference="DlI-3g-HXX"/>
-                                <toolbarItem reference="kHr-CS-QsW"/>
+                                <toolbarItem reference="INJ-zl-Jmu"/>
                             </defaultToolbarItems>
                         </toolbar>
                         <connections>
@@ -669,8 +663,8 @@ DQ
         </scene>
     </scenes>
     <resources>
-        <image name="NSAddTemplate" width="15" height="13"/>
-        <image name="NSLeftFacingTriangleTemplate" width="10" height="14"/>
+        <image name="NSAddTemplate" width="11" height="11"/>
+        <image name="NSLeftFacingTriangleTemplate" width="9" height="12"/>
         <image name="PreferencesIcon" width="32" height="32"/>
     </resources>
 </document>
