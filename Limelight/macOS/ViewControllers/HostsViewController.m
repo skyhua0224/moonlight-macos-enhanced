@@ -142,7 +142,7 @@
     }
 }
 
-- (IBAction)unpairMenuItemClicked:(NSMenuItem *)sender {
+- (IBAction)removeHostMenuItemClicked:(NSMenuItem *)sender {
     TemporaryHost *host = [self getHostFromMenuItem:sender];
     if (host != nil) {
         [self.discMan removeHostFromDiscovery:host];

@@ -95,16 +95,16 @@
         </collectionViewItem>
         <menu autoenablesItems="NO" id="sKH-8r-FIG">
             <items>
-                <menuItem title="Wake" identifier="wakeMenuItem" id="8rh-sG-qAJ">
+                <menuItem title="Wake PC" identifier="wakeMenuItem" id="8rh-sG-qAJ">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="wakeMenuItemClicked:" target="-1" id="QRb-YP-iMw"/>
                     </connections>
                 </menuItem>
-                <menuItem title="Unpair" identifier="unpairMenuItem" id="xzr-nr-OxJ">
+                <menuItem title="Remove Host" identifier="removeHostMenuItem" id="xzr-nr-OxJ">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
-                        <action selector="unpairMenuItemClicked:" target="-1" id="Oyj-Ia-dBx"/>
+                        <action selector="removeHostMenuItemClicked:" target="-1" id="tfu-ld-UU0"/>
                     </connections>
                 </menuItem>
             </items>
