@@ -361,7 +361,7 @@
     NSArray<TemporaryHost *> *filteredHosts = [self.hostList filteredArrayUsingPredicate:predicate];
     self.hosts = [filteredHosts sortedArrayUsingSelector:@selector(compareName:)];
 
-    [self.collectionView moonlight_reloadDataKeepingSelection];
+    [self.collectionView reloadData];
     [self updateHostCellsStatusStates];
 }
 
