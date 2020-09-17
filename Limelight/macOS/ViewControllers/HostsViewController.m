@@ -148,7 +148,9 @@
         [self.discMan removeHostFromDiscovery:host];
         DataManager* dataMan = [[DataManager alloc] init];
         [dataMan removeHost:host];
-        self.hosts = [dataMan getHosts];
+        self.hosts = [self.hosts filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id  _Nullable evaluatedObject, NSDictionary<NSString *,id> * _Nullable bindings) {
+            return evaluatedObject != host;
+        }]];
         [self updateHosts];
     }
 }
@@ -198,7 +200,7 @@
                 dispatch_async(dispatch_get_main_queue(), ^{
                     DataManager* dataMan = [[DataManager alloc] init];
                     [dataMan updateHost:host];
-                    self.hosts = [dataMan getHosts];
+                    self.hosts = [self.hosts arrayByAddingObject:host];
                     [self updateHosts];
                 });
             } else {
@@ -269,13 +271,6 @@
     if (wakeMenuItem != nil) {
         if (host.state == StateOnline) {
             wakeMenuItem.enabled = NO;
-        }
-    }
-
-    NSMenuItem *unpairMenuItem = [self getMenuItemForIdentifier:@"unpairMenuItem" inMenu:menu];;
-    if (wakeMenuItem != nil) {
-        if (host.pairState != PairStatePaired) {
-            unpairMenuItem.enabled = NO;
         }
     }
 }
