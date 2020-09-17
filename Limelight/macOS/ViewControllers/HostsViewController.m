@@ -8,6 +8,7 @@
 
 #import "HostsViewController.h"
 #import "HostCell.h"
+#import "HostCellView.h"
 #import "HostsViewControllerDelegate.h"
 #import "AppsViewController.h"
 #import "AlertPresenter.h"
@@ -132,15 +133,29 @@
     [self.view.window makeFirstResponder:self.getSearchField];
 }
 
-- (IBAction)wakeMenuItemClicked:(id)sender {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [WakeOnLanManager wakeHost:self.selectedHost];
-    });
+- (IBAction)wakeMenuItemClicked:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host != nil) {
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            [WakeOnLanManager wakeHost:host];
+        });
+    }
 }
 
-- (IBAction)open:(id)sender {
-    if (self.collectionView.selectionIndexes.count != 0) {
-        TemporaryHost *host = self.hosts[self.collectionView.selectionIndexes.firstIndex];
+- (IBAction)unpairMenuItemClicked:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host != nil) {
+        [self.discMan removeHostFromDiscovery:host];
+        DataManager* dataMan = [[DataManager alloc] init];
+        [dataMan removeHost:host];
+        self.hosts = [dataMan getHosts];
+        [self updateHosts];
+    }
+}
+
+- (IBAction)open:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host != nil) {
         [self openHost:host];
     }
 }
@@ -198,11 +213,18 @@
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forHost:(TemporaryHost *)host {
-    self.selectedHost = host;
-    
-    if (host.state == StateOnline) {
-        [menu cancelTrackingWithoutAnimation];
-        return;
+    NSMenuItem *wakeMenuItem = [self getMenuItemForIdentifier:@"wakeMenuItem" inMenu:menu];
+    if (wakeMenuItem != nil) {
+        if (host.state == StateOnline) {
+            wakeMenuItem.enabled = NO;
+        }
+    }
+
+    NSMenuItem *unpairMenuItem = [self getMenuItemForIdentifier:@"unpairMenuItem" inMenu:menu];;
+    if (wakeMenuItem != nil) {
+        if (host.pairState != PairStatePaired) {
+            unpairMenuItem.enabled = NO;
+        }
     }
 }
 
@@ -211,6 +233,23 @@
 
 - (NSSearchField *)getSearchField {
     return [self.parentViewController.view.window moonlight_searchFieldInToolbar];
+}
+
+- (TemporaryHost *)getHostFromMenuItem:(NSMenuItem *)item {
+    HostCellView *hostCellView = (HostCellView *)(item.menu.delegate);
+    HostCell *hostCell = (HostCell *)(hostCellView.delegate);
+    
+    return hostCell.host;
+}
+
+- (NSMenuItem *)getMenuItemForIdentifier:(NSString *)id inMenu:(NSMenu *)menu {
+    for (NSMenuItem *item in menu.itemArray) {
+        if ([item.identifier isEqualToString:id]) {
+            return item;
+        }
+    }
+    
+    return nil;
 }
 
 

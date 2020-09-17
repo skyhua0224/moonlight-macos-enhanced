@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="17140" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="17154" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17140"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17154"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -95,10 +95,16 @@
         </collectionViewItem>
         <menu autoenablesItems="NO" id="sKH-8r-FIG">
             <items>
-                <menuItem title="Wake" id="8rh-sG-qAJ">
+                <menuItem title="Wake" identifier="wakeMenuItem" id="8rh-sG-qAJ">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="wakeMenuItemClicked:" target="-1" id="QRb-YP-iMw"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Unpair" identifier="unpairMenuItem" id="xzr-nr-OxJ">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="unpairMenuItemClicked:" target="-1" id="Oyj-Ia-dBx"/>
                     </connections>
                 </menuItem>
             </items>
