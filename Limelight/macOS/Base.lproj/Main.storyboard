@@ -446,8 +446,8 @@ DQ
                             <allowedToolbarItems>
                                 <toolbarItem implicitItemIdentifier="42B48997-D762-4496-B238-914561D9F2DA" explicitItemIdentifier="BackToolbarItem" label="Back" paletteLabel="Back" toolTip="Back" image="NSLeftFacingTriangleTemplate" sizingBehavior="auto" navigational="YES" id="acz-Dh-U70">
                                     <button key="view" verticalHuggingPriority="750" id="F3n-81-eHQ">
-                                        <rect key="frame" x="4" y="14" width="25" height="25"/>
-                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <rect key="frame" x="6" y="14" width="22" height="23"/>
+                                        <autoresizingMask key="autoresizingMask"/>
                                         <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="NSLeftFacingTriangleTemplate" imagePosition="only" alignment="center" controlSize="large" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="Ald-vP-dX8">
                                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
@@ -459,8 +459,8 @@ DQ
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="92AFD66A-D582-4D34-B4BD-A82B7C3AAED2" explicitItemIdentifier="AddHostToolbarItem" label="Add Host" paletteLabel="Add Host" toolTip="Add Host" image="NSAddTemplate" sizingBehavior="auto" id="LpS-n7-CuI">
                                     <button key="view" verticalHuggingPriority="750" id="ca8-YB-UCk">
-                                        <rect key="frame" x="16" y="14" width="25" height="25"/>
-                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <rect key="frame" x="15" y="14" width="26" height="23"/>
+                                        <autoresizingMask key="autoresizingMask"/>
                                         <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="NSAddTemplate" imagePosition="only" alignment="center" controlSize="large" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="rqX-fx-OIt">
                                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
@@ -473,8 +473,8 @@ DQ
                                 <toolbarItem implicitItemIdentifier="NSToolbarFlexibleSpaceItem" id="DlI-3g-HXX"/>
                                 <toolbarItem implicitItemIdentifier="D100550D-C94A-447F-A352-02ADD096B0AA" explicitItemIdentifier="PreferencesToolbarItem" label="Preferences" paletteLabel="Preferences" toolTip="Preferences" image="PreferencesIcon" sizingBehavior="auto" id="INJ-zl-Jmu">
                                     <button key="view" verticalHuggingPriority="750" id="gFh-st-nIN">
-                                        <rect key="frame" x="23" y="14" width="25" height="25"/>
-                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <rect key="frame" x="20" y="14" width="30" height="23"/>
+                                        <autoresizingMask key="autoresizingMask"/>
                                         <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="PreferencesIcon" imagePosition="only" alignment="center" controlSize="large" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="52J-6t-vDC">
                                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
@@ -522,7 +522,7 @@ DQ
                                             <rect key="frame" x="0.0" y="0.0" width="450" height="158"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
                                             <collectionViewFlowLayout key="collectionViewLayout" minimumInteritemSpacing="20" minimumLineSpacing="20" id="on9-o4-Mos">
-                                                <size key="itemSize" width="192" height="192"/>
+                                                <size key="itemSize" width="192" height="209"/>
                                                 <edgeInsets key="sectionInset" left="12" right="12" top="12" bottom="12"/>
                                             </collectionViewFlowLayout>
                                             <color key="primaryBackgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -663,8 +663,8 @@ DQ
         </scene>
     </scenes>
     <resources>
-        <image name="NSAddTemplate" width="11" height="11"/>
-        <image name="NSLeftFacingTriangleTemplate" width="9" height="12"/>
+        <image name="NSAddTemplate" width="14" height="13"/>
+        <image name="NSLeftFacingTriangleTemplate" width="10" height="14"/>
         <image name="PreferencesIcon" width="32" height="32"/>
     </resources>
 </document>

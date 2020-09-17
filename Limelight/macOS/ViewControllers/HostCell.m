@@ -98,19 +98,19 @@
         case StateOnline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemOrangeColor];
-                toolTipText = @"Online, but not paired";
+                self.statusLabel.stringValue = @"Online, but not paired";
             } else {
                 statusColor = [NSColor systemGreenColor];
-                toolTipText = @"Online, and paired";
+                self.statusLabel.stringValue = @"Online, and paired";
             }
             break;
         case StateOffline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemGrayColor];
-                toolTipText = @"Offline, but not paired";
+                self.statusLabel.stringValue = @"Offline, but not paired";
             } else {
                 statusColor = [NSColor systemRedColor];
-                toolTipText = @"Offline, and paired";
+                self.statusLabel.stringValue = @"Offline, and paired";
             }
             break;
         case StateUnknown:
