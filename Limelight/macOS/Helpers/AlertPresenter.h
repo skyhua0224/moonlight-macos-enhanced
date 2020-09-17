@@ -10,6 +10,6 @@
 
 @interface AlertPresenter : NSObject
 
-+ (NSAlert *)displayAlert:(NSAlertStyle)style message:(NSString *)message window:(NSWindow *)window completionHandler:(void (^)(NSModalResponse returnCode))handler;
++ (NSAlert *)displayAlert:(NSAlertStyle)style title:(NSString *)title message:(NSString *)message window:(NSWindow *)window completionHandler:(void (^)(NSModalResponse returnCode))handler;
 
 @end

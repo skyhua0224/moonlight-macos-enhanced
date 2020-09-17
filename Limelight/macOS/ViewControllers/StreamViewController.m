@@ -284,7 +284,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.delegate appDidQuit:self.app];
         if (message != nil) {
-            [AlertPresenter displayAlert:NSAlertStyleWarning message:message window:self.view.window completionHandler:^(NSModalResponse returnCode) {
+            [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Connection Failed" message:message window:self.view.window completionHandler:^(NSModalResponse returnCode) {
                 [self.view.window close];
             }];
         } else {
@@ -376,11 +376,11 @@
 
 - (void)stageFailed:(const char *)stageName withError:(int)errorCode {
     Log(LOG_I, @"Stage %s failed: %ld", stageName, errorCode);
-    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %s failed with error %d", stageName, errorCode]];
+    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"%s failed with error %d", stageName, errorCode]];
 }
 
 - (void)launchFailed:(NSString *)message {
-    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"Connection Failed: %@", message]];
+    [self closeWindowFromMainQueueWithMessage:message];
 }
 
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {

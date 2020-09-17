@@ -10,10 +10,13 @@
 
 @implementation AlertPresenter
 
-+ (NSAlert *)displayAlert:(NSAlertStyle)style message:(NSString *)message window:(NSWindow *)window completionHandler:(void (^)(NSModalResponse returnCode))handler {
++ (NSAlert *)displayAlert:(NSAlertStyle)style title:(NSString *)title message:(NSString *)message window:(NSWindow *)window completionHandler:(void (^)(NSModalResponse returnCode))handler {
     NSAlert *alert = [[NSAlert alloc] init];
     alert.alertStyle = style;
-    alert.messageText = message;
+    alert.messageText = title;
+    if (message != nil) {
+        alert.informativeText = message;
+    }
     [alert beginSheetModalForWindow:window completionHandler:handler];
     
     return alert;

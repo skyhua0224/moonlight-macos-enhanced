@@ -24,12 +24,13 @@
 #import "PairManager.h"
 #import "WakeOnLanManager.h"
 
-@interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, NSSearchFieldDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
+@interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, NSSearchFieldDelegate, NSControlTextEditingDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
 
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
 @property (nonatomic, strong) TemporaryHost *selectedHost;
 @property (nonatomic, strong) NSAlert *pairAlert;
+@property (nonatomic, strong) NSAlert *addHostManuallyAlert;
 
 @property (nonatomic, strong) NSArray *hostList;
 @property (nonatomic, strong) NSString *filterText;
@@ -71,7 +72,6 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
     [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
-    [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(addHostButtonClicked:)].enabled = NO;
 #pragma clang diagnostic pop
     
     self.getSearchField.delegate = self;
@@ -161,6 +161,53 @@
 }
 
 - (IBAction)addHostButtonClicked:(id)sender {
+    NSAlert *alert = [[NSAlert alloc] init];
+    
+    alert.alertStyle = NSAlertStyleInformational;
+    alert.messageText = @"Add Host Manually";
+    alert.informativeText = @"If Moonlight doesn't find your local gaming PC automatically,\nenter the IP address of your PC";
+
+    NSTextField *inputField = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 200, 24)];
+    inputField.identifier = @"addHostField";
+    inputField.placeholderString = @"IP address";
+    inputField.delegate = self;
+    [alert setAccessoryView:inputField];
+
+    [alert addButtonWithTitle:@"Add"];
+    [alert addButtonWithTitle:@"Cancel"];
+    
+    alert.buttons.firstObject.enabled = NO;
+    
+    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode == NSAlertFirstButtonReturn) {
+            [self addHostManuallyHandlerWithInputValue:inputField.stringValue];
+        }
+        self.addHostManuallyAlert = nil;
+        [self.view.window endSheet:alert.window];
+    }];
+    [alert.accessoryView becomeFirstResponder];
+    
+    self.addHostManuallyAlert = alert;
+}
+
+- (void)addHostManuallyHandlerWithInputValue:(NSString *)inputValue {
+    NSString* hostAddress = inputValue;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+        [self.discMan discoverHost:hostAddress withCallback:^(TemporaryHost* host, NSString* error){
+            if (host != nil) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    DataManager* dataMan = [[DataManager alloc] init];
+                    [dataMan updateHost:host];
+                    self.hosts = [dataMan getHosts];
+                    [self updateHosts];
+                });
+            } else {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Add Host Manually" message:error window:self.view.window completionHandler:nil];
+                });
+            }
+        }];
+    });
 }
 
 
@@ -188,11 +235,16 @@
 }
 
 
-#pragma mark - NSSearchFieldDelegate
+#pragma mark - NSSearchFieldDelegate, NSControlTextEditingDelegate
 
 - (void)controlTextDidChange:(NSNotification *)obj {
-    self.filterText = ((NSTextField *)obj.object).stringValue;
-    [self displayHosts];
+    NSControl *control = (NSControl *)(obj.object);
+    if ([control.identifier isEqualToString:@"addHostField"]) {
+        self.addHostManuallyAlert.buttons.firstObject.enabled = control.stringValue.length != 0;
+    } else {
+        self.filterText = ((NSTextField *)obj.object).stringValue;
+        [self displayHosts];
+    }
 }
 
 
@@ -374,7 +426,7 @@
 
 - (void)startPairing:(NSString *)PIN {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational message:[NSString stringWithFormat:@"Enter the following PIN on %@: %@", self.selectedHost.name, PIN] window:self.view.window completionHandler:nil];
+        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational title:[NSString stringWithFormat:@"Enter the following PIN on %@: %@", self.selectedHost.name, PIN] message:nil window:self.view.window completionHandler:nil];
     });
 }
 
@@ -394,7 +446,7 @@
             [self.view.window endSheet:self.pairAlert.window];
             self.pairAlert = nil;
         }
-        [AlertPresenter displayAlert:NSAlertStyleWarning message:[NSString stringWithFormat:@"Pairing Failed: %@", message] window:self.view.window completionHandler:nil];
+        [AlertPresenter displayAlert:NSAlertStyleWarning title:[NSString stringWithFormat:@"Pairing Failed"] message:message window:self.view.window completionHandler:nil];
         [self->_discMan startDiscovery];
     });
 }

@@ -276,7 +276,7 @@ const CGFloat scaleBase = 1.125;
         dispatch_async(dispatch_get_main_queue(), ^{
             // If it fails, display an error and stop the current operation
             if (quitResponse.statusCode != 200) {
-                [AlertPresenter displayAlert:NSAlertStyleWarning message:@"Failed to quit app. If this app was started by another device, you'll need to quit from that device." window:self.view.window completionHandler:nil];
+                [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Failed to quit app" message:@"If this app was started by another device, you'll need to quit from that device." window:self.view.window completionHandler:nil];
                 if (completion != nil) {
                     completion(NO);
                 }
@@ -523,7 +523,7 @@ const CGFloat scaleBase = 1.125;
         if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
             Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
             dispatch_async(dispatch_get_main_queue(), ^{
-                [AlertPresenter displayAlert:NSAlertStyleWarning message:@"Fetching App List Failed\nThe connection to the PC was interrupted." window:self.view.window completionHandler:^(NSModalResponse returnCode) {
+                [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Fetching App List Failed" message:@"The connection to the PC was interrupted." window:self.view.window completionHandler:^(NSModalResponse returnCode) {
                     host.state = StateOffline;
                     [self transitionToHostsVC];
                 }];
