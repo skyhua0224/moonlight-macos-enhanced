@@ -97,7 +97,7 @@
     switch (self.host.state) {
         case StateOnline:
             if (self.host.pairState == PairStateUnpaired) {
-                statusColor = [NSColor systemGrayColor];
+                statusColor = [NSColor systemOrangeColor];
                 toolTipText = @"Online, but not paired";
             } else {
                 statusColor = [NSColor systemGreenColor];
