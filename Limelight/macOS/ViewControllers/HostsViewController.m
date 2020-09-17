@@ -30,7 +30,7 @@
 @property (nonatomic, strong) TemporaryHost *selectedHost;
 @property (nonatomic, strong) NSAlert *pairAlert;
 
-@property (nonatomic, strong) NSArray *hostlist;
+@property (nonatomic, strong) NSArray *hostList;
 @property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
 
@@ -252,7 +252,7 @@
     @synchronized (self.hosts) {
         // Sort the host list in alphabetical order
         self.hosts = [self.hosts sortedArrayUsingSelector:@selector(compareName:)];
-        self.hostlist = self.hosts;
+        self.hostList = self.hosts;
         [self.collectionView moonlight_reloadDataKeepingSelection];
     }
 }
@@ -272,7 +272,7 @@
     } else {
         predicate = [NSPredicate predicateWithValue:YES];
     }
-    NSArray<TemporaryHost *> *filteredHosts = [self.hostlist filteredArrayUsingPredicate:predicate];
+    NSArray<TemporaryHost *> *filteredHosts = [self.hostList filteredArrayUsingPredicate:predicate];
     self.hosts = [filteredHosts sortedArrayUsingSelector:@selector(compareName:)];
 
     [self.collectionView moonlight_reloadDataKeepingSelection];
