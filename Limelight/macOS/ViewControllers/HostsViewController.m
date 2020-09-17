@@ -344,7 +344,7 @@
     [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
         switch (returnCode) {
             case NSAlertFirstButtonReturn:
-                [WakeOnLanManager wakeHost:self.selectedHost];
+                [WakeOnLanManager wakeHost:host];
                 break;
             case NSAlertSecondButtonReturn:
                 [self.view.window endSheet:alert.window];
