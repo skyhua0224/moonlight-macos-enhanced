@@ -19,7 +19,10 @@
                 <outlet property="framerateSelector" destination="hef-cx-cbH" id="XND-fc-loI"/>
                 <outlet property="heightLabel" destination="MuR-JH-Avq" id="mZF-Yp-XC6"/>
                 <outlet property="optimizeSettingsCheckbox" destination="g6c-U8-VxX" id="qTz-pa-M7a"/>
+                <outlet property="pointerSpeedLabel" destination="k6N-pd-ulL" id="Hyl-o9-sxZ"/>
+                <outlet property="pointerSpeedSlider" destination="87Z-fs-rqS" id="XYK-p5-Vgq"/>
                 <outlet property="resolutionSelector" destination="CDM-EN-PEn" id="CdY-3D-UzS"/>
+                <outlet property="scrollWheelLinesTextField" destination="LNq-JS-wgG" id="Cfh-fA-68Y"/>
                 <outlet property="shouldSyncCheckbox" destination="vJe-jH-dWn" id="4Ah-Za-DeY"/>
                 <outlet property="videoCodecSelector" destination="eUF-iT-PsL" id="G4N-Ra-1py"/>
                 <outlet property="view" destination="RJx-AI-6VT" id="Ve7-Y9-fzb"/>
@@ -458,6 +461,9 @@
                                                     <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
                                                     <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                 </textFieldCell>
+                                                <connections>
+                                                    <action selector="didChangeNumberOfLinesToScroll:" target="-2" id="pWi-Ap-C4d"/>
+                                                </connections>
                                             </textField>
                                         </subviews>
                                         <visibilityPriorities>
@@ -486,9 +492,9 @@
                                         <subviews>
                                             <slider verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="87Z-fs-rqS">
                                                 <rect key="frame" x="1" y="12" width="276" height="28"/>
-                                                <sliderCell key="cell" continuous="YES" state="on" alignment="left" minValue="5000" maxValue="60000" doubleValue="5000" tickMarkPosition="below" numberOfTickMarks="10" allowsTickMarkValuesOnly="YES" sliderType="linear" id="tuI-2f-4Z2"/>
+                                                <sliderCell key="cell" continuous="YES" state="on" alignment="left" minValue="1" maxValue="10" doubleValue="5" tickMarkPosition="below" numberOfTickMarks="10" allowsTickMarkValuesOnly="YES" sliderType="linear" id="tuI-2f-4Z2"/>
                                                 <connections>
-                                                    <action selector="didChangeBitrate:" target="-2" id="VEe-I8-aby"/>
+                                                    <action selector="didChangePointerSpeed:" target="-2" id="OUl-UI-llU"/>
                                                 </connections>
                                             </slider>
                                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="k6N-pd-ulL">

@@ -4,8 +4,12 @@
 <dict>
 	<key>shouldSync</key>
 	<false/>
+	<key>pointerSpeed</key>
+	<integer>10</integer>
 	<key>disablePointerPrecision</key>
 	<false/>
+	<key>scrollWheelLines</key>
+	<integer>1</integer>
 	<key>videoCodec</key>
 	<integer>0</integer>
 	<key>dynamicResolution</key>

@@ -37,7 +37,10 @@
 @property (weak) IBOutlet NSTextField *heightLabel;
 @property (weak) IBOutlet NSTextField *customResWidthTextField;
 @property (weak) IBOutlet NSTextField *customResHeightTextField;
+@property (weak) IBOutlet NSSlider *pointerSpeedSlider;
+@property (weak) IBOutlet NSTextField *pointerSpeedLabel;
 @property (weak) IBOutlet NSButtonCell *disablePointerPrecisionCheckbox;
+@property (weak) IBOutlet NSTextField *scrollWheelLinesTextField;
 @property (weak) IBOutlet NSSlider *bitrateSlider;
 @property (weak) IBOutlet NSTextField *bitrateLabel;
 @property (weak) IBOutlet NSPopUpButton *videoCodecSelector;
@@ -63,10 +66,13 @@
     [self.framerateSelector selectItemWithTag:[streamSettings.framerate intValue]];
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
     self.shouldSyncCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
-    [self UpdateShoucldSyncCheckboxRelatedControlStates];
+    [self UpdateShouldSyncCheckboxRelatedControlStates];
     self.customResWidthTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncWidth"];
     self.customResHeightTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHeight"];
+    self.pointerSpeedSlider.integerValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"pointerSpeed"] / 2;
+    [self updatePointerSpeedLabel];
     self.disablePointerPrecisionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecision"];
+    self.scrollWheelLinesTextField.integerValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"scrollWheelLines"];
     self.bitrateSlider.integerValue = [streamSettings.bitrate intValue];
     [self updateBitrateLabel];
     [self.videoCodecSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"videoCodec"]];
@@ -79,12 +85,16 @@
 
 #pragma mark - Helpers
 
-- (void)UpdateShoucldSyncCheckboxRelatedControlStates {
+- (void)UpdateShouldSyncCheckboxRelatedControlStates {
     self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
     self.widthLabel.textColor = self.shouldSyncCheckbox.state == NSControlStateValueOn ? NSColor.labelColor : NSColor.secondaryLabelColor;
     self.heightLabel.textColor = self.shouldSyncCheckbox.state == NSControlStateValueOn ? NSColor.labelColor : NSColor.secondaryLabelColor;
     self.customResWidthTextField.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOn;
     self.customResHeightTextField.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOn;
+}
+
+- (void)updatePointerSpeedLabel {
+    self.pointerSpeedLabel.integerValue = self.pointerSpeedSlider.integerValue;
 }
 
 - (void)updateBitrateLabel {
@@ -128,21 +138,31 @@
 }
 
 - (IBAction)didChangeShouldSync:(id)sender {
-    [self UpdateShoucldSyncCheckboxRelatedControlStates];
+    [self UpdateShouldSyncCheckboxRelatedControlStates];
     [[NSUserDefaults standardUserDefaults] setBool:self.shouldSyncCheckbox.state == NSControlStateValueOn forKey:@"shouldSync"];
 }
 
 - (IBAction)didChangeCustomResWidth:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setObject:self.customResWidthTextField.stringValue forKey:@"syncWidth"];
+    [[NSUserDefaults standardUserDefaults] setInteger:self.customResWidthTextField.integerValue forKey:@"syncWidth"];
 }
 
 - (IBAction)didChangeCustomResHeight:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setObject:self.customResHeightTextField.stringValue forKey:@"syncHeight"];
+    [[NSUserDefaults standardUserDefaults] setInteger:self.customResHeightTextField.integerValue forKey:@"syncHeight"];
+}
+
+- (IBAction)didChangePointerSpeed:(id)sender {
+    [self updatePointerSpeedLabel];
+    [[NSUserDefaults standardUserDefaults] setInteger:self.pointerSpeedSlider.integerValue * 2 forKey:@"pointerSpeed"];
 }
 
 - (IBAction)didChangeDisablePointerPrecision:(id)sender {
     [[NSUserDefaults standardUserDefaults] setBool:self.disablePointerPrecisionCheckbox.state == NSControlStateValueOn forKey:@"disablePointerPrecision"];
 }
+
+- (IBAction)didChangeNumberOfLinesToScroll:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setInteger:self.scrollWheelLinesTextField.integerValue forKey:@"scrollWheelLines"];
+}
+
 
 - (IBAction)didChangeBitrate:(id)sender {
     [self updateBitrateLabel];

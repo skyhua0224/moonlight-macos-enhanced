@@ -18,8 +18,8 @@ class ResolutionSyncRequester: NSObject {
             Self.disableMouseAcceleration(for: host)
         }
         
-        Self.setMouseSpeed(for: host, speed: 12)
-        Self.setScrollLines(for: host, lines: 1)
+        Self.setMouseSpeed(for: host, speed: UserDefaults.standard.integer(forKey: "pointerSpeed"))
+        Self.setScrollLines(for: host, lines: UserDefaults.standard.integer(forKey: "scrollWheelLines"))
 
         let enabled = UserDefaults.standard.bool(forKey: "shouldSync")
         if !enabled {
