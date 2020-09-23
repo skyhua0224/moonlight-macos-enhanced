@@ -61,6 +61,7 @@
 		4C65704A23EBE9F4000D1601 /* PreferencesView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* PreferencesView.xib */; };
 		4C65704C23EBEE66000D1601 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
 		4C682BD124D1227600A70C44 /* Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C682BD024D1227600A70C44 /* Helpers.m */; };
+		4C798E67251A1E9800CAB469 /* HapticContext.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C798E66251A1E9700CAB469 /* HapticContext.m */; };
 		4C7CB9162446A982002B8D4E /* Limelight.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB90B2446A981002B8D4E /* Limelight.xcdatamodeld */; };
 		4C7CB91E2446E05D002B8D4E /* ConnectionHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB91D2446E05D002B8D4E /* ConnectionHelper.m */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
@@ -75,7 +76,6 @@
 		4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C8E7EC2236EF0040075DE78 /* Controller.m */; };
 		4C97FE5E24CD3C1A001F3064 /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946EA19F6AFB800339C8A /* libopus.a */; };
 		4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */; };
-		4CA27E8724C033C100ACEA27 /* Rumble.ahap in Resources */ = {isa = PBXBuildFile; fileRef = 4CA27E8524C033C100ACEA27 /* Rumble.ahap */; };
 		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
 		4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CBBE13A24CFF7B700B4706E /* AboutView.xib */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
@@ -146,6 +146,8 @@
 		4C65704B23EBEB3D000D1601 /* PreferencesViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PreferencesViewController.h; sourceTree = "<group>"; };
 		4C682BCF24D1227600A70C44 /* Helpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Helpers.h; sourceTree = "<group>"; };
 		4C682BD024D1227600A70C44 /* Helpers.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Helpers.m; sourceTree = "<group>"; };
+		4C798E65251A1E9700CAB469 /* HapticContext.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = HapticContext.h; sourceTree = "<group>"; };
+		4C798E66251A1E9700CAB469 /* HapticContext.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HapticContext.m; sourceTree = "<group>"; };
 		4C7CB90C2446A981002B8D4E /* Moonlight v1.4.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.4.xcdatamodel"; sourceTree = "<group>"; };
 		4C7CB90D2446A981002B8D4E /* Limelight.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Limelight.xcdatamodel; sourceTree = "<group>"; };
 		4C7CB90E2446A981002B8D4E /* Moonlight v1.1.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.1.xcdatamodel"; sourceTree = "<group>"; };
@@ -180,7 +182,6 @@
 		4C8E7EC3236EF0040075DE78 /* Controller.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Controller.h; sourceTree = "<group>"; };
 		4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KPCScaleToFillNSImageView.m; sourceTree = "<group>"; };
 		4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = KPCScaleToFillNSImageView.h; sourceTree = "<group>"; };
-		4CA27E8524C033C100ACEA27 /* Rumble.ahap */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Rumble.ahap; sourceTree = "<group>"; };
 		4CABABB021F6C8A3008576A4 /* CollectionView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CollectionView.h; sourceTree = "<group>"; };
 		4CABABB121F6C8A4008576A4 /* CollectionView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CollectionView.m; sourceTree = "<group>"; };
 		4CBBE13A24CFF7B700B4706E /* AboutView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutView.xib; sourceTree = "<group>"; };
@@ -432,7 +433,6 @@
 		4C7E0A941FECC7A000684411 /* Supporting Files */ = {
 			isa = PBXGroup;
 			children = (
-				4CA27E8524C033C100ACEA27 /* Rumble.ahap */,
 				4CF7C06021E982E400F38DC4 /* WhiteSpinner.car */,
 				4C7E0A871FECBFFD00684411 /* Info.plist */,
 				4C7E0A881FECBFFD00684411 /* main.m */,
@@ -567,6 +567,8 @@
 				FB89460D19F646E200339C8A /* StreamView.m */,
 				FB4678EB1A50C40900377732 /* OnScreenControls.h */,
 				FB4678EC1A50C40900377732 /* OnScreenControls.m */,
+				4C798E65251A1E9700CAB469 /* HapticContext.h */,
+				4C798E66251A1E9700CAB469 /* HapticContext.m */,
 				4C2E247F1FF1E99300B6A12E /* HIDSupport.h */,
 				4C2E24801FF1E99300B6A12E /* HIDSupport.m */,
 			);
@@ -928,7 +930,6 @@
 				4C65704A23EBE9F4000D1601 /* PreferencesView.xib in Resources */,
 				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
 				4C30BFD91FF9D57F00AD09E6 /* DefaultPreferences.plist in Resources */,
-				4CA27E8724C033C100ACEA27 /* Rumble.ahap in Resources */,
 				4CF7C06221E9851500F38DC4 /* WhiteSpinner.car in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -993,6 +994,7 @@
 				4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */,
 				4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */,
 				4C7E0A971FECCF9A00684411 /* HostsViewController.m in Sources */,
+				4C798E67251A1E9800CAB469 /* HapticContext.m in Sources */,
 				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
 				4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */,

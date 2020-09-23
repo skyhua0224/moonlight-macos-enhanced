@@ -7,8 +7,8 @@
 //
 
 #import <Foundation/Foundation.h>
-#import "StreamView.h"
 
+@protocol EdgeDetectionDelegate;
 @class ControllerSupport;
 
 @interface OnScreenControls : NSObject
@@ -22,6 +22,7 @@ typedef NS_ENUM(NSInteger, OnScreenControlsLevel) {
     // Internal levels selected by ControllerSupport
     OnScreenControlsLevelAutoGCGamepad,
     OnScreenControlsLevelAutoGCExtendedGamepad,
+    OnScreenControlsLevelAutoGCExtendedGamepadWithStickButtons
 };
 
 - (id) initWithView:(OSView*)view controllerSup:(ControllerSupport*)controllerSupport swipeDelegate:(id<EdgeDetectionDelegate>)edgeDelegate;
@@ -29,5 +30,7 @@ typedef NS_ENUM(NSInteger, OnScreenControlsLevel) {
 - (BOOL) handleTouchUpEvent:(NSSet*)touches;
 - (BOOL) handleTouchMovedEvent:(NSSet*)touches;
 - (void) setLevel:(OnScreenControlsLevel)level;
+- (OnScreenControlsLevel) getLevel;
+- (void) show;
 
 @end

@@ -7,12 +7,10 @@
 //
 
 #import "OnScreenControls.h"
+#import "StreamView.h"
 #import "ControllerSupport.h"
-//#import "Controller.h"
+#import "Controller.h"
 #include "Limelight.h"
-
-#import "Moonlight-Swift.h"
-@class Controller;
 
 #define UPDATE_BUTTON(x, y) (buttonFlags = \
 (y) ? (buttonFlags | (x)) : (buttonFlags & ~(x)))
@@ -67,6 +65,7 @@
     CGRect _controlArea;
     UIView* _view;
     OnScreenControlsLevel _level;
+    BOOL _visible;
     
     ControllerSupport *_controllerSupport;
     Controller *_controller;
@@ -123,7 +122,7 @@ static float L3_Y;
     _edgeDelegate = swipeDelegate;
     _deadTouches = [[NSMutableArray alloc] init];
     
-    _iPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+    _iPad = ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad);
     _controlArea = CGRectMake(0, 0, _view.frame.size.width, _view.frame.size.height);
     if (_iPad)
     {
@@ -159,14 +158,29 @@ static float L3_Y;
     _rightStick = [CALayer layer];
     _edge = [CALayer layer];
     
+    return self;
+}
+
+- (void) show {
+    _visible = YES;
+    
     [self setupEdgeDetection];
     
-    return self;
+    [self updateControls];
 }
 
 - (void) setLevel:(OnScreenControlsLevel)level {
     _level = level;
-    [self updateControls];
+    
+    // Only update controls if we're showing, otherwise
+    // show will do it for us.
+    if (_visible) {
+        [self updateControls];
+    }
+}
+
+- (OnScreenControlsLevel) getLevel {
+    return _level;
 }
 
 - (void) updateControls {
@@ -202,15 +216,27 @@ static float L3_Y;
             [self hideSticks];
             [self drawL3R3];
             break;
+        case OnScreenControlsLevelAutoGCExtendedGamepadWithStickButtons:
+            // This variant of GCExtendedGamepad has L3 and R3 but
+            // is still missing Select
+            [self setupExtendedGamepadControls];
+            
+            [self hideButtons];
+            [self hideBumpers];
+            [self hideTriggers];
+            [self hideL3R3];
+            [self drawStartSelect];
+            [self hideSticks];
+            break;
         case OnScreenControlsLevelSimple:
             [self setupSimpleControls];
             
-            [self drawTriggers];
-            [self drawStartSelect];
-            [self drawL3R3];
-            [self hideButtons];
+            [self hideTriggers];
+            [self hideL3R3];
             [self hideBumpers];
             [self hideSticks];
+            [self drawStartSelect];
+            [self drawButtons];
             break;
         case OnScreenControlsLevelFull:
             [self setupComplexControls];
@@ -238,8 +264,22 @@ static float L3_Y;
     // Start with the default complex layout
     [self setupComplexControls];
     
+    START_X = _controlArea.size.width * .95 + _controlArea.origin.x;
     START_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
+    SELECT_X = _controlArea.size.width * .05 + _controlArea.origin.x;
     SELECT_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
+    
+    L3_Y = _controlArea.size.height * .85 + _controlArea.origin.y;
+    R3_Y = _controlArea.size.height * .85 + _controlArea.origin.y;
+    
+    if (_iPad) {
+        L3_X = _controlArea.size.width * .15 + _controlArea.origin.x;
+        R3_X = _controlArea.size.width * .85 + _controlArea.origin.x;
+    }
+    else {
+        L3_X = _controlArea.size.width * .25 + _controlArea.origin.x;
+        R3_X = _controlArea.size.width * .75 + _controlArea.origin.x;
+    }
 }
 
 // For GCGamepad controls we move triggers, start, and select
@@ -248,41 +288,21 @@ static float L3_Y;
     // Start with the default complex layout
     [self setupComplexControls];
     
-    START_X = _controlArea.size.width * .6 + _controlArea.origin.x;
-    START_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
+    L2_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
+    L2_X = _controlArea.size.width * .05 + _controlArea.origin.x;
     
-    SELECT_X = _controlArea.size.width * .4 + _controlArea.origin.x;
-    SELECT_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
+    R2_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
+    R2_X = _controlArea.size.width * .95 + _controlArea.origin.x;
     
-    L2_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
-    L2_X = _controlArea.size.width * .1 + _controlArea.origin.x;
-    
-    R2_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
-    R2_X = _controlArea.size.width * .9 + _controlArea.origin.x;
+    START_X = _controlArea.size.width * .95 + _controlArea.origin.x;
+    START_Y = _controlArea.size.height * .95 + _controlArea.origin.y;
+    SELECT_X = _controlArea.size.width * .05 + _controlArea.origin.x;
+    SELECT_Y = _controlArea.size.height * .95 + _controlArea.origin.y;
     
     if (_iPad) {
-        START_X = _controlArea.size.width * .75 + _controlArea.origin.x;
-        START_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
-        
-        SELECT_X = _controlArea.size.width * .25 + _controlArea.origin.x;
-        SELECT_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
-        
         // The analog sticks are kept closer to the sides on iPad
-        LS_CENTER_X = _controlArea.size.width * .18 + _controlArea.origin.x;
-        LS_CENTER_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
-        RS_CENTER_X = _controlArea.size.width * .82 + _controlArea.origin.x;
-        RS_CENTER_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
-    } else {
-        START_X = _controlArea.size.width * .6 + _controlArea.origin.x;
-        START_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
-        
-        SELECT_X = _controlArea.size.width * .4 + _controlArea.origin.x;
-        SELECT_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
-        
-        LS_CENTER_X = _controlArea.size.width * .25 + _controlArea.origin.x;
-        LS_CENTER_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
-        RS_CENTER_X = _controlArea.size.width * .75 + _controlArea.origin.x;
-        RS_CENTER_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
+        LS_CENTER_X = _controlArea.size.width * .15 + _controlArea.origin.x;
+        RS_CENTER_X = _controlArea.size.width * .85 + _controlArea.origin.x;
     }
 }
 
@@ -291,10 +311,7 @@ static float L3_Y;
     // Start with the default complex layout
     [self setupComplexControls];
     
-    START_X = _controlArea.size.width * .6 + _controlArea.origin.x;
     START_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
-    
-    SELECT_X = _controlArea.size.width * .4 + _controlArea.origin.x;
     SELECT_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
     
     L2_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
@@ -302,6 +319,20 @@ static float L3_Y;
 
     R2_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
     R2_X = _controlArea.size.width * .9 + _controlArea.origin.x;
+    
+    if (_iPad) {
+        // Lower the D-pad and buttons on iPad
+        D_PAD_CENTER_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
+        BUTTON_CENTER_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
+        
+        // Move Start and Select closer to sides
+        SELECT_X = _controlArea.size.width * .2 + _controlArea.origin.x;
+        START_X = _controlArea.size.width * .8 + _controlArea.origin.x;
+    }
+    else {
+        SELECT_X = _controlArea.size.width * .4 + _controlArea.origin.x;
+        START_X = _controlArea.size.width * .6 + _controlArea.origin.x;
+    }
 }
 
 - (void) setupComplexControls
@@ -315,9 +346,9 @@ static float L3_Y;
     {
         // The analog sticks are kept closer to the sides on iPad
         LS_CENTER_X = _controlArea.size.width * .22 + _controlArea.origin.x;
-        LS_CENTER_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
+        LS_CENTER_Y = _controlArea.size.height * .80 + _controlArea.origin.y;
         RS_CENTER_X = _controlArea.size.width * .77 + _controlArea.origin.x;
-        RS_CENTER_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
+        RS_CENTER_Y = _controlArea.size.height * .80 + _controlArea.origin.y;
     }
     else
     {
@@ -332,18 +363,24 @@ static float L3_Y;
     SELECT_X = _controlArea.size.width * .1 + _controlArea.origin.x;
     SELECT_Y = _controlArea.size.height * .9 + _controlArea.origin.y;
     
-    L1_X = _controlArea.size.width * .1 + _controlArea.origin.x;
     L1_Y = _controlArea.size.height * .27 + _controlArea.origin.y;
-    L2_X = _controlArea.size.width * .1 + _controlArea.origin.x;
     L2_Y = _controlArea.size.height * .1 + _controlArea.origin.y;
-    R1_X = _controlArea.size.width * .9 + _controlArea.origin.x;
     R1_Y = _controlArea.size.height * .27 + _controlArea.origin.y;
-    R2_X = _controlArea.size.width * .9 + _controlArea.origin.x;
     R2_Y = _controlArea.size.height * .1 + _controlArea.origin.y;
-    L3_X = _controlArea.size.width * .25 + _controlArea.origin.x;
-    L3_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
-    R3_X = _controlArea.size.width * .75 + _controlArea.origin.x;
-    R3_Y = _controlArea.size.height * .75 + _controlArea.origin.y;
+    
+    if (_iPad) {
+        // Move L/R buttons closer to the side on iPad
+        L1_X = _controlArea.size.width * .05 + _controlArea.origin.x;
+        L2_X = _controlArea.size.width * .05 + _controlArea.origin.x;
+        R1_X = _controlArea.size.width * .95 + _controlArea.origin.x;
+        R2_X = _controlArea.size.width * .95 + _controlArea.origin.x;
+    }
+    else {
+        L1_X = _controlArea.size.width * .1 + _controlArea.origin.x;
+        L2_X = _controlArea.size.width * .1 + _controlArea.origin.x;
+        R1_X = _controlArea.size.width * .9 + _controlArea.origin.x;
+        R2_X = _controlArea.size.width * .9 + _controlArea.origin.x;
+    }
 }
 
 - (void) drawButtons {
@@ -836,26 +873,31 @@ static float L3_Y;
 }
 
 - (BOOL) isInDeadZone:(UITouch*) touch {
-    switch (_level) {
-        case OnScreenControlsLevelFull:
-            return [self isDpadDeadZone:touch]
-            || [self isAbxyDeadZone:touch]
-            || [self isTriggerDeadZone:touch]
-            || [self isBumperDeadZone:touch]
-            || [self isStartSelectDeadZone:touch];
-        case OnScreenControlsLevelSimple:
-            return [self isTriggerDeadZone:touch]
-            || [self isStartSelectDeadZone:touch]
-            || [self isL3R3DeadZone:touch];
-        case OnScreenControlsLevelAutoGCExtendedGamepad:
-            return [self isL3R3DeadZone:touch]
-            || [self isStartSelectDeadZone:touch];
-        case OnScreenControlsLevelAutoGCGamepad:
-            return [self isTriggerDeadZone:touch]
-            || [self isStartSelectDeadZone:touch];
-        default:
-            return false;
+    // Dynamically evaluate deadzones based on the controls
+    // on screen at the time
+    if (_leftButton.superlayer != nil && [self isDpadDeadZone:touch]) {
+        return true;
     }
+    else if (_aButton.superlayer != nil && [self isAbxyDeadZone:touch]) {
+        return true;
+    }
+    else if (_l2Button.superlayer != nil && [self isTriggerDeadZone:touch]) {
+        return true;
+    }
+    else if (_l1Button.superlayer != nil && [self isBumperDeadZone:touch]) {
+        return true;
+    }
+    else if (_startButton.superlayer != nil && [self isStartSelectDeadZone:touch]) {
+        return true;
+    }
+    else if (_l3Button.superlayer != nil && [self isL3R3DeadZone:touch]) {
+        return true;
+    }
+    else if (_leftStickBackground.superlayer != nil && [self isStickDeadZone:touch]) {
+        return true;
+    }
+    
+    return false;
 }
 
 - (BOOL) isDpadDeadZone:(UITouch*) touch {
@@ -923,6 +965,19 @@ static float L3_Y;
                  startX:_view.frame.origin.x
                  startY:_selectButton.frame.origin.y
                    endX:_selectButton.frame.origin.x + _selectButton.frame.size.width
+                   endY:_view.frame.origin.y + _view.frame.size.height];
+}
+
+- (BOOL) isStickDeadZone:(UITouch*) touch {
+    return [self isDeadZone:touch
+                     startX:_leftStickBackground.frame.origin.x - 15
+                     startY:_leftStickBackground.frame.origin.y - 15
+                       endX:_leftStickBackground.frame.origin.x + _leftStickBackground.frame.size.width + 15
+                       endY:_view.frame.origin.y + _view.frame.size.height]
+    || [self isDeadZone:touch
+                 startX:_rightStickBackground.frame.origin.x - 15
+                 startY:_rightStickBackground.frame.origin.y - 15
+                   endX:_rightStickBackground.frame.origin.x + _rightStickBackground.frame.size.width + 15
                    endY:_view.frame.origin.y + _view.frame.size.height];
 }
 

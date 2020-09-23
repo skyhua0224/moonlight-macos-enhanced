@@ -156,11 +156,7 @@ enum ButtonDebouncerState {
 @implementation ControllerSupport {
     NSLock *_controllerStreamLock;
     NSMutableDictionary *_controllers;
-    NSTimer *_rumbleTimer;
     
-    API_AVAILABLE(macos(10.16))
-    CHHapticEngine *hapticEngine;
-
     OnScreenControls *_osc;
     
     // This controller object is shared between on-screen controls
@@ -181,34 +177,6 @@ enum ButtonDebouncerState {
 #define UPDATE_BUTTON_FLAG(controller, x, y) \
 ((y) ? [self setButtonFlag:controller flags:x] : [self clearButtonFlag:controller flags:x])
 
-- (CHHapticEngine *)createEngineWithGCController:(GCController *)controller API_AVAILABLE(macos(10.16)) {
-    if (hapticEngine == nil) {
-        hapticEngine = [controller.haptics createEngineWithLocality:GCHapticsLocalityDefault];
-    }
-    return hapticEngine;
-}
-
--(void) rumbleController: (Controller*)controller
-{
-    // Only vibrate if the amplitude is large enough
-    if (controller.lowFreqMotor > 0x5000 || controller.highFreqMotor > 0x5000) {
-        
-        if (@available(macOS 10.16, *)) {
-            
-            CHHapticEngine *engine = [self createEngineWithGCController:GCController.controllers[controller.playerIndex]];
-            if (engine != nil) {
-                
-                NSError *error;
-                [engine playPatternFromURL:[NSBundle.mainBundle URLForResource:@"Rumble" withExtension:@"ahap"] error:&error];
-                
-                if (error != Nil) {
-                    NSLog(@"Haptic failed with error: %@", error);
-                }
-            }
-        }
-    }
-}
-
 -(void) rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor
 {
     Controller* controller = [_controllers objectForKey:[NSNumber numberWithInteger:controllerNumber]];
@@ -221,12 +189,8 @@ enum ButtonDebouncerState {
         return;
     }
     
-    // Update the motor levels for the rumble timer to grab next iteration
-    controller.lowFreqMotor = lowFreqMotor;
-    controller.highFreqMotor = highFreqMotor;
-    
-    // Rumble now to ensure short vibrations aren't missed
-    [self rumbleController:controller];
+    [controller.lowFreqMotor setMotorAmplitude:lowFreqMotor];
+    [controller.highFreqMotor setMotorAmplitude:highFreqMotor];
 }
 
 -(void) updateLeftStick:(Controller*)controller x:(short)x y:(short)y
@@ -245,21 +209,21 @@ enum ButtonDebouncerState {
     }
 }
 
--(void) updateLeftTrigger:(Controller*)controller left:(char)left
+-(void) updateLeftTrigger:(Controller*)controller left:(unsigned char)left
 {
     @synchronized(controller) {
         controller.lastLeftTrigger = left;
     }
 }
 
--(void) updateRightTrigger:(Controller*)controller right:(char)right
+-(void) updateRightTrigger:(Controller*)controller right:(unsigned char)right
 {
     @synchronized(controller) {
         controller.lastRightTrigger = right;
     }
 }
 
--(void) updateTriggers:(Controller*) controller left:(char)left right:(char)right
+-(void) updateTriggers:(Controller*) controller left:(unsigned char)left right:(unsigned char)right
 {
     @synchronized(controller) {
         controller.lastLeftTrigger = left;
@@ -343,6 +307,18 @@ enum ButtonDebouncerState {
     }
 }
 
+-(void) initializeControllerHaptics:(Controller*) controller
+{
+    controller.lowFreqMotor = [HapticContext createContextForLowFreqMotor:controller.gamepad];
+    controller.highFreqMotor = [HapticContext createContextForHighFreqMotor:controller.gamepad];
+}
+
+-(void) cleanupControllerHaptics:(Controller*) controller
+{
+    [controller.lowFreqMotor cleanup];
+    [controller.highFreqMotor cleanup];
+}
+
 -(void) registerControllerCallbacks:(GCController*) controller
 {
     if (controller != NULL) {
@@ -384,7 +360,7 @@ enum ButtonDebouncerState {
                 Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:weakController.playerIndex]];
                 short leftStickX, leftStickY;
                 short rightStickX, rightStickY;
-                char leftTrigger, rightTrigger;
+                unsigned char leftTrigger, rightTrigger;
                 
                 UPDATE_BUTTON_FLAG(limeController, A_FLAG, gamepad.buttonA.pressed);
                 UPDATE_BUTTON_FLAG(limeController, B_FLAG, gamepad.buttonB.pressed);
@@ -420,6 +396,12 @@ enum ButtonDebouncerState {
                     }
                 }
                 
+                if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *)) {
+                    if (gamepad.buttonHome != nil) {
+                        UPDATE_BUTTON_FLAG(limeController, SPECIAL_FLAG, gamepad.buttonHome.pressed);
+                    }
+                }
+
                 leftStickX = gamepad.leftThumbstick.xAxis.value * 0x7FFE;
                 leftStickY = gamepad.leftThumbstick.yAxis.value * 0x7FFE;
                 
@@ -479,7 +461,7 @@ enum ButtonDebouncerState {
                 if (@available(iOS 12.1, tvOS 12.1, macOS 10.14.1, *)) {
                     if (controller.extendedGamepad.leftThumbstickButton != nil &&
                         controller.extendedGamepad.rightThumbstickButton != nil) {
-                        level = OnScreenControlsLevelAutoGCExtendedGamepad;
+                        level = OnScreenControlsLevelAutoGCExtendedGamepadWithStickButtons;
                         if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
                             if (controller.extendedGamepad.buttonOptions != nil) {
                                 // Has L3/R3 and Select, so we can show nothing :)
@@ -498,6 +480,17 @@ enum ButtonDebouncerState {
     }
     
 #if TARGET_OS_IPHONE
+    // If we didn't find a gamepad present and we have a keyboard or mouse, turn
+    // the on-screen controls off to get the overlays out of the way.
+    if (level == OnScreenControlsLevelFull && [ControllerSupport hasKeyboardOrMouse]) {
+        level = OnScreenControlsLevelOff;
+        
+        // Ensure the virtual gamepad disappears to avoid confusing some games.
+        // If the mouse and keyboard disconnect later, it will reappear when the
+        // first OSC input is received.
+        LiSendMultiControllerEvent(0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+    
     [_osc setLevel:level];
 #endif
 }
@@ -526,6 +519,9 @@ enum ButtonDebouncerState {
             }
             
             limeController.gamepad = controller;
+
+            // Prepare controller haptics for use
+            [self initializeControllerHaptics:limeController];
 
             [_controllers setObject:limeController forKey:[NSNumber numberWithInteger:controller.playerIndex]];
             
@@ -562,19 +558,19 @@ enum ButtonDebouncerState {
 +(int) getConnectedGamepadMask:(StreamConfiguration*)streamConfig {
     int mask = 0;
     
-//    if (streamConfig.multiController) {
-//        int i = 0;
-//        for (GCController* controller in [GCController controllers]) {
-//            if ([ControllerSupport isSupportedGamepad:controller]) {
-//                mask |= 1 << i++;
-//            }
-//        }
-//    }
-//    else {
+    if (streamConfig.multiController) {
+        int i = 0;
+        for (GCController* controller in [GCController controllers]) {
+            if ([ControllerSupport isSupportedGamepad:controller]) {
+                mask |= 1 << i++;
+            }
+        }
+    }
+    else {
         // Some games don't deal with having controller reconnected
         // properly so always report controller 1 if not in MC mode
         mask = 0x1;
-//    }
+    }
     
 #if TARGET_OS_IPHONE
     DataManager* dataMan = [[DataManager alloc] init];
@@ -590,21 +586,9 @@ enum ButtonDebouncerState {
     return mask;
 }
 
--(void) rumbleTimer
+-(NSUInteger) getConnectedGamepadCount
 {
-    for (int i = 0; i < 4; i++) {
-        Controller* controller = [_controllers objectForKey:[NSNumber numberWithInteger:i]];
-        if (controller == nil && i == 0 && _oscEnabled) {
-            // No physical controller, but we have on-screen controls
-            controller = _player0osc;
-        }
-        if (controller == nil) {
-            // No connected controller for this player
-            continue;
-        }
-        
-        [self rumbleController:controller];
-    }
+    return _controllers.count;
 }
 
 -(id) initWithConfig:(StreamConfiguration*)streamConfig
@@ -614,7 +598,7 @@ enum ButtonDebouncerState {
     _controllerStreamLock = [[NSLock alloc] init];
     _controllers = [[NSMutableDictionary alloc] init];
     _controllerNumbers = 0;
-//    _multiController = streamConfig.multiController;
+    _multiController = streamConfig.multiController;
 
     _debouncers = [[NSMutableDictionary alloc] init];
     _debouncers[@(PLAY_FLAG)] = [[NSMutableDictionary alloc] init];
@@ -628,12 +612,6 @@ enum ButtonDebouncerState {
     _oscEnabled = (OnScreenControlsLevel)[[dataMan getSettings].onscreenControls integerValue] != OnScreenControlsLevelOff;
 #endif
     
-    _rumbleTimer = [NSTimer scheduledTimerWithTimeInterval:0.20
-                                                    target:self
-                                                  selector:@selector(rumbleTimer)
-                                                  userInfo:nil
-                                                   repeats:YES];
-    
     Log(LOG_I, @"Number of supported controllers connected: %d", [ControllerSupport getGamepadCount]);
     Log(LOG_I, @"Multi-controller: %d", _multiController);
     
@@ -641,7 +619,6 @@ enum ButtonDebouncerState {
         if ([ControllerSupport isSupportedGamepad:controller]) {
             [self assignController:controller];
             [self registerControllerCallbacks:controller];
-            [self updateAutoOnScreenControlMode];
 
             if (@available(iOS 13.0, macOS 10.15, *)) {
                 ButtonDebouncer *play = [[ButtonDebouncer alloc] initWithButton:PLAY_FLAG input:controller.extendedGamepad.buttonMenu controllerSupport:self chordButton:SPECIAL_FLAG];
@@ -688,6 +665,10 @@ enum ButtonDebouncerState {
         
         // Unset the GCController on this object (in case it is the OSC, which will persist)
         Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+        
+        // Stop haptics on this controller
+        [self cleanupControllerHaptics:limeController];
+        
         limeController.gamepad = nil;
         
         // Inform the server of the updated active gamepads before removing this controller
@@ -702,10 +683,14 @@ enum ButtonDebouncerState {
 
 -(void) cleanup
 {
-    [_rumbleTimer invalidate];
-    _rumbleTimer = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self.connectObserver];
     [[NSNotificationCenter defaultCenter] removeObserver:self.disconnectObserver];
+    
+    _controllerNumbers = 0;
+    
+    for (Controller* controller in [_controllers allValues]) {
+        [self cleanupControllerHaptics:controller];
+    }
     [_controllers removeAllObjects];
     _controllerNumbers = 0;
     for (GCController* controller in [GCController controllers]) {
