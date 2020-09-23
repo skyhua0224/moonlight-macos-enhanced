@@ -157,9 +157,12 @@
 
 - (IBAction)open:(NSMenuItem *)sender {
     TemporaryHost *host = [self getHostFromMenuItem:sender];
-    if (host != nil) {
-        [self openHost:host];
+    if (host == nil) {
+        if (self.collectionView.selectionIndexes.count != 0) {
+            host = self.hosts[self.collectionView.selectionIndexes.firstIndex];
+        }
     }
+    [self openHost:host];
 }
 
 - (IBAction)addHostButtonClicked:(id)sender {
