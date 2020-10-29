@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="17503.1" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="17506" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17503.1"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17506"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -36,10 +36,10 @@
             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
             <subviews>
                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="13V-Cr-6Io" userLabel="Content View">
-                    <rect key="frame" x="20" y="20" width="433" height="452"/>
+                    <rect key="frame" x="20" y="16" width="433" height="460"/>
                     <subviews>
                         <gridView horizontalHuggingPriority="600" verticalHuggingPriority="600" xPlacement="leading" yPlacement="center" rowAlignment="firstBaseline" rowSpacing="12" columnSpacing="12" translatesAutoresizingMaskIntoConstraints="NO" id="mBW-XX-3X2">
-                            <rect key="frame" x="0.0" y="0.0" width="433" height="452"/>
+                            <rect key="frame" x="0.0" y="4" width="433" height="452"/>
                             <constraints>
                                 <constraint firstItem="eUF-iT-PsL" firstAttribute="width" secondItem="CDM-EN-PEn" secondAttribute="width" id="6Xg-nB-eJd"/>
                                 <constraint firstItem="hef-cx-cbH" firstAttribute="width" secondItem="eUF-iT-PsL" secondAttribute="width" id="PhL-di-2RX"/>
@@ -521,16 +521,16 @@
                     </subviews>
                     <constraints>
                         <constraint firstItem="mBW-XX-3X2" firstAttribute="leading" secondItem="13V-Cr-6Io" secondAttribute="leading" id="3Nz-4H-6Y9"/>
-                        <constraint firstItem="mBW-XX-3X2" firstAttribute="top" secondItem="13V-Cr-6Io" secondAttribute="top" id="8Wx-9T-CrV"/>
-                        <constraint firstAttribute="bottom" secondItem="mBW-XX-3X2" secondAttribute="bottom" id="THg-c8-prf"/>
+                        <constraint firstItem="mBW-XX-3X2" firstAttribute="top" secondItem="13V-Cr-6Io" secondAttribute="top" constant="4" id="8Wx-9T-CrV"/>
+                        <constraint firstAttribute="bottom" secondItem="mBW-XX-3X2" secondAttribute="bottom" constant="4" id="THg-c8-prf"/>
                         <constraint firstAttribute="trailing" secondItem="mBW-XX-3X2" secondAttribute="trailing" id="gPr-qh-eaX"/>
                     </constraints>
                 </customView>
             </subviews>
             <constraints>
                 <constraint firstAttribute="trailing" secondItem="13V-Cr-6Io" secondAttribute="trailing" constant="20" symbolic="YES" id="27o-2w-5XF"/>
-                <constraint firstAttribute="bottom" secondItem="13V-Cr-6Io" secondAttribute="bottom" constant="20" symbolic="YES" id="ADl-Ce-Iua"/>
-                <constraint firstItem="13V-Cr-6Io" firstAttribute="top" secondItem="RJx-AI-6VT" secondAttribute="top" constant="20" symbolic="YES" id="fRC-rA-TDX"/>
+                <constraint firstAttribute="bottom" secondItem="13V-Cr-6Io" secondAttribute="bottom" constant="16" id="ADl-Ce-Iua"/>
+                <constraint firstItem="13V-Cr-6Io" firstAttribute="top" secondItem="RJx-AI-6VT" secondAttribute="top" constant="16" id="fRC-rA-TDX"/>
                 <constraint firstItem="13V-Cr-6Io" firstAttribute="leading" secondItem="RJx-AI-6VT" secondAttribute="leading" constant="20" symbolic="YES" id="sH4-SA-oPX"/>
             </constraints>
             <point key="canvasLocation" x="362" y="493.5"/>
