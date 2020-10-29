@@ -16,5 +16,8 @@
 
 +(HapticContext*) createContextForHighFreqMotor:(GCController*)gamepad;
 +(HapticContext*) createContextForLowFreqMotor:(GCController*)gamepad;
+#if TARGET_OS_IPHONE
++(HapticContext*) createContext;
+#endif
 
 @end
