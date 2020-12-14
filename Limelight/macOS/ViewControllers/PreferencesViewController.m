@@ -46,6 +46,7 @@
 @property (weak) IBOutlet NSPopUpButton *videoCodecSelector;
 @property (weak) IBOutlet NSButton *dynamicResolutionCheckbox;
 @property (weak) IBOutlet NSButton *optimizeSettingsCheckbox;
+@property (weak) IBOutlet NSButton *playAudioOnPCCheckbox;
 @property (weak) IBOutlet NSButton *autoFullscreenCheckbox;
 @property (weak) IBOutlet NSPopUpButton *controllerDriverSelector;
 
@@ -78,6 +79,7 @@
     [self.videoCodecSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"videoCodec"]];
     self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
     self.optimizeSettingsCheckbox.state = streamSettings.optimizeGames ? NSControlStateValueOn : NSControlStateValueOff;
+    self.playAudioOnPCCheckbox.state = streamSettings.playAudioOnPC ? NSControlStateValueOn : NSControlStateValueOff;
     self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
     [self.controllerDriverSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"]];
 }
@@ -123,7 +125,7 @@
         break;
     }
     
-    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:NO optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn multiController:NO audioOnPC:NO useHevc:useHevc enableHdr:NO btMouseSupport:NO];
+    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:NO optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn multiController:NO audioOnPC:self.playAudioOnPCCheckbox.state == NSControlStateValueOn useHevc:useHevc enableHdr:NO btMouseSupport:NO];
 }
 
 
@@ -179,6 +181,10 @@
 }
 
 - (IBAction)didToggleOptimizeSettings:(id)sender {
+    [self saveSettings];
+}
+
+- (IBAction)didTogglePlayAudioOnPC:(id)sender {
     [self saveSettings];
 }
 

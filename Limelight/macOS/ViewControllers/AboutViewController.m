@@ -7,7 +7,6 @@
 //
 
 #import "AboutViewController.h"
-#import "NSWindow+Moonlight.h"
 #import "Helpers.h"
 
 @interface AboutViewController ()

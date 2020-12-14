@@ -324,6 +324,8 @@
 
     streamConfig.frameRate = [streamSettings.framerate intValue];
     streamConfig.bitRate = [streamSettings.bitrate intValue];
+    streamConfig.optimizeGameSettings = streamSettings.optimizeGames;
+    streamConfig.playAudioOnPC = streamSettings.playAudioOnPC;
     streamConfig.allowHevc = streamSettings.useHevc;
     
     streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
