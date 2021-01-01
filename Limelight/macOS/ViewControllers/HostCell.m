@@ -107,10 +107,10 @@
         case StateOffline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemGrayColor];
-                self.statusLabel.stringValue = @"Offline, but not paired";
+                self.statusLabel.stringValue = @"Offline, and not paired";
             } else {
                 statusColor = [NSColor systemRedColor];
-                self.statusLabel.stringValue = @"Offline, and paired";
+                self.statusLabel.stringValue = @"Offline, but paired";
             }
             break;
         case StateUnknown:
