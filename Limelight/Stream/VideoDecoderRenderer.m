@@ -439,7 +439,7 @@ RenderNextFrame:
                 const size_t parameterSetSizes[] = { [vpsData length], [spsData length], [ppsData length] };
                 
                 Log(LOG_I, @"Constructing new HEVC format description");
-                if (@available(iOS 11.0, macOS 10.13, *)) {
+                if (@available(iOS 11.0, macOS 10.14, *)) {
                     status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
                                                                                  3, /* count of parameter sets */
                                                                                  parameterSetPointers,

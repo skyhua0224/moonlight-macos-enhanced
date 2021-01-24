@@ -389,7 +389,7 @@ void ClConnectionStatusUpdate(int status)
     // Additionally, iPhone X had a bug which would cause video
     // to freeze after a few minutes with HEVC prior to iOS 11.3.
     // As a result, we will only use HEVC on iOS 11.3 or later.
-    if (@available(iOS 11.3, tvOS 11.3, macOS 10.13, *)) {
+    if (@available(iOS 11.3, tvOS 11.3, macOS 10.14, *)) {
         _streamConfig.supportsHevc = config.allowHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
     }
     
