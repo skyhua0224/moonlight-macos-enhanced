@@ -27,6 +27,36 @@
 }
 @end
 
+static float bitrateSteps[] = {
+    0.5,
+    1,
+    1.5,
+    2,
+    2.5,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    12,
+    15,
+    18,
+    20,
+    25,
+    30,
+    40,
+    50,
+    60,
+    70,
+    80,
+    90,
+    100,
+    120,
+    150
+};
 
 @interface PreferencesViewController ()
 
@@ -74,7 +104,7 @@
     [self updatePointerSpeedLabel];
     self.disablePointerPrecisionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecision"];
     self.scrollWheelLinesTextField.integerValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"scrollWheelLines"];
-    self.bitrateSlider.integerValue = [streamSettings.bitrate intValue];
+    self.bitrateSlider.integerValue = [self getTickMarkFromBitrate:[streamSettings.bitrate intValue]];
     [self updateBitrateLabel];
     [self.videoCodecSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"videoCodec"]];
     self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
@@ -99,8 +129,22 @@
     self.pointerSpeedLabel.integerValue = self.pointerSpeedSlider.integerValue;
 }
 
+- (NSInteger)getBitrateFromTickMark:(NSInteger)tickmark {
+    return bitrateSteps[tickmark] * 1000;
+}
+
+- (NSInteger)getTickMarkFromBitrate:(NSInteger)bitrate {
+    for (NSInteger i = 0; i < sizeof(bitrateSteps) / sizeof(bitrateSteps[0]); i++) {
+        if (bitrate <= bitrateSteps[i] * 1000.0) {
+            return i;
+        }
+    }
+    
+    return 0;
+}
+
 - (void)updateBitrateLabel {
-    NSInteger bitrate = self.bitrateSlider.integerValue / 1000;
+    float bitrate = [self getBitrateFromTickMark:self.bitrateSlider.integerValue] / 1000.0;
     self.bitrateLabel.stringValue = [NSString stringWithFormat:@"%@ Mbps", @(bitrate)];
 }
 
@@ -125,7 +169,7 @@
         break;
     }
     
-    [dataMan saveSettingsWithBitrate:self.bitrateSlider.integerValue framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:NO optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn multiController:NO audioOnPC:self.playAudioOnPCCheckbox.state == NSControlStateValueOn useHevc:useHevc enableHdr:NO btMouseSupport:NO];
+    [dataMan saveSettingsWithBitrate:[self getBitrateFromTickMark:self.bitrateSlider.integerValue] framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:NO optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn multiController:NO audioOnPC:self.playAudioOnPCCheckbox.state == NSControlStateValueOn useHevc:useHevc enableHdr:NO btMouseSupport:NO];
 }
 
 
