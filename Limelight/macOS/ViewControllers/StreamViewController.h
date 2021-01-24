@@ -10,6 +10,12 @@
 #import "TemporaryApp.h"
 #import "AppsViewControllerDelegate.h"
 
+@protocol KeyboardNotifiableDelegate <NSObject>
+
+- (BOOL)onKeyboardEquivalent:(NSEvent *)event;
+
+@end
+
 @interface StreamViewController : NSViewController
 @property (nonatomic, strong) TemporaryApp *app;
 @property (nonatomic, weak) id<AppsViewControllerDelegate> delegate;

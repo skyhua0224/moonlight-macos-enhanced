@@ -272,11 +272,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)keyDown:(NSEvent *)event {
-    LiSendKeyboardEvent([self translateKeyCodeWithEvent:event], KEY_ACTION_DOWN, [self translateKeyModifierWithEvent:event]);
+    LiSendKeyboardEvent(0x8000 | [self translateKeyCodeWithEvent:event], KEY_ACTION_DOWN, [self translateKeyModifierWithEvent:event]);
 }
 
 - (void)keyUp:(NSEvent *)event {
-    LiSendKeyboardEvent([self translateKeyCodeWithEvent:event], KEY_ACTION_UP, [self translateKeyModifierWithEvent:event]);
+    LiSendKeyboardEvent(0x8000 | [self translateKeyCodeWithEvent:event], KEY_ACTION_UP, [self translateKeyModifierWithEvent:event]);
 }
 
 - (void)releaseAllModifierKeys {

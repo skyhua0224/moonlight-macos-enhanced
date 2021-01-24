@@ -52,4 +52,8 @@
     NSRectFill(dirtyRect);
 }
 
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
+    return [self.keyboardNotifiable onKeyboardEquivalent:event];
+}
+
 @end

@@ -21,10 +21,11 @@
 #include "Limelight.h"
 
 #import <IOKit/pwr_mgt/IOPMLib.h>
+#import <Carbon/Carbon.h>
 
 #import "Moonlight-Swift.h"
 
-@interface StreamViewController () <ConnectionCallbacks>
+@interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
 @property (nonatomic, strong) HIDSupport *hidSupport;
@@ -64,6 +65,7 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
+    self.streamView.keyboardNotifiable = self;
     self.streamView.appName = self.app.name;
     self.streamView.statusText = @"Starting";
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
@@ -145,6 +147,27 @@
 
 - (void)scrollWheel:(NSEvent *)event {
     [self.hidSupport scrollWheel:event];
+}
+
+
+#pragma mark - KeyboardNotifiable
+
+- (BOOL)onKeyboardEquivalent:(NSEvent *)event {
+    const NSEventModifierFlags modifierFlags = NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand;
+    const NSEventModifierFlags eventModifierFlags = event.modifierFlags & modifierFlags;
+    
+    if ((event.keyCode == kVK_ANSI_F && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagCommand))
+        || (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagOption | NSEventModifierFlagCommand))
+        || (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagShift | NSEventModifierFlagCommand))
+        || (event.keyCode == kVK_ANSI_W && eventModifierFlags == NSEventModifierFlagCommand)
+        ) {
+        return NO;
+    }
+    
+    [self.hidSupport keyDown:event];
+    [self.hidSupport keyUp:event];
+    
+    return YES;
 }
 
 
