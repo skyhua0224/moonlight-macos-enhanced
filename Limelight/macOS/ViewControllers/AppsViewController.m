@@ -204,11 +204,17 @@ const CGFloat scaleBase = 1.125;
     
     item.runningIcon.hidden = app != self.runningApp;
 
-    NSImage* appImage = [self.boxArtCache objectForKey:app];
-    if (appImage != nil) {
-        item.appCoverArt.image = appImage;
+    NSImage* fastCacheImage = [self.boxArtCache objectForKey:app];
+    if (fastCacheImage != nil) {
+        item.appCoverArt.image = fastCacheImage;
     } else {
-        item.appCoverArt.image = nil;
+        NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
+        if (cacheImage != nil) {
+            [self.boxArtCache setObject:cacheImage forKey:app];
+            item.appCoverArt.image = cacheImage;
+        } else {
+            item.appCoverArt.image = nil;
+        }
     }
 }
 
@@ -486,17 +492,8 @@ const CGFloat scaleBase = 1.125;
     
     if (self.host.appList.count > 0) {
         [self displayApps];
-        [self updateBoxArtForAllApps];
     }
     [self discoverAppsForHost:self.host];
-}
-
-- (void)updateBoxArtForAllApps {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        for (TemporaryApp* app in self.apps) {
-            [self updateBoxArtCacheForApp:app];
-        }
-    });
 }
 
 - (NSArray<TemporaryApp *> *)fetchApps {
@@ -602,10 +599,13 @@ const CGFloat scaleBase = 1.125;
 
 - (void)updateCellWithImageForApp:(TemporaryApp *)app {
     dispatch_async(dispatch_get_main_queue(), ^{
+        
         NSInteger appIndex = [self.apps indexOfObject:app];
         if (appIndex >= 0) {
+            
             NSIndexPath *path = [NSIndexPath indexPathForItem:appIndex inSection:0];
             AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
+            
             if (item != nil) {
                 [self configureItem:item atIndexPath:path];
             }
@@ -615,8 +615,8 @@ const CGFloat scaleBase = 1.125;
 
 // This function forces immediate decoding of the UIImage, rather
 // than the default lazy decoding that results in janky scrolling.
-+ (OSImage*) loadBoxArtForCaching:(TemporaryApp*)app {
-    OSImage* boxArt;
++ (OSImage *)loadBoxArtForCaching:(TemporaryApp *)app {
+    OSImage *boxArt;
     
     NSData* imageData = [NSData dataWithContentsOfFile:[AppAssetManager boxArtPathForApp:app]];
     if (imageData == nil) {
@@ -654,12 +654,12 @@ const CGFloat scaleBase = 1.125;
     return boxArt;
 }
 
-- (void) updateBoxArtCacheForApp:(TemporaryApp*)app {
-    if ([_boxArtCache objectForKey:app] == nil) {
-        OSImage* image = [AppsViewController loadBoxArtForCaching:app];
+- (void)updateBoxArtCacheForApp:(TemporaryApp *)app {
+    if ([self.boxArtCache objectForKey:app] == nil) {
+        OSImage *image = [AppsViewController loadBoxArtForCaching:app];
         if (image != nil) {
             // Add the image to our cache if it was present
-            [_boxArtCache setObject:image forKey:app];
+            [self.boxArtCache setObject:image forKey:app];
             
             [self updateCellWithImageForApp:app];
         }
@@ -669,7 +669,7 @@ const CGFloat scaleBase = 1.125;
 
 #pragma mark - AppAssetCallback
 
-- (void) receivedAssetForApp:(TemporaryApp*)app {
+- (void)receivedAssetForApp:(TemporaryApp *)app {
     // Update the box art cache now so we don't have to do it
     // on the main thread
     [self updateBoxArtCacheForApp:app];
