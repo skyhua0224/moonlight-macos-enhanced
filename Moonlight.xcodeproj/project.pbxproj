@@ -61,6 +61,7 @@
 		4C65704A23EBE9F4000D1601 /* PreferencesView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* PreferencesView.xib */; };
 		4C65704C23EBEE66000D1601 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
 		4C682BD124D1227600A70C44 /* Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C682BD024D1227600A70C44 /* Helpers.m */; };
+		4C6E962925BE79CE008F6DAE /* ImageFader.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C6E962825BE79CE008F6DAE /* ImageFader.m */; };
 		4C798E67251A1E9800CAB469 /* HapticContext.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C798E66251A1E9700CAB469 /* HapticContext.m */; };
 		4C7CB9162446A982002B8D4E /* Limelight.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB90B2446A981002B8D4E /* Limelight.xcdatamodeld */; };
 		4C7CB91E2446E05D002B8D4E /* ConnectionHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB91D2446E05D002B8D4E /* ConnectionHelper.m */; };
@@ -145,6 +146,8 @@
 		4C65704B23EBEB3D000D1601 /* PreferencesViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PreferencesViewController.h; sourceTree = "<group>"; };
 		4C682BCF24D1227600A70C44 /* Helpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Helpers.h; sourceTree = "<group>"; };
 		4C682BD024D1227600A70C44 /* Helpers.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Helpers.m; sourceTree = "<group>"; };
+		4C6E962725BE79CE008F6DAE /* ImageFader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ImageFader.h; sourceTree = "<group>"; };
+		4C6E962825BE79CE008F6DAE /* ImageFader.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ImageFader.m; sourceTree = "<group>"; };
 		4C798E65251A1E9700CAB469 /* HapticContext.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = HapticContext.h; sourceTree = "<group>"; };
 		4C798E66251A1E9700CAB469 /* HapticContext.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HapticContext.m; sourceTree = "<group>"; };
 		4C7CB90C2446A981002B8D4E /* Moonlight v1.4.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Moonlight v1.4.xcdatamodel"; sourceTree = "<group>"; };
@@ -365,6 +368,8 @@
 			children = (
 				4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */,
 				4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */,
+				4C6E962725BE79CE008F6DAE /* ImageFader.h */,
+				4C6E962825BE79CE008F6DAE /* ImageFader.m */,
 				4C38E81E1FEF4FC1000425CD /* AlertPresenter.h */,
 				4C38E81F1FEF4FC1000425CD /* AlertPresenter.m */,
 				4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */,
@@ -975,6 +980,7 @@
 				4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */,
 				4C38E7F41FEE011A000425CD /* DiscoveryManager.m in Sources */,
 				4C38E8201FEF4FC1000425CD /* AlertPresenter.m in Sources */,
+				4C6E962925BE79CE008F6DAE /* ImageFader.m in Sources */,
 				4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */,
 				4C38E82B1FF0BFAC000425CD /* ControllerSupport.m in Sources */,
 				4C38E8271FF0BF64000425CD /* VideoDecoderRenderer.m in Sources */,

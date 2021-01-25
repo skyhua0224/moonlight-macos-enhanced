@@ -16,6 +16,7 @@
 #import "NSCollectionView+Moonlight.h"
 #import "NSApplication+Moonlight.h"
 #import "BackgroundColorView.h"
+#import "ImageFader.h"
 
 #import "HttpManager.h"
 #import "IdManager.h"
@@ -605,9 +606,19 @@ const CGFloat scaleBase = 1.125;
             
             NSIndexPath *path = [NSIndexPath indexPathForItem:appIndex inSection:0];
             AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
-            
             if (item != nil) {
-                [self configureItem:item atIndexPath:path];
+                
+                NSImage* fastCacheImage = [self.boxArtCache objectForKey:app];
+                if (fastCacheImage != nil) {
+                    
+                    [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
+                        NSImageView *newImageView = [[NSImageView alloc] init];
+                        newImageView.wantsLayer = YES;
+                        newImageView.layer.masksToBounds = YES;
+                        newImageView.layer.cornerRadius = 10;
+                        return newImageView;
+                    } duration:0.3 image:fastCacheImage];
+                }
             }
         }
     });
