@@ -22,7 +22,9 @@ static const int MAX_REQUEST_COUNT = 4;
 + (NSString*) boxArtPathForApp:(TemporaryApp*)app {
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
     NSString *filePath = [paths objectAtIndex:0];
-    
+
+    filePath = [filePath stringByAppendingPathComponent:[[NSBundle mainBundle] bundleIdentifier]];
+
     // Keep app assets separate by host UUID
     filePath = [filePath stringByAppendingPathComponent:app.host.uuid];
     
