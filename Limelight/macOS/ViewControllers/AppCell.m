@@ -33,6 +33,11 @@
     self.appCoverArt.layer.masksToBounds = YES;
     self.appCoverArt.layer.cornerRadius = 10;
     
+    self.placeholderView.backgroundColor = [NSColor systemGrayColor];
+    self.placeholderView.wantsLayer = YES;
+    self.placeholderView.layer.masksToBounds = YES;
+    self.placeholderView.layer.cornerRadius = 10;
+
     self.appNameContainer.wantsLayer = YES;
     self.appNameContainer.layer.masksToBounds = YES;
     self.appNameContainer.layer.cornerRadius = 4;
