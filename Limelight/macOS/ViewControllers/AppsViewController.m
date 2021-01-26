@@ -612,7 +612,7 @@ const CGFloat scaleBase = 1.125;
                 if (fastCacheImage != nil) {
                     
                     [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
-                        NSImageView *newImageView = [[NSImageView alloc] init];
+                        KPCScaleToFillNSImageView *newImageView = [[KPCScaleToFillNSImageView alloc] init];
                         newImageView.wantsLayer = YES;
                         newImageView.layer.masksToBounds = YES;
                         newImageView.layer.cornerRadius = 10;

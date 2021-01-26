@@ -12,7 +12,6 @@
 
 + (void)transitionImageViewWithOldImageView:(NSImageView *)oldImageView newImageViewBlock:(NSImageView *(^)(void))newImageViewBlock duration:(NSTimeInterval)duration image:(NSImage *)image {
     NSImageView *newImageView = newImageViewBlock();
-    newImageView.image = image;
     
     NSView *containerView = oldImageView.superview;
     [containerView addSubview:newImageView positioned:NSWindowAbove relativeTo:oldImageView];
@@ -22,6 +21,10 @@
     [newImageView.bottomAnchor constraintEqualToAnchor:containerView.bottomAnchor].active = YES;
     [newImageView.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor].active = YES;
     [newImageView.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor].active = YES;
+
+    [newImageView layoutSubtreeIfNeeded];
+
+    newImageView.image = image;
 
     newImageView.alphaValue = 0;
     oldImageView.alphaValue = 1;
