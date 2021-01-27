@@ -483,7 +483,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                 break;
         }
 
-    } else if (vendorId == 0x054C && productId == 0x09CC) { // DualShock 4
+    } else if (vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4)) { // DualShock 4
         switch (usagePage) {
             case kHIDPage_GenericDesktop:
                 switch (usage) {
