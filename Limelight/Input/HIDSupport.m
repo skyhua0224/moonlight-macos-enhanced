@@ -317,6 +317,17 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
 }
 
+- (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
+    UInt8 rumble_packet[] = { 0x03, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xEB };
+
+    rumble_packet[4] = lowFreqMotor / 256;
+    rumble_packet[5] = highFreqMotor / 256;
+    
+    NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
+
+    IOHIDDeviceSetReport((IOHIDDeviceRef)devices.allObjects[0], kIOHIDReportTypeOutput, rumble_packet[0], rumble_packet, sizeof(rumble_packet));
+}
+
 - (short)translateKeyCodeWithEvent:(NSEvent *)event {
     if (![self.mappings objectForKey:@(event.keyCode)]) {
         return 0;

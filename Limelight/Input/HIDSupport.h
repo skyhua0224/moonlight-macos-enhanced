@@ -22,4 +22,6 @@
 - (void)mouseMoved:(NSEvent *)event;
 - (void)scrollWheel:(NSEvent *)event;
 
+- (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor;
+
 @end
