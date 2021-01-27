@@ -357,7 +357,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
     CFNumberRef product = (CFNumberRef)(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)));
     UInt16 productId = [(NSNumber *)CFBridgingRelease(product) unsignedShortValue];
 
-    if (vendorId == 0x045E && productId == 0x02FD) { // Xbox One S Wireless
+    if (vendorId == 0x045E && (productId == 0x02FD || productId == 0x0B13)) { // Xbox One S Wireless and Xbox Series X/S Wireless Controller
         switch (usagePage) {
             case kHIDPage_GenericDesktop:
                 switch (usage) {
@@ -445,8 +445,14 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                     case 8:
                         [self updateButtonFlags:RB_FLAG state:intValue];
                         break;
+                    case 11:
+                        [self updateButtonFlags:BACK_FLAG state:intValue];
+                        break;
                     case 12:
                         [self updateButtonFlags:PLAY_FLAG state:intValue];
+                        break;
+                    case 13:
+                        [self updateButtonFlags:SPECIAL_FLAG state:intValue];
                         break;
 
                         
@@ -477,7 +483,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                 break;
         }
 
-    } else if (vendorId == 0x054C && productId == 0x09CC) { // Dualshock 4
+    } else if (vendorId == 0x054C && productId == 0x09CC) { // DualShock 4
         switch (usagePage) {
             case kHIDPage_GenericDesktop:
                 switch (usage) {
