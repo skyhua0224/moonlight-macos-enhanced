@@ -141,6 +141,30 @@ static struct KeyMapping keys[] = {
     {kVK_F20, 0x83},
 };
 
+typedef struct {
+    UInt8 ucLeftJoystickX;
+    UInt8 ucLeftJoystickY;
+    UInt8 ucRightJoystickX;
+    UInt8 ucRightJoystickY;
+    UInt8 rgucButtonsHatAndCounter[3];
+    UInt8 ucTriggerLeft;
+    UInt8 ucTriggerRight;
+    UInt8 _rgucPad0[3];
+    UInt8 rgucGyroX[2];
+    UInt8 rgucGyroY[2];
+    UInt8 rgucGyroZ[2];
+    UInt8 rgucAccelX[2];
+    UInt8 rgucAccelY[2];
+    UInt8 rgucAccelZ[2];
+    UInt8 _rgucPad1[5];
+    UInt8 ucBatteryLevel;
+    UInt8 _rgucPad2[4];
+    UInt8 ucTouchpadCounter1;
+    UInt8 rgucTouchpadData1[3];
+    UInt8 ucTouchpadCounter2;
+    UInt8 rgucTouchpadData2[3];
+} PS4StatePacket_t;
+
 static UInt32 crc32_for_byte(UInt32 r)
 {
     int i;
@@ -174,6 +198,7 @@ UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
 @property (atomic) UInt16 nextHighFreqMotor;
 @property (atomic) dispatch_semaphore_t rumbleSemaphore;
 @property (atomic) BOOL closeRumble;
+@property (nonatomic) PS4StatePacket_t lastPS4State;
 @end
 
 @implementation HIDSupport
@@ -182,7 +207,9 @@ UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
     self = [super init];
     if (self) {
         [self setupHidManager];
-        
+        self.previousLowFreqMotor = 0xFF;
+        self.previousHighFreqMotor = 0xFF;
+
         self.controller = [[Controller alloc] init];
 
         NSMutableDictionary *d = [NSMutableDictionary dictionary];
@@ -198,8 +225,6 @@ UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
 }
 
 - (void)dealloc {
-    [self tearDownHidManager];
-    
     if (self.displayLink != NULL) {
         CVDisplayLinkStop(self.displayLink);
         CVDisplayLinkRelease(self.displayLink);
@@ -355,6 +380,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             break;
         }
         
+        if (device == nil) {
+            continue;
+        }
+        
         // get next value
         UInt16 lowFreqMotor = self.nextLowFreqMotor;
         UInt16 highFreqMotor = self.nextHighFreqMotor;
@@ -366,41 +395,45 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             UInt8 convertedHighFreqMotor = highFreqMotor / 655;
             if (convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) {
                 
+                self.previousLowFreqMotor = convertedLowFreqMotor;
+                self.previousHighFreqMotor = convertedHighFreqMotor;
+
                 rumble_packet[4] = convertedLowFreqMotor;
                 rumble_packet[5] = convertedHighFreqMotor;
                 
-                NSLog(@"rumbling low: %@, high: %@ actual", @(convertedLowFreqMotor), @(convertedHighFreqMotor));
+                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, rumble_packet[0], rumble_packet, sizeof(rumble_packet));
+                usleep(30000);
+            }
+        } else if (isPlayStation(device)) {
+            UInt8 data[78] = {};
+
+            data[0] = 17;
+            data[1] = 0xC0 | 0x04;  /* Magic value HID + CRC, also sets interval to 4ms for samples */
+            data[3] = 0x03;  /* 0x1 is rumble, 0x2 is lightbar, 0x4 is the blink interval */
+
+            UInt8 convertedLowFreqMotor = lowFreqMotor / 256;
+            UInt8 convertedHighFreqMotor = highFreqMotor / 256;
+            if (convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) {
                 
                 self.previousLowFreqMotor = convertedLowFreqMotor;
                 self.previousHighFreqMotor = convertedHighFreqMotor;
+
+                data[6] = convertedHighFreqMotor;
+                data[7] = convertedLowFreqMotor;
+                data[8] = 0; // red
+                data[9] = 0; // green
+                data[10] = 12; // blue
                 
-                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, rumble_packet[0], rumble_packet, sizeof(rumble_packet));
+                /* Bluetooth reports need a CRC at the end of the packet (at least on Linux) */
+                UInt8 ubHdr = 0xA2; /* hidp header is part of the CRC calculation */
+                UInt32 unCRC;
+                unCRC = SDL_crc32(0, &ubHdr, 1);
+                unCRC = SDL_crc32(unCRC, data, (size_t)(sizeof(data) - sizeof(unCRC)));
+                memcpy(&data[sizeof(data) - sizeof(unCRC)], &unCRC, sizeof(unCRC));
+                
+                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, sizeof(data));
                 usleep(30000);
-            } else {
-                NSLog(@"skipping rumble");
             }
-        } else if (isPlayStation(device)) {
-//            UInt8 data[78] = {};
-//
-//            data[0] = 17;
-//            data[1] = 0xC0 | 0x04;  /* Magic value HID + CRC, also sets interval to 4ms for samples */
-//            data[3] = 0x03;  /* 0x1 is rumble, 0x2 is lightbar, 0x4 is the blink interval */
-//
-//            data[6] = highFreqMotor / 256;
-//            data[7] = lowFreqMotor / 256;
-//            data[8] = 0; // red
-//            data[9] = 0; // green
-//            data[10] = 255; // blue
-//
-//            /* Bluetooth reports need a CRC at the end of the packet (at least on Linux) */
-//            UInt8 ubHdr = 0xA2; /* hidp header is part of the CRC calculation */
-//            UInt32 unCRC;
-//            unCRC = SDL_crc32(0, &ubHdr, 1);
-//            unCRC = SDL_crc32(unCRC, data, (size_t)(sizeof(data) - sizeof(unCRC)));
-//            memcpy(&data[sizeof(data) - sizeof(unCRC)], &unCRC, sizeof(unCRC));
-//
-//            IOReturn retVal = IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, sizeof(data));
-//            int x = 1;
         }
     }
 }
@@ -451,6 +484,42 @@ BOOL isPlayStation(IOHIDDeviceRef device) {
     UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
     UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
     return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4);
+}
+
+- (void)handlePlaystationDpad:(NSInteger)intValue {
+    switch (intValue) {
+        case 0:
+            [self updateButtonFlags:UP_FLAG state:YES];
+            break;
+        case 1:
+            [self updateButtonFlags:UP_FLAG | RIGHT_FLAG state:YES];
+            break;
+        case 2:
+            [self updateButtonFlags:RIGHT_FLAG state:YES];
+            break;
+        case 3:
+            [self updateButtonFlags:DOWN_FLAG | RIGHT_FLAG state:YES];
+            break;
+        case 4:
+            [self updateButtonFlags:DOWN_FLAG state:YES];
+            break;
+        case 5:
+            [self updateButtonFlags:DOWN_FLAG | LEFT_FLAG state:YES];
+            break;
+        case 6:
+            [self updateButtonFlags:LEFT_FLAG state:YES];
+            break;
+        case 7:
+            [self updateButtonFlags:UP_FLAG | LEFT_FLAG state:YES];
+            break;
+
+        case 8:
+            [self updateButtonFlags:UP_FLAG | RIGHT_FLAG | DOWN_FLAG | LEFT_FLAG state:NO];
+            break;
+
+        default:
+            break;
+    }
 }
 
 void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef value) {
@@ -613,39 +682,8 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                         break;
                         
                     case kHIDUsage_GD_Hatswitch:
-                        switch (intValue) {
-                            case 0:
-                                [self updateButtonFlags:UP_FLAG state:YES];
-                                break;
-                            case 1:
-                                [self updateButtonFlags:UP_FLAG | RIGHT_FLAG state:YES];
-                                break;
-                            case 2:
-                                [self updateButtonFlags:RIGHT_FLAG state:YES];
-                                break;
-                            case 3:
-                                [self updateButtonFlags:DOWN_FLAG | RIGHT_FLAG state:YES];
-                                break;
-                            case 4:
-                                [self updateButtonFlags:DOWN_FLAG state:YES];
-                                break;
-                            case 5:
-                                [self updateButtonFlags:DOWN_FLAG | LEFT_FLAG state:YES];
-                                break;
-                            case 6:
-                                [self updateButtonFlags:LEFT_FLAG state:YES];
-                                break;
-                            case 7:
-                                [self updateButtonFlags:UP_FLAG | LEFT_FLAG state:YES];
-                                break;
-
-                            case 8:
-                                [self updateButtonFlags:UP_FLAG | RIGHT_FLAG | DOWN_FLAG | LEFT_FLAG state:NO];
-                                break;
-
-                            default:
-                                break;
-                        }
+                        [self handlePlaystationDpad:intValue];
+                        break;
 
                     default:
                         break;
@@ -696,10 +734,6 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                         break;
                 }
             
-            case kHIDPage_VendorDefinedStart:
-                NSLog(@"kHIDPage_VendorDefinedStart usage: %02x", usage);
-                break;
-
             default:
                 break;
         }
@@ -720,10 +754,58 @@ void myHIDReportCallback (
                           uint8_t *               report,
                           CFIndex                 reportLength) {
     HIDSupport *self = (__bridge HIDSupport *)context;
-    IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
     
-    NSLog(@"data: %s", report);
-    int x = 1;
+    IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
+    if (!isPlayStation(device)) {
+        return;
+    };
+    
+    PS4StatePacket_t *state = (PS4StatePacket_t *)(report + 3);
+    
+    UInt8 abxy = state->rgucButtonsHatAndCounter[0] >> 4;
+    [self updateButtonFlags:X_FLAG state:(abxy & 0x01) != 0];
+    [self updateButtonFlags:A_FLAG state:(abxy & 0x02) != 0];
+    [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
+    [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
+    
+    [self handlePlaystationDpad:state->rgucButtonsHatAndCounter[0] & 0x0F];
+
+    UInt8 otherButtons = state->rgucButtonsHatAndCounter[1];
+    [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
+    [self updateButtonFlags:RB_FLAG state:(otherButtons & 0x02) != 0];
+    [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x10) != 0];
+    [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x20) != 0];
+    [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x40) != 0];
+    [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x80) != 0];
+
+    [self updateButtonFlags:SPECIAL_FLAG state:(state->rgucButtonsHatAndCounter[2] & 0x01) != 0];
+    
+    self.controller.lastLeftTrigger = state->ucTriggerLeft;
+    self.controller.lastRightTrigger = state->ucTriggerRight;
+
+    self.controller.lastLeftStickX = (state->ucLeftJoystickX - 128) * 255 + 1;
+    self.controller.lastLeftStickY = (state->ucLeftJoystickY - 128) * -255;
+    self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
+    self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
+    
+    BOOL useHIDControllerDriver = [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"] == 0;
+    if (useHIDControllerDriver) {
+
+        if (self.lastPS4State.rgucButtonsHatAndCounter[0] != state->rgucButtonsHatAndCounter[0] ||
+            self.lastPS4State.rgucButtonsHatAndCounter[1] != state->rgucButtonsHatAndCounter[1] ||
+            self.lastPS4State.rgucButtonsHatAndCounter[2] != state->rgucButtonsHatAndCounter[2] ||
+            self.lastPS4State.ucTriggerLeft != state->ucTriggerLeft ||
+            self.lastPS4State.ucTriggerRight != state->ucTriggerRight ||
+            self.lastPS4State.ucLeftJoystickX != state->ucLeftJoystickX ||
+            self.lastPS4State.ucLeftJoystickY != state->ucLeftJoystickY ||
+            self.lastPS4State.ucRightJoystickX != state->ucRightJoystickX ||
+            self.lastPS4State.ucRightJoystickY != state->ucRightJoystickY ||
+            0)
+        {
+            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+            self.lastPS4State = *state;
+        }
+    }
 }
 
 
@@ -747,14 +829,16 @@ void myHIDReportCallback (
     IOHIDManagerSetDeviceMatchingMultiple(self.hidManager, (__bridge CFArrayRef)matches);
     
     IOHIDManagerRegisterInputValueCallback(self.hidManager, myHIDCallback, (__bridge void * _Nullable)(self));
-//    IOHIDManagerRegisterInputReportCallback(self.hidManager, myHIDReportCallback, (__bridge void * _Nullable)(self));
+    IOHIDManagerRegisterInputReportCallback(self.hidManager, myHIDReportCallback, (__bridge void * _Nullable)(self));
     
     IOHIDManagerScheduleWithRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
     
     self.rumbleSemaphore = dispatch_semaphore_create(0);
     self.rumbleQueue = dispatch_queue_create("rumbleQueue", nil);
+    
+    __weak typeof(self) weakSelf = self;
     dispatch_async(self.rumbleQueue, ^{
-        [self runRumbleLoop];
+        [weakSelf runRumbleLoop];
     });
 }
 
@@ -766,6 +850,7 @@ void myHIDReportCallback (
     
     IOHIDManagerUnscheduleFromRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
     IOHIDManagerClose(self.hidManager, kIOHIDOptionsTypeNone);
+    CFRelease(self.hidManager);
 }
 
 

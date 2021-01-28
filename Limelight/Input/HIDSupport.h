@@ -24,4 +24,6 @@
 
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor;
 
+- (void)tearDownHidManager;
+
 @end

@@ -87,6 +87,11 @@
     [self.streamMan stopStream];
 }
 
+- (void)dealloc {
+    [self.hidSupport tearDownHidManager];
+    self.hidSupport = nil;
+}
+
 - (void)flagsChanged:(NSEvent *)event {
     [self.hidSupport flagsChanged:event];
     
@@ -383,7 +388,7 @@
 - (void)connectionStarted {
     [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:60];
     
-//    [self.hidSupport rumbleLowFreqMotor:0 highFreqMotor:0];
+    [self.hidSupport rumbleLowFreqMotor:0 highFreqMotor:0];
     
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
