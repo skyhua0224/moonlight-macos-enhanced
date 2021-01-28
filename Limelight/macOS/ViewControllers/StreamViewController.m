@@ -382,7 +382,9 @@
 
 - (void)connectionStarted {
     [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:60];
-
+    
+//    [self.hidSupport rumbleLowFreqMotor:0 highFreqMotor:0];
+    
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
         
@@ -409,6 +411,7 @@
 }
 
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
+    NSLog(@"rumbling low: %@, high: %@", @(lowFreqMotor), @(highFreqMotor));
     if (self.controllerSupport != nil) {
         [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
     } else {

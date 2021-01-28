@@ -141,13 +141,39 @@ static struct KeyMapping keys[] = {
     {kVK_F20, 0x83},
 };
 
+static UInt32 crc32_for_byte(UInt32 r)
+{
+    int i;
+    for(i = 0; i < 8; ++i) {
+        r = (r & 1? 0: (UInt32)0xEDB88320L) ^ r >> 1;
+    }
+    return r ^ (UInt32)0xFF000000L;
+}
+
+UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
+{
+    /* As an optimization we can precalculate a 256 entry table for each byte */
+    size_t i;
+    for(i = 0; i < len; ++i) {
+        crc = crc32_for_byte((UInt8)crc ^ ((const UInt8*)data)[i]) ^ crc >> 8;
+    }
+    return crc;
+}
+
 @interface HIDSupport ()
+@property (nonatomic) dispatch_queue_t rumbleQueue;
 @property (nonatomic, strong) NSDictionary *mappings;
 @property (nonatomic) IOHIDManagerRef hidManager;
 @property (nonatomic, strong) Controller *controller;
 @property (nonatomic) CVDisplayLinkRef displayLink;
 @property (nonatomic) CGFloat mouseDeltaX;
 @property (nonatomic) CGFloat mouseDeltaY;
+@property (nonatomic) UInt8 previousLowFreqMotor;
+@property (nonatomic) UInt8 previousHighFreqMotor;
+@property (atomic) UInt16 nextLowFreqMotor;
+@property (atomic) UInt16 nextHighFreqMotor;
+@property (atomic) dispatch_semaphore_t rumbleSemaphore;
+@property (atomic) BOOL closeRumble;
 @end
 
 @implementation HIDSupport
@@ -317,15 +343,73 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
 }
 
-- (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
-    UInt8 rumble_packet[] = { 0x03, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xEB };
-
-    rumble_packet[4] = lowFreqMotor / 256;
-    rumble_packet[5] = highFreqMotor / 256;
-    
+- (void)runRumbleLoop {
     NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
+    IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)devices.allObjects[0];
+    
+    while (YES) {
+        // wait for signal
+        dispatch_semaphore_wait(self.rumbleSemaphore, DISPATCH_TIME_FOREVER);
+        
+        if (self.closeRumble) {
+            break;
+        }
+        
+        // get next value
+        UInt16 lowFreqMotor = self.nextLowFreqMotor;
+        UInt16 highFreqMotor = self.nextHighFreqMotor;
+        
+        if (isXbox(device)) {
+            UInt8 rumble_packet[] = { 0x03, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xEB };
+            
+            UInt8 convertedLowFreqMotor = lowFreqMotor / 655;
+            UInt8 convertedHighFreqMotor = highFreqMotor / 655;
+            if (convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) {
+                
+                rumble_packet[4] = convertedLowFreqMotor;
+                rumble_packet[5] = convertedHighFreqMotor;
+                
+                NSLog(@"rumbling low: %@, high: %@ actual", @(convertedLowFreqMotor), @(convertedHighFreqMotor));
+                
+                self.previousLowFreqMotor = convertedLowFreqMotor;
+                self.previousHighFreqMotor = convertedHighFreqMotor;
+                
+                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, rumble_packet[0], rumble_packet, sizeof(rumble_packet));
+                usleep(30000);
+            } else {
+                NSLog(@"skipping rumble");
+            }
+        } else if (isPlayStation(device)) {
+//            UInt8 data[78] = {};
+//
+//            data[0] = 17;
+//            data[1] = 0xC0 | 0x04;  /* Magic value HID + CRC, also sets interval to 4ms for samples */
+//            data[3] = 0x03;  /* 0x1 is rumble, 0x2 is lightbar, 0x4 is the blink interval */
+//
+//            data[6] = highFreqMotor / 256;
+//            data[7] = lowFreqMotor / 256;
+//            data[8] = 0; // red
+//            data[9] = 0; // green
+//            data[10] = 255; // blue
+//
+//            /* Bluetooth reports need a CRC at the end of the packet (at least on Linux) */
+//            UInt8 ubHdr = 0xA2; /* hidp header is part of the CRC calculation */
+//            UInt32 unCRC;
+//            unCRC = SDL_crc32(0, &ubHdr, 1);
+//            unCRC = SDL_crc32(unCRC, data, (size_t)(sizeof(data) - sizeof(unCRC)));
+//            memcpy(&data[sizeof(data) - sizeof(unCRC)], &unCRC, sizeof(unCRC));
+//
+//            IOReturn retVal = IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, sizeof(data));
+//            int x = 1;
+        }
+    }
+}
 
-    IOHIDDeviceSetReport((IOHIDDeviceRef)devices.allObjects[0], kIOHIDReportTypeOutput, rumble_packet[0], rumble_packet, sizeof(rumble_packet));
+- (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
+    self.nextLowFreqMotor = lowFreqMotor;
+    self.nextHighFreqMotor = highFreqMotor;
+
+    dispatch_semaphore_signal(self.rumbleSemaphore);
 }
 
 - (short)translateKeyCodeWithEvent:(NSEvent *)event {
@@ -352,6 +436,23 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     return modifiers;
 }
 
+UInt16 usbIdFromDevice(IOHIDDeviceRef device, NSString *key) {
+    CFNumberRef vendor = (CFNumberRef)(IOHIDDeviceGetProperty(device, (CFStringRef)key));
+    return [(NSNumber *)CFBridgingRelease(vendor) unsignedShortValue];
+}
+
+BOOL isXbox(IOHIDDeviceRef device) {
+    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
+    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
+    return vendorId == 0x045E && (productId == 0x02FD || productId == 0x0B13);
+}
+
+BOOL isPlayStation(IOHIDDeviceRef device) {
+    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
+    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
+    return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4);
+}
+
 void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef value) {
     IOHIDElementRef elem = IOHIDValueGetElement(value);
     uint32_t usagePage = IOHIDElementGetUsagePage(elem);
@@ -362,13 +463,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
     
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
     
-    CFNumberRef vendor = (CFNumberRef)(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)));
-    UInt16 vendorId = [(NSNumber *)CFBridgingRelease(vendor) unsignedShortValue];
-    
-    CFNumberRef product = (CFNumberRef)(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)));
-    UInt16 productId = [(NSNumber *)CFBridgingRelease(product) unsignedShortValue];
-
-    if (vendorId == 0x045E && (productId == 0x02FD || productId == 0x0B13)) { // Xbox One S Wireless and Xbox Series X/S Wireless Controller
+    if (isXbox(device)) {
         switch (usagePage) {
             case kHIDPage_GenericDesktop:
                 switch (usage) {
@@ -494,7 +589,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                 break;
         }
 
-    } else if (vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4)) { // DualShock 4
+    } else if (isPlayStation(device)) {
         switch (usagePage) {
             case kHIDPage_GenericDesktop:
                 switch (usage) {
@@ -600,7 +695,11 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                     default:
                         break;
                 }
-                
+            
+            case kHIDPage_VendorDefinedStart:
+                NSLog(@"kHIDPage_VendorDefinedStart usage: %02x", usage);
+                break;
+
             default:
                 break;
         }
@@ -611,6 +710,22 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
         LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
     }
 }
+
+void myHIDReportCallback (
+                          void * _Nullable        context,
+                          IOReturn                result,
+                          void * _Nullable        sender,
+                          IOHIDReportType         type,
+                          uint32_t                reportID,
+                          uint8_t *               report,
+                          CFIndex                 reportLength) {
+    HIDSupport *self = (__bridge HIDSupport *)context;
+    IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
+    
+    NSLog(@"data: %s", report);
+    int x = 1;
+}
+
 
 - (void)updateButtonFlags:(int)flag state:(BOOL)set {
     if (set) {
@@ -632,11 +747,23 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
     IOHIDManagerSetDeviceMatchingMultiple(self.hidManager, (__bridge CFArrayRef)matches);
     
     IOHIDManagerRegisterInputValueCallback(self.hidManager, myHIDCallback, (__bridge void * _Nullable)(self));
+//    IOHIDManagerRegisterInputReportCallback(self.hidManager, myHIDReportCallback, (__bridge void * _Nullable)(self));
     
     IOHIDManagerScheduleWithRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+    
+    self.rumbleSemaphore = dispatch_semaphore_create(0);
+    self.rumbleQueue = dispatch_queue_create("rumbleQueue", nil);
+    dispatch_async(self.rumbleQueue, ^{
+        [self runRumbleLoop];
+    });
 }
 
 - (void)tearDownHidManager {
+    self.closeRumble = YES;
+    dispatch_semaphore_signal(self.rumbleSemaphore);
+    
+    self.rumbleQueue = nil;
+    
     IOHIDManagerUnscheduleFromRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
     IOHIDManagerClose(self.hidManager, kIOHIDOptionsTypeNone);
 }
