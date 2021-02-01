@@ -46,6 +46,13 @@
     [self prepareForStreaming];
     
     __weak typeof(self) weakSelf = self;
+    
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"]) {
+            [NSCursor hide];
+        }
+    }];
+    
     [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if (![weakSelf isWindowInCurrentSpace]) {
             [weakSelf uncaptureMouse];
