@@ -215,6 +215,7 @@
 - (IBAction)performCloseAndQuitApp:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
     
+    [self performCloseStreamWindow:sender];
     [self.delegate quitApp:self.app completion:nil];
 }
 
