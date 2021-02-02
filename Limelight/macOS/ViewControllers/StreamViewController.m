@@ -31,6 +31,10 @@
 @property (nonatomic, strong) HIDSupport *hidSupport;
 @property (nonatomic, strong) StreamManager *streamMan;
 @property (nonatomic, readonly) StreamViewMac *streamView;
+@property (nonatomic, strong) id windowDidExitFullScreenNotification;
+@property (nonatomic, strong) id windowDidEnterFullScreenNotification;
+@property (nonatomic, strong) id windowDidResignKeyNotification;
+@property (nonatomic, strong) id windowDidBecomeKeyNotification;
 
 @property (nonatomic) IOPMAssertionID powerAssertionID;
 
@@ -47,23 +51,43 @@
     
     __weak typeof(self) weakSelf = self;
 
-    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        if ([weakSelf.view.window isKeyWindow]) {
-            [weakSelf captureMouse];
+    self.windowDidExitFullScreenNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            if ([weakSelf.view.window isKeyWindow]) {
+                [weakSelf captureMouse];
+            }
         }
     }];
 
-    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        [weakSelf captureMouseIfAppropriate];
-    }];
-    
-    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        if (![weakSelf isWindowInCurrentSpace]) {
-            [weakSelf uncaptureMouse];
+    self.windowDidEnterFullScreenNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            if ([weakSelf isWindowInCurrentSpace]) {
+                if ([weakSelf.view.window styleMask] & NSWindowStyleMaskFullScreen) {
+                    if ([weakSelf.view.window isKeyWindow]) {
+                        [weakSelf captureMouse];
+                    }
+                }
+            }
         }
     }];
-    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        [weakSelf captureMouseIfAppropriate];
+    
+    self.windowDidResignKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            if (![weakSelf isWindowInCurrentSpace]) {
+                [weakSelf uncaptureMouse];
+            }
+        }
+    }];
+    self.windowDidBecomeKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            if ([weakSelf isWindowInCurrentSpace]) {
+	                if ([weakSelf.view.window isKeyWindow]) {
+                    [weakSelf captureMouse];
+                }
+            }
+        } else {
+            [weakSelf uncaptureMouse];
+        }
     }];
 }
 
@@ -83,14 +107,15 @@
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
 }
 
-- (void)viewDidDisappear {
-    [super viewDidDisappear];
-    
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidExitFullScreenNotification];
+    [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidEnterFullScreenNotification];
+    [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidResignKeyNotification];
+    [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyNotification];
+
     [self uncaptureMouse];
     [self.streamMan stopStream];
-}
 
-- (void)dealloc {
     [self.hidSupport tearDownHidManager];
     self.hidSupport = nil;
 }
@@ -164,6 +189,16 @@
     const NSEventModifierFlags modifierFlags = NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand;
     const NSEventModifierFlags eventModifierFlags = event.modifierFlags & modifierFlags;
     
+    if ((event.keyCode == kVK_ANSI_Grave && eventModifierFlags == NSEventModifierFlagCommand)
+        || (event.keyCode == kVK_ANSI_H && eventModifierFlags == NSEventModifierFlagCommand)
+        ) {
+        if (!([self.view.window styleMask] & NSWindowStyleMaskFullScreen)) {
+            if (!self.hidSupport.shouldSendInputEvents) {
+                return NO;
+            }
+        }
+    }
+    
     if ((event.keyCode == kVK_ANSI_F && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagCommand))
         || (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagOption | NSEventModifierFlagCommand))
         || (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagShift | NSEventModifierFlagCommand))
@@ -231,19 +266,11 @@
     [self itemWithMenu:appMenu andAction:@selector(terminate:)].enabled = enable;
 }
 
-- (void)captureMouseIfAppropriate {
-    if ([self isWindowInCurrentSpace]) {
-        if ([self.view.window styleMask] & NSWindowStyleMaskFullScreen) {
-            if ([self.view.window isKeyWindow]) {
-                [self captureMouse];
-            }
-        }
-    }
-}
-
 - (void)captureMouse {
     CGAssociateMouseAndMouseCursorPosition(NO);
-    [NSCursor hide];
+    if (NSApplication.sharedApplication.isActive) {
+        [NSCursor hide];
+    }
     
     CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
     CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
@@ -255,7 +282,7 @@
     
     [self disallowDisplaySleep];
     
-    self.hidSupport.shouldSendMouseEvents = YES;
+    self.hidSupport.shouldSendInputEvents = YES;
     self.view.window.acceptsMouseMovedEvents = YES;
 }
 
@@ -267,7 +294,7 @@
     
     [self allowDisplaySleep];
     
-    self.hidSupport.shouldSendMouseEvents = NO;
+    self.hidSupport.shouldSendInputEvents = NO;
     self.view.window.acceptsMouseMovedEvents = NO;
 }
 
@@ -285,6 +312,10 @@
         CFRelease(windowsInSpace);
     }
     return found;
+}
+
+- (BOOL)isOurWindowTheWindowInNotiifcation:(NSNotification *)note {
+    return ((NSWindow *)note.object) == self.view.window;
 }
 
 - (NSMenuItem *)itemWithMenu:(NSMenu *)menu andAction:(SEL)action {

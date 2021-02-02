@@ -247,7 +247,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     if (deltaX != 0 || deltaY != 0) {
         me.mouseDeltaX = 0;
         me.mouseDeltaY = 0;
-        if (me.shouldSendMouseEvents) {
+        if (me.shouldSendInputEvents) {
             LiSendMouseMoveEvent(deltaX, deltaY);
         }
     }
@@ -288,46 +288,52 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)flagsChanged:(NSEvent *)event {
-    switch (event.keyCode) {
-        case kVK_Shift:
-            [self sendKeyboardModifierEvent:event withKeyCode:0xA0 andModifierFlag:NSEventModifierFlagShift];
-            break;
-        case kVK_RightShift:
-            [self sendKeyboardModifierEvent:event withKeyCode:0xA1 andModifierFlag:NSEventModifierFlagShift];
-            break;
-            
-        case kVK_Control:
-            [self sendKeyboardModifierEvent:event withKeyCode:0xA2 andModifierFlag:NSEventModifierFlagControl];
-            break;
-        case kVK_RightControl:
-            [self sendKeyboardModifierEvent:event withKeyCode:0xA3 andModifierFlag:NSEventModifierFlagControl];
-            break;
-
-        case kVK_Option:
-            [self sendKeyboardModifierEvent:event withKeyCode:0xA4 andModifierFlag:NSEventModifierFlagOption];
-            break;
-        case kVK_RightOption:
-            [self sendKeyboardModifierEvent:event withKeyCode:0xA5 andModifierFlag:NSEventModifierFlagOption];
-            break;
-            
-        case kVK_Command:
-            [self sendKeyboardModifierEvent:event withKeyCode:0x5B andModifierFlag:NSEventModifierFlagCommand];
-            break;
-        case kVK_RightCommand:
-            [self sendKeyboardModifierEvent:event withKeyCode:0x5C andModifierFlag:NSEventModifierFlagCommand];
-            break;
-
-        default:
-            break;
+    if (self.shouldSendInputEvents) {
+        switch (event.keyCode) {
+            case kVK_Shift:
+                [self sendKeyboardModifierEvent:event withKeyCode:0xA0 andModifierFlag:NSEventModifierFlagShift];
+                break;
+            case kVK_RightShift:
+                [self sendKeyboardModifierEvent:event withKeyCode:0xA1 andModifierFlag:NSEventModifierFlagShift];
+                break;
+                
+            case kVK_Control:
+                [self sendKeyboardModifierEvent:event withKeyCode:0xA2 andModifierFlag:NSEventModifierFlagControl];
+                break;
+            case kVK_RightControl:
+                [self sendKeyboardModifierEvent:event withKeyCode:0xA3 andModifierFlag:NSEventModifierFlagControl];
+                break;
+                
+            case kVK_Option:
+                [self sendKeyboardModifierEvent:event withKeyCode:0xA4 andModifierFlag:NSEventModifierFlagOption];
+                break;
+            case kVK_RightOption:
+                [self sendKeyboardModifierEvent:event withKeyCode:0xA5 andModifierFlag:NSEventModifierFlagOption];
+                break;
+                
+            case kVK_Command:
+                [self sendKeyboardModifierEvent:event withKeyCode:0x5B andModifierFlag:NSEventModifierFlagCommand];
+                break;
+            case kVK_RightCommand:
+                [self sendKeyboardModifierEvent:event withKeyCode:0x5C andModifierFlag:NSEventModifierFlagCommand];
+                break;
+                
+            default:
+                break;
+        }
     }
 }
 
 - (void)keyDown:(NSEvent *)event {
-    LiSendKeyboardEvent(0x8000 | [self translateKeyCodeWithEvent:event], KEY_ACTION_DOWN, [self translateKeyModifierWithEvent:event]);
+    if (self.shouldSendInputEvents) {
+        LiSendKeyboardEvent(0x8000 | [self translateKeyCodeWithEvent:event], KEY_ACTION_DOWN, [self translateKeyModifierWithEvent:event]);
+    }
 }
 
 - (void)keyUp:(NSEvent *)event {
-    LiSendKeyboardEvent(0x8000 | [self translateKeyCodeWithEvent:event], KEY_ACTION_UP, [self translateKeyModifierWithEvent:event]);
+    if (self.shouldSendInputEvents) {
+        LiSendKeyboardEvent(0x8000 | [self translateKeyCodeWithEvent:event], KEY_ACTION_UP, [self translateKeyModifierWithEvent:event]);
+    }
 }
 
 - (void)releaseAllModifierKeys {
@@ -342,13 +348,13 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)mouseDown:(NSEvent *)event withButton:(int)button {
-    if (self.shouldSendMouseEvents) {
+    if (self.shouldSendInputEvents) {
         LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
     }
 }
 
 - (void)mouseUp:(NSEvent *)event withButton:(int)button {
-    if (self.shouldSendMouseEvents) {
+    if (self.shouldSendInputEvents) {
         LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, button);
     }
 }
@@ -359,7 +365,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)scrollWheel:(NSEvent *)event {
-    if (self.shouldSendMouseEvents) {
+    if (self.shouldSendInputEvents) {
         if (event.hasPreciseScrollingDeltas) {
             LiSendHighResScrollEvent(event.scrollingDeltaY);
         } else {
