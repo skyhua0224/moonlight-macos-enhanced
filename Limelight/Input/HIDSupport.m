@@ -369,9 +369,6 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)runRumbleLoop {
-    NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
-    IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)devices.allObjects[0];
-    
     while (YES) {
         // wait for signal
         dispatch_semaphore_wait(self.rumbleSemaphore, DISPATCH_TIME_FOREVER);
@@ -380,6 +377,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             break;
         }
         
+        NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
+        IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)devices.allObjects[0];
         if (device == nil) {
             continue;
         }
