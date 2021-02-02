@@ -46,11 +46,15 @@
     [self prepareForStreaming];
     
     __weak typeof(self) weakSelf = self;
-    
-    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"]) {
-            [NSCursor hide];
+
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf.view.window isKeyWindow]) {
+            [weakSelf captureMouse];
         }
+    }];
+
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf captureMouseIfAppropriate];
     }];
     
     [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
@@ -59,13 +63,7 @@
         }
     }];
     [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        if ([weakSelf isWindowInCurrentSpace]) {
-            if ([weakSelf.view.window styleMask] & NSWindowStyleMaskFullScreen) {
-                if ([weakSelf.view.window isKeyWindow]) {
-                    [weakSelf captureMouse];
-                }
-            }
-        }
+        [weakSelf captureMouseIfAppropriate];
     }];
 }
 
@@ -83,8 +81,6 @@
     [self.view.window moonlight_centerWindowOnFirstRun];
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
-    
-    [self captureMouse];
 }
 
 - (void)viewDidDisappear {
@@ -215,7 +211,6 @@
 
 - (IBAction)performCloseStreamWindow:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
-
     [self.nextResponder doCommandBySelector:@selector(performClose:)];
 }
 
@@ -236,38 +231,44 @@
     [self itemWithMenu:appMenu andAction:@selector(terminate:)].enabled = enable;
 }
 
-- (void)captureMouse {
-    if (!self.hidSupport.shouldSendMouseEvents) {
-        CGAssociateMouseAndMouseCursorPosition(NO);
-        [NSCursor hide];
-        
-        CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
-        CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
-        CGFloat screenHeight = self.view.window.screen.frame.size.height;
-        CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
-        CGWarpMouseCursorPosition(cursorPoint);
-        
-        [self enableMenuItems:NO];
-
-        [self disallowDisplaySleep];
-        
-        self.hidSupport.shouldSendMouseEvents = YES;
-        self.view.window.acceptsMouseMovedEvents = YES;
+- (void)captureMouseIfAppropriate {
+    if ([self isWindowInCurrentSpace]) {
+        if ([self.view.window styleMask] & NSWindowStyleMaskFullScreen) {
+            if ([self.view.window isKeyWindow]) {
+                [self captureMouse];
+            }
+        }
     }
 }
 
+- (void)captureMouse {
+    CGAssociateMouseAndMouseCursorPosition(NO);
+    [NSCursor hide];
+    
+    CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
+    CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
+    CGFloat screenHeight = self.view.window.screen.frame.size.height;
+    CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
+    CGWarpMouseCursorPosition(cursorPoint);
+    
+    [self enableMenuItems:NO];
+    
+    [self disallowDisplaySleep];
+    
+    self.hidSupport.shouldSendMouseEvents = YES;
+    self.view.window.acceptsMouseMovedEvents = YES;
+}
+
 - (void)uncaptureMouse {
-    if (self.hidSupport.shouldSendMouseEvents) {
-        CGAssociateMouseAndMouseCursorPosition(YES);
-        [NSCursor unhide];
-        
-        [self enableMenuItems:YES];
-
-        [self allowDisplaySleep];
-
-        self.hidSupport.shouldSendMouseEvents = NO;
-        self.view.window.acceptsMouseMovedEvents = NO;
-    }
+    CGAssociateMouseAndMouseCursorPosition(YES);
+    [NSCursor unhide];
+    
+    [self enableMenuItems:YES];
+    
+    [self allowDisplaySleep];
+    
+    self.hidSupport.shouldSendMouseEvents = NO;
+    self.view.window.acceptsMouseMovedEvents = NO;
 }
 
 - (BOOL)isWindowInCurrentSpace {
@@ -319,6 +320,8 @@
     [self.hidSupport releaseAllModifierKeys];
     
     dispatch_async(dispatch_get_main_queue(), ^{
+        [self uncaptureMouse];
+
         [self.delegate appDidQuit:self.app];
         if (message != nil) {
             [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Connection Failed" message:message window:self.view.window completionHandler:^(NSModalResponse returnCode) {
@@ -409,6 +412,8 @@
             if (!(self.view.window.styleMask & NSWindowStyleMaskFullScreen)) {
                 [self.view.window toggleFullScreen:self];
             }
+        } else {
+            [self captureMouse];
         }
     });
 }
