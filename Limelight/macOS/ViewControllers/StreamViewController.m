@@ -35,6 +35,7 @@
 @property (nonatomic, strong) id windowDidEnterFullScreenNotification;
 @property (nonatomic, strong) id windowDidResignKeyNotification;
 @property (nonatomic, strong) id windowDidBecomeKeyNotification;
+@property (nonatomic, strong) id windowWillCloseNotification;
 @property (nonatomic) int cursorHiddenCounter;
 
 @property (nonatomic) IOPMAssertionID powerAssertionID;
@@ -100,6 +101,15 @@
             [weakSelf uncaptureMouse];
         }
     }];
+    
+    self.windowWillCloseNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowWillCloseNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [weakSelf.streamMan stopStream];
+            });
+        }
+    }];
+    
 }
 
 - (void)viewDidAppear {
@@ -123,6 +133,7 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidEnterFullScreenNotification];
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidResignKeyNotification];
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyNotification];
+    [[NSNotificationCenter defaultCenter] removeObserver:self.windowWillCloseNotification];
 
     [self.hidSupport tearDownHidManager];
     self.hidSupport = nil;
@@ -257,7 +268,6 @@
 
 - (IBAction)performCloseStreamWindow:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
-    [self.streamMan stopStream];
     [self.nextResponder doCommandBySelector:@selector(performClose:)];
 }
 
