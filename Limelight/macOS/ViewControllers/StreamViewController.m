@@ -272,11 +272,7 @@
 }
 
 - (IBAction)performCloseAndQuitApp:(id)sender {
-    [self performCloseStreamWindow:sender];
-    
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self.delegate quitApp:self.app completion:nil];
-    });
+    [self.delegate quitApp:self.app completion:nil];
 }
 
 
