@@ -423,6 +423,9 @@
     streamConfig.optimizeGameSettings = streamSettings.optimizeGames;
     streamConfig.playAudioOnPC = streamSettings.playAudioOnPC;
     streamConfig.allowHevc = streamSettings.useHevc;
+    if (streamSettings.useHevc) {
+        streamConfig.enableHdr = YES;
+    }
     
     streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
 
