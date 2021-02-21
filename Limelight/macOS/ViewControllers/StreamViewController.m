@@ -25,10 +25,11 @@
 
 #import "Moonlight-Swift.h"
 
-@interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate>
+@interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate, InputPresenceDelegate>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
 @property (nonatomic, strong) HIDSupport *hidSupport;
+@property (nonatomic) BOOL useSystemControllerDriver;
 @property (nonatomic, strong) StreamManager *streamMan;
 @property (nonatomic, readonly) StreamViewMac *streamView;
 @property (nonatomic, strong) id windowDidExitFullScreenNotification;
@@ -45,6 +46,10 @@
 @implementation StreamViewController
 
 #pragma mark - Lifecycle
+
+- (BOOL)useSystemControllerDriver {
+    return [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"] == 1;
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -105,6 +110,9 @@
     self.windowWillCloseNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowWillCloseNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                if (weakSelf.useSystemControllerDriver) {
+                    [weakSelf.controllerSupport cleanup];
+                }
                 [weakSelf.streamMan stopStream];
             });
         }
@@ -426,13 +434,15 @@
     if (streamSettings.useHevc) {
         streamConfig.enableHdr = YES;
     }
+
+    streamConfig.multiController = YES;
+    streamConfig.gamepadMask = self.useSystemControllerDriver ? [ControllerSupport getConnectedGamepadMask:streamConfig] : 1;
     
     streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
 
-    BOOL useSystemControllerDriver = [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"] == 1;
-    if (useSystemControllerDriver) {
+    if (self.useSystemControllerDriver) {
         if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-            self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig];
+            self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig presenceDelegate:self];
         }
     }
     self.hidSupport = [[HIDSupport alloc] init];
@@ -501,6 +511,15 @@
 }
 
 - (void)connectionStatusUpdate:(int)status {
+}
+
+
+#pragma mark - InputPresenceDelegate
+
+- (void)gamepadPresenceChanged {
+}
+
+- (void)mousePresenceChanged {
 }
 
 @end

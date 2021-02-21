@@ -11,15 +11,22 @@
 
 @class OnScreenControls;
 
+@protocol InputPresenceDelegate <NSObject>
+
+- (void) gamepadPresenceChanged;
+- (void) mousePresenceChanged;
+
+@end
+
 @interface ControllerSupport : NSObject
 
--(id) initWithConfig:(StreamConfiguration*)streamConfig;
+-(id) initWithConfig:(StreamConfiguration*)streamConfig presenceDelegate:(id<InputPresenceDelegate>)delegate;
 
 #if TARGET_OS_IPHONE
 -(void) initAutoOnScreenControlMode:(OnScreenControls*)osc;
--(void) cleanup;
 -(Controller*) getOscController;
 #endif
+-(void) cleanup;
 
 -(void) updateLeftStick:(Controller*)controller x:(short)x y:(short)y;
 -(void) updateRightStick:(Controller*)controller x:(short)x y:(short)y;
@@ -38,8 +45,6 @@
 
 +(int) getConnectedGamepadMask:(StreamConfiguration*)streamConfig;
 
-@property (nonatomic, strong) id connectObserver;
-@property (nonatomic, strong) id disconnectObserver;
 -(NSUInteger) getConnectedGamepadCount;
 
 @end
