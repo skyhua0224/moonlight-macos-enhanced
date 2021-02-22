@@ -17,6 +17,8 @@
 #import "HttpRequest.h"
 #import "IdManager.h"
 
+#import "AlternateControllerNetworking.h"
+
 @implementation StreamManager {
     StreamConfiguration* _config;
 
@@ -77,6 +79,8 @@
             return;
         }
     }
+    
+    startListeningForRumblePackets(_callbacks);
 
 #if TARGET_OS_IPHONE
     // Set mouse delta factors from the screen resolution and stream size
@@ -102,6 +106,8 @@
 
 - (void) stopStream
 {
+    stopListeningForRumblePackets();
+    
     [_connection terminate];
     _callbacks = nil;
 }

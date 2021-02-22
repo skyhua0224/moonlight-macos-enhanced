@@ -395,8 +395,6 @@
             [self.view.window close];
         }
     });
-    
-    [ResolutionSyncRequester resetResolutionFor:self.app.host.activeAddress];
 }
 
 - (StreamViewMac *)streamView {

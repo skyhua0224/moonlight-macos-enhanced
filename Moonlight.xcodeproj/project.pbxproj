@@ -58,6 +58,7 @@
 		4C4FB2B323713AA100D0FCE3 /* AboutViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B223713AA100D0FCE3 /* AboutViewController.m */; };
 		4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */; };
 		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
+		4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */; };
 		4C65704A23EBE9F4000D1601 /* PreferencesView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* PreferencesView.xib */; };
 		4C65704C23EBEE66000D1601 /* PreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3C02E1FF73A490029EBF5 /* PreferencesWindow.xib */; };
 		4C682BD124D1227600A70C44 /* Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C682BD024D1227600A70C44 /* Helpers.m */; };
@@ -142,6 +143,8 @@
 		4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutWindow.xib; sourceTree = "<group>"; };
 		4C4FB2B923715A9000D0FCE3 /* LinkTextField.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LinkTextField.h; sourceTree = "<group>"; };
 		4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LinkTextField.m; sourceTree = "<group>"; };
+		4C51EE3325E0DE2700F205D3 /* AlternateControllerNetworking.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AlternateControllerNetworking.h; sourceTree = "<group>"; };
+		4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AlternateControllerNetworking.m; sourceTree = "<group>"; };
 		4C65704923EBE9F4000D1601 /* PreferencesView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = PreferencesView.xib; sourceTree = "<group>"; };
 		4C65704B23EBEB3D000D1601 /* PreferencesViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PreferencesViewController.h; sourceTree = "<group>"; };
 		4C682BCF24D1227600A70C44 /* Helpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Helpers.h; sourceTree = "<group>"; };
@@ -381,6 +384,8 @@
 				4C84385821FE9453000A77CD /* NSApplication+Moonlight.h */,
 				4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */,
 				4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */,
+				4C51EE3325E0DE2700F205D3 /* AlternateControllerNetworking.h */,
+				4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -1019,6 +1024,7 @@
 				4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
+				4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */,
 				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
 				4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */,
 				4C682BD124D1227600A70C44 /* Helpers.m in Sources */,
@@ -1193,6 +1199,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -1240,6 +1247,7 @@
 				PROVISIONING_PROFILE = "";
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 			};
