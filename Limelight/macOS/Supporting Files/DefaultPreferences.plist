@@ -10,15 +10,17 @@
 	<false/>
 	<key>scrollWheelLines</key>
 	<integer>1</integer>
-	<key>controllerMethod</key>
-	<integer>0</integer>
 	<key>mouseScrollMethod</key>
+	<integer>0</integer>
+	<key>controllerMethod</key>
 	<integer>0</integer>
 	<key>videoCodec</key>
 	<integer>0</integer>
 	<key>dynamicResolution</key>
 	<false/>
 	<key>autoFullscreen</key>
+	<true/>
+	<key>rumbleGamepad</key>
 	<true/>
 	<key>controllerDriver</key>
 	<integer>0</integer>

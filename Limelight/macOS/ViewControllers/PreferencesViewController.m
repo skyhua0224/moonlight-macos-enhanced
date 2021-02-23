@@ -80,6 +80,7 @@ static float bitrateSteps[] = {
 @property (weak) IBOutlet NSButton *optimizeSettingsCheckbox;
 @property (weak) IBOutlet NSButton *playAudioOnPCCheckbox;
 @property (weak) IBOutlet NSButton *autoFullscreenCheckbox;
+@property (weak) IBOutlet NSButton *controllerVibrationCheckbox;
 @property (weak) IBOutlet NSPopUpButton *controllerDriverSelector;
 
 @end
@@ -115,6 +116,7 @@ static float bitrateSteps[] = {
     self.optimizeSettingsCheckbox.state = streamSettings.optimizeGames ? NSControlStateValueOn : NSControlStateValueOff;
     self.playAudioOnPCCheckbox.state = streamSettings.playAudioOnPC ? NSControlStateValueOn : NSControlStateValueOff;
     self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
+    self.controllerVibrationCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"rumbleGamepad"] ? NSControlStateValueOn : NSControlStateValueOff;
     [self.controllerDriverSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"]];
 }
 
@@ -245,6 +247,10 @@ static float bitrateSteps[] = {
 
 - (IBAction)didToggleAutoFullscreen:(id)sender {
     [[NSUserDefaults standardUserDefaults] setBool:self.autoFullscreenCheckbox.state == NSControlStateValueOn forKey:@"autoFullscreen"];
+}
+
+- (IBAction)didToggleControllerVibration:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setBool:self.controllerVibrationCheckbox.state == NSControlStateValueOn forKey:@"rumbleGamepad"];
 }
 
 - (IBAction)didChangeControllerDriver:(id)sender {
