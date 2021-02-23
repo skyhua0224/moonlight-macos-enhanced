@@ -71,6 +71,8 @@ static float bitrateSteps[] = {
 @property (weak) IBOutlet NSTextField *pointerSpeedLabel;
 @property (weak) IBOutlet NSButtonCell *disablePointerPrecisionCheckbox;
 @property (weak) IBOutlet NSTextField *scrollWheelLinesTextField;
+@property (weak) IBOutlet NSPopUpButton *mouseScrollMethodSelector;
+@property (weak) IBOutlet NSPopUpButton *controllerMethodSelector;
 @property (weak) IBOutlet NSSlider *bitrateSlider;
 @property (weak) IBOutlet NSTextField *bitrateLabel;
 @property (weak) IBOutlet NSPopUpButton *videoCodecSelector;
@@ -104,6 +106,8 @@ static float bitrateSteps[] = {
     [self updatePointerSpeedLabel];
     self.disablePointerPrecisionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecision"];
     self.scrollWheelLinesTextField.integerValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"scrollWheelLines"];
+    [self.mouseScrollMethodSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"mouseScrollMethod"]];
+    [self.controllerMethodSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"controllerMethod"]];
     self.bitrateSlider.integerValue = [self getTickMarkFromBitrate:[streamSettings.bitrate intValue]];
     [self updateBitrateLabel];
     [self.videoCodecSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"videoCodec"]];
@@ -209,6 +213,13 @@ static float bitrateSteps[] = {
     [[NSUserDefaults standardUserDefaults] setInteger:self.scrollWheelLinesTextField.integerValue forKey:@"scrollWheelLines"];
 }
 
+- (IBAction)didChangeMouseScrollMethod:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setInteger:self.mouseScrollMethodSelector.selectedTag forKey:@"mouseScrollMethod"];
+}
+
+- (IBAction)didChangeControllerMethod:(id)sender {
+    [[NSUserDefaults standardUserDefaults] setInteger:self.controllerMethodSelector.selectedTag forKey:@"controllerMethod"];
+}
 
 - (IBAction)didChangeBitrate:(id)sender {
     [self updateBitrateLabel];

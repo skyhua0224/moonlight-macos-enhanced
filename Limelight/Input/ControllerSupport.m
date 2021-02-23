@@ -14,6 +14,8 @@
 #import "DataManager.h"
 #include "Limelight.h"
 
+#import "AlternateControllerNetworking.h"
+
 @import GameController;
 @import AudioToolbox;
 @import CoreHaptics;
@@ -304,8 +306,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     [_controllerStreamLock lock];
     @synchronized(controller) {
         // Player 1 is always present for OSC
-        LiSendMultiControllerEvent(_multiController ? controller.playerIndex : 0,
-                                   (_multiController ? _controllerNumbers : 1) | (_oscEnabled ? 1 : 0), controller.lastButtonFlags, controller.lastLeftTrigger, controller.lastRightTrigger, controller.lastLeftStickX, controller.lastLeftStickY, controller.lastRightStickX, controller.lastRightStickY);
+        if ([[NSUserDefaults standardUserDefaults] integerForKey:@"controllerMethod"] == 1) {
+            CFDYSendMultiControllerEvent(_multiController ? controller.playerIndex : 0,
+                                       (_multiController ? _controllerNumbers : 1) | (_oscEnabled ? 1 : 0), controller.lastButtonFlags, controller.lastLeftTrigger, controller.lastRightTrigger, controller.lastLeftStickX, controller.lastLeftStickY, controller.lastRightStickX, controller.lastRightStickY);
+        } else {
+            LiSendMultiControllerEvent(_multiController ? controller.playerIndex : 0,
+                                       (_multiController ? _controllerNumbers : 1) | (_oscEnabled ? 1 : 0), controller.lastButtonFlags, controller.lastLeftTrigger, controller.lastRightTrigger, controller.lastLeftStickX, controller.lastLeftStickY, controller.lastRightStickX, controller.lastRightStickY);
+        }
     }
     [_controllerStreamLock unlock];
 }

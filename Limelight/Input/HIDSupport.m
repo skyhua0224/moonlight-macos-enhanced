@@ -368,8 +368,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 - (void)scrollWheel:(NSEvent *)event {
     if (self.shouldSendInputEvents) {
         if (event.hasPreciseScrollingDeltas) {
-            CFDYSendHighResScrollEvent(event.scrollingDeltaY);
-//            LiSendHighResScrollEvent(event.scrollingDeltaY);
+            if ([[NSUserDefaults standardUserDefaults] integerForKey:@"mouseScrollMethod"] == 1) {
+                CFDYSendHighResScrollEvent(event.scrollingDeltaY);
+            } else {
+                LiSendHighResScrollEvent(event.scrollingDeltaY);
+            }
         } else {
             LiSendScrollEvent(event.scrollingDeltaY);
         }
@@ -748,8 +751,11 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
 
     BOOL useHIDControllerDriver = [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"] == 0;
     if (useHIDControllerDriver) {
-//        LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-        CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+        if ([[NSUserDefaults standardUserDefaults] integerForKey:@"controllerMethod"] == 1) {
+            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+        } else {
+            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+        }
     }
 }
 
@@ -810,8 +816,11 @@ void myHIDReportCallback (
             self.lastPS4State.ucRightJoystickY != state->ucRightJoystickY ||
             0)
         {
-//            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+            if ([[NSUserDefaults standardUserDefaults] integerForKey:@"controllerMethod"] == 1) {
+                CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+            } else {
+                LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+            }
             self.lastPS4State = *state;
         }
     }
