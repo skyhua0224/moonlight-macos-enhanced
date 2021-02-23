@@ -16,7 +16,8 @@ extern struct sockaddr_storage RemoteAddr;
 extern SOCKADDR_LEN RemoteAddrLen;
 
 
-static SOCKET clientSocket = INVALID_SOCKET;
+static SOCKET controllerSocket = INVALID_SOCKET;
+static SOCKET mouseScrollSocket = INVALID_SOCKET;
 static SOCKET rumbleSocket = INVALID_SOCKET;
 
 static dispatch_queue_t rumbleQueue;
@@ -31,9 +32,9 @@ void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMas
                                        short buttonFlags, unsigned char leftTrigger, unsigned char rightTrigger,
                                        short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
 
-    if (clientSocket == INVALID_SOCKET) {
-        clientSocket = createSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, true);
-        if (clientSocket == SOCKET_ERROR) {
+    if (controllerSocket == INVALID_SOCKET) {
+        controllerSocket = createSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, true);
+        if (controllerSocket == SOCKET_ERROR) {
             NSLog(@"Error creating controller input socket: %d", LastSocketError());
         }
     }
@@ -54,10 +55,40 @@ void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMas
     memcpy(addr, &RemoteAddr, RemoteAddrLen);
     addr->sin_port = htons(48020);
     
-    if (sendto(clientSocket, &packet, sizeof(packet), 0, (const struct sockaddr *)addr, RemoteAddrLen) < 0)
-    {
+    if (sendto(controllerSocket, &packet, sizeof(packet), 0, (const struct sockaddr *)addr, RemoteAddrLen) < 0) {
         NSLog(@"Error sending controller packet: %d", LastSocketError());
     }
+}
+
+int CFDYSendHighResScrollEvent(short scrollAmount) {
+    if (mouseScrollSocket == INVALID_SOCKET) {
+        mouseScrollSocket = createSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, true);
+        if (mouseScrollSocket == SOCKET_ERROR) {
+            NSLog(@"Error creating mouse scroll socket: %d", LastSocketError());
+        }
+    }
+
+    NV_SCROLL_PACKET packet = {};
+    
+    packet.header.packetType = htonl(PACKET_TYPE_SCROLL);
+    packet.magicA = MAGIC_A;
+    packet.magicA++;
+    packet.zero1 = 0;
+    packet.zero2 = 0;
+    packet.scrollAmt1 = htons(scrollAmount);
+    packet.scrollAmt2 = packet.scrollAmt1;
+    packet.zero3 = 0;
+
+    struct sockaddr_in *addr = malloc(RemoteAddrLen);
+    memcpy(addr, &RemoteAddr, RemoteAddrLen);
+    addr->sin_port = htons(48030);
+    
+    if (sendto(mouseScrollSocket, &packet, sizeof(packet), 0, (const struct sockaddr *)addr, RemoteAddrLen) < 0) {
+        NSLog(@"Error sending mouse scroll packet: %d", LastSocketError());
+        return 1;
+    }
+    
+    return 0;
 }
 
 BOOL startListeningForRumblePackets(id<ConnectionCallbacks> connectionCallbacks) {

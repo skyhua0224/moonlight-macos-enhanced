@@ -288,6 +288,7 @@ const CGFloat scaleBase = 1.125;
             } else {
                 self.runningApp = nil;
                 
+                [ResolutionSyncRequester teardownControllerFor:self.host.activeAddress];
                 [ResolutionSyncRequester resetResolutionFor:self.host.activeAddress];
                 
                 if (completion != nil) {

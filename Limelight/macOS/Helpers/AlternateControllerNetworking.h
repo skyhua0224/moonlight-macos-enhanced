@@ -13,6 +13,7 @@
 void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMask,
                                   short buttonFlags, unsigned char leftTrigger, unsigned char rightTrigger,
                                   short leftStickX, short leftStickY, short rightStickX, short rightStickY);
+int CFDYSendHighResScrollEvent(short scrollAmount);
 
 BOOL startListeningForRumblePackets(id<ConnectionCallbacks> connectionCallbacks);
 void stopListeningForRumblePackets(void);

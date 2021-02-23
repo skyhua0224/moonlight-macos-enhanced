@@ -17,6 +17,7 @@
 #import "HttpRequest.h"
 #import "IdManager.h"
 
+#import "Moonlight-Swift.h"
 #import "AlternateControllerNetworking.h"
 
 @implementation StreamManager {
@@ -80,6 +81,7 @@
         }
     }
     
+    [ResolutionSyncRequester setupControllerFor:_config.host];
     startListeningForRumblePackets(_callbacks);
 
 #if TARGET_OS_IPHONE
@@ -106,6 +108,7 @@
 
 - (void) stopStream
 {
+    [ResolutionSyncRequester teardownControllerFor:_config.host];
     stopListeningForRumblePackets();
     
     [_connection terminate];
