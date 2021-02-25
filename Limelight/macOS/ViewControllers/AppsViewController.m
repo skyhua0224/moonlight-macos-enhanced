@@ -93,6 +93,11 @@ const CGFloat scaleBase = 1.125;
     }
     
     [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wundeclared-selector"
+    [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(addHostButtonClicked:)].enabled = NO;
+#pragma clang diagnostic pop
+
 
     self.getSearchField.delegate = self;
     self.getSearchField.placeholderString = @"Filter Apps";
