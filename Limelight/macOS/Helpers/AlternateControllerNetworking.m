@@ -28,15 +28,15 @@ typedef struct _NV_RUMBLE_PACKET {
     uint16_t highFreqMotor;
 } NV_RUMBLE_PACKET;
 
-BOOL enableResolutionSync(void) {
-    return [NSUserDefaults.standardUserDefaults boolForKey:@"enableResolutionSync"];
+BOOL disableResolutionSync(void) {
+    return ![NSUserDefaults.standardUserDefaults boolForKey:@"enableResolutionSync"];
 }
 
 void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMask,
                                        short buttonFlags, unsigned char leftTrigger, unsigned char rightTrigger,
                                        short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
     
-    if (enableResolutionSync()) {
+    if (disableResolutionSync()) {
         return;
     }
 
@@ -69,7 +69,7 @@ void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMas
 }
 
 int CFDYSendHighResScrollEvent(short scrollAmount) {
-    if (enableResolutionSync()) {
+    if (disableResolutionSync()) {
         return 1;
     }
 
@@ -104,7 +104,7 @@ int CFDYSendHighResScrollEvent(short scrollAmount) {
 }
 
 BOOL startListeningForRumblePackets(id<ConnectionCallbacks> connectionCallbacks) {
-    if (enableResolutionSync()) {
+    if (disableResolutionSync()) {
         return NO;
     }
 
@@ -143,7 +143,7 @@ BOOL startListeningForRumblePackets(id<ConnectionCallbacks> connectionCallbacks)
 }
 
 void stopListeningForRumblePackets(void) {
-    if (enableResolutionSync()) {
+    if (disableResolutionSync()) {
         return;
     }
 
