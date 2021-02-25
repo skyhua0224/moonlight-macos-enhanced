@@ -12,9 +12,17 @@ class ResolutionSyncRequester: NSObject {
     
     // MARK: - Resolution
     
+    static private var enableResolutionSync: Bool {
+        UserDefaults.standard.bool(forKey: "enableResolutionSync")
+    }
+
     static let port = 8080
     
     @objc static public func setResolution(for host: String, refreshRate: Int) {
+        if enableResolutionSync {
+            return
+        }
+        
         let disableMouseAcceleration = UserDefaults.standard.bool(forKey: "disablePointerPrecision")
         if disableMouseAcceleration {
             Self.disableMouseAcceleration(for: host)
@@ -39,6 +47,10 @@ class ResolutionSyncRequester: NSObject {
     }
 
     @objc static public func resetResolution(for host: String) {
+        if enableResolutionSync {
+            return
+        }
+        
         Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/reset")!)
     }
 
@@ -65,10 +77,18 @@ class ResolutionSyncRequester: NSObject {
     // MARK: - Controller
     
     @objc static public func setupController(for host: String) {
+        if enableResolutionSync {
+            return
+        }
+        
         Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setupController")!)
     }
 
     @objc static public func teardownController(for host: String) {
+        if enableResolutionSync {
+            return
+        }
+        
         Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/teardownController")!)
     }
 

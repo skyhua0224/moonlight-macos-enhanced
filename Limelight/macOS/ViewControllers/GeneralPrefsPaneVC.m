@@ -15,20 +15,6 @@
 #import <VideoToolbox/VideoToolbox.h>
 
 
-@interface NSUserDefaults (Moonlight)
-- (NSString *)safeStringForKey:(NSString *)key;
-@end
-
-@implementation NSUserDefaults (Moonlight)
-- (NSString *)safeStringForKey:(NSString *)key {
-    NSString *value = [self stringForKey:key];
-    if (value != nil) {
-        return value;
-    }
-    return @"";
-}
-@end
-
 static float bitrateSteps[] = {
     0.5,
     1,
@@ -61,20 +47,9 @@ static float bitrateSteps[] = {
 };
 
 @interface GeneralPrefsPaneVC () <MASPreferencesViewController>
-
+@property (nonatomic, strong) NSUserDefaults *standard;
 @property (weak) IBOutlet NSPopUpButton *framerateSelector;
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
-@property (weak) IBOutlet NSButton *shouldSyncCheckbox;
-@property (weak) IBOutlet NSTextField *widthLabel;
-@property (weak) IBOutlet NSTextField *heightLabel;
-@property (weak) IBOutlet NSTextField *customResWidthTextField;
-@property (weak) IBOutlet NSTextField *customResHeightTextField;
-@property (weak) IBOutlet NSSlider *pointerSpeedSlider;
-@property (weak) IBOutlet NSTextField *pointerSpeedLabel;
-@property (weak) IBOutlet NSButtonCell *disablePointerPrecisionCheckbox;
-@property (weak) IBOutlet NSTextField *scrollWheelLinesTextField;
-@property (weak) IBOutlet NSPopUpButton *mouseScrollMethodSelector;
-@property (weak) IBOutlet NSPopUpButton *controllerMethodSelector;
 @property (weak) IBOutlet NSSlider *bitrateSlider;
 @property (weak) IBOutlet NSTextField *bitrateLabel;
 @property (weak) IBOutlet NSPopUpButton *videoCodecSelector;
@@ -100,46 +75,36 @@ static float bitrateSteps[] = {
 
     [self setPreferredContentSize:NSMakeSize(self.view.bounds.size.width, self.view.bounds.size.height)];
     
+    self.standard = [NSUserDefaults standardUserDefaults];
+
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
     [self.framerateSelector selectItemWithTag:[streamSettings.framerate intValue]];
     [self.resolutionSelector selectItemWithTag:[streamSettings.height intValue]];
-    self.shouldSyncCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
-    [self UpdateShouldSyncCheckboxRelatedControlStates];
-    self.customResWidthTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncWidth"];
-    self.customResHeightTextField.stringValue = [[NSUserDefaults standardUserDefaults] safeStringForKey:@"syncHeight"];
-    self.pointerSpeedSlider.integerValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"pointerSpeed"] / 2;
-    [self updatePointerSpeedLabel];
-    self.disablePointerPrecisionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"disablePointerPrecision"];
-    self.scrollWheelLinesTextField.integerValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"scrollWheelLines"];
-    [self.mouseScrollMethodSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"mouseScrollMethod"]];
-    [self.controllerMethodSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"controllerMethod"]];
     self.bitrateSlider.integerValue = [self getTickMarkFromBitrate:[streamSettings.bitrate intValue]];
     [self updateBitrateLabel];
-    [self.videoCodecSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"videoCodec"]];
-    self.dynamicResolutionCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
+    [self.videoCodecSelector selectItemWithTag:[self.standard integerForKey:@"videoCodec"]];
+    self.dynamicResolutionCheckbox.state = [self.standard boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
     self.optimizeSettingsCheckbox.state = streamSettings.optimizeGames ? NSControlStateValueOn : NSControlStateValueOff;
     self.playAudioOnPCCheckbox.state = streamSettings.playAudioOnPC ? NSControlStateValueOn : NSControlStateValueOff;
-    self.autoFullscreenCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
-    self.controllerVibrationCheckbox.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"rumbleGamepad"] ? NSControlStateValueOn : NSControlStateValueOff;
-    [self.controllerDriverSelector selectItemWithTag:[[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"]];
+    self.autoFullscreenCheckbox.state = [self.standard boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
+    self.controllerVibrationCheckbox.state = [self.standard boolForKey:@"rumbleGamepad"] ? NSControlStateValueOn : NSControlStateValueOff;
+    [self.controllerDriverSelector selectItemWithTag:[self.standard integerForKey:@"controllerDriver"]];
+}
+
+- (void)viewWillAppear {
+    [super viewWillAppear];
+    
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"enableResolutionSync"]) {
+        self.resolutionSelector.enabled = ![self.standard boolForKey:@"shouldSync"];
+    } else {
+        self.resolutionSelector.enabled = YES;
+    }
 }
 
 
 #pragma mark - Helpers
-
-- (void)UpdateShouldSyncCheckboxRelatedControlStates {
-    self.resolutionSelector.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOff;
-    self.widthLabel.textColor = self.shouldSyncCheckbox.state == NSControlStateValueOn ? NSColor.labelColor : NSColor.secondaryLabelColor;
-    self.heightLabel.textColor = self.shouldSyncCheckbox.state == NSControlStateValueOn ? NSColor.labelColor : NSColor.secondaryLabelColor;
-    self.customResWidthTextField.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOn;
-    self.customResHeightTextField.enabled = self.shouldSyncCheckbox.state == NSControlStateValueOn;
-}
-
-- (void)updatePointerSpeedLabel {
-    self.pointerSpeedLabel.integerValue = self.pointerSpeedSlider.integerValue;
-}
 
 - (NSInteger)getBitrateFromTickMark:(NSInteger)tickmark {
     return bitrateSteps[tickmark] * 1000;
@@ -195,40 +160,6 @@ static float bitrateSteps[] = {
     [self saveSettings];
 }
 
-- (IBAction)didChangeShouldSync:(id)sender {
-    [self UpdateShouldSyncCheckboxRelatedControlStates];
-    [[NSUserDefaults standardUserDefaults] setBool:self.shouldSyncCheckbox.state == NSControlStateValueOn forKey:@"shouldSync"];
-}
-
-- (IBAction)didChangeCustomResWidth:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setInteger:self.customResWidthTextField.integerValue forKey:@"syncWidth"];
-}
-
-- (IBAction)didChangeCustomResHeight:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setInteger:self.customResHeightTextField.integerValue forKey:@"syncHeight"];
-}
-
-- (IBAction)didChangePointerSpeed:(id)sender {
-    [self updatePointerSpeedLabel];
-    [[NSUserDefaults standardUserDefaults] setInteger:self.pointerSpeedSlider.integerValue * 2 forKey:@"pointerSpeed"];
-}
-
-- (IBAction)didChangeDisablePointerPrecision:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setBool:self.disablePointerPrecisionCheckbox.state == NSControlStateValueOn forKey:@"disablePointerPrecision"];
-}
-
-- (IBAction)didChangeNumberOfLinesToScroll:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setInteger:self.scrollWheelLinesTextField.integerValue forKey:@"scrollWheelLines"];
-}
-
-- (IBAction)didChangeMouseScrollMethod:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setInteger:self.mouseScrollMethodSelector.selectedTag forKey:@"mouseScrollMethod"];
-}
-
-- (IBAction)didChangeControllerMethod:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setInteger:self.controllerMethodSelector.selectedTag forKey:@"controllerMethod"];
-}
-
 - (IBAction)didChangeBitrate:(id)sender {
     [self updateBitrateLabel];
     [self saveSettings];
@@ -236,11 +167,11 @@ static float bitrateSteps[] = {
 
 - (IBAction)didChangeVideoCodec:(id)sender {
     [self saveSettings];
-    [[NSUserDefaults standardUserDefaults] setInteger:self.videoCodecSelector.selectedTag forKey:@"videoCodec"];
+    [self.standard setInteger:self.videoCodecSelector.selectedTag forKey:@"videoCodec"];
 }
 
 - (IBAction)didToggleDynamicResolution:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setBool:self.dynamicResolutionCheckbox.state == NSControlStateValueOn forKey:@"dynamicResolution"];
+    [self.standard setBool:self.dynamicResolutionCheckbox.state == NSControlStateValueOn forKey:@"dynamicResolution"];
 }
 
 - (IBAction)didToggleOptimizeSettings:(id)sender {
@@ -252,15 +183,15 @@ static float bitrateSteps[] = {
 }
 
 - (IBAction)didToggleAutoFullscreen:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setBool:self.autoFullscreenCheckbox.state == NSControlStateValueOn forKey:@"autoFullscreen"];
+    [self.standard setBool:self.autoFullscreenCheckbox.state == NSControlStateValueOn forKey:@"autoFullscreen"];
 }
 
 - (IBAction)didToggleControllerVibration:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setBool:self.controllerVibrationCheckbox.state == NSControlStateValueOn forKey:@"rumbleGamepad"];
+    [self.standard setBool:self.controllerVibrationCheckbox.state == NSControlStateValueOn forKey:@"rumbleGamepad"];
 }
 
 - (IBAction)didChangeControllerDriver:(id)sender {
-    [[NSUserDefaults standardUserDefaults] setInteger:self.controllerDriverSelector.selectedTag forKey:@"controllerDriver"];
+    [self.standard setInteger:self.controllerDriverSelector.selectedTag forKey:@"controllerDriver"];
 }
 
 
@@ -280,6 +211,10 @@ static float bitrateSteps[] = {
 
 - (NSString *)toolbarItemLabel {
     return @"General";
+}
+
+- (NSView *)initialKeyView {
+    return self.framerateSelector;
 }
 
 @end

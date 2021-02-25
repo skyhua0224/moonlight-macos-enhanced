@@ -28,9 +28,17 @@ typedef struct _NV_RUMBLE_PACKET {
     uint16_t highFreqMotor;
 } NV_RUMBLE_PACKET;
 
+BOOL enableResolutionSync(void) {
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"enableResolutionSync"];
+}
+
 void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMask,
                                        short buttonFlags, unsigned char leftTrigger, unsigned char rightTrigger,
                                        short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
+    
+    if (enableResolutionSync()) {
+        return;
+    }
 
     if (controllerSocket == INVALID_SOCKET) {
         controllerSocket = createSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, true);
@@ -61,6 +69,10 @@ void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMas
 }
 
 int CFDYSendHighResScrollEvent(short scrollAmount) {
+    if (enableResolutionSync()) {
+        return 1;
+    }
+
     if (mouseScrollSocket == INVALID_SOCKET) {
         mouseScrollSocket = createSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, true);
         if (mouseScrollSocket == SOCKET_ERROR) {
@@ -92,6 +104,10 @@ int CFDYSendHighResScrollEvent(short scrollAmount) {
 }
 
 BOOL startListeningForRumblePackets(id<ConnectionCallbacks> connectionCallbacks) {
+    if (enableResolutionSync()) {
+        return NO;
+    }
+
     rumbleSocket = createSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, NO);
     
     struct sockaddr_in addr;
@@ -127,5 +143,9 @@ BOOL startListeningForRumblePackets(id<ConnectionCallbacks> connectionCallbacks)
 }
 
 void stopListeningForRumblePackets(void) {
+    if (enableResolutionSync()) {
+        return;
+    }
+
     closeSocket(rumbleSocket);
 }
