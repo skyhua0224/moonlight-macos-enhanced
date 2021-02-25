@@ -1,5 +1,5 @@
 //
-//  PreferencesViewController.h
+//  GeneralPrefsPaneVC.h
 //  Moonlight for macOS
 //
 //  Created by Michael Kenny on 30/12/17.
@@ -8,6 +8,6 @@
 
 #import <Cocoa/Cocoa.h>
 
-@interface PreferencesViewController : NSViewController
+@interface GeneralPrefsPaneVC : NSViewController
 
 @end

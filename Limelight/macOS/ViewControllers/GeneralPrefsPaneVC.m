@@ -1,13 +1,15 @@
 //
-//  PreferencesViewController.m
+//  GeneralPrefsPaneVC.m
 //  Moonlight for macOS
 //
 //  Created by Michael Kenny on 30/12/17.
 //  Copyright © 2017 Moonlight Stream. All rights reserved.
 //
 
-#import "PreferencesViewController.h"
+#import "GeneralPrefsPaneVC.h"
 #import "NSWindow+Moonlight.h"
+
+#import "MASPreferences.h"
 
 #import "DataManager.h"
 #import <VideoToolbox/VideoToolbox.h>
@@ -58,7 +60,7 @@ static float bitrateSteps[] = {
     150
 };
 
-@interface PreferencesViewController ()
+@interface GeneralPrefsPaneVC () <MASPreferencesViewController>
 
 @property (weak) IBOutlet NSPopUpButton *framerateSelector;
 @property (weak) IBOutlet NSPopUpButton *resolutionSelector;
@@ -85,9 +87,13 @@ static float bitrateSteps[] = {
 
 @end
 
-@implementation PreferencesViewController
+@implementation GeneralPrefsPaneVC
 
 #pragma mark - Lifecycle
+
+- (id)init {
+    return [super initWithNibName:@"GeneralPrefsPaneView" bundle:nil];
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -257,5 +263,23 @@ static float bitrateSteps[] = {
     [[NSUserDefaults standardUserDefaults] setInteger:self.controllerDriverSelector.selectedTag forKey:@"controllerDriver"];
 }
 
+
+#pragma mark - MASPreferencesViewController
+
+- (NSString *)viewIdentifier {
+    return @"generalPrefs";
+}
+
+- (NSImage *)toolbarItemImage {
+    if (@available(macOS 11.0, *)) {
+        return [NSImage imageWithSystemSymbolName:@"gearshape" accessibilityDescription:nil];
+    } else {
+        return [NSImage imageNamed:NSImageNamePreferencesGeneral];
+    }
+}
+
+- (NSString *)toolbarItemLabel {
+    return @"General";
+}
 
 @end

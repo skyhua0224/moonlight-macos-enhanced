@@ -8,9 +8,12 @@
 
 #import "AppDelegateForAppKit.h"
 #import "DatabaseSingleton.h"
-#import "PreferencesViewController.h"
 #import "AboutViewController.h"
 #import "NSWindow+Moonlight.h"
+
+#import "MASPreferencesWindowController.h"
+#import "GeneralPrefsPaneVC.h"
+#import "ResolutionSyncPrefsPaneVC.h"
 
 typedef enum : NSUInteger {
     SystemTheme,
@@ -45,17 +48,19 @@ typedef enum : NSUInteger {
     [[DatabaseSingleton shared] saveContext];
 }
 
-- (IBAction)showPreferences:(id)sender {
-    if (self.preferencesWC == nil) {
-        self.preferencesWC = [[NSWindowController alloc] initWithWindowNibName:@"PreferencesWindow"];
-        self.preferencesWC.contentViewController = [[PreferencesViewController alloc] initWithNibName:@"PreferencesView" bundle:nil];
+- (NSWindowController *)preferencesWC {
+    if (_preferencesWC == nil) {
+        NSViewController *generalVC = [[GeneralPrefsPaneVC alloc] init];
+        NSViewController *resolutionSyncVC = [[ResolutionSyncPrefsPaneVC alloc] init];
+        NSArray *controllers = @[generalVC, resolutionSyncVC];
+        _preferencesWC = [[MASPreferencesWindowController alloc] initWithViewControllers:controllers title:@"Preferences"];
     }
-    
-    self.preferencesWC.window.frameAutosaveName = @"Preferences Window";
-    [self.preferencesWC.window moonlight_centerWindowOnFirstRun];
-    
+
+    return _preferencesWC;
+}
+
+- (IBAction)showPreferences:(id)sender {
     [self.preferencesWC showWindow:nil];
-    [self.preferencesWC.window makeKeyAndOrderFront:nil];
 }
 
 - (IBAction)showAbout:(id)sender {

@@ -6,7 +6,7 @@
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
-        <customObject id="-2" userLabel="File's Owner" customClass="PreferencesViewController">
+        <customObject id="-2" userLabel="File's Owner" customClass="GeneralPrefsPaneVC">
             <connections>
                 <outlet property="autoFullscreenCheckbox" destination="7ME-vj-ZVX" id="rfe-OD-fAy"/>
                 <outlet property="bitrateLabel" destination="h5W-G6-oe9" id="II5-5j-UUZ"/>
