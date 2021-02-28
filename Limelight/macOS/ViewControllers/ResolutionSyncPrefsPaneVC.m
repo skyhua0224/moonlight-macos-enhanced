@@ -85,6 +85,7 @@
         
         NSTextField *enableResolutionSyncLabel = [[NSTextField alloc] init];
         enableResolutionSyncLabel.stringValue = enableResolutionSyncString;
+        enableResolutionSyncLabel.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
         enableResolutionSyncLabel.alignment = NSTextAlignmentCenter;
         [enableResolutionSyncLabel sizeToFit];
         enableResolutionSyncLabel.bezeled = NO;
