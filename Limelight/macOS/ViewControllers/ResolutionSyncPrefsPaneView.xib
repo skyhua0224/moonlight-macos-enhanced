@@ -26,20 +26,20 @@
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
-        <customView id="Hz6-mo-xeY" userLabel="Resolution Sync View">
-            <rect key="frame" x="0.0" y="0.0" width="484" height="334"/>
+        <customView misplaced="YES" id="Hz6-mo-xeY" userLabel="Resolution Sync View">
+            <rect key="frame" x="0.0" y="0.0" width="490" height="337"/>
             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
             <subviews>
                 <customView horizontalHuggingPriority="1000" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="7eL-63-mQt" userLabel="Content View">
-                    <rect key="frame" x="20" y="20" width="444" height="294"/>
+                    <rect key="frame" x="20" y="20" width="456" height="297"/>
                     <subviews>
                         <stackView distribution="fill" orientation="horizontal" alignment="centerY" horizontalStackHuggingPriority="250" verticalStackHuggingPriority="250" detachesHiddenViews="YES" translatesAutoresizingMaskIntoConstraints="NO" id="deB-jC-39r">
-                            <rect key="frame" x="222" y="282" width="0.0" height="12"/>
+                            <rect key="frame" x="228" y="285" width="0.0" height="12"/>
                         </stackView>
                         <box borderType="line" translatesAutoresizingMaskIntoConstraints="NO" id="FtB-Lt-ll9">
-                            <rect key="frame" x="-3" y="-4" width="450" height="280"/>
+                            <rect key="frame" x="0.0" y="-1" width="456" height="280"/>
                             <view key="contentView" id="xlX-Au-yo5">
-                                <rect key="frame" x="3" y="3" width="444" height="262"/>
+                                <rect key="frame" x="6" y="3" width="444" height="262"/>
                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                 <subviews>
                                     <gridView horizontalHuggingPriority="600" verticalHuggingPriority="600" xPlacement="leading" yPlacement="center" rowAlignment="firstBaseline" rowSpacing="12" columnSpacing="12" translatesAutoresizingMaskIntoConstraints="NO" id="lfT-7f-7TM">
@@ -356,14 +356,15 @@
                                     <constraint firstAttribute="bottom" secondItem="lfT-7f-7TM" secondAttribute="bottom" constant="16" id="oyr-QM-jr9"/>
                                 </constraints>
                             </view>
+                            <size key="contentViewMargins" width="3" height="0.0"/>
                         </box>
                     </subviews>
                     <constraints>
-                        <constraint firstItem="FtB-Lt-ll9" firstAttribute="leading" secondItem="7eL-63-mQt" secondAttribute="leading" id="5Xe-Ui-S61"/>
                         <constraint firstItem="deB-jC-39r" firstAttribute="centerX" secondItem="7eL-63-mQt" secondAttribute="centerX" id="E5p-Yg-l4t"/>
-                        <constraint firstAttribute="trailing" secondItem="FtB-Lt-ll9" secondAttribute="trailing" priority="250" id="Pgl-N9-qHO"/>
+                        <constraint firstItem="FtB-Lt-ll9" firstAttribute="leading" secondItem="7eL-63-mQt" secondAttribute="leading" constant="3" id="QmT-51-xAT"/>
                         <constraint firstItem="FtB-Lt-ll9" firstAttribute="top" secondItem="deB-jC-39r" secondAttribute="bottom" constant="6" id="Wgt-El-0Ow"/>
-                        <constraint firstAttribute="bottom" secondItem="FtB-Lt-ll9" secondAttribute="bottom" id="ah6-tc-v6A"/>
+                        <constraint firstAttribute="trailing" secondItem="FtB-Lt-ll9" secondAttribute="trailing" constant="3" id="ZXL-pp-HEd"/>
+                        <constraint firstAttribute="bottom" secondItem="FtB-Lt-ll9" secondAttribute="bottom" constant="3" id="ah6-tc-v6A"/>
                         <constraint firstItem="deB-jC-39r" firstAttribute="top" secondItem="7eL-63-mQt" secondAttribute="top" id="jj9-Ce-m1Y"/>
                     </constraints>
                 </customView>
