@@ -10,6 +10,9 @@
 
 @protocol ConnectionCallbacks;
 
+BOOL cfdyControllerMethod(void);
+BOOL cfdyMouseScrollMethod(void);
+
 void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMask,
                                   short buttonFlags, unsigned char leftTrigger, unsigned char rightTrigger,
                                   short leftStickX, short leftStickY, short rightStickX, short rightStickY);

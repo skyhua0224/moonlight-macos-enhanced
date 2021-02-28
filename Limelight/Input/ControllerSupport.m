@@ -306,7 +306,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     [_controllerStreamLock lock];
     @synchronized(controller) {
         // Player 1 is always present for OSC
-        if ([[NSUserDefaults standardUserDefaults] integerForKey:@"controllerMethod"] == 1) {
+        if (cfdyControllerMethod()) {
             CFDYSendMultiControllerEvent(_multiController ? controller.playerIndex : 0,
                                        (_multiController ? _controllerNumbers : 1) | (_oscEnabled ? 1 : 0), controller.lastButtonFlags, controller.lastLeftTrigger, controller.lastRightTrigger, controller.lastLeftStickX, controller.lastLeftStickY, controller.lastRightStickX, controller.lastRightStickY);
         } else {

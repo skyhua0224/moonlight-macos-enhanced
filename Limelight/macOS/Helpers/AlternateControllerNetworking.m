@@ -32,6 +32,14 @@ BOOL disableResolutionSync(void) {
     return ![NSUserDefaults.standardUserDefaults boolForKey:@"enableResolutionSync"];
 }
 
+BOOL cfdyControllerMethod(void) {
+    return [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerMethod"] == 1 && !disableResolutionSync();
+}
+
+BOOL cfdyMouseScrollMethod(void) {
+    return [[NSUserDefaults standardUserDefaults] integerForKey:@"mouseScrollMethod"] == 1 && !disableResolutionSync();
+}
+
 void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMask,
                                        short buttonFlags, unsigned char leftTrigger, unsigned char rightTrigger,
                                        short leftStickX, short leftStickY, short rightStickX, short rightStickY) {
