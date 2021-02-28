@@ -53,6 +53,7 @@ static float bitrateSteps[] = {
 @property (weak) IBOutlet NSSlider *bitrateSlider;
 @property (weak) IBOutlet NSTextField *bitrateLabel;
 @property (weak) IBOutlet NSPopUpButton *videoCodecSelector;
+@property (weak) IBOutlet NSButton *hdrCheckbox;
 @property (weak) IBOutlet NSButton *dynamicResolutionCheckbox;
 @property (weak) IBOutlet NSButton *optimizeSettingsCheckbox;
 @property (weak) IBOutlet NSButton *playAudioOnPCCheckbox;
@@ -85,6 +86,8 @@ static float bitrateSteps[] = {
     self.bitrateSlider.integerValue = [self getTickMarkFromBitrate:[streamSettings.bitrate intValue]];
     [self updateBitrateLabel];
     [self.videoCodecSelector selectItemWithTag:[self.standard integerForKey:@"videoCodec"]];
+    [self getHevcState];
+    self.hdrCheckbox.state = streamSettings.enableHdr ? NSControlStateValueOn : NSControlStateValueOff;
     self.dynamicResolutionCheckbox.state = [self.standard boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
     self.optimizeSettingsCheckbox.state = streamSettings.optimizeGames ? NSControlStateValueOn : NSControlStateValueOff;
     self.playAudioOnPCCheckbox.state = streamSettings.playAudioOnPC ? NSControlStateValueOn : NSControlStateValueOff;
@@ -125,6 +128,26 @@ static float bitrateSteps[] = {
     self.bitrateLabel.stringValue = [NSString stringWithFormat:@"%@ Mbps", @(bitrate)];
 }
 
+- (BOOL)getHevcState {
+    BOOL useHevc;
+    switch (self.videoCodecSelector.selectedTag) {
+        case 0:
+            useHevc = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
+            break;
+        case 1:
+            useHevc = NO;
+            break;
+        case 2:
+            useHevc = YES;
+            break;
+        default:
+            useHevc = NO;
+            break;
+    }
+    self.hdrCheckbox.enabled = useHevc;
+    return useHevc;
+}
+
 - (void)saveSettings {
     DataManager* dataMan = [[DataManager alloc] init];
     NSInteger resolutionHeight;
@@ -132,21 +155,9 @@ static float bitrateSteps[] = {
     resolutionHeight = self.resolutionSelector.selectedTag;
     resolutionWidth = resolutionHeight * 16 / 9;
     
-    BOOL useHevc;
-    switch (self.videoCodecSelector.selectedTag) {
-    case 1:
-        useHevc = NO;
-        break;
-    case 2:
-        useHevc = YES;
-        break;
-    case 0:
-    default:
-        useHevc = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
-        break;
-    }
-    
-    [dataMan saveSettingsWithBitrate:[self getBitrateFromTickMark:self.bitrateSlider.integerValue] framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:NO optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn multiController:NO audioOnPC:self.playAudioOnPCCheckbox.state == NSControlStateValueOn useHevc:useHevc enableHdr:NO btMouseSupport:NO];
+    BOOL useHevc = [self getHevcState];
+
+    [dataMan saveSettingsWithBitrate:[self getBitrateFromTickMark:self.bitrateSlider.integerValue] framerate:self.framerateSelector.selectedTag height:resolutionHeight width:resolutionWidth onscreenControls:0 remote:NO optimizeGames:self.optimizeSettingsCheckbox.state == NSControlStateValueOn multiController:NO audioOnPC:self.playAudioOnPCCheckbox.state == NSControlStateValueOn useHevc:useHevc enableHdr:self.hdrCheckbox.state == NSControlStateValueOn btMouseSupport:NO];
 }
 
 
@@ -168,6 +179,10 @@ static float bitrateSteps[] = {
 - (IBAction)didChangeVideoCodec:(id)sender {
     [self saveSettings];
     [self.standard setInteger:self.videoCodecSelector.selectedTag forKey:@"videoCodec"];
+}
+
+- (IBAction)didToggleHDR:(id)sender {
+    [self saveSettings];
 }
 
 - (IBAction)didToggleDynamicResolution:(id)sender {

@@ -18,7 +18,10 @@
 #import "StreamManager.h"
 #import "VideoDecoderRenderer.h"
 #import "HIDSupport.h"
+
 #include "Limelight.h"
+
+@import VideoToolbox;
 
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Carbon/Carbon.h>
@@ -429,9 +432,7 @@
     streamConfig.optimizeGameSettings = streamSettings.optimizeGames;
     streamConfig.playAudioOnPC = streamSettings.playAudioOnPC;
     streamConfig.allowHevc = streamSettings.useHevc;
-    if (streamSettings.useHevc) {
-        streamConfig.enableHdr = YES;
-    }
+    streamConfig.enableHdr = streamSettings.useHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) ? streamSettings.enableHdr : NO;
 
     streamConfig.multiController = YES;
     streamConfig.gamepadMask = self.useSystemControllerDriver ? [ControllerSupport getConnectedGamepadMask:streamConfig] : 1;
