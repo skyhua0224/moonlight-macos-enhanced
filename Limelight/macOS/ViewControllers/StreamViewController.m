@@ -67,7 +67,6 @@
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf.view.window isKeyWindow]) {
                 [weakSelf uncaptureMouse];
-                NSLog(@"MMK exitFullscreen captureMouse");
                 [weakSelf captureMouse];
             }
         }
@@ -79,7 +78,6 @@
                 if ([weakSelf.view.window styleMask] & NSWindowStyleMaskFullScreen) {
                     if ([weakSelf.view.window isKeyWindow]) {
                         [weakSelf uncaptureMouse];
-                        NSLog(@"MMK enterFullscreen captureMouse");
                         [weakSelf captureMouse];
                     }
                 }
@@ -90,7 +88,6 @@
     self.windowDidResignKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if (![weakSelf isWindowInCurrentSpace]) {
-                NSLog(@"MMK resignKey uncaptureMouse");
                 [weakSelf uncaptureMouse];
             }
         }
@@ -100,12 +97,10 @@
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf.view.window isKeyWindow]) {
                     [weakSelf uncaptureMouse];
-                    NSLog(@"MMK becomeKey captureMouse");
                     [weakSelf captureMouse];
                 }
             }
         } else {
-            NSLog(@"MMK becomeKey uncaptureMouse");
             [weakSelf uncaptureMouse];
         }
     }];
@@ -154,7 +149,6 @@
     [self.hidSupport flagsChanged:event];
     
     if ((event.modifierFlags & NSEventModifierFlagCommand) && (event.modifierFlags & NSEventModifierFlagOption)) {
-        NSLog(@"MMK flagsChanged uncaptureMouse");
         [self uncaptureMouse];
     }
 }
@@ -170,7 +164,6 @@
 
 - (void)mouseDown:(NSEvent *)event {
     [self.hidSupport mouseDown:event withButton:BUTTON_LEFT];
-    NSLog(@"MMK mouseDown captureMouse");
     [self captureMouse];
 }
 
@@ -250,7 +243,6 @@
 
 
 - (IBAction)performClose:(id)sender {
-    NSLog(@"MMK performClose captureMouse");
     [self uncaptureMouse];
     
     NSAlert *alert = [[NSAlert alloc] init];
@@ -299,7 +291,6 @@
     CGAssociateMouseAndMouseCursorPosition(NO);
     if (self.cursorHiddenCounter == 0) {
         [NSCursor hide];
-        NSLog(@"MMK cursor hide, cursor count: %@", @(self.cursorHiddenCounter));
         self.cursorHiddenCounter ++;
     }
     
@@ -321,7 +312,6 @@
     CGAssociateMouseAndMouseCursorPosition(YES);
     if (self.cursorHiddenCounter != 0) {
         [NSCursor unhide];
-        NSLog(@"MMK cursor unhide, cursor count: %@", @(self.cursorHiddenCounter));
         self.cursorHiddenCounter --;
     }
     
@@ -386,7 +376,6 @@
     [self.hidSupport releaseAllModifierKeys];
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSLog(@"MMK closeWindowMainQueue uncaptureMouse");
         [self uncaptureMouse];
 
         [self.delegate appDidQuit:self.app];
@@ -476,7 +465,6 @@
                 [self.view.window toggleFullScreen:self];
             }
         } else {
-            NSLog(@"MMK connectionStarted captureMouse");
             [self captureMouse];
         }
     });
