@@ -468,11 +468,6 @@
 - (void)connectionStarted {
     [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:60];
     
-    BOOL useHIDControllerDriver = [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"] == 0;
-    if (useHIDControllerDriver) {
-        [self.hidSupport rumbleLowFreqMotor:0 highFreqMotor:0];
-    }
-    
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
         

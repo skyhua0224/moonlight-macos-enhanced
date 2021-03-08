@@ -142,6 +142,28 @@ static struct KeyMapping keys[] = {
     {kVK_F20, 0x83},
 };
 
+typedef enum {
+    k_EPS4ReportIdUsbState = 1,
+    k_EPS4ReportIdUsbEffects = 5,
+    k_EPS4ReportIdBluetoothState1 = 17,
+    k_EPS4ReportIdBluetoothState2 = 18,
+    k_EPS4ReportIdBluetoothState3 = 19,
+    k_EPS4ReportIdBluetoothState4 = 20,
+    k_EPS4ReportIdBluetoothState5 = 21,
+    k_EPS4ReportIdBluetoothState6 = 22,
+    k_EPS4ReportIdBluetoothState7 = 23,
+    k_EPS4ReportIdBluetoothState8 = 24,
+    k_EPS4ReportIdBluetoothState9 = 25,
+    k_EPS4ReportIdBluetoothEffects = 17,
+    k_EPS4ReportIdDisconnectMessage = 226,
+} EPS4ReportId;
+
+typedef enum {
+    k_ePS4FeatureReportIdGyroCalibration_USB = 0x02,
+    k_ePS4FeatureReportIdGyroCalibration_BT = 0x05,
+    k_ePS4FeatureReportIdSerialNumber = 0x12,
+} EPS4FeatureReportID;
+
 typedef struct {
     UInt8 ucLeftJoystickX;
     UInt8 ucLeftJoystickY;
@@ -177,7 +199,7 @@ static UInt32 crc32_for_byte(UInt32 r)
 
 UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
 {
-    /* As an optimization we can precalculate a 256 entry table for each byte */
+    // As an optimization we can precalculate a 256 entry table for each byte.
     size_t i;
     for(i = 0; i < len; ++i) {
         crc = crc32_for_byte((UInt8)crc ^ ((const UInt8*)data)[i]) ^ crc >> 8;
@@ -211,6 +233,8 @@ UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
         [self setupHidManager];
         self.previousLowFreqMotor = 0xFF;
         self.previousHighFreqMotor = 0xFF;
+
+        [self rumbleSync];
 
         self.controller = [[Controller alloc] init];
 
@@ -380,6 +404,41 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
 }
 
+- (int)hidGetFeatureReport:(IOHIDDeviceRef)device data:(unsigned char *)data length:(size_t)length {
+    CFIndex len = length;
+    IOReturn res;
+        
+    int skipped_report_id = 0;
+    int report_number = data[0];
+    if (report_number == 0x0) {
+//         Offset the return buffer by 1, so that the report ID
+//         will remain in byte 0.
+        data++;
+        len--;
+        skipped_report_id = 1;
+    }
+    
+    res = IOHIDDeviceGetReport(device,
+                               kIOHIDReportTypeFeature,
+                               report_number, /* Report ID */
+                               data, &len);
+    if (res != kIOReturnSuccess) {
+        return -1;
+    }
+
+    if (skipped_report_id) {
+        len++;
+    }
+
+    return (int)len;
+}
+
+- (void)rumbleSync {
+    if (self.controllerDriver == 0) {
+        [self rumbleLowFreqMotor:0 highFreqMotor:0];
+    }
+}
+
 - (void)runRumbleLoop {
     while (YES) {
         // wait for signal
@@ -419,32 +478,55 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                 usleep(30000);
             }
         } else if (isPlayStation(device)) {
+            UInt8 reportData[64];
+            int size;
+
+            // This will fail if we're on Bluetooth.
+            reportData[0] = k_ePS4FeatureReportIdSerialNumber;
+            size = [self hidGetFeatureReport:device data:reportData length:sizeof(reportData)];
+            BOOL isBluetooth = !(size >= 7);
+            
             UInt8 data[78] = {};
-
-            data[0] = 17;
-            data[1] = 0xC0 | 0x04;  /* Magic value HID + CRC, also sets interval to 4ms for samples */
-            data[3] = 0x03;  /* 0x1 is rumble, 0x2 is lightbar, 0x4 is the blink interval */
-
+            if (isBluetooth) {
+                data[0] = 17;
+                data[1] = 0xC0 | 0x04; // Magic value HID + CRC, also sets interval to 4ms for samples.
+                data[3] = 0x03; // 0x1 is rumble, 0x2 is lightbar, 0x4 is the blink interval.
+            } else {
+                data[0] = 5;
+                data[1] = 0x07; // Magic value
+            }
             UInt8 convertedLowFreqMotor = lowFreqMotor / 256;
             UInt8 convertedHighFreqMotor = highFreqMotor / 256;
-            if (convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) {
+            if ((convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) || (convertedLowFreqMotor == 0 && convertedHighFreqMotor == 0)) {
                 
+//                convertedLowFreqMotor = convertedLowFreqMotor > 0 ? convertedLowFreqMotor : 0;
+//                convertedHighFreqMotor = convertedHighFreqMotor > 0 ? convertedHighFreqMotor : 0;
                 self.previousLowFreqMotor = convertedLowFreqMotor;
                 self.previousHighFreqMotor = convertedHighFreqMotor;
+                
+                if (isBluetooth) {
+                    data[6] = convertedHighFreqMotor;
+                    data[7] = convertedLowFreqMotor;
+                    data[8] = 0; // red
+                    data[9] = 0; // green
+                    data[10] = 12; // blue
+                } else {
+                    data[4] = convertedHighFreqMotor;
+                    data[5] = convertedLowFreqMotor;
+                    data[6] = 0; // red
+                    data[7] = 0; // green
+                    data[8] = 12; // blue
+                }
+                
+                if (isBluetooth) {
+                    // Bluetooth reports need a CRC at the end of the packet (at least on Linux).
+                    UInt8 ubHdr = 0xA2; // hidp header is part of the CRC calculation.
+                    UInt32 unCRC;
+                    unCRC = SDL_crc32(0, &ubHdr, 1);
+                    unCRC = SDL_crc32(unCRC, data, (size_t)(sizeof(data) - sizeof(unCRC)));
+                    memcpy(&data[sizeof(data) - sizeof(unCRC)], &unCRC, sizeof(unCRC));
+                }
 
-                data[6] = convertedHighFreqMotor;
-                data[7] = convertedLowFreqMotor;
-                data[8] = 0; // red
-                data[9] = 0; // green
-                data[10] = 12; // blue
-                
-                /* Bluetooth reports need a CRC at the end of the packet (at least on Linux) */
-                UInt8 ubHdr = 0xA2; /* hidp header is part of the CRC calculation */
-                UInt32 unCRC;
-                unCRC = SDL_crc32(0, &ubHdr, 1);
-                unCRC = SDL_crc32(unCRC, data, (size_t)(sizeof(data) - sizeof(unCRC)));
-                memcpy(&data[sizeof(data) - sizeof(unCRC)], &unCRC, sizeof(unCRC));
-                
                 IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, sizeof(data));
                 usleep(30000);
             }
@@ -781,7 +863,30 @@ void myHIDReportCallback (
         return;
     };
     
-    PS4StatePacket_t *state = (PS4StatePacket_t *)(report + 3);
+    PS4StatePacket_t *state = (PS4StatePacket_t *)report;
+    switch (report[0]) {
+        case k_EPS4ReportIdUsbState:
+            state = (PS4StatePacket_t *)(report + 1);
+            break;
+        case k_EPS4ReportIdBluetoothState1:
+        case k_EPS4ReportIdBluetoothState2:
+        case k_EPS4ReportIdBluetoothState3:
+        case k_EPS4ReportIdBluetoothState4:
+        case k_EPS4ReportIdBluetoothState5:
+        case k_EPS4ReportIdBluetoothState6:
+        case k_EPS4ReportIdBluetoothState7:
+        case k_EPS4ReportIdBluetoothState8:
+        case k_EPS4ReportIdBluetoothState9:
+            // Bluetooth state packets have two additional bytes at the beginning, the first notes if HID is present.
+            if (report[1] & 0x80) {
+                state = (PS4StatePacket_t *)(report + 3);
+            }
+            break;
+        default:
+            NSLog(@"Unknown PS4 packet: 0x%hhu", report[0]);
+            break;
+    }
+            
     
     UInt8 abxy = state->rgucButtonsHatAndCounter[0] >> 4;
     [self updateButtonFlags:X_FLAG state:(abxy & 0x01) != 0];
@@ -832,6 +937,15 @@ void myHIDReportCallback (
     }
 }
 
+void myHIDDeviceMatchingCallback(void * _Nullable        context,
+                                IOReturn                result,
+                                void * _Nullable        sender,
+                                IOHIDDeviceRef          device) {
+    HIDSupport *self = (__bridge HIDSupport *)context;
+
+    [self rumbleSync];
+}
+
 void myHIDDeviceRemovalCallback(void * _Nullable        context,
                                 IOReturn                result,
                                 void * _Nullable        sender,
@@ -877,6 +991,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     
     IOHIDManagerRegisterInputValueCallback(self.hidManager, myHIDCallback, (__bridge void * _Nullable)(self));
     IOHIDManagerRegisterInputReportCallback(self.hidManager, myHIDReportCallback, (__bridge void * _Nullable)(self));
+    IOHIDManagerRegisterDeviceMatchingCallback(self.hidManager, myHIDDeviceMatchingCallback, (__bridge void * _Nullable)(self));
     IOHIDManagerRegisterDeviceRemovalCallback(self.hidManager, myHIDDeviceRemovalCallback, (__bridge void * _Nullable)(self));
     
     IOHIDManagerScheduleWithRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
