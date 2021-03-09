@@ -411,8 +411,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     int skipped_report_id = 0;
     int report_number = data[0];
     if (report_number == 0x0) {
-//         Offset the return buffer by 1, so that the report ID
-//         will remain in byte 0.
+//      Offset the return buffer by 1, so that the report ID
+//      will remain in byte 0.
         data++;
         len--;
         skipped_report_id = 1;
@@ -499,24 +499,15 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             UInt8 convertedHighFreqMotor = highFreqMotor / 256;
             if ((convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) || (convertedLowFreqMotor == 0 && convertedHighFreqMotor == 0)) {
                 
-//                convertedLowFreqMotor = convertedLowFreqMotor > 0 ? convertedLowFreqMotor : 0;
-//                convertedHighFreqMotor = convertedHighFreqMotor > 0 ? convertedHighFreqMotor : 0;
                 self.previousLowFreqMotor = convertedLowFreqMotor;
                 self.previousHighFreqMotor = convertedHighFreqMotor;
                 
-                if (isBluetooth) {
-                    data[6] = convertedHighFreqMotor;
-                    data[7] = convertedLowFreqMotor;
-                    data[8] = 0; // red
-                    data[9] = 0; // green
-                    data[10] = 12; // blue
-                } else {
-                    data[4] = convertedHighFreqMotor;
-                    data[5] = convertedLowFreqMotor;
-                    data[6] = 0; // red
-                    data[7] = 0; // green
-                    data[8] = 12; // blue
-                }
+                int i = isBluetooth ? 6 : 4;
+                data[i++] = convertedHighFreqMotor;
+                data[i++] = convertedLowFreqMotor;
+                data[i++] = 0; // red
+                data[i++] = 0; // green
+                data[i++] = 12; // blue
                 
                 if (isBluetooth) {
                     // Bluetooth reports need a CRC at the end of the packet (at least on Linux).
