@@ -77,7 +77,7 @@ class ResolutionSyncRequester: NSObject {
     // MARK: - Controller
     
     @objc static public func setupController(for host: String) {
-        if disableResolutionSync {
+        if disableResolutionSync || UserDefaults.standard.integer(forKey: "controllerMethod") == 0 {
             return
         }
         
@@ -85,7 +85,7 @@ class ResolutionSyncRequester: NSObject {
     }
 
     @objc static public func teardownController(for host: String) {
-        if disableResolutionSync {
+        if disableResolutionSync || UserDefaults.standard.integer(forKey: "controllerMethod") == 0 {
             return
         }
         
