@@ -552,11 +552,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             
             UInt8 data[78] = {};
             if (isBluetooth) {
-                data[0] = 17;
+                data[0] = k_EPS4ReportIdBluetoothEffects;
                 data[1] = 0xC0 | 0x04; // Magic value HID + CRC, also sets interval to 4ms for samples.
                 data[3] = 0x03; // 0x1 is rumble, 0x2 is lightbar, 0x4 is the blink interval.
             } else {
-                data[0] = 5;
+                data[0] = k_EPS4ReportIdUsbEffects;
                 data[1] = 0x07; // Magic value
             }
             UInt8 convertedLowFreqMotor = lowFreqMotor / 256;
@@ -590,13 +590,13 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 
             UInt8 data[78] = {};
             if (self.isPS5Bluetooth) {
-                data[0] = 0x31;
+                data[0] = k_EPS5ReportIdBluetoothEffects;
                 data[1] = 0x02; // Magic value
 
                 dataSize = 78;
                 offset = 2;
             } else {
-                data[0] = 0x02;
+                data[0] = k_EPS5ReportIdBluetoothEffects;
 
                 dataSize = 48;
                 offset = 1;
@@ -625,7 +625,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                     memcpy(&data[dataSize - sizeof(unCRC)], &unCRC, sizeof(unCRC));
                 }
 
-                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, sizeof(data));
+                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, dataSize);
                 usleep(30000);
             }
         }
