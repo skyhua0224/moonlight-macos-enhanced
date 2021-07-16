@@ -188,6 +188,68 @@ typedef struct {
     UInt8 rgucTouchpadData2[3];
 } PS4StatePacket_t;
 
+typedef enum {
+    k_EPS5ReportIdState = 0x01,
+    k_EPS5ReportIdUsbEffects = 0x02,
+    k_EPS5ReportIdBluetoothEffects = 0x31,
+    k_EPS5ReportIdBluetoothState = 0x31,
+} EPS5ReportId;
+
+typedef struct {
+    UInt8 ucLeftJoystickX;              /* 0 */
+    UInt8 ucLeftJoystickY;              /* 1 */
+    UInt8 ucRightJoystickX;             /* 2 */
+    UInt8 ucRightJoystickY;             /* 3 */
+    UInt8 ucTriggerLeft;                /* 4 */
+    UInt8 ucTriggerRight;               /* 5 */
+    UInt8 ucCounter;                    /* 6 */
+    UInt8 rgucButtonsAndHat[3];         /* 7 */
+    UInt8 ucZero;                       /* 10 */
+    UInt8 rgucPacketSequence[4];        /* 11 - 32 bit little endian */
+    UInt8 rgucGyroX[2];                 /* 15 */
+    UInt8 rgucGyroY[2];                 /* 17 */
+    UInt8 rgucGyroZ[2];                 /* 19 */
+    UInt8 rgucAccelX[2];                /* 21 */
+    UInt8 rgucAccelY[2];                /* 23 */
+    UInt8 rgucAccelZ[2];                /* 25 */
+    UInt8 rgucTimer1[4];                /* 27 - 32 bit little endian */
+    UInt8 ucBatteryTemp;                /* 31 */
+    UInt8 ucTouchpadCounter1;           /* 32 - high bit clear + counter */
+    UInt8 rgucTouchpadData1[3];         /* 33 - X/Y, 12 bits per axis */
+    UInt8 ucTouchpadCounter2;           /* 36 - high bit clear + counter */
+    UInt8 rgucTouchpadData2[3];         /* 37 - X/Y, 12 bits per axis */
+    UInt8 rgucUnknown1[8];              /* 40 */
+    UInt8 rgucTimer2[4];                /* 48 - 32 bit little endian */
+    UInt8 ucBatteryLevel;               /* 52 */
+    UInt8 ucConnectState;               /* 53 - 0x08 = USB, 0x01 = headphone */
+
+    /* There's more unknown data at the end, and a 32-bit CRC on Bluetooth */
+} PS5StatePacket_t;
+
+typedef struct {
+    UInt8 ucEnableBits1;                /* 0 */
+    UInt8 ucEnableBits2;                /* 1 */
+    UInt8 ucRumbleRight;                /* 2 */
+    UInt8 ucRumbleLeft;                 /* 3 */
+    UInt8 ucHeadphoneVolume;            /* 4 */
+    UInt8 ucSpeakerVolume;              /* 5 */
+    UInt8 ucMicrophoneVolume;           /* 6 */
+    UInt8 ucAudioEnableBits;            /* 7 */
+    UInt8 ucMicLightMode;               /* 8 */
+    UInt8 ucAudioMuteBits;              /* 9 */
+    UInt8 rgucRightTriggerEffect[11];   /* 10 */
+    UInt8 rgucLeftTriggerEffect[11];    /* 21 */
+    UInt8 rgucUnknown1[6];              /* 32 */
+    UInt8 ucLedFlags;                   /* 38 */
+    UInt8 rgucUnknown2[2];              /* 39 */
+    UInt8 ucLedAnim;                    /* 41 */
+    UInt8 ucLedBrightness;              /* 42 */
+    UInt8 ucPadLights;                  /* 43 */
+    UInt8 ucLedRed;                     /* 44 */
+    UInt8 ucLedGreen;                   /* 45 */
+    UInt8 ucLedBlue;                    /* 46 */
+} DS5EffectsState_t;
+
 static UInt32 crc32_for_byte(UInt32 r)
 {
     int i;
@@ -222,7 +284,9 @@ UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
 @property (atomic) dispatch_semaphore_t rumbleSemaphore;
 @property (atomic) BOOL closeRumble;
 @property (nonatomic) PS4StatePacket_t lastPS4State;
+@property (nonatomic) PS5StatePacket_t lastPS5State;
 @property (nonatomic) NSInteger controllerDriver;
+@property (nonatomic) BOOL isPS5Bluetooth;
 @end
 
 @implementation HIDSupport
@@ -477,7 +541,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                 IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, rumble_packet[0], rumble_packet, sizeof(rumble_packet));
                 usleep(30000);
             }
-        } else if (isPlayStation(device)) {
+        } else if (isPS4(device)) {
             UInt8 reportData[64];
             int size;
 
@@ -516,6 +580,49 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                     unCRC = SDL_crc32(0, &ubHdr, 1);
                     unCRC = SDL_crc32(unCRC, data, (size_t)(sizeof(data) - sizeof(unCRC)));
                     memcpy(&data[sizeof(data) - sizeof(unCRC)], &unCRC, sizeof(unCRC));
+                }
+
+                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, sizeof(data));
+                usleep(30000);
+            }
+        } else if (isPS5(device)) {
+            int dataSize, offset;
+
+            UInt8 data[78] = {};
+            if (self.isPS5Bluetooth) {
+                data[0] = 0x31;
+                data[1] = 0x02; // Magic value
+
+                dataSize = 78;
+                offset = 2;
+            } else {
+                data[0] = 0x02;
+
+                dataSize = 48;
+                offset = 1;
+            }
+            DS5EffectsState_t *effects = (DS5EffectsState_t *)&data[offset];
+
+            UInt8 convertedLowFreqMotor = lowFreqMotor / 256;
+            UInt8 convertedHighFreqMotor = highFreqMotor / 256;
+            if ((convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) || (convertedLowFreqMotor == 0 && convertedHighFreqMotor == 0)) {
+
+                self.previousLowFreqMotor = convertedLowFreqMotor;
+                self.previousHighFreqMotor = convertedHighFreqMotor;
+
+                effects->ucEnableBits1 |= 0x01; /* Enable rumble emulation */
+                effects->ucEnableBits1 |= 0x02; /* Disable audio haptics */
+
+                effects->ucRumbleLeft = convertedLowFreqMotor;
+                effects->ucRumbleRight = convertedHighFreqMotor;
+
+                if (self.isPS5Bluetooth) {
+                    // Bluetooth reports need a CRC at the end of the packet (at least on Linux).
+                    UInt8 ubHdr = 0xA2; // hidp header is part of the CRC calculation.
+                    UInt32 unCRC;
+                    unCRC = SDL_crc32(0, &ubHdr, 1);
+                    unCRC = SDL_crc32(unCRC, data, (size_t)(dataSize - sizeof(unCRC)));
+                    memcpy(&data[dataSize - sizeof(unCRC)], &unCRC, sizeof(unCRC));
                 }
 
                 IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, sizeof(data));
@@ -574,7 +681,19 @@ BOOL isXbox(IOHIDDeviceRef device) {
 BOOL isPlayStation(IOHIDDeviceRef device) {
     UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
     UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
+    return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4 || productId == 0x0ce6);
+}
+
+BOOL isPS4(IOHIDDeviceRef device) {
+    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
+    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
     return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4);
+}
+
+BOOL isPS5(IOHIDDeviceRef device) {
+    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
+    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
+    return vendorId == 0x054C && (productId == 0x0ce6);
 }
 
 - (void)handlePlaystationDpad:(NSInteger)intValue {
@@ -748,86 +867,6 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
             default:
                 break;
         }
-
-    } else if (isPlayStation(device)) {
-        switch (usagePage) {
-            case kHIDPage_GenericDesktop:
-                switch (usage) {
-                    case kHIDUsage_GD_X:
-                        self.controller.lastLeftStickX = (intValue - 128) * 255 + 1;
-                        break;
-                    case kHIDUsage_GD_Y:
-                        self.controller.lastLeftStickY = (intValue - 128) * -255;
-                        break;
-                    case kHIDUsage_GD_Z:
-                        self.controller.lastRightStickX = (intValue - 128) * 255 + 1;
-                        break;
-                    case kHIDUsage_GD_Rx:
-                        self.controller.lastLeftTrigger = intValue;
-                        break;
-                    case kHIDUsage_GD_Ry:
-                        self.controller.lastRightTrigger = intValue;
-                        break;
-                    case kHIDUsage_GD_Rz:
-                        self.controller.lastRightStickY = (intValue - 128) * -255;
-                        break;
-                        
-                    case kHIDUsage_GD_Hatswitch:
-                        [self handlePlaystationDpad:intValue];
-                        break;
-
-                    default:
-                        break;
-                }
-
-            case kHIDPage_Button:
-                switch (usage) {
-                    case 1:
-                        [self updateButtonFlags:X_FLAG state:intValue];
-                        break;
-                    case 2:
-                        [self updateButtonFlags:A_FLAG state:intValue];
-                        break;
-                    case 3:
-                        [self updateButtonFlags:B_FLAG state:intValue];
-                        break;
-                    case 4:
-                        [self updateButtonFlags:Y_FLAG state:intValue];
-                        break;
-
-                    case 5:
-                        [self updateButtonFlags:LB_FLAG state:intValue];
-                        break;
-                    case 6:
-                        [self updateButtonFlags:RB_FLAG state:intValue];
-                        break;
-
-                    case 9:
-                        [self updateButtonFlags:BACK_FLAG state:intValue];
-                        break;
-                    case 10:
-                        [self updateButtonFlags:PLAY_FLAG state:intValue];
-                        break;
-
-                    case 11:
-                        [self updateButtonFlags:LS_CLK_FLAG state:intValue];
-                        break;
-                    case 12:
-                        [self updateButtonFlags:RS_CLK_FLAG state:intValue];
-                        break;
-
-                    case 13:
-                        [self updateButtonFlags:SPECIAL_FLAG state:intValue];
-                        break;
-
-                        
-                    default:
-                        break;
-                }
-            
-            default:
-                break;
-        }
     }
 
     if (self.controllerDriver == 0) {
@@ -854,76 +893,141 @@ void myHIDReportCallback (
         return;
     };
     
-    PS4StatePacket_t *state = (PS4StatePacket_t *)report;
-    switch (report[0]) {
-        case k_EPS4ReportIdUsbState:
-            state = (PS4StatePacket_t *)(report + 1);
-            break;
-        case k_EPS4ReportIdBluetoothState1:
-        case k_EPS4ReportIdBluetoothState2:
-        case k_EPS4ReportIdBluetoothState3:
-        case k_EPS4ReportIdBluetoothState4:
-        case k_EPS4ReportIdBluetoothState5:
-        case k_EPS4ReportIdBluetoothState6:
-        case k_EPS4ReportIdBluetoothState7:
-        case k_EPS4ReportIdBluetoothState8:
-        case k_EPS4ReportIdBluetoothState9:
-            // Bluetooth state packets have two additional bytes at the beginning, the first notes if HID is present.
-            if (report[1] & 0x80) {
-                state = (PS4StatePacket_t *)(report + 3);
+    if (isPS4(device)) {
+        PS4StatePacket_t *state = (PS4StatePacket_t *)report;
+        switch (report[0]) {
+            case k_EPS4ReportIdUsbState:
+                state = (PS4StatePacket_t *)(report + 1);
+                break;
+            case k_EPS4ReportIdBluetoothState1:
+            case k_EPS4ReportIdBluetoothState2:
+            case k_EPS4ReportIdBluetoothState3:
+            case k_EPS4ReportIdBluetoothState4:
+            case k_EPS4ReportIdBluetoothState5:
+            case k_EPS4ReportIdBluetoothState6:
+            case k_EPS4ReportIdBluetoothState7:
+            case k_EPS4ReportIdBluetoothState8:
+            case k_EPS4ReportIdBluetoothState9:
+                // Bluetooth state packets have two additional bytes at the beginning, the first notes if HID is present.
+                if (report[1] & 0x80) {
+                    state = (PS4StatePacket_t *)(report + 3);
+                }
+                break;
+            default:
+                NSLog(@"Unknown PS4 packet: 0x%hhu", report[0]);
+                break;
+        }
+                
+        
+        UInt8 abxy = state->rgucButtonsHatAndCounter[0] >> 4;
+        [self updateButtonFlags:X_FLAG state:(abxy & 0x01) != 0];
+        [self updateButtonFlags:A_FLAG state:(abxy & 0x02) != 0];
+        [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
+        [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
+        
+        [self handlePlaystationDpad:state->rgucButtonsHatAndCounter[0] & 0x0F];
+
+        UInt8 otherButtons = state->rgucButtonsHatAndCounter[1];
+        [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
+        [self updateButtonFlags:RB_FLAG state:(otherButtons & 0x02) != 0];
+        [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x10) != 0];
+        [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x20) != 0];
+        [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x40) != 0];
+        [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x80) != 0];
+
+        [self updateButtonFlags:SPECIAL_FLAG state:(state->rgucButtonsHatAndCounter[2] & 0x01) != 0];
+        
+        self.controller.lastLeftTrigger = state->ucTriggerLeft;
+        self.controller.lastRightTrigger = state->ucTriggerRight;
+
+        self.controller.lastLeftStickX = (state->ucLeftJoystickX - 128) * 255 + 1;
+        self.controller.lastLeftStickY = (state->ucLeftJoystickY - 128) * -255;
+        self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
+        self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
+        
+        if (self.controllerDriver == 0) {
+
+            if (self.lastPS4State.rgucButtonsHatAndCounter[0] != state->rgucButtonsHatAndCounter[0] ||
+                self.lastPS4State.rgucButtonsHatAndCounter[1] != state->rgucButtonsHatAndCounter[1] ||
+                self.lastPS4State.rgucButtonsHatAndCounter[2] != state->rgucButtonsHatAndCounter[2] ||
+                self.lastPS4State.ucTriggerLeft != state->ucTriggerLeft ||
+                self.lastPS4State.ucTriggerRight != state->ucTriggerRight ||
+                self.lastPS4State.ucLeftJoystickX != state->ucLeftJoystickX ||
+                self.lastPS4State.ucLeftJoystickY != state->ucLeftJoystickY ||
+                self.lastPS4State.ucRightJoystickX != state->ucRightJoystickX ||
+                self.lastPS4State.ucRightJoystickY != state->ucRightJoystickY ||
+                0)
+            {
+                if (cfdyControllerMethod()) {
+                    CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                } else {
+                    LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                }
+                self.lastPS4State = *state;
             }
-            break;
-        default:
-            NSLog(@"Unknown PS4 packet: 0x%hhu", report[0]);
-            break;
-    }
-            
-    
-    UInt8 abxy = state->rgucButtonsHatAndCounter[0] >> 4;
-    [self updateButtonFlags:X_FLAG state:(abxy & 0x01) != 0];
-    [self updateButtonFlags:A_FLAG state:(abxy & 0x02) != 0];
-    [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
-    [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
-    
-    [self handlePlaystationDpad:state->rgucButtonsHatAndCounter[0] & 0x0F];
+        }
+    } else if (isPS5(device)) {
+        PS5StatePacket_t *state = (PS5StatePacket_t *)report;
+        switch (report[0]) {
+            case k_EPS5ReportIdState:
+                state = (PS5StatePacket_t *)(report + 1);
+                self.isPS5Bluetooth = reportLength == 10;
+                break;
+            case k_EPS5ReportIdBluetoothState:
+                state = (PS5StatePacket_t *)(report + 2);
+                self.isPS5Bluetooth = YES;
+                break;
+            default:
+                NSLog(@"Unknown PS5 packet: 0x%hhu", report[0]);
+                break;
+        }
+        
+        UInt8 abxy = state->rgucButtonsAndHat[0] >> 4;
+        [self updateButtonFlags:X_FLAG state:(abxy & 0x01) != 0];
+        [self updateButtonFlags:A_FLAG state:(abxy & 0x02) != 0];
+        [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
+        [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
+        
+        [self handlePlaystationDpad:state->rgucButtonsAndHat[0] & 0x0F];
 
-    UInt8 otherButtons = state->rgucButtonsHatAndCounter[1];
-    [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
-    [self updateButtonFlags:RB_FLAG state:(otherButtons & 0x02) != 0];
-    [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x10) != 0];
-    [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x20) != 0];
-    [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x40) != 0];
-    [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x80) != 0];
+        UInt8 otherButtons = state->rgucButtonsAndHat[1];
+        [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
+        [self updateButtonFlags:RB_FLAG state:(otherButtons & 0x02) != 0];
+        [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x10) != 0];
+        [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x20) != 0];
+        [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x40) != 0];
+        [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x80) != 0];
 
-    [self updateButtonFlags:SPECIAL_FLAG state:(state->rgucButtonsHatAndCounter[2] & 0x01) != 0];
-    
-    self.controller.lastLeftTrigger = state->ucTriggerLeft;
-    self.controller.lastRightTrigger = state->ucTriggerRight;
+        [self updateButtonFlags:SPECIAL_FLAG state:(state->rgucButtonsAndHat[2] & 0x01) != 0];
+        
+        self.controller.lastLeftTrigger = state->ucTriggerLeft;
+        self.controller.lastRightTrigger = state->ucTriggerRight;
 
-    self.controller.lastLeftStickX = (state->ucLeftJoystickX - 128) * 255 + 1;
-    self.controller.lastLeftStickY = (state->ucLeftJoystickY - 128) * -255;
-    self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
-    self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
-    
-    if (self.controllerDriver == 0) {
+        self.controller.lastLeftStickX = (state->ucLeftJoystickX - 128) * 255 + 1;
+        self.controller.lastLeftStickY = (state->ucLeftJoystickY - 128) * -255;
+        self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
+        self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
+        
+        if (self.controllerDriver == 0) {
 
-        if (self.lastPS4State.rgucButtonsHatAndCounter[0] != state->rgucButtonsHatAndCounter[0] ||
-            self.lastPS4State.rgucButtonsHatAndCounter[1] != state->rgucButtonsHatAndCounter[1] ||
-            self.lastPS4State.rgucButtonsHatAndCounter[2] != state->rgucButtonsHatAndCounter[2] ||
-            self.lastPS4State.ucTriggerLeft != state->ucTriggerLeft ||
-            self.lastPS4State.ucTriggerRight != state->ucTriggerRight ||
-            self.lastPS4State.ucLeftJoystickX != state->ucLeftJoystickX ||
-            self.lastPS4State.ucLeftJoystickY != state->ucLeftJoystickY ||
-            self.lastPS4State.ucRightJoystickX != state->ucRightJoystickX ||
-            self.lastPS4State.ucRightJoystickY != state->ucRightJoystickY ||
-            0)
-        {
-            if (cfdyControllerMethod()) {
-                CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-            } else {
-                LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+            if (self.lastPS5State.rgucButtonsAndHat[0] != state->rgucButtonsAndHat[0] ||
+                self.lastPS5State.rgucButtonsAndHat[1] != state->rgucButtonsAndHat[1] ||
+                self.lastPS5State.rgucButtonsAndHat[2] != state->rgucButtonsAndHat[2] ||
+                self.lastPS5State.ucTriggerLeft != state->ucTriggerLeft ||
+                self.lastPS5State.ucTriggerRight != state->ucTriggerRight ||
+                self.lastPS5State.ucLeftJoystickX != state->ucLeftJoystickX ||
+                self.lastPS5State.ucLeftJoystickY != state->ucLeftJoystickY ||
+                self.lastPS5State.ucRightJoystickX != state->ucRightJoystickX ||
+                self.lastPS5State.ucRightJoystickY != state->ucRightJoystickY ||
+                0)
+            {
+                if (cfdyControllerMethod()) {
+                    CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                } else {
+                    LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                }
+                self.lastPS5State = *state;
             }
-            self.lastPS4State = *state;
         }
     }
 }
