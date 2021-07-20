@@ -81,6 +81,7 @@
 		4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CBBE13A24CFF7B700B4706E /* AboutView.xib */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
 		4CC3C0321FF73A660029EBF5 /* GeneralPrefsPaneVC.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C0311FF73A660029EBF5 /* GeneralPrefsPaneVC.m */; };
+		4CD99EB226A554B00026173A /* Ticks.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CD99EB126A554B00026173A /* Ticks.m */; };
 		4CDC8E6E25E750D6009E66C6 /* MASPreferencesWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CDC8E6D25E750D6009E66C6 /* MASPreferencesWindowController.m */; };
 		4CDC8E7025E754B2009E66C6 /* MASPreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CDC8E6F25E754B2009E66C6 /* MASPreferencesWindow.xib */; };
 		4CDC8E7425E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CDC8E7225E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m */; };
@@ -94,13 +95,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = FB290E2D19B37A4E004C83CF;
 			remoteInfo = "moonlight-common";
-		};
-		4C819478202EC9A50023F308 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 4C819476202EC9070023F308;
-			remoteInfo = "moonlight-common iOS";
 		};
 		98AB2E831CAD46840089BB98 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -198,6 +192,8 @@
 		4CC3C02B1FF72A3D0029EBF5 /* AppCellView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCellView.h; sourceTree = "<group>"; };
 		4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCellView.m; sourceTree = "<group>"; };
 		4CC3C0311FF73A660029EBF5 /* GeneralPrefsPaneVC.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GeneralPrefsPaneVC.m; sourceTree = "<group>"; };
+		4CD99EB026A554B00026173A /* Ticks.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Ticks.h; sourceTree = "<group>"; };
+		4CD99EB126A554B00026173A /* Ticks.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Ticks.m; sourceTree = "<group>"; };
 		4CDC8E6A25E750D6009E66C6 /* MASPreferencesWindowController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MASPreferencesWindowController.h; sourceTree = "<group>"; };
 		4CDC8E6B25E750D6009E66C6 /* MASPreferences.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MASPreferences.h; sourceTree = "<group>"; };
 		4CDC8E6C25E750D6009E66C6 /* MASPreferencesViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MASPreferencesViewController.h; sourceTree = "<group>"; };
@@ -495,7 +491,6 @@
 			isa = PBXGroup;
 			children = (
 				98AB2E841CAD46840089BB98 /* libmoonlight-common.a */,
-				4C819479202EC9A50023F308 /* libmoonlight-common iOS.a */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -603,6 +598,8 @@
 				4C798E66251A1E9700CAB469 /* HapticContext.m */,
 				4C2E247F1FF1E99300B6A12E /* HIDSupport.h */,
 				4C2E24801FF1E99300B6A12E /* HIDSupport.m */,
+				4CD99EB026A554B00026173A /* Ticks.h */,
+				4CD99EB126A554B00026173A /* Ticks.m */,
 			);
 			path = Input;
 			sourceTree = "<group>";
@@ -932,13 +929,6 @@
 /* End PBXProject section */
 
 /* Begin PBXReferenceProxy section */
-		4C819479202EC9A50023F308 /* libmoonlight-common iOS.a */ = {
-			isa = PBXReferenceProxy;
-			fileType = archive.ar;
-			path = "libmoonlight-common iOS.a";
-			remoteRef = 4C819478202EC9A50023F308 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
 		98AB2E841CAD46840089BB98 /* libmoonlight-common.a */ = {
 			isa = PBXReferenceProxy;
 			fileType = archive.ar;
@@ -1007,6 +997,7 @@
 				4C84385A21FE9453000A77CD /* NSApplication+Moonlight.m in Sources */,
 				4C38E8001FEE08A3000425CD /* ServerInfoResponse.m in Sources */,
 				4C38E7FD1FEE0887000425CD /* HttpManager.m in Sources */,
+				4CD99EB226A554B00026173A /* Ticks.m in Sources */,
 				4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */,
 				4C38E8091FEE0A0C000425CD /* mkcert.c in Sources */,
 				4C38E7F41FEE011A000425CD /* DiscoveryManager.m in Sources */,
