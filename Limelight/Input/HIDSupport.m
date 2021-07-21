@@ -411,6 +411,9 @@ typedef enum {
 @property (nonatomic) NSInteger controllerDriver;
 @property (nonatomic) BOOL isPS5Bluetooth;
 
+@property (nonatomic) SwitchSimpleStatePacket_t lastSimpleSwitchState;
+@property (nonatomic) SwitchStatePacket_t lastSwitchState;
+
 @property (atomic) dispatch_semaphore_t hidReadSemaphore;
 @property (atomic) BOOL vibrationEnableResponded;
 @property (atomic) BOOL waitingForVibrationEnable;
@@ -658,6 +661,9 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         }
         
         IOHIDDeviceRef device = [self getFirstDevice];
+        if (device == nil) {
+            continue;
+        }
         
         // get next value
         UInt16 lowFreqMotor = self.nextLowFreqMotor;
@@ -1064,7 +1070,7 @@ BOOL isPS5(IOHIDDeviceRef device) {
     return vendorId == 0x054C && (productId == 0x0ce6);
 }
 
-- (void)handlePlaystationDpad:(NSInteger)intValue {
+- (void)handleDpad:(NSInteger)intValue {
     switch (intValue) {
         case 0:
             [self updateButtonFlags:UP_FLAG state:YES];
@@ -1293,7 +1299,7 @@ void myHIDReportCallback (
         [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
         [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
         
-        [self handlePlaystationDpad:state->rgucButtonsHatAndCounter[0] & 0x0F];
+        [self handleDpad:state->rgucButtonsHatAndCounter[0] & 0x0F];
 
         UInt8 otherButtons = state->rgucButtonsHatAndCounter[1];
         [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
@@ -1356,7 +1362,7 @@ void myHIDReportCallback (
         [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
         [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
         
-        [self handlePlaystationDpad:state->rgucButtonsAndHat[0] & 0x0F];
+        [self handleDpad:state->rgucButtonsAndHat[0] & 0x0F];
 
         UInt8 otherButtons = state->rgucButtonsAndHat[1];
         [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
@@ -1410,6 +1416,122 @@ void myHIDReportCallback (
                     self.vibrationEnableResponded = YES;
                     self.waitingForVibrationEnable = NO;
                     dispatch_semaphore_signal(self.hidReadSemaphore);
+                }
+            }
+        } else {
+            if (report[0] == k_eSwitchInputReportIDs_SimpleControllerState) {
+                SwitchSimpleStatePacket_t *packet = (SwitchSimpleStatePacket_t *)&report[1];
+                
+                SInt16 axis;
+                
+                UInt8 buttons = packet->rgucButtons[0];
+                [self updateButtonFlags:Y_FLAG state:(buttons & 0x08) != 0];
+                [self updateButtonFlags:B_FLAG state:(buttons & 0x02) != 0];
+                [self updateButtonFlags:A_FLAG state:(buttons & 0x01) != 0];
+                [self updateButtonFlags:X_FLAG state:(buttons & 0x04) != 0];
+                [self updateButtonFlags:LB_FLAG state:(buttons & 0x10) != 0];
+                [self updateButtonFlags:RB_FLAG state:(buttons & 0x20) != 0];
+                axis = (buttons & 0x40) ? 32767 : -32768;
+                self.controller.lastLeftTrigger = axis;
+                axis = (buttons & 0x80) ? 32767 : -32768;
+                self.controller.lastRightTrigger = axis;
+                
+                UInt8 otherButtons = packet->rgucButtons[1];
+                [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x01) != 0];
+                [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x02) != 0];
+                [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x04) != 0];
+                [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x08) != 0];
+                
+                [self updateButtonFlags:SPECIAL_FLAG state:(otherButtons & 0x10) != 0];
+                
+                [self handleDpad:packet->ucStickHat];
+
+                axis = packet->sJoystickLeft[0] - INT_MAX;
+                self.controller.lastLeftStickX = axis;
+                axis = packet->sJoystickLeft[1] - INT_MAX;
+                self.controller.lastLeftStickY = axis;
+                axis = packet->sJoystickRight[0] - INT_MAX;
+                self.controller.lastRightStickX = axis;
+                axis = packet->sJoystickRight[1] - INT_MAX;
+                self.controller.lastRightStickY = axis;
+                
+                if (self.controllerDriver == 0) {
+                    
+                    if (self.lastSimpleSwitchState.rgucButtons[0] != packet->rgucButtons[0] ||
+                        self.lastSimpleSwitchState.rgucButtons[1] != packet->rgucButtons[1] ||
+                        self.lastSimpleSwitchState.ucStickHat != packet->ucStickHat ||
+                        self.lastSimpleSwitchState.sJoystickLeft[0] != packet->sJoystickLeft[0] ||
+                        self.lastSimpleSwitchState.sJoystickLeft[1] != packet->sJoystickLeft[1] ||
+                        self.lastSimpleSwitchState.sJoystickRight[0] != packet->sJoystickRight[0] ||
+                        self.lastSimpleSwitchState.sJoystickRight[1] != packet->sJoystickRight[1] ||
+                        0)
+                    {
+                        if (cfdyControllerMethod()) {
+                            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                        } else {
+                            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                        }
+                        self.lastSimpleSwitchState = *packet;
+                    }
+                }
+            } else if (report[0] == k_eSwitchInputReportIDs_FullControllerState) {
+                SwitchStatePacket_t *packet = (SwitchStatePacket_t *)&report[1];
+                
+                SInt16 axis;
+                
+                UInt8 buttons = packet->controllerState.rgucButtons[0];
+                [self updateButtonFlags:Y_FLAG state:(buttons & 0x02) != 0];
+                [self updateButtonFlags:B_FLAG state:(buttons & 0x08) != 0];
+                [self updateButtonFlags:A_FLAG state:(buttons & 0x04) != 0];
+                [self updateButtonFlags:X_FLAG state:(buttons & 0x01) != 0];
+                [self updateButtonFlags:RB_FLAG state:(buttons & 0x40) != 0];
+                axis = (buttons & 0x80) ? 32767 : -32768;
+                self.controller.lastRightTrigger = axis;
+                
+                UInt8 otherButtons = packet->controllerState.rgucButtons[1];
+                [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x01) != 0];
+                [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x02) != 0];
+                [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x08) != 0];
+                [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x04) != 0];
+                
+                [self updateButtonFlags:SPECIAL_FLAG state:(otherButtons & 0x10) != 0];
+                
+                UInt8 otherOtherButtons = packet->controllerState.rgucButtons[2];
+                [self updateButtonFlags:DOWN_FLAG state:(otherOtherButtons & 0x01) != 0];
+                [self updateButtonFlags:UP_FLAG state:(otherOtherButtons & 0x02) != 0];
+                [self updateButtonFlags:RIGHT_FLAG state:(otherOtherButtons & 0x04) != 0];
+                [self updateButtonFlags:LEFT_FLAG state:(otherOtherButtons & 0x08) != 0];
+                [self updateButtonFlags:LB_FLAG state:(otherOtherButtons & 0x40) != 0];
+                axis = (otherOtherButtons & 0x80) ? 32767 : -32768;
+                self.controller.lastLeftTrigger = axis;
+                
+                axis = packet->controllerState.rgucJoystickLeft[0] | ((packet->controllerState.rgucJoystickLeft[1] & 0xF) << 8);
+                self.controller.lastLeftStickX = (axis - 2048) * 20;
+                axis = ((packet->controllerState.rgucJoystickLeft[1] & 0xF0) >> 4) | (packet->controllerState.rgucJoystickLeft[2] << 4);
+                self.controller.lastLeftStickY = (axis - 2048) * 20;
+                axis = packet->controllerState.rgucJoystickRight[0] | ((packet->controllerState.rgucJoystickRight[1] & 0xF) << 8);
+                self.controller.lastRightStickX = (axis - 2048) * 20;
+                axis = ((packet->controllerState.rgucJoystickRight[1] & 0xF0) >> 4) | (packet->controllerState.rgucJoystickRight[2] << 4);
+                self.controller.lastRightStickY = (axis - 2048) * 20;
+                
+                if (self.controllerDriver == 0) {
+                    
+                    if (self.lastSwitchState.controllerState.rgucButtons[0] != packet->controllerState.rgucButtons[0] ||
+                        self.lastSwitchState.controllerState.rgucButtons[1] != packet->controllerState.rgucButtons[1] ||
+                        self.lastSwitchState.controllerState.rgucButtons[2] != packet->controllerState.rgucButtons[2] ||
+                        self.lastSwitchState.controllerState.rgucJoystickLeft[0] != packet->controllerState.rgucJoystickLeft[0] ||
+                        self.lastSwitchState.controllerState.rgucJoystickLeft[1] != packet->controllerState.rgucJoystickLeft[1] ||
+                        self.lastSwitchState.controllerState.rgucJoystickRight[0] != packet->controllerState.rgucJoystickRight[0] ||
+                        self.lastSwitchState.controllerState.rgucJoystickRight[1] != packet->controllerState.rgucJoystickRight[1] ||
+                        0)
+                    {
+                        if (cfdyControllerMethod()) {
+                            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                        } else {
+                            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                        }
+                        self.lastSwitchState = *packet;
+                    }
                 }
             }
         }
@@ -1487,11 +1609,16 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
         [weakSelf runRumbleLoop];
     });
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), self.enableVibrationQueue, ^{
-        if (![self setVibrationEnabled:1]) {
-            NSLog(@"Couldn't enable vibration");
+    IOHIDDeviceRef device = [self getFirstDevice];
+    if (device != nil) {
+        if (isNintendo(device)) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), self.enableVibrationQueue, ^{
+                if (![self setVibrationEnabled:1]) {
+                    NSLog(@"Couldn't enable vibration");
+                }
+            });
         }
-    });
+    }
 }
 
 - (void)tearDownHidManager {
