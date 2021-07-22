@@ -1506,13 +1506,13 @@ void myHIDReportCallback (
                 self.controller.lastLeftTrigger = axis;
                 
                 axis = packet->controllerState.rgucJoystickLeft[0] | ((packet->controllerState.rgucJoystickLeft[1] & 0xF) << 8);
-                self.controller.lastLeftStickX = (axis - 2048) * 20;
+                self.controller.lastLeftStickX = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
                 axis = ((packet->controllerState.rgucJoystickLeft[1] & 0xF0) >> 4) | (packet->controllerState.rgucJoystickLeft[2] << 4);
-                self.controller.lastLeftStickY = (axis - 2048) * 20;
+                self.controller.lastLeftStickY = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
                 axis = packet->controllerState.rgucJoystickRight[0] | ((packet->controllerState.rgucJoystickRight[1] & 0xF) << 8);
-                self.controller.lastRightStickX = (axis - 2048) * 20;
+                self.controller.lastRightStickX = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
                 axis = ((packet->controllerState.rgucJoystickRight[1] & 0xF0) >> 4) | (packet->controllerState.rgucJoystickRight[2] << 4);
-                self.controller.lastRightStickY = (axis - 2048) * 20;
+                self.controller.lastRightStickY = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
                 
                 if (self.controllerDriver == 0) {
                     
