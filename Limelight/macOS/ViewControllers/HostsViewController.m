@@ -130,10 +130,6 @@
 
 #pragma mark - Actions
 
-- (IBAction)filterList:(id)sender {
-    [self.view.window makeFirstResponder:self.getSearchField];
-}
-
 - (IBAction)wakeMenuItemClicked:(NSMenuItem *)sender {
     TemporaryHost *host = [self getHostFromMenuItem:sender];
     if (host != nil) {

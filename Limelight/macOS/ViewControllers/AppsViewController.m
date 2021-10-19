@@ -154,10 +154,6 @@ const CGFloat scaleBase = 1.125;
 
 #pragma mark - Actions
 
-- (IBAction)filterList:(id)sender {
-    [self.view.window makeFirstResponder:self.getSearchField];
-}
-
 - (IBAction)backButtonClicked:(id)sender {
     [self transitionToHostsVC];
 }

@@ -11,6 +11,16 @@
 #import "BackgroundColorView.h"
 #import "Helpers.h"
 
+@interface CustomSearchField : NSSearchField
+@end
+
+@implementation CustomSearchField
+- (void)cancelOperation:(id)sender {
+    [self.window makeFirstResponder:nil];
+}
+@end
+
+
 @interface ContainerViewController () <NSToolbarDelegate>
 @property (weak) IBOutlet BackgroundColorView *titleContainer;
 
@@ -96,13 +106,14 @@
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar itemForItemIdentifier:(NSToolbarItemIdentifier)itemIdentifier willBeInsertedIntoToolbar:(BOOL)flag {
     if (@available(macOS 11.0, *)) {
         NSSearchToolbarItem *newSearchItem = [[NSSearchToolbarItem alloc] initWithItemIdentifier:@"NewSearchToolbarItem"];
+        newSearchItem.searchField = [[CustomSearchField alloc] init];
         return newSearchItem;
     } else {
         NSToolbarItem *OldSearchItem = [[NSToolbarItem alloc] initWithItemIdentifier:@"OldSearchToolbarItem"];
         OldSearchItem.minSize = NSMakeSize(96, 22);
         OldSearchItem.maxSize = NSMakeSize(256, 22);
         
-        NSSearchField *searchField = [[NSSearchField alloc] init];
+        NSSearchField *searchField = [[CustomSearchField alloc] init];
         [OldSearchItem setView:searchField];
         
         return OldSearchItem;;

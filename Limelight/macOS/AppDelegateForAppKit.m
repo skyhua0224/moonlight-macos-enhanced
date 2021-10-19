@@ -76,6 +76,11 @@ typedef enum : NSUInteger {
     [self.aboutWC.window makeKeyAndOrderFront:nil];
 }
 
+- (IBAction)filterList:(id)sender {
+    NSWindow *window = NSApplication.sharedApplication.mainWindow;
+    [window makeFirstResponder:[window moonlight_searchFieldInToolbar]];
+}
+
 - (IBAction)setSystemTheme:(id)sender {
     [self changeTheme:SystemTheme withMenuItem:((NSMenuItem *)sender)];
 }
