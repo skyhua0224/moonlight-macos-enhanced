@@ -374,12 +374,13 @@ DQ
                                             </connections>
                                         </menuItem>
                                         <menuItem title="Close Stream Window" keyEquivalent="w" id="fwh-3l-HJN">
-                                            <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                            <modifierMask key="keyEquivalentModifierMask" control="YES" option="YES"/>
                                             <connections>
                                                 <action selector="performCloseStreamWindow:" target="Ady-hI-5gd" id="raX-9U-LT7"/>
                                             </connections>
                                         </menuItem>
                                         <menuItem title="Close and Quit App" keyEquivalent="W" id="vi8-oc-CxM">
+                                            <modifierMask key="keyEquivalentModifierMask" control="YES"/>
                                             <connections>
                                                 <action selector="performCloseAndQuitApp:" target="Ady-hI-5gd" id="kw5-Qu-bbw"/>
                                             </connections>

@@ -148,7 +148,7 @@
 - (void)flagsChanged:(NSEvent *)event {
     [self.hidSupport flagsChanged:event];
     
-    if ((event.modifierFlags & NSEventModifierFlagCommand) && (event.modifierFlags & NSEventModifierFlagOption)) {
+    if (event.modifierFlags == 524640) {
         [self uncaptureMouse];
     }
 }
@@ -211,7 +211,7 @@
 #pragma mark - KeyboardNotifiable
 
 - (BOOL)onKeyboardEquivalent:(NSEvent *)event {
-    const NSEventModifierFlags modifierFlags = NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand;
+    const NSEventModifierFlags modifierFlags = NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand | NSEventModifierFlagFunction;
     const NSEventModifierFlags eventModifierFlags = event.modifierFlags & modifierFlags;
     
     if ((event.keyCode == kVK_ANSI_Grave && eventModifierFlags == NSEventModifierFlagCommand)
@@ -219,16 +219,19 @@
         ) {
         if (!([self.view.window styleMask] & NSWindowStyleMaskFullScreen)) {
             if (!self.hidSupport.shouldSendInputEvents) {
+                [self.hidSupport releaseAllModifierKeys];
                 return NO;
             }
         }
     }
     
     if ((event.keyCode == kVK_ANSI_F && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagCommand))
-        || (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagOption | NSEventModifierFlagCommand))
-        || (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagShift | NSEventModifierFlagCommand))
+        || (event.keyCode == kVK_ANSI_F && eventModifierFlags == NSEventModifierFlagFunction)
+        || (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagOption | NSEventModifierFlagControl))
+        || (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagShift | NSEventModifierFlagControl))
         || (event.keyCode == kVK_ANSI_W && eventModifierFlags == NSEventModifierFlagCommand)
         ) {
+        [self.hidSupport releaseAllModifierKeys];
         return NO;
     }
     
