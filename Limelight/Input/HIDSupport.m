@@ -9,6 +9,7 @@
 #import "HIDSupport.h"
 #import "Controller.h"
 #import "AlternateControllerNetworking.h"
+#import "Ticks.h"
 
 #include "Limelight.h"
 
@@ -250,8 +251,7 @@ typedef struct {
     UInt8 ucLedBlue;                    /* 46 */
 } DS5EffectsState_t;
 
-static UInt32 crc32_for_byte(UInt32 r)
-{
+static UInt32 crc32_for_byte(UInt32 r) {
     int i;
     for(i = 0; i < 8; ++i) {
         r = (r & 1? 0: (UInt32)0xEDB88320L) ^ r >> 1;
@@ -259,8 +259,7 @@ static UInt32 crc32_for_byte(UInt32 r)
     return r ^ (UInt32)0xFF000000L;
 }
 
-UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
-{
+UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len) {
     // As an optimization we can precalculate a 256 entry table for each byte.
     size_t i;
     for(i = 0; i < len; ++i) {
@@ -268,6 +267,129 @@ UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
     }
     return crc;
 }
+
+typedef enum {
+    k_eSwitchSubcommandIDs_BluetoothManualPair = 0x01,
+    k_eSwitchSubcommandIDs_RequestDeviceInfo   = 0x02,
+    k_eSwitchSubcommandIDs_SetInputReportMode  = 0x03,
+    k_eSwitchSubcommandIDs_SetHCIState         = 0x06,
+    k_eSwitchSubcommandIDs_SPIFlashRead        = 0x10,
+    k_eSwitchSubcommandIDs_SetPlayerLights     = 0x30,
+    k_eSwitchSubcommandIDs_SetHomeLight        = 0x38,
+    k_eSwitchSubcommandIDs_EnableIMU           = 0x40,
+    k_eSwitchSubcommandIDs_SetIMUSensitivity   = 0x41,
+    k_eSwitchSubcommandIDs_EnableVibration     = 0x48,
+} ESwitchSubcommandIDs;
+
+typedef enum {
+    k_eSwitchInputReportIDs_SubcommandReply       = 0x21,
+    k_eSwitchInputReportIDs_FullControllerState   = 0x30,
+    k_eSwitchInputReportIDs_SimpleControllerState = 0x3F,
+    k_eSwitchInputReportIDs_CommandAck            = 0x81,
+} ESwitchInputReportIDs;
+
+typedef struct {
+    UInt32 unAddress;
+    UInt8 ucLength;
+} SwitchSPIOpData_t;
+
+typedef struct {
+    UInt8 ucCounter;
+    UInt8 ucBatteryAndConnection;
+    UInt8 rgucButtons[3];
+    UInt8 rgucJoystickLeft[3];
+    UInt8 rgucJoystickRight[3];
+    UInt8 ucVibrationCode;
+} SwitchControllerStatePacket_t;
+
+typedef struct {
+    SwitchControllerStatePacket_t m_controllerState;
+
+    UInt8 ucSubcommandAck;
+    UInt8 ucSubcommandID;
+
+    #define k_unSubcommandDataBytes 35
+    union {
+        UInt8 rgucSubcommandData[k_unSubcommandDataBytes];
+
+        struct {
+            SwitchSPIOpData_t opData;
+            UInt8 rgucReadData[k_unSubcommandDataBytes - sizeof(SwitchSPIOpData_t)];
+        } spiReadData;
+
+        struct {
+            UInt8 rgucFirmwareVersion[2];
+            UInt8 ucDeviceType;
+            UInt8 ucFiller1;
+            UInt8 rgucMACAddress[6];
+            UInt8 ucFiller2;
+            UInt8 ucColorLocation;
+        } deviceInfo;
+    };
+} SwitchSubcommandInputPacket_t;
+
+typedef struct {
+    UInt8 rgucData[4];
+} SwitchRumbleData_t;
+
+typedef struct {
+    UInt8 ucPacketType;
+    UInt8 ucPacketNumber;
+    SwitchRumbleData_t rumbleData[2];
+} SwitchCommonOutputPacket_t;
+
+#define k_unSwitchOutputPacketDataLength 49
+#define k_unSwitchMaxOutputPacketLength 64
+
+typedef struct {
+    SwitchCommonOutputPacket_t commonData;
+
+    UInt8 ucSubcommandID;
+    UInt8 rgucSubcommandData[k_unSwitchOutputPacketDataLength - sizeof(SwitchCommonOutputPacket_t) - 1];
+} SwitchSubcommandOutputPacket_t;
+
+typedef struct {
+    UInt8 rgucButtons[2];
+    UInt8 ucStickHat;
+    UInt8 rgucJoystickLeft[2];
+    UInt8 rgucJoystickRight[2];
+} SwitchInputOnlyControllerStatePacket_t;
+
+typedef struct {
+    UInt8 rgucButtons[2];
+    UInt8 ucStickHat;
+    int16_t sJoystickLeft[2];
+    int16_t sJoystickRight[2];
+} SwitchSimpleStatePacket_t;
+
+typedef struct {
+    SwitchControllerStatePacket_t controllerState;
+
+    struct {
+        int16_t sAccelX;
+        int16_t sAccelY;
+        int16_t sAccelZ;
+
+        int16_t sGyroX;
+        int16_t sGyroY;
+        int16_t sGyroZ;
+    } imuState[3];
+} SwitchStatePacket_t;
+
+#define RUMBLE_WRITE_FREQUENCY_MS 25
+#define RUMBLE_REFRESH_FREQUENCY_MS 40
+
+typedef enum {
+    k_eSwitchOutputReportIDs_RumbleAndSubcommand = 0x01,
+    k_eSwitchOutputReportIDs_Rumble              = 0x10,
+    k_eSwitchOutputReportIDs_Proprietary         = 0x80,
+} ESwitchOutputReportIDs;
+
+#define k_unSwitchOutputPacketDataLength 49
+#define k_unSwitchMaxOutputPacketLength 64
+#define k_unSwitchBluetoothPacketLength k_unSwitchOutputPacketDataLength
+#define k_unSwitchUSBPacketLength k_unSwitchMaxOutputPacketLength
+
 
 @interface HIDSupport ()
 @property (nonatomic) dispatch_queue_t rumbleQueue;
@@ -283,18 +405,44 @@ UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len)
 @property (atomic) UInt16 nextHighFreqMotor;
 @property (atomic) dispatch_semaphore_t rumbleSemaphore;
 @property (atomic) BOOL closeRumble;
+@property (nonatomic) BOOL isRumbleTimer;
 @property (nonatomic) PS4StatePacket_t lastPS4State;
 @property (nonatomic) PS5StatePacket_t lastPS5State;
 @property (nonatomic) NSInteger controllerDriver;
 @property (nonatomic) BOOL isPS5Bluetooth;
+
+@property (nonatomic) SwitchSimpleStatePacket_t lastSimpleSwitchState;
+@property (nonatomic) SwitchStatePacket_t lastSwitchState;
+
+@property (atomic) dispatch_semaphore_t hidReadSemaphore;
+@property (atomic) BOOL vibrationEnableResponded;
+@property (atomic) BOOL waitingForVibrationEnable;
+@property (atomic) UInt32 startedWaitingForVibrationEnable;
+@property (nonatomic) dispatch_queue_t enableVibrationQueue;
+
+@property (nonatomic) BOOL switchUsingBluetooth;
+@property (nonatomic) UInt8 switchCommandNumber;
+@property (nonatomic) BOOL switchRumbleActive;
+@property (nonatomic) UInt32 switchUnRumbleSent;
+@property (nonatomic) BOOL switchRumblePending;
+@property (nonatomic) BOOL switchRumbleZeroPending;
+@property (nonatomic) UInt32 switchUnRumblePending;
+
+@property (nonatomic, strong) Ticks *ticks;
 @end
 
 @implementation HIDSupport
+
+SwitchCommonOutputPacket_t switchRumblePacket;
 
 - (instancetype)init {
     self = [super init];
     if (self) {
         [self setupHidManager];
+        
+        self.ticks = [[Ticks alloc] init];
+        self.switchUsingBluetooth = YES;
+        
         self.previousLowFreqMotor = 0xFF;
         self.previousHighFreqMotor = 0xFF;
 
@@ -512,11 +660,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             break;
         }
         
-        NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
-        if (devices.count == 0) {
-            continue;
-        }
-        IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)devices.allObjects[0];
+        IOHIDDeviceRef device = [self getFirstDevice];
         if (device == nil) {
             continue;
         }
@@ -628,14 +772,238 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                 IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, dataSize);
                 usleep(30000);
             }
+        } else if (isNintendo(device)) {
+            if (self.isRumbleTimer) {
+                if (self.switchRumblePending || self.switchRumbleZeroPending) {
+                    [self switchSendPendingRumble:device];
+                } else if (self.switchRumbleActive && TICKS_PASSED([self.ticks getTicks], self.switchUnRumbleSent + RUMBLE_REFRESH_FREQUENCY_MS)) {
+                    NSLog(@"Sent continuing rumble");
+                    [self writeRumble:device];
+                }
+                
+                if (self.switchRumblePending) {
+                    usleep(RUMBLE_REFRESH_FREQUENCY_MS * 1000);
+                    self.isRumbleTimer = YES;
+                    dispatch_semaphore_signal(self.rumbleSemaphore);
+                } else {
+                    self.isRumbleTimer = NO;
+                }
+            } else {
+                self.switchUnRumbleSent = [self.ticks getTicks];
+                [self switch_RumbleJoystick:device lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+                
+                usleep(RUMBLE_REFRESH_FREQUENCY_MS * 1000);
+                self.isRumbleTimer = YES;
+                dispatch_semaphore_signal(self.rumbleSemaphore);
+            }
         }
     }
 }
+
+- (IOHIDDeviceRef)getFirstDevice {
+    NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
+    if (devices.count == 0) {
+        return nil;
+    }
+    IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)devices.allObjects[0];
+    if (device == nil) {
+        return nil;
+    }
+    
+    return device;
+}
+
+
+#pragma mark - Switch rumble stuff
+
+- (int)switch_RumbleJoystick:(IOHIDDeviceRef)device lowFreqMotor:(UInt16)lowFreqMotor highFreqMotor:(UInt16)highFreqMotor {
+    if (self.switchRumblePending) {
+        if ([self switchSendPendingRumble:device] < 0) {
+            return -1;
+        }
+    }
+
+    if (self.switchUsingBluetooth && ([self.ticks getTicks] - self.switchUnRumbleSent) < RUMBLE_WRITE_FREQUENCY_MS) {
+        if (lowFreqMotor || highFreqMotor) {
+            UInt32 unRumblePending = lowFreqMotor << 16 | highFreqMotor;
+
+            /* Keep the highest rumble intensity in the given interval */
+            if (unRumblePending > self.switchUnRumblePending) {
+                self.switchUnRumblePending = unRumblePending;
+            }
+            self.switchRumblePending = YES;
+            self.switchRumbleZeroPending = NO;
+        } else {
+            /* When rumble is complete, turn it off */
+            self.switchRumbleZeroPending = YES;
+        }
+        return 0;
+    }
+
+    NSLog(@"Sent rumble %d/%d", lowFreqMotor, highFreqMotor);
+
+    return [self switchActuallyRumbleJoystick:device low_frequency_rumble:lowFreqMotor high_frequency_rumble:highFreqMotor];
+}
+
+- (BOOL)setVibrationEnabled:(UInt8)enabled {
+    return [self writeSubcommand:k_eSwitchSubcommandIDs_EnableVibration pBuf:&enabled ucLen:sizeof(enabled) ppReply:nil];
+}
+
+- (BOOL)writeSubcommand:(ESwitchSubcommandIDs)ucCommandID pBuf:(UInt8 *)pBuf ucLen:(UInt8)ucLen ppReply:(SwitchSubcommandInputPacket_t **)ppReply {
+    int nRetries = 5;
+    BOOL success = NO;
+
+    while (!success && nRetries--) {
+        SwitchSubcommandOutputPacket_t commandPacket;
+        [self constructSubcommand:ucCommandID pBuf:pBuf ucLen:ucLen outPacket:&commandPacket];
+
+        IOHIDDeviceRef device = [self getFirstDevice];
+        
+        self.waitingForVibrationEnable = YES;
+        self.startedWaitingForVibrationEnable = [self.ticks getTicks];
+        if (![self writePacket:device pBuf:&commandPacket ucLen:sizeof(commandPacket)]) {
+            continue;
+        }
+
+        dispatch_semaphore_wait(self.hidReadSemaphore, DISPATCH_TIME_FOREVER);
+        success = self.vibrationEnableResponded;
+    }
+
+    return success;
+}
+
+- (void)constructSubcommand:(ESwitchSubcommandIDs)ucCommandID pBuf:(UInt8 *)pBuf ucLen:(UInt8)ucLen outPacket:(SwitchSubcommandOutputPacket_t *)outPacket {
+    memset(outPacket, 0, sizeof(*outPacket));
+
+    outPacket->commonData.ucPacketType = k_eSwitchOutputReportIDs_RumbleAndSubcommand;
+    outPacket->commonData.ucPacketNumber = self.switchCommandNumber;
+
+    memcpy(&outPacket->commonData.rumbleData, &switchRumblePacket.rumbleData, sizeof(switchRumblePacket.rumbleData));
+
+    outPacket->ucSubcommandID = ucCommandID;
+    memcpy(outPacket->rgucSubcommandData, pBuf, ucLen);
+
+    self.switchCommandNumber = (self.switchCommandNumber + 1) & 0xF;
+}
+
+- (int)switchSendPendingRumble:(IOHIDDeviceRef)device {
+    if (([self.ticks getTicks] - self.switchUnRumbleSent) < RUMBLE_WRITE_FREQUENCY_MS) {
+        return 0;
+    }
+    
+    if (self.switchRumblePending) {
+        UInt16 low_frequency_rumble = (UInt16)(self.switchUnRumblePending >> 16);
+        UInt16 high_frequency_rumble = (UInt16)self.switchUnRumblePending;
+
+        NSLog(@"Sent pending rumble %d/%d", low_frequency_rumble, high_frequency_rumble);
+
+        self.switchRumblePending = NO;
+        self.switchUnRumblePending = 0;
+
+        return [self switchActuallyRumbleJoystick:device low_frequency_rumble:low_frequency_rumble high_frequency_rumble:high_frequency_rumble];
+    }
+
+    if (self.switchRumbleZeroPending) {
+        self.switchRumbleZeroPending = NO;
+
+        NSLog(@"Sent pending zero rumble");
+
+        return [self switchActuallyRumbleJoystick:device low_frequency_rumble:0 high_frequency_rumble:0];
+    }
+
+    return 0;
+}
+
+- (int)switchActuallyRumbleJoystick:(IOHIDDeviceRef)device low_frequency_rumble:(UInt16)low_frequency_rumble high_frequency_rumble:(UInt16)high_frequency_rumble {
+    const UInt16 k_usHighFreq = 0x0074;
+    const UInt8 k_ucHighFreqAmp = 0xBE;
+    const UInt8 k_ucLowFreq = 0x3D;
+    const UInt16 k_usLowFreqAmp = 0x806F;
+
+    if (low_frequency_rumble) {
+        [self switchEncodeRumble:&switchRumblePacket.rumbleData[0] usHighFreq:k_usHighFreq ucHighFreqAmp:k_ucHighFreqAmp ucLowFreq:k_ucLowFreq usLowFreqAmp:k_usLowFreqAmp];
+    } else {
+        [self setNeutralRumble:&switchRumblePacket.rumbleData[0]];
+    }
+
+    if (high_frequency_rumble) {
+        [self switchEncodeRumble:&switchRumblePacket.rumbleData[1] usHighFreq:k_usHighFreq ucHighFreqAmp:k_ucHighFreqAmp ucLowFreq:k_ucLowFreq usLowFreqAmp:k_usLowFreqAmp];
+    } else {
+        [self setNeutralRumble:&switchRumblePacket.rumbleData[1]];
+    }
+
+    self.switchRumbleActive = (low_frequency_rumble || high_frequency_rumble) ? YES : NO;
+
+    if (![self writeRumble:device]) {
+        NSLog(@"Couldn't send rumble packet");
+        return -1;
+    }
+    return 0;
+}
+
+- (void)setNeutralRumble:(SwitchRumbleData_t *)pRumble {
+    pRumble->rgucData[0] = 0x00;
+    pRumble->rgucData[1] = 0x01;
+    pRumble->rgucData[2] = 0x40;
+    pRumble->rgucData[3] = 0x40;
+}
+
+- (void)switchEncodeRumble:(SwitchRumbleData_t *)pRumble usHighFreq:(UInt16)usHighFreq ucHighFreqAmp:(UInt8)ucHighFreqAmp ucLowFreq:(UInt8)ucLowFreq usLowFreqAmp:(UInt16)usLowFreqAmp {
+    if (ucHighFreqAmp > 0 || usLowFreqAmp > 0) {
+        // High-band frequency and low-band amplitude are actually nine-bits each so they
+        // take a bit from the high-band amplitude and low-band frequency bytes respectively
+        pRumble->rgucData[0] = usHighFreq & 0xFF;
+        pRumble->rgucData[1] = ucHighFreqAmp | ((usHighFreq >> 8) & 0x01);
+
+        pRumble->rgucData[2]  = ucLowFreq | ((usLowFreqAmp >> 8) & 0x80);
+        pRumble->rgucData[3]  = usLowFreqAmp & 0xFF;
+
+        NSLog(@"Freq: %.2X %.2X  %.2X, Amp: %.2X  %.2X %.2X\n", usHighFreq & 0xFF, ((usHighFreq >> 8) & 0x01), ucLowFreq, ucHighFreqAmp, ((usLowFreqAmp >> 8) & 0x80), usLowFreqAmp & 0xFF);
+    } else {
+        [self setNeutralRumble:pRumble];
+    }
+}
+
+- (BOOL)writeRumble:(IOHIDDeviceRef)device {
+    // Write into m_RumblePacket rather than a temporary buffer to allow the current rumble state
+    // to be retained for subsequent rumble or subcommand packets sent to the controller
+    
+    switchRumblePacket.ucPacketType = k_eSwitchOutputReportIDs_Rumble;
+    switchRumblePacket.ucPacketNumber = self.switchCommandNumber;
+    self.switchCommandNumber = (self.switchCommandNumber + 1) & 0xF;
+
+    // Refresh the rumble state periodically
+    self.switchUnRumbleSent = [self.ticks getTicks];
+
+    return [self writePacket:device pBuf:(UInt8 *)&switchRumblePacket ucLen:sizeof(switchRumblePacket)];
+}
+
+- (BOOL)writePacket:(IOHIDDeviceRef)device pBuf:(void *)pBuf ucLen:(UInt8)ucLen {
+    UInt8 rgucBuf[k_unSwitchMaxOutputPacketLength];
+    const size_t unWriteSize = self.switchUsingBluetooth ? k_unSwitchBluetoothPacketLength : k_unSwitchUSBPacketLength;
+
+    if (ucLen > k_unSwitchOutputPacketDataLength) {
+        return NO;
+    }
+
+    if (ucLen < unWriteSize) {
+        memcpy(rgucBuf, pBuf, ucLen);
+        memset(rgucBuf+ucLen, 0, unWriteSize-ucLen);
+        pBuf = rgucBuf;
+        ucLen = (UInt8)unWriteSize;
+    }
+    
+    UInt8 *data = (UInt8 *)pBuf;
+    IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, ucLen);
+    return YES;
+}
+
 
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
     self.nextLowFreqMotor = lowFreqMotor;
     self.nextHighFreqMotor = highFreqMotor;
 
+    self.isRumbleTimer = NO;
     dispatch_semaphore_signal(self.rumbleSemaphore);
 }
 
@@ -672,6 +1040,12 @@ UInt16 usbIdFromDevice(IOHIDDeviceRef device, NSString *key) {
     return [(NSNumber *)CFBridgingRelease(vendor) unsignedShortValue];
 }
 
+BOOL isNintendo(IOHIDDeviceRef device) {
+    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
+    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
+    return vendorId == 0x057E && (productId == 0x2009);
+}
+
 BOOL isXbox(IOHIDDeviceRef device) {
     UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
     UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
@@ -681,7 +1055,7 @@ BOOL isXbox(IOHIDDeviceRef device) {
 BOOL isPlayStation(IOHIDDeviceRef device) {
     UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
     UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
-    return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4 || productId == 0x0ce6);
+    return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05C4 || productId == 0x0CE6);
 }
 
 BOOL isPS4(IOHIDDeviceRef device) {
@@ -696,7 +1070,7 @@ BOOL isPS5(IOHIDDeviceRef device) {
     return vendorId == 0x054C && (productId == 0x0ce6);
 }
 
-- (void)handlePlaystationDpad:(NSInteger)intValue {
+- (void)handleDpad:(NSInteger)intValue {
     switch (intValue) {
         case 0:
             [self updateButtonFlags:UP_FLAG state:YES];
@@ -889,7 +1263,7 @@ void myHIDReportCallback (
     HIDSupport *self = (__bridge HIDSupport *)context;
     
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
-    if (!isPlayStation(device)) {
+    if (!isPlayStation(device) && !isNintendo(device)) {
         return;
     };
     
@@ -925,7 +1299,7 @@ void myHIDReportCallback (
         [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
         [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
         
-        [self handlePlaystationDpad:state->rgucButtonsHatAndCounter[0] & 0x0F];
+        [self handleDpad:state->rgucButtonsHatAndCounter[0] & 0x0F];
 
         UInt8 otherButtons = state->rgucButtonsHatAndCounter[1];
         [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
@@ -988,7 +1362,7 @@ void myHIDReportCallback (
         [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
         [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
         
-        [self handlePlaystationDpad:state->rgucButtonsAndHat[0] & 0x0F];
+        [self handleDpad:state->rgucButtonsAndHat[0] & 0x0F];
 
         UInt8 otherButtons = state->rgucButtonsAndHat[1];
         [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
@@ -1027,6 +1401,138 @@ void myHIDReportCallback (
                     LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
                 }
                 self.lastPS5State = *state;
+            }
+        }
+    } else if (isNintendo(device)) {
+        if (self.waitingForVibrationEnable) {
+            if (TICKS_PASSED([self.ticks getTicks], self.startedWaitingForVibrationEnable + 100)) {
+                self.vibrationEnableResponded = NO;
+                self.waitingForVibrationEnable = NO;
+                dispatch_semaphore_signal(self.hidReadSemaphore);
+            }
+            if (report[0] == k_eSwitchInputReportIDs_SubcommandReply) {
+                SwitchSubcommandInputPacket_t *reply = (SwitchSubcommandInputPacket_t *)&report[1];
+                if (reply->ucSubcommandID == k_eSwitchSubcommandIDs_EnableVibration && (reply->ucSubcommandAck & 0x80)) {
+                    self.vibrationEnableResponded = YES;
+                    self.waitingForVibrationEnable = NO;
+                    dispatch_semaphore_signal(self.hidReadSemaphore);
+                }
+            }
+        } else {
+            if (report[0] == k_eSwitchInputReportIDs_SimpleControllerState) {
+                SwitchSimpleStatePacket_t *packet = (SwitchSimpleStatePacket_t *)&report[1];
+                
+                SInt16 axis;
+                
+                UInt8 buttons = packet->rgucButtons[0];
+                [self updateButtonFlags:Y_FLAG state:(buttons & 0x08) != 0];
+                [self updateButtonFlags:B_FLAG state:(buttons & 0x02) != 0];
+                [self updateButtonFlags:A_FLAG state:(buttons & 0x01) != 0];
+                [self updateButtonFlags:X_FLAG state:(buttons & 0x04) != 0];
+                [self updateButtonFlags:LB_FLAG state:(buttons & 0x10) != 0];
+                [self updateButtonFlags:RB_FLAG state:(buttons & 0x20) != 0];
+                axis = (buttons & 0x40) ? 32767 : -32768;
+                self.controller.lastLeftTrigger = axis;
+                axis = (buttons & 0x80) ? 32767 : -32768;
+                self.controller.lastRightTrigger = axis;
+                
+                UInt8 otherButtons = packet->rgucButtons[1];
+                [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x01) != 0];
+                [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x02) != 0];
+                [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x04) != 0];
+                [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x08) != 0];
+                
+                [self updateButtonFlags:SPECIAL_FLAG state:(otherButtons & 0x10) != 0];
+                
+                [self handleDpad:packet->ucStickHat];
+
+                axis = packet->sJoystickLeft[0] - INT_MAX;
+                self.controller.lastLeftStickX = axis;
+                axis = packet->sJoystickLeft[1] - INT_MAX;
+                self.controller.lastLeftStickY = axis;
+                axis = packet->sJoystickRight[0] - INT_MAX;
+                self.controller.lastRightStickX = axis;
+                axis = packet->sJoystickRight[1] - INT_MAX;
+                self.controller.lastRightStickY = axis;
+                
+                if (self.controllerDriver == 0) {
+                    
+                    if (self.lastSimpleSwitchState.rgucButtons[0] != packet->rgucButtons[0] ||
+                        self.lastSimpleSwitchState.rgucButtons[1] != packet->rgucButtons[1] ||
+                        self.lastSimpleSwitchState.ucStickHat != packet->ucStickHat ||
+                        self.lastSimpleSwitchState.sJoystickLeft[0] != packet->sJoystickLeft[0] ||
+                        self.lastSimpleSwitchState.sJoystickLeft[1] != packet->sJoystickLeft[1] ||
+                        self.lastSimpleSwitchState.sJoystickRight[0] != packet->sJoystickRight[0] ||
+                        self.lastSimpleSwitchState.sJoystickRight[1] != packet->sJoystickRight[1] ||
+                        0)
+                    {
+                        if (cfdyControllerMethod()) {
+                            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                        } else {
+                            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                        }
+                        self.lastSimpleSwitchState = *packet;
+                    }
+                }
+            } else if (report[0] == k_eSwitchInputReportIDs_FullControllerState) {
+                SwitchStatePacket_t *packet = (SwitchStatePacket_t *)&report[1];
+                
+                SInt16 axis;
+                
+                UInt8 buttons = packet->controllerState.rgucButtons[0];
+                [self updateButtonFlags:Y_FLAG state:(buttons & 0x02) != 0];
+                [self updateButtonFlags:B_FLAG state:(buttons & 0x08) != 0];
+                [self updateButtonFlags:A_FLAG state:(buttons & 0x04) != 0];
+                [self updateButtonFlags:X_FLAG state:(buttons & 0x01) != 0];
+                [self updateButtonFlags:RB_FLAG state:(buttons & 0x40) != 0];
+                axis = (buttons & 0x80) ? 32767 : -32768;
+                self.controller.lastRightTrigger = axis;
+                
+                UInt8 otherButtons = packet->controllerState.rgucButtons[1];
+                [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x01) != 0];
+                [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x02) != 0];
+                [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x08) != 0];
+                [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x04) != 0];
+                
+                [self updateButtonFlags:SPECIAL_FLAG state:(otherButtons & 0x10) != 0];
+                
+                UInt8 otherOtherButtons = packet->controllerState.rgucButtons[2];
+                [self updateButtonFlags:DOWN_FLAG state:(otherOtherButtons & 0x01) != 0];
+                [self updateButtonFlags:UP_FLAG state:(otherOtherButtons & 0x02) != 0];
+                [self updateButtonFlags:RIGHT_FLAG state:(otherOtherButtons & 0x04) != 0];
+                [self updateButtonFlags:LEFT_FLAG state:(otherOtherButtons & 0x08) != 0];
+                [self updateButtonFlags:LB_FLAG state:(otherOtherButtons & 0x40) != 0];
+                axis = (otherOtherButtons & 0x80) ? 32767 : -32768;
+                self.controller.lastLeftTrigger = axis;
+                
+                axis = packet->controllerState.rgucJoystickLeft[0] | ((packet->controllerState.rgucJoystickLeft[1] & 0xF) << 8);
+                self.controller.lastLeftStickX = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
+                axis = ((packet->controllerState.rgucJoystickLeft[1] & 0xF0) >> 4) | (packet->controllerState.rgucJoystickLeft[2] << 4);
+                self.controller.lastLeftStickY = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
+                axis = packet->controllerState.rgucJoystickRight[0] | ((packet->controllerState.rgucJoystickRight[1] & 0xF) << 8);
+                self.controller.lastRightStickX = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
+                axis = ((packet->controllerState.rgucJoystickRight[1] & 0xF0) >> 4) | (packet->controllerState.rgucJoystickRight[2] << 4);
+                self.controller.lastRightStickY = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
+                
+                if (self.controllerDriver == 0) {
+                    
+                    if (self.lastSwitchState.controllerState.rgucButtons[0] != packet->controllerState.rgucButtons[0] ||
+                        self.lastSwitchState.controllerState.rgucButtons[1] != packet->controllerState.rgucButtons[1] ||
+                        self.lastSwitchState.controllerState.rgucButtons[2] != packet->controllerState.rgucButtons[2] ||
+                        self.lastSwitchState.controllerState.rgucJoystickLeft[0] != packet->controllerState.rgucJoystickLeft[0] ||
+                        self.lastSwitchState.controllerState.rgucJoystickLeft[1] != packet->controllerState.rgucJoystickLeft[1] ||
+                        self.lastSwitchState.controllerState.rgucJoystickRight[0] != packet->controllerState.rgucJoystickRight[0] ||
+                        self.lastSwitchState.controllerState.rgucJoystickRight[1] != packet->controllerState.rgucJoystickRight[1] ||
+                        0)
+                    {
+                        if (cfdyControllerMethod()) {
+                            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                        } else {
+                            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+                        }
+                        self.lastSwitchState = *packet;
+                    }
+                }
             }
         }
     }
@@ -1094,14 +1600,30 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.rumbleSemaphore = dispatch_semaphore_create(0);
     self.rumbleQueue = dispatch_queue_create("rumbleQueue", nil);
     
+    self.enableVibrationQueue = dispatch_queue_create("enableVibrationQueue", nil);
+
+    self.hidReadSemaphore = dispatch_semaphore_create(0);
+
     __weak typeof(self) weakSelf = self;
     dispatch_async(self.rumbleQueue, ^{
         [weakSelf runRumbleLoop];
     });
+
+    IOHIDDeviceRef device = [self getFirstDevice];
+    if (device != nil) {
+        if (isNintendo(device)) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), self.enableVibrationQueue, ^{
+                if (![self setVibrationEnabled:1]) {
+                    NSLog(@"Couldn't enable vibration");
+                }
+            });
+        }
+    }
 }
 
 - (void)tearDownHidManager {
     self.closeRumble = YES;
+    self.isRumbleTimer = NO;
     dispatch_semaphore_signal(self.rumbleSemaphore);
     
     self.rumbleQueue = nil;
