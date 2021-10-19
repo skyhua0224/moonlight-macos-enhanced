@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="18121" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19455" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="18121"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19455"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -71,13 +71,13 @@
                                 <gridCell row="GTB-9k-PLf" column="pYn-tJ-FRL" id="BWD-VS-Hke">
                                     <popUpButton key="contentView" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="hef-cx-cbH" userLabel="Framerate selector">
                                         <rect key="frame" x="152" y="356" width="102" height="25"/>
-                                        <popUpButtonCell key="cell" type="push" title="30 Hz" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" tag="30" imageScaling="proportionallyDown" inset="2" selectedItem="Wfv-OD-3k5" id="V1o-Yl-eVE">
+                                        <popUpButtonCell key="cell" type="push" title="30Hz" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" tag="30" imageScaling="proportionallyDown" inset="2" selectedItem="Wfv-OD-3k5" id="V1o-Yl-eVE">
                                             <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="menu"/>
                                             <menu key="menu" id="goZ-7v-Jhv">
                                                 <items>
-                                                    <menuItem title="30 Hz" state="on" tag="30" id="Wfv-OD-3k5"/>
-                                                    <menuItem title="60 Hz" tag="60" id="pgx-Oq-z63"/>
+                                                    <menuItem title="30Hz" state="on" tag="30" id="Wfv-OD-3k5"/>
+                                                    <menuItem title="60Hz" tag="60" id="pgx-Oq-z63"/>
                                                 </items>
                                             </menu>
                                         </popUpButtonCell>
