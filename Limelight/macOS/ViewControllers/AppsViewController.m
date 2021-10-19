@@ -109,6 +109,11 @@ const CGFloat scaleBase = 1.125;
     [self.parentViewController.view.window makeFirstResponder:self.collectionView];
 }
 
+- (BOOL)becomeFirstResponder {
+    [self.view.window makeFirstResponder:self.collectionView];
+    return [super becomeFirstResponder];
+}
+
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
     if ([keyPath isEqualToString:@"effectiveAppearance"]) {
         for (int i = 0; i < self.apps.count; i++) {

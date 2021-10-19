@@ -25,7 +25,6 @@
 #import "WakeOnLanManager.h"
 
 @interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, NSSearchFieldDelegate, NSControlTextEditingDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
-
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
 @property (nonatomic, strong) TemporaryHost *selectedHost;
@@ -93,6 +92,11 @@
     [self.discMan stopDiscovery];
 }
 
+- (BOOL)becomeFirstResponder {
+    [self.view.window makeFirstResponder:self.collectionView];
+    return [super becomeFirstResponder];
+}
+
 - (void)transitionToAppsVCWithHost:(TemporaryHost *)host {
     AppsViewController *appsVC = [self.storyboard instantiateControllerWithIdentifier:@"appsVC"];
     appsVC.host = host;
@@ -105,7 +109,6 @@
     appsVC.view.frame = self.view.bounds;
     
     [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:nil];
-    
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {

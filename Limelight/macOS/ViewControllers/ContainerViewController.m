@@ -15,9 +15,26 @@
 @end
 
 @implementation CustomSearchField
+
 - (void)cancelOperation:(id)sender {
-    [self.window makeFirstResponder:nil];
+    [self makeVCFirstResponder];
 }
+
+- (void)textDidEndEditing:(NSNotification *)notification {
+    [super textDidEndEditing:notification];
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self makeVCFirstResponder];
+    });
+}
+
+- (void)makeVCFirstResponder {
+    NSArray<NSViewController *> *vcs = NSApplication.sharedApplication.mainWindow.contentViewController.childViewControllers;
+    for (NSViewController *vc in vcs) {
+        [self.window makeFirstResponder:vc];
+    }
+}
+
 @end
 
 
