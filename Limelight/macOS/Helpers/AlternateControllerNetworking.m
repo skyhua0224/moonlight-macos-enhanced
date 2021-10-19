@@ -90,11 +90,8 @@ int CFDYSendHighResScrollEvent(short scrollAmount) {
 
     NV_SCROLL_PACKET packet = {};
     
-    packet.header.packetType = htonl(PACKET_TYPE_SCROLL);
-    packet.magicA = MAGIC_A;
-    packet.magicA++;
-    packet.zero1 = 0;
-    packet.zero2 = 0;
+    packet.header.size = htonl(sizeof packet - sizeof packet.header);
+    packet.header.magic = SCROLL_MAGIC;
     packet.scrollAmt1 = htons(scrollAmount);
     packet.scrollAmt2 = packet.scrollAmt1;
     packet.zero3 = 0;
