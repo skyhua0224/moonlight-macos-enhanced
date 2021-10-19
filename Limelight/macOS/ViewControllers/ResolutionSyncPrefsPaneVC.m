@@ -24,7 +24,22 @@
 }
 @end
 
-@interface ResolutionSyncPrefsPaneVC () <MASPreferencesViewController>
+
+@interface OnlyIntegerValueFormatter : NSNumberFormatter
+@end
+
+@implementation OnlyIntegerValueFormatter
+- (BOOL)isPartialStringValid:(NSString *)partialString newEditingString:(NSString * _Nullable __autoreleasing *)newString errorDescription:(NSString * _Nullable __autoreleasing *)error {
+    if (partialString.length == 0) {
+        return YES;
+    }
+    
+    return [NSNumber numberWithInteger:partialString.integerValue] != nil;
+}
+@end
+
+
+@interface ResolutionSyncPrefsPaneVC () <MASPreferencesViewController, NSTextFieldDelegate>
 @property (nonatomic, strong) NSUserDefaults *standard;
 @property (nonatomic, strong) NSControl *enableResolutionControl;
 @property (weak) IBOutlet NSStackView *enableResolutionSyncStackView;
@@ -56,6 +71,10 @@
     self.standard = [NSUserDefaults standardUserDefaults];
 
     [self createEnableResolutionControl];
+
+    self.customResWidthTextField.formatter = [[OnlyIntegerValueFormatter alloc] init];
+    self.customResHeightTextField.formatter = [[OnlyIntegerValueFormatter alloc] init];
+    self.scrollWheelLinesTextField.formatter = [[OnlyIntegerValueFormatter alloc] init];
 
     self.shouldSyncCustomResolutionCheckbox.state = [self.standard boolForKey:@"shouldSync"];
     [self updateShouldSyncCheckboxRelatedControlStates];
@@ -129,6 +148,21 @@
 }
 
 
+#pragma mark - NSTextFieldDelegate
+
+- (void)controlTextDidChange:(NSNotification *)obj {
+    NSTextField *textField = obj.object;
+    if (textField != nil) {
+        if (self.customResWidthTextField == textField) {
+            [self.standard setInteger:self.customResWidthTextField.integerValue forKey:@"syncWidth"];
+        } else if (self.customResHeightTextField == textField) {
+            [self.standard setInteger:self.customResHeightTextField.integerValue forKey:@"syncHeight"];
+        } else if (self.scrollWheelLinesTextField == textField) {
+            [self.standard setInteger:self.scrollWheelLinesTextField.integerValue forKey:@"scrollWheelLines"];
+        }
+    }
+}
+
 #pragma mark - Actions
 
 - (void)setAllSettingControlStatesToReflectResolutionSyncState:(NSControlStateValue)state {
@@ -173,14 +207,6 @@
     [self.standard setBool:self.shouldSyncCustomResolutionCheckbox.state == NSControlStateValueOn forKey:@"shouldSync"];
 }
 
-- (IBAction)didChangeCustomResWidth:(id)sender {
-    [self.standard setInteger:self.customResWidthTextField.integerValue forKey:@"syncWidth"];
-}
-
-- (IBAction)didChangeCustomResHeight:(id)sender {
-    [self.standard setInteger:self.customResHeightTextField.integerValue forKey:@"syncHeight"];
-}
-
 - (IBAction)didChangePointerSpeed:(id)sender {
     [self updatePointerSpeedLabel];
     [self.standard setInteger:self.pointerSpeedSlider.integerValue * 2 forKey:@"pointerSpeed"];
@@ -189,11 +215,6 @@
 - (IBAction)didChangeDisablePointerPrecision:(id)sender {
     [self.standard setBool:self.disablePointerPrecisionCheckbox.state == NSControlStateValueOn forKey:@"disablePointerPrecision"];
 }
-
-- (IBAction)didChangeNumberOfLinesToScroll:(id)sender {
-    [self.standard setInteger:self.scrollWheelLinesTextField.integerValue forKey:@"scrollWheelLines"];
-}
-
 - (IBAction)didChangeMouseScrollMethod:(id)sender {
     [self.standard setInteger:self.mouseScrollMethodSelector.selectedTag forKey:@"mouseScrollMethod"];
 }

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="18121" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19455" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="18121"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19455"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -119,7 +119,7 @@
                                                                         <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                                     </textFieldCell>
                                                                     <connections>
-                                                                        <action selector="didChangeCustomResWidth:" target="-2" id="Yzw-bG-2pC"/>
+                                                                        <outlet property="delegate" destination="-2" id="Scv-lI-QIo"/>
                                                                     </connections>
                                                                 </textField>
                                                             </subviews>
@@ -154,7 +154,7 @@
                                                                         <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                                     </textFieldCell>
                                                                     <connections>
-                                                                        <action selector="didChangeCustomResHeight:" target="-2" id="KiQ-jD-2X2"/>
+                                                                        <outlet property="delegate" destination="-2" id="ELi-oy-j9I"/>
                                                                     </connections>
                                                                 </textField>
                                                             </subviews>
@@ -273,7 +273,7 @@
                                                                 <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                             </textFieldCell>
                                                             <connections>
-                                                                <action selector="didChangeNumberOfLinesToScroll:" target="-2" id="VAQ-6Q-qqt"/>
+                                                                <outlet property="delegate" destination="-2" id="Tqw-ai-Czt"/>
                                                             </connections>
                                                         </textField>
                                                     </subviews>
