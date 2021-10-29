@@ -149,6 +149,7 @@
     [self.hidSupport flagsChanged:event];
     
     if (event.modifierFlags == 524640) {
+        [self.hidSupport releaseAllModifierKeys];
         [self uncaptureMouse];
     }
 }
