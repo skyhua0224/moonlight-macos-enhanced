@@ -74,7 +74,7 @@ typedef enum : NSUInteger {
     }
 
     self.aboutWC.window.frameAutosaveName = @"About Window";
-    [self.aboutWC.window moonlight_centerWindowOnFirstRun];
+    [self.aboutWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
     
     [self.aboutWC showWindow:nil];
     [self.aboutWC.window makeKeyAndOrderFront:nil];

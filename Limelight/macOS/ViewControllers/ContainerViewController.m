@@ -96,7 +96,7 @@
     NSWindow *window = self.view.window;
 
     window.frameAutosaveName = @"Main Window";
-    [window moonlight_centerWindowOnFirstRun];
+    [window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(808, 566)];
 
     if (@available(macOS 11.0, *)) {
         [window setTitleVisibility:NSWindowTitleVisible];

@@ -129,7 +129,7 @@
     
     self.view.window.contentAspectRatio = NSMakeSize(16, 9);
     self.view.window.frameAutosaveName = @"Stream Window";
-    [self.view.window moonlight_centerWindowOnFirstRun];
+    [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
 }

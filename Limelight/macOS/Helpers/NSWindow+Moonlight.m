@@ -10,9 +10,12 @@
 
 @implementation NSWindow (Moonlight)
 
-- (void)moonlight_centerWindowOnFirstRun {
+- (void)moonlight_centerWindowOnFirstRunWithSize:(CGSize)size {
     NSString *key = [NSString stringWithFormat:@"NSWindow Frame %@", self.frameAutosaveName];
     if ([[NSUserDefaults standardUserDefaults] stringForKey:key].length == 0) {
+        if (!CGSizeEqualToSize(size, CGSizeZero)) {
+            [self setFrame:NSMakeRect(0, 0, size.width, size.height) display:NO];
+        }
         [self moonlight_centerWindow];
     }
 }
