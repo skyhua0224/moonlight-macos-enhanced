@@ -44,6 +44,10 @@ typedef enum : NSUInteger {
     }
 }
 
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
+    return YES;
+}
+
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
     [[DatabaseSingleton shared] saveContext];
 }
