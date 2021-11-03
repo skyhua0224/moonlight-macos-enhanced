@@ -55,8 +55,13 @@ typedef enum : NSUInteger {
 - (NSWindowController *)preferencesWC {
     if (_preferencesWC == nil) {
         NSViewController *generalVC = [[GeneralPrefsPaneVC alloc] init];
+        NSArray *controllers;
+#ifdef USE_RESOLUTION_SYNC
         NSViewController *resolutionSyncVC = [[ResolutionSyncPrefsPaneVC alloc] init];
-        NSArray *controllers = @[generalVC, resolutionSyncVC];
+        controllers = @[generalVC, resolutionSyncVC];
+#else
+        controllers = @[generalVC];
+#endif
         _preferencesWC = [[MASPreferencesWindowController alloc] initWithViewControllers:controllers title:@"Preferences"];
     }
 

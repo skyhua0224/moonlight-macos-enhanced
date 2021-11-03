@@ -99,7 +99,11 @@ static float bitrateSteps[] = {
 - (void)viewWillAppear {
     [super viewWillAppear];
     
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"enableResolutionSync"]) {
+    BOOL enableResolutionSync = NO;
+#ifdef USE_RESOLUTION_SYNC
+    enableResolutionSync = [[NSUserDefaults standardUserDefaults] boolForKey:@"enableResolutionSync"];
+#endif
+    if (enableResolutionSync) {
         self.resolutionSelector.enabled = ![self.standard boolForKey:@"shouldSync"];
     } else {
         self.resolutionSelector.enabled = YES;

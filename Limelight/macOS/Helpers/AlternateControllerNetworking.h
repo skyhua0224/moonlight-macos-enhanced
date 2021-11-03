@@ -6,6 +6,7 @@
 //  Copyright © 2021 Moonlight Game Streaming Project. All rights reserved.
 //
 
+#ifdef USE_RESOLUTION_SYNC
 #import <Foundation/Foundation.h>
 
 @protocol ConnectionCallbacks;
@@ -20,3 +21,4 @@ int CFDYSendHighResScrollEvent(short scrollAmount);
 
 BOOL startListeningForRumblePackets(id<ConnectionCallbacks> connectionCallbacks);
 void stopListeningForRumblePackets(void);
+#endif

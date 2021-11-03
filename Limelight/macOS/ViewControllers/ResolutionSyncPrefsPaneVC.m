@@ -6,6 +6,7 @@
 //  Copyright © 2021 Moonlight Game Streaming Project. All rights reserved.
 //
 
+#ifdef USE_RESOLUTION_SYNC
 #import "ResolutionSyncPrefsPaneVC.h"
 
 #import "MASPreferences.h"
@@ -247,3 +248,4 @@
 }
 
 @end
+#endif

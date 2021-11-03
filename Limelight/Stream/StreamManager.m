@@ -81,8 +81,10 @@
         }
     }
     
+#ifdef USE_RESOLUTION_SYNC
     [ResolutionSyncRequester setupControllerFor:_config.host];
     startListeningForRumblePackets(_callbacks);
+#endif
 
 #if TARGET_OS_IPHONE
     // Set mouse delta factors from the screen resolution and stream size
@@ -108,8 +110,10 @@
 
 - (void) stopStream
 {
+#ifdef USE_RESOLUTION_SYNC
     [ResolutionSyncRequester teardownControllerFor:_config.host];
     stopListeningForRumblePackets();
+#endif
     
     [_connection terminate];
     _callbacks = nil;

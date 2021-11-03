@@ -6,6 +6,7 @@
 //  Copyright © 2019 Moonlight Game Streaming Project. All rights reserved.
 //
 
+#if USE_RESOLUTION_SYNC
 import Foundation
 
 class ResolutionSyncRequester: NSObject {
@@ -112,3 +113,4 @@ class ResolutionSyncRequester: NSObject {
     }
     
 }
+#endif

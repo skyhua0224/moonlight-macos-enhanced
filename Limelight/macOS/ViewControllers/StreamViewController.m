@@ -411,7 +411,10 @@
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
-    BOOL syncEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
+    BOOL syncEnabled = NO;
+#ifdef USE_RESOLUTION_SYNC
+    syncEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
+#endif
     if (syncEnabled) {
         streamConfig.height = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncHeight"];
         streamConfig.width = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncWidth"];
@@ -459,7 +462,9 @@
 }
 
 - (void)connectionStarted {
+#ifdef USE_RESOLUTION_SYNC
     [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:60];
+#endif
     
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;

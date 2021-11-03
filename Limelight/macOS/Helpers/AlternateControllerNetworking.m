@@ -6,6 +6,7 @@
 //  Copyright © 2021 Moonlight Game Streaming Project. All rights reserved.
 //
 
+#ifdef USE_RESOLUTION_SYNC
 #import "AlternateControllerNetworking.h"
 #import "Input.h"
 
@@ -154,3 +155,4 @@ void stopListeningForRumblePackets(void) {
 
     closeSocket(rumbleSocket);
 }
+#endif

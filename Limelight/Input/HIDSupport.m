@@ -469,6 +469,18 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     }
 }
 
+- (void)sendControllerEvent {
+#ifdef USE_RESOLUTION_SYNC
+    if (cfdyControllerMethod()) {
+        CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+    } else {
+#endif
+        LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+#ifdef USE_RESOLUTION_SYNC
+    }
+#endif
+}
+
 static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                                           const CVTimeStamp *now,
                                           const CVTimeStamp *vsyncTime,
@@ -605,11 +617,15 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 - (void)scrollWheel:(NSEvent *)event {
     if (self.shouldSendInputEvents) {
         if (event.hasPreciseScrollingDeltas) {
+#ifdef USE_RESOLUTION_SYNC
             if (cfdyMouseScrollMethod()) {
                 CFDYSendHighResScrollEvent(event.scrollingDeltaY);
             } else {
+#endif
                 LiSendHighResScrollEvent(event.scrollingDeltaY);
+#ifdef USE_RESOLUTION_SYNC
             }
+#endif
         } else {
             LiSendScrollEvent(event.scrollingDeltaY);
         }
@@ -1244,11 +1260,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
     }
 
     if (self.controllerDriver == 0) {
-        if (cfdyControllerMethod()) {
-            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-        } else {
-            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-        }
+        [self sendControllerEvent];
     }
 }
 
@@ -1332,11 +1344,7 @@ void myHIDReportCallback (
                 self.lastPS4State.ucRightJoystickY != state->ucRightJoystickY ||
                 0)
             {
-                if (cfdyControllerMethod()) {
-                    CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-                } else {
-                    LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-                }
+                [self sendControllerEvent];
                 self.lastPS4State = *state;
             }
         }
@@ -1395,11 +1403,7 @@ void myHIDReportCallback (
                 self.lastPS5State.ucRightJoystickY != state->ucRightJoystickY ||
                 0)
             {
-                if (cfdyControllerMethod()) {
-                    CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-                } else {
-                    LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-                }
+                [self sendControllerEvent];
                 self.lastPS5State = *state;
             }
         }
@@ -1466,11 +1470,7 @@ void myHIDReportCallback (
                         self.lastSimpleSwitchState.sJoystickRight[1] != packet->sJoystickRight[1] ||
                         0)
                     {
-                        if (cfdyControllerMethod()) {
-                            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-                        } else {
-                            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-                        }
+                        [self sendControllerEvent];
                         self.lastSimpleSwitchState = *packet;
                     }
                 }
@@ -1525,11 +1525,7 @@ void myHIDReportCallback (
                         self.lastSwitchState.controllerState.rgucJoystickRight[1] != packet->controllerState.rgucJoystickRight[1] ||
                         0)
                     {
-                        if (cfdyControllerMethod()) {
-                            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-                        } else {
-                            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-                        }
+                        [self sendControllerEvent];
                         self.lastSwitchState = *packet;
                     }
                 }
@@ -1562,11 +1558,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
         self.controller.lastRightStickX = 0;
         self.controller.lastRightStickY = 0;
         
-        if (cfdyControllerMethod()) {
-            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-        } else {
-            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-        }
+        [self sendControllerEvent];
     }
 }
 
