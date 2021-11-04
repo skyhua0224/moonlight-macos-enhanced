@@ -397,15 +397,15 @@ typedef enum {
 @property (nonatomic) IOHIDManagerRef hidManager;
 @property (nonatomic, strong) Controller *controller;
 @property (nonatomic) CVDisplayLinkRef displayLink;
-@property (nonatomic) CGFloat mouseDeltaX;
-@property (nonatomic) CGFloat mouseDeltaY;
+@property (atomic) CGFloat mouseDeltaX;
+@property (atomic) CGFloat mouseDeltaY;
 @property (nonatomic) UInt8 previousLowFreqMotor;
 @property (nonatomic) UInt8 previousHighFreqMotor;
 @property (atomic) UInt16 nextLowFreqMotor;
 @property (atomic) UInt16 nextHighFreqMotor;
 @property (atomic) dispatch_semaphore_t rumbleSemaphore;
 @property (atomic) BOOL closeRumble;
-@property (nonatomic) BOOL isRumbleTimer;
+@property (atomic) BOOL isRumbleTimer;
 @property (nonatomic) PS4StatePacket_t lastPS4State;
 @property (nonatomic) PS5StatePacket_t lastPS5State;
 @property (nonatomic) NSInteger controllerDriver;

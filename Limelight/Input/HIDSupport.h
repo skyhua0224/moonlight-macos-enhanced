@@ -9,7 +9,7 @@
 #import <Foundation/Foundation.h>
 
 @interface HIDSupport : NSObject
-@property (nonatomic) BOOL shouldSendInputEvents;
+@property (atomic) BOOL shouldSendInputEvents;
 
 - (void)flagsChanged:(NSEvent *)event;
 - (void)keyDown:(NSEvent *)event;
