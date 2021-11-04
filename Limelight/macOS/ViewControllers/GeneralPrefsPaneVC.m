@@ -54,7 +54,6 @@ static float bitrateSteps[] = {
 @property (weak) IBOutlet NSTextField *bitrateLabel;
 @property (weak) IBOutlet NSPopUpButton *videoCodecSelector;
 @property (weak) IBOutlet NSButton *hdrCheckbox;
-@property (weak) IBOutlet NSButton *dynamicResolutionCheckbox;
 @property (weak) IBOutlet NSButton *optimizeSettingsCheckbox;
 @property (weak) IBOutlet NSButton *playAudioOnPCCheckbox;
 @property (weak) IBOutlet NSButton *autoFullscreenCheckbox;
@@ -88,7 +87,6 @@ static float bitrateSteps[] = {
     [self.videoCodecSelector selectItemWithTag:[self.standard integerForKey:@"videoCodec"]];
     [self getHevcState];
     self.hdrCheckbox.state = streamSettings.enableHdr ? NSControlStateValueOn : NSControlStateValueOff;
-    self.dynamicResolutionCheckbox.state = [self.standard boolForKey:@"dynamicResolution"] ? NSControlStateValueOn : NSControlStateValueOff;
     self.optimizeSettingsCheckbox.state = streamSettings.optimizeGames ? NSControlStateValueOn : NSControlStateValueOff;
     self.playAudioOnPCCheckbox.state = streamSettings.playAudioOnPC ? NSControlStateValueOn : NSControlStateValueOff;
     self.autoFullscreenCheckbox.state = [self.standard boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
@@ -187,10 +185,6 @@ static float bitrateSteps[] = {
 
 - (IBAction)didToggleHDR:(id)sender {
     [self saveSettings];
-}
-
-- (IBAction)didToggleDynamicResolution:(id)sender {
-    [self.standard setBool:self.dynamicResolutionCheckbox.state == NSControlStateValueOn forKey:@"dynamicResolution"];
 }
 
 - (IBAction)didToggleOptimizeSettings:(id)sender {
