@@ -193,6 +193,7 @@
 		4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCellView.m; sourceTree = "<group>"; };
 		4CC3C0311FF73A660029EBF5 /* GeneralPrefsPaneVC.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GeneralPrefsPaneVC.m; sourceTree = "<group>"; };
 		4CD17E9827337FF1004D438C /* LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LICENSE.md; sourceTree = "<group>"; };
+		4CD17E9B2733C0FC004D438C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		4CD99EB026A554B00026173A /* Ticks.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Ticks.h; sourceTree = "<group>"; };
 		4CD99EB126A554B00026173A /* Ticks.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Ticks.m; sourceTree = "<group>"; };
 		4CDC8E6A25E750D6009E66C6 /* MASPreferencesWindowController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MASPreferencesWindowController.h; sourceTree = "<group>"; };
@@ -522,6 +523,7 @@
 		FB290CE519B2C406004C83CF = {
 			isa = PBXGroup;
 			children = (
+				4CD17E9B2733C0FC004D438C /* README.md */,
 				4C2556A121F56F280009838E /* Moonlight.entitlements */,
 				98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */,
 				FB290CF919B2C406004C83CF /* Moonlight */,
