@@ -558,7 +558,7 @@ void outputCallback(void * CM_NULLABLE decompressionOutputRefCon,
                     CMTime presentationTimeStamp,
                     CMTime presentationDuration) {
     VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)(decompressionOutputRefCon);
-    if (self.frameQueue != nil) {
+    if (self.frameQueue != nil && imageBuffer != nil) {
         
         os_unfair_lock_lock(&(self->_frameQueueLock));
         [self.frameQueue enqueue:(__bridge NSObject *)(imageBuffer)];
