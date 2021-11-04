@@ -2,7 +2,7 @@
 
 Moonlight macOS is a native macOS client for NVIDIA's GameStream. It allows you to stream games from your desktop computer to your Mac.
 
-![App list and Game.png](readme-assets/images/app-list-and-game.jpg)
+![](readme-assets/images/app-list-and-game.jpg)
 
 ## Features
 
@@ -22,11 +22,11 @@ Moonlight macOS is a native macOS client for NVIDIA's GameStream. It allows you 
 
 ## Screenshots
 
-![Host list.png](readme-assets/images/host-list.png)
+<img src="readme-assets/images/host-list.png" width="600">
 
-![App list.png](readme-assets/images/app-list.png)
+<img src="readme-assets/images/app-list.png" width="600">
 
-![Preferences.png](readme-assets/images/preferences.png)
+<img src="readme-assets/images/preferences.png" width="500">
 
 ## Notes
 
