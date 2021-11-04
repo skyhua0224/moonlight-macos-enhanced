@@ -30,7 +30,7 @@
 		<true/>
 	</dict>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2017-2021 Coofdy Labs and Moonlight Stream. All rights reserved.</string>
+	<string>Copyright © 2017-2021 Michael Kenny, Martin Kenny, and Moonlight Stream.</string>
 	<key>NSMainStoryboardFile</key>
 	<string>Main</string>
 	<key>NSPrincipalClass</key>
