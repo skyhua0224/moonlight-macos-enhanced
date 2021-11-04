@@ -69,6 +69,7 @@ typedef enum : NSUInteger {
 }
 
 - (IBAction)showPreferences:(id)sender {
+    [self.preferencesWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
     [self.preferencesWC showWindow:nil];
 }
 
