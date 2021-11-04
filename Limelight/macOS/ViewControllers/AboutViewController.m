@@ -14,6 +14,7 @@
 @property (weak) IBOutlet NSImageView *appIconImageView;
 @property (weak) IBOutlet NSTextField *versionNumberTextField;
 @property (weak) IBOutlet NSTextField *copyrightTextField;
+@property (weak) IBOutlet NSTextField *githubTextFieldLink;
 @property (weak) IBOutlet NSTextField *creditsTextFieldLink;
 @end
 
@@ -33,14 +34,15 @@
     self.appIconImageView.image = [NSApp applicationIconImage];
     self.versionNumberTextField.stringValue = [Helpers versionNumberString];
     self.copyrightTextField.stringValue = [Helpers copyrightString];
-    self.creditsTextFieldLink.attributedStringValue = [self makeTextFieldLink:self.creditsTextFieldLink];
+    self.githubTextFieldLink.attributedStringValue = [self makeTextFieldLinkWithURLString:@"https://github.com/MichaelMKenny/moonlight-macos" :self.githubTextFieldLink];
+    self.creditsTextFieldLink.attributedStringValue = [self makeTextFieldLinkWithURLString:@"https://github.com/moonlight-stream/moonlight-ios" :self.creditsTextFieldLink];
 }
 
-- (NSAttributedString *)makeTextFieldLink:(NSTextField *)textField {
+- (NSAttributedString *)makeTextFieldLinkWithURLString:(NSString *)link :(NSTextField *)textField {
     [textField setAllowsEditingTextAttributes: YES];
     [textField setSelectable: YES];
 
-    NSURL *url = [NSURL URLWithString:@"https://github.com/moonlight-stream/moonlight-ios"];
+    NSURL *url = [NSURL URLWithString:link];
 
     NSMutableParagraphStyle *paragraphStyle = [[[NSParagraphStyle alloc] init] mutableCopy];
     paragraphStyle.alignment = NSTextAlignmentCenter;

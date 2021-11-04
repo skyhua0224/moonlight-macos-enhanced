@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="17140" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19455" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17140"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19455"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -12,6 +12,7 @@
                 <outlet property="backgroundEffectView" destination="Qjc-iK-n84" id="meF-Y4-7Tu"/>
                 <outlet property="copyrightTextField" destination="fIC-dx-4lV" id="KBA-0B-j6n"/>
                 <outlet property="creditsTextFieldLink" destination="Y2V-lg-zjm" id="av4-zv-0jr"/>
+                <outlet property="githubTextFieldLink" destination="uUA-Lb-eTm" id="6PK-OS-CK7"/>
                 <outlet property="versionNumberTextField" destination="stN-27-Kd2" id="DPX-5q-sJS"/>
                 <outlet property="view" destination="c22-O7-iKe" id="g3z-tA-AzQ"/>
             </connections>
@@ -52,7 +53,7 @@
                                     </textFieldCell>
                                 </textField>
                                 <textField wantsLayer="YES" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="fIC-dx-4lV" userLabel="Copyright">
-                                    <rect key="frame" x="196" y="70" width="276" height="16"/>
+                                    <rect key="frame" x="196" y="99" width="276" height="16"/>
                                     <textFieldCell key="cell" alignment="center" title="Copyright © 2019 Coofdy Labs" id="bow-M0-JTv">
                                         <font key="font" metaFont="system"/>
                                         <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
@@ -70,15 +71,30 @@
                                         <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                     </textFieldCell>
                                 </textField>
+                                <textField wantsLayer="YES" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" verticalCompressionResistancePriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="uUA-Lb-eTm" userLabel="GitHub Link" customClass="LinkTextField">
+                                    <rect key="frame" x="196" y="70" width="276" height="17"/>
+                                    <constraints>
+                                        <constraint firstAttribute="height" constant="17" id="dIP-QS-PDq"/>
+                                    </constraints>
+                                    <textFieldCell key="cell" truncatesLastVisibleLine="YES" alignment="center" title="View on GitHub" id="gzE-au-gvm">
+                                        <font key="font" metaFont="system"/>
+                                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                        <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                    </textFieldCell>
+                                </textField>
                             </subviews>
                             <constraints>
+                                <constraint firstItem="Y2V-lg-zjm" firstAttribute="top" secondItem="uUA-Lb-eTm" secondAttribute="bottom" constant="12" id="3jk-Ye-OYG"/>
                                 <constraint firstItem="stN-27-Kd2" firstAttribute="centerX" secondItem="c8S-4z-oNh" secondAttribute="centerX" id="7gc-Ie-D2f"/>
                                 <constraint firstAttribute="bottom" secondItem="Y2V-lg-zjm" secondAttribute="bottom" constant="24" id="A6F-3m-wNY"/>
+                                <constraint firstItem="uUA-Lb-eTm" firstAttribute="centerX" secondItem="c8S-4z-oNh" secondAttribute="centerX" id="DaL-UV-Y1q"/>
                                 <constraint firstAttribute="trailing" secondItem="c8S-4z-oNh" secondAttribute="trailing" constant="16" id="Frd-2X-R9r"/>
                                 <constraint firstItem="fIC-dx-4lV" firstAttribute="centerX" secondItem="c8S-4z-oNh" secondAttribute="centerX" id="L5c-ea-GZm"/>
+                                <constraint firstItem="uUA-Lb-eTm" firstAttribute="width" secondItem="c8S-4z-oNh" secondAttribute="width" id="LjB-LZ-JlV"/>
                                 <constraint firstItem="Y2V-lg-zjm" firstAttribute="width" secondItem="c8S-4z-oNh" secondAttribute="width" id="Lnc-LS-9LT"/>
                                 <constraint firstItem="4v7-WK-Lvz" firstAttribute="width" secondItem="Qjc-iK-n84" secondAttribute="width" multiplier="1:3" id="Qbn-jA-g4V"/>
                                 <constraint firstItem="c8S-4z-oNh" firstAttribute="top" secondItem="Qjc-iK-n84" secondAttribute="top" constant="32" id="UHq-Ia-xU0"/>
+                                <constraint firstItem="uUA-Lb-eTm" firstAttribute="top" secondItem="fIC-dx-4lV" secondAttribute="bottom" constant="12" id="YUh-IP-QH9"/>
                                 <constraint firstItem="c8S-4z-oNh" firstAttribute="leading" secondItem="4v7-WK-Lvz" secondAttribute="trailing" constant="16" id="YnY-rM-8Ie"/>
                                 <constraint firstItem="4v7-WK-Lvz" firstAttribute="height" secondItem="Qjc-iK-n84" secondAttribute="height" id="ZRU-ab-XPD"/>
                                 <constraint firstItem="4v7-WK-Lvz" firstAttribute="leading" secondItem="Qjc-iK-n84" secondAttribute="leading" constant="20" id="Zhf-t8-JKa"/>
@@ -86,7 +102,6 @@
                                 <constraint firstItem="4v7-WK-Lvz" firstAttribute="centerY" secondItem="Qjc-iK-n84" secondAttribute="centerY" id="bRb-Ot-exq"/>
                                 <constraint firstItem="fIC-dx-4lV" firstAttribute="width" secondItem="c8S-4z-oNh" secondAttribute="width" multiplier="1:1" id="dg6-88-KgM"/>
                                 <constraint firstItem="stN-27-Kd2" firstAttribute="width" secondItem="c8S-4z-oNh" secondAttribute="width" multiplier="1:1" id="v19-Se-rFx"/>
-                                <constraint firstItem="Y2V-lg-zjm" firstAttribute="top" secondItem="fIC-dx-4lV" secondAttribute="bottom" constant="12" id="vml-f5-lNT"/>
                                 <constraint firstItem="stN-27-Kd2" firstAttribute="top" secondItem="c8S-4z-oNh" secondAttribute="bottom" constant="16" id="wkw-bZ-6iy"/>
                             </constraints>
                         </visualEffectView>
