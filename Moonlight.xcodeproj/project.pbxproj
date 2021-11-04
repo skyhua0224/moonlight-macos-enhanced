@@ -192,6 +192,7 @@
 		4CC3C02B1FF72A3D0029EBF5 /* AppCellView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppCellView.h; sourceTree = "<group>"; };
 		4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppCellView.m; sourceTree = "<group>"; };
 		4CC3C0311FF73A660029EBF5 /* GeneralPrefsPaneVC.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GeneralPrefsPaneVC.m; sourceTree = "<group>"; };
+		4CD17E9827337FF1004D438C /* LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LICENSE.md; sourceTree = "<group>"; };
 		4CD99EB026A554B00026173A /* Ticks.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Ticks.h; sourceTree = "<group>"; };
 		4CD99EB126A554B00026173A /* Ticks.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Ticks.m; sourceTree = "<group>"; };
 		4CDC8E6A25E750D6009E66C6 /* MASPreferencesWindowController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MASPreferencesWindowController.h; sourceTree = "<group>"; };
@@ -483,6 +484,7 @@
 				4CDC8E6A25E750D6009E66C6 /* MASPreferencesWindowController.h */,
 				4CDC8E6D25E750D6009E66C6 /* MASPreferencesWindowController.m */,
 				4CDC8E6F25E754B2009E66C6 /* MASPreferencesWindow.xib */,
+				4CD17E9827337FF1004D438C /* LICENSE.md */,
 			);
 			path = MASPreferences;
 			sourceTree = "<group>";
