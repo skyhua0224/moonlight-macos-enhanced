@@ -233,7 +233,7 @@
 
 - (NSImage *)toolbarItemImage {
     if (@available(macOS 11.0, *)) {
-        return [NSImage imageWithSystemSymbolName:@"network" accessibilityDescription:nil];
+        return [NSImage imageWithSystemSymbolName:@"rectangle.on.rectangle" accessibilityDescription:nil];
     } else {
         return [NSImage imageNamed:NSImageNameNetwork];
     }
