@@ -463,7 +463,8 @@
 
 - (void)connectionStarted {
 #ifdef USE_RESOLUTION_SYNC
-    [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:60];
+    BOOL isRunning = [self.app.id isEqualToString:self.app.host.currentGame];
+    [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:60 isResume:isRunning];
 #endif
     
     dispatch_async(dispatch_get_main_queue(), ^{

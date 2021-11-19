@@ -19,7 +19,7 @@ class ResolutionSyncRequester: NSObject {
 
     static let port = 8080
     
-    @objc static public func setResolution(for host: String, refreshRate: Int) {
+    @objc static public func setResolution(for host: String, refreshRate: Int, isResume: Bool) {
         if disableResolutionSync {
             return
         }
@@ -34,14 +34,14 @@ class ResolutionSyncRequester: NSObject {
 
         let enabled = UserDefaults.standard.bool(forKey: "shouldSync")
         if !enabled {
-            Self.setRefreshRate(for: host, refreshRate: refreshRate)
+            Self.setRefreshRate(for: host, refreshRate: refreshRate, isResume: isResume)
             return
         }
         
         let width = UserDefaults.standard.integer(forKey: "syncWidth")
         let height = UserDefaults.standard.integer(forKey: "syncHeight")
 
-        if let url = URL(string: "http://\(host):\(port)/resolutionsync/set?\(width)&\(height)&\(refreshRate)") {
+        if let url = URL(string: "http://\(host):\(port)/resolutionsync/set?\(width)&\(height)&\(refreshRate)&\(isResume)") {
             Self.makeRequest(url)
             print("ResolutionSync URL: \(url.absoluteString)")
         }
@@ -55,8 +55,8 @@ class ResolutionSyncRequester: NSObject {
         Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/reset")!)
     }
 
-    static private func setRefreshRate(for host: String, refreshRate: Int) {
-        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setRefreshRate?\(refreshRate)")!)
+    static private func setRefreshRate(for host: String, refreshRate: Int, isResume: Bool) {
+        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setRefreshRate?\(refreshRate)&\(isResume)")!)
     }
 
     
