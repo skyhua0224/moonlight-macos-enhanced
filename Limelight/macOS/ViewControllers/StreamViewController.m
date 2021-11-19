@@ -148,7 +148,7 @@
 - (void)flagsChanged:(NSEvent *)event {
     [self.hidSupport flagsChanged:event];
     
-    if (event.modifierFlags == 524640) {
+    if (event.modifierFlags == 786721) {
         [self.hidSupport releaseAllModifierKeys];
         [self uncaptureMouse];
     }

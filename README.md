@@ -30,7 +30,7 @@ Moonlight macOS is a native macOS client for NVIDIA's GameStream. It allows you 
 
 ## Notes
 
-- To release the mouse cursor from the stream, press both left and right `Option` keys at the same time.
+- To release the mouse cursor from the stream, press both `Control` and `Option` at the same time.
 - To quit an app and disconnect from stream in one keystroke press `Control-Shift-W`.
 - To just disconnect from the stream (leaving the app running) press `Control-Option-W`.
 - To quit apps from the apps grid, right-click on the running app and choose *Quit.*
