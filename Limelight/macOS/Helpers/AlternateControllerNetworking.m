@@ -73,6 +73,7 @@ void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMas
     addr->sin_port = htons(48020);
     
     if (sendto(controllerSocket, &packet, sizeof(packet), 0, (const struct sockaddr *)addr, RemoteAddrLen) < 0) {
+        controllerSocket = INVALID_SOCKET;
         NSLog(@"Error sending controller packet: %d", LastSocketError());
     }
 }
@@ -102,6 +103,7 @@ int CFDYSendHighResScrollEvent(short scrollAmount) {
     addr->sin_port = htons(48030);
     
     if (sendto(mouseScrollSocket, &packet, sizeof(packet), 0, (const struct sockaddr *)addr, RemoteAddrLen) < 0) {
+        mouseScrollSocket = INVALID_SOCKET;
         NSLog(@"Error sending mouse scroll packet: %d", LastSocketError());
         return 1;
     }
