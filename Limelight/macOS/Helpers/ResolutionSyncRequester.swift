@@ -17,33 +17,30 @@ class ResolutionSyncRequester: NSObject {
         !UserDefaults.standard.bool(forKey: "enableResolutionSync")
     }
 
-    static let port = 8080
+    static let port = 48020
     
     @objc static public func setResolution(for host: String, refreshRate: Int, isResume: Bool) {
         if disableResolutionSync {
             return
         }
         
-        let disableMouseAcceleration = UserDefaults.standard.bool(forKey: "disablePointerPrecision")
-        if disableMouseAcceleration {
-            Self.disableMouseAcceleration(for: host)
+        let pointerSpeed = UserDefaults.standard.integer(forKey: "pointerSpeed")
+        let scrollLines = UserDefaults.standard.integer(forKey: "scrollWheelLines")
+
+        var url = "http://\(host):\(port)/set?fps=\(refreshRate)&is_resume=\(isResume ? 1 : 0)&mouse_speed=\(pointerSpeed)&scroll_lines=\(scrollLines)"
+
+        if UserDefaults.standard.bool(forKey: "shouldSync") {
+            let width = UserDefaults.standard.integer(forKey: "syncWidth")
+            let height = UserDefaults.standard.integer(forKey: "syncHeight")
+            url += "&width=\(width)&height=\(height)"
+        }
+
+        if UserDefaults.standard.bool(forKey: "disablePointerPrecision") {
+            url += "&mouse_acceleration=0"
         }
         
-        Self.setMouseSpeed(for: host, speed: UserDefaults.standard.integer(forKey: "pointerSpeed"))
-        Self.setScrollLines(for: host, lines: UserDefaults.standard.integer(forKey: "scrollWheelLines"))
-
-        let enabled = UserDefaults.standard.bool(forKey: "shouldSync")
-        if !enabled {
-            Self.setRefreshRate(for: host, refreshRate: refreshRate, isResume: isResume)
-            return
-        }
-        
-        let width = UserDefaults.standard.integer(forKey: "syncWidth")
-        let height = UserDefaults.standard.integer(forKey: "syncHeight")
-
-        if let url = URL(string: "http://\(host):\(port)/resolutionsync/set?\(width)&\(height)&\(refreshRate)&\(isResume)") {
+        if let url = URL(string: url) {
             Self.makeRequest(url)
-            print("ResolutionSync URL: \(url.absoluteString)")
         }
     }
 
@@ -52,26 +49,7 @@ class ResolutionSyncRequester: NSObject {
             return
         }
         
-        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/reset")!)
-    }
-
-    static private func setRefreshRate(for host: String, refreshRate: Int, isResume: Bool) {
-        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setRefreshRate?\(refreshRate)&\(isResume)")!)
-    }
-
-    
-    // MARK: - Mouse
-    
-    static private func disableMouseAcceleration(for host: String) {
-        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/disableMouseAcceleration")!)
-    }
-
-    static private func setMouseSpeed(for host: String, speed: Int) {
-        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setMouseSpeed?\(speed)")!)
-    }
-
-    static private func setScrollLines(for host: String, lines: Int) {
-        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setScrollLines?\(lines)")!)
+        Self.makeRequest(URL(string: "http://\(host):\(port)/reset")!)
     }
 
     
@@ -82,7 +60,7 @@ class ResolutionSyncRequester: NSObject {
             return
         }
         
-        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/setupController")!)
+        Self.makeRequest(URL(string: "http://\(host):\(port)/setup_controller")!)
     }
 
     @objc static public func teardownController(for host: String) {
@@ -90,7 +68,7 @@ class ResolutionSyncRequester: NSObject {
             return
         }
         
-        Self.makeRequest(URL(string: "http://\(host):\(port)/resolutionsync/teardownController")!)
+        Self.makeRequest(URL(string: "http://\(host):\(port)/teardown_controller")!)
     }
 
     
