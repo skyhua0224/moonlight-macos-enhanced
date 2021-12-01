@@ -155,6 +155,9 @@ void stopListeningForRumblePackets(void) {
         return;
     }
 
-    closeSocket(rumbleSocket);
+    if (rumbleSocket != INVALID_SOCKET) {
+        closeSocket(rumbleSocket);
+        rumbleSocket = INVALID_SOCKET;
+    }
 }
 #endif
