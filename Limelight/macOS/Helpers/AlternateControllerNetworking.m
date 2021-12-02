@@ -21,6 +21,8 @@ static SOCKET controllerSocket = INVALID_SOCKET;
 static SOCKET mouseScrollSocket = INVALID_SOCKET;
 static SOCKET rumbleSocket = INVALID_SOCKET;
 
+const port = 48020;
+
 static dispatch_queue_t rumbleQueue;
 
 typedef struct _NV_RUMBLE_PACKET {
@@ -72,7 +74,7 @@ void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMas
     
     struct sockaddr_in *addr = malloc(RemoteAddrLen);
     memcpy(addr, &RemoteAddr, RemoteAddrLen);
-    addr->sin_port = htons(48020);
+    addr->sin_port = htons(port);
     
     if (sendto(controllerSocket, &packet, sizeof(packet), 0, (const struct sockaddr *)addr, RemoteAddrLen) < 0) {
         controllerSocket = INVALID_SOCKET;
@@ -102,7 +104,7 @@ int CFDYSendHighResScrollEvent(short scrollAmount) {
 
     struct sockaddr_in *addr = malloc(RemoteAddrLen);
     memcpy(addr, &RemoteAddr, RemoteAddrLen);
-    addr->sin_port = htons(48030);
+    addr->sin_port = htons(port);
     
     if (sendto(mouseScrollSocket, &packet, sizeof(packet), 0, (const struct sockaddr *)addr, RemoteAddrLen) < 0) {
         mouseScrollSocket = INVALID_SOCKET;
