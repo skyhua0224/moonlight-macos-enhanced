@@ -58,6 +58,8 @@ void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMas
 
     NV_MULTI_CONTROLLER_PACKET packet = {};
     
+    packet.header.size = htonl(sizeof packet - sizeof packet.header);
+    packet.header.magic = MULTI_CONTROLLER_MAGIC_GEN5;
     packet.controllerNumber = controllerNumber;
     packet.activeGamepadMask = activeGamepadMask;
     packet.buttonFlags = buttonFlags;
@@ -93,7 +95,7 @@ int CFDYSendHighResScrollEvent(short scrollAmount) {
     NV_SCROLL_PACKET packet = {};
     
     packet.header.size = htonl(sizeof packet - sizeof packet.header);
-    packet.header.magic = SCROLL_MAGIC;
+    packet.header.magic = SCROLL_MAGIC_GEN5;
     packet.scrollAmt1 = htons(scrollAmount);
     packet.scrollAmt2 = packet.scrollAmt1;
     packet.zero3 = 0;
