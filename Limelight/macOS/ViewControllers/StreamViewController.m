@@ -129,7 +129,7 @@
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
     
-    self.view.window.contentAspectRatio = NSMakeSize(16, 9);
+    self.view.window.contentAspectRatio = NSMakeSize([self getResolution].width, [self getResolution].height);
     self.view.window.frameAutosaveName = @"Stream Window";
     [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
     
@@ -217,6 +217,11 @@
     const NSEventModifierFlags modifierFlags = NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand | NSEventModifierFlagFunction;
     const NSEventModifierFlags eventModifierFlags = event.modifierFlags & modifierFlags;
     
+    if (event.keyCode == kVK_ANSI_1 && eventModifierFlags == NSEventModifierFlagCommand) {
+        [self.hidSupport releaseAllModifierKeys];
+        return NO;
+    }
+    
     if ((event.keyCode == kVK_ANSI_Grave && eventModifierFlags == NSEventModifierFlagCommand)
         || (event.keyCode == kVK_ANSI_H && eventModifierFlags == NSEventModifierFlagCommand)
         ) {
@@ -282,6 +287,13 @@
 
 - (IBAction)performCloseAndQuitApp:(id)sender {
     [self.delegate quitApp:self.app completion:nil];
+}
+
+- (IBAction)resizeWindowToActualResulution:(id)sender {
+    CGFloat screenScale = [NSScreen mainScreen].backingScaleFactor;
+    CGFloat width = (CGFloat)[self getResolution].width / screenScale;
+    CGFloat height = (CGFloat)[self getResolution].height / screenScale;
+    [self.view.window setContentSize:NSMakeSize(width, height)];
 }
 
 
@@ -417,17 +429,8 @@
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
-    BOOL syncEnabled = NO;
-#ifdef USE_RESOLUTION_SYNC
-    syncEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
-#endif
-    if (syncEnabled) {
-        streamConfig.height = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncHeight"];
-        streamConfig.width = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncWidth"];
-    } else {
-        streamConfig.height = [streamSettings.height intValue];
-        streamConfig.width = [streamSettings.width intValue];
-    }
+    streamConfig.width = [self getResolution].width;
+    streamConfig.height = [self getResolution].height;
 
     streamConfig.frameRate = [streamSettings.framerate intValue];
     streamConfig.bitRate = [streamSettings.bitrate intValue];
@@ -451,6 +454,35 @@
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:self.streamMan];
+}
+
+
+#pragma mark - Resolution
+
+struct Resolution {
+   int width;
+   int height;
+};
+
+- (struct Resolution)getResolution {
+    DataManager* dataMan = [[DataManager alloc] init];
+    TemporarySettings* streamSettings = [dataMan getSettings];
+
+    struct Resolution resolution;
+    
+    BOOL syncEnabled = NO;
+#ifdef USE_RESOLUTION_SYNC
+    syncEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
+#endif
+    if (syncEnabled) {
+        resolution.width = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncWidth"];
+        resolution.height = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncHeight"];
+    } else {
+        resolution.width = [streamSettings.width intValue];
+        resolution.height = [streamSettings.height intValue];
+    }
+
+    return resolution;
 }
 
 

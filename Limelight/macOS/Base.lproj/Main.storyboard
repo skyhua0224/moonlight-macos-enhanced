@@ -368,6 +368,11 @@ DQ
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <menu key="submenu" title="Window" systemMenu="window" id="Td7-aD-5lo">
                                     <items>
+                                        <menuItem title="Actual Stream Size" keyEquivalent="1" id="FX7-Uu-TSG" userLabel="Actual Stream Size">
+                                            <connections>
+                                                <action selector="resizeWindowToActualResulution:" target="Ady-hI-5gd" id="cfz-nd-w8y"/>
+                                            </connections>
+                                        </menuItem>
                                         <menuItem title="Close" keyEquivalent="w" id="DVo-aG-piG">
                                             <connections>
                                                 <action selector="performClose:" target="Ady-hI-5gd" id="HmO-Ls-i7Q"/>
