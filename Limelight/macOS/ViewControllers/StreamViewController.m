@@ -75,7 +75,7 @@
     self.windowDidEnterFullScreenNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
-                if ([weakSelf.view.window styleMask] & NSWindowStyleMaskFullScreen) {
+                if ([weakSelf isWindowFullscreen]) {
                     if ([weakSelf.view.window isKeyWindow]) {
                         [weakSelf uncaptureMouse];
                         [weakSelf captureMouse];
@@ -87,7 +87,7 @@
     
     self.windowDidResignKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
-            if (![weakSelf isWindowInCurrentSpace]) {
+            if (![weakSelf isWindowInCurrentSpace] || ![weakSelf isWindowFullscreen]) {
                 [weakSelf uncaptureMouse];
             }
         }
@@ -95,9 +95,11 @@
     self.windowDidBecomeKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
-                if ([weakSelf.view.window isKeyWindow]) {
-                    [weakSelf uncaptureMouse];
-                    [weakSelf captureMouse];
+                if ([weakSelf isWindowFullscreen]) {
+                    if ([weakSelf.view.window isKeyWindow]) {
+                        [weakSelf uncaptureMouse];
+                        [weakSelf captureMouse];
+                    }
                 }
             }
         } else {
@@ -341,6 +343,10 @@
         CFRelease(windowsInSpace);
     }
     return found;
+}
+
+- (BOOL)isWindowFullscreen {
+    return [self.view.window styleMask] & NSWindowStyleMaskFullScreen;
 }
 
 - (BOOL)isOurWindowTheWindowInNotiifcation:(NSNotification *)note {
