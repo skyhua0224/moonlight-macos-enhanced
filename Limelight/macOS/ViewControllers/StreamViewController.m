@@ -225,11 +225,9 @@
     if ((event.keyCode == kVK_ANSI_Grave && eventModifierFlags == NSEventModifierFlagCommand)
         || (event.keyCode == kVK_ANSI_H && eventModifierFlags == NSEventModifierFlagCommand)
         ) {
-        if (!([self.view.window styleMask] & NSWindowStyleMaskFullScreen)) {
-            if (!self.hidSupport.shouldSendInputEvents) {
-                [self.hidSupport releaseAllModifierKeys];
-                return NO;
-            }
+        if (![self isWindowFullscreen]) {
+            [self.hidSupport releaseAllModifierKeys];
+            return NO;
         }
     }
     
