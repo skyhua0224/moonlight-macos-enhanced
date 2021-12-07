@@ -21,7 +21,7 @@ static SOCKET controllerSocket = INVALID_SOCKET;
 static SOCKET mouseScrollSocket = INVALID_SOCKET;
 static SOCKET rumbleSocket = INVALID_SOCKET;
 
-const port = 48020;
+const in_port_t port = 48020;
 
 static dispatch_queue_t rumbleQueue;
 
@@ -125,7 +125,7 @@ BOOL startListeningForRumblePackets(id<ConnectionCallbacks> connectionCallbacks)
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(48020);
+    addr.sin_port = htons(port);
     
     if (bind(rumbleSocket, (struct sockaddr *)&addr, sizeof(addr)) == SOCKET_ERROR) {
         NSLog(@"Error binding port: %d", LastSocketError());
