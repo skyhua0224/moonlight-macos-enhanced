@@ -524,14 +524,16 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     };
     
     mouse.mouseInput.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput * _Nonnull axis, float value) {
+        short scrollAmount = value * 20;
+        scrollAmount = mouse.mouseInput.auxiliaryButtons == nil ? -scrollAmount : scrollAmount;
 #ifdef USE_RESOLUTION_SYNC
-            if (cfdyMouseScrollMethod()) {
-                CFDYSendHighResScrollEvent(value);
-            } else {
+        if (cfdyMouseScrollMethod()) {
+            CFDYSendHighResScrollEvent(scrollAmount);
+        } else {
 #endif
-                LiSendHighResScrollEvent(value);
+            LiSendHighResScrollEvent(scrollAmount);
 #ifdef USE_RESOLUTION_SYNC
-            }
+        }
 #endif
     };
 }
