@@ -59,6 +59,7 @@ static float bitrateSteps[] = {
 @property (weak) IBOutlet NSButton *autoFullscreenCheckbox;
 @property (weak) IBOutlet NSButton *controllerVibrationCheckbox;
 @property (weak) IBOutlet NSPopUpButton *controllerDriverSelector;
+@property (weak) IBOutlet NSButton *useGCMouseCheckbox;
 
 @end
 
@@ -92,6 +93,7 @@ static float bitrateSteps[] = {
     self.autoFullscreenCheckbox.state = [self.standard boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
     self.controllerVibrationCheckbox.state = [self.standard boolForKey:@"rumbleGamepad"] ? NSControlStateValueOn : NSControlStateValueOff;
     [self.controllerDriverSelector selectItemWithTag:[self.standard integerForKey:@"controllerDriver"]];
+    self.useGCMouseCheckbox.state = [self.standard boolForKey:@"useGCMouseDriver"] ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
 - (void)viewWillAppear {
@@ -205,6 +207,10 @@ static float bitrateSteps[] = {
 
 - (IBAction)didChangeControllerDriver:(id)sender {
     [self.standard setInteger:self.controllerDriverSelector.selectedTag forKey:@"controllerDriver"];
+}
+
+- (IBAction)didToggleGCMouseDriver:(id)sender {
+    [self.standard setBool:self.useGCMouseCheckbox.state == NSControlStateValueOn forKey:@"useGCMouseDriver"];
 }
 
 

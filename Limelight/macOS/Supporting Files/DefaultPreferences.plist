@@ -26,5 +26,7 @@
 	<true/>
 	<key>controllerDriver</key>
 	<integer>0</integer>
+	<key>useGCMouseDriver</key>
+	<false/>
 </dict>
 </plist>

@@ -19,6 +19,8 @@
 #import <IOKit/hid/IOHIDKeys.h>
 #import <IOKit/hid/IOHIDElement.h>
 
+@import GameController;
+
 struct KeyMapping {
     unsigned short mac;
     short windows;
@@ -429,6 +431,11 @@ typedef enum {
 @property (nonatomic) UInt32 switchUnRumblePending;
 
 @property (nonatomic, strong) Ticks *ticks;
+
+@property (nonatomic) id mouseConnectObserver;
+@property (nonatomic) id mouseDisconnectObserver;
+
+@property (nonatomic) BOOL useGCMouse;
 @end
 
 @implementation HIDSupport
@@ -449,7 +456,20 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         [self rumbleSync];
 
         self.controller = [[Controller alloc] init];
+        
+        if (@available(macOS 11.0, *)) {
+            for (GCMouse *mouse in GCMouse.mice) {
+                [self registerMouseCallbacks:mouse];
+            }
 
+            self.mouseConnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidConnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+                [self registerMouseCallbacks:note.object];
+            }];
+            self.mouseDisconnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+                [self unregisterMouseCallbacks:note.object];
+            }];
+        }
+        
         NSMutableDictionary *d = [NSMutableDictionary dictionary];
         for (size_t i = 0; i < sizeof(keys) / sizeof(struct KeyMapping); i++) {
             struct KeyMapping m = keys[i];
@@ -463,9 +483,72 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 }
 
 - (void)dealloc {
-    if (self.displayLink != NULL) {
-        CVDisplayLinkStop(self.displayLink);
-        CVDisplayLinkRelease(self.displayLink);
+    NSLog(@"HIDSupport dealloc");
+}
+
+-(void)registerMouseCallbacks:(GCMouse *)mouse API_AVAILABLE(macos(11.0)) {
+    if (!self.useGCMouse) {
+        return;
+    }
+    
+    mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput * _Nonnull mouse, float deltaX, float deltaY) {
+        self.mouseDeltaX += deltaX;
+        self.mouseDeltaY -= deltaY;
+    };
+    
+    mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+        if (self.shouldSendInputEvents) {
+            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        }
+    };
+    mouse.mouseInput.middleButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+        if (self.shouldSendInputEvents) {
+            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
+        }
+    };
+    mouse.mouseInput.rightButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+        if (self.shouldSendInputEvents) {
+            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+        }
+    };
+    
+    mouse.mouseInput.auxiliaryButtons[0].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+        if (self.shouldSendInputEvents) {
+            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
+        }
+    };
+    mouse.mouseInput.auxiliaryButtons[1].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+        if (self.shouldSendInputEvents) {
+            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
+        }
+    };
+    
+    mouse.mouseInput.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput * _Nonnull axis, float value) {
+#ifdef USE_RESOLUTION_SYNC
+            if (cfdyMouseScrollMethod()) {
+                CFDYSendHighResScrollEvent(value);
+            } else {
+#endif
+                LiSendHighResScrollEvent(value);
+#ifdef USE_RESOLUTION_SYNC
+            }
+#endif
+    };
+}
+
+-(void)unregisterMouseCallbacks:(GCMouse*)mouse API_AVAILABLE(macos(11.0)) {
+    if (!self.useGCMouse) {
+        return;
+    }
+    
+    mouse.mouseInput.mouseMovedHandler = nil;
+    
+    mouse.mouseInput.leftButton.pressedChangedHandler = nil;
+    mouse.mouseInput.middleButton.pressedChangedHandler = nil;
+    mouse.mouseInput.rightButton.pressedChangedHandler = nil;
+    
+    for (GCControllerButtonInput* auxButton in mouse.mouseInput.auxiliaryButtons) {
+        auxButton.pressedChangedHandler = nil;
     }
 }
 
@@ -489,8 +572,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                                           void *displayLinkContext)
 {
     HIDSupport *me = (__bridge HIDSupport *)displayLinkContext;
-    
-    
+    if (me == nil) {
+        return kCVReturnError;
+    }
+
     int32_t deltaX, deltaY;
     deltaX = me.mouseDeltaX;
     deltaY = me.mouseDeltaY;
@@ -518,7 +603,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
     self.displayLink = displayLink;
     
-    status = CVDisplayLinkSetOutputCallback(self.displayLink, displayLinkOutputCallback, (__bridge void * _Nullable)(self));
+    __weak typeof(self) weakSelf = self;
+    status = CVDisplayLinkSetOutputCallback(self.displayLink, displayLinkOutputCallback, (__bridge void * _Nullable)(weakSelf));
     if (status != kCVReturnSuccess) {
         Log(LOG_E, @"CVDisplayLinkSetOutputCallback() failed: %d", status);
         return NO;
@@ -598,23 +684,39 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)mouseDown:(NSEvent *)event withButton:(int)button {
+    if (self.useGCMouse) {
+        return;
+    }
+    
     if (self.shouldSendInputEvents) {
         LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
     }
 }
 
 - (void)mouseUp:(NSEvent *)event withButton:(int)button {
+    if (self.useGCMouse) {
+        return;
+    }
+    
     if (self.shouldSendInputEvents) {
         LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, button);
     }
 }
 
 - (void)mouseMoved:(NSEvent *)event {
+    if (self.useGCMouse) {
+        return;
+    }
+    
     self.mouseDeltaX += event.deltaX;
     self.mouseDeltaY += event.deltaY;
 }
 
 - (void)scrollWheel:(NSEvent *)event {
+    if (self.useGCMouse) {
+        return;
+    }
+    
     if (self.shouldSendInputEvents) {
         if (event.hasPreciseScrollingDeltas) {
 #ifdef USE_RESOLUTION_SYNC
@@ -1045,6 +1147,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         modifiers |= MODIFIER_META;
     }
     return modifiers;
+}
+
+- (BOOL)useGCMouse {
+    return [[NSUserDefaults standardUserDefaults] boolForKey:@"useGCMouseDriver"];
 }
 
 - (NSInteger)controllerDriver {
@@ -1613,7 +1719,23 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
 }
 
-- (void)tearDownHidManager {
+- (void)tearDownHidManager {    
+    [[NSNotificationCenter defaultCenter] removeObserver:self.mouseConnectObserver];
+    [[NSNotificationCenter defaultCenter] removeObserver:self.mouseDisconnectObserver];
+    self.mouseConnectObserver = nil;
+    self.mouseDisconnectObserver = nil;
+
+    if (@available(macOS 11.0, *)) {
+        for (GCMouse *mouse in GCMouse.mice) {
+            [self unregisterMouseCallbacks:mouse];
+        }
+    }
+    
+    if (self.displayLink != NULL) {
+        CVDisplayLinkStop(self.displayLink);
+        CVDisplayLinkRelease(self.displayLink);
+    }
+    
     self.closeRumble = YES;
     self.isRumbleTimer = NO;
     dispatch_semaphore_signal(self.rumbleSemaphore);
