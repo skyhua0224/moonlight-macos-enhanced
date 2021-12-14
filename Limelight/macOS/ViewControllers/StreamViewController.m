@@ -183,11 +183,19 @@
 }
 
 - (void)otherMouseDown:(NSEvent *)event {
-    [self.hidSupport mouseDown:event withButton:BUTTON_MIDDLE];
+    int button = [self getMouseButtonFromEvent:event];
+    if (button == 0) {
+        return;
+    }
+    [self.hidSupport mouseDown:event withButton:button];
 }
 
 - (void)otherMouseUp:(NSEvent *)event {
-    [self.hidSupport mouseUp:event withButton:BUTTON_MIDDLE];
+    int button = [self getMouseButtonFromEvent:event];
+    if (button == 0) {
+        return;
+    }
+    [self.hidSupport mouseUp:event withButton:button];
 }
 
 - (void)mouseMoved:(NSEvent *)event {
@@ -208,6 +216,26 @@
 
 - (void)scrollWheel:(NSEvent *)event {
     [self.hidSupport scrollWheel:event];
+}
+
+- (int)getMouseButtonFromEvent:(NSEvent *)event {
+    int button;
+    switch (event.buttonNumber) {
+        case 2:
+            button = BUTTON_MIDDLE;
+            break;
+        case 3:
+            button = BUTTON_X1;
+            break;
+        case 4:
+            button = BUTTON_X2;
+            break;
+        default:
+            return 0;
+            break;
+    }
+    
+    return button;
 }
 
 
