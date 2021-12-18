@@ -53,7 +53,10 @@
 
 - (CGFloat)scaleForSelected:(BOOL)selected hovered:(BOOL)hovered {
     CGFloat scale = 1;
-    if (hovered || selected) {
+    if (selected) {
+        scale *= 1.15;
+    }
+    if (hovered) {
         scale *= 1.1;
     }
     return scale;
@@ -114,7 +117,7 @@
         if (hovered) {
             return [NSApplication moonlight_isDarkAppearance] ? 1 : 1;
         } else {
-            return [NSApplication moonlight_isDarkAppearance] ? 0.75 : 0.85;
+            return [NSApplication moonlight_isDarkAppearance] ? 0.85 : 0.925;
         }
     }
 }
