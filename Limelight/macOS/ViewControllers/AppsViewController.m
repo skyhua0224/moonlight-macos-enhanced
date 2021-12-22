@@ -85,7 +85,7 @@ const CGFloat scaleBase = 1.125;
     }];
     
     if (@available(macOS 10.14, *)) {
-        [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
+        [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew) context:nil];
     }
 }
 
@@ -215,17 +215,26 @@ const CGFloat scaleBase = 1.125;
     
     item.runningIcon.hidden = app != self.runningApp;
 
-    NSImage* fastCacheImage = [self.boxArtCache objectForKey:app];
+    NSImage *fastCacheImage = [self.boxArtCache objectForKey:app];
     if (fastCacheImage != nil) {
+//        NSLog(@"MMK ✅ Inexpensive boxArt loading for %@", app.name);
         item.appCoverArt.image = fastCacheImage;
     } else {
-        NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
-        if (cacheImage != nil) {
-            [self.boxArtCache setObject:cacheImage forKey:app];
-            item.appCoverArt.image = cacheImage;
-        } else {
-            item.appCoverArt.image = nil;
-        }
+        item.appCoverArt.image = nil;
+//        NSLog(@"MMK ⚠️ Preparing boxArt for %@", app.name);
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+            NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
+            if (cacheImage != nil) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    AppCell *currentItem = (AppCell *)[self.collectionView itemAtIndexPath:indexPath];
+                    if ([item.app.id isEqualToString:currentItem.app.id]) {
+//                        NSLog(@"MMK ❤️ Rendered boxArt for %@", app.name);
+                        item.appCoverArt.image = cacheImage;
+                    }
+                    [self.boxArtCache setObject:cacheImage forKey:app];
+                });
+            }
+        });
     }
 }
 
@@ -675,7 +684,7 @@ const CGFloat scaleBase = 1.125;
                 if (fastCacheImage != nil) {
                     
                     [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
-                        KPCScaleToFillNSImageView *newImageView = [[KPCScaleToFillNSImageView alloc] init];
+                        NSImageView *newImageView = [[NSImageView alloc] init];
                         newImageView.wantsLayer = YES;
                         newImageView.layer.masksToBounds = YES;
                         newImageView.layer.cornerRadius = 10;
@@ -704,19 +713,26 @@ const CGFloat scaleBase = 1.125;
     size_t width = CGImageGetWidth(cgImage);
     size_t height = CGImageGetHeight(cgImage);
     
+    CGFloat targetWidth = 300;
+    CGFloat targetHeight = 400;
+    CGFloat drawAspect = (CGFloat)width / (CGFloat)height;
+    
+    CGFloat drawHeight = targetWidth / drawAspect;
+    CGFloat yOffset = (targetHeight - drawHeight) / 2.0;
+
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    CGContextRef imageContext =  CGBitmapContextCreate(NULL, width, height, 8, width * 4, colorSpace,
+    CGContextRef imageContext =  CGBitmapContextCreate(NULL, targetWidth, targetHeight, 8, targetWidth * 4, colorSpace,
                                                        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
     CGColorSpaceRelease(colorSpace);
 
-    CGContextDrawImage(imageContext, CGRectMake(0, 0, width, height), cgImage);
+    CGContextDrawImage(imageContext, CGRectMake(0, yOffset, targetWidth, drawHeight), cgImage);
     
     CGImageRef outputImage = CGBitmapContextCreateImage(imageContext);
 
 #if TARGET_OS_IPHONE
     boxArt = [UIImage imageWithCGImage:outputImage];
 #else
-    boxArt = [[NSImage alloc] initWithCGImage:outputImage size:NSMakeSize(width, height)];
+    boxArt = [[NSImage alloc] initWithCGImage:outputImage size:NSMakeSize(targetWidth, targetHeight)];
 #endif
 
     CGImageRelease(outputImage);

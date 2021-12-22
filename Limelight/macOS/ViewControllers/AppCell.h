@@ -14,7 +14,7 @@
 @interface AppCell : NSCollectionViewItem
 @property (weak) IBOutlet NSTextField *appName;
 @property (weak) IBOutlet BackgroundColorView *appNameContainer;
-@property (weak) IBOutlet KPCScaleToFillNSImageView *appCoverArt;
+@property (weak) IBOutlet NSImageView *appCoverArt;
 @property (weak) IBOutlet BackgroundColorView *placeholderView;
 @property (weak) IBOutlet NSImageView *runningIcon;
 @property (nonatomic, strong) TemporaryApp *app;

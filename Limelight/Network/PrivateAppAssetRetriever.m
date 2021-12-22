@@ -49,9 +49,7 @@ static const int MAX_ATTEMPTS = 5;
                     [[NSFileManager defaultManager] createDirectoryAtPath:[boxArtPath stringByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
                     [data writeToFile:boxArtPath atomically:NO];
 
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [self.callback receivedPrivateAssetForApp:self.app];
-                    });
+                    [self.callback receivedPrivateAssetForApp:self.app];
                 }
             }
         }];
