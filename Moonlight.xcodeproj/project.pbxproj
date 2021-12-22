@@ -86,6 +86,12 @@
 		4CDC8E7025E754B2009E66C6 /* MASPreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CDC8E6F25E754B2009E66C6 /* MASPreferencesWindow.xib */; };
 		4CDC8E7425E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CDC8E7225E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m */; };
 		4CDC8E7525E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CDC8E7325E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib */; };
+		4CE887092771DD4F004EB216 /* NSNumber+F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887022771DD4F004EB216 /* NSNumber+F.m */; };
+		4CE8870A2771DD4F004EB216 /* NSDictionary+F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887032771DD4F004EB216 /* NSDictionary+F.m */; };
+		4CE8870B2771DD4F004EB216 /* F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887042771DD4F004EB216 /* F.m */; };
+		4CE8870C2771DD4F004EB216 /* NSArray+F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887062771DD4F004EB216 /* NSArray+F.m */; };
+		4CE8870F2772B8A6004EB216 /* PrivateAppAssetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE8870E2772B8A6004EB216 /* PrivateAppAssetManager.m */; };
+		4CE887122772B8B3004EB216 /* PrivateAppAssetRetriever.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887112772B8B3004EB216 /* PrivateAppAssetRetriever.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -204,6 +210,18 @@
 		4CDC8E7125E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ResolutionSyncPrefsPaneVC.h; sourceTree = "<group>"; };
 		4CDC8E7225E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ResolutionSyncPrefsPaneVC.m; sourceTree = "<group>"; };
 		4CDC8E7325E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = ResolutionSyncPrefsPaneView.xib; sourceTree = "<group>"; };
+		4CE887012771DD4F004EB216 /* F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = F.h; sourceTree = "<group>"; };
+		4CE887022771DD4F004EB216 /* NSNumber+F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSNumber+F.m"; sourceTree = "<group>"; };
+		4CE887032771DD4F004EB216 /* NSDictionary+F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSDictionary+F.m"; sourceTree = "<group>"; };
+		4CE887042771DD4F004EB216 /* F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = F.m; sourceTree = "<group>"; };
+		4CE887052771DD4F004EB216 /* NSArray+F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSArray+F.h"; sourceTree = "<group>"; };
+		4CE887062771DD4F004EB216 /* NSArray+F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSArray+F.m"; sourceTree = "<group>"; };
+		4CE887072771DD4F004EB216 /* NSNumber+F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSNumber+F.h"; sourceTree = "<group>"; };
+		4CE887082771DD4F004EB216 /* NSDictionary+F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSDictionary+F.h"; sourceTree = "<group>"; };
+		4CE8870D2772B8A6004EB216 /* PrivateAppAssetManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PrivateAppAssetManager.h; sourceTree = "<group>"; };
+		4CE8870E2772B8A6004EB216 /* PrivateAppAssetManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PrivateAppAssetManager.m; sourceTree = "<group>"; };
+		4CE887102772B8B3004EB216 /* PrivateAppAssetRetriever.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PrivateAppAssetRetriever.h; sourceTree = "<group>"; };
+		4CE887112772B8B3004EB216 /* PrivateAppAssetRetriever.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PrivateAppAssetRetriever.m; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
@@ -377,6 +395,7 @@
 		4C38E81D1FEF4F89000425CD /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
+				4CE887002771DD22004EB216 /* Functional */,
 				4CDC8E6925E750B3009E66C6 /* MASPreferences */,
 				4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */,
 				4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */,
@@ -488,6 +507,21 @@
 				4CD17E9827337FF1004D438C /* LICENSE.md */,
 			);
 			path = MASPreferences;
+			sourceTree = "<group>";
+		};
+		4CE887002771DD22004EB216 /* Functional */ = {
+			isa = PBXGroup;
+			children = (
+				4CE887012771DD4F004EB216 /* F.h */,
+				4CE887042771DD4F004EB216 /* F.m */,
+				4CE887052771DD4F004EB216 /* NSArray+F.h */,
+				4CE887062771DD4F004EB216 /* NSArray+F.m */,
+				4CE887082771DD4F004EB216 /* NSDictionary+F.h */,
+				4CE887032771DD4F004EB216 /* NSDictionary+F.m */,
+				4CE887072771DD4F004EB216 /* NSNumber+F.h */,
+				4CE887022771DD4F004EB216 /* NSNumber+F.m */,
+			);
+			path = Functional;
 			sourceTree = "<group>";
 		};
 		98AB2E801CAD46830089BB98 /* Products */ = {
@@ -831,6 +865,10 @@
 				FBD3494219FC9C04002D2A60 /* AppAssetManager.m */,
 				FB9AFD301A7D867C00872C98 /* AppAssetRetriever.h */,
 				FB9AFD311A7D867C00872C98 /* AppAssetRetriever.m */,
+				4CE8870D2772B8A6004EB216 /* PrivateAppAssetManager.h */,
+				4CE8870E2772B8A6004EB216 /* PrivateAppAssetManager.m */,
+				4CE887102772B8B3004EB216 /* PrivateAppAssetRetriever.h */,
+				4CE887112772B8B3004EB216 /* PrivateAppAssetRetriever.m */,
 			);
 			name = AppList;
 			sourceTree = "<group>";
@@ -1019,13 +1057,16 @@
 				4C4B02EC236FF5F200B63AE6 /* WakeOnLanManager.m in Sources */,
 				4C38E8131FEE30F8000425CD /* ContainerViewController.m in Sources */,
 				4C38E8081FEE09D0000425CD /* Utils.m in Sources */,
+				4CE8870A2771DD4F004EB216 /* NSDictionary+F.m in Sources */,
 				4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */,
 				4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */,
 				4C7E0A971FECCF9A00684411 /* HostsViewController.m in Sources */,
 				4C798E67251A1E9800CAB469 /* HapticContext.m in Sources */,
+				4CE8870C2771DD4F004EB216 /* NSArray+F.m in Sources */,
 				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
 				4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */,
+				4CE8870B2771DD4F004EB216 /* F.m in Sources */,
 				4C30BA201FF5F7D600848919 /* BackgroundColorView.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
 				4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */,
@@ -1045,12 +1086,15 @@
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
 				4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
+				4CE887122772B8B3004EB216 /* PrivateAppAssetRetriever.m in Sources */,
+				4CE887092771DD4F004EB216 /* NSNumber+F.m in Sources */,
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
 				4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */,
 				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
 				4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */,
 				4C682BD124D1227600A70C44 /* Helpers.m in Sources */,
 				4C38E8021FEE08B1000425CD /* TemporarySettings.m in Sources */,
+				4CE8870F2772B8A6004EB216 /* PrivateAppAssetManager.m in Sources */,
 				4C38E8031FEE08BE000425CD /* MDNSManager.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

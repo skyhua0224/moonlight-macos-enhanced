@@ -18,6 +18,10 @@
 #import "BackgroundColorView.h"
 #import "ImageFader.h"
 
+#import "PrivateAppAssetManager.h"
+
+#import "F.h"
+
 #import "HttpManager.h"
 #import "IdManager.h"
 #import "CryptoManager.h"
@@ -30,7 +34,7 @@
 
 #import "Moonlight-Swift.h"
 
-@interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, NSSearchFieldDelegate>
+@interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, PrivateAppAssetCallback, NSSearchFieldDelegate>
 @property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
 @property (nonatomic, strong) TemporaryApp *runningApp;
@@ -38,6 +42,7 @@
 @property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
 
+@property (nonatomic, strong) PrivateAppAssetManager *privateAppManager;
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSCache *boxArtCache;
 @property (nonatomic) CGFloat itemScale;
@@ -136,6 +141,7 @@ const CGFloat scaleBase = 1.125;
         [self removeFromParentViewController];
         
         self.appManager = nil;
+        self.privateAppManager = nil;
         self.apps = @[];
         [self.collectionView reloadData];
     }];
@@ -381,10 +387,10 @@ const CGFloat scaleBase = 1.125;
     NSOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
         DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:weakSelf.host uniqueId:[IdManager getUniqueId]];
         [worker discoverHost];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            TemporaryApp *runningApp = [weakSelf findRunningApp:weakSelf.host];
-            [weakSelf setRunningApp:runningApp];
-        });
+//        dispatch_async(dispatch_get_main_queue(), ^{
+//            TemporaryApp *runningApp = [weakSelf findRunningApp:weakSelf.host];
+//            [weakSelf setRunningApp:runningApp];
+//        });
     }];
     NSOperationQueue *queue = [[NSOperationQueue alloc] init];
     [queue addOperation:operation];
@@ -493,15 +499,65 @@ const CGFloat scaleBase = 1.125;
 }
 
 
+#pragma mark - Private GFE App Discovery
+
+- (void)fetchPrivateAppsForHostWithHostIP:(NSString *)hostIP WithCompletionBlock:(void (^)(NSArray<TemporaryApp *> *))completion {
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:49999/Applications/v.1.0/", hostIP]];
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (error == nil) {
+            if (httpResponse.statusCode == 200) {
+                NSArray<NSDictionary<NSString *, id> *> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                responseObject = [F filterArray:responseObject withBlock:^BOOL(id obj) {
+                    return [obj[@"cmsId"] intValue] != 0 && [obj[@"isCreativeApplication"] boolValue] == NO;
+                }];
+                
+                NSMutableArray<TemporaryApp *> *apps = [NSMutableArray array];
+                [F eachInArrayWithIndex:responseObject withBlock:^(id obj, NSInteger idx) {
+                    TemporaryApp *app = [[TemporaryApp alloc] init];
+                    app.id = [NSString stringWithFormat:@"%@", obj[@"cmsId"]];
+                    app.name = obj[@"displayName"];
+                    app.installPath = obj[@"installDirectory"];
+                    app.host = self.host;
+                    [apps addObject:app];
+                }];
+                
+                completion(apps);
+            }
+        }
+    }];
+    [task resume];
+}
+
+- (void)discoverPrivateApps:(TemporaryHost *)host {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self fetchPrivateAppsForHostWithHostIP:host.activeAddress WithCompletionBlock:^(NSArray<TemporaryApp *> *apps) {
+            NSArray<TemporaryApp *> *oldItems = [self fetchApps];
+
+            NSSet *appSet = [NSSet setWithArray:apps];
+            [self updateApplist:appSet forHost:host];
+            
+            [self.privateAppManager stopRetrieving];
+            [self.privateAppManager retrieveAssetsFromHost:self.host];
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self updateCollectionViewDataWithOld:oldItems new:[self fetchApps]];
+            });
+        }];
+    });
+}
+
+
 #pragma mark - App Discovery
 
 - (void)loadApps {
     self.appManager = [[AppAssetManager alloc] initWithCallback:self];
+    self.privateAppManager = [[PrivateAppAssetManager alloc] initWithCallback:self];
     
     if (self.host.appList.count > 0) {
         [self displayApps];
     }
-    [self discoverAppsForHost:self.host];
+    [self discoverPrivateApps:self.host];
 }
 
 - (NSArray<TemporaryApp *> *)fetchApps {
@@ -688,6 +744,15 @@ const CGFloat scaleBase = 1.125;
 #pragma mark - AppAssetCallback
 
 - (void)receivedAssetForApp:(TemporaryApp *)app {
+    // Update the box art cache now so we don't have to do it
+    // on the main thread
+    [self updateBoxArtCacheForApp:app];
+}
+
+
+#pragma mark - PrivateAppAssetCallback
+
+- (void)receivedPrivateAssetForApp:(TemporaryApp *)app {
     // Update the box art cache now so we don't have to do it
     // on the main thread
     [self updateBoxArtCacheForApp:app];
