@@ -16,8 +16,6 @@
 #import "F.h"
 
 @implementation PrivateAppAssetRetriever
-static const double RETRY_DELAY = 2; // seconds
-static const int MAX_ATTEMPTS = 5;
 
 - (void)getAppBoxArtUrlFromAppId:(NSString *)appId withCompletionBlock:(void (^)(NSURL *))completion {
     NSURL *detailsUrl = [NSURL URLWithString:[NSString stringWithFormat:@"https://static.nvidiagrid.net/apps/%@/US/%@_US.json", appId, appId]];

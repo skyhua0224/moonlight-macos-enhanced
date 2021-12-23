@@ -214,27 +214,32 @@ const CGFloat scaleBase = 1.125;
     item.app = app;
     
     item.runningIcon.hidden = app != self.runningApp;
-
-    NSImage *fastCacheImage = [self.boxArtCache objectForKey:app];
-    if (fastCacheImage != nil) {
-//        NSLog(@"MMK ✅ Inexpensive boxArt loading for %@", app.name);
-        item.appCoverArt.image = fastCacheImage;
-    } else {
-        item.appCoverArt.image = nil;
-//        NSLog(@"MMK ⚠️ Preparing boxArt for %@", app.name);
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-            NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
-            if (cacheImage != nil) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    AppCell *currentItem = (AppCell *)[self.collectionView itemAtIndexPath:indexPath];
-                    if ([item.app.id isEqualToString:currentItem.app.id]) {
-//                        NSLog(@"MMK ❤️ Rendered boxArt for %@", app.name);
-                        item.appCoverArt.image = cacheImage;
-                    }
-                    [self.boxArtCache setObject:cacheImage forKey:app];
-                });
-            }
-        });
+    
+    if (item.appCoverArt != nil) {
+        NSImage *fastCacheImage = [self.boxArtCache objectForKey:app];
+        if (fastCacheImage != nil) {
+            item.appCoverArt.image = fastCacheImage;
+        } else {
+            item.appCoverArt.image = nil;
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+                NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
+                if (cacheImage != nil) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        AppCell *currentItem = (AppCell *)[self.collectionView itemAtIndexPath:indexPath];
+                        if ([item.app.id isEqualToString:currentItem.app.id]) {
+                            [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
+                                NSImageView *newImageView = [[NSImageView alloc] init];
+                                newImageView.wantsLayer = YES;
+                                newImageView.layer.masksToBounds = YES;
+                                newImageView.layer.cornerRadius = 10;
+                                return newImageView;
+                            } duration:0.3 image:cacheImage];
+                        }
+                        [self.boxArtCache setObject:cacheImage forKey:app];
+                    });
+                }
+            });
+        }
     }
 }
 

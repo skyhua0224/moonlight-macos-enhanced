@@ -12,6 +12,8 @@
 
 #import <QuartzCore/QuartzCore.h>
 
+#import "Moonlight-Swift.h"
+
 @interface AppCell () <NSMenuDelegate>
 @property (nonatomic) BOOL hovered;
 @property (nonatomic) BOOL previousHovered;
@@ -102,7 +104,7 @@
     self.previousHovered = self.hovered;
 }
 
-- (CGFloat)shadowAlphaWithSelected:(BOOL)selected {
+- (CGFloat)shadowAlpha {
     if (@available(macOS 10.14, *)) {
         return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.33;
     } else {
@@ -123,14 +125,17 @@
 }
 
 - (void)updateSelectedState:(BOOL)selected {
-    NSShadow *shadow = [[NSShadow alloc] init];
-    shadow.shadowColor = [NSColor colorWithWhite:0 alpha:[self shadowAlphaWithSelected:selected]];
+    NSView *appCoverArtContainerView = self.appCoverArt.superview;
+    appCoverArtContainerView.shadow = [[NSShadow alloc] init];
+    appCoverArtContainerView.wantsLayer = YES;
+
+    appCoverArtContainerView.layer.shadowColor = [NSColor colorWithWhite:0 alpha:[self shadowAlpha]].CGColor;
     if (@available(macOS 10.14, *)) {
-        shadow.shadowOffset = NSMakeSize(0, -5);
-        shadow.shadowBlurRadius = 5;
+        appCoverArtContainerView.layer.shadowOffset = NSMakeSize(0, -5);
+        appCoverArtContainerView.layer.shadowRadius = 5;
     } else {
-        shadow.shadowOffset = NSMakeSize(0, -4);
-        shadow.shadowBlurRadius = 4;
+        appCoverArtContainerView.layer.shadowOffset = NSMakeSize(0, -4);
+        appCoverArtContainerView.layer.shadowRadius = 4;
     }
 
     self.appNameContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
@@ -138,11 +143,15 @@
 
     [NSAnimationContext beginGrouping];
     [NSAnimationContext currentContext].duration = 0.4;
-    self.appCoverArt.superview.animator.shadow = shadow;
     self.appCoverArt.superview.animator.alphaValue = [self appCoverArtAlphaWithHovered:NO];
     [NSAnimationContext endGrouping];
 
     [self animateSelectedAndHoveredState];
+}
+
+- (void)viewDidLayout {
+    [super viewDidLayout];
+    self.appCoverArt.superview.layer.shadowPath = CGPathCreateWithRect(self.appCoverArt.bounds, nil);
 }
 
 - (void)setSelected:(BOOL)selected {
