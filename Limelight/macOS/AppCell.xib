@@ -17,13 +17,13 @@
                     <rect key="frame" x="0.0" y="0.0" width="205" height="144"/>
                     <subviews>
                         <customView verticalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="Dvl-ny-Fge" userLabel="App Cover Art Container">
-                            <rect key="frame" x="62" y="28" width="81" height="108"/>
+                            <rect key="frame" x="64" y="28" width="77" height="108"/>
                             <subviews>
                                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="b3R-NC-s5G" userLabel="Placeholder View" customClass="BackgroundColorView">
-                                    <rect key="frame" x="0.0" y="0.0" width="81" height="108"/>
+                                    <rect key="frame" x="0.0" y="0.0" width="77" height="108"/>
                                 </customView>
                                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="KWV-yZ-F3P" userLabel="App Cover Art">
-                                    <rect key="frame" x="0.0" y="0.0" width="81" height="108"/>
+                                    <rect key="frame" x="0.0" y="0.0" width="77" height="108"/>
                                     <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" id="o9Q-i8-aPK"/>
                                 </imageView>
                             </subviews>
@@ -34,13 +34,13 @@
                                 <constraint firstItem="KWV-yZ-F3P" firstAttribute="leading" secondItem="Dvl-ny-Fge" secondAttribute="leading" id="Rzf-K4-0WO"/>
                                 <constraint firstItem="KWV-yZ-F3P" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" id="S4o-3s-BOw"/>
                                 <constraint firstItem="b3R-NC-s5G" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" id="XvJ-cs-IMM"/>
-                                <constraint firstAttribute="width" secondItem="Dvl-ny-Fge" secondAttribute="height" multiplier="3:4" id="Ylp-Pm-UzC"/>
+                                <constraint firstAttribute="width" secondItem="Dvl-ny-Fge" secondAttribute="height" multiplier="628:888" id="Ylp-Pm-UzC"/>
                                 <constraint firstAttribute="trailing" secondItem="KWV-yZ-F3P" secondAttribute="trailing" id="eKq-NM-blt"/>
                                 <constraint firstAttribute="bottom" secondItem="KWV-yZ-F3P" secondAttribute="bottom" id="tiR-AM-WcG"/>
                             </constraints>
                         </customView>
                         <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="TBj-LS-qdd" userLabel="Running Icon">
-                            <rect key="frame" x="125" y="118" width="24" height="24"/>
+                            <rect key="frame" x="123" y="118" width="24" height="24"/>
                             <constraints>
                                 <constraint firstAttribute="width" secondItem="TBj-LS-qdd" secondAttribute="height" multiplier="1:1" id="DkP-9w-jfL"/>
                                 <constraint firstAttribute="width" constant="24" id="JLY-KU-77T"/>

@@ -215,31 +215,35 @@ const CGFloat scaleBase = 1.125;
     
     item.runningIcon.hidden = app != self.runningApp;
     
-    if (item.appCoverArt != nil) {
-        NSImage *fastCacheImage = [self.boxArtCache objectForKey:app];
-        if (fastCacheImage != nil) {
-            item.appCoverArt.image = fastCacheImage;
-        } else {
-            item.appCoverArt.image = nil;
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-                NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
-                if (cacheImage != nil) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        AppCell *currentItem = (AppCell *)[self.collectionView itemAtIndexPath:indexPath];
-                        if ([item.app.id isEqualToString:currentItem.app.id]) {
+    NSImage *fastCacheImage = [self.boxArtCache objectForKey:app.id];
+    if (fastCacheImage != nil) {
+        item.appCoverArt.image = fastCacheImage;
+    } else {
+        item.appCoverArt.image = nil;
+        
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+            NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
+            if (cacheImage != nil) {
+                
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    AppCell *currentItem = (AppCell *)[self.collectionView itemAtIndexPath:indexPath];
+                    if ([item.app.id isEqualToString:currentItem.app.id]) {
+                        if (item.appCoverArt != nil) {
                             [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
                                 NSImageView *newImageView = [[NSImageView alloc] init];
                                 newImageView.wantsLayer = YES;
                                 newImageView.layer.masksToBounds = YES;
                                 newImageView.layer.cornerRadius = 10;
                                 return newImageView;
-                            } duration:0.3 image:cacheImage];
+                            } duration:0.3 image:cacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
+                                item.appCoverArt = newImageView;
+                            }];
                         }
-                        [self.boxArtCache setObject:cacheImage forKey:app];
-                    });
-                }
-            });
-        }
+                    }
+                    [self.boxArtCache setObject:cacheImage forKey:app.id];
+                });
+            }
+        });
     }
 }
 
@@ -685,7 +689,7 @@ const CGFloat scaleBase = 1.125;
             AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
             if (item != nil) {
                 
-                NSImage* fastCacheImage = [self.boxArtCache objectForKey:app];
+                NSImage* fastCacheImage = [self.boxArtCache objectForKey:app.id];
                 if (fastCacheImage != nil) {
                     
                     [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
@@ -694,7 +698,9 @@ const CGFloat scaleBase = 1.125;
                         newImageView.layer.masksToBounds = YES;
                         newImageView.layer.cornerRadius = 10;
                         return newImageView;
-                    } duration:0.3 image:fastCacheImage];
+                    } duration:0.3 image:fastCacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
+                        item.appCoverArt = newImageView;
+                    }];
                 }
             }
         }
@@ -718,8 +724,8 @@ const CGFloat scaleBase = 1.125;
     size_t width = CGImageGetWidth(cgImage);
     size_t height = CGImageGetHeight(cgImage);
     
-    CGFloat targetWidth = 300;
-    CGFloat targetHeight = 400;
+    CGFloat targetWidth = 628;
+    CGFloat targetHeight = 888;
     CGFloat drawAspect = (CGFloat)width / (CGFloat)height;
     
     CGFloat drawHeight = targetWidth / drawAspect;
@@ -754,7 +760,7 @@ const CGFloat scaleBase = 1.125;
         OSImage *image = [AppsViewController loadBoxArtForCaching:app];
         if (image != nil) {
             // Add the image to our cache if it was present
-            [self.boxArtCache setObject:image forKey:app];
+            [self.boxArtCache setObject:image forKey:app.id];
             
             [self updateCellWithImageForApp:app];
         }

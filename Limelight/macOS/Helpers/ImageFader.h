@@ -12,7 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface ImageFader : NSObject
 
-+ (void)transitionImageViewWithOldImageView:(NSImageView *)oldImageView newImageViewBlock:(NSImageView *(^)(void))newImageViewBlock duration:(NSTimeInterval)duration image:(NSImage *)image;
++ (void)transitionImageViewWithOldImageView:(NSImageView *)oldImageView newImageViewBlock:(NSImageView *(^)(void))newImageViewBlock duration:(NSTimeInterval)duration image:(NSImage *)image completionBlock:(void (^)(NSImageView *newImageView))completion;
 
 @end
 

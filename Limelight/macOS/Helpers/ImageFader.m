@@ -10,7 +10,7 @@
 
 @implementation ImageFader
 
-+ (void)transitionImageViewWithOldImageView:(NSImageView *)oldImageView newImageViewBlock:(NSImageView *(^)(void))newImageViewBlock duration:(NSTimeInterval)duration image:(NSImage *)image {
++ (void)transitionImageViewWithOldImageView:(NSImageView *)oldImageView newImageViewBlock:(NSImageView *(^)(void))newImageViewBlock duration:(NSTimeInterval)duration image:(NSImage *)image completionBlock:(void (^)(NSImageView *newImageView))completion {
     NSImageView *newImageView = newImageViewBlock();
     
     NSView *containerView = oldImageView.superview;
@@ -36,6 +36,7 @@
         [oldImageView animator].alphaValue = 0;
     } completionHandler:^{
         [oldImageView removeFromSuperview];
+        completion(newImageView);
     }];
 }
 

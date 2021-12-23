@@ -149,8 +149,8 @@
     [self animateSelectedAndHoveredState];
 }
 
-- (void)viewDidLayout {
-    [super viewDidLayout];
+- (void)viewDidAppear {
+    [super viewDidAppear];
     self.appCoverArt.superview.layer.shadowPath = CGPathCreateWithRect(self.appCoverArt.bounds, nil);
 }
 
