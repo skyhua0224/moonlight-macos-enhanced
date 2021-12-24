@@ -151,7 +151,13 @@
 
 - (void)viewDidAppear {
     [super viewDidAppear];
-    self.appCoverArt.superview.layer.shadowPath = CGPathCreateWithRect(self.appCoverArt.bounds, nil);
+    [self updateShadowPath];
+}
+
+- (void)updateShadowPath {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.appCoverArt.superview.layer.shadowPath = CGPathCreateWithRect(self.appCoverArt.bounds, nil);
+    });
 }
 
 - (void)setSelected:(BOOL)selected {

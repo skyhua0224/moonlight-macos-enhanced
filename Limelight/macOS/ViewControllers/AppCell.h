@@ -24,5 +24,6 @@
 - (void)exitHoveredState;
 
 - (void)updateSelectedState:(BOOL)selected;
+- (void)updateShadowPath;
 
 @end

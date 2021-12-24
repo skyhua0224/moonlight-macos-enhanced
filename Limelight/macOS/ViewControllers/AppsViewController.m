@@ -187,6 +187,10 @@ const CGFloat scaleBase = 1.125;
     [flowLayout invalidateLayout];
     
     [[NSUserDefaults standardUserDefaults] setFloat:self.itemScale forKey:@"itemScale"];
+    
+    for (AppCell *item in self.collectionView.visibleItems) {
+        [item updateShadowPath];
+    }
 }
 
 - (IBAction)increaseItemSize:(id)sender {
