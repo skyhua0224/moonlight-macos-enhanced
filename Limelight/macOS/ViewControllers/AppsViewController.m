@@ -531,7 +531,7 @@ const CGFloat scaleBase = 1.125;
             if (httpResponse.statusCode == 200) {
                 NSArray<NSDictionary<NSString *, id> *> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                 responseObject = [F filterArray:responseObject withBlock:^BOOL(id obj) {
-                    return [obj[@"cmsId"] intValue] != 0 && [obj[@"isCreativeApplication"] boolValue] == NO;
+                    return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"isCreativeApplication"] boolValue] == NO;
                 }];
                 
                 NSMutableArray<TemporaryApp *> *apps = [NSMutableArray array];
@@ -556,7 +556,27 @@ const CGFloat scaleBase = 1.125;
         [self fetchPrivateAppsForHostWithHostIP:host.activeAddress WithCompletionBlock:^(NSArray<TemporaryApp *> *apps) {
             NSArray<TemporaryApp *> *oldItems = [self fetchApps];
 
-            NSSet *appSet = [NSSet setWithArray:apps];
+            NSMutableArray *gfeAppList;
+            
+            AppListResponse* appListResp = [ConnectionHelper getAppListForHostWithHostIP:host.activeAddress serverCert:host.serverCert uniqueID:[IdManager getUniqueId]];
+            if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
+                Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Fetching App List Failed" message:@"The connection to the PC was interrupted." window:self.view.window completionHandler:^(NSModalResponse returnCode) {
+                        host.state = StateOffline;
+                        [self transitionToHostsVC];
+                    }];
+                });
+            } else {
+                gfeAppList = [NSMutableArray arrayWithArray:[[appListResp getAppList] allObjects]];
+                gfeAppList = (NSMutableArray *)[F filterArray:gfeAppList withBlock:^BOOL(TemporaryApp *obj) {
+                    return [obj.name isEqualToString:@"BigBox"] || [obj.name isEqualToString:@"Desktop"] || [obj.name isEqualToString:@"Steam"];
+                }];
+            }
+            
+            NSArray<TemporaryApp *> *mergedApps = [gfeAppList arrayByAddingObjectsFromArray:apps];
+            
+            NSSet *appSet = [NSSet setWithArray:mergedApps];
             [self updateApplist:appSet forHost:host];
             
             [self.privateAppManager stopRetrieving];
@@ -730,17 +750,23 @@ const CGFloat scaleBase = 1.125;
     
     CGFloat targetWidth = 628;
     CGFloat targetHeight = 888;
+    CGFloat targetAspect = targetWidth / targetHeight;
     CGFloat drawAspect = (CGFloat)width / (CGFloat)height;
     
-    CGFloat drawHeight = targetWidth / drawAspect;
-    CGFloat yOffset = (targetHeight - drawHeight) / 2.0;
-
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
     CGContextRef imageContext =  CGBitmapContextCreate(NULL, targetWidth, targetHeight, 8, targetWidth * 4, colorSpace,
                                                        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
     CGColorSpaceRelease(colorSpace);
 
-    CGContextDrawImage(imageContext, CGRectMake(0, yOffset, targetWidth, drawHeight), cgImage);
+    if (targetAspect >= drawAspect) {
+        CGFloat drawHeight = targetWidth / drawAspect;
+        CGFloat yOffset = (targetHeight - drawHeight) / 2.0;
+        CGContextDrawImage(imageContext, CGRectMake(0, yOffset, targetWidth, drawHeight), cgImage);
+    } else {
+        CGFloat drawWidth = targetHeight * drawAspect;
+        CGFloat xOffset = (targetWidth - drawWidth) / 2.0;
+        CGContextDrawImage(imageContext, CGRectMake(xOffset, 0, drawWidth, targetHeight), cgImage);
+    }
     
     CGImageRef outputImage = CGBitmapContextCreateImage(imageContext);
 
