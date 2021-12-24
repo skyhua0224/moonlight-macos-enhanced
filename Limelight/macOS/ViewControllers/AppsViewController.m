@@ -36,6 +36,7 @@
 
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, PrivateAppAssetCallback, NSSearchFieldDelegate>
 @property (weak) IBOutlet NSCollectionView *collectionView;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *cmsIdToId;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
 @property (nonatomic, strong) TemporaryApp *runningApp;
 
@@ -66,6 +67,7 @@ const CGFloat scaleBase = 1.125;
     [self.collectionView registerNib:[[NSNib alloc] initWithNibNamed:@"AppCell" bundle:nil] forItemWithIdentifier:@"AppCell"];
 
     self.apps = @[];
+    self.cmsIdToId = [NSMutableDictionary dictionary];
 
     self.itemScale = [[NSUserDefaults standardUserDefaults] floatForKey:@"itemScale"];
     if (self.itemScale == 0) {
@@ -147,10 +149,40 @@ const CGFloat scaleBase = 1.125;
     }];
 }
 
+- (void)requestPrivateAppId:(NSString *)appId toBeLaunchedForHostWithHostIP:(NSString *)hostIP {
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:49999/Applications/v.1.0/%@/launch", hostIP, appId]];
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
+    request.HTTPMethod = @"POST";
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (error == nil) {
+            if (httpResponse.statusCode == 200) {
+                int x = 1;
+            }
+        }
+    }];
+    [task resume];
+}
+
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
-    streamVC.app = self.runningApp;
+    TemporaryApp *appToStream;
+    if ([self isSelectGFEApp:self.runningApp]) {
+        appToStream = self.runningApp;
+    } else {
+        for (TemporaryApp *app in self.apps) {
+            if ([app.name isEqualToString:@"Desktop"]) {
+                appToStream = app;
+            }
+        }
+    }
+    streamVC.app = appToStream;
+    streamVC.appName = self.runningApp.name;
     streamVC.delegate = self;
+    
+    if (![self isSelectGFEApp:self.runningApp]) {
+        [self requestPrivateAppId:self.cmsIdToId[self.runningApp.id] toBeLaunchedForHostWithHostIP:self.host.activeAddress];
+    }
 }
 
 
@@ -409,10 +441,10 @@ const CGFloat scaleBase = 1.125;
     NSOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
         DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:weakSelf.host uniqueId:[IdManager getUniqueId]];
         [worker discoverHost];
-//        dispatch_async(dispatch_get_main_queue(), ^{
-//            TemporaryApp *runningApp = [weakSelf findRunningApp:weakSelf.host];
-//            [weakSelf setRunningApp:runningApp];
-//        });
+        dispatch_async(dispatch_get_main_queue(), ^{
+            TemporaryApp *runningApp = [weakSelf findRunningApp:weakSelf.host];
+            [weakSelf setRunningApp:runningApp];
+        });
     }];
     NSOperationQueue *queue = [[NSOperationQueue alloc] init];
     [queue addOperation:operation];
@@ -538,6 +570,7 @@ const CGFloat scaleBase = 1.125;
                 [F eachInArrayWithIndex:responseObject withBlock:^(id obj, NSInteger idx) {
                     TemporaryApp *app = [[TemporaryApp alloc] init];
                     app.id = [NSString stringWithFormat:@"%@", obj[@"cmsId"]];
+                    [self.cmsIdToId setObject:obj[@"id"] forKey:app.id];
                     app.name = obj[@"displayName"];
                     app.installPath = obj[@"installDirectory"];
                     app.host = self.host;
@@ -570,7 +603,7 @@ const CGFloat scaleBase = 1.125;
             } else {
                 gfeAppList = [NSMutableArray arrayWithArray:[[appListResp getAppList] allObjects]];
                 gfeAppList = (NSMutableArray *)[F filterArray:gfeAppList withBlock:^BOOL(TemporaryApp *obj) {
-                    return [obj.name isEqualToString:@"BigBox"] || [obj.name isEqualToString:@"Desktop"] || [obj.name isEqualToString:@"Steam"];
+                    return [self isSelectGFEApp:obj];
                 }];
             }
             
@@ -587,6 +620,10 @@ const CGFloat scaleBase = 1.125;
             });
         }];
     });
+}
+
+- (BOOL)isSelectGFEApp:(TemporaryApp *)app {
+    return [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"] || [app.name isEqualToString:@"Steam"];
 }
 
 

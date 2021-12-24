@@ -124,7 +124,7 @@
     [super viewDidAppear];
     
     self.streamView.keyboardNotifiable = self;
-    self.streamView.appName = self.app.name;
+    self.streamView.appName = self.appName;
     self.streamView.statusText = @"Starting";
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
