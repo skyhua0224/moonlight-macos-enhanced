@@ -10,6 +10,8 @@
 #import "TemporaryHost.h"
 #import "HostsViewController.h"
 
+#define CUSTOM_PRIVATE_GFE_PORT 49999
+
 @interface AppsViewController : NSViewController
 @property (nonatomic, strong) TemporaryHost *host;
 @property (nonatomic, strong) HostsViewController *hostsVC;

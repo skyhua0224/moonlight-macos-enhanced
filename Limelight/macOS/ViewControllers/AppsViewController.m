@@ -43,6 +43,8 @@
 @property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
 
+@property (nonatomic, strong) NSString *privateAppId;
+
 @property (nonatomic, strong) PrivateAppAssetManager *privateAppManager;
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSCache *boxArtCache;
@@ -149,15 +151,15 @@ const CGFloat scaleBase = 1.125;
     }];
 }
 
-- (void)requestPrivateAppId:(NSString *)appId toBeLaunchedForHostWithHostIP:(NSString *)hostIP {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:49999/Applications/v.1.0/%@/launch", hostIP, appId]];
+- (void)requestLaunchOfPrivateApp:(NSString *)appId {
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/launch", self.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
     NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
     request.HTTPMethod = @"POST";
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         if (error == nil) {
             if (httpResponse.statusCode == 200) {
-                int x = 1;
+                return;
             }
         }
     }];
@@ -178,10 +180,13 @@ const CGFloat scaleBase = 1.125;
     }
     streamVC.app = appToStream;
     streamVC.appName = self.runningApp.name;
+    streamVC.privateAppId = self.cmsIdToId[self.runningApp.id];
     streamVC.delegate = self;
     
+    self.privateAppId = streamVC.privateAppId;
+    
     if (![self isSelectGFEApp:self.runningApp]) {
-        [self requestPrivateAppId:self.cmsIdToId[self.runningApp.id] toBeLaunchedForHostWithHostIP:self.host.activeAddress];
+        [self requestLaunchOfPrivateApp:streamVC.privateAppId];
     }
 }
 
@@ -353,6 +358,8 @@ const CGFloat scaleBase = 1.125;
                 }
             } else {
                 self.runningApp = nil;
+                
+                [self resetSettingsForPrivateApp:self.privateAppId];
                 
 #ifdef USE_RESOLUTION_SYNC
                 [ResolutionSyncRequester teardownControllerFor:self.host.activeAddress];
@@ -553,10 +560,10 @@ const CGFloat scaleBase = 1.125;
 }
 
 
-#pragma mark - Private GFE App Discovery
+#pragma mark - Private GFE API
 
 - (void)fetchPrivateAppsForHostWithHostIP:(NSString *)hostIP WithCompletionBlock:(void (^)(NSArray<TemporaryApp *> *))completion {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:49999/Applications/v.1.0/", hostIP]];
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/", hostIP, @(CUSTOM_PRIVATE_GFE_PORT)]];
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         if (error == nil) {
@@ -620,6 +627,25 @@ const CGFloat scaleBase = 1.125;
             });
         }];
     });
+}
+
+- (void)resetSettingsForPrivateApp:(NSString *)appId {
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/targetACPosition", self.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
+    
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
+    request.HTTPMethod = @"POST";
+    NSDictionary<NSString *, id> *body = @{};
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (error == nil) {
+            if (httpResponse.statusCode == 202) {
+                return;
+            }
+        }
+    }];
+    [task resume];
 }
 
 - (BOOL)isSelectGFEApp:(TemporaryApp *)app {

@@ -8,6 +8,7 @@
 
 #import "StreamViewController.h"
 #import "StreamViewMac.h"
+#import "AppsViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "AlertPresenter.h"
 
@@ -480,6 +481,8 @@
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:self.streamMan];
+    
+    [self requestOptimalResolutionForPrivateApp:self.privateAppId];
 }
 
 
@@ -509,6 +512,52 @@ struct Resolution {
     }
 
     return resolution;
+}
+
+
+#pragma mark - Private GFE API
+
+- (void)getRecommendedSettingsIndexForApp:(NSString *)appId withCompletionBlock:(void (^)(int))completion {
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/state", self.app.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (error == nil) {
+            if (httpResponse.statusCode == 200) {
+                NSDictionary<NSString *, id> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                int index = ((NSNumber *)responseObject[@"REGULAR"][@"recommendationAC"][@"recommendedIndex"]).intValue;
+                
+                completion(index);
+            }
+        }
+    }];
+    [task resume];
+}
+
+- (void)requestOptimalResolutionForPrivateApp:(NSString *)appId {
+    [self getRecommendedSettingsIndexForApp:appId withCompletionBlock:^(int index) {
+        NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/targetACPosition", self.app.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
+
+        NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
+        request.HTTPMethod = @"POST";
+        NSDictionary<NSString *, id> *body = @{
+            @"tweak": @{
+                @"resolution": [NSString stringWithFormat:@"%@x%@", @([self getResolution].width), @([self getResolution].height)],
+                @"displayMode": @"Full-screen"
+            },
+            @"settingsIndex": @(index),
+        };
+        request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+
+        NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+            if (error == nil) {
+                if (httpResponse.statusCode == 202) {
+                    return;
+                }
+            }
+        }];
+        [task resume];
+    }];
 }
 
 
