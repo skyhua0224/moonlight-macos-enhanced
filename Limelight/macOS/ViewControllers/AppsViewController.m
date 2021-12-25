@@ -563,7 +563,7 @@ const CGFloat scaleBase = 1.125;
             if (httpResponse.statusCode == 200) {
                 NSArray<NSDictionary<NSString *, id> *> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                 responseObject = [F filterArray:responseObject withBlock:^BOOL(id obj) {
-                    return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"isCreativeApplication"] boolValue] == NO;
+                    return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
                 }];
                 
                 NSMutableArray<TemporaryApp *> *apps = [NSMutableArray array];
@@ -623,7 +623,7 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (BOOL)isSelectGFEApp:(TemporaryApp *)app {
-    return [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"] || [app.name isEqualToString:@"Steam"];
+    return [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"];
 }
 
 
