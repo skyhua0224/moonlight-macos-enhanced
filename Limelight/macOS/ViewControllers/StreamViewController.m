@@ -482,7 +482,11 @@
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:self.streamMan];
     
-    [self requestOptimalResolutionForPrivateApp:self.privateAppId];
+    if (![AppsViewController isSelectGFEApp:self.privateApp]) {
+        [self requestOptimalResolutionForPrivateApp:self.privateAppId withCompletionBlock:^{
+            [self requestLaunchOfPrivateApp:self.privateAppId];
+        }];
+    }
 }
 
 
@@ -517,24 +521,32 @@ struct Resolution {
 
 #pragma mark - Private GFE API
 
-- (void)getRecommendedSettingsIndexForApp:(NSString *)appId withCompletionBlock:(void (^)(int))completion {
+- (void)getRecommendedSettingsIndexForApp:(NSString *)appId withCompletionBlock:(void (^)(int, BOOL))completion {
     NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/state", self.app.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSLog(@"PrivateGFE getRecommendedSettingsIndexForApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
         if (error == nil) {
-            if (httpResponse.statusCode == 200) {
+            if (httpResponse.statusCode / 100 == 2) {
                 NSDictionary<NSString *, id> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                 int index = ((NSNumber *)responseObject[@"REGULAR"][@"recommendationAC"][@"recommendedIndex"]).intValue;
                 
-                completion(index);
+                completion(index, YES);
+                return;
             }
         }
+        completion(0, NO);
     }];
     [task resume];
 }
 
-- (void)requestOptimalResolutionForPrivateApp:(NSString *)appId {
-    [self getRecommendedSettingsIndexForApp:appId withCompletionBlock:^(int index) {
+- (void)requestOptimalResolutionForPrivateApp:(NSString *)appId withCompletionBlock:(void (^)(void))completion {
+    [self getRecommendedSettingsIndexForApp:appId withCompletionBlock:^(int index, BOOL success) {
+        if (!success) {
+            completion();
+            return;
+        }
+        
         NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/targetACPosition", self.app.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
 
         NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
@@ -550,14 +562,22 @@ struct Resolution {
 
         NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-            if (error == nil) {
-                if (httpResponse.statusCode == 202) {
-                    return;
-                }
-            }
+            NSLog(@"PrivateGFE requestOptimalResolutionForPrivateApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
+            completion();
         }];
         [task resume];
     }];
+}
+
+- (void)requestLaunchOfPrivateApp:(NSString *)appId {
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/launch", self.app.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
+    request.HTTPMethod = @"POST";
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSLog(@"PrivateGFE requestLaunchOfPrivateApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
+    }];
+    [task resume];
 }
 
 

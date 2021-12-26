@@ -7,6 +7,7 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import "TemporaryApp.h"
 #import "TemporaryHost.h"
 #import "HostsViewController.h"
 
@@ -15,4 +16,7 @@
 @interface AppsViewController : NSViewController
 @property (nonatomic, strong) TemporaryHost *host;
 @property (nonatomic, strong) HostsViewController *hostsVC;
+
++ (BOOL)isSelectGFEApp:(TemporaryApp *)app;
+
 @end

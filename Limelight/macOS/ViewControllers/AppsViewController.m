@@ -7,7 +7,6 @@
 //
 
 #import "AppsViewController.h"
-#import "TemporaryApp.h"
 #import "AppsViewControllerDelegate.h"
 #import "AppCell.h"
 #import "AlertPresenter.h"
@@ -43,6 +42,7 @@
 @property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
 
+@property (nonatomic, strong) TemporaryApp *privateApp;
 @property (nonatomic, strong) NSString *privateAppId;
 
 @property (nonatomic, strong) PrivateAppAssetManager *privateAppManager;
@@ -151,25 +151,10 @@ const CGFloat scaleBase = 1.125;
     }];
 }
 
-- (void)requestLaunchOfPrivateApp:(NSString *)appId {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/launch", self.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
-    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
-    request.HTTPMethod = @"POST";
-    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        if (error == nil) {
-            if (httpResponse.statusCode == 200) {
-                return;
-            }
-        }
-    }];
-    [task resume];
-}
-
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
     TemporaryApp *appToStream;
-    if ([self isSelectGFEApp:self.runningApp]) {
+    if ([AppsViewController isSelectGFEApp:self.runningApp]) {
         appToStream = self.runningApp;
     } else {
         for (TemporaryApp *app in self.apps) {
@@ -180,14 +165,12 @@ const CGFloat scaleBase = 1.125;
     }
     streamVC.app = appToStream;
     streamVC.appName = self.runningApp.name;
+    streamVC.privateApp = self.runningApp;
     streamVC.privateAppId = self.cmsIdToId[self.runningApp.id];
     streamVC.delegate = self;
     
+    self.privateApp = self.runningApp;
     self.privateAppId = streamVC.privateAppId;
-    
-    if (![self isSelectGFEApp:self.runningApp]) {
-        [self requestLaunchOfPrivateApp:streamVC.privateAppId];
-    }
 }
 
 
@@ -359,7 +342,9 @@ const CGFloat scaleBase = 1.125;
             } else {
                 self.runningApp = nil;
                 
-                [self resetSettingsForPrivateApp:self.privateAppId];
+                if (![AppsViewController isSelectGFEApp:self.privateApp]) {
+                    [self resetSettingsForPrivateApp:self.privateAppId];
+                }
                 
 #ifdef USE_RESOLUTION_SYNC
                 [ResolutionSyncRequester teardownControllerFor:self.host.activeAddress];
@@ -566,8 +551,9 @@ const CGFloat scaleBase = 1.125;
     NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/", hostIP, @(CUSTOM_PRIVATE_GFE_PORT)]];
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSLog(@"PrivateGFE fetchPrivateAppsForHost error: %@, statusCode: %@", error, @(httpResponse.statusCode));
         if (error == nil) {
-            if (httpResponse.statusCode == 200) {
+            if (httpResponse.statusCode / 100 == 2) {
                 NSArray<NSDictionary<NSString *, id> *> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                 responseObject = [F filterArray:responseObject withBlock:^BOOL(id obj) {
                     return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
@@ -610,7 +596,7 @@ const CGFloat scaleBase = 1.125;
             } else {
                 gfeAppList = [NSMutableArray arrayWithArray:[[appListResp getAppList] allObjects]];
                 gfeAppList = (NSMutableArray *)[F filterArray:gfeAppList withBlock:^BOOL(TemporaryApp *obj) {
-                    return [self isSelectGFEApp:obj];
+                    return [AppsViewController isSelectGFEApp:obj];
                 }];
             }
             
@@ -639,16 +625,12 @@ const CGFloat scaleBase = 1.125;
     
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        if (error == nil) {
-            if (httpResponse.statusCode == 202) {
-                return;
-            }
-        }
+        NSLog(@"PrivateGFE resetSettingsForPrivateApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
     }];
     [task resume];
 }
 
-- (BOOL)isSelectGFEApp:(TemporaryApp *)app {
++ (BOOL)isSelectGFEApp:(TemporaryApp *)app {
     return [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"];
 }
 
