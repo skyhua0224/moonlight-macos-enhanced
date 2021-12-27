@@ -15,6 +15,7 @@
 #import "Moonlight-Swift.h"
 
 @interface AppCell () <NSMenuDelegate>
+@property (nonatomic) BOOL togglingHideStatus;
 @property (nonatomic) BOOL hovered;
 @property (nonatomic) BOOL previousHovered;
 @property (nonatomic) BOOL previousSelected;
@@ -113,6 +114,9 @@
 }
 
 - (CGFloat)appCoverArtAlphaWithHovered:(BOOL)hovered {
+    if (self.app.hidden) {
+        return 0.33;
+    }
     if (self.selected) {
         return 1;
     } else {
@@ -121,6 +125,22 @@
         } else {
             return [NSApplication moonlight_isDarkAppearance] ? 0.85 : 0.925;
         }
+    }
+}
+
+- (void)updateAlphaStateWithShouldAnimate:(BOOL)animate {
+    self.togglingHideStatus = YES;
+    if (animate) {
+        [NSAnimationContext beginGrouping];
+        [NSAnimationContext currentContext].duration = 0.4;
+        [NSAnimationContext currentContext].completionHandler = ^{
+            self.togglingHideStatus = NO;
+        };
+        self.appCoverArt.superview.animator.alphaValue = [self appCoverArtAlphaWithHovered:NO];
+        [NSAnimationContext endGrouping];
+    } else {
+        self.togglingHideStatus = NO;
+        self.appCoverArt.superview.alphaValue = [self appCoverArtAlphaWithHovered:NO];
     }
 }
 
@@ -151,6 +171,8 @@
 
 - (void)viewDidAppear {
     [super viewDidAppear];
+    
+    [self updateAlphaStateWithShouldAnimate:NO];
     [self updateShadowPath];
 }
 
@@ -174,7 +196,9 @@
 }
 
 - (void)mouseExited:(NSEvent *)event {
-    [self.delegate didHover:NO forApp:self.app];
+    if (!self.togglingHideStatus) {
+        [self.delegate didHover:NO forApp:self.app];
+    }
 }
 
 - (void)mouseDown:(NSEvent *)theEvent {

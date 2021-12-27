@@ -23,6 +23,7 @@
 - (void)enterHoveredState;
 - (void)exitHoveredState;
 
+- (void)updateAlphaStateWithShouldAnimate:(BOOL)animate;
 - (void)updateSelectedState:(BOOL)selected;
 - (void)updateShadowPath;
 

@@ -155,6 +155,19 @@
     }
 }
 
+- (IBAction)showHiddenAppsMenuItemClicked:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host != nil) {
+        if (sender.state == NSControlStateValueOn) {
+            sender.state = NSControlStateValueOff;
+            host.showHiddenApps = NO;
+        } else {
+            sender.state = NSControlStateValueOn;
+            host.showHiddenApps = YES;
+        }
+    }
+}
+
 - (IBAction)open:(NSMenuItem *)sender {
     TemporaryHost *host = [self getHostFromMenuItem:sender];
     if (host == nil) {
@@ -270,12 +283,14 @@
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forHost:(TemporaryHost *)host {
-    NSMenuItem *wakeMenuItem = [self getMenuItemForIdentifier:@"wakeMenuItem" inMenu:menu];
+    NSMenuItem *wakeMenuItem = [HostsViewController getMenuItemForIdentifier:@"wakeMenuItem" inMenu:menu];
+    NSMenuItem *showHiddenAppsMenuItem = [HostsViewController getMenuItemForIdentifier:@"showHiddenAppsMenuItem" inMenu:menu];
     if (wakeMenuItem != nil) {
         if (host.state == StateOnline) {
             wakeMenuItem.enabled = NO;
         }
     }
+    showHiddenAppsMenuItem.state = host.showHiddenApps ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
 
@@ -292,7 +307,7 @@
     return hostCell.host;
 }
 
-- (NSMenuItem *)getMenuItemForIdentifier:(NSString *)id inMenu:(NSMenu *)menu {
++ (NSMenuItem *)getMenuItemForIdentifier:(NSString *)id inMenu:(NSMenu *)menu {
     for (NSMenuItem *item in menu.itemArray) {
         if ([item.identifier isEqualToString:id]) {
             return item;

@@ -16,6 +16,8 @@
 @property (atomic, nullable, retain) NSString * activeAddress;
 @property (atomic, nullable, retain) NSString * currentGame;
 
+@property (nonatomic) BOOL showHiddenApps;
+
 @property (atomic, nullable, retain) NSData *serverCert;
 @property (atomic, nullable, retain) NSString *address;
 @property (atomic, nullable, retain) NSString *externalAddress;

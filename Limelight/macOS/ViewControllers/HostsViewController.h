@@ -9,5 +9,5 @@
 #import <Cocoa/Cocoa.h>
 
 @interface HostsViewController : NSViewController
-
++ (NSMenuItem *)getMenuItemForIdentifier:(NSString *)id inMenu:(NSMenu *)menu;
 @end

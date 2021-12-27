@@ -9,6 +9,7 @@
 #import "AppsViewController.h"
 #import "AppsViewControllerDelegate.h"
 #import "AppCell.h"
+#import "AppCellView.h"
 #import "AlertPresenter.h"
 #import "StreamViewController.h"
 #import "NSWindow+Moonlight.h"
@@ -189,6 +190,14 @@ const CGFloat scaleBase = 1.125;
     [self transitionToHostsVC];
 }
 
+- (IBAction)hideAppMenuItemClicked:(NSMenuItem *)item {
+    AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
+    AppCell *appCell = (AppCell *)(appCellView.delegate);
+    
+    appCell.app.hidden = !appCell.app.hidden;
+    [appCell updateAlphaStateWithShouldAnimate:YES];
+}
+
 - (IBAction)quitAppMenuItemClicked:(id)sender {
     [self quitApp:self.runningApp completion:nil];
 }
@@ -365,11 +374,19 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
+    NSMenuItem *quitAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"quitAppMenuItem" inMenu:menu];
+    NSMenuItem *hideAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"hideAppMenuItem" inMenu:menu];
+    if (app.hidden) {
+        hideAppMenuItem.title = @"Unhide App";
+    } else {
+        hideAppMenuItem.title = @"Hide App";
+    }
     if (self.runningApp == nil) {
-        [menu cancelTrackingWithoutAnimation];
+        quitAppMenuItem.hidden = YES;
         return;
     }
     if (app != self.runningApp) {
+        quitAppMenuItem.hidden = YES;
         [menu cancelTrackingWithoutAnimation];
     }
 }
@@ -659,7 +676,13 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)displayApps {
-    self.apps = [self fetchApps];
+    self.apps = [F filterArray:[self fetchApps] withBlock:^BOOL(TemporaryApp *obj) {
+        if (self.host.showHiddenApps) {
+            return YES;
+        } else {
+            return obj.hidden == NO;
+        }
+    }];
 }
 
 - (void)discoverAppsForHost:(TemporaryHost *)host {

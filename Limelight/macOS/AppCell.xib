@@ -17,13 +17,13 @@
                     <rect key="frame" x="0.0" y="0.0" width="205" height="144"/>
                     <subviews>
                         <customView verticalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="Dvl-ny-Fge" userLabel="App Cover Art Container">
-                            <rect key="frame" x="64" y="28" width="77" height="108"/>
+                            <rect key="frame" x="62" y="28" width="81" height="108"/>
                             <subviews>
                                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="b3R-NC-s5G" userLabel="Placeholder View" customClass="BackgroundColorView">
-                                    <rect key="frame" x="0.0" y="0.0" width="77" height="108"/>
+                                    <rect key="frame" x="0.0" y="0.0" width="81" height="108"/>
                                 </customView>
                                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="KWV-yZ-F3P" userLabel="App Cover Art">
-                                    <rect key="frame" x="0.0" y="0.0" width="77" height="108"/>
+                                    <rect key="frame" x="0.0" y="0.0" width="81" height="108"/>
                                     <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" id="o9Q-i8-aPK"/>
                                 </imageView>
                             </subviews>
@@ -40,7 +40,7 @@
                             </constraints>
                         </customView>
                         <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="TBj-LS-qdd" userLabel="Running Icon">
-                            <rect key="frame" x="123" y="118" width="24" height="24"/>
+                            <rect key="frame" x="125" y="118" width="24" height="24"/>
                             <constraints>
                                 <constraint firstAttribute="width" secondItem="TBj-LS-qdd" secondAttribute="height" multiplier="1:1" id="DkP-9w-jfL"/>
                                 <constraint firstAttribute="width" constant="24" id="JLY-KU-77T"/>
@@ -105,7 +105,13 @@
         </collectionViewItem>
         <menu autoenablesItems="NO" id="eXa-bo-m2A">
             <items>
-                <menuItem title="Quit App" id="rCU-F4-fg2">
+                <menuItem title="Hide App" identifier="hideAppMenuItem" id="Z5m-xc-LSb">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="hideAppMenuItemClicked:" target="-1" id="YSN-VI-8ce"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Quit App" identifier="quitAppMenuItem" id="rCU-F4-fg2">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="quitAppMenuItemClicked:" target="-1" id="Y01-kY-3Bg"/>
