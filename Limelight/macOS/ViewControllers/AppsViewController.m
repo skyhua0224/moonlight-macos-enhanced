@@ -673,17 +673,20 @@ const CGFloat scaleBase = 1.125;
         predicate = [NSPredicate predicateWithValue:YES];
     }
     NSArray<TemporaryApp *> *filteredApps = [self.host.appList.allObjects filteredArrayUsingPredicate:predicate];
-    return [filteredApps sortedArrayUsingSelector:@selector(compareName:)];
-}
-
-- (void)displayApps {
-    self.apps = [F filterArray:[self fetchApps] withBlock:^BOOL(TemporaryApp *obj) {
+    
+    NSArray<TemporaryApp *> *hiddenAwareApps = [F filterArray:filteredApps withBlock:^BOOL(TemporaryApp *obj) {
         if (self.host.showHiddenApps) {
             return YES;
         } else {
             return obj.hidden == NO;
         }
     }];
+    
+    return [hiddenAwareApps sortedArrayUsingSelector:@selector(compareName:)];
+}
+
+- (void)displayApps {
+    self.apps = [self fetchApps];
 }
 
 - (void)discoverAppsForHost:(TemporaryHost *)host {
