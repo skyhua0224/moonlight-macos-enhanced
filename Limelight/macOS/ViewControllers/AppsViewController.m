@@ -17,6 +17,7 @@
 #import "NSApplication+Moonlight.h"
 #import "BackgroundColorView.h"
 #import "ImageFader.h"
+#import "OptimalSettingsConfigurer.h"
 
 #import "PrivateAppAssetManager.h"
 
@@ -191,6 +192,11 @@ const CGFloat scaleBase = 1.125;
 
 - (IBAction)backButtonClicked:(id)sender {
     [self transitionToHostsVC];
+}
+
+- (IBAction)configureOptimalSettingsItemClicked:(NSMenuItem *)item {
+    OptimalSettingsConfigurer *optimalSettingsConfigVC = [[OptimalSettingsConfigurer alloc] init];
+    [self presentViewControllerAsSheet:optimalSettingsConfigVC];
 }
 
 - (IBAction)hideAppMenuItemClicked:(NSMenuItem *)item {

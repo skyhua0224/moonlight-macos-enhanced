@@ -77,6 +77,8 @@
 		4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C8E7EC2236EF0040075DE78 /* Controller.m */; };
 		4C97FE5E24CD3C1A001F3064 /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946EA19F6AFB800339C8A /* libopus.a */; };
 		4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */; };
+		4CA454C7277ADD0600E99A96 /* OptimalSettingsConfigurer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */; };
+		4CA454C8277ADD0600E99A96 /* OptimalSettingsConfigurer.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */; };
 		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
 		4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CBBE13A24CFF7B700B4706E /* AboutView.xib */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
@@ -190,6 +192,9 @@
 		4C8E7EC3236EF0040075DE78 /* Controller.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Controller.h; sourceTree = "<group>"; };
 		4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KPCScaleToFillNSImageView.m; sourceTree = "<group>"; };
 		4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = KPCScaleToFillNSImageView.h; sourceTree = "<group>"; };
+		4CA454C4277ADD0600E99A96 /* OptimalSettingsConfigurer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OptimalSettingsConfigurer.h; sourceTree = "<group>"; };
+		4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = OptimalSettingsConfigurer.m; sourceTree = "<group>"; };
+		4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = OptimalSettingsConfigurer.xib; sourceTree = "<group>"; };
 		4CABABB021F6C8A3008576A4 /* CollectionView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CollectionView.h; sourceTree = "<group>"; };
 		4CABABB121F6C8A4008576A4 /* CollectionView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CollectionView.m; sourceTree = "<group>"; };
 		4CBBE13A24CFF7B700B4706E /* AboutView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutView.xib; sourceTree = "<group>"; };
@@ -452,6 +457,9 @@
 				4C38E80E1FEE1C81000425CD /* AppsViewController.m */,
 				4C38E8141FEF36A0000425CD /* AppCell.h */,
 				4C38E8151FEF36A0000425CD /* AppCell.m */,
+				4CA454C4277ADD0600E99A96 /* OptimalSettingsConfigurer.h */,
+				4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */,
+				4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */,
 				4C38E8241FF0B609000425CD /* StreamViewController.h */,
 				4C38E8251FF0B609000425CD /* StreamViewController.m */,
 				4C65704B23EBEB3D000D1601 /* GeneralPrefsPaneVC.h */,
@@ -985,6 +993,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */,
+				4CA454C8277ADD0600E99A96 /* OptimalSettingsConfigurer.xib in Resources */,
 				4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */,
 				4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */,
 				4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */,
@@ -1066,6 +1075,7 @@
 				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
 				4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */,
+				4CA454C7277ADD0600E99A96 /* OptimalSettingsConfigurer.m in Sources */,
 				4CE8870B2771DD4F004EB216 /* F.m in Sources */,
 				4C30BA201FF5F7D600848919 /* BackgroundColorView.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
