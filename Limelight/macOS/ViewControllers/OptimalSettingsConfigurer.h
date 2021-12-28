@@ -11,7 +11,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface OptimalSettingsConfigurer : NSViewController
-
+- (instancetype)initWithAppName:(NSString *)appName andPrivateId:(NSString *)appId;
 @end
 
 NS_ASSUME_NONNULL_END

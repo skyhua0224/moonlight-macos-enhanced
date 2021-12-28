@@ -195,7 +195,10 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (IBAction)configureOptimalSettingsItemClicked:(NSMenuItem *)item {
-    OptimalSettingsConfigurer *optimalSettingsConfigVC = [[OptimalSettingsConfigurer alloc] init];
+    AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
+    AppCell *appCell = (AppCell *)(appCellView.delegate);
+
+    OptimalSettingsConfigurer *optimalSettingsConfigVC = [[OptimalSettingsConfigurer alloc] initWithAppName:appCell.app.name andPrivateId:[self privateAppIdForAppName:appCell.app.name]];
     [self presentViewControllerAsSheet:optimalSettingsConfigVC];
 }
 

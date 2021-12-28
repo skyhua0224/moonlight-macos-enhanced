@@ -8,6 +8,11 @@
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="OptimalSettingsConfigurer">
             <connections>
+                <outlet property="displayModeSelector" destination="yzS-pa-Sxg" id="Y2h-j1-k3Q"/>
+                <outlet property="doneButton" destination="jCS-fh-O84" id="nLH-gs-mFc"/>
+                <outlet property="gameTitleLabel" destination="2QJ-Ba-LBh" id="BcI-fE-enE"/>
+                <outlet property="settingsGrid" destination="2Gg-QK-R0u" id="w75-Ib-JCp"/>
+                <outlet property="settingsIndexSlider" destination="8aT-Yi-NF0" id="Hqk-u2-2wU"/>
                 <outlet property="view" destination="Hz6-mo-xeY" id="0bl-1N-x8E"/>
             </connections>
         </customObject>
@@ -49,6 +54,9 @@
                             </items>
                         </menu>
                     </popUpButtonCell>
+                    <connections>
+                        <action selector="didChangeDisplayMode:" target="-2" id="q9K-AL-eaD"/>
+                    </connections>
                 </popUpButton>
                 <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="ioK-eU-7mZ">
                     <rect key="frame" x="21" y="134" width="83" height="16"/>
@@ -77,6 +85,9 @@
                 <slider verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="8aT-Yi-NF0" userLabel="Settings slider">
                     <rect key="frame" x="148" y="125" width="213" height="28"/>
                     <sliderCell key="cell" state="on" alignment="left" maxValue="100" doubleValue="50" tickMarkPosition="above" numberOfTickMarks="1" allowsTickMarkValuesOnly="YES" sliderType="linear" id="Gy7-sO-PHc"/>
+                    <connections>
+                        <action selector="didChangeIndexOfSettingsSlider:" target="-2" id="0F0-1F-OAk"/>
+                    </connections>
                 </slider>
                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="nqY-BC-8Sk" userLabel="Quality image">
                     <rect key="frame" x="375" y="130" width="16" height="22"/>
