@@ -11,6 +11,8 @@
 #import "BackgroundColorView.h"
 #import "KPCScaleToFillNSImageView.h"
 
+#define APP_CELL_CORNER_RADIUS (12)
+
 @interface AppCell : NSCollectionViewItem
 @property (weak) IBOutlet NSTextField *appName;
 @property (weak) IBOutlet BackgroundColorView *appNameContainer;
