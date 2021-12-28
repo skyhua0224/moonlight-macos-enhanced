@@ -34,7 +34,7 @@
                                 <constraint firstItem="KWV-yZ-F3P" firstAttribute="leading" secondItem="Dvl-ny-Fge" secondAttribute="leading" id="Rzf-K4-0WO"/>
                                 <constraint firstItem="KWV-yZ-F3P" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" id="S4o-3s-BOw"/>
                                 <constraint firstItem="b3R-NC-s5G" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" id="XvJ-cs-IMM"/>
-                                <constraint firstAttribute="width" secondItem="Dvl-ny-Fge" secondAttribute="height" multiplier="628:888" id="Ylp-Pm-UzC"/>
+                                <constraint firstAttribute="width" secondItem="Dvl-ny-Fge" secondAttribute="height" multiplier="6:9" id="Ylp-Pm-UzC"/>
                                 <constraint firstAttribute="trailing" secondItem="KWV-yZ-F3P" secondAttribute="trailing" id="eKq-NM-blt"/>
                                 <constraint firstAttribute="bottom" secondItem="KWV-yZ-F3P" secondAttribute="bottom" id="tiR-AM-WcG"/>
                             </constraints>

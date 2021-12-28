@@ -424,6 +424,8 @@
 - (void)closeWindowFromMainQueueWithMessage:(NSString *)message {
     [self.hidSupport releaseAllModifierKeys];
     
+    [AppsViewController resetSettingsForPrivateApp:self.privateAppId withHostIP:self.app.host.activeAddress];
+    
     dispatch_async(dispatch_get_main_queue(), ^{
         [self uncaptureMouse];
 
@@ -478,15 +480,17 @@
     }
     self.hidSupport = [[HIDSupport alloc] init];
     
-    self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
-    NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
-    [opQueue addOperation:self.streamMan];
-    
-    if (![AppsViewController isSelectGFEApp:self.privateApp]) {
-        [self requestOptimalResolutionForPrivateApp:self.privateAppId withCompletionBlock:^{
-            [self requestLaunchOfPrivateApp:self.privateAppId];
-        }];
-    }
+    [self requestOptimalResolutionForPrivateApp:self.privateAppId withCompletionBlock:^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
+            NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
+            [opQueue addOperation:self.streamMan];
+        });
+    }];
+
+//    if (![AppsViewController isSelectGFEApp:self.privateApp]) {
+//            [self requestLaunchOfPrivateApp:self.privateAppId];
+//    }
 }
 
 

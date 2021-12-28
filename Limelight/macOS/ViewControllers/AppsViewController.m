@@ -46,6 +46,8 @@
 @property (nonatomic, strong) TemporaryApp *privateApp;
 @property (nonatomic, strong) NSString *privateAppId;
 
+@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *appNameToId;
+
 @property (nonatomic, strong) PrivateAppAssetManager *privateAppManager;
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSCache *boxArtCache;
@@ -167,7 +169,8 @@ const CGFloat scaleBase = 1.125;
     streamVC.app = appToStream;
     streamVC.appName = self.runningApp.name;
     streamVC.privateApp = self.runningApp;
-    streamVC.privateAppId = self.cmsIdToId[self.runningApp.id];
+//    streamVC.privateAppId = self.cmsIdToId[self.runningApp.id];
+    streamVC.privateAppId = [self privateAppIdForAppName:self.runningApp.name];
     streamVC.delegate = self;
     
     self.privateApp = self.runningApp;
@@ -355,9 +358,9 @@ const CGFloat scaleBase = 1.125;
             } else {
                 self.runningApp = nil;
                 
-                if (![AppsViewController isSelectGFEApp:self.privateApp]) {
-                    [self resetSettingsForPrivateApp:self.privateAppId];
-                }
+//                if (![AppsViewController isSelectGFEApp:self.privateApp]) {
+                    [AppsViewController resetSettingsForPrivateApp:self.privateAppId withHostIP:self.host.activeAddress];
+//                }
                 
 #ifdef USE_RESOLUTION_SYNC
                 [ResolutionSyncRequester teardownControllerFor:self.host.activeAddress];
@@ -568,6 +571,68 @@ const CGFloat scaleBase = 1.125;
 
 #pragma mark - Private GFE API
 
+- (void)fetchPrivateAppsWithCompletionBlock:(void (^)(NSDictionary *))completion {
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/", self.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT)]];
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSLog(@"PrivateGFE fetchPrivateAppsForHost error: %@, statusCode: %@", error, @(httpResponse.statusCode));
+        if (error == nil) {
+            if (httpResponse.statusCode / 100 == 2) {
+                NSArray<NSDictionary<NSString *, id> *> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:responseObject withBlock:^BOOL(id obj) {
+                    return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
+                }];
+                
+                NSDictionary *mapping = (NSDictionary *)[F reduceArray:filteredPrivateApps withBlock:^NSMutableDictionary *(NSMutableDictionary *memo, NSDictionary *obj) {
+                    memo[obj[@"displayName"]] = obj[@"id"];
+                    return memo;
+                } andInitialMemo:[NSMutableDictionary dictionary]];
+                
+                completion(mapping);
+            }
+        }
+    }];
+    [task resume];
+}
+
+- (NSString *)removeNonASCIICharactersFrom:(NSString *)string {
+    NSCharacterSet *set = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyz0123456789"];
+    NSString *lowercase = [string lowercaseString];
+    
+    NSMutableString *output = [NSMutableString string];
+    
+    for (int i = 0; i < [lowercase length]; i++) {
+        unichar character = [lowercase characterAtIndex:i];
+        if ([set characterIsMember:character]) {
+            [output appendString:[NSString stringWithFormat:@"%c", character]];
+        }
+    }
+    
+    return output;
+}
+
+- (NSString *)removeSpecialWordsFrom:(NSString *)string {
+    NSArray<NSString *> *specialWords = @[@"Vulkan"];
+    NSString *result = string;
+    for (NSString *word in specialWords) {
+        result = [result stringByReplacingOccurrencesOfString:word withString:@""];
+    }
+    
+    return result;
+}
+
+- (NSString *)privateAppIdForAppName:(NSString *)appName {
+    NSString *simplifiedAppName = [self removeNonASCIICharactersFrom:[self removeSpecialWordsFrom:appName]];
+    for (NSString *privateName in self.appNameToId.allKeys) {
+        NSString *simplifiedPrivateAppName = [self removeNonASCIICharactersFrom:[self removeSpecialWordsFrom:privateName]];
+        if ([simplifiedAppName isEqualToString:simplifiedPrivateAppName]) {
+            return self.appNameToId[privateName];
+        }
+    }
+    
+    return nil;
+}
+
 - (void)fetchPrivateAppsForHostWithHostIP:(NSString *)hostIP WithCompletionBlock:(void (^)(NSArray<TemporaryApp *> *))completion {
     NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/", hostIP, @(CUSTOM_PRIVATE_GFE_PORT)]];
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
@@ -576,12 +641,12 @@ const CGFloat scaleBase = 1.125;
         if (error == nil) {
             if (httpResponse.statusCode / 100 == 2) {
                 NSArray<NSDictionary<NSString *, id> *> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-                responseObject = [F filterArray:responseObject withBlock:^BOOL(id obj) {
+                NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:responseObject withBlock:^BOOL(id obj) {
                     return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
                 }];
                 
                 NSMutableArray<TemporaryApp *> *apps = [NSMutableArray array];
-                [F eachInArrayWithIndex:responseObject withBlock:^(id obj, NSInteger idx) {
+                [F eachInArrayWithIndex:filteredPrivateApps withBlock:^(id obj, NSInteger idx) {
                     TemporaryApp *app = [[TemporaryApp alloc] init];
                     app.id = [NSString stringWithFormat:@"%@", obj[@"cmsId"]];
                     [self.cmsIdToId setObject:obj[@"id"] forKey:app.id];
@@ -636,8 +701,8 @@ const CGFloat scaleBase = 1.125;
     });
 }
 
-- (void)resetSettingsForPrivateApp:(NSString *)appId {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/targetACPosition", self.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
++ (void)resetSettingsForPrivateApp:(NSString *)appId withHostIP:(NSString *)hostIP {
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/targetACPosition", hostIP, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
     
     NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
     request.HTTPMethod = @"POST";
@@ -652,7 +717,8 @@ const CGFloat scaleBase = 1.125;
 }
 
 + (BOOL)isSelectGFEApp:(TemporaryApp *)app {
-    return [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"];
+    return YES;
+//    return [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"];
 }
 
 
@@ -660,12 +726,18 @@ const CGFloat scaleBase = 1.125;
 
 - (void)loadApps {
     self.appManager = [[AppAssetManager alloc] initWithCallback:self];
-    self.privateAppManager = [[PrivateAppAssetManager alloc] initWithCallback:self];
+//    self.privateAppManager = [[PrivateAppAssetManager alloc] initWithCallback:self];
     
     if (self.host.appList.count > 0) {
         [self displayApps];
     }
-    [self discoverPrivateApps:self.host];
+    
+    [self fetchPrivateAppsWithCompletionBlock:^(NSDictionary *mapping) {
+        self.appNameToId = mapping;
+    }];
+    
+    [self discoverAppsForHost:self.host];
+    //    [self discoverPrivateApps:self.host];
 }
 
 - (NSArray<TemporaryApp *> *)fetchApps {
@@ -823,8 +895,8 @@ const CGFloat scaleBase = 1.125;
     size_t width = CGImageGetWidth(cgImage);
     size_t height = CGImageGetHeight(cgImage);
     
-    CGFloat targetWidth = 628;
-    CGFloat targetHeight = 888;
+    CGFloat targetWidth = 600;
+    CGFloat targetHeight = 900;
     CGFloat targetAspect = targetWidth / targetHeight;
     CGFloat drawAspect = (CGFloat)width / (CGFloat)height;
     
