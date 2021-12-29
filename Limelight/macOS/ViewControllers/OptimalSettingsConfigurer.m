@@ -117,7 +117,9 @@
     self.displayModeSelector.enabled = NO;
     self.settingsIndexSlider.enabled = NO;
     for (NSView *view in self.view.subviews) {
-        view.hidden = YES;
+        if (view.class != NSButton.class) {
+            view.hidden = YES;
+        }
     }
 }
 
