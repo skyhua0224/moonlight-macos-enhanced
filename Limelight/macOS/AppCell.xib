@@ -105,7 +105,7 @@
         </collectionViewItem>
         <menu autoenablesItems="NO" id="eXa-bo-m2A">
             <items>
-                <menuItem title="Configure Optimal Settings…" id="CFv-rv-nVq">
+                <menuItem title="Configure Optimal Settings…" identifier="configureOptimalSettingsMenuItem" id="CFv-rv-nVq">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="configureOptimalSettingsItemClicked:" target="-1" id="Dna-K3-TaU"/>

@@ -79,6 +79,7 @@
 		4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */; };
 		4CA454C7277ADD0600E99A96 /* OptimalSettingsConfigurer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */; };
 		4CA454C8277ADD0600E99A96 /* OptimalSettingsConfigurer.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */; };
+		4CA454CB277BE4E400E99A96 /* PrivateGfeApiRequester.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */; };
 		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
 		4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CBBE13A24CFF7B700B4706E /* AboutView.xib */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
@@ -195,6 +196,8 @@
 		4CA454C4277ADD0600E99A96 /* OptimalSettingsConfigurer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OptimalSettingsConfigurer.h; sourceTree = "<group>"; };
 		4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = OptimalSettingsConfigurer.m; sourceTree = "<group>"; };
 		4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = OptimalSettingsConfigurer.xib; sourceTree = "<group>"; };
+		4CA454C9277BE4E400E99A96 /* PrivateGfeApiRequester.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PrivateGfeApiRequester.h; sourceTree = "<group>"; };
+		4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PrivateGfeApiRequester.m; sourceTree = "<group>"; };
 		4CABABB021F6C8A3008576A4 /* CollectionView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CollectionView.h; sourceTree = "<group>"; };
 		4CABABB121F6C8A4008576A4 /* CollectionView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CollectionView.m; sourceTree = "<group>"; };
 		4CBBE13A24CFF7B700B4706E /* AboutView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutView.xib; sourceTree = "<group>"; };
@@ -419,6 +422,8 @@
 				4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */,
 				4C51EE3325E0DE2700F205D3 /* AlternateControllerNetworking.h */,
 				4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */,
+				4CA454C9277BE4E400E99A96 /* PrivateGfeApiRequester.h */,
+				4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -1094,6 +1099,7 @@
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
+				4CA454CB277BE4E400E99A96 /* PrivateGfeApiRequester.m in Sources */,
 				4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
 				4CE887122772B8B3004EB216 /* PrivateAppAssetRetriever.m in Sources */,

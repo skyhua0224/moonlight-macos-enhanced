@@ -18,6 +18,5 @@
 @property (nonatomic, strong) HostsViewController *hostsVC;
 
 + (BOOL)isSelectGFEApp:(TemporaryApp *)app;
-+ (void)resetSettingsForPrivateApp:(NSString *)appId withHostIP:(NSString *)hostIP;
 
 @end

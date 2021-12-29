@@ -7,11 +7,8 @@
 //
 
 #import <Cocoa/Cocoa.h>
-
-NS_ASSUME_NONNULL_BEGIN
+#import "TemporaryApp.h"
 
 @interface OptimalSettingsConfigurer : NSViewController
-- (instancetype)initWithAppName:(NSString *)appName andPrivateId:(NSString *)appId;
+- (instancetype)initWithApp:(TemporaryApp *)app andPrivateId:(NSString *)appId;
 @end
-
-NS_ASSUME_NONNULL_END

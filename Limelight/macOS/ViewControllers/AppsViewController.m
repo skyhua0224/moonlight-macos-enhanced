@@ -17,6 +17,7 @@
 #import "NSApplication+Moonlight.h"
 #import "BackgroundColorView.h"
 #import "ImageFader.h"
+#import "PrivateGfeApiRequester.h"
 #import "OptimalSettingsConfigurer.h"
 
 #import "PrivateAppAssetManager.h"
@@ -198,7 +199,7 @@ const CGFloat scaleBase = 1.125;
     AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
     AppCell *appCell = (AppCell *)(appCellView.delegate);
 
-    OptimalSettingsConfigurer *optimalSettingsConfigVC = [[OptimalSettingsConfigurer alloc] initWithAppName:appCell.app.name andPrivateId:[self privateAppIdForAppName:appCell.app.name]];
+    OptimalSettingsConfigurer *optimalSettingsConfigVC = [[OptimalSettingsConfigurer alloc] initWithApp:appCell.app andPrivateId:[self privateAppIdForAppName:appCell.app.name]];
     [self presentViewControllerAsSheet:optimalSettingsConfigVC];
 }
 
@@ -368,7 +369,7 @@ const CGFloat scaleBase = 1.125;
                 self.runningApp = nil;
                 
 //                if (![AppsViewController isSelectGFEApp:self.privateApp]) {
-                    [AppsViewController resetSettingsForPrivateApp:self.privateAppId withHostIP:self.host.activeAddress];
+                    [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.host.activeAddress];
 //                }
                 
 #ifdef USE_RESOLUTION_SYNC
@@ -390,8 +391,10 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
+    NSMenuItem *configureOptimalSettingsMenuItem = [HostsViewController getMenuItemForIdentifier:@"configureOptimalSettingsMenuItem" inMenu:menu];
     NSMenuItem *quitAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"quitAppMenuItem" inMenu:menu];
     NSMenuItem *hideAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"hideAppMenuItem" inMenu:menu];
+    configureOptimalSettingsMenuItem.hidden = ![self privateAppIdForAppName:app.name];
     if (app.hidden) {
         hideAppMenuItem.title = @"Unhide App";
     } else {
@@ -581,27 +584,18 @@ const CGFloat scaleBase = 1.125;
 #pragma mark - Private GFE API
 
 - (void)fetchPrivateAppsWithCompletionBlock:(void (^)(NSDictionary *))completion {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/", self.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT)]];
-    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"PrivateGFE fetchPrivateAppsForHost error: %@, statusCode: %@", error, @(httpResponse.statusCode));
-        if (error == nil) {
-            if (httpResponse.statusCode / 100 == 2) {
-                NSArray<NSDictionary<NSString *, id> *> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-                NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:responseObject withBlock:^BOOL(id obj) {
-                    return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
-                }];
-                
-                NSDictionary *mapping = (NSDictionary *)[F reduceArray:filteredPrivateApps withBlock:^NSMutableDictionary *(NSMutableDictionary *memo, NSDictionary *obj) {
-                    memo[obj[@"displayName"]] = obj[@"id"];
-                    return memo;
-                } andInitialMemo:[NSMutableDictionary dictionary]];
-                
-                completion(mapping);
-            }
-        }
+    [PrivateGfeApiRequester fetchPrivateAppsJSONForHostIP:self.host.activeAddress WithCompletionBlock:^(NSArray<NSDictionary<NSString *, id> *> *appsJSON) {
+        NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:appsJSON withBlock:^BOOL(id obj) {
+            return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
+        }];
+        
+        NSDictionary *mapping = (NSDictionary *)[F reduceArray:filteredPrivateApps withBlock:^NSMutableDictionary *(NSMutableDictionary *memo, NSDictionary *obj) {
+            memo[obj[@"displayName"]] = obj[@"id"];
+            return memo;
+        } andInitialMemo:[NSMutableDictionary dictionary]];
+        
+        completion(mapping);
     }];
-    [task resume];
 }
 
 - (NSString *)removeNonASCIICharactersFrom:(NSString *)string {
@@ -643,33 +637,24 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)fetchPrivateAppsForHostWithHostIP:(NSString *)hostIP WithCompletionBlock:(void (^)(NSArray<TemporaryApp *> *))completion {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/", hostIP, @(CUSTOM_PRIVATE_GFE_PORT)]];
-    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"PrivateGFE fetchPrivateAppsForHost error: %@, statusCode: %@", error, @(httpResponse.statusCode));
-        if (error == nil) {
-            if (httpResponse.statusCode / 100 == 2) {
-                NSArray<NSDictionary<NSString *, id> *> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-                NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:responseObject withBlock:^BOOL(id obj) {
-                    return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
-                }];
-                
-                NSMutableArray<TemporaryApp *> *apps = [NSMutableArray array];
-                [F eachInArrayWithIndex:filteredPrivateApps withBlock:^(id obj, NSInteger idx) {
-                    TemporaryApp *app = [[TemporaryApp alloc] init];
-                    app.id = [NSString stringWithFormat:@"%@", obj[@"cmsId"]];
-                    [self.cmsIdToId setObject:obj[@"id"] forKey:app.id];
-                    app.name = obj[@"displayName"];
-                    app.installPath = obj[@"installDirectory"];
-                    app.host = self.host;
-                    [apps addObject:app];
-                }];
-                
-                completion(apps);
-            }
-        }
+    [PrivateGfeApiRequester fetchPrivateAppsJSONForHostIP:hostIP WithCompletionBlock:^(NSArray<NSDictionary<NSString *, id> *> *appsJSON) {
+        NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:appsJSON withBlock:^BOOL(id obj) {
+            return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
+        }];
+        
+        NSMutableArray<TemporaryApp *> *apps = [NSMutableArray array];
+        [F eachInArrayWithIndex:filteredPrivateApps withBlock:^(id obj, NSInteger idx) {
+            TemporaryApp *app = [[TemporaryApp alloc] init];
+            app.id = [NSString stringWithFormat:@"%@", obj[@"cmsId"]];
+            [self.cmsIdToId setObject:obj[@"id"] forKey:app.id];
+            app.name = obj[@"displayName"];
+            app.installPath = obj[@"installDirectory"];
+            app.host = self.host;
+            [apps addObject:app];
+        }];
+        
+        completion(apps);
     }];
-    [task resume];
 }
 
 - (void)discoverPrivateApps:(TemporaryHost *)host {
@@ -708,21 +693,6 @@ const CGFloat scaleBase = 1.125;
             });
         }];
     });
-}
-
-+ (void)resetSettingsForPrivateApp:(NSString *)appId withHostIP:(NSString *)hostIP {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/targetACPosition", hostIP, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
-    
-    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
-    request.HTTPMethod = @"POST";
-    NSDictionary<NSString *, id> *body = @{};
-    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
-    
-    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"PrivateGFE resetSettingsForPrivateApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
-    }];
-    [task resume];
 }
 
 + (BOOL)isSelectGFEApp:(TemporaryApp *)app {

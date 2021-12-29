@@ -11,6 +11,7 @@
 #import "AppsViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "AlertPresenter.h"
+#import "PrivateGfeApiRequester.h"
 
 #import "Connection.h"
 #import "StreamConfiguration.h"
@@ -424,7 +425,7 @@
 - (void)closeWindowFromMainQueueWithMessage:(NSString *)message {
     [self.hidSupport releaseAllModifierKeys];
     
-    [AppsViewController resetSettingsForPrivateApp:self.privateAppId withHostIP:self.app.host.activeAddress];
+    [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
     
     dispatch_async(dispatch_get_main_queue(), ^{
         [self uncaptureMouse];
@@ -480,7 +481,7 @@
     }
     self.hidSupport = [[HIDSupport alloc] init];
     
-    [self requestOptimalResolutionForPrivateApp:self.privateAppId withCompletionBlock:^{
+    [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self getResolution].width andHeight:[self getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
         dispatch_async(dispatch_get_main_queue(), ^{
             self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
             NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
@@ -489,7 +490,7 @@
     }];
 
 //    if (![AppsViewController isSelectGFEApp:self.privateApp]) {
-//            [self requestLaunchOfPrivateApp:self.privateAppId];
+//        [PrivateGfeApiRequester requestLaunchOfPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
 //    }
 }
 
@@ -524,65 +525,6 @@ struct Resolution {
 
 
 #pragma mark - Private GFE API
-
-- (void)getRecommendedSettingsIndexForApp:(NSString *)appId withCompletionBlock:(void (^)(int, BOOL))completion {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/state", self.app.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
-    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"PrivateGFE getRecommendedSettingsIndexForApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
-        if (error == nil) {
-            if (httpResponse.statusCode / 100 == 2) {
-                NSDictionary<NSString *, id> *responseObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-                int index = ((NSNumber *)responseObject[@"REGULAR"][@"recommendationAC"][@"recommendedIndex"]).intValue;
-                
-                completion(index, YES);
-                return;
-            }
-        }
-        completion(0, NO);
-    }];
-    [task resume];
-}
-
-- (void)requestOptimalResolutionForPrivateApp:(NSString *)appId withCompletionBlock:(void (^)(void))completion {
-    [self getRecommendedSettingsIndexForApp:appId withCompletionBlock:^(int index, BOOL success) {
-        if (!success) {
-            completion();
-            return;
-        }
-        
-        NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/targetACPosition", self.app.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
-
-        NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
-        request.HTTPMethod = @"POST";
-        NSDictionary<NSString *, id> *body = @{
-            @"tweak": @{
-                @"resolution": [NSString stringWithFormat:@"%@x%@", @([self getResolution].width), @([self getResolution].height)],
-                @"displayMode": @"Full-screen"
-            },
-            @"settingsIndex": @(index),
-        };
-        request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
-
-        NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-            NSLog(@"PrivateGFE requestOptimalResolutionForPrivateApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
-            completion();
-        }];
-        [task resume];
-    }];
-}
-
-- (void)requestLaunchOfPrivateApp:(NSString *)appId {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/launch", self.app.host.activeAddress, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
-    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
-    request.HTTPMethod = @"POST";
-    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"PrivateGFE requestLaunchOfPrivateApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
-    }];
-    [task resume];
-}
 
 
 #pragma mark - ConnectionCallbacks

@@ -8,6 +8,8 @@
 
 #import "OptimalSettingsConfigurer.h"
 #import "BackgroundColorView.h"
+#import "PrivateGfeApiRequester.h"
+#import "F.h"
 
 @interface OptimalSettingsConfigurer ()
 @property (weak) IBOutlet NSTextField *gameTitleLabel;
@@ -18,16 +20,16 @@
 
 @property (nonatomic, strong) NSProgressIndicator *spinner;
 
-@property (nonatomic, strong) NSString *appName;
+@property (nonatomic, strong) TemporaryApp *app;
 @property (nonatomic, strong) NSString *appId;
 @end
 
 @implementation OptimalSettingsConfigurer
 
-- (instancetype)initWithAppName:(NSString *)appName andPrivateId:(NSString *)appId {
+- (instancetype)initWithApp:(TemporaryApp *)app andPrivateId:(NSString *)appId {
     self = [super init];
     if (self) {
-        self.appName = appName;
+        self.app = app;
         self.appId = appId;
     }
     return self;
@@ -36,8 +38,32 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.gameTitleLabel.stringValue = [NSString stringWithFormat:@"Configure %@ Optimal Settings:", self.appName];
+    self.gameTitleLabel.stringValue = [NSString stringWithFormat:@"Configure %@ Optimal Settings:", self.app.name];
 
+    [PrivateGfeApiRequester requestStateOfApp:self.appId hostIP:self.app.host.activeAddress withCompletionBlock:^(NSDictionary<NSString *,id> *stateJSON) {
+        NSArray<NSString *> *displayModes = stateJSON[@"REGULAR"][@"sliderSettingsDC"][@"displayMode"][@"values"];
+        displayModes = [displayModes sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
+            return [obj1 compare:obj2 options:NSCaseInsensitiveSearch];
+        }];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSArray<NSMenuItem *> *allItems = self.displayModeSelector.menu.itemArray;
+            [self.displayModeSelector.menu removeAllItems];
+            
+            for (NSString *displayMode in displayModes) {
+                for (NSMenuItem *item in allItems) {
+                    if ([item.title isEqualToString:displayMode]) {
+                        item.state = NSControlStateValueOff;
+                        [self.displayModeSelector.menu addItem:item];
+                    }
+                }
+            }
+            
+            [self hideLoadingView];
+        });
+    }];
+        
+    
     [self showLoadingView];
     
     self.spinner = [[NSProgressIndicator alloc] init];
@@ -50,10 +76,6 @@
     [self.spinner.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
     [self.spinner.widthAnchor constraintEqualToConstant:32].active = YES;
     [self.spinner.heightAnchor constraintEqualToConstant:32].active = YES;
-    
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self hideLoadingView];
-    });
 }
 
 - (void)showLoadingView {
