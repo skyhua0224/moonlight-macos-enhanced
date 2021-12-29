@@ -83,14 +83,14 @@
                     <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="speedometer" catalog="system" id="7Os-MC-FkP"/>
                 </imageView>
                 <slider verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="8aT-Yi-NF0" userLabel="Settings slider">
-                    <rect key="frame" x="134" y="123" width="230" height="28"/>
+                    <rect key="frame" x="134" y="123" width="235" height="28"/>
                     <sliderCell key="cell" continuous="YES" state="on" alignment="left" maxValue="100" doubleValue="50" tickMarkPosition="above" numberOfTickMarks="1" allowsTickMarkValuesOnly="YES" sliderType="linear" id="Gy7-sO-PHc"/>
                     <connections>
                         <action selector="didChangeIndexOfSettingsSlider:" target="-2" id="0F0-1F-OAk"/>
                     </connections>
                 </slider>
                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="nqY-BC-8Sk" userLabel="Quality image">
-                    <rect key="frame" x="368" y="128" width="16" height="22"/>
+                    <rect key="frame" x="373" y="128" width="16" height="22"/>
                     <constraints>
                         <constraint firstAttribute="width" secondItem="nqY-BC-8Sk" secondAttribute="height" multiplier="1:1" id="1pb-ap-nZe"/>
                         <constraint firstAttribute="width" constant="16" id="C3j-07-2VV"/>
@@ -98,7 +98,7 @@
                     <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="4k.tv" catalog="system" id="Oje-Ic-wO3"/>
                 </imageView>
                 <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="pJh-sp-eIM">
-                    <rect key="frame" x="347" y="110" width="38" height="13"/>
+                    <rect key="frame" x="352" y="110" width="38" height="13"/>
                     <constraints>
                         <constraint firstAttribute="height" constant="13" id="2DP-Nv-D8f"/>
                     </constraints>
@@ -109,13 +109,13 @@
                     </textFieldCell>
                 </textField>
                 <box borderType="line" title="Graphics Settings:" translatesAutoresizingMaskIntoConstraints="NO" id="11q-A4-A7h">
-                    <rect key="frame" x="13" y="40" width="374" height="50"/>
+                    <rect key="frame" x="13" y="40" width="379" height="50"/>
                     <view key="contentView" id="6ho-K5-GbZ">
-                        <rect key="frame" x="3" y="3" width="368" height="32"/>
+                        <rect key="frame" x="3" y="3" width="373" height="32"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
                             <gridView horizontalCompressionResistancePriority="250" xPlacement="leading" yPlacement="center" rowAlignment="firstBaseline" rowSpacing="12" columnSpacing="12" translatesAutoresizingMaskIntoConstraints="NO" id="2Gg-QK-R0u" userLabel="Settings grid view">
-                                <rect key="frame" x="8" y="8" width="352" height="16"/>
+                                <rect key="frame" x="8" y="8" width="357" height="16"/>
                                 <constraints>
                                     <constraint firstItem="Z7Z-Wi-zNr" firstAttribute="firstBaseline" secondItem="cpg-zt-gDy" secondAttribute="firstBaseline" id="3Xg-PF-O8O"/>
                                     <constraint firstItem="cpg-zt-gDy" firstAttribute="top" secondItem="2Gg-QK-R0u" secondAttribute="top" id="kMj-8l-vw8"/>
@@ -125,7 +125,7 @@
                                 </rows>
                                 <columns>
                                     <gridColumn xPlacement="fill" width="225" id="z0Q-9e-8n5"/>
-                                    <gridColumn xPlacement="fill" width="115" id="HHB-mu-vqd"/>
+                                    <gridColumn xPlacement="fill" width="120" id="HHB-mu-vqd"/>
                                 </columns>
                                 <gridCells>
                                     <gridCell row="bcg-4A-QHo" column="z0Q-9e-8n5" id="Tmi-PJ-jhD">
@@ -140,7 +140,7 @@
                                     </gridCell>
                                     <gridCell row="bcg-4A-QHo" column="HHB-mu-vqd" id="nId-BT-RRy">
                                         <textField key="contentView" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Z7Z-Wi-zNr">
-                                            <rect key="frame" x="235" y="0.0" width="119" height="16"/>
+                                            <rect key="frame" x="235" y="0.0" width="124" height="16"/>
                                             <textFieldCell key="cell" lineBreakMode="clipping" id="H73-Gs-JOP">
                                                 <font key="font" usesAppearanceFont="YES"/>
                                                 <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
@@ -160,7 +160,7 @@
                     </view>
                 </box>
                 <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="jCS-fh-O84">
-                    <rect key="frame" x="325" y="9" width="66" height="32"/>
+                    <rect key="frame" x="330" y="9" width="66" height="32"/>
                     <buttonCell key="cell" type="push" title="Done" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="UX9-Un-uVX">
                         <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                         <font key="font" metaFont="system"/>

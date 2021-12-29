@@ -56,6 +56,11 @@
             
             for (NSString *displayMode in displayModes) {
                 for (NSMenuItem *item in allItems) {
+                    if ([item.title isEqualToString:@"Windowed Borderless"] && [displayMode isEqualToString:@"Full-screen Borderless"]) {
+                        NSMenuItem *differentWindowBorderDisplayModeItem = [[NSMenuItem alloc] init];
+                        differentWindowBorderDisplayModeItem.title = displayMode;
+                        [self.displayModeSelector.menu addItem:differentWindowBorderDisplayModeItem];
+                    }
                     if ([item.title isEqualToString:displayMode]) {
                         item.state = NSControlStateValueOff;
                         [self.displayModeSelector.menu addItem:item];
