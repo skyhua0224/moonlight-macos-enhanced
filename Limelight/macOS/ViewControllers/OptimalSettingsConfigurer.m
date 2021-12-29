@@ -16,7 +16,6 @@
 @property (weak) IBOutlet NSGridView *settingsGrid;
 @property (weak) IBOutlet NSButton *doneButton;
 
-@property (nonatomic, strong) NSVisualEffectView *loadingView;
 @property (nonatomic, strong) NSProgressIndicator *spinner;
 
 @property (nonatomic, strong) NSString *appName;
@@ -37,23 +36,9 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.gameTitleLabel.stringValue = self.appName;
-    self.displayModeSelector.enabled = NO;
-    self.settingsIndexSlider.enabled = NO;
-    self.settingsGrid.wantsLayer = YES;
-    self.settingsGrid.layer.backgroundColor = [NSColor clearColor].CGColor;
-    
-    self.loadingView = [[NSVisualEffectView alloc] init];
-    self.loadingView.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-    self.loadingView.material = NSVisualEffectMaterialWindowBackground;
-    self.loadingView.state = NSVisualEffectStateActive;
-    [self.view addSubview:self.loadingView];
-    self.loadingView.translatesAutoresizingMaskIntoConstraints = NO;
-    
-    [self.loadingView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor].active = YES;
-    [self.loadingView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor].active = YES;
-    [self.loadingView.topAnchor constraintEqualToAnchor:self.gameTitleLabel.bottomAnchor].active = YES;
-    [self.loadingView.bottomAnchor constraintEqualToAnchor:self.doneButton.topAnchor].active = YES;
+    self.gameTitleLabel.stringValue = [NSString stringWithFormat:@"Configure %@ Optimal Settings:", self.appName];
+
+    [self showLoadingView];
     
     self.spinner = [[NSProgressIndicator alloc] init];
     self.spinner.style = NSProgressIndicatorStyleSpinning;
@@ -71,10 +56,19 @@
     });
 }
 
+- (void)showLoadingView {
+    self.displayModeSelector.enabled = NO;
+    self.settingsIndexSlider.enabled = NO;
+    for (NSView *view in self.view.subviews) {
+        view.hidden = YES;
+    }
+}
+
 - (void)hideLoadingView {
-    [self.loadingView removeFromSuperview];
     [self.spinner removeFromSuperview];
-    
+    for (NSView *view in self.view.subviews) {
+        view.hidden = NO;
+    }
     self.displayModeSelector.enabled = YES;
     self.settingsIndexSlider.enabled = YES;
 }
