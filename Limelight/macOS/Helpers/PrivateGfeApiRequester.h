@@ -12,6 +12,7 @@
 
 + (void)fetchPrivateAppsJSONForHostIP:(NSString *)hostIP WithCompletionBlock:(void (^)(NSArray<NSDictionary<NSString *, id> *> *))completion;
 + (void)resetSettingsForPrivateApp:(NSString *)appId hostIP:(NSString *)hostIP;
++ (void)getSettingsJSONForApp:(NSString *)appId hostIP:(NSString *)hostIP resolutionWidth:(int)width height:(int)height withCompletionBlock:(void (^)(NSDictionary *))completion;
 
 + (void)getRecommendedSettingsIndexForApp:(NSString *)appId hostIP:(NSString *)hostIP withCompletionBlock:(void (^)(int, BOOL))completion;
 + (void)requestOptimalResolutionWithWidth:(int)width andHeight:(int)height hostIP:(NSString *)hostIP forPrivateApp:(NSString *)appId withCompletionBlock:(void (^)(void))completion;

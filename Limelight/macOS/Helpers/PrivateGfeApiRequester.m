@@ -15,7 +15,7 @@
     NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/", hostIP, @(CUSTOM_PRIVATE_GFE_PORT)]];
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"PrivateGFE fetchPrivateAppsForHost error: %@, statusCode: %@", error, @(httpResponse.statusCode));
+        NSLog(@"PrivateGFE fetchPrivateAppsJSONForHostIP error: %@, statusCode: %@", error, @(httpResponse.statusCode));
         if (error == nil) {
             if (httpResponse.statusCode / 100 == 2) {
                 completion([NSJSONSerialization JSONObjectWithData:data options:0 error:nil]);
@@ -36,6 +36,27 @@
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         NSLog(@"PrivateGFE resetSettingsForPrivateApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
+    }];
+    [task resume];
+}
+
++ (void)getSettingsJSONForApp:(NSString *)appId hostIP:(NSString *)hostIP resolutionWidth:(int)width height:(int)height withCompletionBlock:(void (^)(NSDictionary *))completion {
+    NSDictionary<NSString *, NSString *> *requestDictionary = @{
+        @"resolution": [NSString stringWithFormat:@"%@x%@", @(width), @(height)],
+        @"displayMode": @"Full-screen",
+    };
+    NSString *requestJSON = [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:requestDictionary options:0 error:nil] encoding:NSUTF8StringEncoding];
+    NSString *request = [requestJSON stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLHostAllowedCharacterSet]];
+    
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/settingsSpace/%@", hostIP, @(CUSTOM_PRIVATE_GFE_PORT), appId, request]];
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSLog(@"PrivateGFE getSettingsJSONForApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
+        if (error == nil) {
+            if (httpResponse.statusCode / 100 == 2) {
+                completion([NSJSONSerialization JSONObjectWithData:data options:0 error:nil]);
+            }
+        }
     }];
     [task resume];
 }
@@ -93,7 +114,7 @@
     NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:%@/Applications/v.1.0/%@/state", hostIP, @(CUSTOM_PRIVATE_GFE_PORT), appId]];
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"PrivateGFE getRecommendedSettingsIndexForApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
+        NSLog(@"PrivateGFE requestStateOfApp error: %@, statusCode: %@", error, @(httpResponse.statusCode));
         if (error == nil) {
             if (httpResponse.statusCode / 100 == 2) {
                 completion([NSJSONSerialization JSONObjectWithData:data options:0 error:nil]);

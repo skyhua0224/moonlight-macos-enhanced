@@ -10,6 +10,7 @@
 #import "BackgroundColorView.h"
 #import "PrivateGfeApiRequester.h"
 #import "F.h"
+#import "StreamViewController.h"
 
 @interface OptimalSettingsConfigurer ()
 @property (weak) IBOutlet NSTextField *gameTitleLabel;
@@ -22,6 +23,8 @@
 
 @property (nonatomic, strong) TemporaryApp *app;
 @property (nonatomic, strong) NSString *appId;
+
+@property (nonatomic, strong) NSArray<NSArray<NSDictionary<NSString *, NSString *> *> *> *settings;
 @end
 
 @implementation OptimalSettingsConfigurer
@@ -58,9 +61,24 @@
                     }
                 }
             }
-            
-            [self hideLoadingView];
         });
+        
+        [PrivateGfeApiRequester getSettingsJSONForApp:self.appId hostIP:self.app.host.activeAddress resolutionWidth:[StreamViewController getResolution].width height:[StreamViewController getResolution].height withCompletionBlock:^(NSDictionary *settingsJSON) {
+            self.settings = settingsJSON[@"settings"];
+            NSInteger settingsCount = self.settings.count;
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.settingsIndexSlider.numberOfTickMarks = settingsCount;
+                self.settingsIndexSlider.minValue = 0.0;
+                self.settingsIndexSlider.maxValue = settingsCount - 1;
+                int sliderInitialValue = ((int)settingsCount - 1);
+                [self.settingsIndexSlider setDoubleValue:sliderInitialValue];
+
+                [self populateSettingsGridWithSettings:self.settings[sliderInitialValue]];
+                
+                [self hideLoadingView];
+            });
+        }];
     }];
         
     
@@ -95,12 +113,58 @@
     self.settingsIndexSlider.enabled = YES;
 }
 
+- (NSTextField *)createSettingLabelWithString:(NSString *)string {
+    NSTextField *settingLabel = [NSTextField textFieldWithString:string];
+    settingLabel.drawsBackground = NO;
+    [settingLabel setBordered:NO];
+    settingLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    settingLabel.font = [NSFont systemFontOfSize:[NSFont systemFontSizeForControlSize:NSControlSizeSmall]];
+    settingLabel.editable = NO;
+    
+    return settingLabel;
+}
+
+- (void)populateSettingsGridWithSettings:(NSArray<NSDictionary<NSString *, NSString *> *> *)settingsSet {
+    BOOL isFirst = YES;
+    for (NSDictionary *setting in settingsSet) {
+        NSTextField *settingNameLabel = [self createSettingLabelWithString:setting[@"name"]];
+        NSTextField *settingValueLabel = [self createSettingLabelWithString:setting[@"value"]];
+        
+        NSArray<NSView *> *settingViews = @[settingNameLabel, settingValueLabel];
+        [self.settingsGrid addRowWithViews:settingViews];
+        
+        if (isFirst) {
+            [self.settingsGrid removeRowAtIndex:0];
+            isFirst = NO;
+        }
+    }
+}
+
+- (void)updateSettingsGridWithSettings:(NSArray<NSDictionary<NSString *, NSString *> *> *)settingsSet withDisplayMode:(NSString *)displayMode {
+    for (int i = 0; i < settingsSet.count - 1; i++) {
+        NSGridCell *keyCell = [self.settingsGrid cellAtColumnIndex:0 rowIndex:i];
+        NSGridCell *valueCell = [self.settingsGrid cellAtColumnIndex:1 rowIndex:i];
+
+        NSTextField *valuelabel = valueCell.contentView;
+        valuelabel.stringValue = settingsSet[i][@"value"];
+
+        NSTextField *keylabel = keyCell.contentView;
+        if ([keylabel.stringValue isEqualToString:@"Display Mode"]) {
+            valuelabel.stringValue = displayMode;
+        }
+    }
+}
+
 
 #pragma mark - Actions
 
-- (IBAction)didChangeDisplayMode:(id)sender {
+- (IBAction)didChangeDisplayMode:(NSPopUpButton *)sender {
+    int index = ((int)self.settingsIndexSlider.doubleValue);
+    [self updateSettingsGridWithSettings:self.settings[index] withDisplayMode:sender.selectedItem.title];
 }
-- (IBAction)didChangeIndexOfSettingsSlider:(id)sender {
+- (IBAction)didChangeIndexOfSettingsSlider:(NSSlider *)sender {
+    int index = ((int)sender.doubleValue);
+    [self updateSettingsGridWithSettings:self.settings[index] withDisplayMode:self.displayModeSelector.selectedItem.title];
 }
 
 - (IBAction)didClickDoneButton:(id)sender {

@@ -131,7 +131,7 @@
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
     
-    self.view.window.contentAspectRatio = NSMakeSize([self getResolution].width, [self getResolution].height);
+    self.view.window.contentAspectRatio = NSMakeSize([self.class getResolution].width, [self.class getResolution].height);
     self.view.window.frameAutosaveName = @"Stream Window";
     [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
     
@@ -319,8 +319,8 @@
 
 - (IBAction)resizeWindowToActualResulution:(id)sender {
     CGFloat screenScale = [NSScreen mainScreen].backingScaleFactor;
-    CGFloat width = (CGFloat)[self getResolution].width / screenScale;
-    CGFloat height = (CGFloat)[self getResolution].height / screenScale;
+    CGFloat width = (CGFloat)[self.class getResolution].width / screenScale;
+    CGFloat height = (CGFloat)[self.class getResolution].height / screenScale;
     [self.view.window setContentSize:NSMakeSize(width, height)];
 }
 
@@ -459,8 +459,8 @@
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
-    streamConfig.width = [self getResolution].width;
-    streamConfig.height = [self getResolution].height;
+    streamConfig.width = [self.class getResolution].width;
+    streamConfig.height = [self.class getResolution].height;
 
     streamConfig.frameRate = [streamSettings.framerate intValue];
     streamConfig.bitRate = [streamSettings.bitrate intValue];
@@ -481,7 +481,7 @@
     }
     self.hidSupport = [[HIDSupport alloc] init];
     
-    [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self getResolution].width andHeight:[self getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
+    [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self.class getResolution].width andHeight:[self.class getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
         dispatch_async(dispatch_get_main_queue(), ^{
             self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
             NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
@@ -497,12 +497,7 @@
 
 #pragma mark - Resolution
 
-struct Resolution {
-   int width;
-   int height;
-};
-
-- (struct Resolution)getResolution {
++ (struct Resolution)getResolution {
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
 
