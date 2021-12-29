@@ -11,4 +11,5 @@
 
 @interface OptimalSettingsConfigurer : NSViewController
 - (instancetype)initWithApp:(TemporaryApp *)app andPrivateId:(NSString *)appId;
++ (NSDictionary *)getSavedOptimalSettingsForApp:(NSString *)appId withInitialSettingsIndex:(int)index andIntialDisplayMode:(NSString *)displayMode;
 @end

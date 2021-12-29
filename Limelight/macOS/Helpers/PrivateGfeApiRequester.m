@@ -8,6 +8,7 @@
 
 #import "PrivateGfeApiRequester.h"
 #import "AppsViewController.h"
+#import "OptimalSettingsConfigurer.h"
 
 @implementation PrivateGfeApiRequester
 
@@ -81,12 +82,17 @@
 
         NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url];
         request.HTTPMethod = @"POST";
+        
+        NSDictionary *appSettings = [OptimalSettingsConfigurer getSavedOptimalSettingsForApp:appId withInitialSettingsIndex:index andIntialDisplayMode:@"Full-screen"];
+        NSString *displayMode = appSettings[@"displayMode"];
+        int savedIndex = ((NSNumber *)appSettings[@"settingsIndex"]).intValue;
+
         NSDictionary<NSString *, id> *body = @{
             @"tweak": @{
                 @"resolution": [NSString stringWithFormat:@"%@x%@", @(width), @(height)],
-                @"displayMode": @"Full-screen"
+                @"displayMode": displayMode,
             },
-            @"settingsIndex": @(index),
+            @"settingsIndex": @(savedIndex),
         };
         request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
 

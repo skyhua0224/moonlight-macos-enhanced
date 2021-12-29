@@ -590,7 +590,7 @@ const CGFloat scaleBase = 1.125;
         }];
         
         NSDictionary *mapping = (NSDictionary *)[F reduceArray:filteredPrivateApps withBlock:^NSMutableDictionary *(NSMutableDictionary *memo, NSDictionary *obj) {
-            memo[obj[@"displayName"]] = obj[@"id"];
+            memo[obj[@"displayName"]] = [obj[@"id"] stringValue];
             return memo;
         } andInitialMemo:[NSMutableDictionary dictionary]];
         

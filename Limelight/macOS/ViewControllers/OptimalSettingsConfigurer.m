@@ -48,7 +48,8 @@
         displayModes = [displayModes sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
             return [obj1 compare:obj2 options:NSCaseInsensitiveSearch];
         }];
-        
+        NSDictionary *appSettings = [self.class getSavedOptimalSettingsForApp:self.appId withInitialSettingsIndex:0 andIntialDisplayMode:displayModes.firstObject];
+
         dispatch_async(dispatch_get_main_queue(), ^{
             NSArray<NSMenuItem *> *allItems = self.displayModeSelector.menu.itemArray;
             [self.displayModeSelector.menu removeAllItems];
@@ -61,6 +62,15 @@
                     }
                 }
             }
+            
+            NSString *displayMode = appSettings[@"displayMode"];
+            NSMenuItem *itemToSelect;
+            for (NSMenuItem *item in self.displayModeSelector.menu.itemArray) {
+                if ([item.title isEqualToString:displayMode]) {
+                    itemToSelect = item;
+                }
+            }
+            [self.displayModeSelector selectItem:itemToSelect];
         });
         
         [PrivateGfeApiRequester getSettingsJSONForApp:self.appId hostIP:self.app.host.activeAddress resolutionWidth:[StreamViewController getResolution].width height:[StreamViewController getResolution].height withCompletionBlock:^(NSDictionary *settingsJSON) {
@@ -71,10 +81,12 @@
                 self.settingsIndexSlider.numberOfTickMarks = settingsCount;
                 self.settingsIndexSlider.minValue = 0.0;
                 self.settingsIndexSlider.maxValue = settingsCount - 1;
-                int sliderInitialValue = ((int)settingsCount - 1);
-                [self.settingsIndexSlider setDoubleValue:sliderInitialValue];
+                
+                int index = ((NSNumber *)appSettings[@"settingsIndex"]).intValue;
+                [self.settingsIndexSlider setDoubleValue:index];
 
-                [self populateSettingsGridWithSettings:self.settings[sliderInitialValue]];
+                [self populateSettingsGridWithSettings:self.settings[index]];
+                [self updateSettingsUI];
                 
                 [self hideLoadingView];
             });
@@ -155,16 +167,50 @@
     }
 }
 
+- (void)saveSettings {
+    int index = ((int)self.settingsIndexSlider.doubleValue);
+    NSString *displayMode = self.displayModeSelector.selectedItem.title;
+    NSDictionary<NSString *, id> *object = @{
+        @"settingsIndex": @(index),
+        @"displayMode": displayMode,
+    };
+    
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:object requiringSecureCoding:NO error:nil];
+    [NSUserDefaults.standardUserDefaults setObject:data forKey:self.appId];
+}
+
+- (void)updateSettingsUI {
+    int index = ((int)self.settingsIndexSlider.doubleValue);
+    [self updateSettingsGridWithSettings:self.settings[index] withDisplayMode:self.displayModeSelector.selectedItem.title];
+}
+
++ (NSDictionary *)getSavedOptimalSettingsForApp:(NSString *)appId withInitialSettingsIndex:(int)index andIntialDisplayMode:(NSString *)displayMode {
+    NSData *data = [NSUserDefaults.standardUserDefaults objectForKey:appId];
+    NSDictionary *appSettings = nil;
+    if (data != nil) {
+        NSSet *allowedClasses = [NSSet setWithArray:@[NSDictionary.class, NSString.class, NSNumber.class]];
+        appSettings = [NSKeyedUnarchiver unarchivedObjectOfClasses:allowedClasses fromData:data error:nil];
+    }
+    if (appSettings == nil) {
+        appSettings = @{
+            @"settingsIndex": @(index),
+            @"displayMode": displayMode,
+        };
+    }
+    
+    return appSettings;
+}
+
 
 #pragma mark - Actions
 
 - (IBAction)didChangeDisplayMode:(NSPopUpButton *)sender {
-    int index = ((int)self.settingsIndexSlider.doubleValue);
-    [self updateSettingsGridWithSettings:self.settings[index] withDisplayMode:sender.selectedItem.title];
+    [self saveSettings];
+    [self updateSettingsUI];
 }
 - (IBAction)didChangeIndexOfSettingsSlider:(NSSlider *)sender {
-    int index = ((int)sender.doubleValue);
-    [self updateSettingsGridWithSettings:self.settings[index] withDisplayMode:self.displayModeSelector.selectedItem.title];
+    [self saveSettings];
+    [self updateSettingsUI];
 }
 
 - (IBAction)didClickDoneButton:(id)sender {
