@@ -41,6 +41,8 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    self.preferredContentSize = NSMakeSize(380, 650);
+
     self.gameTitleLabel.stringValue = [NSString stringWithFormat:@"Configure %@ Optimal Settings:", self.app.name];
 
     [PrivateGfeApiRequester requestStateOfApp:self.appId hostIP:self.app.host.activeAddress withCompletionBlock:^(NSDictionary<NSString *,id> *stateJSON) {
@@ -111,6 +113,10 @@
     [self.spinner.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor].active = YES;
     [self.spinner.widthAnchor constraintEqualToConstant:32].active = YES;
     [self.spinner.heightAnchor constraintEqualToConstant:32].active = YES;
+}
+
+- (NSSize)preferredMinimumSize {
+    return NSMakeSize(380, 275);
 }
 
 - (void)showLoadingView {
