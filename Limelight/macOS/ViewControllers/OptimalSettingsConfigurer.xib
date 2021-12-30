@@ -22,7 +22,7 @@
             <rect key="frame" x="0.0" y="0.0" width="407" height="266"/>
             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
             <subviews>
-                <scrollView horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="le4-R1-Ifi" userLabel="Scroll View">
+                <scrollView horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" usesPredominantAxisScrolling="NO" horizontalScrollElasticity="none" translatesAutoresizingMaskIntoConstraints="NO" id="le4-R1-Ifi" userLabel="Scroll View">
                     <rect key="frame" x="0.0" y="52" width="407" height="214"/>
                     <clipView key="contentView" drawsBackground="NO" id="cV5-GN-rLj">
                         <rect key="frame" x="1" y="1" width="405" height="212"/>
