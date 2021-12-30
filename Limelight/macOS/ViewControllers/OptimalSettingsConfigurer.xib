@@ -48,9 +48,9 @@
                                         </textFieldCell>
                                     </textField>
                                     <popUpButton horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="yzS-pa-Sxg" userLabel="Display mode selector">
-                                        <rect key="frame" x="111" y="129" width="173" height="25"/>
+                                        <rect key="frame" x="111" y="129" width="177" height="25"/>
                                         <constraints>
-                                            <constraint firstAttribute="width" constant="166" id="ETi-eP-ujM"/>
+                                            <constraint firstAttribute="width" constant="170" id="ETi-eP-ujM"/>
                                         </constraints>
                                         <popUpButtonCell key="cell" type="push" title="Full-screen" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" selectedItem="Iic-7t-NSx" id="1cg-Rm-CHF">
                                             <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
