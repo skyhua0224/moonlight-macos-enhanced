@@ -481,17 +481,25 @@
     }
     self.hidSupport = [[HIDSupport alloc] init];
     
-    [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self.class getResolution].width andHeight:[self.class getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
-            NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
-            [opQueue addOperation:self.streamMan];
-        });
-    }];
+    if (self.privateAppId != nil) {
+        [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self.class getResolution].width andHeight:[self.class getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self startStreamWithStreamConfig:streamConfig];
+            });
+        }];
+    } else {
+        [self startStreamWithStreamConfig:streamConfig];
+    }
 
 //    if (![AppsViewController isSelectGFEApp:self.privateApp]) {
 //        [PrivateGfeApiRequester requestLaunchOfPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
 //    }
+}
+
+- (void)startStreamWithStreamConfig:(StreamConfiguration *)streamConfig {
+    self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
+    NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
+    [opQueue addOperation:self.streamMan];
 }
 
 
