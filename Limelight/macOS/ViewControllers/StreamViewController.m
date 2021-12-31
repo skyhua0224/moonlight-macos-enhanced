@@ -482,11 +482,16 @@
     self.hidSupport = [[HIDSupport alloc] init];
     
     if (self.privateAppId != nil) {
-        [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self.class getResolution].width andHeight:[self.class getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self startStreamWithStreamConfig:streamConfig];
-            });
-        }];
+        BOOL optimalSettingsEnabled = [NSUserDefaults.standardUserDefaults boolForKey:[NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.privateAppId]];
+        if (optimalSettingsEnabled) {
+            [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self.class getResolution].width andHeight:[self.class getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self startStreamWithStreamConfig:streamConfig];
+                });
+            }];
+        } else {
+            [self startStreamWithStreamConfig:streamConfig];
+        }
     } else {
         [self startStreamWithStreamConfig:streamConfig];
     }

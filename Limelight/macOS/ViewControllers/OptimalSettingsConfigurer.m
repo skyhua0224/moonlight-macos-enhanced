@@ -14,6 +14,7 @@
 
 @interface OptimalSettingsConfigurer ()
 @property (weak) IBOutlet NSTextField *gameTitleLabel;
+@property (weak) IBOutlet NSButton *enabledCheckbox;
 @property (weak) IBOutlet NSPopUpButton *displayModeSelector;
 @property (weak) IBOutlet NSSlider *settingsIndexSlider;
 @property (weak) IBOutlet NSGridView *settingsGrid;
@@ -43,8 +44,14 @@
     
     self.preferredContentSize = NSMakeSize(380, 650);
 
+    NSString *enabledKey = [NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.appId];
+    [NSUserDefaults.standardUserDefaults registerDefaults:@{
+        enabledKey: @YES,
+    }];
+    
     self.gameTitleLabel.stringValue = [NSString stringWithFormat:@"Configure %@ Optimal Settings:", self.app.name];
-
+    self.enabledCheckbox.state = [NSUserDefaults.standardUserDefaults boolForKey:enabledKey];
+    
     [PrivateGfeApiRequester requestStateOfApp:self.appId hostIP:self.app.host.activeAddress withCompletionBlock:^(NSDictionary<NSString *,id> *stateJSON) {
         NSArray<NSString *> *displayModes = stateJSON[@"REGULAR"][@"sliderSettingsDC"][@"displayMode"][@"values"];
         displayModes = [displayModes sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
@@ -216,6 +223,10 @@
 
 
 #pragma mark - Actions
+
+- (IBAction)didToggleEnabledCheckbox:(NSButton *)sender {
+    [NSUserDefaults.standardUserDefaults setBool:sender.state == NSControlStateValueOn forKey:[NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.appId]];
+}
 
 - (IBAction)didChangeDisplayMode:(NSPopUpButton *)sender {
     [self saveSettings];

@@ -10,6 +10,7 @@
             <connections>
                 <outlet property="displayModeSelector" destination="yzS-pa-Sxg" id="Y2h-j1-k3Q"/>
                 <outlet property="doneButton" destination="jCS-fh-O84" id="nLH-gs-mFc"/>
+                <outlet property="enabledCheckbox" destination="0U3-ah-qgd" id="xUg-Xn-GIv"/>
                 <outlet property="gameTitleLabel" destination="2QJ-Ba-LBh" id="BcI-fE-enE"/>
                 <outlet property="settingsGrid" destination="2Gg-QK-R0u" id="w75-Ib-JCp"/>
                 <outlet property="settingsIndexSlider" destination="8aT-Yi-NF0" id="Hqk-u2-2wU"/>
@@ -29,16 +30,26 @@
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
                             <customView translatesAutoresizingMaskIntoConstraints="NO" id="1Oh-go-KH3" userLabel="Content View">
-                                <rect key="frame" x="0.0" y="0.0" width="405" height="212"/>
+                                <rect key="frame" x="0.0" y="-32" width="405" height="244"/>
                                 <subviews>
                                     <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2QJ-Ba-LBh" userLabel="Game title">
-                                        <rect key="frame" x="14" y="176" width="185" height="16"/>
+                                        <rect key="frame" x="14" y="208" width="185" height="16"/>
                                         <textFieldCell key="cell" title="Game Title Optimal Settings" id="NhY-mX-kqv">
                                             <font key="font" textStyle="headline" name=".SFNS-Bold"/>
                                             <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                         </textFieldCell>
                                     </textField>
+                                    <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="0U3-ah-qgd">
+                                        <rect key="frame" x="164" y="167" width="75" height="18"/>
+                                        <buttonCell key="cell" type="check" title="Enabled" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="QsA-io-rV7">
+                                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                            <font key="font" metaFont="system"/>
+                                        </buttonCell>
+                                        <connections>
+                                            <action selector="didToggleEnabledCheckbox:" target="-2" id="09e-PC-S9H"/>
+                                        </connections>
+                                    </button>
                                     <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="6uB-Zr-bk1">
                                         <rect key="frame" x="14" y="136" width="90" height="16"/>
                                         <textFieldCell key="cell" lineBreakMode="clipping" alignment="right" title="Display Mode:" id="vl5-uX-Xbt">
@@ -171,8 +182,10 @@
                                 </subviews>
                                 <constraints>
                                     <constraint firstItem="ioK-eU-7mZ" firstAttribute="trailing" secondItem="6uB-Zr-bk1" secondAttribute="trailing" id="0Lg-au-wl0"/>
+                                    <constraint firstItem="6uB-Zr-bk1" firstAttribute="top" secondItem="0U3-ah-qgd" secondAttribute="bottom" constant="16" id="1AI-XT-bur"/>
                                     <constraint firstItem="8aT-Yi-NF0" firstAttribute="firstBaseline" secondItem="ioK-eU-7mZ" secondAttribute="firstBaseline" id="5X4-Wl-hcd"/>
                                     <constraint firstItem="11q-A4-A7h" firstAttribute="leading" secondItem="1Oh-go-KH3" secondAttribute="leading" constant="16" id="7t4-Nu-uwc"/>
+                                    <constraint firstItem="0U3-ah-qgd" firstAttribute="centerX" secondItem="1Oh-go-KH3" secondAttribute="centerX" id="AB7-wZ-QEC"/>
                                     <constraint firstItem="nqY-BC-8Sk" firstAttribute="leading" secondItem="8aT-Yi-NF0" secondAttribute="trailing" constant="6" id="BdQ-os-hmw"/>
                                     <constraint firstItem="ioK-eU-7mZ" firstAttribute="top" secondItem="6uB-Zr-bk1" secondAttribute="bottom" constant="16" id="BjZ-Ki-c3A"/>
                                     <constraint firstItem="nqY-BC-8Sk" firstAttribute="centerY" secondItem="8aT-Yi-NF0" secondAttribute="centerY" id="E0X-tr-33I"/>
@@ -182,9 +195,10 @@
                                     <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="yzS-pa-Sxg" secondAttribute="trailing" constant="32" id="LPG-vh-TnS"/>
                                     <constraint firstItem="yzS-pa-Sxg" firstAttribute="leading" secondItem="6uB-Zr-bk1" secondAttribute="trailing" constant="12" id="RRN-M9-zbG"/>
                                     <constraint firstItem="2QJ-Ba-LBh" firstAttribute="top" secondItem="1Oh-go-KH3" secondAttribute="top" constant="20" id="SJv-fk-x8g"/>
+                                    <constraint firstItem="0U3-ah-qgd" firstAttribute="top" secondItem="2QJ-Ba-LBh" secondAttribute="bottom" constant="24" id="Udy-yh-zbU"/>
+                                    <constraint firstItem="0U3-ah-qgd" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="1Oh-go-KH3" secondAttribute="leading" constant="16" id="YfH-4g-FtN"/>
                                     <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="2QJ-Ba-LBh" secondAttribute="trailing" constant="16" id="ZZG-mp-7jI"/>
                                     <constraint firstItem="HlG-c4-AZd" firstAttribute="centerY" secondItem="8aT-Yi-NF0" secondAttribute="centerY" id="cle-n7-A4a"/>
-                                    <constraint firstItem="6uB-Zr-bk1" firstAttribute="top" secondItem="2QJ-Ba-LBh" secondAttribute="bottom" constant="24" id="g3W-iF-rCn"/>
                                     <constraint firstItem="11q-A4-A7h" firstAttribute="top" secondItem="V5W-iA-XqR" secondAttribute="bottom" constant="20" id="hZb-QB-Raq"/>
                                     <constraint firstItem="6uB-Zr-bk1" firstAttribute="firstBaseline" secondItem="yzS-pa-Sxg" secondAttribute="firstBaseline" id="ihi-FZ-n6N"/>
                                     <constraint firstItem="6uB-Zr-bk1" firstAttribute="leading" secondItem="2QJ-Ba-LBh" secondAttribute="leading" id="j9p-Er-ebC"/>
@@ -195,6 +209,7 @@
                                     <constraint firstItem="8aT-Yi-NF0" firstAttribute="leading" secondItem="HlG-c4-AZd" secondAttribute="trailing" constant="6" id="sa7-9u-1WT"/>
                                     <constraint firstItem="HlG-c4-AZd" firstAttribute="leading" secondItem="ioK-eU-7mZ" secondAttribute="trailing" constant="12" id="v6A-dQ-jSD"/>
                                     <constraint firstItem="2QJ-Ba-LBh" firstAttribute="leading" secondItem="1Oh-go-KH3" secondAttribute="leading" constant="16" id="vl2-8k-foV"/>
+                                    <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="0U3-ah-qgd" secondAttribute="trailing" constant="16" id="zjZ-k1-vy5"/>
                                 </constraints>
                             </customView>
                         </subviews>
@@ -209,7 +224,7 @@
                         <rect key="frame" x="1" y="197" width="405" height="16"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </scroller>
-                    <scroller key="verticalScroller" wantsLayer="YES" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="eCX-E2-62f">
+                    <scroller key="verticalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="NO" id="eCX-E2-62f">
                         <rect key="frame" x="390" y="1" width="16" height="212"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </scroller>
