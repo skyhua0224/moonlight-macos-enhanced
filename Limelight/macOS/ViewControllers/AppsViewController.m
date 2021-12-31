@@ -265,6 +265,7 @@ const CGFloat scaleBase = 1.125;
     NSImage *fastCacheImage = [self.boxArtCache objectForKey:app.id];
     if (fastCacheImage != nil) {
         item.appCoverArt.image = fastCacheImage;
+        item.placeholderView.hidden = YES;
     } else {
         item.appCoverArt.image = nil;
         
@@ -287,6 +288,7 @@ const CGFloat scaleBase = 1.125;
                                 return newImageView;
                             } duration:0.3 image:cacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
                                 item.appCoverArt = newImageView;
+                                item.placeholderView.hidden = YES;
                             }];
                         }
                     }
@@ -841,10 +843,14 @@ const CGFloat scaleBase = 1.125;
                         NSImageView *newImageView = [[NSImageView alloc] init];
                         newImageView.wantsLayer = YES;
                         newImageView.layer.masksToBounds = YES;
-                        newImageView.layer.cornerRadius = 10;
+                        if (@available(macOS 10.15, *)) {
+                            newImageView.layer.cornerCurve = kCACornerCurveContinuous;
+                        }
+                        newImageView.layer.cornerRadius = APP_CELL_CORNER_RADIUS;
                         return newImageView;
                     } duration:0.3 image:fastCacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
                         item.appCoverArt = newImageView;
+                        item.placeholderView.hidden = YES;
                     }];
                 }
             }

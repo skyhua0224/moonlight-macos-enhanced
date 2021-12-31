@@ -34,7 +34,11 @@
     
     self.appCoverArt.wantsLayer = YES;
     self.appCoverArt.layer.masksToBounds = YES;
-    
+    if (@available(macOS 10.15, *)) {
+        self.appCoverArt.layer.cornerCurve = kCACornerCurveContinuous;
+    }
+    self.placeholderView.layer.cornerRadius = APP_CELL_CORNER_RADIUS;
+
     self.placeholderView.backgroundColor = [NSColor systemGrayColor];
     self.placeholderView.wantsLayer = YES;
     self.placeholderView.layer.masksToBounds = YES;
