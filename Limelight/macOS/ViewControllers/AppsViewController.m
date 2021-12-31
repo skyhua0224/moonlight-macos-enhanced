@@ -400,13 +400,8 @@ const CGFloat scaleBase = 1.125;
     } else {
         hideAppMenuItem.title = @"Hide App";
     }
-    if (self.runningApp == nil) {
+    if (self.runningApp == nil || app != self.runningApp) {
         quitAppMenuItem.hidden = YES;
-        return;
-    }
-    if (app != self.runningApp) {
-        quitAppMenuItem.hidden = YES;
-        [menu cancelTrackingWithoutAnimation];
     }
 }
 
