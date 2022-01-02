@@ -482,7 +482,12 @@
     self.hidSupport = [[HIDSupport alloc] init];
     
     if (self.privateAppId != nil) {
-        BOOL optimalSettingsEnabled = [NSUserDefaults.standardUserDefaults boolForKey:[NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.privateAppId]];
+        NSString *enabledKey = [NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.privateAppId];
+        [NSUserDefaults.standardUserDefaults registerDefaults:@{
+            enabledKey: @YES,
+        }];
+        
+        BOOL optimalSettingsEnabled = [NSUserDefaults.standardUserDefaults boolForKey:enabledKey];
         if (optimalSettingsEnabled) {
             [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self.class getResolution].width andHeight:[self.class getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
                 dispatch_async(dispatch_get_main_queue(), ^{

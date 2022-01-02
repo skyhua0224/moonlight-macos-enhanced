@@ -43,14 +43,9 @@
     [super viewDidLoad];
     
     self.preferredContentSize = NSMakeSize(380, 650);
-
-    NSString *enabledKey = [NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.appId];
-    [NSUserDefaults.standardUserDefaults registerDefaults:@{
-        enabledKey: @YES,
-    }];
     
     self.gameTitleLabel.stringValue = [NSString stringWithFormat:@"Configure %@ Optimal Settings:", self.app.name];
-    self.enabledCheckbox.state = [NSUserDefaults.standardUserDefaults boolForKey:enabledKey];
+    self.enabledCheckbox.state = [NSUserDefaults.standardUserDefaults boolForKey:[NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.appId]];
     
     [PrivateGfeApiRequester requestStateOfApp:self.appId hostIP:self.app.host.activeAddress withCompletionBlock:^(NSDictionary<NSString *,id> *stateJSON) {
         NSArray<NSString *> *displayModes = stateJSON[@"REGULAR"][@"sliderSettingsDC"][@"displayMode"][@"values"];
