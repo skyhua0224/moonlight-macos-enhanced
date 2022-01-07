@@ -5,6 +5,7 @@
         <attribute name="hidden" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES" syncable="YES"/>
         <attribute name="id" attributeType="String" syncable="YES"/>
         <attribute name="name" attributeType="String" syncable="YES"/>
+        <attribute name="pinned" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES" syncable="YES"/>
         <relationship name="host" maxCount="1" deletionRule="Nullify" destinationEntity="Host" inverseName="appList" inverseEntity="Host" syncable="YES"/>
     </entity>
     <entity name="Host" representedClassName="Host" syncable="YES" codeGenerationType="class">
@@ -36,7 +37,7 @@
         <attribute name="width" attributeType="Integer 32" defaultValueString="1280" usesScalarValueType="NO" syncable="YES"/>
     </entity>
     <elements>
-        <element name="App" positionX="0" positionY="54" width="128" height="104"/>
+        <element name="App" positionX="0" positionY="54" width="128" height="119"/>
         <element name="Host" positionX="0" positionY="0" width="128" height="210"/>
         <element name="Settings" positionX="0" positionY="0" width="128" height="238"/>
     </elements>

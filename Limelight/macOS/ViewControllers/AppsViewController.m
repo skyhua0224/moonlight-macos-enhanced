@@ -129,12 +129,12 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
-    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
-        for (int i = 0; i < self.apps.count; i++) {
-            AppCell *cell = (AppCell *)[self.collectionView itemAtIndex:i];
-            [cell updateSelectedState:cell.selected];
-        }
-    }
+//    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
+//        for (int i = 0; i < self.apps.count; i++) {
+//            AppCell *cell = (AppCell *)[self.collectionView itemAtIndex:i];
+//            [cell updateSelectedState:cell.selected];
+//        }
+//    }
 }
 
 - (void)transitionToHostsVC {
@@ -203,6 +203,16 @@ const CGFloat scaleBase = 1.125;
     [self presentViewControllerAsSheet:optimalSettingsConfigVC];
 }
 
+- (IBAction)pinAppMenuItemClicked:(NSMenuItem *)item {
+    AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
+    AppCell *appCell = (AppCell *)(appCellView.delegate);
+
+    NSInteger previousIndex = [self indexPathForApp:appCell.app].item;
+    
+    appCell.app.pinned = !appCell.app.pinned;
+    [self updateCollectionViewWithNewPinnedChangedApp:appCell.app newPinnedState:appCell.app.pinned previousIndex:previousIndex];
+}
+
 - (IBAction)hideAppMenuItemClicked:(NSMenuItem *)item {
     AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
     AppCell *appCell = (AppCell *)(appCellView.delegate);
@@ -217,7 +227,8 @@ const CGFloat scaleBase = 1.125;
 
 - (IBAction)open:(id)sender {
     if (self.collectionView.selectionIndexes.count != 0) {
-        TemporaryApp *app = self.apps[self.collectionView.selectionIndexes.firstIndex];
+        NSIndexPath *selectedIndex = self.collectionView.selectionIndexPaths.anyObject;
+        TemporaryApp *app = [self itemsForSection:selectedIndex.section][selectedIndex.item];
         [self openApp:app];
     }
 }
@@ -256,7 +267,7 @@ const CGFloat scaleBase = 1.125;
 #pragma mark - NSCollectionViewDataSource
 
 - (void)configureItem:(AppCell *)item atIndexPath:(NSIndexPath * _Nonnull)indexPath {
-    TemporaryApp *app = self.apps[indexPath.item];
+    TemporaryApp *app = [self itemsForSection:indexPath.section][indexPath.item];
     item.appName.stringValue = app.name;
     item.app = app;
     
@@ -309,7 +320,23 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (NSInteger)collectionView:(nonnull NSCollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    return self.apps.count;
+    return [self itemsForSection:section].count;
+}
+
+- (NSInteger)numberOfSectionsInCollectionView:(NSCollectionView *)collectionView {
+    return 2;
+}
+
+- (NSArray<TemporaryApp *> *)itemsForSection:(NSInteger)section {
+    if (section == 0) {
+        return [F filterArray:self.apps withBlock:^BOOL(TemporaryApp *obj) {
+            return obj.pinned;
+        }];
+    } else {
+        return [F filterArray:self.apps withBlock:^BOOL(TemporaryApp *obj) {
+            return !obj.pinned;
+        }];
+    }
 }
 
 
@@ -396,7 +423,13 @@ const CGFloat scaleBase = 1.125;
     NSMenuItem *configureOptimalSettingsMenuItem = [HostsViewController getMenuItemForIdentifier:@"configureOptimalSettingsMenuItem" inMenu:menu];
     NSMenuItem *quitAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"quitAppMenuItem" inMenu:menu];
     NSMenuItem *hideAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"hideAppMenuItem" inMenu:menu];
+    NSMenuItem *pinAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"pinAppMenuItem" inMenu:menu];
     configureOptimalSettingsMenuItem.hidden = ![self privateAppIdForAppName:app.name];
+    if (app.pinned) {
+        pinAppMenuItem.title = @"Unpin App";
+    } else {
+        pinAppMenuItem.title = @"Pin App";
+    }
     if (app.hidden) {
         hideAppMenuItem.title = @"Unhide App";
     } else {
@@ -484,9 +517,10 @@ const CGFloat scaleBase = 1.125;
 
 - (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {
     if (app != nil) {
-        NSInteger appIndex = [self.apps indexOfObject:app];
+        NSInteger section = app.pinned ? 0 : 1;
+        NSInteger appIndex = [[self itemsForSection:section] indexOfObject:app];
         if (appIndex >= 0) {
-            return [NSIndexPath indexPathForItem:appIndex inSection:0];
+            return [NSIndexPath indexPathForItem:appIndex inSection:section];
         }
     }
     
@@ -499,7 +533,7 @@ const CGFloat scaleBase = 1.125;
     }
     
     NSIndexPath *indexPath = [self indexPathForApp:app];
-    return (AppCell *)[self.collectionView itemAtIndex:indexPath.item];
+    return (AppCell *)[self.collectionView itemAtIndexPath:indexPath];
 }
 
 - (BOOL)askWhetherToStopRunningApp:(TemporaryApp *)currentApp andStartNewApp:(TemporaryApp *)newApp {
@@ -526,18 +560,18 @@ const CGFloat scaleBase = 1.125;
     
     while (oldIndex < old.count || newIndex < new.count) {
         if (oldIndex >= old.count) {
-            [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:0]];
+            [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:1]];
             TemporaryApp *newItem = new[newIndex];
             [alreadyAdded addObject:newItem.id];
             newIndex++;
         } else if (newIndex >= new.count) {
-            [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+            [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
             oldIndex++;
         } else {
             TemporaryApp *oldItem = old[oldIndex];
             TemporaryApp *newItem = new[newIndex];
             if ([alreadyAdded containsObject:oldItem.id]) {
-                [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+                [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
                 oldIndex++;
             } else {
                 NSComparisonResult comparison = [oldItem compareName:newItem];
@@ -546,10 +580,10 @@ const CGFloat scaleBase = 1.125;
                     oldIndex++;
                     newIndex++;
                 } else if (comparison == NSOrderedAscending) {
-                    [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+                    [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
                     oldIndex++;
                 } else if (comparison == NSOrderedDescending) {
-                    [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:0]];
+                    [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:1]];
                     [alreadyAdded addObject:newItem.id];
                     newIndex++;
                 }
@@ -575,6 +609,32 @@ const CGFloat scaleBase = 1.125;
             
         }];
     }
+}
+
+- (void)updateCollectionViewWithNewPinnedChangedApp:(TemporaryApp *)app newPinnedState:(BOOL)newPinnedState previousIndex:(NSInteger)previousIndex {
+    NSArray<TemporaryApp *> *apps = [[self itemsForSection:newPinnedState == YES ? 0 : 1] sortedArrayUsingSelector:@selector(compareName:)];
+    NSArray<NSString *> *appNames = [F mapArray:apps withBlock:^id(TemporaryApp *obj) {
+        return obj.name;
+    }];
+    NSInteger newIndex = [appNames indexOfObject:app.name inSortedRange:NSMakeRange(0, appNames.count) options:NSBinarySearchingInsertionIndex usingComparator:^NSComparisonResult(NSString * _Nonnull obj1, NSString * _Nonnull obj2) {
+        return [obj1 caseInsensitiveCompare:obj2];
+    }];
+
+    NSIndexPath *previousIndexPath;
+    NSIndexPath *newIndexPath;
+    if (newPinnedState == YES) {
+        newIndexPath = [NSIndexPath indexPathForItem:newIndex inSection:0];
+        previousIndexPath = [NSIndexPath indexPathForItem:previousIndex inSection:1];
+    } else {
+        previousIndexPath = [NSIndexPath indexPathForItem:previousIndex inSection:0];
+        newIndexPath = [NSIndexPath indexPathForItem:newIndex inSection:1];
+    }
+    
+    [self.collectionView.animator performBatchUpdates:^{
+        [self.collectionView moveItemAtIndexPath:previousIndexPath toIndexPath:newIndexPath];
+    } completionHandler:^(BOOL finished) {
+        
+    }];
 }
 
 
@@ -828,31 +888,27 @@ const CGFloat scaleBase = 1.125;
 
 - (void)updateCellWithImageForApp:(TemporaryApp *)app {
     dispatch_async(dispatch_get_main_queue(), ^{
-        
-        NSInteger appIndex = [self.apps indexOfObject:app];
-        if (appIndex >= 0) {
+
+        NSIndexPath *path = [self indexPathForApp:app];
+        AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
+        if (item != nil) {
             
-            NSIndexPath *path = [NSIndexPath indexPathForItem:appIndex inSection:0];
-            AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
-            if (item != nil) {
+            NSImage* fastCacheImage = [self.boxArtCache objectForKey:app.id];
+            if (fastCacheImage != nil) {
                 
-                NSImage* fastCacheImage = [self.boxArtCache objectForKey:app.id];
-                if (fastCacheImage != nil) {
-                    
-                    [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
-                        NSImageView *newImageView = [[NSImageView alloc] init];
-                        newImageView.wantsLayer = YES;
-                        newImageView.layer.masksToBounds = YES;
-                        if (@available(macOS 10.15, *)) {
-                            newImageView.layer.cornerCurve = kCACornerCurveContinuous;
-                        }
-                        newImageView.layer.cornerRadius = APP_CELL_CORNER_RADIUS;
-                        return newImageView;
-                    } duration:0.3 image:fastCacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
-                        item.appCoverArt = newImageView;
-                        item.placeholderView.hidden = YES;
-                    }];
-                }
+                [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
+                    NSImageView *newImageView = [[NSImageView alloc] init];
+                    newImageView.wantsLayer = YES;
+                    newImageView.layer.masksToBounds = YES;
+                    if (@available(macOS 10.15, *)) {
+                        newImageView.layer.cornerCurve = kCACornerCurveContinuous;
+                    }
+                    newImageView.layer.cornerRadius = APP_CELL_CORNER_RADIUS;
+                    return newImageView;
+                } duration:0.3 image:fastCacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
+                    item.appCoverArt = newImageView;
+                    item.placeholderView.hidden = YES;
+                }];
             }
         }
     });

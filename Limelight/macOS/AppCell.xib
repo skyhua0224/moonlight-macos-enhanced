@@ -111,6 +111,12 @@
                         <action selector="configureOptimalSettingsItemClicked:" target="-1" id="Dna-K3-TaU"/>
                     </connections>
                 </menuItem>
+                <menuItem title="Pin App" identifier="pinAppMenuItem" id="5Ld-kN-ktJ">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="pinAppMenuItemClicked:" target="-1" id="wAJ-gs-IyC"/>
+                    </connections>
+                </menuItem>
                 <menuItem title="Hide App" identifier="hideAppMenuItem" id="Z5m-xc-LSb">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
