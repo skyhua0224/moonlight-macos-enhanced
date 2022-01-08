@@ -9,6 +9,7 @@
 #import "AppCell.h"
 #import "AppCellView.h"
 #import "NSApplication+Moonlight.h"
+#import "NSView+Moonlight.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -32,20 +33,10 @@
     [runningShadow setShadowBlurRadius:2];
     self.runningIcon.shadow = runningShadow;
     
-    self.appCoverArt.wantsLayer = YES;
-    self.appCoverArt.layer.masksToBounds = YES;
-    if (@available(macOS 10.15, *)) {
-        self.appCoverArt.layer.cornerCurve = kCACornerCurveContinuous;
-    }
-    self.placeholderView.layer.cornerRadius = APP_CELL_CORNER_RADIUS;
+    [self.appCoverArt smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
 
     self.placeholderView.backgroundColor = [NSColor systemGrayColor];
-    self.placeholderView.wantsLayer = YES;
-    self.placeholderView.layer.masksToBounds = YES;
-    if (@available(macOS 10.15, *)) {
-        self.appCoverArt.layer.cornerCurve = kCACornerCurveContinuous;
-    }
-    self.placeholderView.layer.cornerRadius = APP_CELL_CORNER_RADIUS;
+    [self.placeholderView smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
 
     self.appNameContainer.wantsLayer = YES;
     self.appNameContainer.layer.masksToBounds = YES;

@@ -59,6 +59,7 @@
 		4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */; };
 		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
 		4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */; };
+		4C63B6A9278925FB00ED3510 /* NSView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */; };
 		4C65704A23EBE9F4000D1601 /* GeneralPrefsPaneView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */; };
 		4C682BD124D1227600A70C44 /* Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C682BD024D1227600A70C44 /* Helpers.m */; };
 		4C6E962925BE79CE008F6DAE /* ImageFader.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C6E962825BE79CE008F6DAE /* ImageFader.m */; };
@@ -151,6 +152,8 @@
 		4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LinkTextField.m; sourceTree = "<group>"; };
 		4C51EE3325E0DE2700F205D3 /* AlternateControllerNetworking.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AlternateControllerNetworking.h; sourceTree = "<group>"; };
 		4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AlternateControllerNetworking.m; sourceTree = "<group>"; };
+		4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSView+Moonlight.h"; sourceTree = "<group>"; };
+		4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSView+Moonlight.m"; sourceTree = "<group>"; };
 		4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = GeneralPrefsPaneView.xib; sourceTree = "<group>"; };
 		4C65704B23EBEB3D000D1601 /* GeneralPrefsPaneVC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GeneralPrefsPaneVC.h; sourceTree = "<group>"; };
 		4C682BCF24D1227600A70C44 /* Helpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Helpers.h; sourceTree = "<group>"; };
@@ -424,6 +427,8 @@
 				4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */,
 				4CA454C9277BE4E400E99A96 /* PrivateGfeApiRequester.h */,
 				4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */,
+				4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */,
+				4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -1102,6 +1107,7 @@
 				4CA454CB277BE4E400E99A96 /* PrivateGfeApiRequester.m in Sources */,
 				4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
+				4C63B6A9278925FB00ED3510 /* NSView+Moonlight.m in Sources */,
 				4CE887122772B8B3004EB216 /* PrivateAppAssetRetriever.m in Sources */,
 				4CE887092771DD4F004EB216 /* NSNumber+F.m in Sources */,
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,

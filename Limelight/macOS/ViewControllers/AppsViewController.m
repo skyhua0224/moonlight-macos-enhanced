@@ -19,6 +19,7 @@
 #import "ImageFader.h"
 #import "PrivateGfeApiRequester.h"
 #import "OptimalSettingsConfigurer.h"
+#import "NSView+Moonlight.h"
 
 #import "PrivateAppAssetManager.h"
 
@@ -290,12 +291,8 @@ const CGFloat scaleBase = 1.125;
                         if (item.appCoverArt != nil) {
                             [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
                                 NSImageView *newImageView = [[NSImageView alloc] init];
-                                newImageView.wantsLayer = YES;
-                                newImageView.layer.masksToBounds = YES;
-                                if (@available(macOS 10.15, *)) {
-                                    newImageView.layer.cornerCurve = kCACornerCurveContinuous;
-                                }
-                                newImageView.layer.cornerRadius = APP_CELL_CORNER_RADIUS;
+                                [newImageView smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
+
                                 return newImageView;
                             } duration:0.3 image:cacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
                                 item.appCoverArt = newImageView;
@@ -903,12 +900,8 @@ const CGFloat scaleBase = 1.125;
                 
                 [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
                     NSImageView *newImageView = [[NSImageView alloc] init];
-                    newImageView.wantsLayer = YES;
-                    newImageView.layer.masksToBounds = YES;
-                    if (@available(macOS 10.15, *)) {
-                        newImageView.layer.cornerCurve = kCACornerCurveContinuous;
-                    }
-                    newImageView.layer.cornerRadius = APP_CELL_CORNER_RADIUS;
+                    [newImageView smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
+                    
                     return newImageView;
                 } duration:0.3 image:fastCacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
                     item.appCoverArt = newImageView;
