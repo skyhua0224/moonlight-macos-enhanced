@@ -328,12 +328,16 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (NSArray<TemporaryApp *> *)itemsForSection:(NSInteger)section {
+    return [self filteredItems:self.apps forSection:section];
+}
+
+- (NSArray<TemporaryApp *> *)filteredItems:(NSArray<TemporaryApp *> *)rawItems forSection:(NSInteger)section {
     if (section == 0) {
-        return [F filterArray:self.apps withBlock:^BOOL(TemporaryApp *obj) {
+        return [F filterArray:rawItems withBlock:^BOOL(TemporaryApp *obj) {
             return obj.pinned;
         }];
     } else {
-        return [F filterArray:self.apps withBlock:^BOOL(TemporaryApp *obj) {
+        return [F filterArray:rawItems withBlock:^BOOL(TemporaryApp *obj) {
             return !obj.pinned;
         }];
     }
@@ -600,7 +604,7 @@ const CGFloat scaleBase = 1.125;
     NSSet<NSIndexPath *> *insertions = updates[@"insertions"];
     
     if (deletions.count != 0 || insertions.count != 0) {
-        self.apps = new;
+        self.apps = [self fetchApps];
         
         [self.collectionView.animator performBatchUpdates:^{
             [self.collectionView deleteItemsAtIndexPaths:deletions];
@@ -815,7 +819,7 @@ const CGFloat scaleBase = 1.125;
                 }];
             });
         } else {
-            NSArray<TemporaryApp *> *oldItems = [self fetchApps];
+            NSArray<TemporaryApp *> *oldItems = [self filteredItems:[self fetchApps] forSection:1];
 
             [self updateApplist:[appListResp getAppList] forHost:host];
             
@@ -823,7 +827,8 @@ const CGFloat scaleBase = 1.125;
             [self.appManager retrieveAssetsFromHost:self.host];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self updateCollectionViewDataWithOld:oldItems new:[self fetchApps]];
+                NSArray<TemporaryApp *> *newItems = [self filteredItems:[self fetchApps] forSection:1];
+                [self updateCollectionViewDataWithOld:oldItems new:newItems];
             });
         }
     });
