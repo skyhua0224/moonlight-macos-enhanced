@@ -48,7 +48,7 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
 }
 
 - (void)performIntialSelectionIfNeededForEvent:(NSEvent *)event {
-    if (self.selectionIndexes.count == 0) {
+    if (self.selectionIndexPaths.count == 0) {
         switch (event.keyCode) {
             case kVK_UpArrow:
             case kVK_LeftArrow: {
