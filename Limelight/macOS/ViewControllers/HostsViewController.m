@@ -25,7 +25,6 @@
 #import "WakeOnLanManager.h"
 
 @interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, NSSearchFieldDelegate, NSControlTextEditingDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
-@property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
 @property (nonatomic, strong) TemporaryHost *selectedHost;
 @property (nonatomic, strong) NSAlert *pairAlert;
@@ -108,6 +107,10 @@
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
     
+    self.collectionView.shouldAllowNavigation = NO;
+    appsVC.collectionView.shouldAllowNavigation = YES;
+    [self.view.window makeFirstResponder:nil];
+
     [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:nil];
 }
 

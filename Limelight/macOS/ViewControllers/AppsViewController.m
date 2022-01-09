@@ -38,7 +38,6 @@
 #import "Moonlight-Swift.h"
 
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, PrivateAppAssetCallback, NSSearchFieldDelegate>
-@property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *cmsIdToId;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
 @property (nonatomic, strong) TemporaryApp *runningApp;
@@ -128,6 +127,10 @@ const CGFloat scaleBase = 1.125;
 - (void)transitionToHostsVC {
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
     
+    self.collectionView.shouldAllowNavigation = NO;
+    self.hostsVC.collectionView.shouldAllowNavigation = YES;
+    [self.view.window makeFirstResponder:nil];
+    
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionSlideRight completionHandler:^{
         [self.parentViewController.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
         
@@ -211,7 +214,7 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (IBAction)open:(id)sender {
-    if (self.collectionView.selectionIndexes.count != 0) {
+    if (self.collectionView.selectionIndexPaths.count != 0) {
         NSIndexPath *selectedIndex = self.collectionView.selectionIndexPaths.anyObject;
         TemporaryApp *app = [self itemsForSection:selectedIndex.section][selectedIndex.item];
         [self openApp:app];

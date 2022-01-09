@@ -11,7 +11,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface CollectionView : NSCollectionView
-
+@property (nonatomic) BOOL shouldAllowNavigation;
 @end
 
 NS_ASSUME_NONNULL_END

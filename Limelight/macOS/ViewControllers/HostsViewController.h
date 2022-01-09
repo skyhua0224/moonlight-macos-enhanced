@@ -7,7 +7,9 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import "CollectionView.h"
 
 @interface HostsViewController : NSViewController
+@property (weak) IBOutlet CollectionView *collectionView;
 + (NSMenuItem *)getMenuItemForIdentifier:(NSString *)id inMenu:(NSMenu *)menu;
 @end
