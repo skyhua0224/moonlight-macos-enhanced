@@ -93,10 +93,6 @@ const CGFloat scaleBase = 1.125;
     self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateRunningAppState];
     }];
-    
-    if (@available(macOS 10.14, *)) {
-        [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew) context:nil];
-    }
 }
 
 - (void)viewWillAppear {
@@ -129,20 +125,8 @@ const CGFloat scaleBase = 1.125;
     return [super becomeFirstResponder];
 }
 
-- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
-//    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
-//        for (int i = 0; i < self.apps.count; i++) {
-//            AppCell *cell = (AppCell *)[self.collectionView itemAtIndex:i];
-//            [cell updateSelectedState:cell.selected];
-//        }
-//    }
-}
-
 - (void)transitionToHostsVC {
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
-    if (@available(macOS 10.14, *)) {
-        [[NSApplication sharedApplication] removeObserver:self forKeyPath:@"effectiveAppearance"];
-    }
     
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionSlideRight completionHandler:^{
         [self.parentViewController.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
