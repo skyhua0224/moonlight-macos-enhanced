@@ -75,12 +75,14 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
         self.controllerDisconnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
             [self unregisterControllerCallbacks:note.object];
         }];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self addWindowObservers];
-        });
     }
     return self;
+}
+
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+
+    [self addWindowObservers];
 }
 
 - (void)dealloc {
