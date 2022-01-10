@@ -351,6 +351,7 @@
     [self disallowDisplaySleep];
     
     self.hidSupport.shouldSendInputEvents = YES;
+    self.controllerSupport.shouldSendInputEvents = YES;
     self.view.window.acceptsMouseMovedEvents = YES;
 }
 
@@ -366,6 +367,7 @@
     [self allowDisplaySleep];
     
     self.hidSupport.shouldSendInputEvents = NO;
+    self.controllerSupport.shouldSendInputEvents = NO;
     self.view.window.acceptsMouseMovedEvents = NO;
 }
 
@@ -588,10 +590,12 @@
 
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"rumbleGamepad"]) {
-        if (self.controllerSupport != nil) {
-            [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
-        } else {
-            [self.hidSupport rumbleLowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+        if (self.hidSupport.shouldSendInputEvents) {
+            if (self.controllerSupport != nil) {
+                [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+            } else {
+                [self.hidSupport rumbleLowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+            }
         }
     }
 }
