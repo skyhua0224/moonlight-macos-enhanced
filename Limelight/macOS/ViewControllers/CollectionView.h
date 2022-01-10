@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface CollectionView : NSCollectionView
 @property (nonatomic) BOOL shouldAllowNavigation;
+@property (nonatomic) BOOL shouldWindowObserversBeAround;
 @end
 
 NS_ASSUME_NONNULL_END

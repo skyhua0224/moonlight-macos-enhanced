@@ -54,8 +54,15 @@
     
     [self prepareDiscovery];
     
-    if (@available(macOS 10.14, *)) {
-        [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
+    [self checkWindowNotNil];
+}
+
+- (void)checkWindowNotNil {
+    if (self.view.window != nil) {
+        self.collectionView.shouldAllowNavigation = YES;
+        self.collectionView.shouldWindowObserversBeAround = YES;
+    } else {
+        [self performSelector:@selector(checkWindowNotNil) withObject:self afterDelay:0.1];
     }
 }
 
@@ -108,20 +115,14 @@
     appsVC.view.frame = self.view.bounds;
     
     self.collectionView.shouldAllowNavigation = NO;
+    self.collectionView.shouldWindowObserversBeAround = NO;
     appsVC.collectionView.shouldAllowNavigation = YES;
-    [self.view.window makeFirstResponder:nil];
+    appsVC.collectionView.shouldWindowObserversBeAround = YES;
+    [self.parentViewController.view.window makeFirstResponder:nil];
 
-    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:nil];
-}
-
-- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
-    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
-        if (self.collectionView.selectionIndexes.count > 0) {
-            NSUInteger selectedIndex = self.collectionView.selectionIndexes.firstIndex;
-            HostCell *cell = (HostCell *)[self.collectionView itemAtIndex:selectedIndex];
-            [cell updateSelectedState:YES];
-        }
-    }
+    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:^{
+        [self.parentViewController.view.window makeFirstResponder:appsVC];
+    }];
 }
 
 

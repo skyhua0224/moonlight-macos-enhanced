@@ -46,25 +46,39 @@ typedef struct {
 const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand;
 
 - (void)setShouldAllowNavigation:(BOOL)shouldAllowNavigation {
+    if (shouldAllowNavigation == _shouldAllowNavigation) {
+        return;
+    }
+
     if (shouldAllowNavigation) {
         for (GCController *controller in GCController.controllers) {
             [self registerControllerCallbacks:controller];
         }
-        [self addWindowObservers];
     } else {
         for (GCController *controller in GCController.controllers) {
             [self unregisterControllerCallbacks:controller];
         }
-        [self removeWindowObservers];
     }
     _shouldAllowNavigation = shouldAllowNavigation;
+}
+
+- (void)setShouldWindowObserversBeAround:(BOOL)shouldWindowObserversBeAround {
+    if (shouldWindowObserversBeAround == _shouldWindowObserversBeAround) {
+        return;
+    }
+    
+    if (shouldWindowObserversBeAround) {
+        [self addWindowObservers];
+    } else {
+        [self removeWindowObservers];
+    }
+    
+    _shouldWindowObserversBeAround = shouldWindowObserversBeAround;
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super initWithCoder:coder];
     if (self) {
-        self.shouldAllowNavigation = YES;
-        
         for (GCController *controller in GCController.controllers) {
             [self registerControllerCallbacks:controller];
         }
@@ -79,28 +93,17 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
     return self;
 }
 
-- (void)viewDidMoveToWindow {
-    [super viewDidMoveToWindow];
-
-    [self addWindowObservers];
-}
-
-- (void)dealloc {
-    for (GCController *controller in GCController.controllers) {
-        [self unregisterControllerCallbacks:controller];
-    }
-    [self removeWindowObservers];
-}
-
 - (void)addWindowObservers {
-    if (self.window != nil) {
-        self.windowDidResignKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:self.window queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+    NSWindow *mainWindow = NSApplication.sharedApplication.mainWindow;
+    
+    if (mainWindow != nil) {
+        self.windowDidResignKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:mainWindow queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
             self.shouldAllowNavigation = NO;
         }];
-        self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:self.window queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:mainWindow queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
             self.shouldAllowNavigation = YES;
         }];
-        self.windowDidEndSheetObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEndSheetNotification object:self.window queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        self.windowDidEndSheetObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEndSheetNotification object:mainWindow queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
             self.shouldAllowNavigation = YES;
         }];
     }

@@ -113,12 +113,6 @@ const CGFloat scaleBase = 1.125;
     self.getSearchField.placeholderString = @"Filter Apps";
 }
 
-- (void)viewDidAppear {
-    [super viewDidAppear];
-    
-    [self.parentViewController.view.window makeFirstResponder:self.collectionView];
-}
-
 - (BOOL)becomeFirstResponder {
     [self.view.window makeFirstResponder:self.collectionView];
     return [super becomeFirstResponder];
@@ -128,11 +122,13 @@ const CGFloat scaleBase = 1.125;
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
     
     self.collectionView.shouldAllowNavigation = NO;
+    self.collectionView.shouldWindowObserversBeAround = NO;
     self.hostsVC.collectionView.shouldAllowNavigation = YES;
-    [self.view.window makeFirstResponder:nil];
+    self.hostsVC.collectionView.shouldWindowObserversBeAround = YES;
+    [self.parentViewController.view.window makeFirstResponder:nil];
     
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionSlideRight completionHandler:^{
-        [self.parentViewController.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
+        [self.parentViewController.view.window makeFirstResponder:self.hostsVC];
         
         [self.view removeFromSuperview];
         [self removeFromParentViewController];
