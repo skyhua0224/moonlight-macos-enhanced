@@ -83,11 +83,12 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
             [self registerControllerCallbacks:controller];
         }
         
+        __weak typeof(self) weakSelf = self;
         self.controllerConnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidConnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-            [self registerControllerCallbacks:note.object];
+            [weakSelf registerControllerCallbacks:note.object];
         }];
         self.controllerDisconnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-            [self unregisterControllerCallbacks:note.object];
+            [weakSelf unregisterControllerCallbacks:note.object];
         }];
     }
     return self;
@@ -97,14 +98,15 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
     NSWindow *mainWindow = NSApplication.sharedApplication.mainWindow;
     
     if (mainWindow != nil) {
+        __weak typeof(self) weakSelf = self;
         self.windowDidResignKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:mainWindow queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-            self.shouldAllowNavigation = NO;
+            weakSelf.shouldAllowNavigation = NO;
         }];
         self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:mainWindow queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-            self.shouldAllowNavigation = YES;
+            weakSelf.shouldAllowNavigation = YES;
         }];
         self.windowDidEndSheetObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEndSheetNotification object:mainWindow queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-            self.shouldAllowNavigation = YES;
+            weakSelf.shouldAllowNavigation = YES;
         }];
     }
 }
