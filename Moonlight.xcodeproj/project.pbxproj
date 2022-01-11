@@ -455,8 +455,6 @@
 			children = (
 				4C38E8111FEE30F8000425CD /* ContainerViewController.h */,
 				4C38E8121FEE30F8000425CD /* ContainerViewController.m */,
-				4CABABB021F6C8A3008576A4 /* CollectionView.h */,
-				4CABABB121F6C8A4008576A4 /* CollectionView.m */,
 				4C7E0A951FECCF9A00684411 /* HostsViewController.h */,
 				4C7E0A961FECCF9A00684411 /* HostsViewController.m */,
 				4C7E0A9C1FECD31600684411 /* HostCell.h */,
@@ -500,6 +498,8 @@
 		4C7E0A9B1FECD2EE00684411 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				4CABABB021F6C8A3008576A4 /* CollectionView.h */,
+				4CABABB121F6C8A4008576A4 /* CollectionView.m */,
 				4C30BA1E1FF5F7D600848919 /* BackgroundColorView.h */,
 				4C30BA1F1FF5F7D600848919 /* BackgroundColorView.m */,
 				4C4FB2B923715A9000D0FCE3 /* LinkTextField.h */,
