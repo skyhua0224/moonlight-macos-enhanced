@@ -15,6 +15,7 @@
 #import "NSWindow+Moonlight.h"
 #import "NSCollectionView+Moonlight.h"
 #import "Helpers.h"
+#import "NavigatableAlertView.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -395,13 +396,24 @@
     [alert addButtonWithTitle:@"Wake"];
     [alert addButtonWithTitle:@"Cancel"];
 
+    NavigatableAlertView *alertView = [[NavigatableAlertView alloc] init];
+    alertView.responder = alert.window;
+    [self.view addSubview:alertView];
+    [self.view.window makeFirstResponder:alertView];
+    
     [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
         switch (returnCode) {
             case NSAlertFirstButtonReturn:
                 [WakeOnLanManager wakeHost:host];
+    
+                [alertView removeFromSuperview];
+                [self.view.window makeFirstResponder:self];
                 break;
             case NSAlertSecondButtonReturn:
                 [self.view.window endSheet:alert.window];
+
+                [alertView removeFromSuperview];
+                [self.view.window makeFirstResponder:self];
                 break;
         }
     }];

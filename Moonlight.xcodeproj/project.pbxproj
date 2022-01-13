@@ -62,6 +62,7 @@
 		4C63B6A9278925FB00ED3510 /* NSView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */; };
 		4C651041278FD2880089E407 /* NSResponder+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651040278FD2880089E407 /* NSResponder+Moonlight.m */; };
 		4C651044278FD81D0089E407 /* ControllerNavigation.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651043278FD81D0089E407 /* ControllerNavigation.m */; };
+		4C651052278FEA130089E407 /* NavigatableAlertView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651051278FEA130089E407 /* NavigatableAlertView.m */; };
 		4C65704A23EBE9F4000D1601 /* GeneralPrefsPaneView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */; };
 		4C682BD124D1227600A70C44 /* Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C682BD024D1227600A70C44 /* Helpers.m */; };
 		4C6E962925BE79CE008F6DAE /* ImageFader.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C6E962825BE79CE008F6DAE /* ImageFader.m */; };
@@ -160,6 +161,8 @@
 		4C651040278FD2880089E407 /* NSResponder+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSResponder+Moonlight.m"; sourceTree = "<group>"; };
 		4C651042278FD81D0089E407 /* ControllerNavigation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ControllerNavigation.h; sourceTree = "<group>"; };
 		4C651043278FD81D0089E407 /* ControllerNavigation.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ControllerNavigation.m; sourceTree = "<group>"; };
+		4C651050278FEA130089E407 /* NavigatableAlertView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NavigatableAlertView.h; sourceTree = "<group>"; };
+		4C651051278FEA130089E407 /* NavigatableAlertView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = NavigatableAlertView.m; sourceTree = "<group>"; };
 		4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = GeneralPrefsPaneView.xib; sourceTree = "<group>"; };
 		4C65704B23EBEB3D000D1601 /* GeneralPrefsPaneVC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GeneralPrefsPaneVC.h; sourceTree = "<group>"; };
 		4C682BCF24D1227600A70C44 /* Helpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Helpers.h; sourceTree = "<group>"; };
@@ -520,6 +523,8 @@
 				4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */,
 				4C2E24851FF3934700B6A12E /* StreamViewMac.h */,
 				4C2E24861FF3934700B6A12E /* StreamViewMac.m */,
+				4C651050278FEA130089E407 /* NavigatableAlertView.h */,
+				4C651051278FEA130089E407 /* NavigatableAlertView.m */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1100,6 +1105,7 @@
 				4C30BA201FF5F7D600848919 /* BackgroundColorView.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
 				4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */,
+				4C651052278FEA130089E407 /* NavigatableAlertView.m in Sources */,
 				4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */,
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
 				4CC3C0321FF73A660029EBF5 /* GeneralPrefsPaneVC.m in Sources */,
