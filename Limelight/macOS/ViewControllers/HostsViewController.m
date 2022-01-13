@@ -53,17 +53,6 @@
     self.hosts = [NSArray array];
     
     [self prepareDiscovery];
-    
-    [self checkWindowNotNil];
-}
-
-- (void)checkWindowNotNil {
-    if (self.view.window != nil) {
-        self.collectionView.shouldAllowNavigation = YES;
-        self.collectionView.shouldWindowObserversBeAround = YES;
-    } else {
-        [self performSelector:@selector(checkWindowNotNil) withObject:self afterDelay:0.1];
-    }
 }
 
 - (void)viewWillAppear {
@@ -114,10 +103,6 @@
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
     
-    self.collectionView.shouldAllowNavigation = NO;
-    self.collectionView.shouldWindowObserversBeAround = NO;
-    appsVC.collectionView.shouldAllowNavigation = YES;
-    appsVC.collectionView.shouldWindowObserversBeAround = YES;
     [self.parentViewController.view.window makeFirstResponder:nil];
 
     [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:^{

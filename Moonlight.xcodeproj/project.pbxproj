@@ -60,6 +60,8 @@
 		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
 		4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */; };
 		4C63B6A9278925FB00ED3510 /* NSView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */; };
+		4C651041278FD2880089E407 /* NSResponder+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651040278FD2880089E407 /* NSResponder+Moonlight.m */; };
+		4C651044278FD81D0089E407 /* ControllerNavigation.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651043278FD81D0089E407 /* ControllerNavigation.m */; };
 		4C65704A23EBE9F4000D1601 /* GeneralPrefsPaneView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */; };
 		4C682BD124D1227600A70C44 /* Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C682BD024D1227600A70C44 /* Helpers.m */; };
 		4C6E962925BE79CE008F6DAE /* ImageFader.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C6E962825BE79CE008F6DAE /* ImageFader.m */; };
@@ -154,6 +156,10 @@
 		4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AlternateControllerNetworking.m; sourceTree = "<group>"; };
 		4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSView+Moonlight.h"; sourceTree = "<group>"; };
 		4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSView+Moonlight.m"; sourceTree = "<group>"; };
+		4C65103F278FD2880089E407 /* NSResponder+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSResponder+Moonlight.h"; sourceTree = "<group>"; };
+		4C651040278FD2880089E407 /* NSResponder+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSResponder+Moonlight.m"; sourceTree = "<group>"; };
+		4C651042278FD81D0089E407 /* ControllerNavigation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ControllerNavigation.h; sourceTree = "<group>"; };
+		4C651043278FD81D0089E407 /* ControllerNavigation.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ControllerNavigation.m; sourceTree = "<group>"; };
 		4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = GeneralPrefsPaneView.xib; sourceTree = "<group>"; };
 		4C65704B23EBEB3D000D1601 /* GeneralPrefsPaneVC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GeneralPrefsPaneVC.h; sourceTree = "<group>"; };
 		4C682BCF24D1227600A70C44 /* Helpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Helpers.h; sourceTree = "<group>"; };
@@ -429,6 +435,10 @@
 				4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */,
 				4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */,
 				4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */,
+				4C65103F278FD2880089E407 /* NSResponder+Moonlight.h */,
+				4C651040278FD2880089E407 /* NSResponder+Moonlight.m */,
+				4C651042278FD81D0089E407 /* ControllerNavigation.h */,
+				4C651043278FD81D0089E407 /* ControllerNavigation.m */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -1093,6 +1103,7 @@
 				4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */,
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
 				4CC3C0321FF73A660029EBF5 /* GeneralPrefsPaneVC.m in Sources */,
+				4C651044278FD81D0089E407 /* ControllerNavigation.m in Sources */,
 				4C38E8101FEE295E000425CD /* PairManager.m in Sources */,
 				4C12130E236FF750005A60A0 /* HostCellView.m in Sources */,
 				4C38E7F91FEE085B000425CD /* (null) in Sources */,
@@ -1112,6 +1123,7 @@
 				4CE887092771DD4F004EB216 /* NSNumber+F.m in Sources */,
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
 				4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */,
+				4C651041278FD2880089E407 /* NSResponder+Moonlight.m in Sources */,
 				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
 				4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */,
 				4C682BD124D1227600A70C44 /* Helpers.m in Sources */,

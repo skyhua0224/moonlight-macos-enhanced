@@ -121,10 +121,6 @@ const CGFloat scaleBase = 1.125;
 - (void)transitionToHostsVC {
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
     
-    self.collectionView.shouldAllowNavigation = NO;
-    self.collectionView.shouldWindowObserversBeAround = NO;
-    self.hostsVC.collectionView.shouldAllowNavigation = YES;
-    self.hostsVC.collectionView.shouldWindowObserversBeAround = YES;
     [self.parentViewController.view.window makeFirstResponder:nil];
     
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionSlideRight completionHandler:^{
