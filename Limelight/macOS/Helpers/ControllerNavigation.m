@@ -12,10 +12,18 @@
 @import GameController;
 
 typedef struct {
-    BOOL dpadUp;
-    BOOL dpadDown;
-    BOOL dpadLeft;
-    BOOL dpadRight;
+    struct {
+        BOOL up;
+        BOOL down;
+        BOOL left;
+        BOOL right;
+    } dpad;
+    struct {
+        BOOL up;
+        BOOL down;
+        BOOL left;
+        BOOL right;
+    } leftThumbstick;
     BOOL buttonA;
     BOOL buttonB;
 } ControllerState;
@@ -46,20 +54,31 @@ typedef struct {
     return self;
 }
 
+#define COMPARE_STATES(Name) \
+    gamepad.Name.pressed != self.lastGamepadState.Name && gamepad.Name.pressed
+
 - (void)registerControllerCallbacks:(GCController *)controller {
     controller.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *gamepad, GCControllerElement *element) {
         MoonlightControllerEvent event;
-        if (gamepad.dpad.up.pressed != self.lastGamepadState.dpadUp && gamepad.dpad.up.pressed) {
+        if (COMPARE_STATES(dpad.up)) {
             event.button = kMCE_UpDpad;
-        } else if (gamepad.dpad.down.pressed != self.lastGamepadState.dpadDown && gamepad.dpad.down.pressed) {
+        } else if (COMPARE_STATES(dpad.down)) {
             event.button = kMCE_DownDpad;
-        } else if (gamepad.dpad.left.pressed != self.lastGamepadState.dpadLeft && gamepad.dpad.left.pressed) {
+        } else if (COMPARE_STATES(dpad.left)) {
             event.button = kMCE_LeftDpad;
-        } else if (gamepad.dpad.right.pressed != self.lastGamepadState.dpadRight && gamepad.dpad.right.pressed) {
+        } else if (COMPARE_STATES(dpad.right)) {
             event.button = kMCE_RightDpad;
-        } else if (gamepad.buttonA.pressed != self.lastGamepadState.buttonA && gamepad.buttonA.pressed) {
+//        } else if (COMPARE_STATES(leftThumbstick.up)) {
+//            event.button = kMCE_UpDpad;
+//        } else if (COMPARE_STATES(leftThumbstick.down)) {
+//            event.button = kMCE_DownDpad;
+//        } else if (COMPARE_STATES(leftThumbstick.left)) {
+//            event.button = kMCE_LeftDpad;
+//        } else if (COMPARE_STATES(leftThumbstick.right)) {
+//            event.button = kMCE_RightDpad;
+        } else if (COMPARE_STATES(buttonA)) {
             event.button = kMCE_AButton;
-        } else if (gamepad.buttonB.pressed != self.lastGamepadState.buttonB && gamepad.buttonB.pressed) {
+        } else if (COMPARE_STATES(buttonB)) {
             event.button = kMCE_BButton;
         } else {
             event.button = kMCE_Unknown;
@@ -74,13 +93,22 @@ typedef struct {
     controller.extendedGamepad.valueChangedHandler = nil;
 }
 
+#define COPY_STATE(Name) \
+    state.Name = gamepad.Name.pressed
+
 - (ControllerState)controllerStateFromGamepad:(GCExtendedGamepad *)gamepad {
     ControllerState state;
-    state.dpadUp = gamepad.dpad.up.pressed;
-    state.dpadDown = gamepad.dpad.down.pressed;
-    state.dpadLeft = gamepad.dpad.left.pressed;
-    state.dpadRight = gamepad.dpad.right.pressed;
-    
+    COPY_STATE(dpad.up);
+    COPY_STATE(dpad.down);
+    COPY_STATE(dpad.left);
+    COPY_STATE(dpad.right);
+//    COPY_STATE(leftThumbstick.up);
+//    COPY_STATE(leftThumbstick.down);
+//    COPY_STATE(leftThumbstick.left);
+//    COPY_STATE(leftThumbstick.right);
+    COPY_STATE(buttonA);
+    COPY_STATE(buttonB);
+
     return state;
 }
 
