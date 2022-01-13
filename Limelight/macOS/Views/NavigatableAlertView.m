@@ -17,19 +17,15 @@
     switch (event.button) {
         case kMCE_LeftDpad:
             [self sendKey:kVK_Tab down:YES modifiers:kCGEventFlagMaskShift];
-            [self sendKey:kVK_Tab down:NO modifiers:kCGEventFlagMaskShift];
             break;
         case kMCE_RightDpad:
             [self sendKey:kVK_Tab down:YES modifiers:0];
-            [self sendKey:kVK_Tab down:NO modifiers:0];
             break;
         case kMCE_AButton:
             [self sendKey:kVK_Space down:YES modifiers:0];
-            [self sendKey:kVK_Space down:NO modifiers:0];
             break;
         case kMCE_BButton:
             [self sendKey:kVK_Escape down:YES modifiers:0];
-            [self sendKey:kVK_Escape down:NO modifiers:0];
             break;
             
         case kMCE_Unknown:
