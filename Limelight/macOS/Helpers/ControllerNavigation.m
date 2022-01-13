@@ -26,6 +26,7 @@ typedef struct {
     } leftThumbstick;
     BOOL buttonA;
     BOOL buttonB;
+    BOOL buttonX;
 } ControllerState;
 
 @interface ControllerNavigation ()
@@ -80,6 +81,8 @@ typedef struct {
             event.button = kMCE_AButton;
         } else if (COMPARE_STATES(buttonB)) {
             event.button = kMCE_BButton;
+        } else if (COMPARE_STATES(buttonX)) {
+            event.button = kMCE_XButton;
         } else {
             event.button = kMCE_Unknown;
         }
@@ -108,6 +111,7 @@ typedef struct {
 //    COPY_STATE(leftThumbstick.right);
     COPY_STATE(buttonA);
     COPY_STATE(buttonB);
+    COPY_STATE(buttonX);
 
     return state;
 }

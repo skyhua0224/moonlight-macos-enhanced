@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 enum {
     kMCE_AButton,
     kMCE_BButton,
+    kMCE_XButton,
     kMCE_LeftDpad,
     kMCE_RightDpad,
     kMCE_UpDpad,
