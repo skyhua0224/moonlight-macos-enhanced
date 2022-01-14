@@ -8,8 +8,10 @@
 
 #import "StreamViewController.h"
 #import "StreamViewMac.h"
+#import "AppsViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "AlertPresenter.h"
+#import "PrivateGfeApiRequester.h"
 
 #import "Connection.h"
 #import "StreamConfiguration.h"
@@ -124,12 +126,12 @@
     [super viewDidAppear];
     
     self.streamView.keyboardNotifiable = self;
-    self.streamView.appName = self.app.name;
+    self.streamView.appName = self.appName;
     self.streamView.statusText = @"Starting";
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
     
-    self.view.window.contentAspectRatio = NSMakeSize([self getResolution].width, [self getResolution].height);
+    self.view.window.contentAspectRatio = NSMakeSize([self.class getResolution].width, [self.class getResolution].height);
     self.view.window.frameAutosaveName = @"Stream Window";
     [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
     
@@ -317,8 +319,8 @@
 
 - (IBAction)resizeWindowToActualResulution:(id)sender {
     CGFloat screenScale = [NSScreen mainScreen].backingScaleFactor;
-    CGFloat width = (CGFloat)[self getResolution].width / screenScale;
-    CGFloat height = (CGFloat)[self getResolution].height / screenScale;
+    CGFloat width = (CGFloat)[self.class getResolution].width / screenScale;
+    CGFloat height = (CGFloat)[self.class getResolution].height / screenScale;
     [self.view.window setContentSize:NSMakeSize(width, height)];
 }
 
@@ -349,6 +351,7 @@
     [self disallowDisplaySleep];
     
     self.hidSupport.shouldSendInputEvents = YES;
+    self.controllerSupport.shouldSendInputEvents = YES;
     self.view.window.acceptsMouseMovedEvents = YES;
 }
 
@@ -364,6 +367,7 @@
     [self allowDisplaySleep];
     
     self.hidSupport.shouldSendInputEvents = NO;
+    self.controllerSupport.shouldSendInputEvents = NO;
     self.view.window.acceptsMouseMovedEvents = NO;
 }
 
@@ -423,6 +427,10 @@
 - (void)closeWindowFromMainQueueWithMessage:(NSString *)message {
     [self.hidSupport releaseAllModifierKeys];
     
+    if (hasFeaturePrivateAppOptimalSettings()) {
+        [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
+    }
+    
     dispatch_async(dispatch_get_main_queue(), ^{
         [self uncaptureMouse];
 
@@ -455,8 +463,8 @@
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
-    streamConfig.width = [self getResolution].width;
-    streamConfig.height = [self getResolution].height;
+    streamConfig.width = [self.class getResolution].width;
+    streamConfig.height = [self.class getResolution].height;
 
     streamConfig.frameRate = [streamSettings.framerate intValue];
     streamConfig.bitRate = [streamSettings.bitrate intValue];
@@ -477,6 +485,34 @@
     }
     self.hidSupport = [[HIDSupport alloc] init];
     
+    if (self.privateAppId != nil) {
+        NSString *enabledKey = [NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.privateAppId];
+        [NSUserDefaults.standardUserDefaults registerDefaults:@{
+            enabledKey: @YES,
+        }];
+        
+        BOOL optimalSettingsEnabled = [NSUserDefaults.standardUserDefaults boolForKey:enabledKey];
+        if (optimalSettingsEnabled) {
+            [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self.class getResolution].width andHeight:[self.class getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self startStreamWithStreamConfig:streamConfig];
+                });
+            }];
+        } else {
+            [self startStreamWithStreamConfig:streamConfig];
+        }
+    } else {
+        [self startStreamWithStreamConfig:streamConfig];
+    }
+
+    if (hasFeaturePrivateAppListing()) {
+        if (![AppsViewController isWhitelistedGFEApp:self.privateApp]) {
+            [PrivateGfeApiRequester requestLaunchOfPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
+        }
+    }
+}
+
+- (void)startStreamWithStreamConfig:(StreamConfiguration *)streamConfig {
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:self.streamMan];
@@ -485,12 +521,7 @@
 
 #pragma mark - Resolution
 
-struct Resolution {
-   int width;
-   int height;
-};
-
-- (struct Resolution)getResolution {
++ (struct Resolution)getResolution {
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
 
@@ -560,10 +591,12 @@ struct Resolution {
 
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"rumbleGamepad"]) {
-        if (self.controllerSupport != nil) {
-            [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
-        } else {
-            [self.hidSupport rumbleLowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+        if (self.hidSupport.shouldSendInputEvents) {
+            if (self.controllerSupport != nil) {
+                [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+            } else {
+                [self.hidSupport rumbleLowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+            }
         }
     }
 }

@@ -7,10 +7,23 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import "TemporaryApp.h"
 #import "TemporaryHost.h"
 #import "HostsViewController.h"
+#import "CollectionView.h"
+
+#define CUSTOM_PRIVATE_GFE_PORT (49999)
 
 @interface AppsViewController : NSViewController
 @property (nonatomic, strong) TemporaryHost *host;
 @property (nonatomic, strong) HostsViewController *hostsVC;
+@property (weak) IBOutlet CollectionView *collectionView;
+
++ (BOOL)isWhitelistedGFEApp:(TemporaryApp *)app;
++ (CGSize)getAppCoverArtSize;
+
 @end
+
+extern BOOL hasFeaturePrivateAppListing(void);
+extern BOOL hasFeaturePrivateAppOptimalSettings(void);
+extern BOOL usesNewAppCoverArtAspectRatio(void);

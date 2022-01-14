@@ -16,6 +16,8 @@
     self.id = app.id;
     self.name = app.name;
     self.hdrSupported = app.hdrSupported;
+    self.hidden = app.hidden;
+    self.pinned = app.pinned;
     self.host = tempHost;
     
     return self;
@@ -25,6 +27,8 @@
     parent.id = self.id;
     parent.name = self.name;
     parent.hdrSupported = self.hdrSupported;
+    parent.hidden = self.hidden;
+    parent.pinned = self.pinned;
     parent.host = host;
 }
 

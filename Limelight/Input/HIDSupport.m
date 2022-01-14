@@ -555,15 +555,17 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 }
 
 - (void)sendControllerEvent {
+    if (self.shouldSendInputEvents) {
 #ifdef USE_RESOLUTION_SYNC
-    if (cfdyControllerMethod()) {
-        CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-    } else {
+        if (cfdyControllerMethod()) {
+            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+        } else {
 #endif
-        LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
 #ifdef USE_RESOLUTION_SYNC
+        }
+#endif
     }
-#endif
 }
 
 static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,

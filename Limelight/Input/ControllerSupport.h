@@ -19,6 +19,7 @@
 @end
 
 @interface ControllerSupport : NSObject
+@property (nonatomic) BOOL shouldSendInputEvents;
 
 -(id) initWithConfig:(StreamConfiguration*)streamConfig presenceDelegate:(id<InputPresenceDelegate>)delegate;
 

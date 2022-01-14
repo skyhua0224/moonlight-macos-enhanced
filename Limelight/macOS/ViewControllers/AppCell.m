@@ -9,10 +9,15 @@
 #import "AppCell.h"
 #import "AppCellView.h"
 #import "NSApplication+Moonlight.h"
+#import "NSView+Moonlight.h"
+#import "AppsViewController.h"
 
 #import <QuartzCore/QuartzCore.h>
 
+#import "Moonlight-Swift.h"
+
 @interface AppCell () <NSMenuDelegate>
+@property (nonatomic) BOOL togglingHideStatus;
 @property (nonatomic) BOOL hovered;
 @property (nonatomic) BOOL previousHovered;
 @property (nonatomic) BOOL previousSelected;
@@ -23,20 +28,20 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    CGFloat aspectRatio = [AppsViewController getAppCoverArtSize].width / [AppsViewController getAppCoverArtSize].height;
+    self.appCoverArt.superview.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.appCoverArt.superview.widthAnchor constraintEqualToAnchor:self.appCoverArt.superview.heightAnchor multiplier:aspectRatio].active = YES;
+    
     NSShadow *runningShadow = [[NSShadow alloc] init];
     [runningShadow setShadowColor:[NSColor colorWithRed:0.06 green:0.204 blue:0.5 alpha:0.75]];
     [runningShadow setShadowOffset:NSMakeSize(0, -2)];
     [runningShadow setShadowBlurRadius:2];
     self.runningIcon.shadow = runningShadow;
     
-    self.appCoverArt.wantsLayer = YES;
-    self.appCoverArt.layer.masksToBounds = YES;
-    self.appCoverArt.layer.cornerRadius = 10;
-    
+    [self.appCoverArt smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
+
     self.placeholderView.backgroundColor = [NSColor systemGrayColor];
-    self.placeholderView.wantsLayer = YES;
-    self.placeholderView.layer.masksToBounds = YES;
-    self.placeholderView.layer.cornerRadius = 10;
+    [self.placeholderView smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
 
     self.appNameContainer.wantsLayer = YES;
     self.appNameContainer.layer.masksToBounds = YES;
@@ -102,7 +107,7 @@
     self.previousHovered = self.hovered;
 }
 
-- (CGFloat)shadowAlphaWithSelected:(BOOL)selected {
+- (CGFloat)shadowAlpha {
     if (@available(macOS 10.14, *)) {
         return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.33;
     } else {
@@ -111,6 +116,9 @@
 }
 
 - (CGFloat)appCoverArtAlphaWithHovered:(BOOL)hovered {
+    if (self.app.hidden) {
+        return 0.33;
+    }
     if (self.selected) {
         return 1;
     } else {
@@ -122,15 +130,34 @@
     }
 }
 
-- (void)updateSelectedState:(BOOL)selected {
-    NSShadow *shadow = [[NSShadow alloc] init];
-    shadow.shadowColor = [NSColor colorWithWhite:0 alpha:[self shadowAlphaWithSelected:selected]];
-    if (@available(macOS 10.14, *)) {
-        shadow.shadowOffset = NSMakeSize(0, -5);
-        shadow.shadowBlurRadius = 5;
+- (void)updateAlphaStateWithShouldAnimate:(BOOL)animate {
+    self.togglingHideStatus = YES;
+    if (animate) {
+        [NSAnimationContext beginGrouping];
+        [NSAnimationContext currentContext].duration = 0.4;
+        [NSAnimationContext currentContext].completionHandler = ^{
+            self.togglingHideStatus = NO;
+        };
+        self.appCoverArt.superview.animator.alphaValue = [self appCoverArtAlphaWithHovered:NO];
+        [NSAnimationContext endGrouping];
     } else {
-        shadow.shadowOffset = NSMakeSize(0, -4);
-        shadow.shadowBlurRadius = 4;
+        self.togglingHideStatus = NO;
+        self.appCoverArt.superview.alphaValue = [self appCoverArtAlphaWithHovered:NO];
+    }
+}
+
+- (void)updateSelectedState:(BOOL)selected {
+    NSView *appCoverArtContainerView = self.appCoverArt.superview;
+    appCoverArtContainerView.shadow = [[NSShadow alloc] init];
+    appCoverArtContainerView.wantsLayer = YES;
+
+    appCoverArtContainerView.layer.shadowColor = [NSColor colorWithWhite:0 alpha:[self shadowAlpha]].CGColor;
+    if (@available(macOS 10.14, *)) {
+        appCoverArtContainerView.layer.shadowOffset = NSMakeSize(0, -5);
+        appCoverArtContainerView.layer.shadowRadius = 5;
+    } else {
+        appCoverArtContainerView.layer.shadowOffset = NSMakeSize(0, -4);
+        appCoverArtContainerView.layer.shadowRadius = 4;
     }
 
     self.appNameContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
@@ -138,11 +165,53 @@
 
     [NSAnimationContext beginGrouping];
     [NSAnimationContext currentContext].duration = 0.4;
-    self.appCoverArt.superview.animator.shadow = shadow;
     self.appCoverArt.superview.animator.alphaValue = [self appCoverArtAlphaWithHovered:NO];
     [NSAnimationContext endGrouping];
 
     [self animateSelectedAndHoveredState];
+}
+
+- (void)viewDidAppear {
+    [super viewDidAppear];
+    
+    [self updateAlphaStateWithShouldAnimate:NO];
+    [self updateShadowPath];
+}
+
+- (CGMutablePathRef)CGPathFromPath:(NSBezierPath *)path {
+    CGMutablePathRef cgPath = CGPathCreateMutable();
+    NSInteger n = [path elementCount];
+
+    for (NSInteger i = 0; i < n; i++) {
+        NSPoint ps[3];
+        switch ([path elementAtIndex:i associatedPoints:ps]) {
+            case NSMoveToBezierPathElement: {
+                CGPathMoveToPoint(cgPath, NULL, ps[0].x, ps[0].y);
+                break;
+            }
+            case NSLineToBezierPathElement: {
+                CGPathAddLineToPoint(cgPath, NULL, ps[0].x, ps[0].y);
+                break;
+            }
+            case NSCurveToBezierPathElement: {
+                CGPathAddCurveToPoint(cgPath, NULL, ps[0].x, ps[0].y, ps[1].x, ps[1].y, ps[2].x, ps[2].y);
+                break;
+            }
+            case NSClosePathBezierPathElement: {
+                CGPathCloseSubpath(cgPath);
+                break;
+            }
+            default: NSAssert(0, @"Invalid NSBezierPathElement");
+        }
+    }
+    return cgPath;
+}
+
+- (void)updateShadowPath {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSBezierPath *shadowPath = [NSBezierPath bezierPathWithRoundedRect:self.appCoverArt.bounds xRadius:APP_CELL_CORNER_RADIUS yRadius:APP_CELL_CORNER_RADIUS];
+        self.appCoverArt.superview.layer.shadowPath = [self CGPathFromPath:shadowPath];
+    });
 }
 
 - (void)setSelected:(BOOL)selected {
@@ -159,7 +228,9 @@
 }
 
 - (void)mouseExited:(NSEvent *)event {
-    [self.delegate didHover:NO forApp:self.app];
+    if (!self.togglingHideStatus) {
+        [self.delegate didHover:NO forApp:self.app];
+    }
 }
 
 - (void)mouseDown:(NSEvent *)theEvent {

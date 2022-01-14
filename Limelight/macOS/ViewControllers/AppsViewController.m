@@ -7,9 +7,9 @@
 //
 
 #import "AppsViewController.h"
-#import "TemporaryApp.h"
 #import "AppsViewControllerDelegate.h"
 #import "AppCell.h"
+#import "AppCellView.h"
 #import "AlertPresenter.h"
 #import "StreamViewController.h"
 #import "NSWindow+Moonlight.h"
@@ -17,6 +17,13 @@
 #import "NSApplication+Moonlight.h"
 #import "BackgroundColorView.h"
 #import "ImageFader.h"
+#import "PrivateGfeApiRequester.h"
+#import "OptimalSettingsConfigurer.h"
+#import "NSView+Moonlight.h"
+
+#import "PrivateAppAssetManager.h"
+
+#import "F.h"
 
 #import "HttpManager.h"
 #import "IdManager.h"
@@ -30,14 +37,20 @@
 
 #import "Moonlight-Swift.h"
 
-@interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, NSSearchFieldDelegate>
-@property (weak) IBOutlet NSCollectionView *collectionView;
+@interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, PrivateAppAssetCallback, NSSearchFieldDelegate>
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *cmsIdToId;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
 @property (nonatomic, strong) TemporaryApp *runningApp;
 
 @property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
 
+@property (nonatomic, strong) TemporaryApp *privateApp;
+@property (nonatomic, strong) NSString *privateAppId;
+
+@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *appNameToId;
+
+@property (nonatomic, strong) PrivateAppAssetManager *privateAppManager;
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSCache *boxArtCache;
 @property (nonatomic) CGFloat itemScale;
@@ -61,6 +74,7 @@ const CGFloat scaleBase = 1.125;
     [self.collectionView registerNib:[[NSNib alloc] initWithNibNamed:@"AppCell" bundle:nil] forItemWithIdentifier:@"AppCell"];
 
     self.apps = @[];
+    self.cmsIdToId = [NSMutableDictionary dictionary];
 
     self.itemScale = [[NSUserDefaults standardUserDefaults] floatForKey:@"itemScale"];
     if (self.itemScale == 0) {
@@ -78,10 +92,6 @@ const CGFloat scaleBase = 1.125;
     self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateRunningAppState];
     }];
-    
-    if (@available(macOS 10.14, *)) {
-        [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
-    }
 }
 
 - (void)viewWillAppear {
@@ -103,39 +113,24 @@ const CGFloat scaleBase = 1.125;
     self.getSearchField.placeholderString = @"Filter Apps";
 }
 
-- (void)viewDidAppear {
-    [super viewDidAppear];
-    
-    [self.parentViewController.view.window makeFirstResponder:self.collectionView];
-}
-
 - (BOOL)becomeFirstResponder {
     [self.view.window makeFirstResponder:self.collectionView];
     return [super becomeFirstResponder];
 }
 
-- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
-    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
-        for (int i = 0; i < self.apps.count; i++) {
-            AppCell *cell = (AppCell *)[self.collectionView itemAtIndex:i];
-            [cell updateSelectedState:cell.selected];
-        }
-    }
-}
-
 - (void)transitionToHostsVC {
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
-    if (@available(macOS 10.14, *)) {
-        [[NSApplication sharedApplication] removeObserver:self forKeyPath:@"effectiveAppearance"];
-    }
+    
+    [self.parentViewController.view.window makeFirstResponder:nil];
     
     [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionSlideRight completionHandler:^{
-        [self.parentViewController.view.window makeFirstResponder:self.hostsVC.view.subviews.firstObject];
+        [self.parentViewController.view.window makeFirstResponder:self.hostsVC];
         
         [self.view removeFromSuperview];
         [self removeFromParentViewController];
         
         self.appManager = nil;
+        self.privateAppManager = nil;
         self.apps = @[];
         [self.collectionView reloadData];
     }];
@@ -143,8 +138,21 @@ const CGFloat scaleBase = 1.125;
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
-    streamVC.app = self.runningApp;
+
+    streamVC.app = [self getGFEAppToStreamFor:self.runningApp];
+    streamVC.appName = self.runningApp.name;
+    streamVC.privateApp = self.runningApp;
+    if (hasFeaturePrivateAppListing()) {
+        streamVC.privateAppId = self.cmsIdToId[self.runningApp.id];
+    } else {
+        if (hasFeaturePrivateAppOptimalSettings()) {
+            streamVC.privateAppId = [self privateAppIdForAppName:self.runningApp.name];
+        }
+    }
     streamVC.delegate = self;
+    
+    self.privateApp = streamVC.privateApp;
+    self.privateAppId = streamVC.privateAppId;
 }
 
 
@@ -163,13 +171,40 @@ const CGFloat scaleBase = 1.125;
     [self transitionToHostsVC];
 }
 
+- (IBAction)configureOptimalSettingsItemClicked:(NSMenuItem *)item {
+    AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
+    AppCell *appCell = (AppCell *)(appCellView.delegate);
+
+    OptimalSettingsConfigurer *optimalSettingsConfigVC = [[OptimalSettingsConfigurer alloc] initWithApp:appCell.app andPrivateId:[self privateAppIdForAppName:appCell.app.name]];
+    [self presentViewControllerAsSheet:optimalSettingsConfigVC];
+}
+
+- (IBAction)pinAppMenuItemClicked:(NSMenuItem *)item {
+    AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
+    AppCell *appCell = (AppCell *)(appCellView.delegate);
+
+    NSInteger previousIndex = [self indexPathForApp:appCell.app].item;
+    
+    appCell.app.pinned = !appCell.app.pinned;
+    [self updateCollectionViewWithNewPinnedChangedApp:appCell.app newPinnedState:appCell.app.pinned previousIndex:previousIndex];
+}
+
+- (IBAction)hideAppMenuItemClicked:(NSMenuItem *)item {
+    AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
+    AppCell *appCell = (AppCell *)(appCellView.delegate);
+    
+    appCell.app.hidden = !appCell.app.hidden;
+    [appCell updateAlphaStateWithShouldAnimate:YES];
+}
+
 - (IBAction)quitAppMenuItemClicked:(id)sender {
     [self quitApp:self.runningApp completion:nil];
 }
 
 - (IBAction)open:(id)sender {
-    if (self.collectionView.selectionIndexes.count != 0) {
-        TemporaryApp *app = self.apps[self.collectionView.selectionIndexes.firstIndex];
+    if (self.collectionView.selectionIndexPaths.count != 0) {
+        NSIndexPath *selectedIndex = self.collectionView.selectionIndexPaths.anyObject;
+        TemporaryApp *app = [self itemsForSection:selectedIndex.section][selectedIndex.item];
         [self openApp:app];
     }
 }
@@ -177,10 +212,15 @@ const CGFloat scaleBase = 1.125;
 - (void)updateCollectionViewItemSize {
     NSCollectionViewFlowLayout *flowLayout = (NSCollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
 
+    flowLayout.minimumInteritemSpacing = 0;
     flowLayout.itemSize = NSMakeSize((int)(90 * self.itemScale + 6 + 2), (int)(128 * self.itemScale + 6 + 2));
     [flowLayout invalidateLayout];
     
     [[NSUserDefaults standardUserDefaults] setFloat:self.itemScale forKey:@"itemScale"];
+    
+    for (AppCell *item in self.collectionView.visibleItems) {
+        [item updateShadowPath];
+    }
 }
 
 - (IBAction)increaseItemSize:(id)sender {
@@ -203,23 +243,42 @@ const CGFloat scaleBase = 1.125;
 #pragma mark - NSCollectionViewDataSource
 
 - (void)configureItem:(AppCell *)item atIndexPath:(NSIndexPath * _Nonnull)indexPath {
-    TemporaryApp *app = self.apps[indexPath.item];
+    TemporaryApp *app = [self itemsForSection:indexPath.section][indexPath.item];
     item.appName.stringValue = app.name;
     item.app = app;
     
     item.runningIcon.hidden = app != self.runningApp;
-
-    NSImage* fastCacheImage = [self.boxArtCache objectForKey:app];
+    
+    NSImage *fastCacheImage = [self.boxArtCache objectForKey:app.id];
     if (fastCacheImage != nil) {
         item.appCoverArt.image = fastCacheImage;
+        item.placeholderView.hidden = YES;
     } else {
-        NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
-        if (cacheImage != nil) {
-            [self.boxArtCache setObject:cacheImage forKey:app];
-            item.appCoverArt.image = cacheImage;
-        } else {
-            item.appCoverArt.image = nil;
-        }
+        item.appCoverArt.image = nil;
+        
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+            NSImage* cacheImage = [AppsViewController loadBoxArtForCaching:app];
+            if (cacheImage != nil) {
+                
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    AppCell *currentItem = (AppCell *)[self.collectionView itemAtIndexPath:indexPath];
+                    if ([item.app.id isEqualToString:currentItem.app.id]) {
+                        if (item.appCoverArt != nil) {
+                            [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
+                                NSImageView *newImageView = [[NSImageView alloc] init];
+                                [newImageView smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
+
+                                return newImageView;
+                            } duration:0.3 image:cacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
+                                item.appCoverArt = newImageView;
+                                item.placeholderView.hidden = YES;
+                            }];
+                        }
+                    }
+                    [self.boxArtCache setObject:cacheImage forKey:app.id];
+                });
+            }
+        });
     }
 }
 
@@ -233,7 +292,27 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (NSInteger)collectionView:(nonnull NSCollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    return self.apps.count;
+    return [self itemsForSection:section].count;
+}
+
+- (NSInteger)numberOfSectionsInCollectionView:(NSCollectionView *)collectionView {
+    return 2;
+}
+
+- (NSArray<TemporaryApp *> *)itemsForSection:(NSInteger)section {
+    return [self filteredItems:self.apps forSection:section];
+}
+
+- (NSArray<TemporaryApp *> *)filteredItems:(NSArray<TemporaryApp *> *)rawItems forSection:(NSInteger)section {
+    if (section == 0) {
+        return [F filterArray:rawItems withBlock:^BOOL(TemporaryApp *obj) {
+            return obj.pinned;
+        }];
+    } else {
+        return [F filterArray:rawItems withBlock:^BOOL(TemporaryApp *obj) {
+            return !obj.pinned;
+        }];
+    }
 }
 
 
@@ -294,6 +373,10 @@ const CGFloat scaleBase = 1.125;
             } else {
                 self.runningApp = nil;
                 
+                if (hasFeaturePrivateAppOptimalSettings()) {
+                    [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.host.activeAddress];
+                }
+                
 #ifdef USE_RESOLUTION_SYNC
                 [ResolutionSyncRequester teardownControllerFor:self.host.activeAddress];
                 [ResolutionSyncRequester resetResolutionFor:self.host.activeAddress];
@@ -313,12 +396,23 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
-    if (self.runningApp == nil) {
-        [menu cancelTrackingWithoutAnimation];
-        return;
+    NSMenuItem *configureOptimalSettingsMenuItem = [HostsViewController getMenuItemForIdentifier:@"configureOptimalSettingsMenuItem" inMenu:menu];
+    NSMenuItem *quitAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"quitAppMenuItem" inMenu:menu];
+    NSMenuItem *hideAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"hideAppMenuItem" inMenu:menu];
+    NSMenuItem *pinAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"pinAppMenuItem" inMenu:menu];
+    configureOptimalSettingsMenuItem.hidden = ![self privateAppIdForAppName:app.name];
+    if (app.pinned) {
+        pinAppMenuItem.title = @"Unpin App";
+    } else {
+        pinAppMenuItem.title = @"Pin App";
     }
-    if (app != self.runningApp) {
-        [menu cancelTrackingWithoutAnimation];
+    if (app.hidden) {
+        hideAppMenuItem.title = @"Unhide App";
+    } else {
+        hideAppMenuItem.title = @"Hide App";
+    }
+    if (self.runningApp == nil || app != self.runningApp) {
+        quitAppMenuItem.hidden = YES;
     }
 }
 
@@ -399,9 +493,10 @@ const CGFloat scaleBase = 1.125;
 
 - (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {
     if (app != nil) {
-        NSInteger appIndex = [self.apps indexOfObject:app];
+        NSInteger section = app.pinned ? 0 : 1;
+        NSInteger appIndex = [[self itemsForSection:section] indexOfObject:app];
         if (appIndex >= 0) {
-            return [NSIndexPath indexPathForItem:appIndex inSection:0];
+            return [NSIndexPath indexPathForItem:appIndex inSection:section];
         }
     }
     
@@ -414,7 +509,7 @@ const CGFloat scaleBase = 1.125;
     }
     
     NSIndexPath *indexPath = [self indexPathForApp:app];
-    return (AppCell *)[self.collectionView itemAtIndex:indexPath.item];
+    return (AppCell *)[self.collectionView itemAtIndexPath:indexPath];
 }
 
 - (BOOL)askWhetherToStopRunningApp:(TemporaryApp *)currentApp andStartNewApp:(TemporaryApp *)newApp {
@@ -441,18 +536,18 @@ const CGFloat scaleBase = 1.125;
     
     while (oldIndex < old.count || newIndex < new.count) {
         if (oldIndex >= old.count) {
-            [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:0]];
+            [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:1]];
             TemporaryApp *newItem = new[newIndex];
             [alreadyAdded addObject:newItem.id];
             newIndex++;
         } else if (newIndex >= new.count) {
-            [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+            [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
             oldIndex++;
         } else {
             TemporaryApp *oldItem = old[oldIndex];
             TemporaryApp *newItem = new[newIndex];
             if ([alreadyAdded containsObject:oldItem.id]) {
-                [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+                [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
                 oldIndex++;
             } else {
                 NSComparisonResult comparison = [oldItem compareName:newItem];
@@ -461,10 +556,10 @@ const CGFloat scaleBase = 1.125;
                     oldIndex++;
                     newIndex++;
                 } else if (comparison == NSOrderedAscending) {
-                    [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:0]];
+                    [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
                     oldIndex++;
                 } else if (comparison == NSOrderedDescending) {
-                    [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:0]];
+                    [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:1]];
                     [alreadyAdded addObject:newItem.id];
                     newIndex++;
                 }
@@ -481,7 +576,7 @@ const CGFloat scaleBase = 1.125;
     NSSet<NSIndexPath *> *insertions = updates[@"insertions"];
     
     if (deletions.count != 0 || insertions.count != 0) {
-        self.apps = new;
+        self.apps = [self fetchApps];
         
         [self.collectionView.animator performBatchUpdates:^{
             [self.collectionView deleteItemsAtIndexPaths:deletions];
@@ -492,16 +587,215 @@ const CGFloat scaleBase = 1.125;
     }
 }
 
+- (void)updateCollectionViewWithNewPinnedChangedApp:(TemporaryApp *)app newPinnedState:(BOOL)newPinnedState previousIndex:(NSInteger)previousIndex {
+    NSArray<TemporaryApp *> *apps = [[self itemsForSection:newPinnedState == YES ? 0 : 1] sortedArrayUsingSelector:@selector(compareName:)];
+    NSArray<NSString *> *appNames = [F mapArray:apps withBlock:^id(TemporaryApp *obj) {
+        return obj.name;
+    }];
+    NSInteger newIndex = [appNames indexOfObject:app.name inSortedRange:NSMakeRange(0, appNames.count) options:NSBinarySearchingInsertionIndex usingComparator:^NSComparisonResult(NSString * _Nonnull obj1, NSString * _Nonnull obj2) {
+        return [obj1 caseInsensitiveCompare:obj2];
+    }];
+
+    NSIndexPath *previousIndexPath;
+    NSIndexPath *newIndexPath;
+    if (newPinnedState == YES) {
+        newIndexPath = [NSIndexPath indexPathForItem:newIndex inSection:0];
+        previousIndexPath = [NSIndexPath indexPathForItem:previousIndex inSection:1];
+    } else {
+        previousIndexPath = [NSIndexPath indexPathForItem:previousIndex inSection:0];
+        newIndexPath = [NSIndexPath indexPathForItem:newIndex inSection:1];
+    }
+    
+    [self.collectionView.animator performBatchUpdates:^{
+        [self.collectionView moveItemAtIndexPath:previousIndexPath toIndexPath:newIndexPath];
+    } completionHandler:^(BOOL finished) {
+        
+    }];
+}
+
+
+#pragma mark - Private GFE API
+
+- (void)fetchPrivateAppsWithCompletionBlock:(void (^)(NSDictionary *))completion {
+    [PrivateGfeApiRequester fetchPrivateAppsJSONForHostIP:self.host.activeAddress WithCompletionBlock:^(NSArray<NSDictionary<NSString *, id> *> *appsJSON) {
+        NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:appsJSON withBlock:^BOOL(id obj) {
+            return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
+        }];
+        
+        NSDictionary *mapping = (NSDictionary *)[F reduceArray:filteredPrivateApps withBlock:^NSMutableDictionary *(NSMutableDictionary *memo, NSDictionary *obj) {
+            memo[obj[@"displayName"]] = [obj[@"id"] stringValue];
+            return memo;
+        } andInitialMemo:[NSMutableDictionary dictionary]];
+        
+        completion(mapping);
+    }];
+}
+
+- (NSString *)removeNonASCIICharactersFrom:(NSString *)string {
+    NSCharacterSet *set = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyz0123456789"];
+    NSString *lowercase = [string lowercaseString];
+    
+    NSMutableString *output = [NSMutableString string];
+    
+    for (int i = 0; i < [lowercase length]; i++) {
+        unichar character = [lowercase characterAtIndex:i];
+        if ([set characterIsMember:character]) {
+            [output appendString:[NSString stringWithFormat:@"%c", character]];
+        }
+    }
+    
+    return output;
+}
+
+- (NSString *)removeSpecialWordsFrom:(NSString *)string {
+    NSArray<NSString *> *specialWords = @[@"Vulkan"];
+    NSString *result = string;
+    for (NSString *word in specialWords) {
+        result = [result stringByReplacingOccurrencesOfString:word withString:@""];
+    }
+    
+    return result;
+}
+
+- (NSString *)privateAppIdForAppName:(NSString *)appName {
+    NSString *simplifiedAppName = [self removeNonASCIICharactersFrom:[self removeSpecialWordsFrom:appName]];
+    for (NSString *privateName in self.appNameToId.allKeys) {
+        NSString *simplifiedPrivateAppName = [self removeNonASCIICharactersFrom:[self removeSpecialWordsFrom:privateName]];
+        if ([simplifiedAppName isEqualToString:simplifiedPrivateAppName]) {
+            return self.appNameToId[privateName];
+        }
+    }
+    
+    return nil;
+}
+
+- (void)fetchPrivateAppsForHostWithHostIP:(NSString *)hostIP WithCompletionBlock:(void (^)(NSArray<TemporaryApp *> *))completion {
+    [PrivateGfeApiRequester fetchPrivateAppsJSONForHostIP:hostIP WithCompletionBlock:^(NSArray<NSDictionary<NSString *, id> *> *appsJSON) {
+        NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:appsJSON withBlock:^BOOL(id obj) {
+            return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
+        }];
+        
+        NSMutableArray<TemporaryApp *> *apps = [NSMutableArray array];
+        [F eachInArrayWithIndex:filteredPrivateApps withBlock:^(id obj, NSInteger idx) {
+            TemporaryApp *app = [[TemporaryApp alloc] init];
+            app.id = [NSString stringWithFormat:@"%@", obj[@"cmsId"]];
+            [self.cmsIdToId setObject:obj[@"id"] forKey:app.id];
+            app.name = obj[@"displayName"];
+            app.installPath = obj[@"installDirectory"];
+            app.host = self.host;
+            [apps addObject:app];
+        }];
+        
+        completion(apps);
+    }];
+}
+
+- (void)discoverPrivateApps:(TemporaryHost *)host {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self fetchPrivateAppsForHostWithHostIP:host.activeAddress WithCompletionBlock:^(NSArray<TemporaryApp *> *apps) {
+            NSArray<TemporaryApp *> *oldItems = [self filteredItems:[self fetchApps] forSection:1];
+
+            NSMutableArray *gfeAppList;
+            
+            AppListResponse* appListResp = [ConnectionHelper getAppListForHostWithHostIP:host.activeAddress serverCert:host.serverCert uniqueID:[IdManager getUniqueId]];
+            if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
+                Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Fetching App List Failed" message:@"The connection to the PC was interrupted." window:self.view.window completionHandler:^(NSModalResponse returnCode) {
+                        host.state = StateOffline;
+                        [self transitionToHostsVC];
+                    }];
+                });
+            } else {
+                gfeAppList = [NSMutableArray arrayWithArray:[[appListResp getAppList] allObjects]];
+                gfeAppList = (NSMutableArray *)[F filterArray:gfeAppList withBlock:^BOOL(TemporaryApp *obj) {
+                    return [AppsViewController isWhitelistedGFEApp:obj];
+                }];
+            }
+            
+            NSArray<TemporaryApp *> *mergedApps = [gfeAppList arrayByAddingObjectsFromArray:apps];
+            
+            NSSet *appSet = [NSSet setWithArray:mergedApps];
+            [self updateApplist:appSet forHost:host];
+            
+            [self.privateAppManager stopRetrieving];
+            [self.privateAppManager retrieveAssetsFromHost:self.host];
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSArray<TemporaryApp *> *newItems = [self filteredItems:[self fetchApps] forSection:1];
+                [self updateCollectionViewDataWithOld:oldItems new:newItems];
+            });
+        }];
+    });
+}
+
++ (BOOL)isWhitelistedGFEApp:(TemporaryApp *)app {
+    return [app.name isEqualToString:@"Playnite Fullscreen"] || [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"];
+}
+
+- (TemporaryApp *)getGFEAppToStreamFor:(TemporaryApp *)app {
+    if (hasFeaturePrivateAppListing()) {
+        if ([AppsViewController isWhitelistedGFEApp:app]) {
+            return app;
+        } else {
+            for (TemporaryApp *app in self.apps) {
+                if ([app.name isEqualToString:@"Desktop"]) {
+                    return app;
+                }
+            }
+            return nil;
+        }
+    } else {
+        return app;
+    }
+}
+
++ (CGSize)getAppCoverArtSize {
+    CGFloat width;
+    CGFloat height;
+    
+    if (hasFeaturePrivateAppListing()) {
+        width = 628;
+        height = 888;
+
+        return CGSizeMake(width, height);
+    }
+    
+    if (usesNewAppCoverArtAspectRatio()) {
+        width = 600;
+        height = 900;
+    } else {
+        width = 300;
+        height = 400;
+    }
+    return CGSizeMake(width, height);
+}
+
 
 #pragma mark - App Discovery
 
 - (void)loadApps {
-    self.appManager = [[AppAssetManager alloc] initWithCallback:self];
-    
+    if (hasFeaturePrivateAppListing()) {
+        self.privateAppManager = [[PrivateAppAssetManager alloc] initWithCallback:self];
+    } else {
+        self.appManager = [[AppAssetManager alloc] initWithCallback:self];
+    }
+        
     if (self.host.appList.count > 0) {
         [self displayApps];
     }
-    [self discoverAppsForHost:self.host];
+    
+    if (hasFeaturePrivateAppOptimalSettings()) {
+        [self fetchPrivateAppsWithCompletionBlock:^(NSDictionary *mapping) {
+            self.appNameToId = mapping;
+        }];
+    }
+
+    if (hasFeaturePrivateAppListing()) {
+        [self discoverPrivateApps:self.host];
+    } else {
+        [self discoverAppsForHost:self.host];
+    }
 }
 
 - (NSArray<TemporaryApp *> *)fetchApps {
@@ -512,7 +806,16 @@ const CGFloat scaleBase = 1.125;
         predicate = [NSPredicate predicateWithValue:YES];
     }
     NSArray<TemporaryApp *> *filteredApps = [self.host.appList.allObjects filteredArrayUsingPredicate:predicate];
-    return [filteredApps sortedArrayUsingSelector:@selector(compareName:)];
+    
+    NSArray<TemporaryApp *> *hiddenAwareApps = [F filterArray:filteredApps withBlock:^BOOL(TemporaryApp *obj) {
+        if (self.host.showHiddenApps) {
+            return YES;
+        } else {
+            return obj.hidden == NO;
+        }
+    }];
+    
+    return [hiddenAwareApps sortedArrayUsingSelector:@selector(compareName:)];
 }
 
 - (void)displayApps {
@@ -534,7 +837,7 @@ const CGFloat scaleBase = 1.125;
                 }];
             });
         } else {
-            NSArray<TemporaryApp *> *oldItems = [self fetchApps];
+            NSArray<TemporaryApp *> *oldItems = [self filteredItems:[self fetchApps] forSection:1];
 
             [self updateApplist:[appListResp getAppList] forHost:host];
             
@@ -542,7 +845,8 @@ const CGFloat scaleBase = 1.125;
             [self.appManager retrieveAssetsFromHost:self.host];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self updateCollectionViewDataWithOld:oldItems new:[self fetchApps]];
+                NSArray<TemporaryApp *> *newItems = [self filteredItems:[self fetchApps] forSection:1];
+                [self updateCollectionViewDataWithOld:oldItems new:newItems];
             });
         }
     });
@@ -607,25 +911,23 @@ const CGFloat scaleBase = 1.125;
 
 - (void)updateCellWithImageForApp:(TemporaryApp *)app {
     dispatch_async(dispatch_get_main_queue(), ^{
-        
-        NSInteger appIndex = [self.apps indexOfObject:app];
-        if (appIndex >= 0) {
+
+        NSIndexPath *path = [self indexPathForApp:app];
+        AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
+        if (item != nil) {
             
-            NSIndexPath *path = [NSIndexPath indexPathForItem:appIndex inSection:0];
-            AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
-            if (item != nil) {
+            NSImage* fastCacheImage = [self.boxArtCache objectForKey:app.id];
+            if (fastCacheImage != nil) {
                 
-                NSImage* fastCacheImage = [self.boxArtCache objectForKey:app];
-                if (fastCacheImage != nil) {
+                [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
+                    NSImageView *newImageView = [[NSImageView alloc] init];
+                    [newImageView smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
                     
-                    [ImageFader transitionImageViewWithOldImageView:item.appCoverArt newImageViewBlock:^NSImageView * _Nonnull {
-                        KPCScaleToFillNSImageView *newImageView = [[KPCScaleToFillNSImageView alloc] init];
-                        newImageView.wantsLayer = YES;
-                        newImageView.layer.masksToBounds = YES;
-                        newImageView.layer.cornerRadius = 10;
-                        return newImageView;
-                    } duration:0.3 image:fastCacheImage];
-                }
+                    return newImageView;
+                } duration:0.3 image:fastCacheImage completionBlock:^(NSImageView * _Nonnull newImageView) {
+                    item.appCoverArt = newImageView;
+                    item.placeholderView.hidden = YES;
+                }];
             }
         }
     });
@@ -648,19 +950,32 @@ const CGFloat scaleBase = 1.125;
     size_t width = CGImageGetWidth(cgImage);
     size_t height = CGImageGetHeight(cgImage);
     
+    CGFloat targetWidth = [self getAppCoverArtSize].width;
+    CGFloat targetHeight = [self getAppCoverArtSize].height;
+    CGFloat targetAspect = targetWidth / targetHeight;
+    CGFloat drawAspect = (CGFloat)width / (CGFloat)height;
+    
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    CGContextRef imageContext =  CGBitmapContextCreate(NULL, width, height, 8, width * 4, colorSpace,
+    CGContextRef imageContext =  CGBitmapContextCreate(NULL, targetWidth, targetHeight, 8, targetWidth * 4, colorSpace,
                                                        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
     CGColorSpaceRelease(colorSpace);
 
-    CGContextDrawImage(imageContext, CGRectMake(0, 0, width, height), cgImage);
+    if (targetAspect >= drawAspect) {
+        CGFloat drawHeight = targetWidth / drawAspect;
+        CGFloat yOffset = (targetHeight - drawHeight) / 2.0;
+        CGContextDrawImage(imageContext, CGRectMake(0, yOffset, targetWidth, drawHeight), cgImage);
+    } else {
+        CGFloat drawWidth = targetHeight * drawAspect;
+        CGFloat xOffset = (targetWidth - drawWidth) / 2.0;
+        CGContextDrawImage(imageContext, CGRectMake(xOffset, 0, drawWidth, targetHeight), cgImage);
+    }
     
     CGImageRef outputImage = CGBitmapContextCreateImage(imageContext);
 
 #if TARGET_OS_IPHONE
     boxArt = [UIImage imageWithCGImage:outputImage];
 #else
-    boxArt = [[NSImage alloc] initWithCGImage:outputImage size:NSMakeSize(width, height)];
+    boxArt = [[NSImage alloc] initWithCGImage:outputImage size:NSMakeSize(targetWidth, targetHeight)];
 #endif
 
     CGImageRelease(outputImage);
@@ -677,7 +992,7 @@ const CGFloat scaleBase = 1.125;
         OSImage *image = [AppsViewController loadBoxArtForCaching:app];
         if (image != nil) {
             // Add the image to our cache if it was present
-            [self.boxArtCache setObject:image forKey:app];
+            [self.boxArtCache setObject:image forKey:app.id];
             
             [self updateCellWithImageForApp:app];
         }
@@ -693,4 +1008,25 @@ const CGFloat scaleBase = 1.125;
     [self updateBoxArtCacheForApp:app];
 }
 
+
+#pragma mark - PrivateAppAssetCallback
+
+- (void)receivedPrivateAssetForApp:(TemporaryApp *)app {
+    // Update the box art cache now so we don't have to do it
+    // on the main thread
+    [self updateBoxArtCacheForApp:app];
+}
+
 @end
+
+BOOL hasFeaturePrivateAppListing(void) {
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"enablePrivateAppListingFeature"];
+}
+
+BOOL hasFeaturePrivateAppOptimalSettings(void) {
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"enablePrivateAppOptimalSettingsFeature"];
+}
+
+BOOL usesNewAppCoverArtAspectRatio(void) {
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"enableNewAppCoverArtAspectRatio"];
+}

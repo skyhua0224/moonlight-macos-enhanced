@@ -59,6 +59,10 @@
 		4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */; };
 		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
 		4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */; };
+		4C63B6A9278925FB00ED3510 /* NSView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */; };
+		4C651041278FD2880089E407 /* NSResponder+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651040278FD2880089E407 /* NSResponder+Moonlight.m */; };
+		4C651044278FD81D0089E407 /* ControllerNavigation.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651043278FD81D0089E407 /* ControllerNavigation.m */; };
+		4C651052278FEA130089E407 /* NavigatableAlertView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651051278FEA130089E407 /* NavigatableAlertView.m */; };
 		4C65704A23EBE9F4000D1601 /* GeneralPrefsPaneView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */; };
 		4C682BD124D1227600A70C44 /* Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C682BD024D1227600A70C44 /* Helpers.m */; };
 		4C6E962925BE79CE008F6DAE /* ImageFader.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C6E962825BE79CE008F6DAE /* ImageFader.m */; };
@@ -77,6 +81,9 @@
 		4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C8E7EC2236EF0040075DE78 /* Controller.m */; };
 		4C97FE5E24CD3C1A001F3064 /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946EA19F6AFB800339C8A /* libopus.a */; };
 		4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */; };
+		4CA454C7277ADD0600E99A96 /* OptimalSettingsConfigurer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */; };
+		4CA454C8277ADD0600E99A96 /* OptimalSettingsConfigurer.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */; };
+		4CA454CB277BE4E400E99A96 /* PrivateGfeApiRequester.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */; };
 		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
 		4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CBBE13A24CFF7B700B4706E /* AboutView.xib */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
@@ -86,6 +93,12 @@
 		4CDC8E7025E754B2009E66C6 /* MASPreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CDC8E6F25E754B2009E66C6 /* MASPreferencesWindow.xib */; };
 		4CDC8E7425E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CDC8E7225E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m */; };
 		4CDC8E7525E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CDC8E7325E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib */; };
+		4CE887092771DD4F004EB216 /* NSNumber+F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887022771DD4F004EB216 /* NSNumber+F.m */; };
+		4CE8870A2771DD4F004EB216 /* NSDictionary+F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887032771DD4F004EB216 /* NSDictionary+F.m */; };
+		4CE8870B2771DD4F004EB216 /* F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887042771DD4F004EB216 /* F.m */; };
+		4CE8870C2771DD4F004EB216 /* NSArray+F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887062771DD4F004EB216 /* NSArray+F.m */; };
+		4CE8870F2772B8A6004EB216 /* PrivateAppAssetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE8870E2772B8A6004EB216 /* PrivateAppAssetManager.m */; };
+		4CE887122772B8B3004EB216 /* PrivateAppAssetRetriever.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887112772B8B3004EB216 /* PrivateAppAssetRetriever.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -142,6 +155,14 @@
 		4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LinkTextField.m; sourceTree = "<group>"; };
 		4C51EE3325E0DE2700F205D3 /* AlternateControllerNetworking.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AlternateControllerNetworking.h; sourceTree = "<group>"; };
 		4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AlternateControllerNetworking.m; sourceTree = "<group>"; };
+		4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSView+Moonlight.h"; sourceTree = "<group>"; };
+		4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSView+Moonlight.m"; sourceTree = "<group>"; };
+		4C65103F278FD2880089E407 /* NSResponder+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSResponder+Moonlight.h"; sourceTree = "<group>"; };
+		4C651040278FD2880089E407 /* NSResponder+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSResponder+Moonlight.m"; sourceTree = "<group>"; };
+		4C651042278FD81D0089E407 /* ControllerNavigation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ControllerNavigation.h; sourceTree = "<group>"; };
+		4C651043278FD81D0089E407 /* ControllerNavigation.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ControllerNavigation.m; sourceTree = "<group>"; };
+		4C651050278FEA130089E407 /* NavigatableAlertView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NavigatableAlertView.h; sourceTree = "<group>"; };
+		4C651051278FEA130089E407 /* NavigatableAlertView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = NavigatableAlertView.m; sourceTree = "<group>"; };
 		4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = GeneralPrefsPaneView.xib; sourceTree = "<group>"; };
 		4C65704B23EBEB3D000D1601 /* GeneralPrefsPaneVC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GeneralPrefsPaneVC.h; sourceTree = "<group>"; };
 		4C682BCF24D1227600A70C44 /* Helpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Helpers.h; sourceTree = "<group>"; };
@@ -184,6 +205,11 @@
 		4C8E7EC3236EF0040075DE78 /* Controller.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Controller.h; sourceTree = "<group>"; };
 		4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KPCScaleToFillNSImageView.m; sourceTree = "<group>"; };
 		4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = KPCScaleToFillNSImageView.h; sourceTree = "<group>"; };
+		4CA454C4277ADD0600E99A96 /* OptimalSettingsConfigurer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OptimalSettingsConfigurer.h; sourceTree = "<group>"; };
+		4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = OptimalSettingsConfigurer.m; sourceTree = "<group>"; };
+		4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = OptimalSettingsConfigurer.xib; sourceTree = "<group>"; };
+		4CA454C9277BE4E400E99A96 /* PrivateGfeApiRequester.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PrivateGfeApiRequester.h; sourceTree = "<group>"; };
+		4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PrivateGfeApiRequester.m; sourceTree = "<group>"; };
 		4CABABB021F6C8A3008576A4 /* CollectionView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CollectionView.h; sourceTree = "<group>"; };
 		4CABABB121F6C8A4008576A4 /* CollectionView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CollectionView.m; sourceTree = "<group>"; };
 		4CBBE13A24CFF7B700B4706E /* AboutView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutView.xib; sourceTree = "<group>"; };
@@ -204,6 +230,18 @@
 		4CDC8E7125E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ResolutionSyncPrefsPaneVC.h; sourceTree = "<group>"; };
 		4CDC8E7225E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ResolutionSyncPrefsPaneVC.m; sourceTree = "<group>"; };
 		4CDC8E7325E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = ResolutionSyncPrefsPaneView.xib; sourceTree = "<group>"; };
+		4CE887012771DD4F004EB216 /* F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = F.h; sourceTree = "<group>"; };
+		4CE887022771DD4F004EB216 /* NSNumber+F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSNumber+F.m"; sourceTree = "<group>"; };
+		4CE887032771DD4F004EB216 /* NSDictionary+F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSDictionary+F.m"; sourceTree = "<group>"; };
+		4CE887042771DD4F004EB216 /* F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = F.m; sourceTree = "<group>"; };
+		4CE887052771DD4F004EB216 /* NSArray+F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSArray+F.h"; sourceTree = "<group>"; };
+		4CE887062771DD4F004EB216 /* NSArray+F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSArray+F.m"; sourceTree = "<group>"; };
+		4CE887072771DD4F004EB216 /* NSNumber+F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSNumber+F.h"; sourceTree = "<group>"; };
+		4CE887082771DD4F004EB216 /* NSDictionary+F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSDictionary+F.h"; sourceTree = "<group>"; };
+		4CE8870D2772B8A6004EB216 /* PrivateAppAssetManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PrivateAppAssetManager.h; sourceTree = "<group>"; };
+		4CE8870E2772B8A6004EB216 /* PrivateAppAssetManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PrivateAppAssetManager.m; sourceTree = "<group>"; };
+		4CE887102772B8B3004EB216 /* PrivateAppAssetRetriever.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PrivateAppAssetRetriever.h; sourceTree = "<group>"; };
+		4CE887112772B8B3004EB216 /* PrivateAppAssetRetriever.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PrivateAppAssetRetriever.m; sourceTree = "<group>"; };
 		9832D1341BBCD5C50036EF48 /* TemporaryApp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TemporaryApp.h; path = Database/TemporaryApp.h; sourceTree = "<group>"; };
 		9832D1351BBCD5C50036EF48 /* TemporaryApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = TemporaryApp.m; path = Database/TemporaryApp.m; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
@@ -377,6 +415,7 @@
 		4C38E81D1FEF4F89000425CD /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
+				4CE887002771DD22004EB216 /* Functional */,
 				4CDC8E6925E750B3009E66C6 /* MASPreferences */,
 				4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */,
 				4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */,
@@ -395,6 +434,14 @@
 				4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */,
 				4C51EE3325E0DE2700F205D3 /* AlternateControllerNetworking.h */,
 				4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */,
+				4CA454C9277BE4E400E99A96 /* PrivateGfeApiRequester.h */,
+				4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */,
+				4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */,
+				4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */,
+				4C65103F278FD2880089E407 /* NSResponder+Moonlight.h */,
+				4C651040278FD2880089E407 /* NSResponder+Moonlight.m */,
+				4C651042278FD81D0089E407 /* ControllerNavigation.h */,
+				4C651043278FD81D0089E407 /* ControllerNavigation.m */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -421,8 +468,6 @@
 			children = (
 				4C38E8111FEE30F8000425CD /* ContainerViewController.h */,
 				4C38E8121FEE30F8000425CD /* ContainerViewController.m */,
-				4CABABB021F6C8A3008576A4 /* CollectionView.h */,
-				4CABABB121F6C8A4008576A4 /* CollectionView.m */,
 				4C7E0A951FECCF9A00684411 /* HostsViewController.h */,
 				4C7E0A961FECCF9A00684411 /* HostsViewController.m */,
 				4C7E0A9C1FECD31600684411 /* HostCell.h */,
@@ -433,6 +478,9 @@
 				4C38E80E1FEE1C81000425CD /* AppsViewController.m */,
 				4C38E8141FEF36A0000425CD /* AppCell.h */,
 				4C38E8151FEF36A0000425CD /* AppCell.m */,
+				4CA454C4277ADD0600E99A96 /* OptimalSettingsConfigurer.h */,
+				4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */,
+				4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */,
 				4C38E8241FF0B609000425CD /* StreamViewController.h */,
 				4C38E8251FF0B609000425CD /* StreamViewController.m */,
 				4C65704B23EBEB3D000D1601 /* GeneralPrefsPaneVC.h */,
@@ -463,6 +511,8 @@
 		4C7E0A9B1FECD2EE00684411 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				4CABABB021F6C8A3008576A4 /* CollectionView.h */,
+				4CABABB121F6C8A4008576A4 /* CollectionView.m */,
 				4C30BA1E1FF5F7D600848919 /* BackgroundColorView.h */,
 				4C30BA1F1FF5F7D600848919 /* BackgroundColorView.m */,
 				4C4FB2B923715A9000D0FCE3 /* LinkTextField.h */,
@@ -473,6 +523,8 @@
 				4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */,
 				4C2E24851FF3934700B6A12E /* StreamViewMac.h */,
 				4C2E24861FF3934700B6A12E /* StreamViewMac.m */,
+				4C651050278FEA130089E407 /* NavigatableAlertView.h */,
+				4C651051278FEA130089E407 /* NavigatableAlertView.m */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -488,6 +540,21 @@
 				4CD17E9827337FF1004D438C /* LICENSE.md */,
 			);
 			path = MASPreferences;
+			sourceTree = "<group>";
+		};
+		4CE887002771DD22004EB216 /* Functional */ = {
+			isa = PBXGroup;
+			children = (
+				4CE887012771DD4F004EB216 /* F.h */,
+				4CE887042771DD4F004EB216 /* F.m */,
+				4CE887052771DD4F004EB216 /* NSArray+F.h */,
+				4CE887062771DD4F004EB216 /* NSArray+F.m */,
+				4CE887082771DD4F004EB216 /* NSDictionary+F.h */,
+				4CE887032771DD4F004EB216 /* NSDictionary+F.m */,
+				4CE887072771DD4F004EB216 /* NSNumber+F.h */,
+				4CE887022771DD4F004EB216 /* NSNumber+F.m */,
+			);
+			path = Functional;
 			sourceTree = "<group>";
 		};
 		98AB2E801CAD46830089BB98 /* Products */ = {
@@ -831,6 +898,10 @@
 				FBD3494219FC9C04002D2A60 /* AppAssetManager.m */,
 				FB9AFD301A7D867C00872C98 /* AppAssetRetriever.h */,
 				FB9AFD311A7D867C00872C98 /* AppAssetRetriever.m */,
+				4CE8870D2772B8A6004EB216 /* PrivateAppAssetManager.h */,
+				4CE8870E2772B8A6004EB216 /* PrivateAppAssetManager.m */,
+				4CE887102772B8B3004EB216 /* PrivateAppAssetRetriever.h */,
+				4CE887112772B8B3004EB216 /* PrivateAppAssetRetriever.m */,
 			);
 			name = AppList;
 			sourceTree = "<group>";
@@ -947,6 +1018,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C7E0AA31FECE55E00684411 /* HostCell.xib in Resources */,
+				4CA454C8277ADD0600E99A96 /* OptimalSettingsConfigurer.xib in Resources */,
 				4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */,
 				4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */,
 				4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */,
@@ -1019,19 +1091,25 @@
 				4C4B02EC236FF5F200B63AE6 /* WakeOnLanManager.m in Sources */,
 				4C38E8131FEE30F8000425CD /* ContainerViewController.m in Sources */,
 				4C38E8081FEE09D0000425CD /* Utils.m in Sources */,
+				4CE8870A2771DD4F004EB216 /* NSDictionary+F.m in Sources */,
 				4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */,
 				4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */,
 				4C7E0A971FECCF9A00684411 /* HostsViewController.m in Sources */,
 				4C798E67251A1E9800CAB469 /* HapticContext.m in Sources */,
+				4CE8870C2771DD4F004EB216 /* NSArray+F.m in Sources */,
 				4C38E8171FEF36A0000425CD /* AppCell.m in Sources */,
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
 				4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */,
+				4CA454C7277ADD0600E99A96 /* OptimalSettingsConfigurer.m in Sources */,
+				4CE8870B2771DD4F004EB216 /* F.m in Sources */,
 				4C30BA201FF5F7D600848919 /* BackgroundColorView.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
 				4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */,
+				4C651052278FEA130089E407 /* NavigatableAlertView.m in Sources */,
 				4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */,
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
 				4CC3C0321FF73A660029EBF5 /* GeneralPrefsPaneVC.m in Sources */,
+				4C651044278FD81D0089E407 /* ControllerNavigation.m in Sources */,
 				4C38E8101FEE295E000425CD /* PairManager.m in Sources */,
 				4C12130E236FF750005A60A0 /* HostCellView.m in Sources */,
 				4C38E7F91FEE085B000425CD /* (null) in Sources */,
@@ -1043,14 +1121,20 @@
 				4C38E7FE1FEE0894000425CD /* HttpRequest.m in Sources */,
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
+				4CA454CB277BE4E400E99A96 /* PrivateGfeApiRequester.m in Sources */,
 				4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
+				4C63B6A9278925FB00ED3510 /* NSView+Moonlight.m in Sources */,
+				4CE887122772B8B3004EB216 /* PrivateAppAssetRetriever.m in Sources */,
+				4CE887092771DD4F004EB216 /* NSNumber+F.m in Sources */,
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
 				4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */,
+				4C651041278FD2880089E407 /* NSResponder+Moonlight.m in Sources */,
 				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
 				4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */,
 				4C682BD124D1227600A70C44 /* Helpers.m in Sources */,
 				4C38E8021FEE08B1000425CD /* TemporarySettings.m in Sources */,
+				4CE8870F2772B8A6004EB216 /* PrivateAppAssetManager.m in Sources */,
 				4C38E8031FEE08BE000425CD /* MDNSManager.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

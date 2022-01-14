@@ -15,6 +15,7 @@
 #import "NSWindow+Moonlight.h"
 #import "NSCollectionView+Moonlight.h"
 #import "Helpers.h"
+#import "NavigatableAlertView.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -25,7 +26,6 @@
 #import "WakeOnLanManager.h"
 
 @interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, NSSearchFieldDelegate, NSControlTextEditingDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback>
-@property (weak) IBOutlet NSCollectionView *collectionView;
 @property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
 @property (nonatomic, strong) TemporaryHost *selectedHost;
 @property (nonatomic, strong) NSAlert *pairAlert;
@@ -54,10 +54,6 @@
     self.hosts = [NSArray array];
     
     [self prepareDiscovery];
-    
-    if (@available(macOS 10.14, *)) {
-        [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
-    }
 }
 
 - (void)viewWillAppear {
@@ -108,17 +104,11 @@
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
     
-    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:nil];
-}
+    [self.parentViewController.view.window makeFirstResponder:nil];
 
-- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
-    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
-        if (self.collectionView.selectionIndexes.count > 0) {
-            NSUInteger selectedIndex = self.collectionView.selectionIndexes.firstIndex;
-            HostCell *cell = (HostCell *)[self.collectionView itemAtIndex:selectedIndex];
-            [cell updateSelectedState:YES];
-        }
-    }
+    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:^{
+        [self.parentViewController.view.window makeFirstResponder:appsVC];
+    }];
 }
 
 
@@ -152,6 +142,19 @@
             return evaluatedObject != host;
         }]];
         [self updateHosts];
+    }
+}
+
+- (IBAction)showHiddenAppsMenuItemClicked:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host != nil) {
+        if (sender.state == NSControlStateValueOn) {
+            sender.state = NSControlStateValueOff;
+            host.showHiddenApps = NO;
+        } else {
+            sender.state = NSControlStateValueOn;
+            host.showHiddenApps = YES;
+        }
     }
 }
 
@@ -270,12 +273,14 @@
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forHost:(TemporaryHost *)host {
-    NSMenuItem *wakeMenuItem = [self getMenuItemForIdentifier:@"wakeMenuItem" inMenu:menu];
+    NSMenuItem *wakeMenuItem = [HostsViewController getMenuItemForIdentifier:@"wakeMenuItem" inMenu:menu];
+    NSMenuItem *showHiddenAppsMenuItem = [HostsViewController getMenuItemForIdentifier:@"showHiddenAppsMenuItem" inMenu:menu];
     if (wakeMenuItem != nil) {
         if (host.state == StateOnline) {
             wakeMenuItem.enabled = NO;
         }
     }
+    showHiddenAppsMenuItem.state = host.showHiddenApps ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
 
@@ -292,7 +297,7 @@
     return hostCell.host;
 }
 
-- (NSMenuItem *)getMenuItemForIdentifier:(NSString *)id inMenu:(NSMenu *)menu {
++ (NSMenuItem *)getMenuItemForIdentifier:(NSString *)id inMenu:(NSMenu *)menu {
     for (NSMenuItem *item in menu.itemArray) {
         if ([item.identifier isEqualToString:id]) {
             return item;
@@ -391,13 +396,24 @@
     [alert addButtonWithTitle:@"Wake"];
     [alert addButtonWithTitle:@"Cancel"];
 
+    NavigatableAlertView *alertView = [[NavigatableAlertView alloc] init];
+    alertView.responder = alert.window;
+    [self.view addSubview:alertView];
+    [self.view.window makeFirstResponder:alertView];
+    
     [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
         switch (returnCode) {
             case NSAlertFirstButtonReturn:
                 [WakeOnLanManager wakeHost:host];
+    
+                [alertView removeFromSuperview];
+                [self.view.window makeFirstResponder:self];
                 break;
             case NSAlertSecondButtonReturn:
                 [self.view.window endSheet:alert.window];
+
+                [alertView removeFromSuperview];
+                [self.view.window makeFirstResponder:self];
                 break;
         }
     }];

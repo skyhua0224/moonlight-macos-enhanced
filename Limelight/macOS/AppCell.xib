@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="17701" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="17701"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -17,13 +17,13 @@
                     <rect key="frame" x="0.0" y="0.0" width="205" height="144"/>
                     <subviews>
                         <customView verticalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="Dvl-ny-Fge" userLabel="App Cover Art Container">
-                            <rect key="frame" x="62" y="28" width="81" height="108"/>
+                            <rect key="frame" x="66" y="28" width="73" height="108"/>
                             <subviews>
                                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="b3R-NC-s5G" userLabel="Placeholder View" customClass="BackgroundColorView">
-                                    <rect key="frame" x="0.0" y="0.0" width="81" height="108"/>
+                                    <rect key="frame" x="0.0" y="0.0" width="73" height="108"/>
                                 </customView>
-                                <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="KWV-yZ-F3P" userLabel="App Cover Art" customClass="KPCScaleToFillNSImageView">
-                                    <rect key="frame" x="0.0" y="0.0" width="81" height="108"/>
+                                <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="KWV-yZ-F3P" userLabel="App Cover Art">
+                                    <rect key="frame" x="0.0" y="0.0" width="73" height="108"/>
                                     <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" id="o9Q-i8-aPK"/>
                                 </imageView>
                             </subviews>
@@ -34,13 +34,13 @@
                                 <constraint firstItem="KWV-yZ-F3P" firstAttribute="leading" secondItem="Dvl-ny-Fge" secondAttribute="leading" id="Rzf-K4-0WO"/>
                                 <constraint firstItem="KWV-yZ-F3P" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" id="S4o-3s-BOw"/>
                                 <constraint firstItem="b3R-NC-s5G" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" id="XvJ-cs-IMM"/>
-                                <constraint firstAttribute="width" secondItem="Dvl-ny-Fge" secondAttribute="height" multiplier="3:4" id="Ylp-Pm-UzC"/>
+                                <constraint firstAttribute="width" secondItem="Dvl-ny-Fge" secondAttribute="height" multiplier="6:9" placeholder="YES" id="Ylp-Pm-UzC"/>
                                 <constraint firstAttribute="trailing" secondItem="KWV-yZ-F3P" secondAttribute="trailing" id="eKq-NM-blt"/>
                                 <constraint firstAttribute="bottom" secondItem="KWV-yZ-F3P" secondAttribute="bottom" id="tiR-AM-WcG"/>
                             </constraints>
                         </customView>
                         <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="TBj-LS-qdd" userLabel="Running Icon">
-                            <rect key="frame" x="125" y="118" width="24" height="24"/>
+                            <rect key="frame" x="121" y="118" width="24" height="24"/>
                             <constraints>
                                 <constraint firstAttribute="width" secondItem="TBj-LS-qdd" secondAttribute="height" multiplier="1:1" id="DkP-9w-jfL"/>
                                 <constraint firstAttribute="width" constant="24" id="JLY-KU-77T"/>
@@ -105,7 +105,25 @@
         </collectionViewItem>
         <menu autoenablesItems="NO" id="eXa-bo-m2A">
             <items>
-                <menuItem title="Quit App" id="rCU-F4-fg2">
+                <menuItem title="Configure Optimal Settings…" identifier="configureOptimalSettingsMenuItem" id="CFv-rv-nVq">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="configureOptimalSettingsItemClicked:" target="-1" id="Dna-K3-TaU"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Pin App" identifier="pinAppMenuItem" id="5Ld-kN-ktJ">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="pinAppMenuItemClicked:" target="-1" id="wAJ-gs-IyC"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Hide App" identifier="hideAppMenuItem" id="Z5m-xc-LSb">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="hideAppMenuItemClicked:" target="-1" id="YSN-VI-8ce"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Quit App" identifier="quitAppMenuItem" id="rCU-F4-fg2">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="quitAppMenuItemClicked:" target="-1" id="Y01-kY-3Bg"/>

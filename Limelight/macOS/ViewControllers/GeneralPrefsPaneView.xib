@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19455" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19455"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -25,8 +25,8 @@
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
-        <view misplaced="YES" id="RJx-AI-6VT" userLabel="General View">
-            <rect key="frame" x="0.0" y="0.0" width="464" height="382"/>
+        <view id="RJx-AI-6VT" userLabel="General View">
+            <rect key="frame" x="0.0" y="0.0" width="464" height="410"/>
             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
             <subviews>
                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="13V-Cr-6Io" userLabel="Content View">
@@ -37,6 +37,7 @@
                             <constraints>
                                 <constraint firstItem="eUF-iT-PsL" firstAttribute="width" secondItem="CDM-EN-PEn" secondAttribute="width" id="6Xg-nB-eJd"/>
                                 <constraint firstItem="hef-cx-cbH" firstAttribute="width" secondItem="eUF-iT-PsL" secondAttribute="width" id="PhL-di-2RX"/>
+                                <constraint firstAttribute="width" constant="424" id="Yif-QY-fs7"/>
                                 <constraint firstItem="zFu-sf-mbv" firstAttribute="width" secondItem="mBW-XX-3X2" secondAttribute="width" multiplier="0.33" id="mtd-YS-he1"/>
                                 <constraint firstItem="Y90-4m-H6Y" firstAttribute="width" secondItem="eUF-iT-PsL" secondAttribute="width" id="yNN-tf-usA"/>
                             </constraints>
@@ -138,7 +139,7 @@
                                                 </connections>
                                             </slider>
                                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="h5W-G6-oe9">
-                                                <rect key="frame" x="111" y="0.0" width="49" height="14"/>
+                                                <rect key="frame" x="112" y="0.0" width="49" height="14"/>
                                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="10 Mbps" id="b4y-39-49p">
                                                     <font key="font" metaFont="controlContent" size="11"/>
                                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>

@@ -8,8 +8,14 @@
 
 #import "CollectionView.h"
 #import "HostsViewController.h"
+#import "NSResponder+Moonlight.h"
 
 #include <Carbon/Carbon.h>
+
+@import GameController;
+
+@interface CollectionView ()
+@end
 
 @implementation CollectionView
 
@@ -38,6 +44,10 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
     }
 }
 
+- (void)controllerEvent:(MoonlightControllerEvent)event {
+    [self performNavigationForControllerEvent:event];
+}
+
 - (void)selectItemAtIndex:(NSInteger)index atPosition:(NSCollectionViewScrollPosition)position {
     if ([self numberOfItemsInSection:0] == 0) {
         return;
@@ -47,8 +57,74 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
     [self selectItemsAtIndexPaths:set scrollPosition:position];
 }
 
+- (void)performNavigationForControllerEvent:(MoonlightControllerEvent)event {
+    if (self.selectionIndexPaths.count == 0) {
+        switch (event.button) {
+            case kMCE_UpDpad:
+            case kMCE_LeftDpad: {
+                NSCollectionViewScrollPosition scrollPosition;
+                if (self.enclosingScrollView.contentView.bounds.origin.y <= 29) {
+                    scrollPosition = NSCollectionViewScrollPositionBottom;
+                } else {
+                    scrollPosition = NSCollectionViewScrollPositionNone;
+                }
+                [self selectItemAtIndex:[self numberOfItemsInSection:0] - 1 atPosition:scrollPosition];
+            }
+                break;
+            case kMCE_DownDpad:
+            case kMCE_RightDpad: {
+                NSCollectionViewScrollPosition scrollPosition;
+                if (self.enclosingScrollView.contentView.bounds.origin.y >= -10) {
+                    scrollPosition = NSCollectionViewScrollPositionTop;
+                } else {
+                    scrollPosition = NSCollectionViewScrollPositionNone;
+                }
+                [self selectItemAtIndex:0 atPosition:scrollPosition];
+            }
+                break;
+            case kMCE_BButton:
+                [self sendKeyDown:kVK_Delete];
+                break;
+                
+            case kMCE_Unknown:
+                break;
+        }
+    } else {
+        switch (event.button) {
+            case kMCE_UpDpad:
+                [self sendKeyDown:kVK_UpArrow];
+                break;
+            case kMCE_LeftDpad:
+                [self sendKeyDown:kVK_LeftArrow];
+                break;
+            case kMCE_DownDpad:
+                [self sendKeyDown:kVK_DownArrow];
+                break;
+            case kMCE_RightDpad:
+                [self sendKeyDown:kVK_RightArrow];
+                break;
+            case kMCE_AButton:
+                [self sendKeyDown:kVK_Return];
+                break;
+            case kMCE_BButton:
+                [self sendKeyDown:kVK_Delete];
+                break;
+
+            case kMCE_Unknown:
+                break;
+        }
+    }
+}
+
+- (void)sendKeyDown:(CGKeyCode)keyCode {
+    CGEventRef cgEvent = CGEventCreateKeyboardEvent(NULL, keyCode, true);
+    CGEventSetFlags(cgEvent, 0);
+    NSEvent *event = [NSEvent eventWithCGEvent:cgEvent];
+    [self keyDown:event];
+}
+
 - (void)performIntialSelectionIfNeededForEvent:(NSEvent *)event {
-    if (self.selectionIndexes.count == 0) {
+    if (self.selectionIndexPaths.count == 0) {
         switch (event.keyCode) {
             case kVK_UpArrow:
             case kVK_LeftArrow: {
@@ -84,7 +160,7 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
     if (menuItem.action == @selector(open:)) {
-        return self.selectionIndexes.count == 1;
+        return self.selectionIndexPaths.count == 1;
     }
 
     return YES;

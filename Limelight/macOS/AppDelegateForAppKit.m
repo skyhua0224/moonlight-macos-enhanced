@@ -10,6 +10,8 @@
 #import "DatabaseSingleton.h"
 #import "AboutViewController.h"
 #import "NSWindow+Moonlight.h"
+#import "NSResponder+Moonlight.h"
+#import "ControllerNavigation.h"
 
 #import "MASPreferencesWindowController.h"
 #import "GeneralPrefsPaneVC.h"
@@ -24,6 +26,7 @@ typedef enum : NSUInteger {
 @interface AppDelegateForAppKit () <NSApplicationDelegate>
 @property (nonatomic, strong) NSWindowController *preferencesWC;
 @property (nonatomic, strong) NSWindowController *aboutWC;
+@property (nonatomic, strong) ControllerNavigation *controllerNavigation;
 @property (weak) IBOutlet NSMenuItem *themeMenuItem;
 @end
 
@@ -33,6 +36,8 @@ typedef enum : NSUInteger {
     NSURL *defaultPrefsFile = [[NSBundle mainBundle] URLForResource:@"DefaultPreferences" withExtension:@"plist"];
     NSDictionary *defaultPrefs = [NSDictionary dictionaryWithContentsOfURL:defaultPrefsFile];
     [[NSUserDefaults standardUserDefaults] registerDefaults:defaultPrefs];
+    
+    self.controllerNavigation = [[ControllerNavigation alloc] init];
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {

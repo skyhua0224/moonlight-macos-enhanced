@@ -11,10 +11,12 @@
 #import "BackgroundColorView.h"
 #import "KPCScaleToFillNSImageView.h"
 
+#define APP_CELL_CORNER_RADIUS (12)
+
 @interface AppCell : NSCollectionViewItem
 @property (weak) IBOutlet NSTextField *appName;
 @property (weak) IBOutlet BackgroundColorView *appNameContainer;
-@property (weak) IBOutlet KPCScaleToFillNSImageView *appCoverArt;
+@property (weak) IBOutlet NSImageView *appCoverArt;
 @property (weak) IBOutlet BackgroundColorView *placeholderView;
 @property (weak) IBOutlet NSImageView *runningIcon;
 @property (nonatomic, strong) TemporaryApp *app;
@@ -23,6 +25,8 @@
 - (void)enterHoveredState;
 - (void)exitHoveredState;
 
+- (void)updateAlphaStateWithShouldAnimate:(BOOL)animate;
 - (void)updateSelectedState:(BOOL)selected;
+- (void)updateShadowPath;
 
 @end
