@@ -68,4 +68,5 @@ git clone --recursive https://github.com/MichaelMKenny/moonlight-macos.git
 - This project is a fork of the main [moonlight-ios project](https://github.com/moonlight-stream/moonlight-ios), by the [Moonlight Stream team](https://github.com/moonlight-stream), made to work on macOS and use a Native AppKit UI. This is not a Mac Catalyst app.
 - In addition, this project also uses the following Open-Source projects:
    - [MASPreferences](https://github.com/shpakovski/MASPreferences) to help handle preference-panes in preferences.
+   - [Functional](https://github.com/leuchtetgruen/Functional.m) to add Objective-C helpers, to make my life easier.
 
