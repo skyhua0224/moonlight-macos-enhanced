@@ -80,7 +80,6 @@
 		4C84385A21FE9453000A77CD /* NSApplication+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */; };
 		4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C8E7EC2236EF0040075DE78 /* Controller.m */; };
 		4C97FE5E24CD3C1A001F3064 /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946EA19F6AFB800339C8A /* libopus.a */; };
-		4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */; };
 		4CA454C7277ADD0600E99A96 /* OptimalSettingsConfigurer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */; };
 		4CA454C8277ADD0600E99A96 /* OptimalSettingsConfigurer.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */; };
 		4CA454CB277BE4E400E99A96 /* PrivateGfeApiRequester.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */; };
@@ -203,8 +202,6 @@
 		4C85A8001FDCE49C00F28E90 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		4C8E7EC2236EF0040075DE78 /* Controller.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Controller.m; sourceTree = "<group>"; };
 		4C8E7EC3236EF0040075DE78 /* Controller.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Controller.h; sourceTree = "<group>"; };
-		4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = KPCScaleToFillNSImageView.m; sourceTree = "<group>"; };
-		4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = KPCScaleToFillNSImageView.h; sourceTree = "<group>"; };
 		4CA454C4277ADD0600E99A96 /* OptimalSettingsConfigurer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OptimalSettingsConfigurer.h; sourceTree = "<group>"; };
 		4CA454C5277ADD0600E99A96 /* OptimalSettingsConfigurer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = OptimalSettingsConfigurer.m; sourceTree = "<group>"; };
 		4CA454C6277ADD0600E99A96 /* OptimalSettingsConfigurer.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = OptimalSettingsConfigurer.xib; sourceTree = "<group>"; };
@@ -417,8 +414,6 @@
 			children = (
 				4CE887002771DD22004EB216 /* Functional */,
 				4CDC8E6925E750B3009E66C6 /* MASPreferences */,
-				4C9D0EAC24BD5AF200A1F06B /* KPCScaleToFillNSImageView.h */,
-				4C9D0EAA24BD5AF100A1F06B /* KPCScaleToFillNSImageView.m */,
 				4C6E962725BE79CE008F6DAE /* ImageFader.h */,
 				4C6E962825BE79CE008F6DAE /* ImageFader.m */,
 				4C38E81E1FEF4FC1000425CD /* AlertPresenter.h */,
@@ -1122,7 +1117,6 @@
 				4C7E0A9E1FECD31600684411 /* HostCell.m in Sources */,
 				4C38E8221FEF77CA000425CD /* AppAssetResponse.m in Sources */,
 				4CA454CB277BE4E400E99A96 /* PrivateGfeApiRequester.m in Sources */,
-				4C9D0EAD24BD5AF300A1F06B /* KPCScaleToFillNSImageView.m in Sources */,
 				4C38E8071FEE099F000425CD /* TemporaryApp.m in Sources */,
 				4C63B6A9278925FB00ED3510 /* NSView+Moonlight.m in Sources */,
 				4CE887122772B8B3004EB216 /* PrivateAppAssetRetriever.m in Sources */,

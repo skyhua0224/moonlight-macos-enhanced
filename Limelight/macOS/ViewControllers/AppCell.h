@@ -9,7 +9,6 @@
 #import <Cocoa/Cocoa.h>
 #import "AppsViewControllerDelegate.h"
 #import "BackgroundColorView.h"
-#import "KPCScaleToFillNSImageView.h"
 
 #define APP_CELL_CORNER_RADIUS (12)
 
