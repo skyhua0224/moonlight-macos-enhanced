@@ -138,24 +138,20 @@ const CGFloat scaleBase = 1.125;
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
-    TemporaryApp *appToStream;
-    if ([AppsViewController isSelectGFEApp:self.runningApp]) {
-        appToStream = self.runningApp;
-    } else {
-        for (TemporaryApp *app in self.apps) {
-            if ([app.name isEqualToString:@"Desktop"]) {
-                appToStream = app;
-            }
-        }
-    }
-    streamVC.app = appToStream;
+
+    streamVC.app = [self getGFEAppToStreamFor:self.runningApp];
     streamVC.appName = self.runningApp.name;
     streamVC.privateApp = self.runningApp;
-//    streamVC.privateAppId = self.cmsIdToId[self.runningApp.id];
-    streamVC.privateAppId = [self privateAppIdForAppName:self.runningApp.name];
+    if (hasFeaturePrivateAppListing()) {
+        streamVC.privateAppId = self.cmsIdToId[self.runningApp.id];
+    } else {
+        if (hasFeaturePrivateAppOptimalSettings()) {
+            streamVC.privateAppId = [self privateAppIdForAppName:self.runningApp.name];
+        }
+    }
     streamVC.delegate = self;
     
-    self.privateApp = self.runningApp;
+    self.privateApp = streamVC.privateApp;
     self.privateAppId = streamVC.privateAppId;
 }
 
@@ -377,9 +373,9 @@ const CGFloat scaleBase = 1.125;
             } else {
                 self.runningApp = nil;
                 
-//                if (![AppsViewController isSelectGFEApp:self.privateApp]) {
+                if (hasFeaturePrivateAppOptimalSettings()) {
                     [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.host.activeAddress];
-//                }
+                }
                 
 #ifdef USE_RESOLUTION_SYNC
                 [ResolutionSyncRequester teardownControllerFor:self.host.activeAddress];
@@ -697,7 +693,7 @@ const CGFloat scaleBase = 1.125;
 - (void)discoverPrivateApps:(TemporaryHost *)host {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self fetchPrivateAppsForHostWithHostIP:host.activeAddress WithCompletionBlock:^(NSArray<TemporaryApp *> *apps) {
-            NSArray<TemporaryApp *> *oldItems = [self fetchApps];
+            NSArray<TemporaryApp *> *oldItems = [self filteredItems:[self fetchApps] forSection:1];
 
             NSMutableArray *gfeAppList;
             
@@ -713,7 +709,7 @@ const CGFloat scaleBase = 1.125;
             } else {
                 gfeAppList = [NSMutableArray arrayWithArray:[[appListResp getAppList] allObjects]];
                 gfeAppList = (NSMutableArray *)[F filterArray:gfeAppList withBlock:^BOOL(TemporaryApp *obj) {
-                    return [AppsViewController isSelectGFEApp:obj];
+                    return [AppsViewController isWhitelistedGFEApp:obj];
                 }];
             }
             
@@ -726,34 +722,80 @@ const CGFloat scaleBase = 1.125;
             [self.privateAppManager retrieveAssetsFromHost:self.host];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self updateCollectionViewDataWithOld:oldItems new:[self fetchApps]];
+                NSArray<TemporaryApp *> *newItems = [self filteredItems:[self fetchApps] forSection:1];
+                [self updateCollectionViewDataWithOld:oldItems new:newItems];
             });
         }];
     });
 }
 
-+ (BOOL)isSelectGFEApp:(TemporaryApp *)app {
-    return YES;
-//    return [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"];
++ (BOOL)isWhitelistedGFEApp:(TemporaryApp *)app {
+    return [app.name isEqualToString:@"Playnite Fullscreen"] || [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"];
+}
+
+- (TemporaryApp *)getGFEAppToStreamFor:(TemporaryApp *)app {
+    if (hasFeaturePrivateAppListing()) {
+        if ([AppsViewController isWhitelistedGFEApp:app]) {
+            return app;
+        } else {
+            for (TemporaryApp *app in self.apps) {
+                if ([app.name isEqualToString:@"Desktop"]) {
+                    return app;
+                }
+            }
+            return nil;
+        }
+    } else {
+        return app;
+    }
+}
+
++ (CGSize)getAppCoverArtSize {
+    CGFloat width;
+    CGFloat height;
+    
+    if (hasFeaturePrivateAppListing()) {
+        width = 628;
+        height = 888;
+
+        return CGSizeMake(width, height);
+    }
+    
+    if (usesNewAppCoverArtAspectRatio()) {
+        width = 600;
+        height = 900;
+    } else {
+        width = 300;
+        height = 400;
+    }
+    return CGSizeMake(width, height);
 }
 
 
 #pragma mark - App Discovery
 
 - (void)loadApps {
-    self.appManager = [[AppAssetManager alloc] initWithCallback:self];
-//    self.privateAppManager = [[PrivateAppAssetManager alloc] initWithCallback:self];
-    
+    if (hasFeaturePrivateAppListing()) {
+        self.privateAppManager = [[PrivateAppAssetManager alloc] initWithCallback:self];
+    } else {
+        self.appManager = [[AppAssetManager alloc] initWithCallback:self];
+    }
+        
     if (self.host.appList.count > 0) {
         [self displayApps];
     }
     
-    [self fetchPrivateAppsWithCompletionBlock:^(NSDictionary *mapping) {
-        self.appNameToId = mapping;
-    }];
-    
-    [self discoverAppsForHost:self.host];
-    //    [self discoverPrivateApps:self.host];
+    if (hasFeaturePrivateAppOptimalSettings()) {
+        [self fetchPrivateAppsWithCompletionBlock:^(NSDictionary *mapping) {
+            self.appNameToId = mapping;
+        }];
+    }
+
+    if (hasFeaturePrivateAppListing()) {
+        [self discoverPrivateApps:self.host];
+    } else {
+        [self discoverAppsForHost:self.host];
+    }
 }
 
 - (NSArray<TemporaryApp *> *)fetchApps {
@@ -908,8 +950,8 @@ const CGFloat scaleBase = 1.125;
     size_t width = CGImageGetWidth(cgImage);
     size_t height = CGImageGetHeight(cgImage);
     
-    CGFloat targetWidth = 600;
-    CGFloat targetHeight = 900;
+    CGFloat targetWidth = [self getAppCoverArtSize].width;
+    CGFloat targetHeight = [self getAppCoverArtSize].height;
     CGFloat targetAspect = targetWidth / targetHeight;
     CGFloat drawAspect = (CGFloat)width / (CGFloat)height;
     
@@ -976,3 +1018,15 @@ const CGFloat scaleBase = 1.125;
 }
 
 @end
+
+BOOL hasFeaturePrivateAppListing(void) {
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"enablePrivateAppListingFeature"];
+}
+
+BOOL hasFeaturePrivateAppOptimalSettings(void) {
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"enablePrivateAppOptimalSettingsFeature"];
+}
+
+BOOL usesNewAppCoverArtAspectRatio(void) {
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"enableNewAppCoverArtAspectRatio"];
+}

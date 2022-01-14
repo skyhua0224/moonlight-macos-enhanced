@@ -10,6 +10,7 @@
 #import "AppCellView.h"
 #import "NSApplication+Moonlight.h"
 #import "NSView+Moonlight.h"
+#import "AppsViewController.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -26,6 +27,10 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    
+    CGFloat aspectRatio = [AppsViewController getAppCoverArtSize].width / [AppsViewController getAppCoverArtSize].height;
+    self.appCoverArt.superview.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.appCoverArt.superview.widthAnchor constraintEqualToAnchor:self.appCoverArt.superview.heightAnchor multiplier:aspectRatio].active = YES;
     
     NSShadow *runningShadow = [[NSShadow alloc] init];
     [runningShadow setShadowColor:[NSColor colorWithRed:0.06 green:0.204 blue:0.5 alpha:0.75]];

@@ -28,5 +28,11 @@
 	<integer>0</integer>
 	<key>useGCMouseDriver</key>
 	<false/>
+	<key>enablePrivateAppOptimalSettingsFeature</key>
+	<false/>
+	<key>enablePrivateAppListingFeature</key>
+	<false/>
+	<key>enableNewAppCoverArtAspectRatio</key>
+	<false/>
 </dict>
 </plist>

@@ -427,7 +427,9 @@
 - (void)closeWindowFromMainQueueWithMessage:(NSString *)message {
     [self.hidSupport releaseAllModifierKeys];
     
-    [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
+    if (hasFeaturePrivateAppOptimalSettings()) {
+        [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
+    }
     
     dispatch_async(dispatch_get_main_queue(), ^{
         [self uncaptureMouse];
@@ -503,9 +505,11 @@
         [self startStreamWithStreamConfig:streamConfig];
     }
 
-//    if (![AppsViewController isSelectGFEApp:self.privateApp]) {
-//        [PrivateGfeApiRequester requestLaunchOfPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
-//    }
+    if (hasFeaturePrivateAppListing()) {
+        if (![AppsViewController isWhitelistedGFEApp:self.privateApp]) {
+            [PrivateGfeApiRequester requestLaunchOfPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
+        }
+    }
 }
 
 - (void)startStreamWithStreamConfig:(StreamConfiguration *)streamConfig {
@@ -537,9 +541,6 @@
 
     return resolution;
 }
-
-
-#pragma mark - Private GFE API
 
 
 #pragma mark - ConnectionCallbacks
