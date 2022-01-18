@@ -7,7 +7,7 @@ Moonlight macOS is a native macOS client for NVIDIA's GameStream. It allows you 
 ## Features
 
 - Apple Silicon support
-- Up to 4K streaming at 60fps
+- Up to 4K streaming at 144fps
 - Native AppKit app
 - Hardware decoding
 - HEVC and H.264
