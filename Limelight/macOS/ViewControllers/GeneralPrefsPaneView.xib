@@ -79,6 +79,9 @@
                                                 <items>
                                                     <menuItem title="30Hz" state="on" tag="30" id="Wfv-OD-3k5"/>
                                                     <menuItem title="60Hz" tag="60" id="pgx-Oq-z63"/>
+                                                    <menuItem title="90Hz" tag="90" id="7WK-XZ-47y"/>
+                                                    <menuItem title="120Hz" tag="120" id="lFc-6V-8Ij"/>
+                                                    <menuItem title="144Hz" tag="144" id="Wov-sV-Y5F"/>
                                                 </items>
                                             </menu>
                                         </popUpButtonCell>

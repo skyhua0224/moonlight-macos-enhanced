@@ -449,6 +449,15 @@
     return (StreamViewMac *)self.view;
 }
 
++ (int)getResolutionSyncRefreshRate {
+    int refreshRate = [[[DataManager alloc] init] getSettings].framerate.intValue;
+    if (refreshRate == 30) {
+        return 60;
+    } else {
+        return refreshRate;
+    }
+}
+
 
 #pragma mark - Streaming Operations
 
@@ -559,7 +568,8 @@
 - (void)connectionStarted {
 #ifdef USE_RESOLUTION_SYNC
     BOOL isRunning = [self.app.id isEqualToString:self.app.host.currentGame];
-    [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:60 isResume:isRunning];
+    int refreshRate = [self.class getResolutionSyncRefreshRate];
+    [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:refreshRate isResume:isRunning];
 #endif
     
     dispatch_async(dispatch_get_main_queue(), ^{
