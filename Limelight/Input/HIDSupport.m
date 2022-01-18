@@ -435,6 +435,7 @@ typedef enum {
 @property (nonatomic) id mouseConnectObserver;
 @property (nonatomic) id mouseDisconnectObserver;
 
+@property (nonatomic) BOOL useMouseScrollHack;
 @property (nonatomic) BOOL useGCMouse;
 @end
 
@@ -531,7 +532,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
             CFDYSendHighResScrollEvent(scrollAmount);
         } else {
 #endif
-            LiSendHighResScrollEvent(scrollAmount);
+            LiSendHighResScrollEvent(scrollAmount, self.useMouseScrollHack);
 #ifdef USE_RESOLUTION_SYNC
         }
 #endif
@@ -728,7 +729,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                 CFDYSendHighResScrollEvent(event.scrollingDeltaY);
             } else {
 #endif
-                LiSendHighResScrollEvent(event.scrollingDeltaY);
+                LiSendHighResScrollEvent(event.scrollingDeltaY, self.useMouseScrollHack);
 #ifdef USE_RESOLUTION_SYNC
             }
 #endif
@@ -1151,6 +1152,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         modifiers |= MODIFIER_META;
     }
     return modifiers;
+}
+
+- (BOOL)useMouseScrollHack {
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"useHighResMouseScrollHack"];
 }
 
 - (BOOL)useGCMouse {
