@@ -34,5 +34,7 @@
 	<false/>
 	<key>enableNewAppCoverArtAspectRatio</key>
 	<false/>
+	<key>useHighResMouseScrollHack</key>
+	<true/>
 </dict>
 </plist>
