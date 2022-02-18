@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="20034" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="20034"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -293,7 +293,7 @@
                                 <gridCell row="fDf-n7-Yh9" column="pYn-tJ-FRL" id="Skd-rl-4NV">
                                     <button key="contentView" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="47m-7c-LqH">
                                         <rect key="frame" x="150" y="61" width="274" height="18"/>
-                                        <buttonCell key="cell" type="check" title="Enable gampad rumble" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="qo3-uH-VoP">
+                                        <buttonCell key="cell" type="check" title="Enable gamepad rumble" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="qo3-uH-VoP">
                                             <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
                                             <font key="font" metaFont="system"/>
                                         </buttonCell>
