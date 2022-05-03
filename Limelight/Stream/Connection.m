@@ -53,13 +53,21 @@ static VideoDecoderRenderer* renderer;
 
 int DrDecoderSetup(int videoFormat, int width, int height, int redrawRate, void* context, int drFlags)
 {
-    [renderer setupWithVideoFormat:videoFormat refreshRate:redrawRate];
+    [renderer setupWithVideoFormat:videoFormat frameRate:redrawRate];
     return 0;
 }
 
-void DrCleanup(void)
+void DrStart(void)
 {
-    [renderer cleanup];
+    [renderer start];
+}
+
+void DrStop(void)
+{
+    [renderer stop];
+
+    _callbacks = nil;
+    renderer = nil;
 }
 
 int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
@@ -79,6 +87,7 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
             ret = [renderer submitDecodeBuffer:(unsigned char*)entry->data
                                         length:entry->length
                                     bufferType:entry->bufferType
+                                     frameType:decodeUnit->frameType
                                            pts:decodeUnit->presentationTimeMs];
             if (ret != DR_OK) {
                 free(data);
@@ -97,6 +106,7 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
     return [renderer submitDecodeBuffer:data
                                  length:offset
                              bufferType:BUFFER_TYPE_PICDATA
+                              frameType:decodeUnit->frameType
                                     pts:decodeUnit->presentationTimeMs];
 }
 
@@ -319,8 +329,6 @@ void ClConnectionStatusUpdate(int status)
         LiStopConnection();
         [initLock unlock];
     });
-    _callbacks = nil;
-    renderer = nil;
 }
 
 -(id) initWithConfig:(StreamConfiguration*)config renderer:(VideoDecoderRenderer*)myRenderer connectionCallbacks:(id<ConnectionCallbacks>)callbacks
@@ -403,15 +411,14 @@ void ClConnectionStatusUpdate(int status)
 
     LiInitializeVideoCallbacks(&_drCallbacks);
     _drCallbacks.setup = DrDecoderSetup;
-    _drCallbacks.cleanup = DrCleanup;
-    _drCallbacks.submitDecodeUnit = DrSubmitDecodeUnit;
+    _drCallbacks.start = DrStart;
+    _drCallbacks.stop = DrStop;
 
-#if TARGET_OS_IPHONE
+//#if TARGET_OS_IPHONE
     // RFI doesn't work properly with HEVC on iOS 11 with an iPhone SE (at least)
     // It doesnt work on macOS either, tested with Network Link Conditioner.
-    _drCallbacks.capabilities = CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC |
-                                CAPABILITY_DIRECT_SUBMIT;
-#endif
+    _drCallbacks.capabilities = CAPABILITY_PULL_RENDERER;
+//#endif
 
     LiInitializeAudioCallbacks(&_arCallbacks);
     _arCallbacks.init = ArInit;

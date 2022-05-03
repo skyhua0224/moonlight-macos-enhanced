@@ -14,35 +14,8 @@
 @import VideoToolbox;
 
 
-#define TIMER_SLACK_MS 3
-#define FRAME_HISTORY_ENTRIES 8
-
-@interface NSMutableArray (Moonlight)
-- (void)enqueue:(NSObject *)object;
-- (NSObject *)dequeue;
-@end
-
-@implementation NSMutableArray (Moonlight)
-
-- (void)enqueue:(NSObject *)object {
-    [self insertObject:object atIndex:0];
-}
-
-- (NSObject *)dequeue {
-    NSObject *object = self.lastObject;
-    [self removeLastObject];
-    
-    return object;
-}
-
-@end
-
-
 @interface VideoDecoderRenderer ()
-@property (nonatomic) int refreshRate;
-
-@property (nonatomic, strong) NSMutableArray *frameQueue;
-@property (nonatomic, strong) NSMutableArray<NSNumber *> *frameQueueHistory;
+@property (nonatomic) int frameRate;
 
 @end
 
@@ -56,26 +29,9 @@
     
     NSData *spsData, *ppsData, *vpsData;
     CMVideoFormatDescriptionRef _imageFormatDesc;
+    CMVideoFormatDescriptionRef formatDesc;
 
     CVDisplayLinkRef _displayLink;
-
-    os_unfair_lock _frameQueueLock;
-    CMVideoFormatDescriptionRef formatDesc;
-    VTDecompressionSessionRef _decompressionSession;
-}
-
-- (void)printStreamInfo {
-    NSLog(@"SPS: %@, PPS: %@, VPS: %@", [self decodeData:spsData], [self decodeData:ppsData], [self decodeData:vpsData]);
-}
-
-- (NSString *)decodeData:(NSData *)data {
-    NSMutableString *string = [NSMutableString string];
-    const void *bytes = [data bytes];
-    for (NSInteger i = 0; i < data.length; i++) {
-        uint8_t byte = ((uint8_t *)bytes)[i];
-        [string appendFormat:@"%02x ", byte];
-    }
-    return [string copy];
 }
 
 - (void)reinitializeDisplayLayer
@@ -109,174 +65,86 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     return [screenNumber unsignedIntValue];
 }
 
-static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
-                                          const CVTimeStamp *now,
-                                          const CVTimeStamp *vsyncTime,
-                                          CVOptionFlags flagsIn,
-                                          CVOptionFlags *flagsOut,
-                                          void *displayLinkContext)
-{
-    VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)displayLinkContext;
-    
-    [self vsyncCallback:(500 / self.refreshRate)];
-    
-    return kCVReturnSuccess;
-}
-
-- (BOOL)initializeDisplayLink
-{
-    CGDirectDisplayID displayId = getDisplayID(_view.window.screen);
-    CVReturn status = CVDisplayLinkCreateWithCGDisplay(displayId, &_displayLink);
-    if (status != kCVReturnSuccess) {
-        Log(LOG_E, @"Failed to create CVDisplayLink: %d", status);
-        return NO;
-    }
-    
-    status = CVDisplayLinkSetOutputCallback(_displayLink, displayLinkOutputCallback, (__bridge void * _Nullable)(self));
-    if (status != kCVReturnSuccess) {
-        Log(LOG_E, @"CVDisplayLinkSetOutputCallback() failed: %d", status);
-        return NO;
-    }
-    
-    status = CVDisplayLinkStart(_displayLink);
-    if (status != kCVReturnSuccess) {
-        Log(LOG_E, @"CVDisplayLinkStart() failed: %d", status);
-        return NO;
-    }
-    
-    return YES;
-}
-
 - (id)initWithView:(OSView *)view
 {
     self = [super init];
     
     _view = view;
     
-    _frameQueueHistory = [NSMutableArray arrayWithCapacity:FRAME_HISTORY_ENTRIES];
-    _frameQueue = [NSMutableArray array];
-
     [self reinitializeDisplayLayer];
         
     return self;
 }
 
-- (void)dealloc
+- (void)setupWithVideoFormat:(int)videoFormat frameRate:(int)frameRate
+{
+    self->videoFormat = videoFormat;
+    self.frameRate = frameRate;
+}
+
+- (void)start
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        CGDirectDisplayID displayId = getDisplayID(self->_view.window.screen);
+        CVReturn status = CVDisplayLinkCreateWithCGDisplay(displayId, &self->_displayLink);
+        if (status != kCVReturnSuccess) {
+            Log(LOG_E, @"Failed to create CVDisplayLink: %d", status);
+        }
+        
+        status = CVDisplayLinkSetOutputCallback(self->_displayLink, displayLinkCallback, (__bridge void * _Nullable)(self));
+        if (status != kCVReturnSuccess) {
+            Log(LOG_E, @"CVDisplayLinkSetOutputCallback() failed: %d", status);
+        }
+        
+        status = CVDisplayLinkStart(self->_displayLink);
+        if (status != kCVReturnSuccess) {
+            Log(LOG_E, @"CVDisplayLinkStart() failed: %d", status);
+        }
+    });
+}
+
+// TODO: Refactor this
+int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit);
+
+static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
+                                          const CVTimeStamp *inNow,
+                                          const CVTimeStamp *inOutputTime,
+                                          CVOptionFlags flagsIn,
+                                          CVOptionFlags *flagsOut,
+                                          void *displayLinkContext)
+{
+    VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)displayLinkContext;
+    
+    VIDEO_FRAME_HANDLE handle;
+    PDECODE_UNIT du;
+    
+    while (LiPollNextVideoFrame(&handle, &du)) {
+        LiCompleteVideoFrame(handle, DrSubmitDecodeUnit(du));
+        
+        // Calculate the actual display refresh rate
+        double displayRefreshRate = 1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(self->_displayLink);
+        
+        // Only pace frames if the display refresh rate is >= 90% of our stream frame rate.
+        // Battery saver, accessibility settings, or device thermals can cause the actual
+        // refresh rate of the display to drop below the physical maximum.
+        if (displayRefreshRate >= self.frameRate * 0.9f) {
+            // Keep one pending frame to smooth out gaps due to
+            // network jitter at the cost of 1 frame of latency
+            if (LiGetPendingVideoFrames() == 1) {
+                break;
+            }
+        }
+    }
+
+    return kCVReturnSuccess;
+}
+
+- (void)stop
 {
     if (_displayLink != NULL) {
         CVDisplayLinkStop(_displayLink);
         CVDisplayLinkRelease(_displayLink);
     }
-    
-    os_unfair_lock_lock(&_frameQueueLock);
-    self.frameQueueHistory = nil;
-    self.frameQueue = nil;
-    os_unfair_lock_unlock(&_frameQueueLock);
-
-    [self releaseDecompressionSession];
-}
-
-- (void)releaseDecompressionSession {
-    if (_decompressionSession != nil) {
-        VTDecompressionSessionInvalidate(_decompressionSession);
-        CFRelease(_decompressionSession);
-        _decompressionSession = nil;
-    }
-}
-
-- (void)setupWithVideoFormat:(int)videoFormat refreshRate:(int)refreshRate
-{
-    self->videoFormat = videoFormat;
-    self.refreshRate = refreshRate;
- 
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self initializeDisplayLink];
-    });
-}
-
-- (void)vsyncCallback:(int)timeUntilNextVsyncMillis
-{
-    int maxVideoFps = self.refreshRate;
-    int displayFps = ceil(1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(_displayLink));
-    
-    // Make sure initialize() has been called
-    assert(maxVideoFps != 0);
-    
-    assert(timeUntilNextVsyncMillis >= TIMER_SLACK_MS);
-    
-    uint64_t vsyncCallbackStartTime = mach_absolute_time() / 1000000;
-    
-    os_unfair_lock_lock(&_frameQueueLock);
-    
-    // If the queue length history entries are large, be strict
-    // about dropping excess frames.
-    int frameDropTarget = 1;
-    
-    // If we may get more frames per second than we can display, use
-    // frame history to drop frames only if consistently above the
-    // one queued frame mark.
-    if (maxVideoFps >= displayFps) {
-        for (int i = 0; i < self.frameQueueHistory.count; i++) {
-            if (self.frameQueueHistory[i].integerValue <= 1) {
-                // Be lenient as long as the queue length
-                // resolves before the end of frame history
-                frameDropTarget = 3;
-                break;
-            }
-        }
-        
-        if (self.frameQueueHistory.count == FRAME_HISTORY_ENTRIES) {
-            [self.frameQueueHistory dequeue];
-        }
-        
-        [self.frameQueueHistory enqueue:@(self.frameQueue.count)];
-    }
-    
-    // Catch up if we're several frames ahead
-    while (self.frameQueue.count > frameDropTarget) {
-        CFTypeRef frame = CFBridgingRetain([self.frameQueue dequeue]);
-        CFRelease(frame);
-    }
-
-    
-    if (self.frameQueue.count == 0) {
-        os_unfair_lock_unlock(&_frameQueueLock);
-        
-        while (mach_absolute_time() / 1000000 < vsyncCallbackStartTime + timeUntilNextVsyncMillis - TIMER_SLACK_MS) {
-            usleep(1000);
-            
-            os_unfair_lock_lock(&_frameQueueLock);
-            if (self.frameQueue.count > 0) {
-                // Don't release the lock
-                goto RenderNextFrame;
-            }
-            os_unfair_lock_unlock(&_frameQueueLock);
-        }
-        
-        // Nothing to render at this time
-        return;
-    }
-    
-RenderNextFrame:
-    {
-        // Grab the first frame
-        CVImageBufferRef frame = (CVImageBufferRef)CFBridgingRetain([self.frameQueue dequeue]);
-        os_unfair_lock_unlock(&_frameQueueLock);
-
-        // Render it
-        [self renderFrameAtVsync:frame];
-    }
-}
-
-- (void)printNaluTypeWithFrame:(NSDictionary *)frame {
-    CMBlockBufferRef blockBuffer = (__bridge CMBlockBufferRef)frame[@"buffer"];
-    size_t length = 1;
-    char *pointer;
-    CMBlockBufferGetDataPointer(blockBuffer, 4, &length, NULL, &pointer);
-    Log(LOG_I, @"Frame nalu type: %c", pointer[0]);
-}
-
-- (void)cleanup {
 }
 
 #define FRAME_START_PREFIX_SIZE 4
@@ -291,27 +159,6 @@ RenderNextFrame:
     else {
         // H.265 requires VPS in addition to SPS and PPS
         return !waitingForVps && !waitingForSps && !waitingForPps;
-    }
-}
-
-- (Boolean)isNalReferencePicture:(unsigned char)nalType
-{
-    if (videoFormat & VIDEO_FORMAT_MASK_H264) {
-        return nalType == 0x65;
-    }
-    else {
-        // HEVC has several types of reference NALU types
-        switch (nalType) {
-            case 0x20:
-            case 0x22:
-            case 0x24:
-            case 0x26:
-            case 0x28:
-            case 0x2A:
-                return true;
-            default:
-                return false;
-        }
     }
 }
 
@@ -382,7 +229,7 @@ RenderNextFrame:
 }
 
 // This function must free data for bufferType == BUFFER_TYPE_PICDATA
-- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType pts:(unsigned int)pts
+- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType frameType:(int)frameType pts:(unsigned int)pts
 {
     OSStatus status;
 
@@ -417,8 +264,6 @@ RenderNextFrame:
             }
             
             if (videoFormat & VIDEO_FORMAT_MASK_H264) {
-                [self printStreamInfo];
-                
                 const uint8_t* const parameterSetPointers[] = { [spsData bytes], [ppsData bytes] };
                 const size_t parameterSetSizes[] = { [spsData length], [ppsData length] };
                 
@@ -439,6 +284,7 @@ RenderNextFrame:
                 const size_t parameterSetSizes[] = { [vpsData length], [spsData length], [ppsData length] };
                 
                 Log(LOG_I, @"Constructing new HEVC format description");
+                
                 if (@available(iOS 11.0, macOS 10.14, *)) {
                     status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
                                                                                  3, /* count of parameter sets */
@@ -457,15 +303,6 @@ RenderNextFrame:
                     Log(LOG_E, @"Failed to create HEVC format description: %d", (int)status);
                     formatDesc = NULL;
                 }
-            }
-            
-            [self releaseDecompressionSession];
-
-            VTDecompressionOutputCallbackRecord callbackRecord = {outputCallback, (__bridge void * _Nullable)(self)};
-            status = VTDecompressionSessionCreate(NULL, formatDesc, CFBridgingRetain(@{(NSString *)kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder: @(YES)}), NULL, &callbackRecord, &_decompressionSession);
-            if (status != noErr) {
-                Log(LOG_E, @"Failed to create decompressionSession: %d", (int)status);
-                _decompressionSession = NULL;
             }
         }
         
@@ -527,6 +364,7 @@ RenderNextFrame:
     // From now on, CMBlockBuffer owns the data pointer and will free it when it's dereferenced
     
     CMSampleBufferRef sampleBuffer;
+    
     status = CMSampleBufferCreate(kCFAllocatorDefault,
                                   blockBuffer,
                                   true, NULL,
@@ -536,74 +374,37 @@ RenderNextFrame:
     if (status != noErr) {
         Log(LOG_E, @"CMSampleBufferCreate failed: %d", (int)status);
         CFRelease(blockBuffer);
-    }
-    
-    VTDecodeInfoFlags infoFlags;
-    status = VTDecompressionSessionDecodeFrame(_decompressionSession, sampleBuffer, kVTDecodeFrame_EnableAsynchronousDecompression | kVTDecodeFrame_EnableTemporalProcessing, NULL, &infoFlags);
-    if (status != noErr) {
-        Log(LOG_E, @"VTDecompressionSessionDecodeFrame failed: %d", (int)status);
+        return DR_NEED_IDR;
     }
 
-    CFRelease(sampleBuffer);
-    CFRelease(blockBuffer);
-    
-    return DR_OK;
-}
+//    TODO: Make P3 color work
+//    CVBufferRemoveAttachment(frame, kCVImageBufferCGColorSpaceKey);
+//    CVBufferSetAttachment(frame, kCVImageBufferCGColorSpaceKey, CGColorSpaceCreateWithName([NSScreen.mainScreen canRepresentDisplayGamut:NSDisplayGamutP3] ? kCGColorSpaceDisplayP3 : kCGColorSpaceSRGB), kCVAttachmentMode_ShouldPropagate);
 
-void outputCallback(void * CM_NULLABLE decompressionOutputRefCon,
-                    void * CM_NULLABLE sourceFrameRefCon,
-                    OSStatus status,
-                    VTDecodeInfoFlags infoFlags,
-                    CM_NULLABLE CVImageBufferRef imageBuffer,
-                    CMTime presentationTimeStamp,
-                    CMTime presentationDuration) {
-    VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)(decompressionOutputRefCon);
-    if (self.frameQueue != nil && imageBuffer != nil) {
-        
-        os_unfair_lock_lock(&(self->_frameQueueLock));
-        [self.frameQueue enqueue:(__bridge NSObject *)(imageBuffer)];
-        os_unfair_lock_unlock(&(self->_frameQueueLock));
+    CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, YES);
+    CFMutableDictionaryRef dict = (CFMutableDictionaryRef)CFArrayGetValueAtIndex(attachments, 0);
+    
+    CFDictionarySetValue(dict, kCMSampleAttachmentKey_DisplayImmediately, kCFBooleanTrue);
+    CFDictionarySetValue(dict, kCMSampleAttachmentKey_IsDependedOnByOthers, kCFBooleanTrue);
+    
+    if (frameType == FRAME_TYPE_PFRAME) {
+        // P-frame
+        CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanTrue);
+        CFDictionarySetValue(dict, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanTrue);
+    } else {
+        // I-frame
+        CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanFalse);
+        CFDictionarySetValue(dict, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanFalse);
     }
-}
 
-
-- (void)renderFrameAtVsync:(CVImageBufferRef)frame {
-    // Queue this sample for the next v-sync
-    CMSampleTimingInfo timingInfo = {
-        .duration = kCMTimeInvalid,
-        .decodeTimeStamp = kCMTimeInvalid,
-        .presentationTimeStamp = CMTimeMake(mach_absolute_time(), 1000 * 1000 * 1000)
-    };
-
-    CVBufferRemoveAttachment(frame, kCVImageBufferCGColorSpaceKey);
-    CVBufferSetAttachment(frame, kCVImageBufferCGColorSpaceKey, CGColorSpaceCreateWithName([NSScreen.mainScreen canRepresentDisplayGamut:NSDisplayGamutP3] ? kCGColorSpaceDisplayP3 : kCGColorSpaceSRGB), kCVAttachmentMode_ShouldPropagate);
-
-    OSStatus status;
-    
-    if (!_imageFormatDesc || !CMVideoFormatDescriptionMatchesImageBuffer(_imageFormatDesc, frame)) {
-        if (_imageFormatDesc != NULL) {
-            CFRelease(_imageFormatDesc);
-        }
-        status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, frame, &_imageFormatDesc);
-        if (status != noErr) {
-            Log(LOG_E, @"CMVideoFormatDescriptionCreateForImageBuffer() failed: %d", (int)status);
-            return;
-        }
-    }
-    
-    CMSampleBufferRef sampleBuffer;
-    status = CMSampleBufferCreateReadyWithImageBuffer(NULL, frame, _imageFormatDesc, &timingInfo, &sampleBuffer);
-    if (status != noErr) {
-        Log(LOG_E, @"CMSampleBufferCreateReadyWithImageBuffer failed: %d", (int)status);
-        CFRelease(frame);
-        return;
-    }
-    
+    // Enqueue the next frame
     [displayLayer enqueueSampleBuffer:sampleBuffer];
     
     // Release the buffers
-    CFRelease(frame);
+    CFRelease(blockBuffer);
     CFRelease(sampleBuffer);
+    
+    return DR_OK;
 }
 
 @end
