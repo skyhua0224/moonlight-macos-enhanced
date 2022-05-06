@@ -370,6 +370,7 @@ void ClConnectionStatusUpdate(int status)
     _streamConfig.bitrate = config.bitRate;
     _streamConfig.enableHdr = config.enableHdr;
     _streamConfig.audioConfiguration = config.audioConfiguration;
+    _streamConfig.colorSpace = COLORSPACE_REC_709;
     
     // Use some of the HEVC encoding efficiency improvements to
     // reduce bandwidth usage while still gaining some image
