@@ -144,7 +144,13 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     if (_displayLink != NULL) {
         CVDisplayLinkStop(_displayLink);
         CVDisplayLinkRelease(_displayLink);
+        _displayLink = NULL;
     }
+}
+
+- (void)dealloc
+{
+    [self stop];
 }
 
 #define FRAME_START_PREFIX_SIZE 4
