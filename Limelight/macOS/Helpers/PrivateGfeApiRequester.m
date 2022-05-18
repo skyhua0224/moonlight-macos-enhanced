@@ -41,10 +41,10 @@
     [task resume];
 }
 
-+ (void)getSettingsJSONForApp:(NSString *)appId hostIP:(NSString *)hostIP resolutionWidth:(int)width height:(int)height withCompletionBlock:(void (^)(NSDictionary *))completion {
++ (void)getSettingsJSONForApp:(NSString *)appId hostIP:(NSString *)hostIP resolutionWidth:(int)width height:(int)height displayModes:(NSArray<NSString *> *)displayModes withCompletionBlock:(void (^)(NSDictionary *))completion {
     NSDictionary<NSString *, NSString *> *requestDictionary = @{
         @"resolution": [NSString stringWithFormat:@"%@x%@", @(width), @(height)],
-        @"displayMode": @"Full-screen",
+        @"displayMode": displayModes.firstObject,
     };
     NSString *requestJSON = [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:requestDictionary options:0 error:nil] encoding:NSUTF8StringEncoding];
     NSString *request = [requestJSON stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLHostAllowedCharacterSet]];

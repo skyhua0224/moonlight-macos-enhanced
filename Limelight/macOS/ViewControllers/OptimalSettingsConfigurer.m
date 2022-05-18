@@ -87,7 +87,7 @@
             [self.displayModeSelector selectItem:itemToSelect];
         });
         
-        [PrivateGfeApiRequester getSettingsJSONForApp:self.appId hostIP:self.app.host.activeAddress resolutionWidth:[StreamViewController getResolution].width height:[StreamViewController getResolution].height withCompletionBlock:^(NSDictionary *settingsJSON) {
+        [PrivateGfeApiRequester getSettingsJSONForApp:self.appId hostIP:self.app.host.activeAddress resolutionWidth:[StreamViewController getResolution].width height:[StreamViewController getResolution].height displayModes:displayModes withCompletionBlock:^(NSDictionary *settingsJSON) {
             self.settings = settingsJSON[@"settings"];
             NSInteger settingsCount = self.settings.count;
             
