@@ -16,12 +16,12 @@
 
 - (id)initWithView:(OSView *)view;
 
-- (void)setupWithVideoFormat:(int)videoFormat refreshRate:(int)refreshRate;
-
-- (void)cleanup;
+- (void)setupWithVideoFormat:(int)videoFormat frameRate:(int)frameRate;
+- (void)start;
+- (void)stop;
 
 - (void)updateBufferForRange:(CMBlockBufferRef)existingBuffer data:(unsigned char *)data offset:(int)offset length:(int)nalLength;
 
-- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType pts:(unsigned int)pts;
+- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType frameType:(int)frameType pts:(unsigned int)pts;
 
 @end
