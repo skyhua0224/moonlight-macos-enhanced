@@ -111,7 +111,6 @@
 - (void) stopStream
 {
 #ifdef USE_RESOLUTION_SYNC
-    [ResolutionSyncRequester teardownControllerFor:_config.host];
     stopListeningForRumblePackets();
 #endif
     
