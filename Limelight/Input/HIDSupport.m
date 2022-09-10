@@ -928,12 +928,15 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     if (devices.count == 0) {
         return nil;
     }
-    IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)devices.allObjects[0];
-    if (device == nil) {
-        return nil;
+    for (NSObject *device in devices) {
+        IOHIDDeviceRef hidDevice = (__bridge IOHIDDeviceRef)device;
+        UInt16 productId = usbIdFromDevice(hidDevice, @kIOHIDProductIDKey);
+        if (productId != 0x028E) {
+            return hidDevice;
+        }
     }
     
-    return device;
+    return nil;
 }
 
 
