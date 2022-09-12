@@ -67,7 +67,11 @@ typedef enum : NSUInteger {
 #else
         controllers = @[generalVC];
 #endif
-        _preferencesWC = [[MASPreferencesWindowController alloc] initWithViewControllers:controllers title:@"Preferences"];
+        if (@available(macOS 13.0, *)) {
+            _preferencesWC = [[MASPreferencesWindowController alloc] initWithViewControllers:controllers title:@"Settings"];
+        } else {
+            _preferencesWC = [[MASPreferencesWindowController alloc] initWithViewControllers:controllers title:@"Preferences"];
+        }
     }
 
     return _preferencesWC;
