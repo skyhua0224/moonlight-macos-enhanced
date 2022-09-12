@@ -70,6 +70,12 @@
         self.titleContainer.layer.masksToBounds = YES;
         self.titleContainer.layer.cornerRadius = self.titleContainer.frame.size.height / 2;
     }
+    
+    if (@available(macOS 13.0, *)) {
+        self.view.window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleAutomatic;
+    } else if (@available(macOS 11.0, *)) {
+        self.view.window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleLine;
+    }
 }
 
 - (void)viewWillAppear {
