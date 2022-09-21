@@ -33,6 +33,8 @@ typedef enum : NSUInteger {
 @implementation AppDelegateForAppKit
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
+    [self createMainWindow];
+    
     NSURL *defaultPrefsFile = [[NSBundle mainBundle] URLForResource:@"DefaultPreferences" withExtension:@"plist"];
     NSDictionary *defaultPrefs = [NSDictionary dictionaryWithContentsOfURL:defaultPrefsFile];
     [[NSUserDefaults standardUserDefaults] registerDefaults:defaultPrefs];
@@ -51,8 +53,7 @@ typedef enum : NSUInteger {
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
     if (!flag) {
-        NSWindowController *windowController = [NSStoryboard.mainStoryboard instantiateControllerWithIdentifier:@"MainWindowController"];
-        [windowController showWindow:self];
+        [self createMainWindow];
 
         return YES;
     }
@@ -62,6 +63,14 @@ typedef enum : NSUInteger {
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
     [[DatabaseSingleton shared] saveContext];
+}
+
+- (void)createMainWindow {
+    NSWindowController *mainWC = [NSStoryboard.mainStoryboard instantiateControllerWithIdentifier:@"MainWindowController"];
+    mainWC.window.frameAutosaveName = @"Main Window";
+    
+    [mainWC showWindow:self];
+    [mainWC.window makeKeyAndOrderFront:nil];
 }
 
 - (NSWindowController *)preferencesWC {
@@ -87,7 +96,9 @@ typedef enum : NSUInteger {
 - (IBAction)showPreferences:(id)sender {
     self.preferencesWC.window.frameAutosaveName = @"Preferences Window";
     [self.preferencesWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
+
     [self.preferencesWC showWindow:nil];
+    [self.preferencesWC.window makeKeyAndOrderFront:nil];
 }
 
 - (IBAction)showAbout:(id)sender {
