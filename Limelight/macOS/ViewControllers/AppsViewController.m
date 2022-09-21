@@ -648,7 +648,7 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (NSString *)removeSpecialWordsFrom:(NSString *)string {
-    NSArray<NSString *> *specialWords = @[@"Vulkan", @"Singleplayer"];
+    NSArray<NSString *> *specialWords = @[@"Vulkan", @"Singleplayer", @"Ultimate Knockout"];
     NSString *result = string;
     for (NSString *word in specialWords) {
         result = [result stringByReplacingOccurrencesOfString:word withString:@""];
