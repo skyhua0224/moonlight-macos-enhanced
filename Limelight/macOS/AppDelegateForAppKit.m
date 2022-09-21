@@ -49,8 +49,15 @@ typedef enum : NSUInteger {
     }
 }
 
-- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
-    return YES;
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
+    if (!flag) {
+        NSWindowController *windowController = [NSStoryboard.mainStoryboard instantiateControllerWithIdentifier:@"MainWindowController"];
+        [windowController showWindow:self];
+
+        return YES;
+    }
+    
+    return NO;
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
