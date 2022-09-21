@@ -114,6 +114,10 @@
 
         NSImageSymbolConfiguration *imgConfig = [NSImageSymbolConfiguration configurationWithPointSize:13 weight:NSFontWeightMedium scale:NSImageSymbolScaleLarge];
         [preferencesButton setImage:[[NSImage imageWithSystemSymbolName:@"gear" accessibilityDescription:nil] imageWithSymbolConfiguration:imgConfig]];
+        
+        if (@available(macOS 13.0, *)) {
+            preferencesButton.toolTip = @"Settings";
+        }
     }
 }
 
