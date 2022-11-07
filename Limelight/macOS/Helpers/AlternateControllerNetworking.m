@@ -80,6 +80,8 @@ void CFDYSendMultiControllerEvent(short controllerNumber, short activeGamepadMas
         controllerSocket = INVALID_SOCKET;
         NSLog(@"Error sending controller packet: %d", LastSocketError());
     }
+    
+    free(addr);
 }
 
 int CFDYSendHighResScrollEvent(short scrollAmount) {
