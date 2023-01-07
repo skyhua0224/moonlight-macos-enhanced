@@ -187,6 +187,8 @@ const CGFloat scaleBase = 1.125;
     
     appCell.app.pinned = !appCell.app.pinned;
     [self updateCollectionViewWithNewPinnedChangedApp:appCell.app newPinnedState:appCell.app.pinned previousIndex:previousIndex];
+    
+    [[[DataManager alloc] init] updateAppsForExistingHost:self.host];
 }
 
 - (IBAction)hideAppMenuItemClicked:(NSMenuItem *)item {
@@ -195,6 +197,8 @@ const CGFloat scaleBase = 1.125;
     
     appCell.app.hidden = !appCell.app.hidden;
     [appCell updateAlphaStateWithShouldAnimate:YES];
+    
+    [[[DataManager alloc] init] updateAppsForExistingHost:self.host];
 }
 
 - (IBAction)quitAppMenuItemClicked:(id)sender {
