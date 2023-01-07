@@ -37,12 +37,25 @@
 }
 
 - (NSComparisonResult)compare:(TemporaryApp *)other {
-    NSComparisonResult retVal = [self.name caseInsensitiveCompare:other.name];
+    NSComparisonResult retVal = [self comparePinned:other];
     if (retVal == NSOrderedSame) {
-        return [self.id compare:other.id];
+        retVal = [self.name caseInsensitiveCompare:other.name];
+        if (retVal == NSOrderedSame) {
+            return [self.id compare:other.id];
+        }
     }
     
     return retVal;
+}
+
+- (NSComparisonResult)comparePinned:(TemporaryApp *)other {
+    if (self.pinned == other.pinned) {
+        return NSOrderedSame;
+    } else if (self.pinned && !other.pinned) {
+        return NSOrderedAscending;
+    } else {
+        return NSOrderedDescending;
+    }
 }
 
 - (NSUInteger)hash {

@@ -540,18 +540,19 @@ const CGFloat scaleBase = 1.125;
     
     while (oldIndex < old.count || newIndex < new.count) {
         if (oldIndex >= old.count) {
-            [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:1]];
             TemporaryApp *newItem = new[newIndex];
+            [insertions addObject:[self indexPathForApp:newItem inApps:new atPos:newIndex]];
             [alreadyAdded addObject:newItem.id];
             newIndex++;
         } else if (newIndex >= new.count) {
-            [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
+            TemporaryApp *oldItem = old[oldIndex];
+            [deletions addObject:[self indexPathForApp:oldItem inApps:old atPos:oldIndex]];
             oldIndex++;
         } else {
             TemporaryApp *oldItem = old[oldIndex];
             TemporaryApp *newItem = new[newIndex];
             if ([alreadyAdded containsObject:oldItem.id]) {
-                [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
+                [deletions addObject:[self indexPathForApp:oldItem inApps:old atPos:oldIndex]];
                 oldIndex++;
             } else {
                 NSComparisonResult comparison = [oldItem compare:newItem];
@@ -560,10 +561,10 @@ const CGFloat scaleBase = 1.125;
                     oldIndex++;
                     newIndex++;
                 } else if (comparison == NSOrderedAscending) {
-                    [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
+                    [deletions addObject:[self indexPathForApp:oldItem inApps:old atPos:oldIndex]];
                     oldIndex++;
                 } else if (comparison == NSOrderedDescending) {
-                    [insertions addObject:[NSIndexPath indexPathForItem:newIndex inSection:1]];
+                    [insertions addObject:[self indexPathForApp:newItem inApps:new atPos:newIndex]];
                     [alreadyAdded addObject:newItem.id];
                     newIndex++;
                 }
@@ -572,6 +573,22 @@ const CGFloat scaleBase = 1.125;
     }
     
     return @{@"deletions": deletions, @"insertions": insertions};
+}
+
+- (NSIndexPath *)indexPathForApp:(TemporaryApp *)app inApps:(NSArray<TemporaryApp *> *)apps atPos:(NSInteger)pos {
+    if (app.pinned) {
+        return [NSIndexPath indexPathForItem:pos inSection:0];
+    } else {
+        NSInteger pinnedAppCount = [apps indexOfObjectPassingTest:^BOOL(TemporaryApp * _Nonnull app, NSUInteger idx, BOOL * _Nonnull stop) {
+            if (!app.pinned) {
+                *stop = YES;
+                return YES;
+            } else {
+                return NO;
+            }
+        }];
+        return [NSIndexPath indexPathForItem:pos - pinnedAppCount inSection:1];
+    }
 }
 
 - (void)updateCollectionViewDataWithOld:(NSArray<TemporaryApp *> *)old new:(NSArray<TemporaryApp *> *)new {
@@ -697,7 +714,7 @@ const CGFloat scaleBase = 1.125;
 - (void)discoverPrivateApps:(TemporaryHost *)host {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self fetchPrivateAppsForHostWithHostIP:host.activeAddress WithCompletionBlock:^(NSArray<TemporaryApp *> *apps) {
-            NSArray<TemporaryApp *> *oldItems = [self filteredItems:[self fetchApps] forSection:1];
+            NSArray<TemporaryApp *> *oldItems = [self fetchApps];
 
             NSMutableArray *gfeAppList;
             
@@ -726,7 +743,7 @@ const CGFloat scaleBase = 1.125;
             [self.privateAppManager retrieveAssetsFromHost:self.host];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                NSArray<TemporaryApp *> *newItems = [self filteredItems:[self fetchApps] forSection:1];
+                NSArray<TemporaryApp *> *newItems = [self fetchApps];
                 [self updateCollectionViewDataWithOld:oldItems new:newItems];
             });
         }];
@@ -819,7 +836,7 @@ const CGFloat scaleBase = 1.125;
         }
     }];
     
-    return [hiddenAwareApps sortedArrayUsingSelector:@selector(compareName:)];
+    return [hiddenAwareApps sortedArrayUsingSelector:@selector(compare:)];
 }
 
 - (void)displayApps {
@@ -841,7 +858,7 @@ const CGFloat scaleBase = 1.125;
                 }];
             });
         } else {
-            NSArray<TemporaryApp *> *oldItems = [self filteredItems:[self fetchApps] forSection:1];
+            NSArray<TemporaryApp *> *oldItems = [self fetchApps];
 
             [self updateApplist:[appListResp getAppList] forHost:host];
             
@@ -849,7 +866,7 @@ const CGFloat scaleBase = 1.125;
             [self.appManager retrieveAssetsFromHost:self.host];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                NSArray<TemporaryApp *> *newItems = [self filteredItems:[self fetchApps] forSection:1];
+                NSArray<TemporaryApp *> *newItems = [self fetchApps];
                 [self updateCollectionViewDataWithOld:oldItems new:newItems];
             });
         }
