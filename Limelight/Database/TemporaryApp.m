@@ -36,6 +36,15 @@
     return [self.name caseInsensitiveCompare:other.name];
 }
 
+- (NSComparisonResult)compare:(TemporaryApp *)other {
+    NSComparisonResult retVal = [self.name caseInsensitiveCompare:other.name];
+    if (retVal == NSOrderedSame) {
+        return [self.id compare:other.id];
+    }
+    
+    return retVal;
+}
+
 - (NSUInteger)hash {
     return [self.host.uuid hash] * 31 + [self.id intValue];
 }

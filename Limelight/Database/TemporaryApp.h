@@ -24,6 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (id) initFromApp:(App*)app withTempHost:(TemporaryHost*)tempHost;
 
 - (NSComparisonResult)compareName:(TemporaryApp *)other;
+- (NSComparisonResult)compare:(TemporaryApp *)other;
 
 - (void) propagateChangesToParent:(App*)parent withHost:(Host*)host;
 

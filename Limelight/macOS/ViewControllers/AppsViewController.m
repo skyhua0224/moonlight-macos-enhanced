@@ -550,7 +550,7 @@ const CGFloat scaleBase = 1.125;
                 [deletions addObject:[NSIndexPath indexPathForItem:oldIndex inSection:1]];
                 oldIndex++;
             } else {
-                NSComparisonResult comparison = [oldItem compareName:newItem];
+                NSComparisonResult comparison = [oldItem compare:newItem];
                 if (comparison == NSOrderedSame) {
                     [alreadyAdded addObject:newItem.id];
                     oldIndex++;
