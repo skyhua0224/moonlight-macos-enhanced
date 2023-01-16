@@ -392,7 +392,7 @@
     NSAlert *alert = [[NSAlert alloc] init];
 
     alert.alertStyle = NSAlertStyleInformational;
-    alert.messageText = [NSString stringWithFormat:@"%@ is offline, do want to try and wake it?", host.name];
+    alert.messageText = [NSString stringWithFormat:@"%@ is offline, do you want to try and wake it?", host.name];
     [alert addButtonWithTitle:@"Wake"];
     [alert addButtonWithTitle:@"Cancel"];
 
