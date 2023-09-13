@@ -523,20 +523,6 @@ SwitchCommonOutputPacket_t switchRumblePacket;
             LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
         }
     };
-    
-    mouse.mouseInput.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput * _Nonnull axis, float value) {
-        short scrollAmount = value * 20;
-        scrollAmount = mouse.mouseInput.auxiliaryButtons == nil ? -scrollAmount : scrollAmount;
-#ifdef USE_RESOLUTION_SYNC
-        if (cfdyMouseScrollMethod()) {
-            CFDYSendHighResScrollEvent(scrollAmount);
-        } else {
-#endif
-            LiSendHighResScrollEvent(scrollAmount, self.useMouseScrollHack);
-#ifdef USE_RESOLUTION_SYNC
-        }
-#endif
-    };
 }
 
 -(void)unregisterMouseCallbacks:(GCMouse*)mouse API_AVAILABLE(macos(11.0)) {
@@ -718,10 +704,9 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)scrollWheel:(NSEvent *)event {
-    if (self.useGCMouse) {
-        return;
-    }
-    
+    CGFloat absDeltaX = fabs(event.scrollingDeltaX);
+    CGFloat absDeltaY = fabs(event.scrollingDeltaY);
+
     if (self.shouldSendInputEvents) {
         if (event.hasPreciseScrollingDeltas) {
 #ifdef USE_RESOLUTION_SYNC
@@ -729,12 +714,20 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                 CFDYSendHighResScrollEvent(event.scrollingDeltaY);
             } else {
 #endif
-                LiSendHighResScrollEvent(event.scrollingDeltaY, self.useMouseScrollHack);
+                if (absDeltaX > absDeltaY) {
+                    LiSendHighResHScrollEvent(-event.scrollingDeltaX);
+                } else {
+                    LiSendHighResScrollEvent(event.scrollingDeltaY);
+                }
 #ifdef USE_RESOLUTION_SYNC
             }
 #endif
         } else {
-            LiSendScrollEvent(event.scrollingDeltaY);
+            if (absDeltaX > absDeltaY) {
+                LiSendHScrollEvent(-event.scrollingDeltaX);
+            } else {
+                LiSendScrollEvent(event.scrollingDeltaY);
+            }
         }
     }
 }
