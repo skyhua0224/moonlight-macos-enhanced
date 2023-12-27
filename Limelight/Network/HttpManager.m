@@ -235,9 +235,23 @@ static const NSString* HTTPS_PORT = @"47984";
 }
 
 - (NSURLRequest*) newResumeRequest:(StreamConfiguration*)config {
-    NSString* urlString = [NSString stringWithFormat:@"%@/resume?uniqueid=%@&rikey=%@&rikeyid=%d&surroundAudioInfo=%d",
+    BOOL sops = config.optimizeGameSettings;
+    
+    // Using an FPS value over 60 causes SOPS to default to 720p60.
+    // We used to set it to 60, but that stopped working in GFE 3.20.3.
+    // Disabling SOPS allows the actual game frame rate to exceed 60.
+    if (config.frameRate > 60) {
+        sops = NO;
+    }
+    
+    NSString* urlString = [NSString stringWithFormat:@"%@/resume?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
                            _baseHTTPSURL, _uniqueId,
+                           config.appID,
+                           config.width, config.height, config.frameRate,
+                           sops ? 1 : 0,
                            [Utils bytesToHex:config.riKey], config.riKeyId,
+                           config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
+                           config.playAudioOnPC ? 1 : 0,
                            SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
     Log(LOG_I, @"Requesting: %@", urlString);
     // This blocks while the app is resuming
