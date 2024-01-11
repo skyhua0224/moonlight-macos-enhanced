@@ -11,7 +11,6 @@
 #import "AppsViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "AlertPresenter.h"
-#import "PrivateGfeApiRequester.h"
 
 #import "Connection.h"
 #import "StreamConfiguration.h"
@@ -124,7 +123,7 @@
     [super viewDidAppear];
     
     self.streamView.keyboardNotifiable = self;
-    self.streamView.appName = self.appName;
+    self.streamView.appName = self.app.name;
     self.streamView.statusText = @"Starting";
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
@@ -425,10 +424,6 @@
 - (void)closeWindowFromMainQueueWithMessage:(NSString *)message {
     [self.hidSupport releaseAllModifierKeys];
     
-    if (hasFeaturePrivateAppOptimalSettings()) {
-        [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
-    }
-    
     dispatch_async(dispatch_get_main_queue(), ^{
         [self uncaptureMouse];
 
@@ -483,34 +478,6 @@
     }
     self.hidSupport = [[HIDSupport alloc] init];
     
-    if (self.privateAppId != nil) {
-        NSString *enabledKey = [NSString stringWithFormat:@"%@: optimalSettingsEnabled", self.privateAppId];
-        [NSUserDefaults.standardUserDefaults registerDefaults:@{
-            enabledKey: @YES,
-        }];
-        
-        BOOL optimalSettingsEnabled = [NSUserDefaults.standardUserDefaults boolForKey:enabledKey];
-        if (optimalSettingsEnabled) {
-            [PrivateGfeApiRequester requestOptimalResolutionWithWidth:[self.class getResolution].width andHeight:[self.class getResolution].height hostIP:self.app.host.activeAddress forPrivateApp:self.privateAppId withCompletionBlock:^{
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self startStreamWithStreamConfig:streamConfig];
-                });
-            }];
-        } else {
-            [self startStreamWithStreamConfig:streamConfig];
-        }
-    } else {
-        [self startStreamWithStreamConfig:streamConfig];
-    }
-
-    if (hasFeaturePrivateAppListing()) {
-        if (![AppsViewController isWhitelistedGFEApp:self.privateApp]) {
-            [PrivateGfeApiRequester requestLaunchOfPrivateApp:self.privateAppId hostIP:self.app.host.activeAddress];
-        }
-    }
-}
-
-- (void)startStreamWithStreamConfig:(StreamConfiguration *)streamConfig {
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:self.streamMan];

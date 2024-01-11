@@ -23,9 +23,6 @@ struct Resolution {
 
 @interface StreamViewController : NSViewController
 @property (nonatomic, strong) TemporaryApp *app;
-@property (nonatomic, strong) TemporaryApp *privateApp;
-@property (nonatomic, strong) NSString *privateAppId;
-@property (nonatomic, strong) NSString *appName;
 @property (nonatomic, weak) id<AppsViewControllerDelegate> delegate;
 
 + (struct Resolution)getResolution;

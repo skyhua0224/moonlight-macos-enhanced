@@ -19,11 +19,8 @@
 @property (nonatomic, strong) HostsViewController *hostsVC;
 @property (weak) IBOutlet CollectionView *collectionView;
 
-+ (BOOL)isWhitelistedGFEApp:(TemporaryApp *)app;
 + (CGSize)getAppCoverArtSize;
 
 @end
 
-extern BOOL hasFeaturePrivateAppListing(void);
-extern BOOL hasFeaturePrivateAppOptimalSettings(void);
 extern BOOL usesNewAppCoverArtAspectRatio(void);

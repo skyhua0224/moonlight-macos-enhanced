@@ -17,11 +17,7 @@
 #import "NSApplication+Moonlight.h"
 #import "BackgroundColorView.h"
 #import "ImageFader.h"
-#import "PrivateGfeApiRequester.h"
-#import "OptimalSettingsConfigurer.h"
 #import "NSView+Moonlight.h"
-
-#import "PrivateAppAssetManager.h"
 
 #import "F.h"
 
@@ -35,7 +31,7 @@
 #import "DiscoveryWorker.h"
 #import "ConnectionHelper.h"
 
-@interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, PrivateAppAssetCallback, NSSearchFieldDelegate>
+@interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, NSSearchFieldDelegate>
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *cmsIdToId;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
 @property (nonatomic, strong) TemporaryApp *runningApp;
@@ -43,12 +39,8 @@
 @property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
 
-@property (nonatomic, strong) TemporaryApp *privateApp;
-@property (nonatomic, strong) NSString *privateAppId;
-
 @property (nonatomic, strong) NSDictionary<NSString *, NSString *> *appNameToId;
 
-@property (nonatomic, strong) PrivateAppAssetManager *privateAppManager;
 @property (nonatomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSCache *boxArtCache;
 @property (nonatomic) CGFloat itemScale;
@@ -128,7 +120,6 @@ const CGFloat scaleBase = 1.125;
         [self removeFromParentViewController];
         
         self.appManager = nil;
-        self.privateAppManager = nil;
         self.apps = @[];
         [self.collectionView reloadData];
     }];
@@ -136,21 +127,8 @@ const CGFloat scaleBase = 1.125;
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
-
-    streamVC.app = [self getGFEAppToStreamFor:self.runningApp];
-    streamVC.appName = self.runningApp.name;
-    streamVC.privateApp = self.runningApp;
-    if (hasFeaturePrivateAppListing()) {
-        streamVC.privateAppId = self.cmsIdToId[self.runningApp.id];
-    } else {
-        if (hasFeaturePrivateAppOptimalSettings()) {
-            streamVC.privateAppId = [self privateAppIdForAppName:self.runningApp.name];
-        }
-    }
+    streamVC.app = self.runningApp;
     streamVC.delegate = self;
-    
-    self.privateApp = streamVC.privateApp;
-    self.privateAppId = streamVC.privateAppId;
 }
 
 
@@ -167,14 +145,6 @@ const CGFloat scaleBase = 1.125;
 
 - (IBAction)backButtonClicked:(id)sender {
     [self transitionToHostsVC];
-}
-
-- (IBAction)configureOptimalSettingsItemClicked:(NSMenuItem *)item {
-    AppCellView *appCellView = (AppCellView *)(item.menu.delegate);
-    AppCell *appCell = (AppCell *)(appCellView.delegate);
-
-    OptimalSettingsConfigurer *optimalSettingsConfigVC = [[OptimalSettingsConfigurer alloc] initWithApp:appCell.app andPrivateId:[self privateAppIdForAppName:appCell.app.name]];
-    [self presentViewControllerAsSheet:optimalSettingsConfigVC];
 }
 
 - (IBAction)pinAppMenuItemClicked:(NSMenuItem *)item {
@@ -375,10 +345,6 @@ const CGFloat scaleBase = 1.125;
             } else {
                 self.runningApp = nil;
                 
-                if (hasFeaturePrivateAppOptimalSettings()) {
-                    [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.host.activeAddress];
-                }
-                
                 if (completion != nil) {
                     completion(YES);
                 }
@@ -393,11 +359,9 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
-    NSMenuItem *configureOptimalSettingsMenuItem = [HostsViewController getMenuItemForIdentifier:@"configureOptimalSettingsMenuItem" inMenu:menu];
     NSMenuItem *quitAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"quitAppMenuItem" inMenu:menu];
     NSMenuItem *hideAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"hideAppMenuItem" inMenu:menu];
     NSMenuItem *pinAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"pinAppMenuItem" inMenu:menu];
-    configureOptimalSettingsMenuItem.hidden = ![self privateAppIdForAppName:app.name];
     if (app.pinned) {
         pinAppMenuItem.title = @"Unpin App";
     } else {
@@ -628,188 +592,15 @@ const CGFloat scaleBase = 1.125;
 }
 
 
-#pragma mark - Private GFE API
-
-- (void)fetchPrivateAppsWithCompletionBlock:(void (^)(NSDictionary *))completion {
-    [PrivateGfeApiRequester fetchPrivateAppsJSONForHostIP:self.host.activeAddress WithCompletionBlock:^(NSArray<NSDictionary<NSString *, id> *> *appsJSON) {
-        NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:appsJSON withBlock:^BOOL(id obj) {
-            return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
-        }];
-        
-        NSDictionary *mapping = (NSDictionary *)[F reduceArray:filteredPrivateApps withBlock:^NSMutableDictionary *(NSMutableDictionary *memo, NSDictionary *obj) {
-            memo[obj[@"displayName"]] = [obj[@"id"] stringValue];
-            return memo;
-        } andInitialMemo:[NSMutableDictionary dictionary]];
-        
-        completion(mapping);
-    }];
-}
-
-- (NSString *)removeNonASCIICharactersFrom:(NSString *)string {
-    NSCharacterSet *set = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyz0123456789"];
-    NSString *lowercase = [string lowercaseString];
-    
-    NSMutableString *output = [NSMutableString string];
-    
-    for (int i = 0; i < [lowercase length]; i++) {
-        unichar character = [lowercase characterAtIndex:i];
-        if ([set characterIsMember:character]) {
-            [output appendString:[NSString stringWithFormat:@"%c", character]];
-        }
-    }
-    
-    return output;
-}
-
-- (NSString *)removeSpecialWordsFrom:(NSString *)string {
-    NSArray<NSString *> *specialWords = @[@"Vulkan", @"Singleplayer", @"Ultimate Knockout"];
-    NSString *result = string;
-    for (NSString *word in specialWords) {
-        result = [result stringByReplacingOccurrencesOfString:word withString:@""];
-    }
-    
-    return result;
-}
-
-- (NSString *)privateAppIdForAppName:(NSString *)appName {
-    NSString *simplifiedAppName = [self removeNonASCIICharactersFrom:[self removeSpecialWordsFrom:appName]];
-    for (NSString *privateName in self.appNameToId.allKeys) {
-        NSString *simplifiedPrivateAppName = [self removeNonASCIICharactersFrom:[self removeSpecialWordsFrom:privateName]];
-        if ([simplifiedAppName isEqualToString:simplifiedPrivateAppName]) {
-            return self.appNameToId[privateName];
-        }
-    }
-    
-    return nil;
-}
-
-- (void)fetchPrivateAppsForHostWithHostIP:(NSString *)hostIP WithCompletionBlock:(void (^)(NSArray<TemporaryApp *> *))completion {
-    [PrivateGfeApiRequester fetchPrivateAppsJSONForHostIP:hostIP WithCompletionBlock:^(NSArray<NSDictionary<NSString *, id> *> *appsJSON) {
-        NSArray<NSDictionary<NSString *, id> *> *filteredPrivateApps = [F filterArray:appsJSON withBlock:^BOOL(id obj) {
-            return [obj[@"cmsId"] intValue] != 0 && [obj[@"cmsId"] intValue] != 100021711 && [obj[@"regularSupported"] boolValue] == YES && [obj[@"isCreativeApplication"] boolValue] == NO;
-        }];
-        
-        NSMutableArray<TemporaryApp *> *apps = [NSMutableArray array];
-        [F eachInArrayWithIndex:filteredPrivateApps withBlock:^(id obj, NSInteger idx) {
-            TemporaryApp *app = [[TemporaryApp alloc] init];
-            app.id = [NSString stringWithFormat:@"%@", obj[@"cmsId"]];
-            [self.cmsIdToId setObject:obj[@"id"] forKey:app.id];
-            app.name = obj[@"displayName"];
-            app.installPath = obj[@"installDirectory"];
-            app.host = self.host;
-            [apps addObject:app];
-        }];
-        
-        completion(apps);
-    }];
-}
-
-- (void)discoverPrivateApps:(TemporaryHost *)host {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [self fetchPrivateAppsForHostWithHostIP:host.activeAddress WithCompletionBlock:^(NSArray<TemporaryApp *> *apps) {
-            NSArray<TemporaryApp *> *oldItems = [self fetchApps];
-
-            NSMutableArray *gfeAppList;
-            
-            AppListResponse* appListResp = [ConnectionHelper getAppListForHostWithHostIP:host.activeAddress serverCert:host.serverCert uniqueID:[IdManager getUniqueId]];
-            if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
-                Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Fetching App List Failed" message:@"The connection to the PC was interrupted." window:self.view.window completionHandler:^(NSModalResponse returnCode) {
-                        host.state = StateOffline;
-                        [self transitionToHostsVC];
-                    }];
-                });
-            } else {
-                gfeAppList = [NSMutableArray arrayWithArray:[[appListResp getAppList] allObjects]];
-                gfeAppList = (NSMutableArray *)[F filterArray:gfeAppList withBlock:^BOOL(TemporaryApp *obj) {
-                    return [AppsViewController isWhitelistedGFEApp:obj];
-                }];
-            }
-            
-            NSArray<TemporaryApp *> *mergedApps = [gfeAppList arrayByAddingObjectsFromArray:apps];
-            
-            NSSet *appSet = [NSSet setWithArray:mergedApps];
-            [self updateApplist:appSet forHost:host];
-            
-            [self.privateAppManager stopRetrieving];
-            [self.privateAppManager retrieveAssetsFromHost:self.host];
-            
-            dispatch_async(dispatch_get_main_queue(), ^{
-                NSArray<TemporaryApp *> *newItems = [self fetchApps];
-                [self updateCollectionViewDataWithOld:oldItems new:newItems];
-            });
-        }];
-    });
-}
-
-+ (BOOL)isWhitelistedGFEApp:(TemporaryApp *)app {
-    return [app.name isEqualToString:@"Playnite Fullscreen"] || [app.name isEqualToString:@"BigBox"] || [app.name isEqualToString:@"Desktop"];
-}
-
-- (TemporaryApp *)getGFEAppToStreamFor:(TemporaryApp *)app {
-    if (hasFeaturePrivateAppListing()) {
-        if ([AppsViewController isWhitelistedGFEApp:app]) {
-            return app;
-        } else {
-            for (TemporaryApp *app in self.apps) {
-                if ([app.name isEqualToString:@"Desktop"]) {
-                    return app;
-                }
-            }
-            return nil;
-        }
-    } else {
-        return app;
-    }
-}
-
-+ (CGSize)getAppCoverArtSize {
-    CGFloat width;
-    CGFloat height;
-    
-    if (hasFeaturePrivateAppListing()) {
-        width = 628;
-        height = 888;
-
-        return CGSizeMake(width, height);
-    }
-    
-    if (usesNewAppCoverArtAspectRatio()) {
-        width = 600;
-        height = 900;
-    } else {
-        width = 300;
-        height = 400;
-    }
-    return CGSizeMake(width, height);
-}
-
-
 #pragma mark - App Discovery
 
 - (void)loadApps {
-    if (hasFeaturePrivateAppListing()) {
-        self.privateAppManager = [[PrivateAppAssetManager alloc] initWithCallback:self];
-    } else {
-        self.appManager = [[AppAssetManager alloc] initWithCallback:self];
-    }
+    self.appManager = [[AppAssetManager alloc] initWithCallback:self];
         
     if (self.host.appList.count > 0) {
         [self displayApps];
     }
-    
-    if (hasFeaturePrivateAppOptimalSettings()) {
-        [self fetchPrivateAppsWithCompletionBlock:^(NSDictionary *mapping) {
-            self.appNameToId = mapping;
-        }];
-    }
-
-    if (hasFeaturePrivateAppListing()) {
-        [self discoverPrivateApps:self.host];
-    } else {
-        [self discoverAppsForHost:self.host];
-    }
+    [self discoverAppsForHost:self.host];
 }
 
 - (NSArray<TemporaryApp *> *)fetchApps {
@@ -947,6 +738,20 @@ const CGFloat scaleBase = 1.125;
     });
 }
 
++ (CGSize)getAppCoverArtSize {
+    CGFloat width;
+    CGFloat height;
+    
+    if (usesNewAppCoverArtAspectRatio()) {
+        width = 600;
+        height = 900;
+    } else {
+        width = 300;
+        height = 400;
+    }
+    return CGSizeMake(width, height);
+}
+
 // This function forces immediate decoding of the UIImage, rather
 // than the default lazy decoding that results in janky scrolling.
 + (OSImage *)loadBoxArtForCaching:(TemporaryApp *)app {
@@ -1022,24 +827,7 @@ const CGFloat scaleBase = 1.125;
     [self updateBoxArtCacheForApp:app];
 }
 
-
-#pragma mark - PrivateAppAssetCallback
-
-- (void)receivedPrivateAssetForApp:(TemporaryApp *)app {
-    // Update the box art cache now so we don't have to do it
-    // on the main thread
-    [self updateBoxArtCacheForApp:app];
-}
-
 @end
-
-BOOL hasFeaturePrivateAppListing(void) {
-    return [NSUserDefaults.standardUserDefaults boolForKey:@"enablePrivateAppListingFeature"];
-}
-
-BOOL hasFeaturePrivateAppOptimalSettings(void) {
-    return [NSUserDefaults.standardUserDefaults boolForKey:@"enablePrivateAppOptimalSettingsFeature"];
-}
 
 BOOL usesNewAppCoverArtAspectRatio(void) {
     return [NSUserDefaults.standardUserDefaults boolForKey:@"enableNewAppCoverArtAspectRatio"];
