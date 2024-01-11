@@ -117,6 +117,7 @@
                         <action selector="hideAppMenuItemClicked:" target="-1" id="YSN-VI-8ce"/>
                     </connections>
                 </menuItem>
+                <menuItem isSeparatorItem="YES" id="EUd-fp-pkA"/>
                 <menuItem title="Quit App" identifier="quitAppMenuItem" id="rCU-F4-fg2">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
