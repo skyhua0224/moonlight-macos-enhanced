@@ -364,14 +364,20 @@ const CGFloat scaleBase = 1.125;
     NSMenuItem *pinAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"pinAppMenuItem" inMenu:menu];
     if (app.pinned) {
         pinAppMenuItem.title = @"Unpin App";
+        pinAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"pin.slash" accessibilityDescription:nil];
     } else {
         pinAppMenuItem.title = @"Pin App";
+        pinAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"pin" accessibilityDescription:nil];
     }
     if (app.hidden) {
-        hideAppMenuItem.title = @"Unhide App";
+        hideAppMenuItem.title = @"Show App";
+        hideAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"eye" accessibilityDescription:nil];
     } else {
         hideAppMenuItem.title = @"Hide App";
+        hideAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"eye.slash" accessibilityDescription:nil];
     }
+
+    quitAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"xmark.circle" accessibilityDescription:nil];
     if (self.runningApp == nil || app != self.runningApp) {
         quitAppMenuItem.hidden = YES;
     }
