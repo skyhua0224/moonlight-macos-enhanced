@@ -11,7 +11,6 @@
 #import "NSApplication+Moonlight.h"
 #import "NSView+Moonlight.h"
 #import "AppsViewController.h"
-#import "NSImage+Moonlight.h"
 
 #import <QuartzCore/QuartzCore.h>
 
