@@ -207,11 +207,7 @@ static float bitrateSteps[] = {
 }
 
 - (NSImage *)toolbarItemImage {
-    if (@available(macOS 11.0, *)) {
-        return [NSImage imageWithSystemSymbolName:@"switch.2" accessibilityDescription:nil];
-    } else {
-        return [NSImage imageNamed:NSImageNamePreferencesGeneral];
-    }
+    return [NSImage imageWithSystemSymbolName:@"switch.2" accessibilityDescription:nil];
 }
 
 - (NSString *)toolbarItemLabel {

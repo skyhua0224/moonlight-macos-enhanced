@@ -13,9 +13,7 @@
 - (void)smoothRoundCornersWithCornerRadius:(CGFloat)cornerRadius {
     self.wantsLayer = YES;
     self.layer.masksToBounds = YES;
-    if (@available(macOS 10.15, *)) {
-        self.layer.cornerCurve = kCACornerCurveContinuous;
-    }
+    self.layer.cornerCurve = kCACornerCurveContinuous;
     self.layer.cornerRadius = cornerRadius;
 }
 

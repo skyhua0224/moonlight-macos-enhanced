@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="21503.1" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="22505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="21503.1"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22505"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -477,11 +477,11 @@ DQ
                                     </connections>
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="NSToolbarFlexibleSpaceItem" id="DlI-3g-HXX"/>
-                                <toolbarItem implicitItemIdentifier="D100550D-C94A-447F-A352-02ADD096B0AA" explicitItemIdentifier="PreferencesToolbarItem" label="Preferences" paletteLabel="Preferences" toolTip="Preferences" image="PreferencesIcon" sizingBehavior="auto" id="INJ-zl-Jmu">
+                                <toolbarItem implicitItemIdentifier="D100550D-C94A-447F-A352-02ADD096B0AA" explicitItemIdentifier="PreferencesToolbarItem" label="Preferences" paletteLabel="Preferences" toolTip="Preferences" image="gear" catalog="system" sizingBehavior="auto" id="INJ-zl-Jmu">
                                     <button key="view" verticalHuggingPriority="750" id="gFh-st-nIN">
-                                        <rect key="frame" x="20" y="14" width="30" height="23"/>
+                                        <rect key="frame" x="21" y="14" width="29" height="23"/>
                                         <autoresizingMask key="autoresizingMask"/>
-                                        <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="PreferencesIcon" imagePosition="only" alignment="center" controlSize="large" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="52J-6t-vDC">
+                                        <buttonCell key="cell" type="roundTextured" bezelStyle="texturedRounded" image="gear" catalog="system" imagePosition="only" alignment="center" controlSize="large" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="52J-6t-vDC">
                                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
                                         </buttonCell>
@@ -567,35 +567,7 @@ DQ
                     <view key="view" id="P1D-TY-v3M">
                         <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
                         <autoresizingMask key="autoresizingMask"/>
-                        <subviews>
-                            <customView translatesAutoresizingMaskIntoConstraints="NO" id="R1i-Lw-Z2x" userLabel="Title Container" customClass="BackgroundColorView">
-                                <rect key="frame" x="163" y="32" width="124" height="31"/>
-                                <subviews>
-                                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mXZ-Qg-vua" userLabel="Title">
-                                        <rect key="frame" x="22" y="6" width="80" height="19"/>
-                                        <textFieldCell key="cell" lineBreakMode="clipping" title="Moonlight" id="40k-3O-hDH">
-                                            <font key="font" metaFont="systemSemibold" size="16"/>
-                                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
-                                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
-                                        </textFieldCell>
-                                    </textField>
-                                </subviews>
-                                <constraints>
-                                    <constraint firstAttribute="height" secondItem="mXZ-Qg-vua" secondAttribute="height" constant="12" id="2jS-5L-1Wo"/>
-                                    <constraint firstItem="mXZ-Qg-vua" firstAttribute="centerX" secondItem="R1i-Lw-Z2x" secondAttribute="centerX" id="QSg-vq-bCp"/>
-                                    <constraint firstAttribute="width" secondItem="mXZ-Qg-vua" secondAttribute="width" constant="48" id="cH0-sW-wYz"/>
-                                    <constraint firstItem="mXZ-Qg-vua" firstAttribute="centerY" secondItem="R1i-Lw-Z2x" secondAttribute="centerY" id="cIm-b1-KnT"/>
-                                </constraints>
-                            </customView>
-                        </subviews>
-                        <constraints>
-                            <constraint firstItem="R1i-Lw-Z2x" firstAttribute="centerX" secondItem="P1D-TY-v3M" secondAttribute="centerX" id="DDP-bi-viE"/>
-                            <constraint firstAttribute="bottom" secondItem="R1i-Lw-Z2x" secondAttribute="bottom" constant="32" id="Fj7-iT-PM4"/>
-                        </constraints>
                     </view>
-                    <connections>
-                        <outlet property="titleContainer" destination="R1i-Lw-Z2x" id="W4b-BQ-nLH"/>
-                    </connections>
                 </viewController>
                 <customObject id="yNp-MY-pIq" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
@@ -669,6 +641,6 @@ DQ
     <resources>
         <image name="NSAddTemplate" width="18" height="17"/>
         <image name="NSLeftFacingTriangleTemplate" width="12" height="17"/>
-        <image name="PreferencesIcon" width="32" height="32"/>
+        <image name="gear" catalog="system" width="17" height="16"/>
     </resources>
 </document>

@@ -46,12 +46,8 @@
 
 - (NSSearchField *)moonlight_searchFieldInToolbar {
     for (NSToolbarItem *item in self.toolbar.items) {
-        if (@available(macOS 11.0, *)) {
-            if ([item isKindOfClass:NSSearchToolbarItem.class]) {
-                return ((NSSearchToolbarItem *)item).searchField;
-            }
-        } else {
-            return ((NSSearchField *)[self moonlight_toolbarItemForIdentifier:@"OldSearchToolbarItem"].view);
+        if ([item isKindOfClass:NSSearchToolbarItem.class]) {
+            return ((NSSearchToolbarItem *)item).searchField;
         }
     }
     return nil;

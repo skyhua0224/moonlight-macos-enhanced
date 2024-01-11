@@ -106,11 +106,7 @@
 }
 
 - (CGFloat)shadowAlpha {
-    if (@available(macOS 10.14, *)) {
-        return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.33;
-    } else {
-        return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.55;
-    }
+    return [NSApplication moonlight_isDarkAppearance] ? 0.7 : 0.33;
 }
 
 - (CGFloat)appCoverArtAlphaWithHovered:(BOOL)hovered {
@@ -150,13 +146,8 @@
     appCoverArtContainerView.wantsLayer = YES;
 
     appCoverArtContainerView.layer.shadowColor = [NSColor colorWithWhite:0 alpha:[self shadowAlpha]].CGColor;
-    if (@available(macOS 10.14, *)) {
-        appCoverArtContainerView.layer.shadowOffset = NSMakeSize(0, -5);
-        appCoverArtContainerView.layer.shadowRadius = 5;
-    } else {
-        appCoverArtContainerView.layer.shadowOffset = NSMakeSize(0, -4);
-        appCoverArtContainerView.layer.shadowRadius = 4;
-    }
+    appCoverArtContainerView.layer.shadowOffset = NSMakeSize(0, -5);
+    appCoverArtContainerView.layer.shadowRadius = 5;
 
     self.appNameContainer.backgroundColor = selected ? [NSColor selectedContentBackgroundColor] : [NSColor clearColor];
     self.appName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];

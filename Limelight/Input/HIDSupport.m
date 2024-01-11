@@ -456,18 +456,16 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 
         self.controller = [[Controller alloc] init];
         
-        if (@available(macOS 11.0, *)) {
-            for (GCMouse *mouse in GCMouse.mice) {
-                [self registerMouseCallbacks:mouse];
-            }
-
-            self.mouseConnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidConnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-                [self registerMouseCallbacks:note.object];
-            }];
-            self.mouseDisconnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-                [self unregisterMouseCallbacks:note.object];
-            }];
+        for (GCMouse *mouse in GCMouse.mice) {
+            [self registerMouseCallbacks:mouse];
         }
+        
+        self.mouseConnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidConnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+            [self registerMouseCallbacks:note.object];
+        }];
+        self.mouseDisconnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+            [self unregisterMouseCallbacks:note.object];
+        }];
         
         NSMutableDictionary *d = [NSMutableDictionary dictionary];
         for (size_t i = 0; i < sizeof(keys) / sizeof(struct KeyMapping); i++) {
@@ -1708,10 +1706,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.mouseConnectObserver = nil;
     self.mouseDisconnectObserver = nil;
 
-    if (@available(macOS 11.0, *)) {
-        for (GCMouse *mouse in GCMouse.mice) {
-            [self unregisterMouseCallbacks:mouse];
-        }
+    for (GCMouse *mouse in GCMouse.mice) {
+        [self unregisterMouseCallbacks:mouse];
     }
     
     if (self.displayLink != NULL) {

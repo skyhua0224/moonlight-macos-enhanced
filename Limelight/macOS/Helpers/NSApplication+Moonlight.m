@@ -11,12 +11,8 @@
 @implementation NSApplication (Moonlight)
 
 + (BOOL)moonlight_isDarkAppearance {
-    if (@available(macOS 10.14, *)) {
-        NSAppearanceName basicAppearance = [[NSApplication sharedApplication].effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
-        return [basicAppearance isEqualToString:NSAppearanceNameDarkAqua];
-    } else {
-        return NO;
-    }
+    NSAppearanceName basicAppearance = [[NSApplication sharedApplication].effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
+    return [basicAppearance isEqualToString:NSAppearanceNameDarkAqua];
 }
 
 @end
