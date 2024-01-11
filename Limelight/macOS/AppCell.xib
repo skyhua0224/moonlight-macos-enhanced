@@ -10,20 +10,20 @@
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <customView identifier="AppCell" id="Hz6-mo-xeY" customClass="AppCellView">
-            <rect key="frame" x="0.0" y="0.0" width="205" height="144"/>
+            <rect key="frame" x="0.0" y="0.0" width="204" height="144"/>
             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
             <subviews>
                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="0O3-YC-k9a" userLabel="Content View">
-                    <rect key="frame" x="0.0" y="0.0" width="205" height="144"/>
+                    <rect key="frame" x="0.0" y="0.0" width="204" height="144"/>
                     <subviews>
                         <customView verticalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="Dvl-ny-Fge" userLabel="App Cover Art Container">
-                            <rect key="frame" x="66" y="28" width="73" height="108"/>
+                            <rect key="frame" x="66" y="28" width="72" height="108"/>
                             <subviews>
-                                <customView translatesAutoresizingMaskIntoConstraints="NO" id="b3R-NC-s5G" userLabel="Placeholder View" customClass="BackgroundColorView">
-                                    <rect key="frame" x="0.0" y="0.0" width="73" height="108"/>
+                                <customView translatesAutoresizingMaskIntoConstraints="NO" id="b3R-NC-s5G" userLabel="Placeholder View">
+                                    <rect key="frame" x="0.0" y="0.0" width="72" height="108"/>
                                 </customView>
                                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="KWV-yZ-F3P" userLabel="App Cover Art">
-                                    <rect key="frame" x="0.0" y="0.0" width="73" height="108"/>
+                                    <rect key="frame" x="0.0" y="0.0" width="72" height="108"/>
                                     <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" id="o9Q-i8-aPK"/>
                                 </imageView>
                             </subviews>
@@ -39,15 +39,27 @@
                                 <constraint firstAttribute="bottom" secondItem="KWV-yZ-F3P" secondAttribute="bottom" id="tiR-AM-WcG"/>
                             </constraints>
                         </customView>
-                        <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="TBj-LS-qdd" userLabel="Running Icon">
-                            <rect key="frame" x="121" y="118" width="24" height="24"/>
+                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="OJL-Il-yyO" userLabel="Running Icon Container">
+                            <rect key="frame" x="108" y="106" width="24" height="24"/>
+                            <subviews>
+                                <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="TBj-LS-qdd" userLabel="Running Icon">
+                                    <rect key="frame" x="4" y="2" width="17" height="21"/>
+                                    <constraints>
+                                        <constraint firstAttribute="height" constant="21" id="Q6Z-oK-xQ2"/>
+                                        <constraint firstAttribute="width" secondItem="TBj-LS-qdd" secondAttribute="height" multiplier="11:14" id="SB2-Zy-DDA"/>
+                                    </constraints>
+                                    <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="RunningIcon" id="oZI-fL-CkB"/>
+                                    <color key="contentTintColor" red="0.99999600649999998" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                </imageView>
+                            </subviews>
                             <constraints>
-                                <constraint firstAttribute="width" secondItem="TBj-LS-qdd" secondAttribute="height" multiplier="1:1" id="DkP-9w-jfL"/>
-                                <constraint firstAttribute="width" constant="24" id="JLY-KU-77T"/>
+                                <constraint firstItem="TBj-LS-qdd" firstAttribute="centerY" secondItem="OJL-Il-yyO" secondAttribute="centerY" id="K19-qc-HKN"/>
+                                <constraint firstAttribute="width" constant="24" id="Lec-Fi-AN7"/>
+                                <constraint firstItem="TBj-LS-qdd" firstAttribute="centerX" secondItem="OJL-Il-yyO" secondAttribute="centerX" constant="0.25" id="Q7x-iw-uns"/>
+                                <constraint firstAttribute="width" secondItem="OJL-Il-yyO" secondAttribute="height" multiplier="1:1" id="b65-ex-X9h"/>
                             </constraints>
-                            <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="RunningIcon" id="oZI-fL-CkB"/>
-                        </imageView>
-                        <customView horizontalHuggingPriority="1000" verticalHuggingPriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="CDc-3e-4aW" userLabel="App Name Container" customClass="BackgroundColorView">
+                        </customView>
+                        <customView horizontalHuggingPriority="1000" verticalHuggingPriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="CDc-3e-4aW" userLabel="App Name Container">
                             <rect key="frame" x="16" y="2" width="173" height="18"/>
                             <subviews>
                                 <textField focusRingType="none" horizontalHuggingPriority="1000" verticalHuggingPriority="1000" verticalCompressionResistancePriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="8Wu-8r-gUK" userLabel="App Name">
@@ -68,16 +80,16 @@
                         </customView>
                     </subviews>
                     <constraints>
+                        <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="Dvl-ny-Fge" secondAttribute="trailing" constant="8" id="4Oj-Tb-Y1m"/>
                         <constraint firstItem="Dvl-ny-Fge" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="0O3-YC-k9a" secondAttribute="leading" constant="8" id="5JE-VO-fCh"/>
                         <constraint firstItem="CDc-3e-4aW" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="bottom" constant="8" id="5uF-G1-zcn"/>
-                        <constraint firstItem="TBj-LS-qdd" firstAttribute="top" secondItem="0O3-YC-k9a" secondAttribute="top" constant="2" id="6Ty-L4-2QH"/>
+                        <constraint firstItem="OJL-Il-yyO" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" constant="6" id="C1T-qj-izX"/>
                         <constraint firstItem="CDc-3e-4aW" firstAttribute="trailing" relation="lessThanOrEqual" secondItem="0O3-YC-k9a" secondAttribute="trailing" constant="-2" id="PXn-eH-3PO"/>
-                        <constraint firstItem="TBj-LS-qdd" firstAttribute="trailing" secondItem="Dvl-ny-Fge" secondAttribute="trailing" constant="6" id="be0-dk-JjC"/>
-                        <constraint firstItem="TBj-LS-qdd" firstAttribute="top" secondItem="Dvl-ny-Fge" secondAttribute="top" constant="-6" id="eXj-Gk-ux7"/>
                         <constraint firstItem="CDc-3e-4aW" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="0O3-YC-k9a" secondAttribute="leading" constant="2" id="gn7-NW-R2B"/>
-                        <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="TBj-LS-qdd" secondAttribute="trailing" constant="2" id="jI0-BS-Y9i"/>
                         <constraint firstItem="Dvl-ny-Fge" firstAttribute="centerX" secondItem="0O3-YC-k9a" secondAttribute="centerX" id="o5z-vB-dc0"/>
+                        <constraint firstItem="Dvl-ny-Fge" firstAttribute="top" secondItem="0O3-YC-k9a" secondAttribute="top" constant="8" id="rrh-2i-nd6"/>
                         <constraint firstAttribute="bottom" secondItem="CDc-3e-4aW" secondAttribute="bottom" constant="2" id="sRX-Rx-eYz"/>
+                        <constraint firstItem="Dvl-ny-Fge" firstAttribute="trailing" secondItem="OJL-Il-yyO" secondAttribute="trailing" constant="6" id="yQM-kF-alQ"/>
                         <constraint firstItem="CDc-3e-4aW" firstAttribute="centerX" secondItem="0O3-YC-k9a" secondAttribute="centerX" id="yaV-Ri-SPf"/>
                     </constraints>
                 </customView>
@@ -99,7 +111,7 @@
                 <outlet property="appName" destination="8Wu-8r-gUK" id="wwO-nu-TRl"/>
                 <outlet property="appNameContainer" destination="CDc-3e-4aW" id="a5w-ko-vZB"/>
                 <outlet property="placeholderView" destination="b3R-NC-s5G" id="N52-9E-5ZZ"/>
-                <outlet property="runningIcon" destination="TBj-LS-qdd" id="sqp-Wv-6eg"/>
+                <outlet property="runningIconContainer" destination="OJL-Il-yyO" id="0Ac-HC-May"/>
                 <outlet property="view" destination="Hz6-mo-xeY" id="2dI-ni-3qs"/>
             </connections>
         </collectionViewItem>
@@ -132,6 +144,6 @@
         </menu>
     </objects>
     <resources>
-        <image name="RunningIcon" width="32" height="32"/>
+        <image name="RunningIcon" width="11" height="14"/>
     </resources>
 </document>

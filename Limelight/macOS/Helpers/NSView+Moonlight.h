@@ -9,6 +9,7 @@
 #import <Cocoa/Cocoa.h>
 
 @interface NSView (Moonlight)
+@property (nonatomic, strong) NSColor *backgroundColor;
 
 - (void)smoothRoundCornersWithCornerRadius:(CGFloat)cornerRadius;
 

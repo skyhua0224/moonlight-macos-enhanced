@@ -16,7 +16,7 @@
                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="uCl-gZ-IFJ" userLabel="Content View">
                     <rect key="frame" x="0.0" y="0.0" width="193" height="209"/>
                     <subviews>
-                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="7bI-bK-K3N" userLabel="Image Container" customClass="BackgroundColorView">
+                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="7bI-bK-K3N" userLabel="Image Container">
                             <rect key="frame" x="7" y="53" width="180" height="156"/>
                             <subviews>
                                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="5Fb-TZ-b9m">
@@ -33,7 +33,7 @@
                                 <constraint firstAttribute="trailing" secondItem="5Fb-TZ-b9m" secondAttribute="trailing" constant="4" id="rzH-Uv-Joh"/>
                             </constraints>
                         </customView>
-                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="pDm-4f-wlV" userLabel="Label Container" customClass="BackgroundColorView">
+                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="pDm-4f-wlV" userLabel="Label Container">
                             <rect key="frame" x="72" y="22" width="49" height="23"/>
                             <subviews>
                                 <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Zdg-fz-C9K" userLabel="Host Name">
@@ -55,7 +55,7 @@
                         <stackView distribution="fill" orientation="horizontal" alignment="centerY" spacing="4" horizontalStackHuggingPriority="249.99998474121094" verticalStackHuggingPriority="249.99998474121094" detachesHiddenViews="YES" translatesAutoresizingMaskIntoConstraints="NO" id="L0K-Hh-p9M" userLabel="Status Stack View">
                             <rect key="frame" x="65" y="4" width="63" height="14"/>
                             <subviews>
-                                <customView translatesAutoresizingMaskIntoConstraints="NO" id="O0I-Co-5lc" userLabel="Status Light View" customClass="BackgroundColorView">
+                                <customView translatesAutoresizingMaskIntoConstraints="NO" id="O0I-Co-5lc" userLabel="Status Light View">
                                     <rect key="frame" x="0.0" y="2" width="10" height="10"/>
                                     <constraints>
                                         <constraint firstAttribute="width" secondItem="O0I-Co-5lc" secondAttribute="height" multiplier="1:1" id="1DE-xS-fZz"/>

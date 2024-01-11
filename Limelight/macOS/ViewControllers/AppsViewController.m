@@ -15,7 +15,6 @@
 #import "NSWindow+Moonlight.h"
 #import "NSCollectionView+Moonlight.h"
 #import "NSApplication+Moonlight.h"
-#import "BackgroundColorView.h"
 #import "ImageFader.h"
 #import "NSView+Moonlight.h"
 
@@ -217,7 +216,7 @@ const CGFloat scaleBase = 1.125;
     item.appName.stringValue = app.name;
     item.app = app;
     
-    item.runningIcon.hidden = app != self.runningApp;
+    item.runningIconContainer.hidden = app != self.runningApp;
     
     NSImage *fastCacheImage = [self.boxArtCache objectForKey:app.id];
     if (fastCacheImage != nil) {

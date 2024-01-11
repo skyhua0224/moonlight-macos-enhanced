@@ -11,7 +11,6 @@
 		4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24801FF1E99300B6A12E /* HIDSupport.m */; };
 		4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24861FF3934700B6A12E /* StreamViewMac.m */; };
 		4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */; };
-		4C30BA201FF5F7D600848919 /* BackgroundColorView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C30BA1F1FF5F7D600848919 /* BackgroundColorView.m */; };
 		4C30BFD91FF9D57F00AD09E6 /* DefaultPreferences.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4C30BFD81FF9D57F00AD09E6 /* DefaultPreferences.plist */; };
 		4C38E7F01FEE00F6000425CD /* Logger.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD1C8E11A8AD71400C6703C /* Logger.m */; };
 		4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3494219FC9C04002D2A60 /* AppAssetManager.m */; };
@@ -118,8 +117,6 @@
 		4C2E24861FF3934700B6A12E /* StreamViewMac.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamViewMac.m; sourceTree = "<group>"; };
 		4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSWindow+Moonlight.h"; sourceTree = "<group>"; };
 		4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSWindow+Moonlight.m"; sourceTree = "<group>"; };
-		4C30BA1E1FF5F7D600848919 /* BackgroundColorView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BackgroundColorView.h; sourceTree = "<group>"; };
-		4C30BA1F1FF5F7D600848919 /* BackgroundColorView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BackgroundColorView.m; sourceTree = "<group>"; };
 		4C30BFD81FF9D57F00AD09E6 /* DefaultPreferences.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = DefaultPreferences.plist; sourceTree = "<group>"; };
 		4C38E7F81FEE04E4000425CD /* Limelight-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Limelight-Prefix.pch"; sourceTree = "<group>"; };
 		4C38E80B1FEE13FB000425CD /* HostsViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HostsViewControllerDelegate.h; sourceTree = "<group>"; };
@@ -468,8 +465,6 @@
 			children = (
 				4CABABB021F6C8A3008576A4 /* CollectionView.h */,
 				4CABABB121F6C8A4008576A4 /* CollectionView.m */,
-				4C30BA1E1FF5F7D600848919 /* BackgroundColorView.h */,
-				4C30BA1F1FF5F7D600848919 /* BackgroundColorView.m */,
 				4C4FB2B923715A9000D0FCE3 /* LinkTextField.h */,
 				4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */,
 				4C12130C236FF750005A60A0 /* HostCellView.h */,
@@ -1046,7 +1041,6 @@
 				4C38E7FA1FEE0865000425CD /* AppAssetRetriever.m in Sources */,
 				4C81943A202D75EF0023F308 /* NSCollectionView+Moonlight.m in Sources */,
 				4CE8870B2771DD4F004EB216 /* F.m in Sources */,
-				4C30BA201FF5F7D600848919 /* BackgroundColorView.m in Sources */,
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
 				4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */,
 				4C651052278FEA130089E407 /* NavigatableAlertView.m in Sources */,

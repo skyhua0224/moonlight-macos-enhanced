@@ -11,6 +11,7 @@
 #import "NSApplication+Moonlight.h"
 #import "NSView+Moonlight.h"
 #import "AppsViewController.h"
+#import "NSImage+Moonlight.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -30,11 +31,17 @@
     self.appCoverArt.superview.translatesAutoresizingMaskIntoConstraints = NO;
     [self.appCoverArt.superview.widthAnchor constraintEqualToAnchor:self.appCoverArt.superview.heightAnchor multiplier:aspectRatio].active = YES;
     
+    self.runningIconContainer.wantsLayer = YES;
+    self.runningIconContainer.layer.masksToBounds = YES;
+    self.runningIconContainer.layer.cornerRadius = self.runningIconContainer.bounds.size.width / 2;
+    
+    self.runningIconContainer.backgroundColor = [NSColor systemBlueColor];
+    
     NSShadow *runningShadow = [[NSShadow alloc] init];
-    [runningShadow setShadowColor:[NSColor colorWithRed:0.06 green:0.204 blue:0.5 alpha:0.75]];
-    [runningShadow setShadowOffset:NSMakeSize(0, -2)];
-    [runningShadow setShadowBlurRadius:2];
-    self.runningIcon.shadow = runningShadow;
+    [runningShadow setShadowColor:[NSColor systemBlueColor]];
+    [runningShadow setShadowOffset:NSMakeSize(0, -1)];
+    [runningShadow setShadowBlurRadius:1.5];
+    self.runningIconContainer.shadow = runningShadow;
     
     [self.appCoverArt smoothRoundCornersWithCornerRadius:APP_CELL_CORNER_RADIUS];
 

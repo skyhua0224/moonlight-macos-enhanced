@@ -8,7 +8,6 @@
 
 #import "ContainerViewController.h"
 #import "NSWindow+Moonlight.h"
-#import "BackgroundColorView.h"
 #import "Helpers.h"
 
 @interface CustomSearchField : NSSearchField

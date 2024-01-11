@@ -10,6 +10,15 @@
 
 @implementation NSView (Moonlight)
 
+- (void)setBackgroundColor:(NSColor *)backgroundColor {
+    self.wantsLayer = YES;
+    self.layer.backgroundColor = backgroundColor.CGColor;
+}
+
+- (NSColor *)backgroundColor {
+    return [NSColor colorWithCGColor:self.layer.backgroundColor];
+}
+
 - (void)smoothRoundCornersWithCornerRadius:(CGFloat)cornerRadius {
     self.wantsLayer = YES;
     self.layer.masksToBounds = YES;

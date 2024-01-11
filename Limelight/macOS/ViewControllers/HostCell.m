@@ -7,13 +7,13 @@
 //
 
 #import "HostCell.h"
-#import "BackgroundColorView.h"
 #import "NSApplication+Moonlight.h"
 #import "HostCellView.h"
+#import "NSView+Moonlight.h"
 
 @interface HostCell () <NSMenuDelegate>
-@property (weak) IBOutlet BackgroundColorView *imageContainer;
-@property (weak) IBOutlet BackgroundColorView *labelContainer;
+@property (weak) IBOutlet NSView *imageContainer;
+@property (weak) IBOutlet NSView *labelContainer;
 
 @end
 
