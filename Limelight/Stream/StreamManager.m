@@ -17,9 +17,6 @@
 #import "HttpRequest.h"
 #import "IdManager.h"
 
-#import "Moonlight-Swift.h"
-#import "AlternateControllerNetworking.h"
-
 @implementation StreamManager {
     StreamConfiguration* _config;
 
@@ -81,11 +78,6 @@
         }
     }
     
-#ifdef USE_RESOLUTION_SYNC
-    [ResolutionSyncRequester setupControllerFor:_config.host];
-    startListeningForRumblePackets(_callbacks);
-#endif
-
 #if TARGET_OS_IPHONE
     // Set mouse delta factors from the screen resolution and stream size
     CGFloat screenScale = [[UIScreen mainScreen] scale];
@@ -110,10 +102,6 @@
 
 - (void) stopStream
 {
-#ifdef USE_RESOLUTION_SYNC
-    stopListeningForRumblePackets();
-#endif
-    
     [_connection terminate];
     _callbacks = nil;
 }

@@ -28,8 +28,6 @@
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Carbon/Carbon.h>
 
-#import "Moonlight-Swift.h"
-
 @interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate, InputPresenceDelegate>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
@@ -449,15 +447,6 @@
     return (StreamViewMac *)self.view;
 }
 
-+ (int)getResolutionSyncRefreshRate {
-    int refreshRate = [[[DataManager alloc] init] getSettings].framerate.intValue;
-    if (refreshRate == 30) {
-        return 60;
-    } else {
-        return refreshRate;
-    }
-}
-
 
 #pragma mark - Streaming Operations
 
@@ -536,17 +525,8 @@
 
     struct Resolution resolution;
     
-    BOOL syncEnabled = NO;
-#ifdef USE_RESOLUTION_SYNC
-    syncEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"shouldSync"];
-#endif
-    if (syncEnabled) {
-        resolution.width = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncWidth"];
-        resolution.height = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"syncHeight"];
-    } else {
-        resolution.width = [streamSettings.width intValue];
-        resolution.height = [streamSettings.height intValue];
-    }
+    resolution.width = [streamSettings.width intValue];
+    resolution.height = [streamSettings.height intValue];
 
     return resolution;
 }
@@ -566,12 +546,6 @@
 }
 
 - (void)connectionStarted {
-#ifdef USE_RESOLUTION_SYNC
-    BOOL isRunning = [self.app.id isEqualToString:self.app.host.currentGame];
-    int refreshRate = [self.class getResolutionSyncRefreshRate];
-    [ResolutionSyncRequester setResolutionFor:self.app.host.activeAddress refreshRate:refreshRate isResume:isRunning];
-#endif
-    
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
         

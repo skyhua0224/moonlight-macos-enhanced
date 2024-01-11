@@ -15,7 +15,6 @@
 
 #import "MASPreferencesWindowController.h"
 #import "GeneralPrefsPaneVC.h"
-#import "ResolutionSyncPrefsPaneVC.h"
 
 typedef enum : NSUInteger {
     SystemTheme,
@@ -76,13 +75,8 @@ typedef enum : NSUInteger {
 - (NSWindowController *)preferencesWC {
     if (_preferencesWC == nil) {
         NSViewController *generalVC = [[GeneralPrefsPaneVC alloc] init];
-        NSArray *controllers;
-#ifdef USE_RESOLUTION_SYNC
-        NSViewController *resolutionSyncVC = [[ResolutionSyncPrefsPaneVC alloc] init];
-        controllers = @[generalVC, resolutionSyncVC];
-#else
-        controllers = @[generalVC];
-#endif
+        NSArray *controllers = @[generalVC];
+        
         if (@available(macOS 13.0, *)) {
             _preferencesWC = [[MASPreferencesWindowController alloc] initWithViewControllers:controllers title:@"Settings"];
         } else {

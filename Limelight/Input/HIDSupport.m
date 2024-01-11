@@ -8,7 +8,6 @@
 
 #import "HIDSupport.h"
 #import "Controller.h"
-#import "AlternateControllerNetworking.h"
 #import "Ticks.h"
 
 #include "Limelight.h"
@@ -543,15 +542,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 
 - (void)sendControllerEvent {
     if (self.shouldSendInputEvents) {
-#ifdef USE_RESOLUTION_SYNC
-        if (cfdyControllerMethod()) {
-            CFDYSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-        } else {
-#endif
-            LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
-#ifdef USE_RESOLUTION_SYNC
-        }
-#endif
+        LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
     }
 }
 
@@ -709,19 +700,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 
     if (self.shouldSendInputEvents) {
         if (event.hasPreciseScrollingDeltas) {
-#ifdef USE_RESOLUTION_SYNC
-            if (cfdyMouseScrollMethod()) {
-                CFDYSendHighResScrollEvent(event.scrollingDeltaY);
+            if (absDeltaX > absDeltaY) {
+                LiSendHighResHScrollEvent(-event.scrollingDeltaX);
             } else {
-#endif
-                if (absDeltaX > absDeltaY) {
-                    LiSendHighResHScrollEvent(-event.scrollingDeltaX);
-                } else {
-                    LiSendHighResScrollEvent(event.scrollingDeltaY);
-                }
-#ifdef USE_RESOLUTION_SYNC
+                LiSendHighResScrollEvent(event.scrollingDeltaY);
             }
-#endif
         } else {
             if (absDeltaX > absDeltaY) {
                 LiSendHScrollEvent(-event.scrollingDeltaX);

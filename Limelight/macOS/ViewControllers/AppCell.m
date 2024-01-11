@@ -14,8 +14,6 @@
 
 #import <QuartzCore/QuartzCore.h>
 
-#import "Moonlight-Swift.h"
-
 @interface AppCell () <NSMenuDelegate>
 @property (nonatomic) BOOL togglingHideStatus;
 @property (nonatomic) BOOL hovered;

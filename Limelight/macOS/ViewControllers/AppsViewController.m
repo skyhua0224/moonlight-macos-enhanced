@@ -35,8 +35,6 @@
 #import "DiscoveryWorker.h"
 #import "ConnectionHelper.h"
 
-#import "Moonlight-Swift.h"
-
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, PrivateAppAssetCallback, NSSearchFieldDelegate>
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *cmsIdToId;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
@@ -380,11 +378,6 @@ const CGFloat scaleBase = 1.125;
                 if (hasFeaturePrivateAppOptimalSettings()) {
                     [PrivateGfeApiRequester resetSettingsForPrivateApp:self.privateAppId hostIP:self.host.activeAddress];
                 }
-                
-#ifdef USE_RESOLUTION_SYNC
-                [ResolutionSyncRequester teardownControllerFor:self.host.activeAddress];
-                [ResolutionSyncRequester resetResolutionFor:self.host.activeAddress];
-#endif
                 
                 if (completion != nil) {
                     completion(YES);

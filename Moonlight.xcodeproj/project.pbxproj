@@ -54,11 +54,9 @@
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		4C3C619E20BD2D4A0045FE30 /* DatabaseSingleton.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */; };
 		4C4B02EC236FF5F200B63AE6 /* WakeOnLanManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB4678FE1A565DAC00377732 /* WakeOnLanManager.m */; };
-		4C4B8351234D8F0A00D174F5 /* ResolutionSyncRequester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */; };
 		4C4FB2B323713AA100D0FCE3 /* AboutViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B223713AA100D0FCE3 /* AboutViewController.m */; };
 		4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */; };
 		4C4FB2BB23715A9000D0FCE3 /* LinkTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */; };
-		4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */; };
 		4C63B6A9278925FB00ED3510 /* NSView+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */; };
 		4C651041278FD2880089E407 /* NSResponder+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651040278FD2880089E407 /* NSResponder+Moonlight.m */; };
 		4C651044278FD81D0089E407 /* ControllerNavigation.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C651043278FD81D0089E407 /* ControllerNavigation.m */; };
@@ -90,8 +88,6 @@
 		4CD99EB226A554B00026173A /* Ticks.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CD99EB126A554B00026173A /* Ticks.m */; };
 		4CDC8E6E25E750D6009E66C6 /* MASPreferencesWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CDC8E6D25E750D6009E66C6 /* MASPreferencesWindowController.m */; };
 		4CDC8E7025E754B2009E66C6 /* MASPreferencesWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CDC8E6F25E754B2009E66C6 /* MASPreferencesWindow.xib */; };
-		4CDC8E7425E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CDC8E7225E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m */; };
-		4CDC8E7525E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CDC8E7325E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib */; };
 		4CE887092771DD4F004EB216 /* NSNumber+F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887022771DD4F004EB216 /* NSNumber+F.m */; };
 		4CE8870A2771DD4F004EB216 /* NSDictionary+F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887032771DD4F004EB216 /* NSDictionary+F.m */; };
 		4CE8870B2771DD4F004EB216 /* F.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE887042771DD4F004EB216 /* F.m */; };
@@ -146,14 +142,11 @@
 		4C38E8251FF0B609000425CD /* StreamViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamViewController.m; sourceTree = "<group>"; };
 		4C3C619C20BD2D4A0045FE30 /* DatabaseSingleton.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DatabaseSingleton.h; sourceTree = "<group>"; };
 		4C3C619D20BD2D4A0045FE30 /* DatabaseSingleton.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DatabaseSingleton.m; sourceTree = "<group>"; };
-		4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolutionSyncRequester.swift; sourceTree = "<group>"; };
 		4C4FB2B123713AA100D0FCE3 /* AboutViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AboutViewController.h; sourceTree = "<group>"; };
 		4C4FB2B223713AA100D0FCE3 /* AboutViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AboutViewController.m; sourceTree = "<group>"; };
 		4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutWindow.xib; sourceTree = "<group>"; };
 		4C4FB2B923715A9000D0FCE3 /* LinkTextField.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LinkTextField.h; sourceTree = "<group>"; };
 		4C4FB2BA23715A9000D0FCE3 /* LinkTextField.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LinkTextField.m; sourceTree = "<group>"; };
-		4C51EE3325E0DE2700F205D3 /* AlternateControllerNetworking.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AlternateControllerNetworking.h; sourceTree = "<group>"; };
-		4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AlternateControllerNetworking.m; sourceTree = "<group>"; };
 		4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSView+Moonlight.h"; sourceTree = "<group>"; };
 		4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSView+Moonlight.m"; sourceTree = "<group>"; };
 		4C65103F278FD2880089E407 /* NSResponder+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSResponder+Moonlight.h"; sourceTree = "<group>"; };
@@ -223,9 +216,6 @@
 		4CDC8E6C25E750D6009E66C6 /* MASPreferencesViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MASPreferencesViewController.h; sourceTree = "<group>"; };
 		4CDC8E6D25E750D6009E66C6 /* MASPreferencesWindowController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MASPreferencesWindowController.m; sourceTree = "<group>"; };
 		4CDC8E6F25E754B2009E66C6 /* MASPreferencesWindow.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = MASPreferencesWindow.xib; sourceTree = "<group>"; };
-		4CDC8E7125E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ResolutionSyncPrefsPaneVC.h; sourceTree = "<group>"; };
-		4CDC8E7225E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ResolutionSyncPrefsPaneVC.m; sourceTree = "<group>"; };
-		4CDC8E7325E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = ResolutionSyncPrefsPaneView.xib; sourceTree = "<group>"; };
 		4CE887012771DD4F004EB216 /* F.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = F.h; sourceTree = "<group>"; };
 		4CE887022771DD4F004EB216 /* NSNumber+F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSNumber+F.m"; sourceTree = "<group>"; };
 		4CE887032771DD4F004EB216 /* NSDictionary+F.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSDictionary+F.m"; sourceTree = "<group>"; };
@@ -421,9 +411,6 @@
 				4C819439202D75EF0023F308 /* NSCollectionView+Moonlight.m */,
 				4C84385821FE9453000A77CD /* NSApplication+Moonlight.h */,
 				4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */,
-				4C4B8350234D8F0A00D174F5 /* ResolutionSyncRequester.swift */,
-				4C51EE3325E0DE2700F205D3 /* AlternateControllerNetworking.h */,
-				4C51EE3425E0DE2700F205D3 /* AlternateControllerNetworking.m */,
 				4CA454C9277BE4E400E99A96 /* PrivateGfeApiRequester.h */,
 				4CA454CA277BE4E400E99A96 /* PrivateGfeApiRequester.m */,
 				4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */,
@@ -476,9 +463,6 @@
 				4C65704B23EBEB3D000D1601 /* GeneralPrefsPaneVC.h */,
 				4CC3C0311FF73A660029EBF5 /* GeneralPrefsPaneVC.m */,
 				4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */,
-				4CDC8E7125E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.h */,
-				4CDC8E7225E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m */,
-				4CDC8E7325E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib */,
 				4C4FB2B123713AA100D0FCE3 /* AboutViewController.h */,
 				4C4FB2B223713AA100D0FCE3 /* AboutViewController.m */,
 				4C4FB2B423713AC300D0FCE3 /* AboutWindow.xib */,
@@ -1008,7 +992,6 @@
 				4C38E8181FEF36A0000425CD /* AppCell.xib in Resources */,
 				4C4FB2B523713AC300D0FCE3 /* AboutWindow.xib in Resources */,
 				4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */,
-				4CDC8E7525E7565B009E66C6 /* ResolutionSyncPrefsPaneView.xib in Resources */,
 				4CDC8E7025E754B2009E66C6 /* MASPreferencesWindow.xib in Resources */,
 				4C65704A23EBE9F4000D1601 /* GeneralPrefsPaneView.xib in Resources */,
 				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
@@ -1072,7 +1055,6 @@
 				4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */,
 				4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */,
 				4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */,
-				4CDC8E7425E7565B009E66C6 /* ResolutionSyncPrefsPaneVC.m in Sources */,
 				4C4B02EC236FF5F200B63AE6 /* WakeOnLanManager.m in Sources */,
 				4C38E8131FEE30F8000425CD /* ContainerViewController.m in Sources */,
 				4C38E8081FEE09D0000425CD /* Utils.m in Sources */,
@@ -1099,7 +1081,6 @@
 				4C12130E236FF750005A60A0 /* HostCellView.m in Sources */,
 				4C38E7F91FEE085B000425CD /* (null) in Sources */,
 				4C38E7F31FEE0113000425CD /* DataManager.m in Sources */,
-				4C4B8351234D8F0A00D174F5 /* ResolutionSyncRequester.swift in Sources */,
 				4C38E80F1FEE1C81000425CD /* AppsViewController.m in Sources */,
 				4CDC8E6E25E750D6009E66C6 /* MASPreferencesWindowController.m in Sources */,
 				4C4FB2B323713AA100D0FCE3 /* AboutViewController.m in Sources */,
@@ -1112,7 +1093,6 @@
 				4CE887122772B8B3004EB216 /* PrivateAppAssetRetriever.m in Sources */,
 				4CE887092771DD4F004EB216 /* NSNumber+F.m in Sources */,
 				4C38E8291FF0BF8E000425CD /* Connection.m in Sources */,
-				4C51EE3525E0DE2700F205D3 /* AlternateControllerNetworking.m in Sources */,
 				4C651041278FD2880089E407 /* NSResponder+Moonlight.m in Sources */,
 				4C38E8281FF0BF83000425CD /* StreamManager.m in Sources */,
 				4C819450202EC3230023F308 /* AppDelegateForAppKit.m in Sources */,
@@ -1242,207 +1222,6 @@
 			};
 			name = Release;
 		};
-		4CD17E9427336F77004D438C /* Debug - Resolution Sync */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_TESTABILITY = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu99;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = "DEBUG=1";
-				GCC_PREPROCESSOR_DEFINITIONS_NOT_USED_IN_PRECOMPS = USE_RESOLUTION_SYNC;
-				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				ONLY_ACTIVE_ARCH = YES;
-				OTHER_SWIFT_FLAGS = "-D USE_RESOLUTION_SYNC";
-				SDKROOT = macosx;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = "Debug - Resolution Sync";
-		};
-		4CD17E9527336F77004D438C /* Debug - Resolution Sync */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = Moonlight.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = YH23FJA92F;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_PRECOMPILE_PREFIX_HEADER = YES;
-				GCC_PREFIX_HEADER = "Limelight/macOS/Supporting Files/Limelight-Prefix.pch";
-				HEADER_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/libs/**",
-					"$(SDKROOT)/usr/include/libxml2",
-					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
-				);
-				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/libs/openssl/lib",
-					"$(PROJECT_DIR)/libs/opus/lib",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 1.1.0;
-				MTL_ENABLE_DEBUG_INFO = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
-				PRODUCT_NAME = Moonlight;
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
-				SWIFT_VERSION = 5.0;
-			};
-			name = "Debug - Resolution Sync";
-		};
-		4CD17E9627336F7A004D438C /* Release - Resolution Sync */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = YES;
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu99;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_PREPROCESSOR_DEFINITIONS_NOT_USED_IN_PRECOMPS = USE_RESOLUTION_SYNC;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				OTHER_SWIFT_FLAGS = "-D USE_RESOLUTION_SYNC";
-				PROVISIONING_PROFILE = "";
-				SDKROOT = macosx;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = "Release - Resolution Sync";
-		};
-		4CD17E9727336F7A004D438C /* Release - Resolution Sync */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = Moonlight.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = YH23FJA92F;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_PRECOMPILE_PREFIX_HEADER = YES;
-				GCC_PREFIX_HEADER = "Limelight/macOS/Supporting Files/Limelight-Prefix.pch";
-				HEADER_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/libs/**",
-					"$(SDKROOT)/usr/include/libxml2",
-					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
-				);
-				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/libs/openssl/lib",
-					"$(PROJECT_DIR)/libs/opus/lib",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				MARKETING_VERSION = 1.1.0;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coofdylabs.MoonlightMac;
-				PRODUCT_NAME = Moonlight;
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Input/Moonlight-Bridging-Header.h";
-				SWIFT_VERSION = 5.0;
-			};
-			name = "Release - Resolution Sync";
-		};
 		FB290D1E19B2C406004C83CF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1550,9 +1329,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				4C7E0A8B1FECBFFD00684411 /* Debug */,
-				4CD17E9527336F77004D438C /* Debug - Resolution Sync */,
 				4C7E0A8C1FECBFFD00684411 /* Release */,
-				4CD17E9727336F7A004D438C /* Release - Resolution Sync */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1561,9 +1338,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				FB290D1E19B2C406004C83CF /* Debug */,
-				4CD17E9427336F77004D438C /* Debug - Resolution Sync */,
 				FB290D1F19B2C406004C83CF /* Release */,
-				4CD17E9627336F7A004D438C /* Release - Resolution Sync */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

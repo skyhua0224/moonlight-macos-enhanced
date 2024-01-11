@@ -96,20 +96,6 @@ static float bitrateSteps[] = {
     self.useGCMouseCheckbox.state = [self.standard boolForKey:@"useGCMouseDriver"] ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
-- (void)viewWillAppear {
-    [super viewWillAppear];
-    
-    BOOL enableResolutionSync = NO;
-#ifdef USE_RESOLUTION_SYNC
-    enableResolutionSync = [[NSUserDefaults standardUserDefaults] boolForKey:@"enableResolutionSync"];
-#endif
-    if (enableResolutionSync) {
-        self.resolutionSelector.enabled = ![self.standard boolForKey:@"shouldSync"];
-    } else {
-        self.resolutionSelector.enabled = YES;
-    }
-}
-
 
 #pragma mark - Helpers
 

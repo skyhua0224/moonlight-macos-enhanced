@@ -2,20 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>enableResolutionSync</key>
-	<false/>
-	<key>shouldSync</key>
-	<false/>
-	<key>pointerSpeed</key>
-	<integer>10</integer>
-	<key>disablePointerPrecision</key>
-	<false/>
-	<key>scrollWheelLines</key>
-	<integer>1</integer>
-	<key>mouseScrollMethod</key>
-	<integer>0</integer>
-	<key>controllerMethod</key>
-	<integer>0</integer>
 	<key>videoCodec</key>
 	<integer>0</integer>
 	<key>dynamicResolution</key>
