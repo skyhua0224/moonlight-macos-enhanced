@@ -100,7 +100,7 @@ const CGFloat scaleBase = 1.125;
 
 
     self.getSearchField.delegate = self;
-    self.getSearchField.placeholderString = @"Filter Apps";
+    self.getSearchField.placeholderString = @"Search Apps";
 }
 
 - (BOOL)becomeFirstResponder {

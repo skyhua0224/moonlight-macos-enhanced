@@ -71,7 +71,7 @@
 #pragma clang diagnostic pop
     
     self.getSearchField.delegate = self;
-    self.getSearchField.placeholderString = @"Filter Hosts";
+    self.getSearchField.placeholderString = @"Search Hosts";
 
     [self updateHostCellsStatusStates];
 }
