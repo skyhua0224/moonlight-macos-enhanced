@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="22505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22505"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -20,8 +20,8 @@
                             <rect key="frame" x="7" y="53" width="180" height="156"/>
                             <subviews>
                                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="5Fb-TZ-b9m">
-                                    <rect key="frame" x="4" y="4" width="172" height="148"/>
-                                    <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="HostIcon" id="jAl-gI-gzt"/>
+                                    <rect key="frame" x="4" y="1" width="172.5" height="154"/>
+                                    <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="desktopcomputer" catalog="system" id="jAl-gI-gzt"/>
                                 </imageView>
                             </subviews>
                             <constraints>
@@ -36,7 +36,7 @@
                         <customView translatesAutoresizingMaskIntoConstraints="NO" id="pDm-4f-wlV" userLabel="Label Container" customClass="BackgroundColorView">
                             <rect key="frame" x="72" y="22" width="49" height="23"/>
                             <subviews>
-                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Zdg-fz-C9K" userLabel="Host Name">
+                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Zdg-fz-C9K" userLabel="Host Name">
                                     <rect key="frame" x="0.0" y="2" width="49" height="19"/>
                                     <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="center" title="Name" id="QvL-Tp-Eyp">
                                         <font key="font" textStyle="title3" name=".SFNS-Regular"/>
@@ -62,7 +62,7 @@
                                         <constraint firstAttribute="width" constant="10" id="6TW-4c-sQx"/>
                                     </constraints>
                                 </customView>
-                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="SAP-xK-60C" userLabel="Status Label">
+                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="SAP-xK-60C" userLabel="Status Label">
                                     <rect key="frame" x="12" y="0.0" width="53" height="14"/>
                                     <textFieldCell key="cell" lineBreakMode="clipping" title="Unknown" id="C0D-J1-9Rf">
                                         <font key="font" textStyle="subheadline" name=".SFNS-Regular"/>
@@ -145,6 +145,6 @@
         </menu>
     </objects>
     <resources>
-        <image name="HostIcon" width="88" height="88"/>
+        <image name="desktopcomputer" catalog="system" width="19" height="15"/>
     </resources>
 </document>
