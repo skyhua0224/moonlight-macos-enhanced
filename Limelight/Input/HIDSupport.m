@@ -434,7 +434,6 @@ typedef enum {
 @property (nonatomic) id mouseConnectObserver;
 @property (nonatomic) id mouseDisconnectObserver;
 
-@property (nonatomic) BOOL useMouseScrollHack;
 @property (nonatomic) BOOL useGCMouse;
 @end
 
@@ -1131,10 +1130,6 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         modifiers |= MODIFIER_META;
     }
     return modifiers;
-}
-
-- (BOOL)useMouseScrollHack {
-    return [NSUserDefaults.standardUserDefaults boolForKey:@"useHighResMouseScrollHack"];
 }
 
 - (BOOL)useGCMouse {
