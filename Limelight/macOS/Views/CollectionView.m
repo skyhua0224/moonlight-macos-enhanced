@@ -14,7 +14,7 @@
 
 @import GameController;
 
-@interface CollectionView ()
+@interface CollectionView () <NSMenuItemValidation>
 @end
 
 @implementation CollectionView

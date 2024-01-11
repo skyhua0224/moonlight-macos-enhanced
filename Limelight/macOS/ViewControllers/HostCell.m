@@ -53,7 +53,7 @@
         self.imageContainer.backgroundColor = [NSColor clearColor];
     }
     
-    self.labelContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
+    self.labelContainer.backgroundColor = selected ? [NSColor selectedContentBackgroundColor] : [NSColor clearColor];
     self.hostName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];
 }
 

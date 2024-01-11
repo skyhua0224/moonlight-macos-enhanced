@@ -158,7 +158,7 @@
         appCoverArtContainerView.layer.shadowRadius = 4;
     }
 
-    self.appNameContainer.backgroundColor = selected ? [NSColor alternateSelectedControlColor] : [NSColor clearColor];
+    self.appNameContainer.backgroundColor = selected ? [NSColor selectedContentBackgroundColor] : [NSColor clearColor];
     self.appName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];
 
     [NSAnimationContext beginGrouping];
@@ -183,19 +183,19 @@
     for (NSInteger i = 0; i < n; i++) {
         NSPoint ps[3];
         switch ([path elementAtIndex:i associatedPoints:ps]) {
-            case NSMoveToBezierPathElement: {
+            case NSBezierPathElementMoveTo: {
                 CGPathMoveToPoint(cgPath, NULL, ps[0].x, ps[0].y);
                 break;
             }
-            case NSLineToBezierPathElement: {
+            case NSBezierPathElementLineTo: {
                 CGPathAddLineToPoint(cgPath, NULL, ps[0].x, ps[0].y);
                 break;
             }
-            case NSCurveToBezierPathElement: {
+            case NSBezierPathElementCurveTo: {
                 CGPathAddCurveToPoint(cgPath, NULL, ps[0].x, ps[0].y, ps[1].x, ps[1].y, ps[2].x, ps[2].y);
                 break;
             }
-            case NSClosePathBezierPathElement: {
+            case NSBezierPathElementClosePath: {
                 CGPathCloseSubpath(cgPath);
                 break;
             }
