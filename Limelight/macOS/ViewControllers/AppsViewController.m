@@ -76,11 +76,6 @@ const CGFloat scaleBase = 1.125;
     self.runningApp = [self findRunningApp:self.host];
     
     self.boxArtCache = [[NSCache alloc] init];
-    
-    __weak typeof(self) weakSelf = self;
-    self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        [weakSelf updateRunningAppState];
-    }];
 }
 
 - (void)viewWillAppear {
@@ -98,6 +93,15 @@ const CGFloat scaleBase = 1.125;
 
     self.getSearchField.delegate = self;
     self.getSearchField.placeholderString = @"Search Apps";
+}
+
+- (void)viewDidAppear {
+    [super viewDidAppear];
+    
+    __weak typeof(self) weakSelf = self;
+    self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:self.view.window queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf updateRunningAppState];
+    }];
 }
 
 - (BOOL)becomeFirstResponder {
@@ -216,6 +220,7 @@ const CGFloat scaleBase = 1.125;
     item.appName.stringValue = app.name;
     item.app = app;
     
+    item.runningIconContainer.alphaValue = app != self.runningApp ? 0.0 : 1.0;
     item.runningIconContainer.hidden = app != self.runningApp;
     
     NSImage *fastCacheImage = [self.boxArtCache objectForKey:app.id];
@@ -421,17 +426,56 @@ const CGFloat scaleBase = 1.125;
         self.host.currentGame = self.runningApp.id;
     }
     
-    [self redrawCellAtIndexPath:[self indexPathForApp:oldApp]];
-    [self redrawCellAtIndexPath:[self indexPathForApp:runningApp]];
-}
-
-- (void)redrawCellAtIndexPath:(NSIndexPath *)path {
-    if (path == nil) {
+    if (oldApp == runningApp) {
         return;
     }
     
-    AppCell *item = (AppCell *)[self.collectionView itemAtIndexPath:path];
-    [self configureItem:item atIndexPath:path];
+    [self redrawCellAtOldPath:[self indexPathForApp:oldApp]];
+    [self redrawCellAtNewPath:[self indexPathForApp:runningApp]];
+}
+
+static const CGFloat runningAnimationDuration = 1.0;
+
+- (void)redrawCellAtOldPath:(NSIndexPath *)oldPath {
+    if (oldPath == nil) {
+        return;
+    }
+    
+    AppCell *oldItem = (AppCell *)[self.collectionView itemAtIndexPath:oldPath];
+
+    // Create an NSAnimationContext for smoother animations
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        // Set the duration of the animation
+        context.duration = runningAnimationDuration;
+        
+        // Fade out the runningIconContainer
+        oldItem.runningIconContainer.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        // This block is called when the fade out animation completes
+        
+        // Update the UI or perform any other necessary tasks
+        
+        // Update the visibility status and alpha value for the runningIconContainer
+        oldItem.runningIconContainer.hidden = YES;
+    }];
+}
+
+- (void)redrawCellAtNewPath:(NSIndexPath *)newPath {
+    if (newPath == nil) {
+        return;
+    }
+        
+    AppCell *newItem = (AppCell *)[self.collectionView itemAtIndexPath:newPath];
+
+    // Now, if you want to fade in the runningIconContainer
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        // Set the duration of the animation
+        context.duration = runningAnimationDuration;
+        
+        // Fade in the runningIconContainer
+        newItem.runningIconContainer.hidden = NO;
+        newItem.runningIconContainer.animator.alphaValue = 1.0;
+    } completionHandler:nil];
 }
 
 - (void)updateRunningAppState {
