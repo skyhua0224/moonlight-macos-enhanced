@@ -56,6 +56,18 @@
     [self updateSelectedState:NO];
 }
 
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super initWithCoder:coder];
+    
+    [self startObservingAppearanceChanges];
+    
+    return self;
+}
+
+- (void)dealloc {
+    [self endObservingAppearanceChanges];
+}
+
 - (CATransform3D)translationTransform {
     return CATransform3DMakeTranslation(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 0);
 }
@@ -128,6 +140,11 @@
             return [NSApplication moonlight_isDarkAppearance] ? 0.85 : 0.925;
         }
     }
+}
+
+- (void)updateShadowAndCoverArtAlphaOnDarkModeChange {
+    self.appCoverArt.superview.layer.shadowColor = [NSColor colorWithWhite:0 alpha:[self shadowAlpha]].CGColor;
+    self.appCoverArt.superview.animator.alphaValue = [self appCoverArtAlphaWithHovered:self.hovered];
 }
 
 - (void)updateAlphaStateWithShouldAnimate:(BOOL)animate {
@@ -238,6 +255,23 @@
 
 - (void)menuWillOpen:(NSMenu *)menu {
     [self.delegate didOpenContextMenu:menu forApp:self.app];
+}
+
+
+#pragma mark - effectiveAppearance Observing
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
+    if ([keyPath isEqualToString:@"effectiveAppearance"]) {
+        [self updateShadowAndCoverArtAlphaOnDarkModeChange];
+    }
+}
+
+- (void)startObservingAppearanceChanges {
+    [[NSApplication sharedApplication] addObserver:self forKeyPath:@"effectiveAppearance" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:nil];
+}
+
+- (void)endObservingAppearanceChanges {
+    [[NSApplication sharedApplication] removeObserver:self forKeyPath:@"effectiveAppearance"];
 }
 
 @end
