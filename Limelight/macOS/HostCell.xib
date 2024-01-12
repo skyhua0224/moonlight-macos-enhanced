@@ -36,7 +36,7 @@
                         <customView translatesAutoresizingMaskIntoConstraints="NO" id="pDm-4f-wlV" userLabel="Label Container">
                             <rect key="frame" x="72" y="22" width="49" height="23"/>
                             <subviews>
-                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Zdg-fz-C9K" userLabel="Host Name">
+                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Zdg-fz-C9K" userLabel="Host Name">
                                     <rect key="frame" x="0.0" y="2" width="49" height="19"/>
                                     <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="center" title="Name" id="QvL-Tp-Eyp">
                                         <font key="font" textStyle="title3" name=".SFNS-Regular"/>
@@ -62,7 +62,7 @@
                                         <constraint firstAttribute="width" constant="10" id="6TW-4c-sQx"/>
                                     </constraints>
                                 </customView>
-                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="SAP-xK-60C" userLabel="Status Label">
+                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="SAP-xK-60C" userLabel="Status Label">
                                     <rect key="frame" x="12" y="0.0" width="53" height="14"/>
                                     <textFieldCell key="cell" lineBreakMode="clipping" title="Unknown" id="C0D-J1-9Rf">
                                         <font key="font" textStyle="subheadline" name=".SFNS-Regular"/>
@@ -119,19 +119,19 @@
         </collectionViewItem>
         <menu autoenablesItems="NO" id="sKH-8r-FIG">
             <items>
-                <menuItem title="Wake PC" identifier="wakeMenuItem" id="8rh-sG-qAJ">
+                <menuItem title="Wake PC" image="power" catalog="system" identifier="wakeMenuItem" id="8rh-sG-qAJ">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="wakeMenuItemClicked:" target="-1" id="QRb-YP-iMw"/>
                     </connections>
                 </menuItem>
-                <menuItem title="Remove Host" identifier="removeHostMenuItem" id="xzr-nr-OxJ">
+                <menuItem title="Remove Host" image="trash" catalog="system" identifier="removeHostMenuItem" id="xzr-nr-OxJ">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="removeHostMenuItemClicked:" target="-1" id="tfu-ld-UU0"/>
                     </connections>
                 </menuItem>
-                <menuItem title="Show Hidden Apps" identifier="showHiddenAppsMenuItem" id="RwF-WV-9CR">
+                <menuItem title="Show Hidden Apps" image="eye" catalog="system" identifier="showHiddenAppsMenuItem" id="RwF-WV-9CR">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="showHiddenAppsMenuItemClicked:" target="-1" id="s7m-Rv-gUh"/>
@@ -146,5 +146,8 @@
     </objects>
     <resources>
         <image name="desktopcomputer" catalog="system" width="19" height="15"/>
+        <image name="eye" catalog="system" width="21" height="13"/>
+        <image name="power" catalog="system" width="15" height="16"/>
+        <image name="trash" catalog="system" width="15" height="17"/>
     </resources>
 </document>
