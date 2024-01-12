@@ -44,11 +44,7 @@
 
 - (void)updateSelectedState:(BOOL)selected {
     if (selected) {
-        if ([NSApplication moonlight_isDarkAppearance]) {
-            self.imageContainer.backgroundColor = [NSColor colorWithWhite:1 alpha:0.095];
-        } else {
-            self.imageContainer.backgroundColor = [NSColor colorWithWhite:0 alpha:0.1];
-        }
+        self.imageContainer.backgroundColor = [NSColor colorNamed:@"HostSelectionBackgroundColor"];
     } else {
         self.imageContainer.backgroundColor = [NSColor clearColor];
     }
