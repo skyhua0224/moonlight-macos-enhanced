@@ -66,6 +66,8 @@
 		4C798E67251A1E9800CAB469 /* HapticContext.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C798E66251A1E9700CAB469 /* HapticContext.m */; };
 		4C7CB9162446A982002B8D4E /* Limelight.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB90B2446A981002B8D4E /* Limelight.xcdatamodeld */; };
 		4C7CB91E2446E05D002B8D4E /* ConnectionHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB91D2446E05D002B8D4E /* ConnectionHelper.m */; };
+		4C7D404A2B54ECDC00759EA4 /* SettingsHostingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D40492B54ECDC00759EA4 /* SettingsHostingController.swift */; };
+		4C7D404E2B54ED8B00759EA4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D404D2B54ED8B00759EA4 /* SettingsView.swift */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
 		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
@@ -168,6 +170,8 @@
 		4C7CB9182446B061002B8D4E /* OSPortabilityDefs.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OSPortabilityDefs.h; sourceTree = "<group>"; };
 		4C7CB91C2446E05D002B8D4E /* ConnectionHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ConnectionHelper.h; sourceTree = "<group>"; };
 		4C7CB91D2446E05D002B8D4E /* ConnectionHelper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ConnectionHelper.m; sourceTree = "<group>"; };
+		4C7D40492B54ECDC00759EA4 /* SettingsHostingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsHostingController.swift; sourceTree = "<group>"; };
+		4C7D404D2B54ED8B00759EA4 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A821FECBFFD00684411 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4C7E0A851FECBFFD00684411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -438,6 +442,8 @@
 				4C38E8151FEF36A0000425CD /* AppCell.m */,
 				4C38E8241FF0B609000425CD /* StreamViewController.h */,
 				4C38E8251FF0B609000425CD /* StreamViewController.m */,
+				4C7D40492B54ECDC00759EA4 /* SettingsHostingController.swift */,
+				4C7D404D2B54ED8B00759EA4 /* SettingsView.swift */,
 				4C65704B23EBEB3D000D1601 /* GeneralPrefsPaneVC.h */,
 				4CC3C0311FF73A660029EBF5 /* GeneralPrefsPaneVC.m */,
 				4C65704923EBE9F4000D1601 /* GeneralPrefsPaneView.xib */,
@@ -1026,6 +1032,7 @@
 				4C38E7FC1FEE0875000425CD /* (null) in Sources */,
 				4C7CB9162446A982002B8D4E /* Limelight.xcdatamodeld in Sources */,
 				4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */,
+				4C7D404A2B54ECDC00759EA4 /* SettingsHostingController.swift in Sources */,
 				4C38E7FF1FEE08A0000425CD /* HttpResponse.m in Sources */,
 				4C38E8211FEF5634000425CD /* AppListResponse.m in Sources */,
 				4C4B02EC236FF5F200B63AE6 /* WakeOnLanManager.m in Sources */,
@@ -1034,6 +1041,7 @@
 				4CE8870A2771DD4F004EB216 /* NSDictionary+F.m in Sources */,
 				4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */,
 				4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */,
+				4C7D404E2B54ED8B00759EA4 /* SettingsView.swift in Sources */,
 				4C7E0A971FECCF9A00684411 /* HostsViewController.m in Sources */,
 				4C798E67251A1E9800CAB469 /* HapticContext.m in Sources */,
 				4CE8870C2771DD4F004EB216 /* NSArray+F.m in Sources */,

@@ -16,6 +16,8 @@
 #import "MASPreferencesWindowController.h"
 #import "GeneralPrefsPaneVC.h"
 
+#import "Moonlight-Swift.h"
+
 typedef enum : NSUInteger {
     SystemTheme,
     LightTheme,
@@ -70,13 +72,8 @@ typedef enum : NSUInteger {
 
 - (NSWindowController *)preferencesWC {
     if (_preferencesWC == nil) {
-        NSViewController *generalVC = [[GeneralPrefsPaneVC alloc] init];
-        NSArray *controllers = @[generalVC];
-        
         if (@available(macOS 13.0, *)) {
-            _preferencesWC = [[MASPreferencesWindowController alloc] initWithViewControllers:controllers title:@"Settings"];
-        } else {
-            _preferencesWC = [[MASPreferencesWindowController alloc] initWithViewControllers:controllers title:@"Preferences"];
+            _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindow];
         }
     }
 
