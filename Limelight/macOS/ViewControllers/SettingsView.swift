@@ -55,6 +55,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .frame(minWidth: 500)
     }
 }
 
