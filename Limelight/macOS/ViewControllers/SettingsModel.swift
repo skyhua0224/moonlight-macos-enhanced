@@ -22,6 +22,16 @@ class SettingsModel: ObservableObject {
             saveSettings()
         }
     }
+    @Published var customResWidth: Int {
+        didSet {
+            saveSettings()
+        }
+    }
+    @Published var customResHeight: Int {
+        didSet {
+            saveSettings()
+        }
+    }
     @Published var bitrateSliderValue: Float {
         didSet {
             saveSettings()
@@ -137,6 +147,8 @@ class SettingsModel: ObservableObject {
     init() {
         if let settings = DataManager().getSettings() {
             selectedResolution = CGSizeMake(CGFloat(truncating: settings.width), CGFloat(truncating: settings.height))
+            customResWidth = 0
+            customResHeight = 0
             selectedFps = settings.framerate.intValue
             
             var bitrateIndex = 0
@@ -168,6 +180,8 @@ class SettingsModel: ObservableObject {
             appArtworkDimensions = CGSizeMake(600, 900)
         } else {
             selectedResolution = CGSizeMake(1280, 720)
+            customResWidth = 0
+            customResHeight = 0
             selectedFps = 60
             bitrateSliderValue = 10
 
