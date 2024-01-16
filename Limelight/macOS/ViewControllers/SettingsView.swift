@@ -23,7 +23,7 @@ let panes: [PaneCell] = [
 
 @available(macOS 13.0, *)
 struct SettingsView: View {
-    @State private var selectedPane = panes.first!
+    @SwiftUI.State private var selectedPane = panes.first!
     
     var body: some View {
         NavigationSplitView {
