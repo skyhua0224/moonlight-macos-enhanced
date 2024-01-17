@@ -42,6 +42,8 @@ struct SettingsView: View {
                     StreamView()
                 } else if selectedPane.title == "Video and Audio" {
                     VideoAndAudioView()
+                } else if selectedPane.title == "Input" {
+                    InputView()
                 }
             }
             .environmentObject(settingsModel)
@@ -93,126 +95,202 @@ struct StreamView: View {
     @SwiftUI.State private var showCustomResolutionGroup = false
     
     var body: some View {
-        VStack {
-            FormSection(title: "Resolution and FPS") {
-                FormCell(title: "Resolution", contentWidth: 100, content: {
-                    Picker("", selection: $settingsModel.selectedResolution) {
-                        ForEach(SettingsModel.resolutions, id: \.self) { resolution in
-                            if resolution == .zero {
-                                Text("Custom")
-                            } else {
-                                Text(verbatim: resolution.height == 2160 ? "4K" : "\(Int(resolution.height))p")
+            VStack {
+                FormSection(title: "Resolution and FPS") {
+                    FormCell(title: "Resolution", contentWidth: 100, content: {
+                        Picker("", selection: $settingsModel.selectedResolution) {
+                            ForEach(SettingsModel.resolutions, id: \.self) { resolution in
+                                if resolution == .zero {
+                                    Text("Custom")
+                                } else {
+                                    Text(verbatim: resolution.height == 2160 ? "4K" : "\(Int(resolution.height))p")
+                                }
                             }
                         }
-                    }
-                })
-                
-                if showCustomResolutionGroup {
-                    Divider()
-                
-                    FormCell(title: "Custom Width", contentWidth: 60, content: {
-                        TextField("", value: $settingsModel.customResWidth, format: .number)
-                            .multilineTextAlignment(.trailing)
                     })
-                    FormCell(title: "Custom Height", contentWidth: 60, content: {
-                        TextField("", value: $settingsModel.customResHeight, format: .number)
-                            .multilineTextAlignment(.trailing)
+                    
+                    if showCustomResolutionGroup {
+                        Divider()
+                        
+                        FormCell(title: "Custom Width", contentWidth: 60, content: {
+                            TextField("", value: $settingsModel.customResWidth, format: .number)
+                                .multilineTextAlignment(.trailing)
+                        })
+                        FormCell(title: "Custom Height", contentWidth: 60, content: {
+                            TextField("", value: $settingsModel.customResHeight, format: .number)
+                                .multilineTextAlignment(.trailing)
+                        })
+                    }
+                    
+                    Divider()
+                    
+                    FormCell(title: "FPS", contentWidth: 100, content: {
+                        Picker("", selection: $settingsModel.selectedFps) {
+                            ForEach(SettingsModel.fpss, id: \.self) { fps in
+                                Text("\(fps)")
+                            }
+                        }
                     })
                 }
                 
-                Divider()
+                Spacer()
+                    .frame(height: 32)
                 
-                FormCell(title: "FPS", contentWidth: 100, content: {
-                    Picker("", selection: $settingsModel.selectedFps) {
-                        ForEach(SettingsModel.fpss, id: \.self) { fps in
-                            Text("\(fps)")
+                if #available(macOS 12.0, *) {
+                    FormSection(title: "Bitrate") {
+                        VStack(alignment: .leading) {
+                            let bitrate = SettingsModel.bitrateSteps[Int(settingsModel.bitrateSliderValue)].formatted(FloatingPointFormatStyle())
+                            Text("\(bitrate) Mbps")
+                                .monospacedDigit()
+                            Slider(value: $settingsModel.bitrateSliderValue, in: 0...Float(SettingsModel.bitrateSteps.count - 1), step: 1)
                         }
                     }
-                })
-            }
-            
-            Spacer()
-                .frame(height: 32)
-            
-            if #available(macOS 12.0, *) {
-                FormSection(title: "Bitrate") {
-                    VStack(alignment: .leading) {
-                        let bitrate = SettingsModel.bitrateSteps[Int(settingsModel.bitrateSliderValue)].formatted(FloatingPointFormatStyle())
-                        Text("\(bitrate) Mbps")
-                            .monospacedDigit()
-                        Slider(value: $settingsModel.bitrateSliderValue, in: 0...Float(SettingsModel.bitrateSteps.count - 1), step: 1)
-                    }
                 }
+                
+                Spacer()
             }
-            
-            Spacer()
-        }
-        .padding()
-        .onAppear {
-            func updateCustomResolutionGroup() {
-                showCustomResolutionGroup = settingsModel.selectedResolution == .zero
-            }
-            
-            updateCustomResolutionGroup()
-            settingsModel.resolutionChangedCallback = {
-                withAnimation {
-                    updateCustomResolutionGroup()
-//                    UserDefaults.standard.set(settingsModel.selectedResolution == .zero, forKey: "useCustomRes")
+            .padding()
+            .onAppear {
+                func updateCustomResolutionGroup() {
+                    showCustomResolutionGroup = settingsModel.selectedResolution == .zero
+                }
+                
+                updateCustomResolutionGroup()
+                settingsModel.resolutionChangedCallback = {
+                    withAnimation {
+                        updateCustomResolutionGroup()
+                        //                    UserDefaults.standard.set(settingsModel.selectedResolution == .zero, forKey: "useCustomRes")
+                    }
                 }
             }
         }
     }
-}
 
 struct VideoAndAudioView: View {
     @EnvironmentObject private var settingsModel: SettingsModel
 
     var body: some View {
-        VStack {
-            FormSection(title: "Video") {
-                FormCell(title: "Video Codec", contentWidth: 155, content: {
-                    Picker("", selection: $settingsModel.selectedVideoCodec) {
-                        ForEach(SettingsModel.videoCodecs, id: \.self) { codec in
-                            Text(codec)
+            VStack {
+                FormSection(title: "Video") {
+                    FormCell(title: "Video Codec", contentWidth: 155, content: {
+                        Picker("", selection: $settingsModel.selectedVideoCodec) {
+                            ForEach(SettingsModel.videoCodecs, id: \.self) { codec in
+                                Text(codec)
+                            }
                         }
-                    }
-                })
-
-                Divider()
-
-                FormCell(title: "HDR", contentWidth: 0, content: {
-                    Toggle(isOn: $settingsModel.hdr) {
-                        Text("")
-                    }
-                    .toggleStyle(.switch)
-                })
-
-                Divider()
-
-                FormCell(title: "Frame Pacing", contentWidth: 155, content: {
-                    Picker("", selection: $settingsModel.selectedPacingOptions) {
-                        ForEach(SettingsModel.pacingOptions, id: \.self) { pacingOption in
-                            Text(pacingOption)
+                    })
+                    
+                    Divider()
+                    
+                    FormCell(title: "HDR", contentWidth: 0, content: {
+                        Toggle(isOn: $settingsModel.hdr) {
+                            Text("")
                         }
-                    }
-                })
+                        .toggleStyle(.switch)
+                    })
+                    
+                    Divider()
+                    
+                    FormCell(title: "Frame Pacing", contentWidth: 155, content: {
+                        Picker("", selection: $settingsModel.selectedPacingOptions) {
+                            ForEach(SettingsModel.pacingOptions, id: \.self) { pacingOption in
+                                Text(pacingOption)
+                            }
+                        }
+                    })
+                }
+                
+                Spacer()
+                    .frame(height: 32)
+                
+                FormSection(title: "Audio") {
+                    FormCell(title: "Play Sound on Host", contentWidth: 0, content: {
+                        Toggle(isOn: $settingsModel.audioOnPC) {
+                            Text("")
+                        }
+                        .toggleStyle(.switch)
+                    })
+                }
+                
+                Spacer()
             }
-            
-            Spacer()
-                .frame(height: 32)
-            
-            FormSection(title: "Audio") {
-                FormCell(title: "Play Sound on Host", contentWidth: 0, content: {
-                    Toggle(isOn: $settingsModel.audioOnPC) {
-                        Text("")
-                    }
-                    .toggleStyle(.switch)
-                })
-            }
-            
-            Spacer()
+            .padding()
         }
-        .padding()
+    }
+
+struct InputView: View {
+    @EnvironmentObject private var settingsModel: SettingsModel
+    
+    var body: some View {
+        ScrollView {
+            VStack {
+                FormSection(title: "Controller") {
+                    FormCell(title: "Multi-Controller Mode", contentWidth: 88, content: {
+                        Picker("", selection: $settingsModel.selectedMultiControllerMode) {
+                            ForEach(SettingsModel.multiControllerModes, id: \.self) { mode in
+                                Text(mode)
+                            }
+                        }
+                    })
+                    
+                    Divider()
+                    
+                    FormCell(title: "Rumble Controller", contentWidth: 0, content: {
+                        Toggle(isOn: $settingsModel.rumble) {
+                            Text("")
+                        }
+                        .toggleStyle(.switch)
+                    })
+                }
+                
+                Spacer()
+                    .frame(height: 32)
+                
+                FormSection(title: "Buttons") {
+                    FormCell(title: "Swap A/B and X/Y Buttons", contentWidth: 0, content: {
+                        Toggle(isOn: $settingsModel.swapButtons) {
+                            Text("")
+                        }
+                        .toggleStyle(.switch)
+                    })
+                    
+                    Divider()
+                    
+                    FormCell(title: "Emulate Guide Button", contentWidth: 0, content: {
+                        Toggle(isOn: $settingsModel.emulateGuide) {
+                            Text("")
+                        }
+                        .toggleStyle(.switch)
+                    })
+                }
+                
+                Spacer()
+                    .frame(height: 32)
+                
+                FormSection(title: "Drivers") {
+                    FormCell(title: "Controller Driver", contentWidth: 72, content: {
+                        Picker("", selection: $settingsModel.selectedControllerDriver) {
+                            ForEach(SettingsModel.controllerDrivers, id: \.self) { mode in
+                                Text(mode)
+                            }
+                        }
+                    })
+                    
+                    Divider()
+                    
+                    FormCell(title: "Mouse Driver", contentWidth: 72, content: {
+                        Picker("", selection: $settingsModel.selectedMouseDriver) {
+                            ForEach(SettingsModel.mouseDrivers, id: \.self) { mode in
+                                Text(mode)
+                            }
+                        }
+                    })
+                }
+                
+                Spacer()
+            }
+            .padding()
+        }
     }
 }
 
