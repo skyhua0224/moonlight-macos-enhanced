@@ -95,6 +95,7 @@ struct StreamView: View {
     @SwiftUI.State private var showCustomResolutionGroup = false
     
     var body: some View {
+        ScrollView {
             VStack {
                 FormSection(title: "Resolution and FPS") {
                     FormCell(title: "Resolution", contentWidth: 100, content: {
@@ -165,11 +166,13 @@ struct StreamView: View {
             }
         }
     }
+}
 
 struct VideoAndAudioView: View {
     @EnvironmentObject private var settingsModel: SettingsModel
 
     var body: some View {
+        ScrollView {
             VStack {
                 FormSection(title: "Video") {
                     FormCell(title: "Video Codec", contentWidth: 155, content: {
@@ -217,6 +220,7 @@ struct VideoAndAudioView: View {
             .padding()
         }
     }
+}
 
 struct InputView: View {
     @EnvironmentObject private var settingsModel: SettingsModel
