@@ -56,6 +56,9 @@ struct SettingsView: View {
             }
         }
         .frame(minWidth: 500)
+        .onAppear {
+            NSWindow.allowsAutomaticWindowTabbing = false
+        }
     }
 }
 
