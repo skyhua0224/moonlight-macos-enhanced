@@ -116,7 +116,7 @@ class SettingsModel: ObservableObject {
     }
 
     static var resolutions: [CGSize] = [CGSizeMake(640, 360), CGSizeMake(1280, 720), CGSizeMake(1920, 1080), CGSizeMake(2560, 1440), CGSizeMake(3840, 2160), .zero]
-    static var fpss: [Int] = [30, 60, 120]
+    static var fpss: [Int] = [30, 60, 90, 120, 144]
     static var bitrateSteps: [Float] = [
         0.5,
         1,
