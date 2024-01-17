@@ -527,9 +527,9 @@ DQ
                                         <collectionView selectable="YES" id="iKf-WV-arz" customClass="CollectionView">
                                             <rect key="frame" x="0.0" y="0.0" width="450" height="158"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES"/>
-                                            <collectionViewFlowLayout key="collectionViewLayout" minimumInteritemSpacing="20" minimumLineSpacing="20" id="on9-o4-Mos">
+                                            <collectionViewFlowLayout key="collectionViewLayout" minimumLineSpacing="20" id="on9-o4-Mos">
                                                 <size key="itemSize" width="192" height="209"/>
-                                                <edgeInsets key="sectionInset" left="12" right="12" top="12" bottom="12"/>
+                                                <edgeInsets key="sectionInset" left="12" right="12" top="18" bottom="12"/>
                                             </collectionViewFlowLayout>
                                             <color key="primaryBackgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
                                         </collectionView>
