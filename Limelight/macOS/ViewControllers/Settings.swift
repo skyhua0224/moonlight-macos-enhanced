@@ -25,6 +25,6 @@ struct Settings {
     let controllerDriver: Int
     let mouseDriver: Int
     
-    let emulateGuide: Bool    
+    let emulateGuide: Bool
     let appArtworkDimensions: CGSize
 }

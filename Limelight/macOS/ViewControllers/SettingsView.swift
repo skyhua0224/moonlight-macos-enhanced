@@ -37,12 +37,14 @@ struct SettingsView: View {
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(160)
         } detail: {
-            VStack {
+            Group {
                 if selectedPane.title == "Stream" {
                     StreamView()
-                        .environmentObject(settingsModel)
+                } else if selectedPane.title == "Video and Audio" {
+                    VideoAndAudioView()
                 }
             }
+            .environmentObject(settingsModel)
             .navigationSubtitle(selectedPane.title)
             .toolbarRole(.editor)
             .toolbar {
@@ -162,9 +164,55 @@ struct StreamView: View {
     }
 }
 
-struct TestView: View {
+struct VideoAndAudioView: View {
+    @EnvironmentObject private var settingsModel: SettingsModel
+
     var body: some View {
-        Text("Test")
+        VStack {
+            FormSection(title: "Video") {
+                FormCell(title: "Video Codec", contentWidth: 155, content: {
+                    Picker("", selection: $settingsModel.selectedVideoCodec) {
+                        ForEach(SettingsModel.videoCodecs, id: \.self) { codec in
+                            Text(codec)
+                        }
+                    }
+                })
+
+                Divider()
+
+                FormCell(title: "HDR", contentWidth: 0, content: {
+                    Toggle(isOn: $settingsModel.hdr) {
+                        Text("")
+                    }
+                    .toggleStyle(.switch)
+                })
+
+                Divider()
+
+                FormCell(title: "Frame Pacing", contentWidth: 155, content: {
+                    Picker("", selection: $settingsModel.selectedPacingOptions) {
+                        ForEach(SettingsModel.pacingOptions, id: \.self) { pacingOption in
+                            Text(pacingOption)
+                        }
+                    }
+                })
+            }
+            
+            Spacer()
+                .frame(height: 32)
+            
+            FormSection(title: "Audio") {
+                FormCell(title: "Play Sound on Host", contentWidth: 0, content: {
+                    Toggle(isOn: $settingsModel.audioOnPC) {
+                        Text("")
+                    }
+                    .toggleStyle(.switch)
+                })
+            }
+            
+            Spacer()
+        }
+        .padding()
     }
 }
 
@@ -216,7 +264,10 @@ struct FormCell<Content: View>: View {
             Spacer()
 
             content
-            .frame(width: contentWidth)
+                .if(contentWidth != 0, transform: { view in
+                    view
+                        .frame(width: contentWidth)
+                })
         }
     }
 }

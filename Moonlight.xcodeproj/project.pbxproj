@@ -70,6 +70,7 @@
 		4C7D404E2B54ED8B00759EA4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D404D2B54ED8B00759EA4 /* SettingsView.swift */; };
 		4C7D40522B56485A00759EA4 /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D40512B56485A00759EA4 /* SettingsModel.swift */; };
 		4C7D40542B56492D00759EA4 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D40532B56492D00759EA4 /* Settings.swift */; };
+		4C7D40562B57A19A00759EA4 /* ViewExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D40552B57A19A00759EA4 /* ViewExtensions.swift */; };
 		4C7E0A831FECBFFD00684411 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A821FECBFFD00684411 /* Assets.xcassets */; };
 		4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4C7E0A841FECBFFD00684411 /* Main.storyboard */; };
 		4C7E0A891FECBFFD00684411 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7E0A881FECBFFD00684411 /* main.m */; };
@@ -176,6 +177,7 @@
 		4C7D404D2B54ED8B00759EA4 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		4C7D40512B56485A00759EA4 /* SettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModel.swift; sourceTree = "<group>"; };
 		4C7D40532B56492D00759EA4 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		4C7D40552B57A19A00759EA4 /* ViewExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewExtensions.swift; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C7E0A821FECBFFD00684411 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4C7E0A851FECBFFD00684411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -408,6 +410,7 @@
 				4C651040278FD2880089E407 /* NSResponder+Moonlight.m */,
 				4C651042278FD81D0089E407 /* ControllerNavigation.h */,
 				4C651043278FD81D0089E407 /* ControllerNavigation.m */,
+				4C7D40552B57A19A00759EA4 /* ViewExtensions.swift */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -1059,6 +1062,7 @@
 				4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */,
 				4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */,
 				4C651052278FEA130089E407 /* NavigatableAlertView.m in Sources */,
+				4C7D40562B57A19A00759EA4 /* ViewExtensions.swift in Sources */,
 				4C38E82C1FF0C0F9000425CD /* RendererLayerContainer.m in Sources */,
 				4C38E7FB1FEE086D000425CD /* DiscoveryWorker.m in Sources */,
 				4CC3C0321FF73A660029EBF5 /* GeneralPrefsPaneVC.m in Sources */,
