@@ -44,6 +44,8 @@ struct SettingsView: View {
                     VideoAndAudioView()
                 } else if selectedPane.title == "Input" {
                     InputView()
+                } else if selectedPane.title == "App" {
+                    AppView()
                 }
             }
             .environmentObject(settingsModel)
@@ -297,6 +299,53 @@ struct InputView: View {
         }
     }
 }
+
+@available(macOS 12.0, *)
+struct AppView: View {
+    @EnvironmentObject private var settingsModel: SettingsModel
+    
+    var body: some View {
+        ScrollView {
+            VStack {
+                FormSection(title: "Behaviour") {
+                    FormCell(title: "Automatically Fullscreen Stream Window", contentWidth: 0, content: {
+                        Toggle(isOn: $settingsModel.autoFullscreen) {
+                            Text("")
+                        }
+                        .toggleStyle(.switch)
+                    })
+
+                    Divider()
+                    
+                    FormCell(title: "Dim Non-Hovered App Artwork", contentWidth: 0, content: {
+                        Toggle(isOn: $settingsModel.dimNonHoveredArtwork) {
+                            Text("")
+                        }
+                        .toggleStyle(.switch)
+                    })
+                }
+                
+                Spacer()
+                    .frame(height: 32)
+
+                FormSection(title: "App Artwork Dimensions") {
+                    FormCell(title: "Artwork Width", contentWidth: 60, content: {
+                        TextField("", value: $settingsModel.appArtworkWidth, format: .number)
+                            .multilineTextAlignment(.trailing)
+                    })
+                    FormCell(title: "Artwork Height", contentWidth: 60, content: {
+                        TextField("", value: $settingsModel.appArtworkHeight, format: .number)
+                            .multilineTextAlignment(.trailing)
+                    })
+                }
+            }
+            
+            Spacer()
+        }
+        .padding()
+    }
+}
+
 
 struct FormSection<Content: View>: View {
     let title: String

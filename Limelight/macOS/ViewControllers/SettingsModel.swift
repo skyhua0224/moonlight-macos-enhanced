@@ -72,12 +72,12 @@ class SettingsModel: ObservableObject {
             saveSettings()
         }
     }
+    
     @Published var autoFullscreen: Bool {
         didSet {
             saveSettings()
         }
     }
-    
     @Published var rumble: Bool {
         didSet {
             saveSettings()
@@ -99,7 +99,17 @@ class SettingsModel: ObservableObject {
             saveSettings()
         }
     }
-    @Published var appArtworkDimensions: CGSize {
+    @Published var appArtworkWidth: Int {
+        didSet {
+            saveSettings()
+        }
+    }
+    @Published var appArtworkHeight: Int {
+        didSet {
+            saveSettings()
+        }
+    }
+    @Published var dimNonHoveredArtwork: Bool {
         didSet {
             saveSettings()
         }
@@ -177,7 +187,9 @@ class SettingsModel: ObservableObject {
             selectedMouseDriver = "HID"
             
             emulateGuide = false
-            appArtworkDimensions = CGSizeMake(600, 900)
+            appArtworkWidth = 600
+            appArtworkHeight = 900
+            dimNonHoveredArtwork = true
         } else {
             selectedResolution = CGSizeMake(1280, 720)
             customResWidth = 0
@@ -202,7 +214,9 @@ class SettingsModel: ObservableObject {
             selectedMouseDriver = "HID"
             
             emulateGuide = false
-            appArtworkDimensions = CGSizeMake(600, 900)
+            appArtworkWidth = 600
+            appArtworkHeight = 900
+            dimNonHoveredArtwork = true
         }
     }
     

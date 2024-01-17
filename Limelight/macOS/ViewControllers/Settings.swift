@@ -27,4 +27,5 @@ struct Settings {
     
     let emulateGuide: Bool
     let appArtworkDimensions: CGSize
+    let dimNonHoveredArtwork: Bool
 }
