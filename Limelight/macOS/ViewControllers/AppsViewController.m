@@ -18,6 +18,8 @@
 #import "ImageFader.h"
 #import "NSView+Moonlight.h"
 
+#import "Moonlight-Swift.h"
+
 #import "F.h"
 
 #import "HttpManager.h"
@@ -786,17 +788,7 @@ static const CGFloat runningAnimationDuration = 1.0;
 }
 
 + (CGSize)getAppCoverArtSize {
-    CGFloat width;
-    CGFloat height;
-    
-    if (usesNewAppCoverArtAspectRatio()) {
-        width = 600;
-        height = 900;
-    } else {
-        width = 300;
-        height = 400;
-    }
-    return CGSizeMake(width, height);
+    return SettingsClass.appArtworkDimensions;
 }
 
 // This function forces immediate decoding of the UIImage, rather
@@ -875,7 +867,3 @@ static const CGFloat runningAnimationDuration = 1.0;
 }
 
 @end
-
-BOOL usesNewAppCoverArtAspectRatio(void) {
-    return [NSUserDefaults.standardUserDefaults boolForKey:@"enableNewAppCoverArtAspectRatio"];
-}

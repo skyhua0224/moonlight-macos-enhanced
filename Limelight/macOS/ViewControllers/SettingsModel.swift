@@ -115,7 +115,7 @@ class SettingsModel: ObservableObject {
         }
     }
 
-    static var resolutions: [CGSize] = [CGSizeMake(640, 360), CGSizeMake(1280, 720), CGSizeMake(1920, 1080), CGSizeMake(2560, 1440), CGSizeMake(3840, 2160), .zero]
+    static var resolutions: [CGSize] = [CGSizeMake(1280, 720), CGSizeMake(1920, 1080), CGSizeMake(2560, 1440), CGSizeMake(3840, 2160), .zero]
     static var fpss: [Int] = [30, 60, 90, 120, 144]
     static var bitrateSteps: [Float] = [
         0.5,
@@ -155,57 +155,65 @@ class SettingsModel: ObservableObject {
     static var mouseDrivers: [String] = ["HID", "MFi"]
 
     init() {
-        if let settings = DataManager().getSettings() {
-            selectedResolution = CGSizeMake(CGFloat(truncating: settings.width), CGFloat(truncating: settings.height))
-            customResWidth = 0
-            customResHeight = 0
-            selectedFps = settings.framerate.intValue
+        if let settings = Settings.getSettings() {
+            selectedResolution = settings.resolution
+            customResWidth = Int(settings.customResolution.width)
+            customResHeight = Int(settings.customResolution.height)
+            selectedFps = settings.fps
             
             var bitrateIndex = 0
             for i in 0..<Self.bitrateSteps.count {
-                if settings.bitrate.floatValue <= Self.bitrateSteps[i] * 1000.0 {
+                if Float(settings.bitrate) <= Self.bitrateSteps[i] * 1000.0 {
                     bitrateIndex = i
                     break
                 }
             }
             bitrateSliderValue = Float(bitrateIndex)
             
-            selectedVideoCodec = Self.getString(from: settings.useHevc, in: Self.videoCodecs)
-            hdr = settings.enableHdr
-            selectedPacingOptions = "Smoothest Video" // Self.getString(from: settings.useFramePacing, in: Self.pacingOptions)
-
-            audioOnPC = settings.playAudioOnPC
-
+            selectedVideoCodec = Self.getString(from: settings.codec, in: Self.videoCodecs)
+            hdr = settings.hdr
+            selectedPacingOptions = Self.getString(from: settings.framePacing, in: Self.pacingOptions)
+            
+            audioOnPC = settings.audioOnPC
+            
             selectedMultiControllerMode = Self.getString(from: settings.multiController, in: Self.multiControllerModes)
-            swapButtons = false // settings.swapABXYButtons
+            swapButtons = settings.swapABXYButtons
             
-            optimize = settings.optimizeGames
+            optimize = settings.optimize
             
-            autoFullscreen = true
-            rumble = true
-            selectedControllerDriver = "HID"
-            selectedMouseDriver = "HID"
+            autoFullscreen = settings.autoFullscreen
+            rumble = settings.rumble
+            selectedControllerDriver = Self.getString(from: settings.controllerDriver, in: Self.controllerDrivers)
+            selectedMouseDriver = Self.getString(from: settings.mouseDriver, in: Self.mouseDrivers)
             
-            emulateGuide = false
-            appArtworkWidth = 600
-            appArtworkHeight = 900
-            dimNonHoveredArtwork = true
+            emulateGuide = settings.emulateGuide
+            appArtworkWidth = Int(settings.appArtworkDimensions.width)
+            appArtworkHeight = Int(settings.appArtworkDimensions.height)
+            dimNonHoveredArtwork = settings.dimNonHoveredArtwork
         } else {
             selectedResolution = CGSizeMake(1280, 720)
             customResWidth = 0
             customResHeight = 0
             selectedFps = 60
-            bitrateSliderValue = 10
-
+            
+            var bitrateIndex = 0
+            for i in 0..<Self.bitrateSteps.count {
+                if 10000.0 <= Self.bitrateSteps[i] * 1000.0 {
+                    bitrateIndex = i
+                    break
+                }
+            }
+            bitrateSliderValue = Float(bitrateIndex)
+            
             selectedVideoCodec = "H.264"
             hdr = false
             selectedPacingOptions = "Smoothest Video"
-
+            
             audioOnPC = false
-
+            
             selectedMultiControllerMode = "Auto"
             swapButtons = false
-
+            
             optimize = false
             
             autoFullscreen = true
@@ -214,24 +222,95 @@ class SettingsModel: ObservableObject {
             selectedMouseDriver = "HID"
             
             emulateGuide = false
-            appArtworkWidth = 600
-            appArtworkHeight = 900
+            appArtworkWidth = 300
+            appArtworkHeight = 400
             dimNonHoveredArtwork = true
-        }
+        }        
     }
     
     func saveSettings() {
+        let customResolution = CGSizeMake(CGFloat(customResWidth), CGFloat(customResHeight))
+        let bitrate = Int(Self.bitrateSteps[Int(bitrateSliderValue)] * 1000)
+        let codec = getInt(from: selectedVideoCodec, in: Self.videoCodecs)
+        let framePacing = getInt(from: selectedPacingOptions, in: Self.pacingOptions)
+        let multiController = getBool(from: selectedMultiControllerMode, in: Self.multiControllerModes)
+        let controllerDriver = getInt(from: selectedControllerDriver, in: Self.controllerDrivers)
+        let mouseDriver = getInt(from: selectedMouseDriver, in: Self.mouseDrivers)
+        let appArtworkDimensions = CGSizeMake(CGFloat(appArtworkWidth), CGFloat(appArtworkHeight))
+
+        let settings = Settings(
+            resolution: selectedResolution,
+            customResolution: customResolution,
+            fps: selectedFps,
+            bitrate: bitrate,
+            codec: codec,
+            hdr: hdr,
+            framePacing: framePacing,
+            audioOnPC: audioOnPC,
+            multiController: multiController,
+            swapABXYButtons: swapButtons,
+            optimize: optimize,
+            autoFullscreen: autoFullscreen,
+            rumble: rumble,
+            controllerDriver: controllerDriver,
+            mouseDriver: mouseDriver,
+            emulateGuide: emulateGuide,
+            appArtworkDimensions: appArtworkDimensions,
+            dimNonHoveredArtwork: dimNonHoveredArtwork
+        )
+        
+        if let data = try? PropertyListEncoder().encode(settings) {
+            UserDefaults.standard.set(data, forKey: "moonlightSettings")
+        }
+        
+        
         let dataMan = DataManager()
         
-        let bitrate = Int(Self.bitrateSteps[Int(bitrateSliderValue)] * 1000)
+        let dataResolutionWidth = selectedResolution == .zero ? customResolution.width : selectedResolution.width
+        let dataResolutionHeight = selectedResolution == .zero ? customResolution.height : selectedResolution.height
+        let dataBitrate = Int(Self.bitrateSteps[Int(bitrateSliderValue)] * 1000)
+        let dataCodec = getBool(from: selectedVideoCodec, in: Self.videoCodecs)
         
-        let multiController = getBool(from: selectedMultiControllerMode, in: Self.multiControllerModes)
-        let hevc = getBool(from: selectedVideoCodec, in: Self.videoCodecs)
-        let framePacing = getBool(from: selectedPacingOptions, in: Self.pacingOptions)
-        
-        dataMan.saveSettings(withBitrate: bitrate, framerate: selectedFps, height: Int(selectedResolution.height), width: Int(selectedResolution.width), onscreenControls: 0, remote: false, optimizeGames: optimize, multiController: multiController, audioOnPC: audioOnPC, useHevc: hevc, enableHdr: hdr, btMouseSupport: false)
+        // TODO: Add this back when VideoDecoderRenderer gets merged, with frame pacing setting check
+        // let dataFramePacing = getBool(from: selectedPacingOptions, in: Self.pacingOptions)
+
+        dataMan.saveSettings(
+            withBitrate: dataBitrate,
+            framerate: selectedFps,
+            height: Int(dataResolutionHeight),
+            width: Int(dataResolutionWidth),
+            onscreenControls: 0,
+            remote: false,
+            optimizeGames: optimize,
+            multiController: multiController,
+            audioOnPC: audioOnPC, 
+            useHevc: dataCodec,
+            enableHdr: hdr,
+            btMouseSupport: false
+        )
     }
-    
+
+    func getInt(from selectedSetting: String, in settingsArray: [String]) -> Int {
+        for (index, setting) in settingsArray.enumerated() {
+            if setting == selectedSetting {
+                return index
+            }
+        }
+        
+        return 0
+    }
+
+    static func getString(from settingInt: Int, in settingsArray: [String]) -> String {
+        var settingString = settingsArray.first!
+        for (index, setting) in settingsArray.enumerated() {
+            if index == settingInt {
+                settingString = setting
+            }
+        }
+        
+        return settingString
+    }
+
     func getBool(from selectedSetting: String, in settingsArray: [String]) -> Bool {
         selectedSetting == settingsArray.last
     }

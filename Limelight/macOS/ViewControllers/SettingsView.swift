@@ -64,6 +64,10 @@ struct SettingsView: View {
         .frame(minWidth: 500)
         .onAppear {
             NSWindow.allowsAutomaticWindowTabbing = false
+
+            if Settings.getSettings() == nil {
+                settingsModel.saveSettings()
+            }
         }
     }
 }
@@ -162,7 +166,7 @@ struct StreamView: View {
                 settingsModel.resolutionChangedCallback = {
                     withAnimation {
                         updateCustomResolutionGroup()
-                        //                    UserDefaults.standard.set(settingsModel.selectedResolution == .zero, forKey: "useCustomRes")
+//                        UserDefaults.standard.set(settingsModel.selectedResolution == .zero, forKey: "useCustomRes")
                     }
                 }
             }

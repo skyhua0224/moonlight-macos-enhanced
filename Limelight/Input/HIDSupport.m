@@ -10,6 +10,8 @@
 #import "Controller.h"
 #import "Ticks.h"
 
+#import "Moonlight-Swift.h"
+
 #include "Limelight.h"
 
 #import <Carbon/Carbon.h>
@@ -1131,11 +1133,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (BOOL)useGCMouse {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"useGCMouseDriver"];
+    return SettingsClass.mouseDriver;
 }
 
 - (NSInteger)controllerDriver {
-    return [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"];
+    return SettingsClass.controllerDriver;
 }
 
 UInt16 usbIdFromDevice(IOHIDDeviceRef device, NSString *key) {

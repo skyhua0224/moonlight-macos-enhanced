@@ -36,10 +36,6 @@ typedef enum : NSUInteger {
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     [self createMainWindow];
     
-    NSURL *defaultPrefsFile = [[NSBundle mainBundle] URLForResource:@"DefaultPreferences" withExtension:@"plist"];
-    NSDictionary *defaultPrefs = [NSDictionary dictionaryWithContentsOfURL:defaultPrefsFile];
-    [[NSUserDefaults standardUserDefaults] registerDefaults:defaultPrefs];
-    
     self.controllerNavigation = [[ControllerNavigation alloc] init];
 }
 

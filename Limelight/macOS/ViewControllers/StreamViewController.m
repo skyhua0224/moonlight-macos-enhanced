@@ -20,6 +20,8 @@
 #import "VideoDecoderRenderer.h"
 #import "HIDSupport.h"
 
+#import "Moonlight-Swift.h"
+
 #include "Limelight.h"
 
 @import VideoToolbox;
@@ -50,7 +52,7 @@
 #pragma mark - Lifecycle
 
 - (BOOL)useSystemControllerDriver {
-    return [[NSUserDefaults standardUserDefaults] integerForKey:@"controllerDriver"] == 1;
+    return SettingsClass.controllerDriver == 1;
 }
 
 - (void)viewDidLoad {
@@ -466,7 +468,7 @@
     streamConfig.allowHevc = streamSettings.useHevc;
     streamConfig.enableHdr = streamSettings.useHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) ? streamSettings.enableHdr : NO;
 
-    streamConfig.multiController = YES;
+    streamConfig.multiController = streamSettings.multiController;
     streamConfig.gamepadMask = self.useSystemControllerDriver ? [ControllerSupport getConnectedGamepadMask:streamConfig] : 1;
     
     streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
@@ -516,7 +518,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
         
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoFullscreen"]) {
+        if (SettingsClass.autoFullscreen) {
             if (!(self.view.window.styleMask & NSWindowStyleMaskFullScreen)) {
                 [self.view.window toggleFullScreen:self];
             }
@@ -541,7 +543,7 @@
 }
 
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"rumbleGamepad"]) {
+    if (SettingsClass.rumble) {
         if (self.hidSupport.shouldSendInputEvents) {
             if (self.controllerSupport != nil) {
                 [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];

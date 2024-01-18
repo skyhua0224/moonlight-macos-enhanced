@@ -11,7 +11,6 @@
 		4C2E24811FF1E99300B6A12E /* HIDSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24801FF1E99300B6A12E /* HIDSupport.m */; };
 		4C2E24871FF3934700B6A12E /* StreamViewMac.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2E24861FF3934700B6A12E /* StreamViewMac.m */; };
 		4C30BA1A1FF5E7DB00848919 /* NSWindow+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */; };
-		4C30BFD91FF9D57F00AD09E6 /* DefaultPreferences.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4C30BFD81FF9D57F00AD09E6 /* DefaultPreferences.plist */; };
 		4C38E7F01FEE00F6000425CD /* Logger.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD1C8E11A8AD71400C6703C /* Logger.m */; };
 		4C38E7F11FEE0101000425CD /* AppAssetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3494219FC9C04002D2A60 /* AppAssetManager.m */; };
 		4C38E7F21FEE0109000425CD /* CryptoManager.m in Sources */ = {isa = PBXBuildFile; fileRef = FB89460619F646E200339C8A /* CryptoManager.m */; };
@@ -122,7 +121,6 @@
 		4C2E24861FF3934700B6A12E /* StreamViewMac.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamViewMac.m; sourceTree = "<group>"; };
 		4C30BA181FF5E7DB00848919 /* NSWindow+Moonlight.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSWindow+Moonlight.h"; sourceTree = "<group>"; };
 		4C30BA191FF5E7DB00848919 /* NSWindow+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSWindow+Moonlight.m"; sourceTree = "<group>"; };
-		4C30BFD81FF9D57F00AD09E6 /* DefaultPreferences.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = DefaultPreferences.plist; sourceTree = "<group>"; };
 		4C38E7F81FEE04E4000425CD /* Limelight-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Limelight-Prefix.pch"; sourceTree = "<group>"; };
 		4C38E80B1FEE13FB000425CD /* HostsViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HostsViewControllerDelegate.h; sourceTree = "<group>"; };
 		4C38E80D1FEE1C81000425CD /* AppsViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppsViewController.h; sourceTree = "<group>"; };
@@ -470,7 +468,6 @@
 				4C7E0A871FECBFFD00684411 /* Info.plist */,
 				4C7E0A881FECBFFD00684411 /* main.m */,
 				4C38E7F81FEE04E4000425CD /* Limelight-Prefix.pch */,
-				4C30BFD81FF9D57F00AD09E6 /* DefaultPreferences.plist */,
 			);
 			path = "Supporting Files";
 			sourceTree = "<group>";
@@ -982,7 +979,6 @@
 				4CDC8E7025E754B2009E66C6 /* MASPreferencesWindow.xib in Resources */,
 				4C65704A23EBE9F4000D1601 /* GeneralPrefsPaneView.xib in Resources */,
 				4C7E0A861FECBFFD00684411 /* Main.storyboard in Resources */,
-				4C30BFD91FF9D57F00AD09E6 /* DefaultPreferences.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
