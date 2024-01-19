@@ -72,6 +72,7 @@ struct SettingsView: View {
     }
 }
 
+@available(macOS 12.0, *)
 struct PaneCellView: View {
     let paneCell: PaneCell
     
@@ -81,6 +82,7 @@ struct PaneCellView: View {
 
         HStack(spacing: 6) {
             Image(systemName: paneCell.symbol)
+                .foregroundStyle(.white)
                 .font(.callout)
                 .frame(width: containerSize, height: containerSize)
                 .padding(1)
