@@ -17,6 +17,8 @@
 #import "Helpers.h"
 #import "NavigatableAlertView.h"
 
+#import "Moonlight-Swift.h"
+
 #import "CryptoManager.h"
 #import "IdManager.h"
 #import "DiscoveryManager.h"
@@ -101,6 +103,8 @@
     
     appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     appsVC.view.frame = self.view.bounds;
+    
+    [SettingsClass loadMoonlightSettingsFor:host.uuid];
     
     [self.parentViewController.view.window makeFirstResponder:nil];
 

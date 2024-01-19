@@ -443,9 +443,11 @@ typedef enum {
 
 SwitchCommonOutputPacket_t switchRumblePacket;
 
-- (instancetype)init {
+- (instancetype)init:(TemporaryHost *)host {
     self = [super init];
     if (self) {
+        self.host = host;
+        
         [self setupHidManager];
         
         self.ticks = [[Ticks alloc] init];

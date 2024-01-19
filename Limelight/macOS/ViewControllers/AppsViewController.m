@@ -103,6 +103,8 @@ const CGFloat scaleBase = 1.125;
     __weak typeof(self) weakSelf = self;
     self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:self.view.window queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateRunningAppState];
+        
+        [SettingsClass loadMoonlightSettingsFor:self.host.uuid];
     }];
 }
 
@@ -224,6 +226,13 @@ const CGFloat scaleBase = 1.125;
     
     item.runningIconContainer.alphaValue = app != self.runningApp ? 0.0 : 1.0;
     item.runningIconContainer.hidden = app != self.runningApp;
+    
+    CGSize appArtworkDimensions = [SettingsClass appArtworkDimensionsFor:app.host.uuid];
+    CGFloat aspectRatio = appArtworkDimensions.width / appArtworkDimensions.height;
+    item.appCoverArt.superview.translatesAutoresizingMaskIntoConstraints = NO;
+    [item.appCoverArt.superview.widthAnchor constraintEqualToAnchor:item.appCoverArt.superview.heightAnchor multiplier:aspectRatio].active = YES;
+
+    [item updateSelectedState:NO];
     
     NSImage *fastCacheImage = [self.boxArtCache objectForKey:app.id];
     if (fastCacheImage != nil) {

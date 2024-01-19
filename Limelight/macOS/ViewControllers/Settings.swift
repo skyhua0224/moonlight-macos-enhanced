@@ -32,7 +32,7 @@ struct Settings: Encodable, Decodable {
     let dimNonHoveredArtwork: Bool
     
     static func getSettings(for key: String) -> Self? {
-        if let data = UserDefaults.standard.data(forKey: key) {
+        if let data = UserDefaults.standard.data(forKey: SettingsClass.profileKey(for: key) ) {
             if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
                 return settings
             }
@@ -43,8 +43,14 @@ struct Settings: Encodable, Decodable {
 }
 
 class SettingsClass: NSObject {
+    static func profileKey(for hostId: String) -> String {
+        let profileKey = "\(hostId)-moonlightSettings"
+        
+        return profileKey
+    }
+
     @objc static func getSettings(for key: String) -> [String: Any]? {
-        if let data = UserDefaults.standard.data(forKey: key) {
+        if let data = UserDefaults.standard.data(forKey: SettingsClass.profileKey(for: key)) {
             if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
                 let objcSettings : [String:Any] = [
                     "resolution": settings.resolution,
@@ -73,6 +79,36 @@ class SettingsClass: NSObject {
         }
         
         return nil
+    }
+    
+    @objc static func loadMoonlightSettings(for key: String) {
+        if let settings = Settings.getSettings(for: key) {
+            let dataMan = DataManager()
+            
+            let dataResolutionWidth = settings.resolution == .zero ? settings.customResolution.width : settings.resolution.width
+            let dataResolutionHeight = settings.resolution == .zero ? settings.customResolution.height : settings.resolution.height
+            let dataFps = settings.fps == .zero ? settings.customFps : settings.fps
+            let dataBitrate = settings.bitrate
+            let dataCodec = SettingsModel.getBool(from: settings.codec, in: SettingsModel.videoCodecs)
+            
+            // TODO: Add this back when VideoDecoderRenderer gets merged, with frame pacing setting check
+//            let dataFramePacing = SettingsModel.getBool(from: settings.framePacing, in: SettingsModel.pacingOptions)
+            
+            dataMan.saveSettings(
+                withBitrate: dataBitrate,
+                framerate: dataFps,
+                height: Int(dataResolutionHeight),
+                width: Int(dataResolutionWidth),
+                onscreenControls: 0,
+                remote: false,
+                optimizeGames: settings.optimize,
+                multiController: settings.multiController,
+                audioOnPC: settings.audioOnPC,
+                useHevc: dataCodec,
+                enableHdr: settings.hdr,
+                btMouseSupport: false
+            )
+        }
     }
     
     @objc static func autoFullscreen(for key: String) -> Bool {

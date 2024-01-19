@@ -13,6 +13,8 @@
 @property (atomic) BOOL shouldSendInputEvents;
 @property (atomic) TemporaryHost *host;
 
+- (instancetype)init:(TemporaryHost *)host;
+
 - (void)flagsChanged:(NSEvent *)event;
 - (void)keyDown:(NSEvent *)event;
 - (void)keyUp:(NSEvent *)event;

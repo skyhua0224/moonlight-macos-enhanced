@@ -27,12 +27,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
-    CGSize appArtworkDimensions = [SettingsClass appArtworkDimensionsFor:self.app.host.uuid];
-    CGFloat aspectRatio = appArtworkDimensions.width / appArtworkDimensions.height;
-    self.appCoverArt.superview.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.appCoverArt.superview.widthAnchor constraintEqualToAnchor:self.appCoverArt.superview.heightAnchor multiplier:aspectRatio].active = YES;
-    
+        
     self.runningIconContainer.wantsLayer = YES;
     self.runningIconContainer.layer.masksToBounds = YES;
     self.runningIconContainer.layer.cornerRadius = self.runningIconContainer.bounds.size.width / 2;
@@ -55,8 +50,6 @@
     self.appNameContainer.layer.cornerRadius = 4;
 
     ((AppCellView *)self.view).delegate = self;
-    
-    [self updateSelectedState:NO];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {

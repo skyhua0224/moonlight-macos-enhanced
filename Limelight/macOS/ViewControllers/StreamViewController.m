@@ -478,8 +478,7 @@
             self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig presenceDelegate:self];
         }
     }
-    self.hidSupport = [[HIDSupport alloc] init];
-    self.hidSupport.host = self.app.host;
+    self.hidSupport = [[HIDSupport alloc] init:self.app.host];
     
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];

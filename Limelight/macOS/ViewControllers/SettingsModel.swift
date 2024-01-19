@@ -28,12 +28,6 @@ class SettingsModel: ObservableObject {
         return nil
     }()
     
-    static func profileKey(for hostId: String) -> String {
-        let profileKey = "\(hostId)-moonlightSettings"
-        
-        return profileKey
-    }
-
     @Published var selectedHost: Host? {
         didSet {
             if selectedHost != nil {
@@ -311,7 +305,7 @@ class SettingsModel: ObservableObject {
     
     func loadSettings() {
         if let selectedHost {
-            if let settings = Settings.getSettings(for: Self.profileKey(for: selectedHost.id)) {
+            if let settings = Settings.getSettings(for: selectedHost.id) {
                 selectedResolution = settings.resolution
                 customResWidth = Int(settings.customResolution.width)
                 customResHeight = Int(settings.customResolution.height)
@@ -358,11 +352,11 @@ class SettingsModel: ObservableObject {
     func saveSettings() {
         let customResolution = CGSizeMake(CGFloat(customResWidth), CGFloat(customResHeight))
         let bitrate = Int(Self.bitrateSteps[Int(bitrateSliderValue)] * 1000)
-        let codec = getInt(from: selectedVideoCodec, in: Self.videoCodecs)
-        let framePacing = getInt(from: selectedPacingOptions, in: Self.pacingOptions)
-        let multiController = getBool(from: selectedMultiControllerMode, in: Self.multiControllerModes)
-        let controllerDriver = getInt(from: selectedControllerDriver, in: Self.controllerDrivers)
-        let mouseDriver = getInt(from: selectedMouseDriver, in: Self.mouseDrivers)
+        let codec = Self.getInt(from: selectedVideoCodec, in: Self.videoCodecs)
+        let framePacing = Self.getInt(from: selectedPacingOptions, in: Self.pacingOptions)
+        let multiController = Self.getBool(from: selectedMultiControllerMode, in: Self.multiControllerModes)
+        let controllerDriver = Self.getInt(from: selectedControllerDriver, in: Self.controllerDrivers)
+        let mouseDriver = Self.getInt(from: selectedMouseDriver, in: Self.mouseDrivers)
         let appArtworkDimensions = CGSizeMake(CGFloat(appArtworkWidth), CGFloat(appArtworkHeight))
 
         let settings = Settings(
@@ -389,39 +383,12 @@ class SettingsModel: ObservableObject {
         
         if let data = try? PropertyListEncoder().encode(settings) {
             if let selectedHost {
-                UserDefaults.standard.set(data, forKey: Self.profileKey(for: selectedHost.id))
+                UserDefaults.standard.set(data, forKey: SettingsClass.profileKey(for: selectedHost.id))
             }
         }
-        
-        
-        let dataMan = DataManager()
-        
-        let dataResolutionWidth = selectedResolution == .zero ? customResolution.width : selectedResolution.width
-        let dataResolutionHeight = selectedResolution == .zero ? customResolution.height : selectedResolution.height
-        let dataFps = selectedFps == .zero ? customFps : selectedFps
-        let dataBitrate = Int(Self.bitrateSteps[Int(bitrateSliderValue)] * 1000)
-        let dataCodec = getBool(from: selectedVideoCodec, in: Self.videoCodecs)
-        
-        // TODO: Add this back when VideoDecoderRenderer gets merged, with frame pacing setting check
-        // let dataFramePacing = getBool(from: selectedPacingOptions, in: Self.pacingOptions)
-
-        dataMan.saveSettings(
-            withBitrate: dataBitrate,
-            framerate: dataFps,
-            height: Int(dataResolutionHeight),
-            width: Int(dataResolutionWidth),
-            onscreenControls: 0,
-            remote: false,
-            optimizeGames: optimize,
-            multiController: multiController,
-            audioOnPC: audioOnPC, 
-            useHevc: dataCodec,
-            enableHdr: hdr,
-            btMouseSupport: false
-        )
     }
-
-    func getInt(from selectedSetting: String, in settingsArray: [String]) -> Int {
+    
+    static func getInt(from selectedSetting: String, in settingsArray: [String]) -> Int {
         for (index, setting) in settingsArray.enumerated() {
             if setting == selectedSetting {
                 return index
@@ -442,7 +409,22 @@ class SettingsModel: ObservableObject {
         return settingString
     }
 
-    func getBool(from selectedSetting: String, in settingsArray: [String]) -> Bool {
+    static func getBool(from settingInt: Int, in settingsArray: [String]) -> Bool {
+        guard settingsArray.count == 2 || settingInt <= 1 else {
+            return false
+        }
+        
+        var settingBool = false
+        for (index, _) in settingsArray.enumerated() {
+            if index == settingInt {
+                settingBool = index == 1
+            }
+        }
+        
+        return settingBool
+    }
+
+    static func getBool(from selectedSetting: String, in settingsArray: [String]) -> Bool {
         selectedSetting == settingsArray.last
     }
     
