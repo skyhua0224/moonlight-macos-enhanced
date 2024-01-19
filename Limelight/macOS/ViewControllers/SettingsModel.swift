@@ -10,7 +10,8 @@ import SwiftUI
 
 class SettingsModel: ObservableObject {
     var resolutionChangedCallback: (() -> Void)?
-    
+    var fpsChangedCallback: (() -> Void)?
+
     @Published var selectedResolution: CGSize {
         didSet {
             saveSettings()
@@ -18,6 +19,12 @@ class SettingsModel: ObservableObject {
         }
     }
     @Published var selectedFps: Int {
+        didSet {
+            saveSettings()
+            fpsChangedCallback?()
+        }
+    }
+    @Published var customFps: Int {
         didSet {
             saveSettings()
         }
@@ -116,7 +123,7 @@ class SettingsModel: ObservableObject {
     }
 
     static var resolutions: [CGSize] = [CGSizeMake(1280, 720), CGSizeMake(1920, 1080), CGSizeMake(2560, 1440), CGSizeMake(3840, 2160), .zero]
-    static var fpss: [Int] = [30, 60, 90, 120, 144]
+    static var fpss: [Int] = [30, 60, 90, 120, 144, .zero]
     static var bitrateSteps: [Float] = [
         0.5,
         1,
@@ -160,6 +167,7 @@ class SettingsModel: ObservableObject {
             customResWidth = Int(settings.customResolution.width)
             customResHeight = Int(settings.customResolution.height)
             selectedFps = settings.fps
+            customFps = settings.customFps
             
             var bitrateIndex = 0
             for i in 0..<Self.bitrateSteps.count {
@@ -195,6 +203,7 @@ class SettingsModel: ObservableObject {
             customResWidth = 0
             customResHeight = 0
             selectedFps = 60
+            customFps = 0
             
             var bitrateIndex = 0
             for i in 0..<Self.bitrateSteps.count {
@@ -242,6 +251,7 @@ class SettingsModel: ObservableObject {
             resolution: selectedResolution,
             customResolution: customResolution,
             fps: selectedFps,
+            customFps: customFps,
             bitrate: bitrate,
             codec: codec,
             hdr: hdr,
@@ -268,6 +278,7 @@ class SettingsModel: ObservableObject {
         
         let dataResolutionWidth = selectedResolution == .zero ? customResolution.width : selectedResolution.width
         let dataResolutionHeight = selectedResolution == .zero ? customResolution.height : selectedResolution.height
+        let dataFps = selectedFps == .zero ? customFps : selectedFps
         let dataBitrate = Int(Self.bitrateSteps[Int(bitrateSliderValue)] * 1000)
         let dataCodec = getBool(from: selectedVideoCodec, in: Self.videoCodecs)
         
@@ -276,7 +287,7 @@ class SettingsModel: ObservableObject {
 
         dataMan.saveSettings(
             withBitrate: dataBitrate,
-            framerate: selectedFps,
+            framerate: dataFps,
             height: Int(dataResolutionHeight),
             width: Int(dataResolutionWidth),
             onscreenControls: 0,

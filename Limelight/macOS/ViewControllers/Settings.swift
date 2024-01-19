@@ -12,6 +12,7 @@ struct Settings: Encodable, Decodable {
     let resolution: CGSize
     let customResolution: CGSize
     let fps: Int
+    let customFps: Int
     let bitrate: Int
     let codec: Int
     let hdr: Bool
@@ -49,6 +50,7 @@ class SettingsClass: NSObject {
                     "resolution": settings.resolution,
                     "customResolution": settings.customResolution,
                     "fps": settings.fps,
+                    "customFps": settings.customFps,
                     "bitrate": settings.bitrate,
                     "codec": settings.codec,
                     "hdr": settings.hdr,

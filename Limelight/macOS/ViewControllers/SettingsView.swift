@@ -101,7 +101,8 @@ struct StreamView: View {
     @EnvironmentObject private var settingsModel: SettingsModel
     
     @SwiftUI.State private var showCustomResolutionGroup = false
-    
+    @SwiftUI.State private var showCustomFpsGroup = false
+
     var body: some View {
         ScrollView {
             VStack {
@@ -136,10 +137,23 @@ struct StreamView: View {
                     FormCell(title: "FPS", contentWidth: 100, content: {
                         Picker("", selection: $settingsModel.selectedFps) {
                             ForEach(SettingsModel.fpss, id: \.self) { fps in
-                                Text("\(fps)")
+                                if fps == .zero {
+                                    Text("Custom")
+                                } else {
+                                    Text("\(fps)")
+                                }
                             }
                         }
                     })
+                    
+                    if showCustomFpsGroup {
+                        Divider()
+                        
+                        FormCell(title: "Custom FPS", contentWidth: 60, content: {
+                            TextField("", value: $settingsModel.customFps, format: .number)
+                                .multilineTextAlignment(.trailing)
+                        })
+                    }
                 }
                 
                 Spacer()
@@ -163,12 +177,20 @@ struct StreamView: View {
                 func updateCustomResolutionGroup() {
                     showCustomResolutionGroup = settingsModel.selectedResolution == .zero
                 }
-                
+                func updateCustomFpsGroup() {
+                    showCustomFpsGroup = settingsModel.selectedFps == .zero
+                }
+
                 updateCustomResolutionGroup()
+                updateCustomFpsGroup()
                 settingsModel.resolutionChangedCallback = {
                     withAnimation {
                         updateCustomResolutionGroup()
-//                        UserDefaults.standard.set(settingsModel.selectedResolution == .zero, forKey: "useCustomRes")
+                    }
+                }
+                settingsModel.fpsChangedCallback = {
+                    withAnimation {
+                        updateCustomFpsGroup()
                     }
                 }
             }
