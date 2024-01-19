@@ -8,7 +8,32 @@
 
 import SwiftUI
 
+struct Host: Identifiable, Hashable {
+    let id: String
+    let name: String
+}
+
 class SettingsModel: ObservableObject {
+    static var hosts: [Host?] = {
+        let dataMan = DataManager()
+        if let tempHosts = dataMan.getHosts() as? [TemporaryHost] {
+            let hosts = tempHosts.map { host in
+                Host(id: host.uuid, name: host.name)
+            }
+            
+            return hosts
+        }
+        
+        
+        return []
+    }()
+
+    @Published var selectedHost: Host? {
+        didSet {
+            UserDefaults.standard.set(selectedHost?.id, forKey: "selectedSettingsProfile")
+        }
+    }
+
     var resolutionChangedCallback: (() -> Void)?
     var fpsChangedCallback: (() -> Void)?
 
@@ -162,6 +187,18 @@ class SettingsModel: ObservableObject {
     static var mouseDrivers: [String] = ["HID", "MFi"]
 
     init() {
+        if let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile") {
+            for (_, host) in Self.hosts.enumerated() {
+                if let host {
+                    if host.id == selectedProfile {
+                        selectedHost = host
+                    }
+                }
+            }
+        } else {
+            selectedHost = Self.hosts.first!
+        }
+        
         if let settings = Settings.getSettings() {
             selectedResolution = settings.resolution
             customResWidth = Int(settings.customResolution.width)

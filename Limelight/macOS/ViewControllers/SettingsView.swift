@@ -26,7 +26,7 @@ struct SettingsView: View {
     @StateObject var settingsModel = SettingsModel()
 
     @SwiftUI.State private var selectedPane = panes.first!
-    
+
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedPane) {
@@ -57,6 +57,22 @@ struct SettingsView: View {
                         NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
                     } label: {
                         Image(systemName: "sidebar.left")
+                    }
+                }
+                
+                if !SettingsModel.hosts.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        HStack {
+                            Text("Profile:")
+                            
+                            Picker("", selection: $settingsModel.selectedHost) {
+                                ForEach(SettingsModel.hosts, id: \.self) { host in
+                                    if let host {
+                                        Text(host.name)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
