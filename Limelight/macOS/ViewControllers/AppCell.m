@@ -28,7 +28,8 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    CGFloat aspectRatio = [AppsViewController getAppCoverArtSize].width / [AppsViewController getAppCoverArtSize].height;
+    CGSize appArtworkDimensions = [SettingsClass appArtworkDimensionsFor:self.app.host.uuid];
+    CGFloat aspectRatio = appArtworkDimensions.width / appArtworkDimensions.height;
     self.appCoverArt.superview.translatesAutoresizingMaskIntoConstraints = NO;
     [self.appCoverArt.superview.widthAnchor constraintEqualToAnchor:self.appCoverArt.superview.heightAnchor multiplier:aspectRatio].active = YES;
     
@@ -130,7 +131,7 @@
 }
 
 - (CGFloat)appCoverArtAlphaWithHovered:(BOOL)hovered {
-    if (SettingsClass.dimNonHoveredArtwork) {
+    if ([SettingsClass dimNonHoveredArtworkFor:self.app.host.uuid]) {
         if (self.app.hidden) {
             return 0.33;
         }

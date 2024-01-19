@@ -31,8 +31,8 @@ struct Settings: Encodable, Decodable {
     let appArtworkDimensions: CGSize
     let dimNonHoveredArtwork: Bool
     
-    static func getSettings() -> Self? {
-        if let data = UserDefaults.standard.data(forKey: "moonlightSettings") {
+    static func getSettings(for key: String) -> Self? {
+        if let data = UserDefaults.standard.data(forKey: key) {
             if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
                 return settings
             }
@@ -43,8 +43,8 @@ struct Settings: Encodable, Decodable {
 }
 
 class SettingsClass: NSObject {
-    @objc static func getSettings() -> [String: Any]? {
-        if let data = UserDefaults.standard.data(forKey: "moonlightSettings") {
+    @objc static func getSettings(for key: String) -> [String: Any]? {
+        if let data = UserDefaults.standard.data(forKey: key) {
             if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
                 let objcSettings : [String:Any] = [
                     "resolution": settings.resolution,
@@ -75,48 +75,48 @@ class SettingsClass: NSObject {
         return nil
     }
     
-    @objc static func autoFullscreen() -> Bool {
-        if let settings = Settings.getSettings() {
+    @objc static func autoFullscreen(for key: String) -> Bool {
+        if let settings = Settings.getSettings(for: key) {
             return settings.autoFullscreen
         }
         
         return true
     }
     
-    @objc static func rumble() -> Bool {
-        if let settings = Settings.getSettings() {
+    @objc static func rumble(for key: String) -> Bool {
+        if let settings = Settings.getSettings(for: key) {
             return settings.rumble
         }
         
         return true
     }
     
-    @objc static func controllerDriver() -> Int {
-        if let settings = Settings.getSettings() {
+    @objc static func controllerDriver(for key: String) -> Int {
+        if let settings = Settings.getSettings(for: key) {
             return settings.controllerDriver
         }
         
         return 0
     }
     
-    @objc static func mouseDriver() -> Int {
-        if let settings = Settings.getSettings() {
+    @objc static func mouseDriver(for key: String) -> Int {
+        if let settings = Settings.getSettings(for: key) {
             return settings.mouseDriver
         }
         
         return 0
     }
     
-    @objc static func appArtworkDimensions() -> CGSize {
-        if let settings = Settings.getSettings() {
+    @objc static func appArtworkDimensions(for key: String) -> CGSize {
+        if let settings = Settings.getSettings(for: key) {
             return settings.appArtworkDimensions
         }
         
         return CGSizeMake(300, 400)
     }
     
-    @objc static func dimNonHoveredArtwork() -> Bool {
-        if let settings = Settings.getSettings() {
+    @objc static func dimNonHoveredArtwork(for key: String) -> Bool {
+        if let settings = Settings.getSettings(for: key) {
             return settings.dimNonHoveredArtwork
         }
         

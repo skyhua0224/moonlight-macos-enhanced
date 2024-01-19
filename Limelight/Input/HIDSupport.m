@@ -1133,11 +1133,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (BOOL)useGCMouse {
-    return SettingsClass.mouseDriver;
+    return [SettingsClass mouseDriverFor:self.host.uuid];
 }
 
 - (NSInteger)controllerDriver {
-    return SettingsClass.controllerDriver;
+    return [SettingsClass controllerDriverFor:self.host.uuid];
 }
 
 UInt16 usbIdFromDevice(IOHIDDeviceRef device, NSString *key) {

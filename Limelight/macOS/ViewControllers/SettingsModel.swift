@@ -14,7 +14,7 @@ struct Host: Identifiable, Hashable {
 }
 
 class SettingsModel: ObservableObject {
-    static var hosts: [Host?] = {
+    static var hosts: [Host?]? = {
         let dataMan = DataManager()
         if let tempHosts = dataMan.getHosts() as? [TemporaryHost] {
             let hosts = tempHosts.map { host in
@@ -25,12 +25,21 @@ class SettingsModel: ObservableObject {
         }
         
         
-        return []
+        return nil
     }()
+    
+    static func profileKey(for hostId: String) -> String {
+        let profileKey = "\(hostId)-moonlightSettings"
+        
+        return profileKey
+    }
 
     @Published var selectedHost: Host? {
         didSet {
-            UserDefaults.standard.set(selectedHost?.id, forKey: "selectedSettingsProfile")
+            if selectedHost != nil {
+                UserDefaults.standard.set(selectedHost?.id, forKey: "selectedSettingsProfile")
+                loadSettings()
+            }
         }
     }
 
@@ -187,91 +196,146 @@ class SettingsModel: ObservableObject {
     static var mouseDrivers: [String] = ["HID", "MFi"]
 
     init() {
-        if let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile") {
-            for (_, host) in Self.hosts.enumerated() {
-                if let host {
-                    if host.id == selectedProfile {
-                        selectedHost = host
+        if let hosts = Self.hosts {
+            if let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile") {
+                for (_, host) in hosts.enumerated() {
+                    if let host {
+                        if host.id == selectedProfile {
+                            selectedHost = host
+                        }
                     }
                 }
+            } else {
+                if let firstHost = hosts.first {
+                    selectedHost = firstHost
+                }
             }
-        } else {
-            selectedHost = Self.hosts.first!
         }
         
-        if let settings = Settings.getSettings() {
-            selectedResolution = settings.resolution
-            customResWidth = Int(settings.customResolution.width)
-            customResHeight = Int(settings.customResolution.height)
-            selectedFps = settings.fps
-            customFps = settings.customFps
-            
-            var bitrateIndex = 0
-            for i in 0..<Self.bitrateSteps.count {
-                if Float(settings.bitrate) <= Self.bitrateSteps[i] * 1000.0 {
-                    bitrateIndex = i
-                    break
-                }
+        selectedResolution = CGSizeMake(1280, 720)
+        customResWidth = 0
+        customResHeight = 0
+        selectedFps = 60
+        customFps = 0
+        
+        var bitrateIndex = 0
+        for i in 0..<Self.bitrateSteps.count {
+            if 10000.0 <= Self.bitrateSteps[i] * 1000.0 {
+                bitrateIndex = i
+                break
             }
-            bitrateSliderValue = Float(bitrateIndex)
-            
-            selectedVideoCodec = Self.getString(from: settings.codec, in: Self.videoCodecs)
-            hdr = settings.hdr
-            selectedPacingOptions = Self.getString(from: settings.framePacing, in: Self.pacingOptions)
-            
-            audioOnPC = settings.audioOnPC
-            
-            selectedMultiControllerMode = Self.getString(from: settings.multiController, in: Self.multiControllerModes)
-            swapButtons = settings.swapABXYButtons
-            
-            optimize = settings.optimize
-            
-            autoFullscreen = settings.autoFullscreen
-            rumble = settings.rumble
-            selectedControllerDriver = Self.getString(from: settings.controllerDriver, in: Self.controllerDrivers)
-            selectedMouseDriver = Self.getString(from: settings.mouseDriver, in: Self.mouseDrivers)
-            
-            emulateGuide = settings.emulateGuide
-            appArtworkWidth = Int(settings.appArtworkDimensions.width)
-            appArtworkHeight = Int(settings.appArtworkDimensions.height)
-            dimNonHoveredArtwork = settings.dimNonHoveredArtwork
+        }
+        bitrateSliderValue = Float(bitrateIndex)
+        
+        selectedVideoCodec = "H.264"
+        hdr = false
+        selectedPacingOptions = "Smoothest Video"
+        
+        audioOnPC = false
+        
+        selectedMultiControllerMode = "Auto"
+        swapButtons = false
+        
+        optimize = false
+        
+        autoFullscreen = true
+        rumble = true
+        selectedControllerDriver = "HID"
+        selectedMouseDriver = "HID"
+        
+        emulateGuide = false
+        appArtworkWidth = 300
+        appArtworkHeight = 400
+        dimNonHoveredArtwork = true
+    }
+    
+    func loadDefaultSettings() {
+        selectedResolution = CGSizeMake(1280, 720)
+        customResWidth = 0
+        customResHeight = 0
+        selectedFps = 60
+        customFps = 0
+        
+        var bitrateIndex = 0
+        for i in 0..<Self.bitrateSteps.count {
+            if 10000.0 <= Self.bitrateSteps[i] * 1000.0 {
+                bitrateIndex = i
+                break
+            }
+        }
+        bitrateSliderValue = Float(bitrateIndex)
+        
+        selectedVideoCodec = "H.264"
+        hdr = false
+        selectedPacingOptions = "Smoothest Video"
+        
+        audioOnPC = false
+        
+        selectedMultiControllerMode = "Auto"
+        swapButtons = false
+        
+        optimize = false
+        
+        autoFullscreen = true
+        rumble = true
+        selectedControllerDriver = "HID"
+        selectedMouseDriver = "HID"
+        
+        emulateGuide = false
+        appArtworkWidth = 300
+        appArtworkHeight = 400
+        dimNonHoveredArtwork = true
+    }
+    
+    func loadAndSaveDefaultSettings() {
+        loadDefaultSettings()
+        saveSettings()
+    }
+    
+    func loadSettings() {
+        if let selectedHost {
+            if let settings = Settings.getSettings(for: Self.profileKey(for: selectedHost.id)) {
+                selectedResolution = settings.resolution
+                customResWidth = Int(settings.customResolution.width)
+                customResHeight = Int(settings.customResolution.height)
+                selectedFps = settings.fps
+                customFps = settings.customFps
+                
+                var bitrateIndex = 0
+                for i in 0..<Self.bitrateSteps.count {
+                    if Float(settings.bitrate) <= Self.bitrateSteps[i] * 1000.0 {
+                        bitrateIndex = i
+                        break
+                    }
+                }
+                bitrateSliderValue = Float(bitrateIndex)
+                
+                selectedVideoCodec = Self.getString(from: settings.codec, in: Self.videoCodecs)
+                hdr = settings.hdr
+                selectedPacingOptions = Self.getString(from: settings.framePacing, in: Self.pacingOptions)
+                
+                audioOnPC = settings.audioOnPC
+                
+                selectedMultiControllerMode = Self.getString(from: settings.multiController, in: Self.multiControllerModes)
+                swapButtons = settings.swapABXYButtons
+                
+                optimize = settings.optimize
+                
+                autoFullscreen = settings.autoFullscreen
+                rumble = settings.rumble
+                selectedControllerDriver = Self.getString(from: settings.controllerDriver, in: Self.controllerDrivers)
+                selectedMouseDriver = Self.getString(from: settings.mouseDriver, in: Self.mouseDrivers)
+                
+                emulateGuide = settings.emulateGuide
+                appArtworkWidth = Int(settings.appArtworkDimensions.width)
+                appArtworkHeight = Int(settings.appArtworkDimensions.height)
+                dimNonHoveredArtwork = settings.dimNonHoveredArtwork
+            } else {
+                loadAndSaveDefaultSettings()
+            }
         } else {
-            selectedResolution = CGSizeMake(1280, 720)
-            customResWidth = 0
-            customResHeight = 0
-            selectedFps = 60
-            customFps = 0
-            
-            var bitrateIndex = 0
-            for i in 0..<Self.bitrateSteps.count {
-                if 10000.0 <= Self.bitrateSteps[i] * 1000.0 {
-                    bitrateIndex = i
-                    break
-                }
-            }
-            bitrateSliderValue = Float(bitrateIndex)
-            
-            selectedVideoCodec = "H.264"
-            hdr = false
-            selectedPacingOptions = "Smoothest Video"
-            
-            audioOnPC = false
-            
-            selectedMultiControllerMode = "Auto"
-            swapButtons = false
-            
-            optimize = false
-            
-            autoFullscreen = true
-            rumble = true
-            selectedControllerDriver = "HID"
-            selectedMouseDriver = "HID"
-            
-            emulateGuide = false
-            appArtworkWidth = 300
-            appArtworkHeight = 400
-            dimNonHoveredArtwork = true
-        }        
+            loadAndSaveDefaultSettings()
+        }
     }
     
     func saveSettings() {
@@ -307,7 +371,9 @@ class SettingsModel: ObservableObject {
         )
         
         if let data = try? PropertyListEncoder().encode(settings) {
-            UserDefaults.standard.set(data, forKey: "moonlightSettings")
+            if let selectedHost {
+                UserDefaults.standard.set(data, forKey: Self.profileKey(for: selectedHost.id))
+            }
         }
         
         

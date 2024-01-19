@@ -19,8 +19,6 @@
 @property (nonatomic, strong) HostsViewController *hostsVC;
 @property (weak) IBOutlet CollectionView *collectionView;
 
-+ (CGSize)getAppCoverArtSize;
-
 @end
 
 extern BOOL usesNewAppCoverArtAspectRatio(void);

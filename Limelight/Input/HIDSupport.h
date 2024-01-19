@@ -7,9 +7,11 @@
 //
 
 #import <Foundation/Foundation.h>
+#import "TemporaryHost.h"
 
 @interface HIDSupport : NSObject
 @property (atomic) BOOL shouldSendInputEvents;
+@property (atomic) TemporaryHost *host;
 
 - (void)flagsChanged:(NSEvent *)event;
 - (void)keyDown:(NSEvent *)event;

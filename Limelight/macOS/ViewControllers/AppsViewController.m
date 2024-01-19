@@ -787,10 +787,6 @@ static const CGFloat runningAnimationDuration = 1.0;
     });
 }
 
-+ (CGSize)getAppCoverArtSize {
-    return SettingsClass.appArtworkDimensions;
-}
-
 // This function forces immediate decoding of the UIImage, rather
 // than the default lazy decoding that results in janky scrolling.
 + (OSImage *)loadBoxArtForCaching:(TemporaryApp *)app {
@@ -808,8 +804,9 @@ static const CGFloat runningAnimationDuration = 1.0;
     size_t width = CGImageGetWidth(cgImage);
     size_t height = CGImageGetHeight(cgImage);
     
-    CGFloat targetWidth = [self getAppCoverArtSize].width;
-    CGFloat targetHeight = [self getAppCoverArtSize].height;
+    CGSize appArtworkDimensions = [SettingsClass appArtworkDimensionsFor:app.host.uuid];
+    CGFloat targetWidth = appArtworkDimensions.width;
+    CGFloat targetHeight = appArtworkDimensions.height;
     CGFloat targetAspect = targetWidth / targetHeight;
     CGFloat drawAspect = (CGFloat)width / (CGFloat)height;
     

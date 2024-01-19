@@ -52,7 +52,7 @@
 #pragma mark - Lifecycle
 
 - (BOOL)useSystemControllerDriver {
-    return SettingsClass.controllerDriver == 1;
+    return [SettingsClass controllerDriverFor:self.app.host.uuid] == 1;
 }
 
 - (void)viewDidLoad {
@@ -479,6 +479,7 @@
         }
     }
     self.hidSupport = [[HIDSupport alloc] init];
+    self.hidSupport.host = self.app.host;
     
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
@@ -518,7 +519,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
         
-        if (SettingsClass.autoFullscreen) {
+        if ([SettingsClass autoFullscreenFor:self.app.host.uuid]) {
             if (!(self.view.window.styleMask & NSWindowStyleMaskFullScreen)) {
                 [self.view.window toggleFullScreen:self];
             }
@@ -543,7 +544,7 @@
 }
 
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
-    if (SettingsClass.rumble) {
+    if ([SettingsClass rumbleFor:self.app.host.uuid]) {
         if (self.hidSupport.shouldSendInputEvents) {
             if (self.controllerSupport != nil) {
                 [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];

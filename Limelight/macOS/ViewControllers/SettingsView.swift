@@ -60,13 +60,13 @@ struct SettingsView: View {
                     }
                 }
                 
-                if !SettingsModel.hosts.isEmpty {
+                if let hosts = SettingsModel.hosts {
                     ToolbarItem(placement: .primaryAction) {
                         HStack {
                             Text("Profile:")
                             
                             Picker("", selection: $settingsModel.selectedHost) {
-                                ForEach(SettingsModel.hosts, id: \.self) { host in
+                                ForEach(hosts, id: \.self) { host in
                                     if let host {
                                         Text(host.name)
                                     }
@@ -80,10 +80,8 @@ struct SettingsView: View {
         .frame(minWidth: 500)
         .onAppear {
             NSWindow.allowsAutomaticWindowTabbing = false
-
-            if Settings.getSettings() == nil {
-                settingsModel.saveSettings()
-            }
+            
+            settingsModel.loadSettings()
         }
     }
 }
