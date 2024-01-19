@@ -112,4 +112,12 @@ class SettingsClass: NSObject {
         
         return CGSizeMake(300, 400)
     }
+    
+    @objc static func dimNonHoveredArtwork() -> Bool {
+        if let settings = Settings.getSettings() {
+            return settings.dimNonHoveredArtwork
+        }
+        
+        return true
+    }
 }

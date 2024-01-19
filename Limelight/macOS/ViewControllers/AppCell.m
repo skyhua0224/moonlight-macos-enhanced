@@ -12,6 +12,8 @@
 #import "NSView+Moonlight.h"
 #import "AppsViewController.h"
 
+#import "Moonlight-Swift.h"
+
 #import <QuartzCore/QuartzCore.h>
 
 @interface AppCell () <NSMenuDelegate>
@@ -128,17 +130,21 @@
 }
 
 - (CGFloat)appCoverArtAlphaWithHovered:(BOOL)hovered {
-    if (self.app.hidden) {
-        return 0.33;
-    }
-    if (self.selected) {
-        return 1;
-    } else {
-        if (hovered) {
-            return [NSApplication moonlight_isDarkAppearance] ? 1 : 1;
-        } else {
-            return [NSApplication moonlight_isDarkAppearance] ? 0.85 : 0.925;
+    if (SettingsClass.dimNonHoveredArtwork) {
+        if (self.app.hidden) {
+            return 0.33;
         }
+        if (self.selected) {
+            return 1;
+        } else {
+            if (hovered) {
+                return [NSApplication moonlight_isDarkAppearance] ? 1 : 1;
+            } else {
+                return [NSApplication moonlight_isDarkAppearance] ? 0.85 : 0.925;
+            }
+        }
+    } else {
+        return 1;
     }
 }
 
