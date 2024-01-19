@@ -61,6 +61,7 @@ typedef enum : NSUInteger {
 - (void)createMainWindow {
     NSWindowController *mainWC = [NSStoryboard.mainStoryboard instantiateControllerWithIdentifier:@"MainWindowController"];
     mainWC.window.frameAutosaveName = @"Main Window";
+    [mainWC.window setMinSize:NSMakeSize(650, 350)];
     
     [mainWC showWindow:self];
     [mainWC.window makeKeyAndOrderFront:nil];
