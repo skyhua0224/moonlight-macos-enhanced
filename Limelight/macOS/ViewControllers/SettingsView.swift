@@ -77,7 +77,7 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(minWidth: 500)
+        .frame(minWidth: 575, minHeight: 275)
         .onAppear {
             NSWindow.allowsAutomaticWindowTabbing = false
             
