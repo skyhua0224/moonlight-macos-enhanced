@@ -195,6 +195,37 @@ class SettingsModel: ObservableObject {
     static var controllerDrivers: [String] = ["HID", "MFi"]
     static var mouseDrivers: [String] = ["HID", "MFi"]
 
+    static let defaultResolution = CGSizeMake(1280, 720)
+    static let defaultCustomResWidth = 0
+    static let defaultCustomResHeight = 0
+    static let defaultFps = 60
+    static let defaultCustomFps = 0
+    static let defaultBitrateSliderValue = {
+        var bitrateIndex = 0
+        for i in 0..<SettingsModel.bitrateSteps.count {
+            if 10000.0 <= SettingsModel.bitrateSteps[i] * 1000.0 {
+                bitrateIndex = i
+                break
+            }
+        }
+        return Float(bitrateIndex)
+    }()
+    static let defaultVideoCodec = "H.264"
+    static let defaultHdr = false
+    static let defaultPacingOptions = "Smoothest Video"
+    static let defaultAudioOnPC = false
+    static let defaultMultiControllerMode = "Auto"
+    static let defaultSwapButtons = false
+    static let defaultOptimize = false
+    static let defaultAutoFullscreen = true
+    static let defaultRumble = true
+    static let defaultControllerDriver = "HID"
+    static let defaultMouseDriver = "HID"
+    static let defaultEmulateGuide = false
+    static let defaultAppArtworkWidth = 300
+    static let defaultAppArtworkHeight = 400
+    static let defaultDimNonHoveredArtwork = true
+    
     init() {
         if let hosts = Self.hosts {
             if let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile") {
@@ -212,79 +243,65 @@ class SettingsModel: ObservableObject {
             }
         }
         
-        selectedResolution = CGSizeMake(1280, 720)
-        customResWidth = 0
-        customResHeight = 0
-        selectedFps = 60
-        customFps = 0
+        selectedResolution = Self.defaultResolution
+        customResWidth = Self.defaultCustomResWidth
+        customResHeight = Self.defaultCustomResHeight
+        selectedFps = Self.defaultFps
+        customFps = Self.defaultCustomFps
         
-        var bitrateIndex = 0
-        for i in 0..<Self.bitrateSteps.count {
-            if 10000.0 <= Self.bitrateSteps[i] * 1000.0 {
-                bitrateIndex = i
-                break
-            }
-        }
-        bitrateSliderValue = Float(bitrateIndex)
+        bitrateSliderValue = Self.defaultBitrateSliderValue
         
-        selectedVideoCodec = "H.264"
-        hdr = false
-        selectedPacingOptions = "Smoothest Video"
+        selectedVideoCodec = Self.defaultVideoCodec
+        hdr = Self.defaultHdr
+        selectedPacingOptions = Self.defaultPacingOptions
         
-        audioOnPC = false
+        audioOnPC = Self.defaultAudioOnPC
         
-        selectedMultiControllerMode = "Auto"
-        swapButtons = false
+        selectedMultiControllerMode = Self.defaultMultiControllerMode
+        swapButtons = Self.defaultSwapButtons
         
-        optimize = false
+        optimize = Self.defaultOptimize
         
-        autoFullscreen = true
-        rumble = true
-        selectedControllerDriver = "HID"
-        selectedMouseDriver = "HID"
+        autoFullscreen = Self.defaultAutoFullscreen
+        rumble = Self.defaultRumble
+        selectedControllerDriver = Self.defaultControllerDriver
+        selectedMouseDriver = Self.defaultMouseDriver
         
-        emulateGuide = false
-        appArtworkWidth = 300
-        appArtworkHeight = 400
-        dimNonHoveredArtwork = true
+        emulateGuide = Self.defaultEmulateGuide
+        appArtworkWidth = Self.defaultAppArtworkWidth
+        appArtworkHeight = Self.defaultAppArtworkHeight
+        dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     }
     
     func loadDefaultSettings() {
-        selectedResolution = CGSizeMake(1280, 720)
-        customResWidth = 0
-        customResHeight = 0
-        selectedFps = 60
-        customFps = 0
+        selectedResolution = Self.defaultResolution
+        customResWidth = Self.defaultCustomResWidth
+        customResHeight = Self.defaultCustomResHeight
+        selectedFps = Self.defaultFps
+        customFps = Self.defaultCustomFps
         
-        var bitrateIndex = 0
-        for i in 0..<Self.bitrateSteps.count {
-            if 10000.0 <= Self.bitrateSteps[i] * 1000.0 {
-                bitrateIndex = i
-                break
-            }
-        }
-        bitrateSliderValue = Float(bitrateIndex)
+        bitrateSliderValue = Self.defaultBitrateSliderValue
         
-        selectedVideoCodec = "H.264"
-        hdr = false
-        selectedPacingOptions = "Smoothest Video"
+        selectedVideoCodec = Self.defaultVideoCodec
+        hdr = Self.defaultHdr
+        selectedPacingOptions = Self.defaultPacingOptions
         
-        audioOnPC = false
+        audioOnPC = Self.defaultAudioOnPC
         
-        selectedMultiControllerMode = "Auto"
-        swapButtons = false
+        selectedMultiControllerMode = Self.defaultMultiControllerMode
+        swapButtons = Self.defaultSwapButtons
         
-        optimize = false
+        optimize = Self.defaultOptimize
         
-        autoFullscreen = true
-        rumble = true
-        selectedControllerDriver = "HID"
-        selectedMouseDriver = "HID"
+        autoFullscreen = Self.defaultAutoFullscreen
+        rumble = Self.defaultRumble
+        selectedControllerDriver = Self.defaultControllerDriver
+        selectedMouseDriver = Self.defaultMouseDriver
         
-        emulateGuide = false
-        appArtworkWidth = 300
-        appArtworkHeight = 400
-        dimNonHoveredArtwork = true
+        emulateGuide = Self.defaultEmulateGuide
+        appArtworkWidth = Self.defaultAppArtworkWidth
+        appArtworkHeight = Self.defaultAppArtworkHeight
+        dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     }
     
     func loadAndSaveDefaultSettings() {
