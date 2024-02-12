@@ -52,7 +52,7 @@ class SettingsClass: NSObject {
     @objc static func getSettings(for key: String) -> [String: Any]? {
         if let data = UserDefaults.standard.data(forKey: SettingsClass.profileKey(for: key)) {
             if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
-                let objcSettings : [String:Any] = [
+                let objcSettings: [String: Any] = [
                     "resolution": settings.resolution,
                     "customResolution": settings.customResolution,
                     "fps": settings.fps,
