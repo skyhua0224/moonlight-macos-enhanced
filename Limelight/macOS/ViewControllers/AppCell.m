@@ -138,7 +138,11 @@
             }
         }
     } else {
-        return 1;
+        if (self.app.hidden) {
+            return 0.33;
+        } else {
+            return 1;
+        }
     }
 }
 
