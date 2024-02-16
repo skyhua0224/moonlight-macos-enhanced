@@ -285,7 +285,7 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (NSArray<TemporaryApp *> *)itemsForSection:(NSInteger)section {
-    return [self filteredItems:self.apps forSection:section];
+    return [[self filteredItems:self.apps forSection:section] sortedArrayUsingSelector:@selector(compareName:)];
 }
 
 - (NSArray<TemporaryApp *> *)filteredItems:(NSArray<TemporaryApp *> *)rawItems forSection:(NSInteger)section {
@@ -624,7 +624,7 @@ static const CGFloat runningAnimationDuration = 1.0;
 }
 
 - (void)updateCollectionViewWithNewPinnedChangedApp:(TemporaryApp *)app newPinnedState:(BOOL)newPinnedState previousIndex:(NSInteger)previousIndex {
-    NSArray<TemporaryApp *> *apps = [[self itemsForSection:newPinnedState == YES ? 0 : 1] sortedArrayUsingSelector:@selector(compareName:)];
+    NSArray<TemporaryApp *> *apps = [self itemsForSection:newPinnedState == YES ? 0 : 1];
     NSArray<NSString *> *appNames = [F mapArray:apps withBlock:^id(TemporaryApp *obj) {
         return obj.name;
     }];
@@ -645,7 +645,6 @@ static const CGFloat runningAnimationDuration = 1.0;
     [self.collectionView.animator performBatchUpdates:^{
         [self.collectionView moveItemAtIndexPath:previousIndexPath toIndexPath:newIndexPath];
     } completionHandler:^(BOOL finished) {
-        
     }];
 }
 
