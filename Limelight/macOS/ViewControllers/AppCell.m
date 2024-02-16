@@ -124,9 +124,11 @@
 }
 
 - (CGFloat)appCoverArtAlphaWithHovered:(BOOL)hovered {
+    CGFloat hiddenAlpha = 0.33;
+    
     if ([SettingsClass dimNonHoveredArtworkFor:self.app.host.uuid]) {
         if (self.app.hidden) {
-            return 0.33;
+            return hiddenAlpha;
         }
         if (self.selected) {
             return 1;
@@ -139,7 +141,7 @@
         }
     } else {
         if (self.app.hidden) {
-            return 0.33;
+            return hiddenAlpha;
         } else {
             return 1;
         }
