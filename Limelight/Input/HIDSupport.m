@@ -1371,10 +1371,10 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                         self.controller.lastRightStickY = MAX(MIN(-(intValue - 32768), 32767), -32768);
                         break;
                     case kHIDUsage_GD_Z:
-                        self.controller.lastLeftTrigger = (unsigned char)((intValue * 255) / 1023);
+                        self.controller.lastLeftTrigger = (unsigned char)(intValue / 4);
                         break;
                     case kHIDUsage_GD_Rz:
-                        self.controller.lastRightTrigger = (unsigned char)((intValue * 255) / 1023);
+                        self.controller.lastRightTrigger = (unsigned char)(intValue / 4);
                         break;
                         
                     case kHIDUsage_GD_Hatswitch:
