@@ -769,7 +769,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         UInt16 lowFreqMotor = self.nextLowFreqMotor;
         UInt16 highFreqMotor = self.nextHighFreqMotor;
         
-        if (isXbox(device)) {
+        if (isXbox(device) || isKingKong(device)) {
             UInt8 rumble_packet[] = { 0x03, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xEB };
             
             UInt8 convertedLowFreqMotor = lowFreqMotor / 655;
@@ -1159,6 +1159,12 @@ BOOL isXbox(IOHIDDeviceRef device) {
     return vendorId == 0x045E && (productId == 0x02FD || productId == 0x0B13);
 }
 
+BOOL isKingKong(IOHIDDeviceRef device) {
+    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
+    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
+    return vendorId == 0x045E && productId == 0x02e0;
+}
+
 BOOL isPlayStation(IOHIDDeviceRef device) {
     UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
     UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
@@ -1341,6 +1347,112 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                         [self updateButtonFlags:RS_CLK_FLAG state:intValue];
                         break;
 
+                    default:
+                        break;
+                }
+                
+            default:
+                break;
+        }
+    } else if (isKingKong(device)) {
+        switch (usagePage) {
+            case kHIDPage_GenericDesktop:
+                switch (usage) {
+                    case kHIDUsage_GD_X:
+                        self.controller.lastLeftStickX = MAX(MIN((intValue - 32768), 32767), -32768);
+                        break;
+                    case kHIDUsage_GD_Y:
+                        self.controller.lastLeftStickY = MAX(MIN(-(intValue - 32768), 32767), -32768);
+                        break;
+                    case kHIDUsage_GD_Rx:
+                        self.controller.lastRightStickX = MAX(MIN((intValue - 32768), 32767), -32768);
+                        break;
+                    case kHIDUsage_GD_Ry:
+                        self.controller.lastRightStickY = MAX(MIN(-(intValue - 32768), 32767), -32768);
+                        break;
+                    case kHIDUsage_GD_Z:
+                        self.controller.lastLeftTrigger = (unsigned char)((intValue * 255) / 1023);
+                        break;
+                    case kHIDUsage_GD_Rz:
+                        self.controller.lastRightTrigger = (unsigned char)((intValue * 255) / 1023);
+                        break;
+                        
+                    case kHIDUsage_GD_Hatswitch:
+                        switch (intValue) {
+                            case 1:
+                                [self updateButtonFlags:UP_FLAG state:YES];
+                                break;
+                            case 2:
+                                [self updateButtonFlags:UP_FLAG | RIGHT_FLAG state:YES];
+                                break;
+                            case 3:
+                                [self updateButtonFlags:RIGHT_FLAG state:YES];
+                                break;
+                            case 4:
+                                [self updateButtonFlags:DOWN_FLAG | RIGHT_FLAG state:YES];
+                                break;
+                            case 5:
+                                [self updateButtonFlags:DOWN_FLAG state:YES];
+                                break;
+                            case 6:
+                                [self updateButtonFlags:DOWN_FLAG | LEFT_FLAG state:YES];
+                                break;
+                            case 7:
+                                [self updateButtonFlags:LEFT_FLAG state:YES];
+                                break;
+                            case 8:
+                                [self updateButtonFlags:UP_FLAG | LEFT_FLAG state:YES];
+                                break;
+
+                            case 0:
+                                [self updateButtonFlags:UP_FLAG | RIGHT_FLAG | DOWN_FLAG | LEFT_FLAG state:NO];
+                                break;
+
+                            default:
+                                break;
+                        }
+
+                    default:
+                        break;
+                }
+
+            case kHIDPage_Button:
+                switch (usage) {
+                    case 1:
+                        [self updateButtonFlags:A_FLAG state:intValue];
+                        break;
+                    case 2:
+                        [self updateButtonFlags:B_FLAG state:intValue];
+                        break;
+                    case 3:
+                        [self updateButtonFlags:X_FLAG state:intValue];
+                        break;
+                    case 4:
+                        [self updateButtonFlags:Y_FLAG state:intValue];
+                        break;
+                    case 5:
+                        [self updateButtonFlags:LB_FLAG state:intValue];
+                        break;
+                    case 6:
+                        [self updateButtonFlags:RB_FLAG state:intValue];
+                        break;
+                    case 7:
+                        [self updateButtonFlags:BACK_FLAG state:intValue];
+                        break;
+                    case 8:
+                        [self updateButtonFlags:PLAY_FLAG state:intValue];
+                        break;
+                    case 9:
+                        [self updateButtonFlags:LS_CLK_FLAG state:intValue];
+                        break;
+                    case 10:
+                        [self updateButtonFlags:RS_CLK_FLAG state:intValue];
+                        break;
+                    case 133:
+                        [self updateButtonFlags:SPECIAL_FLAG state:intValue];
+                        break;
+
+                        
                     default:
                         break;
                 }
