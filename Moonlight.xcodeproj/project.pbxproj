@@ -81,6 +81,7 @@
 		4C84385A21FE9453000A77CD /* NSApplication+Moonlight.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */; };
 		4C8E7EC4236EF0040075DE78 /* Controller.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C8E7EC2236EF0040075DE78 /* Controller.m */; };
 		4C97FE5E24CD3C1A001F3064 /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB8946EA19F6AFB800339C8A /* libopus.a */; };
+		4CA3E8272C22C57E00A435A5 /* BackgroundColorView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CA3E8262C22C57E00A435A5 /* BackgroundColorView.m */; };
 		4CABABB221F6C8A4008576A4 /* CollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CABABB121F6C8A4008576A4 /* CollectionView.m */; };
 		4CBBE13B24CFF7B700B4706E /* AboutView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4CBBE13A24CFF7B700B4706E /* AboutView.xib */; };
 		4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3C02C1FF72A3D0029EBF5 /* AppCellView.m */; };
@@ -194,6 +195,8 @@
 		4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSApplication+Moonlight.m"; sourceTree = "<group>"; };
 		4C8E7EC2236EF0040075DE78 /* Controller.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Controller.m; sourceTree = "<group>"; };
 		4C8E7EC3236EF0040075DE78 /* Controller.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Controller.h; sourceTree = "<group>"; };
+		4CA3E8252C22C57E00A435A5 /* BackgroundColorView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BackgroundColorView.h; sourceTree = "<group>"; };
+		4CA3E8262C22C57E00A435A5 /* BackgroundColorView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BackgroundColorView.m; sourceTree = "<group>"; };
 		4CABABB021F6C8A3008576A4 /* CollectionView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CollectionView.h; sourceTree = "<group>"; };
 		4CABABB121F6C8A4008576A4 /* CollectionView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CollectionView.m; sourceTree = "<group>"; };
 		4CBBE13A24CFF7B700B4706E /* AboutView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = AboutView.xib; sourceTree = "<group>"; };
@@ -404,6 +407,8 @@
 				4C84385921FE9453000A77CD /* NSApplication+Moonlight.m */,
 				4C63B6A7278925FB00ED3510 /* NSView+Moonlight.h */,
 				4C63B6A8278925FB00ED3510 /* NSView+Moonlight.m */,
+				4CA3E8252C22C57E00A435A5 /* BackgroundColorView.h */,
+				4CA3E8262C22C57E00A435A5 /* BackgroundColorView.m */,
 				4C65103F278FD2880089E407 /* NSResponder+Moonlight.h */,
 				4C651040278FD2880089E407 /* NSResponder+Moonlight.m */,
 				4C651042278FD81D0089E407 /* ControllerNavigation.h */,
@@ -1017,6 +1022,7 @@
 				4C38E8011FEE08AA000425CD /* (null) in Sources */,
 				4C38E8041FEE08C8000425CD /* TemporaryHost.m in Sources */,
 				4C38E82A1FF0BFA0000425CD /* StreamConfiguration.m in Sources */,
+				4CA3E8272C22C57E00A435A5 /* BackgroundColorView.m in Sources */,
 				4C38E8261FF0B609000425CD /* StreamViewController.m in Sources */,
 				4CC3C02D1FF72A3D0029EBF5 /* AppCellView.m in Sources */,
 				4C38E7F01FEE00F6000425CD /* Logger.m in Sources */,

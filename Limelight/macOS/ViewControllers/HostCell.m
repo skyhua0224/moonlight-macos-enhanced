@@ -7,12 +7,13 @@
 //
 
 #import "HostCell.h"
+#import "BackgroundColorView.h"
 #import "NSApplication+Moonlight.h"
 #import "HostCellView.h"
 #import "NSView+Moonlight.h"
 
 @interface HostCell () <NSMenuDelegate>
-@property (weak) IBOutlet NSView *imageContainer;
+@property (weak) IBOutlet BackgroundColorView *imageContainer;
 @property (weak) IBOutlet NSView *labelContainer;
 
 @end
@@ -23,6 +24,8 @@
     [super viewDidLoad];
     
     [self startUpdateLoop];
+    
+    self.imageContainer.backgroundColorName = @"HostSelectionBackgroundColor";
     
     self.imageContainer.wantsLayer = YES;
     self.imageContainer.layer.masksToBounds = YES;
@@ -43,11 +46,7 @@
 }
 
 - (void)updateSelectedState:(BOOL)selected {
-    if (selected) {
-        self.imageContainer.backgroundColor = [NSColor colorNamed:@"HostSelectionBackgroundColor"];
-    } else {
-        self.imageContainer.backgroundColor = [NSColor clearColor];
-    }
+    self.imageContainer.clear = !selected;
     
     self.labelContainer.backgroundColor = selected ? [NSColor selectedContentBackgroundColor] : [NSColor clearColor];
     self.hostName.textColor = selected ? [NSColor alternateSelectedControlTextColor] : [NSColor textColor];

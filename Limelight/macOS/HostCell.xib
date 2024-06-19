@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="22505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="32700.99.1234" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22505"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22690"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -16,7 +16,7 @@
                 <customView translatesAutoresizingMaskIntoConstraints="NO" id="uCl-gZ-IFJ" userLabel="Content View">
                     <rect key="frame" x="0.0" y="0.0" width="193" height="209"/>
                     <subviews>
-                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="7bI-bK-K3N" userLabel="Image Container">
+                        <customView translatesAutoresizingMaskIntoConstraints="NO" id="7bI-bK-K3N" userLabel="Image Container" customClass="BackgroundColorView">
                             <rect key="frame" x="7" y="53" width="180" height="156"/>
                             <subviews>
                                 <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="5Fb-TZ-b9m">
