@@ -69,9 +69,7 @@ typedef enum : NSUInteger {
 
 - (NSWindowController *)preferencesWC {
     if (_preferencesWC == nil) {
-        if (@available(macOS 13.0, *)) {
-            _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindow];
-        }
+        _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindow];
     }
 
     return _preferencesWC;

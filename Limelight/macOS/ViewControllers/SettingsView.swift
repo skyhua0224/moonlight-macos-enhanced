@@ -21,36 +21,60 @@ let panes: [PaneCell] = [
     PaneCell(title: "App", symbol: "appclip", color: .pink)
 ]
 
-@available(macOS 13.0, *)
 struct SettingsView: View {
     @StateObject var settingsModel = SettingsModel()
 
-    @SwiftUI.State private var selectedPane = panes.first!
+    @SwiftUI.State private var selectedPane: PaneCell? = panes.first
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selectedPane) {
-                ForEach(panes, id: \.self) { pane in
-                    PaneCellView(paneCell: pane)
-                }
+        NavigationView {
+            Sidebar(selectedPane: $selectedPane)
+            Detail(pane: selectedPane)
+                .environmentObject(settingsModel)
+        }
+        .frame(minWidth: 575, minHeight: 275)
+        .onAppear {
+            NSWindow.allowsAutomaticWindowTabbing = false
+            
+            settingsModel.loadSettings()
+        }
+    }
+}
+
+struct Sidebar: View {
+    @Binding var selectedPane: PaneCell?
+    
+    var body: some View {
+        List(selection: $selectedPane) {
+            ForEach(panes, id: \.self) { pane in
+                PaneCellView(paneCell: pane)
             }
-            .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(160)
-        } detail: {
+        }
+        .listStyle(.sidebar)
+        .frame(minWidth: 160)
+    }
+}
+
+struct Detail: View {
+    var pane: PaneCell? = nil
+
+    @EnvironmentObject private var settingsModel: SettingsModel
+
+    var body: some View {
+        if let pane {
             Group {
-                if selectedPane.title == "Stream" {
+                if pane.title == "Stream" {
                     StreamView()
-                } else if selectedPane.title == "Video and Audio" {
+                } else if pane.title == "Video and Audio" {
                     VideoAndAudioView()
-                } else if selectedPane.title == "Input" {
+                } else if pane.title == "Input" {
                     InputView()
-                } else if selectedPane.title == "App" {
+                } else if pane.title == "App" {
                     AppView()
                 }
             }
             .environmentObject(settingsModel)
-            .navigationSubtitle(selectedPane.title)
-            .toolbarRole(.editor)
+            .navigationSubtitle(pane.title)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     Button {
@@ -60,8 +84,8 @@ struct SettingsView: View {
                     }
                 }
                 
-                if let hosts = SettingsModel.hosts {
-                    ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: .primaryAction) {
+                    if let hosts = SettingsModel.hosts {
                         HStack {
                             Text("Profile:")
                             
@@ -77,16 +101,9 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(minWidth: 575, minHeight: 275)
-        .onAppear {
-            NSWindow.allowsAutomaticWindowTabbing = false
-            
-            settingsModel.loadSettings()
-        }
     }
 }
 
-@available(macOS 12.0, *)
 struct PaneCellView: View {
     let paneCell: PaneCell
     
@@ -96,7 +113,7 @@ struct PaneCellView: View {
 
         HStack(spacing: 6) {
             Image(systemName: paneCell.symbol)
-                .foregroundStyle(.white)
+                .adaptiveForegroundColor(.white)
                 .font(.callout)
                 .frame(width: containerSize, height: containerSize)
                 .padding(1)
@@ -110,7 +127,6 @@ struct PaneCellView: View {
     }
 }
 
-@available(macOS 12.0, *)
 struct StreamView: View {
     @EnvironmentObject private var settingsModel: SettingsModel
     
@@ -137,11 +153,11 @@ struct StreamView: View {
                         Divider()
                         
                         FormCell(title: "Custom Width", contentWidth: 60, content: {
-                            TextField("", value: $settingsModel.customResWidth, format: .number)
+                            TextField("", value: $settingsModel.customResWidth, formatter: NumberOnlyFormatter())
                                 .multilineTextAlignment(.trailing)
                         })
                         FormCell(title: "Custom Height", contentWidth: 60, content: {
-                            TextField("", value: $settingsModel.customResHeight, format: .number)
+                            TextField("", value: $settingsModel.customResHeight, formatter: NumberOnlyFormatter())
                                 .multilineTextAlignment(.trailing)
                         })
                     }
@@ -164,7 +180,7 @@ struct StreamView: View {
                         Divider()
                         
                         FormCell(title: "Custom FPS", contentWidth: 60, content: {
-                            TextField("", value: $settingsModel.customFps, format: .number)
+                            TextField("", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
                                 .multilineTextAlignment(.trailing)
                         })
                     }
@@ -342,7 +358,6 @@ struct InputView: View {
     }
 }
 
-@available(macOS 12.0, *)
 struct AppView: View {
     @EnvironmentObject private var settingsModel: SettingsModel
     
@@ -372,11 +387,11 @@ struct AppView: View {
 
                 FormSection(title: "App Artwork Dimensions") {
                     FormCell(title: "Artwork Width", contentWidth: 60, content: {
-                        TextField("", value: $settingsModel.appArtworkWidth, format: .number)
+                        TextField("", value: $settingsModel.appArtworkWidth, formatter: NumberOnlyFormatter())
                             .multilineTextAlignment(.trailing)
                     })
                     FormCell(title: "Artwork Height", contentWidth: 60, content: {
-                        TextField("", value: $settingsModel.appArtworkHeight, format: .number)
+                        TextField("", value: $settingsModel.appArtworkHeight, formatter: NumberOnlyFormatter())
                             .multilineTextAlignment(.trailing)
                     })
                 }

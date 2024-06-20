@@ -24,7 +24,6 @@ class SettingsHostingController<RootView: View>: NSWindowController {
 }
 
 @objc class SettingsWindowObjCBridge: NSView {
-    @available(macOS 13.0, *)
     @objc class func makeSettingsWindow() -> NSWindowController {
         SettingsHostingController(rootView: SettingsView())
     }
