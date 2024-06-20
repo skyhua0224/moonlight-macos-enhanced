@@ -23,18 +23,23 @@
     return self;
 }
 
+- (void)dealloc {
+    CGColorRelease(self.backgroundCGColor);
+}
+
 - (void)setClear:(BOOL)clear {
     _clear = clear;
-    [self updateBackgroundColorWithClear:clear];
+    [self updateBackgroundColor];
 }
 
 - (void)updateLayer {
-    self.backgroundCGColor = [NSColor colorNamed:self.backgroundColorName].CGColor;
-    [self updateBackgroundColorWithClear:self.clear];
+    CGColorRelease(self.backgroundCGColor);
+    self.backgroundCGColor = CGColorRetain([NSColor colorNamed:self.backgroundColorName].CGColor);
+    [self updateBackgroundColor];
 }
 
-- (void)updateBackgroundColorWithClear:(BOOL)clear {
-    self.layer.backgroundColor = clear ? [NSColor clearColor].CGColor : self.backgroundCGColor;
+- (void)updateBackgroundColor {
+    self.layer.backgroundColor = self.clear ? [NSColor clearColor].CGColor : self.backgroundCGColor;
 }
 
 @end
