@@ -191,6 +191,16 @@ const CGFloat scaleBase = 1.125;
 
     flowLayout.minimumInteritemSpacing = 0;
     flowLayout.itemSize = NSMakeSize((int)(90 * self.itemScale + 6 + 2), (int)(128 * self.itemScale + 6 + 2));
+    
+    CGSize appArtworkDimensions = [SettingsClass appArtworkDimensionsFor:self.host.uuid];
+    CGFloat artworkAspectRatio = appArtworkDimensions.width / appArtworkDimensions.height;
+
+    CGFloat baseHeight = 128.0 * self.itemScale + 6 + 2;
+    CGFloat baseWidth = baseHeight * artworkAspectRatio;
+
+    NSSize itemSize = NSMakeSize((int)baseWidth, (int)baseHeight);
+    flowLayout.itemSize = itemSize;
+    
     [flowLayout invalidateLayout];
     
     [[NSUserDefaults standardUserDefaults] setFloat:self.itemScale forKey:@"itemScale"];
