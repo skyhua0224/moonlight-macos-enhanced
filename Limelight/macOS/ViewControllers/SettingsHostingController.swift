@@ -17,6 +17,7 @@ class SettingsHostingController<RootView: View>: NSWindowController {
         let window = NSWindow(contentViewController: hostingController)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.collectionBehavior = [.fullScreenNone]
+        window.tabbingMode = .disallowed
         window.title = "Settings"
         
         self.init(window: window)

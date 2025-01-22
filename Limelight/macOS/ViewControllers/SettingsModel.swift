@@ -52,17 +52,17 @@ class SettingsModel: ObservableObject {
             fpsChangedCallback?()
         }
     }
-    @Published var customFps: Int {
+    @Published var customFps: CGFloat? {
         didSet {
             saveSettings()
         }
     }
-    @Published var customResWidth: Int {
+    @Published var customResWidth: CGFloat? {
         didSet {
             saveSettings()
         }
     }
-    @Published var customResHeight: Int {
+    @Published var customResHeight: CGFloat? {
         didSet {
             saveSettings()
         }
@@ -134,12 +134,12 @@ class SettingsModel: ObservableObject {
             saveSettings()
         }
     }
-    @Published var appArtworkWidth: Int {
+    @Published var appArtworkWidth: CGFloat? {
         didSet {
             saveSettings()
         }
     }
-    @Published var appArtworkHeight: Int {
+    @Published var appArtworkHeight: CGFloat? {
         didSet {
             saveSettings()
         }
@@ -189,11 +189,11 @@ class SettingsModel: ObservableObject {
     static var controllerDrivers: [String] = ["HID", "MFi"]
     static var mouseDrivers: [String] = ["HID", "MFi"]
 
-    static let defaultResolution = CGSizeMake(1280, 720)
-    static let defaultCustomResWidth = 0
-    static let defaultCustomResHeight = 0
+    static let defaultResolution = CGSizeMake(1920, 1080)
+    static let defaultCustomResWidth: CGFloat? = nil
+    static let defaultCustomResHeight: CGFloat? = nil
     static let defaultFps = 60
-    static let defaultCustomFps = 0
+    static let defaultCustomFps: CGFloat? = nil
     static let defaultBitrateSliderValue = {
         var bitrateIndex = 0
         for i in 0..<SettingsModel.bitrateSteps.count {
@@ -216,8 +216,8 @@ class SettingsModel: ObservableObject {
     static let defaultControllerDriver = "HID"
     static let defaultMouseDriver = "HID"
     static let defaultEmulateGuide = false
-    static let defaultAppArtworkWidth = 300
-    static let defaultAppArtworkHeight = 400
+    static let defaultAppArtworkWidth: CGFloat? = nil
+    static let defaultAppArtworkHeight: CGFloat? = nil
     static let defaultDimNonHoveredArtwork = true
     
     init() {
@@ -307,10 +307,21 @@ class SettingsModel: ObservableObject {
         if let selectedHost {
             if let settings = Settings.getSettings(for: selectedHost.id) {
                 selectedResolution = settings.resolution
-                customResWidth = Int(settings.customResolution.width)
-                customResHeight = Int(settings.customResolution.height)
+                if let customResolution = settings.customResolution {
+                    customResWidth = customResolution.width
+                    customResHeight = customResolution.height
+                } else {
+                    if selectedResolution == .zero {
+                        selectedResolution = Self.defaultResolution
+                    }
+                }
                 selectedFps = settings.fps
                 customFps = settings.customFps
+                if customFps == nil {
+                    if selectedFps == 0 {
+                        selectedFps = Self.defaultFps
+                    }
+                }
                 
                 var bitrateIndex = 0
                 for i in 0..<Self.bitrateSteps.count {
@@ -338,8 +349,11 @@ class SettingsModel: ObservableObject {
                 selectedMouseDriver = Self.getString(from: settings.mouseDriver, in: Self.mouseDrivers)
                 
                 emulateGuide = settings.emulateGuide
-                appArtworkWidth = Int(settings.appArtworkDimensions.width)
-                appArtworkHeight = Int(settings.appArtworkDimensions.height)
+                
+                if let appArtworkDimensions = settings.appArtworkDimensions {
+                    appArtworkWidth = appArtworkDimensions.width
+                    appArtworkHeight = appArtworkDimensions.height
+                }
                 dimNonHoveredArtwork = settings.dimNonHoveredArtwork
             } else {
                 loadAndSaveDefaultSettings()
@@ -350,20 +364,45 @@ class SettingsModel: ObservableObject {
     }
     
     func saveSettings() {
-        let customResolution = CGSizeMake(CGFloat(customResWidth), CGFloat(customResHeight))
+        var customResolution: CGSize? = nil
+        if let customResWidth, let customResHeight {
+            if customResWidth == 0 || customResHeight == 0 {
+                customResolution = nil
+            } else {
+                customResolution = CGSizeMake(CGFloat(customResWidth), CGFloat(customResHeight))
+            }
+        }
+        
+        var finalCustomFps: CGFloat? = nil
+        if let customFps {
+            if customFps == 0 {
+                finalCustomFps = nil
+            } else {
+                finalCustomFps = customFps
+            }
+        }
+
         let bitrate = Int(Self.bitrateSteps[Int(bitrateSliderValue)] * 1000)
         let codec = Self.getInt(from: selectedVideoCodec, in: Self.videoCodecs)
         let framePacing = Self.getInt(from: selectedPacingOptions, in: Self.pacingOptions)
         let multiController = Self.getBool(from: selectedMultiControllerMode, in: Self.multiControllerModes)
         let controllerDriver = Self.getInt(from: selectedControllerDriver, in: Self.controllerDrivers)
         let mouseDriver = Self.getInt(from: selectedMouseDriver, in: Self.mouseDrivers)
-        let appArtworkDimensions = CGSizeMake(CGFloat(appArtworkWidth), CGFloat(appArtworkHeight))
+
+        var appArtworkDimensions: CGSize? = nil
+        if let appArtworkWidth, let appArtworkHeight {
+            if appArtworkWidth == 0 || appArtworkHeight == 0 {
+                appArtworkDimensions = nil
+            } else {
+                appArtworkDimensions = CGSizeMake(CGFloat(appArtworkWidth), CGFloat(appArtworkHeight))
+            }
+        }
 
         let settings = Settings(
             resolution: selectedResolution,
             customResolution: customResolution,
             fps: selectedFps,
-            customFps: customFps,
+            customFps: finalCustomFps,
             bitrate: bitrate,
             codec: codec,
             hdr: hdr,

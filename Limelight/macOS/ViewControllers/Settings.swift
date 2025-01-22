@@ -10,9 +10,9 @@ import SwiftUI
 
 struct Settings: Encodable, Decodable {
     let resolution: CGSize
-    let customResolution: CGSize
+    let customResolution: CGSize?
     let fps: Int
-    let customFps: Int
+    let customFps: CGFloat?
     let bitrate: Int
     let codec: Int
     let hdr: Bool
@@ -28,7 +28,7 @@ struct Settings: Encodable, Decodable {
     let mouseDriver: Int
     
     let emulateGuide: Bool
-    let appArtworkDimensions: CGSize
+    let appArtworkDimensions: CGSize?
     let dimNonHoveredArtwork: Bool
     
     static func getSettings(for key: String) -> Self? {
@@ -52,7 +52,7 @@ class SettingsClass: NSObject {
     @objc static func getSettings(for key: String) -> [String: Any]? {
         if let data = UserDefaults.standard.data(forKey: SettingsClass.profileKey(for: key)) {
             if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
-                let objcSettings: [String: Any] = [
+                let objcSettings: [String: Any?] = [
                     "resolution": settings.resolution,
                     "customResolution": settings.customResolution,
                     "fps": settings.fps,
@@ -85,9 +85,9 @@ class SettingsClass: NSObject {
         if let settings = Settings.getSettings(for: key) {
             let dataMan = DataManager()
             
-            let dataResolutionWidth = settings.resolution == .zero ? settings.customResolution.width : settings.resolution.width
-            let dataResolutionHeight = settings.resolution == .zero ? settings.customResolution.height : settings.resolution.height
-            let dataFps = settings.fps == .zero ? settings.customFps : settings.fps
+            let dataResolutionWidth = settings.resolution == .zero ? settings.customResolution!.width : settings.resolution.width
+            let dataResolutionHeight = settings.resolution == .zero ? settings.customResolution!.height : settings.resolution.height
+            let dataFps = settings.fps == .zero ? Int(settings.customFps!) : settings.fps
             let dataBitrate = settings.bitrate
             let dataCodec = SettingsModel.getBool(from: settings.codec, in: SettingsModel.videoCodecs)
             
@@ -145,7 +145,9 @@ class SettingsClass: NSObject {
     
     @objc static func appArtworkDimensions(for key: String) -> CGSize {
         if let settings = Settings.getSettings(for: key) {
-            return settings.appArtworkDimensions
+            if let dimensions = settings.appArtworkDimensions {
+                return dimensions
+            }
         }
         
         return CGSizeMake(300, 400)

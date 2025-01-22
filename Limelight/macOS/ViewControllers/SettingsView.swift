@@ -33,11 +33,6 @@ struct SettingsView: View {
                 .environmentObject(settingsModel)
         }
         .frame(minWidth: 575, minHeight: 275)
-        .onAppear {
-            NSWindow.allowsAutomaticWindowTabbing = false
-            
-            settingsModel.loadSettings()
-        }
     }
 }
 
@@ -64,13 +59,21 @@ struct Detail: View {
         if let pane {
             Group {
                 if pane.title == "Stream" {
-                    StreamView()
+                    SettingPaneLoader(settingsModel) {
+                        StreamView()
+                    }
                 } else if pane.title == "Video and Audio" {
-                    VideoAndAudioView()
+                    SettingPaneLoader(settingsModel) {
+                        VideoAndAudioView()
+                    }
                 } else if pane.title == "Input" {
-                    InputView()
+                    SettingPaneLoader(settingsModel) {
+                        InputView()
+                    }
                 } else if pane.title == "App" {
-                    AppView()
+                    SettingPaneLoader(settingsModel) {
+                        AppView()
+                    }
                 }
             }
             .environmentObject(settingsModel)
@@ -101,6 +104,23 @@ struct Detail: View {
                 }
             }
         }
+    }
+}
+
+struct SettingPaneLoader<Content: View>: View {
+    let settingsModel: SettingsModel
+    let content: Content
+
+    init(_ settingsModel: SettingsModel, @ViewBuilder content: () -> Content) {
+        self.settingsModel = settingsModel
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .onAppear {
+                settingsModel.loadSettings()
+            }
     }
 }
 
@@ -178,7 +198,6 @@ struct StreamView: View {
                             TextField("40", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
                                 .multilineTextAlignment(.trailing)
                                 .textFieldStyle(.plain)
-                                .availableMonospacedDigit()
                                 .fixedSize()
                         })
                     }
@@ -373,23 +392,26 @@ struct ToggleCell: View {
 }
 
 struct DimensionsInputView: View {
-    @Binding var widthBinding: Int
-    @Binding var heightBinding: Int
+    @Binding var widthBinding: CGFloat?
+    @Binding var heightBinding: CGFloat?
     let placeholderDimensions: CGSize
     
     var body: some View {
         HStack(spacing: 4) {
-            TextField("\(placeholderDimensions.width)", value: $widthBinding, formatter: NumberOnlyFormatter())
+            TextField(formatDimension(placeholderDimensions.width), value: $widthBinding, formatter: NumberOnlyFormatter())
                 .multilineTextAlignment(.trailing)
             
-            Text("x")
+            Text("×")
             
-            TextField("\(placeholderDimensions.height)", value: $heightBinding, formatter: NumberOnlyFormatter())
+            TextField(formatDimension(placeholderDimensions.height), value: $heightBinding, formatter: NumberOnlyFormatter())
                 .multilineTextAlignment(.leading)
         }
         .textFieldStyle(.plain)
-        .availableMonospacedDigit()
         .fixedSize()
+    }
+    
+    func formatDimension(_ dimension: CGFloat) -> String {
+        return "\(Int(dimension))"
     }
 }
 

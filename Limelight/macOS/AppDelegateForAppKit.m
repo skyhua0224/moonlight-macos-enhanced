@@ -24,7 +24,7 @@ typedef enum : NSUInteger {
     DarkTheme,
 } Theme;
 
-@interface AppDelegateForAppKit () <NSApplicationDelegate>
+@interface AppDelegateForAppKit () <NSApplicationDelegate, NSWindowDelegate>
 @property (nonatomic, strong) NSWindowController *preferencesWC;
 @property (nonatomic, strong) NSWindowController *aboutWC;
 @property (nonatomic, strong) ControllerNavigation *controllerNavigation;
@@ -70,6 +70,7 @@ typedef enum : NSUInteger {
 - (NSWindowController *)preferencesWC {
     if (_preferencesWC == nil) {
         _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindow];
+        _preferencesWC.window.delegate = self;
     }
 
     return _preferencesWC;
@@ -139,6 +140,15 @@ typedef enum : NSUInteger {
         case DarkTheme:
             app.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
             break;
+    }
+}
+
+
+#pragma mark - NSWindowDelegate
+
+- (void)windowWillClose:(NSNotification *)notification {
+    if (notification.object == self.preferencesWC.window) {
+        self.preferencesWC = nil;
     }
 }
 

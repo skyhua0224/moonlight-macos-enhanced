@@ -19,15 +19,19 @@ class NumberOnlyFormatter: Formatter {
     
     override func getObjectValue(_ obj: AutoreleasingUnsafeMutablePointer<AnyObject?>?, for string: String, errorDescription error: AutoreleasingUnsafeMutablePointer<NSString?>?) -> Bool {
         // Check if the string can be converted to a valid number
-        if let number = Double(string) {
-            obj?.pointee = NSNumber(value: number)
+        if string.isEmpty {
             return true
         } else {
-            // If conversion fails, set an error description
-            if error != nil {
-                error?.pointee = "Input is not a valid number" as NSString
+            if let number = Double(string) {
+                obj?.pointee = NSNumber(value: number)
+                return true
+            } else {
+                // If conversion fails, set an error description
+                if error != nil {
+                    error?.pointee = "Input is not a valid number" as NSString
+                }
+                return false
             }
-            return false
         }
     }
     
