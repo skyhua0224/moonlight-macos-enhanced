@@ -307,14 +307,16 @@ class SettingsModel: ObservableObject {
         if let selectedHost {
             if let settings = Settings.getSettings(for: selectedHost.id) {
                 selectedResolution = settings.resolution
-                if let customResolution = settings.customResolution {
-                    customResWidth = customResolution.width
-                    customResHeight = customResolution.height
-                } else {
+
+                let customResolution = loadNillableDimensionSetting(inputDimensions: settings.customResolution)
+                customResWidth = customResolution != nil ? customResolution!.width : nil
+                customResHeight = customResolution != nil ? customResolution!.height : nil
+                if customResolution == nil {
                     if selectedResolution == .zero {
                         selectedResolution = Self.defaultResolution
                     }
                 }
+
                 selectedFps = settings.fps
                 customFps = settings.customFps
                 if customFps == nil {
@@ -350,11 +352,27 @@ class SettingsModel: ObservableObject {
                 
                 emulateGuide = settings.emulateGuide
                 
-                if let appArtworkDimensions = settings.appArtworkDimensions {
-                    appArtworkWidth = appArtworkDimensions.width
-                    appArtworkHeight = appArtworkDimensions.height
-                }
+                let appArtworkDimensions = loadNillableDimensionSetting(inputDimensions: settings.appArtworkDimensions)
+                appArtworkWidth = appArtworkDimensions != nil ? appArtworkDimensions!.width : nil
+                appArtworkHeight = appArtworkDimensions != nil ? appArtworkDimensions!.height : nil
+
                 dimNonHoveredArtwork = settings.dimNonHoveredArtwork
+                
+                func loadNillableDimensionSetting(inputDimensions: CGSize?) -> CGSize? {
+                    let finalSize: CGSize?
+                    
+                    if let nonNilDimensions = inputDimensions {
+                        if nonNilDimensions.width == .zero || nonNilDimensions.height == .zero {
+                            finalSize = nil
+                        } else {
+                            finalSize = nonNilDimensions
+                        }
+                    } else {
+                        finalSize = nil
+                    }
+                    
+                    return finalSize
+                }
             } else {
                 loadAndSaveDefaultSettings()
             }
