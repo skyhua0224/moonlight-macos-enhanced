@@ -79,14 +79,6 @@ struct Detail: View {
             .environmentObject(settingsModel)
             .navigationSubtitle(pane.title)
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
-                    } label: {
-                        Image(systemName: "sidebar.left")
-                    }
-                }
-                
                 ToolbarItem(placement: .primaryAction) {
                     if let hosts = SettingsModel.hosts {
                         HStack {
