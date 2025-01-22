@@ -13,7 +13,8 @@ enum SettingsPaneType: Int, CaseIterable {
     case videoAndAudio
     case input
     case app
-    
+    case legacy
+
     var title: String {
         switch self {
         case .stream:
@@ -25,6 +26,8 @@ enum SettingsPaneType: Int, CaseIterable {
             return "Input"
         case .app:
             return "App"
+        case .legacy:
+            return "Legacy"
         }
     }
     
@@ -38,6 +41,8 @@ enum SettingsPaneType: Int, CaseIterable {
             return "keyboard.fill"
         case .app:
             return "appclip"
+        case .legacy:
+            return "archivebox.fill"
         }
     }
     
@@ -51,7 +56,22 @@ enum SettingsPaneType: Int, CaseIterable {
             return .purple
         case .app:
             return .pink
+        case .legacy:
+            return Color(hex: 0x65B741)
         }
+    }
+}
+
+// From: https://medium.com/@jakir/use-hex-color-in-swiftui-c19e6ab79220
+extension Color {
+    init(hex: Int, opacity: Double = 1) {
+        self.init(
+            .sRGB,
+            red: Double((hex >> 16) & 0xff) / 255,
+            green: Double((hex >> 08) & 0xff) / 255,
+            blue: Double((hex >> 00) & 0xff) / 255,
+            opacity: opacity
+        )
     }
 }
 
@@ -113,6 +133,10 @@ struct Detail: View {
             case .app:
                 SettingPaneLoader(settingsModel) {
                     AppView()
+                }
+            case .legacy:
+                SettingPaneLoader(settingsModel) {
+                    LegacyView()
                 }
             }
         }
@@ -404,6 +428,21 @@ struct AppView: View {
             }
             
             Spacer()
+        }
+        .padding()
+    }
+}
+
+struct LegacyView: View {
+    @EnvironmentObject private var settingsModel: SettingsModel
+    
+    var body: some View {
+        ScrollView {
+            VStack {
+                FormSection(title: "Geforce Experience") {
+                    ToggleCell(title: "Optimize Game Settings", boolBinding: $settingsModel.optimize)
+                }
+            }
         }
         .padding()
     }
