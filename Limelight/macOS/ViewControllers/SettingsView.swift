@@ -23,9 +23,9 @@ let panes: [PaneCell] = [
 
 struct SettingsView: View {
     @StateObject var settingsModel = SettingsModel()
-
+    
     @SwiftUI.State private var selectedPane: PaneCell? = panes.first
-
+    
     var body: some View {
         NavigationView {
             Sidebar(selectedPane: $selectedPane)
@@ -57,9 +57,9 @@ struct Sidebar: View {
 
 struct Detail: View {
     var pane: PaneCell? = nil
-
+    
     @EnvironmentObject private var settingsModel: SettingsModel
-
+    
     var body: some View {
         if let pane {
             Group {
@@ -110,7 +110,7 @@ struct PaneCellView: View {
     var body: some View {
         let iconSize = CGFloat(14)
         let containerSize = iconSize + (iconSize / 3)
-
+        
         HStack(spacing: 6) {
             Image(systemName: paneCell.symbol)
                 .adaptiveForegroundColor(.white)
@@ -121,7 +121,7 @@ struct PaneCellView: View {
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
                         .foregroundColor(paneCell.color)
                 )
-
+            
             Text(paneCell.title)
         }
     }
@@ -132,7 +132,7 @@ struct StreamView: View {
     
     @SwiftUI.State private var showCustomResolutionGroup = false
     @SwiftUI.State private var showCustomFpsGroup = false
-
+    
     var body: some View {
         ScrollView {
             VStack {
@@ -152,13 +152,8 @@ struct StreamView: View {
                     if showCustomResolutionGroup {
                         Divider()
                         
-                        FormCell(title: "Custom Width", contentWidth: 60, content: {
-                            TextField("", value: $settingsModel.customResWidth, formatter: NumberOnlyFormatter())
-                                .multilineTextAlignment(.trailing)
-                        })
-                        FormCell(title: "Custom Height", contentWidth: 60, content: {
-                            TextField("", value: $settingsModel.customResHeight, formatter: NumberOnlyFormatter())
-                                .multilineTextAlignment(.trailing)
+                        FormCell(title: "Custom Resolution", contentWidth: 0, content: {
+                            DimensionsInputView(widthBinding: $settingsModel.customResWidth, heightBinding: $settingsModel.customResHeight, placeholderDimensions: CGSize(width: 3440, height: 1440))
                         })
                     }
                     
@@ -179,9 +174,12 @@ struct StreamView: View {
                     if showCustomFpsGroup {
                         Divider()
                         
-                        FormCell(title: "Custom FPS", contentWidth: 60, content: {
-                            TextField("", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
+                        FormCell(title: "Custom FPS", contentWidth: 0, content: {
+                            TextField("40", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
                                 .multilineTextAlignment(.trailing)
+                                .textFieldStyle(.plain)
+                                .availableMonospacedDigit()
+                                .fixedSize()
                         })
                     }
                 }
@@ -189,14 +187,12 @@ struct StreamView: View {
                 Spacer()
                     .frame(height: 32)
                 
-                if #available(macOS 12.0, *) {
-                    FormSection(title: "Bitrate") {
-                        VStack(alignment: .leading) {
-                            let bitrate = SettingsModel.bitrateSteps[Int(settingsModel.bitrateSliderValue)].formatted(FloatingPointFormatStyle())
-                            Text("\(bitrate) Mbps")
-                                .monospacedDigit()
-                            Slider(value: $settingsModel.bitrateSliderValue, in: 0...Float(SettingsModel.bitrateSteps.count - 1), step: 1)
-                        }
+                FormSection(title: "Bitrate") {
+                    VStack(alignment: .leading) {
+                        let bitrate = Int(SettingsModel.bitrateSteps[Int(settingsModel.bitrateSliderValue)])
+                        Text("\(bitrate) Mbps")
+                            .availableMonospacedDigit()
+                        Slider(value: $settingsModel.bitrateSliderValue, in: 0...Float(SettingsModel.bitrateSteps.count - 1), step: 1)
                     }
                 }
                 
@@ -210,7 +206,7 @@ struct StreamView: View {
                 func updateCustomFpsGroup() {
                     showCustomFpsGroup = settingsModel.selectedFps == .zero
                 }
-
+                
                 updateCustomResolutionGroup()
                 updateCustomFpsGroup()
                 settingsModel.resolutionChangedCallback = {
@@ -230,7 +226,7 @@ struct StreamView: View {
 
 struct VideoAndAudioView: View {
     @EnvironmentObject private var settingsModel: SettingsModel
-
+    
     var body: some View {
         ScrollView {
             VStack {
@@ -245,12 +241,7 @@ struct VideoAndAudioView: View {
                     
                     Divider()
                     
-                    FormCell(title: "HDR", contentWidth: 0, content: {
-                        Toggle(isOn: $settingsModel.hdr) {
-                            Text("")
-                        }
-                        .toggleStyle(.switch)
-                    })
+                    ToggleCell(title: "HDR", boolBinding: $settingsModel.hdr)
                     
                     Divider()
                     
@@ -267,12 +258,7 @@ struct VideoAndAudioView: View {
                     .frame(height: 32)
                 
                 FormSection(title: "Audio") {
-                    FormCell(title: "Play Sound on Host", contentWidth: 0, content: {
-                        Toggle(isOn: $settingsModel.audioOnPC) {
-                            Text("")
-                        }
-                        .toggleStyle(.switch)
-                    })
+                    ToggleCell(title: "Play Sound on Host", boolBinding: $settingsModel.audioOnPC)
                 }
                 
                 Spacer()
@@ -299,40 +285,25 @@ struct InputView: View {
                     
                     Divider()
                     
-                    FormCell(title: "Rumble Controller", contentWidth: 0, content: {
-                        Toggle(isOn: $settingsModel.rumble) {
-                            Text("")
-                        }
-                        .toggleStyle(.switch)
-                    })
+                    ToggleCell(title: "Rumble Controller", boolBinding: $settingsModel.rumble)
                 }
                 
                 Spacer()
                     .frame(height: 32)
                 
                 FormSection(title: "Buttons") {
-                    FormCell(title: "Swap A/B and X/Y Buttons", contentWidth: 0, content: {
-                        Toggle(isOn: $settingsModel.swapButtons) {
-                            Text("")
-                        }
-                        .toggleStyle(.switch)
-                    })
+                    ToggleCell(title: "Swap A/B and X/Y Buttons", boolBinding: $settingsModel.swapButtons)
                     
                     Divider()
                     
-                    FormCell(title: "Emulate Guide Button", contentWidth: 0, content: {
-                        Toggle(isOn: $settingsModel.emulateGuide) {
-                            Text("")
-                        }
-                        .toggleStyle(.switch)
-                    })
+                    ToggleCell(title: "Emulate Guide Button", boolBinding: $settingsModel.emulateGuide)
                 }
                 
                 Spacer()
                     .frame(height: 32)
                 
                 FormSection(title: "Drivers") {
-                    FormCell(title: "Controller Driver", contentWidth: 72, content: {
+                    FormCell(title: "Controller Driver", contentWidth: 88, content: {
                         Picker("", selection: $settingsModel.selectedControllerDriver) {
                             ForEach(SettingsModel.controllerDrivers, id: \.self) { mode in
                                 Text(mode)
@@ -342,7 +313,7 @@ struct InputView: View {
                     
                     Divider()
                     
-                    FormCell(title: "Mouse Driver", contentWidth: 72, content: {
+                    FormCell(title: "Mouse Driver", contentWidth: 88, content: {
                         Picker("", selection: $settingsModel.selectedMouseDriver) {
                             ForEach(SettingsModel.mouseDrivers, id: \.self) { mode in
                                 Text(mode)
@@ -365,34 +336,19 @@ struct AppView: View {
         ScrollView {
             VStack {
                 FormSection(title: "Behaviour") {
-                    FormCell(title: "Automatically Fullscreen Stream Window", contentWidth: 0, content: {
-                        Toggle(isOn: $settingsModel.autoFullscreen) {
-                            Text("")
-                        }
-                        .toggleStyle(.switch)
-                    })
-
-                    Divider()
-                    
-                    FormCell(title: "Dim Non-Hovered App Artwork", contentWidth: 0, content: {
-                        Toggle(isOn: $settingsModel.dimNonHoveredArtwork) {
-                            Text("")
-                        }
-                        .toggleStyle(.switch)
-                    })
+                    ToggleCell(title: "Automatically Fullscreen Stream Window", boolBinding: $settingsModel.autoFullscreen)
                 }
                 
                 Spacer()
                     .frame(height: 32)
+                
+                FormSection(title: "Visuals") {
+                    ToggleCell(title: "Dim Non-Hovered Apps", boolBinding: $settingsModel.dimNonHoveredArtwork)
+                    
+                    Divider()
 
-                FormSection(title: "App Artwork Dimensions") {
-                    FormCell(title: "Artwork Width", contentWidth: 60, content: {
-                        TextField("", value: $settingsModel.appArtworkWidth, formatter: NumberOnlyFormatter())
-                            .multilineTextAlignment(.trailing)
-                    })
-                    FormCell(title: "Artwork Height", contentWidth: 60, content: {
-                        TextField("", value: $settingsModel.appArtworkHeight, formatter: NumberOnlyFormatter())
-                            .multilineTextAlignment(.trailing)
+                    FormCell(title: "Custom Artwork Dimensions", contentWidth: 0, content: {
+                        DimensionsInputView(widthBinding: $settingsModel.appArtworkWidth, heightBinding: $settingsModel.appArtworkHeight, placeholderDimensions: CGSize(width: 300, height: 400))
                     })
                 }
             }
@@ -403,6 +359,39 @@ struct AppView: View {
     }
 }
 
+struct ToggleCell: View {
+    let title: String
+    @Binding var boolBinding: Bool
+
+    var body: some View {
+        FormCell(title: title, contentWidth: 0, content: {
+            Toggle("", isOn: $boolBinding)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        })
+    }
+}
+
+struct DimensionsInputView: View {
+    @Binding var widthBinding: Int
+    @Binding var heightBinding: Int
+    let placeholderDimensions: CGSize
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField("\(placeholderDimensions.width)", value: $widthBinding, formatter: NumberOnlyFormatter())
+                .multilineTextAlignment(.trailing)
+            
+            Text("x")
+            
+            TextField("\(placeholderDimensions.height)", value: $heightBinding, formatter: NumberOnlyFormatter())
+                .multilineTextAlignment(.leading)
+        }
+        .textFieldStyle(.plain)
+        .availableMonospacedDigit()
+        .fixedSize()
+    }
+}
 
 struct FormSection<Content: View>: View {
     let title: String
@@ -450,7 +439,7 @@ struct FormCell<Content: View>: View {
             Text(title)
             
             Spacer()
-
+            
             content
                 .if(contentWidth != 0, transform: { view in
                     view
@@ -460,7 +449,7 @@ struct FormCell<Content: View>: View {
     }
 }
 
-extension CGSize: Hashable {
+extension CGSize: @retroactive Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(width)
         hasher.combine(height)

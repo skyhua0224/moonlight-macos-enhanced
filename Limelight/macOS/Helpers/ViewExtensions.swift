@@ -17,6 +17,12 @@ extension View {
         }
     }
     
+    @ViewBuilder func availableMonospacedDigit() -> some View {
+        if #available(macOS 12.0, *) {
+            self.monospacedDigit()
+        }
+    }
+    
     @ViewBuilder func adaptiveForegroundColor(_ color: Color) -> some View {
         if #available(macOS 12.0, *) {
             self.foregroundStyle(color)
