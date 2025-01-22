@@ -8,24 +8,58 @@
 
 import SwiftUI
 
-struct PaneCell: Hashable {
-    let title: String
-    let symbol: String
-    let color: Color
+enum SettingsPaneType: Int, CaseIterable {
+    case stream
+    case videoAndAudio
+    case input
+    case app
+    
+    var title: String {
+        switch self {
+        case .stream:
+            return "Stream"
+        case .videoAndAudio:
+            return "Video and Audio"
+            
+        case .input:
+            return "Input"
+        case .app:
+            return "App"
+        }
+    }
+    
+    var symbol: String {
+        switch self {
+        case .stream:
+            return "airplayvideo"
+        case .videoAndAudio:
+            return "video.fill"
+        case .input:
+            return "keyboard.fill"
+        case .app:
+            return "appclip"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .stream:
+            return .blue
+        case .videoAndAudio:
+            return .orange
+        case .input:
+            return .purple
+        case .app:
+            return .pink
+        }
+    }
 }
-
-let panes: [PaneCell] = [
-    PaneCell(title: "Stream", symbol: "airplayvideo", color: .blue),
-    PaneCell(title: "Video and Audio", symbol: "video.fill", color: .orange),
-    PaneCell(title: "Input", symbol: "keyboard.fill", color: .purple),
-    PaneCell(title: "App", symbol: "appclip", color: .pink)
-]
 
 struct SettingsView: View {
     @StateObject var settingsModel = SettingsModel()
     
-    @SwiftUI.State private var selectedPane: PaneCell? = panes.first
-    
+    @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .stream
+
     var body: some View {
         NavigationView {
             Sidebar(selectedPane: $selectedPane)
@@ -37,13 +71,19 @@ struct SettingsView: View {
 }
 
 struct Sidebar: View {
-    @Binding var selectedPane: PaneCell?
-    
+    @Binding var selectedPane: SettingsPaneType
+
     var body: some View {
-        List(selection: $selectedPane) {
-            ForEach(panes, id: \.self) { pane in
-                PaneCellView(paneCell: pane)
+        let selectionBinding = Binding<SettingsPaneType?>(get: {
+            selectedPane
+        }, set: { newValue in
+            if let newPane = newValue {
+                selectedPane = newPane
             }
+        })
+
+        List(SettingsPaneType.allCases, id: \.self, selection: selectionBinding) { pane in
+            PaneCellView(pane: pane)
         }
         .listStyle(.sidebar)
         .frame(minWidth: 160)
@@ -51,44 +91,43 @@ struct Sidebar: View {
 }
 
 struct Detail: View {
-    var pane: PaneCell? = nil
-    
+    var pane: SettingsPaneType
+
     @EnvironmentObject private var settingsModel: SettingsModel
     
     var body: some View {
-        if let pane {
-            Group {
-                if pane.title == "Stream" {
-                    SettingPaneLoader(settingsModel) {
-                        StreamView()
-                    }
-                } else if pane.title == "Video and Audio" {
-                    SettingPaneLoader(settingsModel) {
-                        VideoAndAudioView()
-                    }
-                } else if pane.title == "Input" {
-                    SettingPaneLoader(settingsModel) {
-                        InputView()
-                    }
-                } else if pane.title == "App" {
-                    SettingPaneLoader(settingsModel) {
-                        AppView()
-                    }
+        Group {
+            switch pane {
+            case .stream:
+                SettingPaneLoader(settingsModel) {
+                    StreamView()
+                }
+            case .videoAndAudio:
+                SettingPaneLoader(settingsModel) {
+                    VideoAndAudioView()
+                }
+            case .input:
+                SettingPaneLoader(settingsModel) {
+                    InputView()
+                }
+            case .app:
+                SettingPaneLoader(settingsModel) {
+                    AppView()
                 }
             }
-            .environmentObject(settingsModel)
-            .navigationSubtitle(pane.title)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    if let hosts = SettingsModel.hosts {
-                        HStack {
-                            Text("Profile:")
-                            
-                            Picker("", selection: $settingsModel.selectedHost) {
-                                ForEach(hosts, id: \.self) { host in
-                                    if let host {
-                                        Text(host.name)
-                                    }
+        }
+        .environmentObject(settingsModel)
+        .navigationSubtitle(pane.title)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if let hosts = SettingsModel.hosts {
+                    HStack {
+                        Text("Profile:")
+                        
+                        Picker("", selection: $settingsModel.selectedHost) {
+                            ForEach(hosts, id: \.self) { host in
+                                if let host {
+                                    Text(host.name)
                                 }
                             }
                         }
@@ -117,24 +156,24 @@ struct SettingPaneLoader<Content: View>: View {
 }
 
 struct PaneCellView: View {
-    let paneCell: PaneCell
-    
+    let pane: SettingsPaneType
+
     var body: some View {
         let iconSize = CGFloat(14)
         let containerSize = iconSize + (iconSize / 3)
         
         HStack(spacing: 6) {
-            Image(systemName: paneCell.symbol)
+            Image(systemName: pane.symbol)
                 .adaptiveForegroundColor(.white)
                 .font(.callout)
                 .frame(width: containerSize, height: containerSize)
                 .padding(1)
                 .background(
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .foregroundColor(paneCell.color)
+                        .foregroundColor(pane.color)
                 )
             
-            Text(paneCell.title)
+            Text(pane.title)
         }
     }
 }
