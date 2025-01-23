@@ -23,8 +23,6 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    [self startUpdateLoop];
-    
     self.imageContainer.backgroundColorName = @"HostSelectionBackgroundColor";
     
     self.imageContainer.wantsLayer = YES;
@@ -43,6 +41,64 @@
     ((HostCellView *)self.view).delegate = self;
     
     [self updateSelectedState:NO];
+}
+
+- (void)dealloc {
+    @try {
+        [_host removeObserver:self forKeyPath:@"pairState"];
+        [_host removeObserver:self forKeyPath:@"state"];
+    } @catch (NSException *exception) {
+        NSLog(@"Observer not registered: %@", exception);
+    }
+}
+
+- (void)setHost:(TemporaryHost *)host {
+    if (_host != host) {
+        // Remove old observers
+        @try {
+            [_host removeObserver:self forKeyPath:@"pairState"];
+            [_host removeObserver:self forKeyPath:@"state"];
+        } @catch (NSException *exception) {
+            NSLog(@"Observer not registered: %@", exception);
+        }
+
+        // Assign the new host
+        _host = host;
+
+        if (_host) {
+            // Add observers for the new host
+            [_host addObserver:self forKeyPath:@"pairState" options:NSKeyValueObservingOptionNew context:nil];
+            [_host addObserver:self forKeyPath:@"state" options:NSKeyValueObservingOptionNew context:nil];
+        }
+
+        [self updateHostState];
+    }
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey,id> *)change
+                       context:(void *)context {
+    if ((object == self.host) && ([keyPath isEqualToString:@"pairState"] || [keyPath isEqualToString:@"state"])) {
+//        NSLog(@"Coofdy: %@ changed state", self.host.name);
+        [self updateHostState];
+    } else {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+    }
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    
+    // Remove observers for the old host
+    @try {
+        [_host removeObserver:self forKeyPath:@"pairState"];
+        [_host removeObserver:self forKeyPath:@"state"];
+    } @catch (NSException *exception) {
+        NSLog(@"Observer not registered: %@", exception);
+    }
+
+    _host = nil;
 }
 
 - (void)updateSelectedState:(BOOL)selected {
@@ -73,50 +129,46 @@
 
 #pragma mark - Host Updating
 
-- (void)startUpdateLoop {
-    [self performSelector:@selector(updateLoop) withObject:self afterDelay:2];
-}
-
-- (void)updateLoop {
-    [self updateHostState];
-    
-    if (self != nil) {
-        [self startUpdateLoop];
-    }
-}
-
 - (void)updateHostState {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self updateHostState];
+        });
+        return;
+    }
+
     NSColor *statusColor;
-    NSString *toolTipText;
-    
+    NSString *statusText;
+
     switch (self.host.state) {
         case StateOnline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemOrangeColor];
-                self.statusLabel.stringValue = @"Online, but not paired";
+                statusText = @"Online, but not paired";
             } else {
                 statusColor = [NSColor systemGreenColor];
-                self.statusLabel.stringValue = @"Online, and paired";
+                statusText = @"Online, and paired";
             }
             break;
         case StateOffline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemGrayColor];
-                self.statusLabel.stringValue = @"Offline, and not paired";
+                statusText = @"Offline, and not paired";
             } else {
                 statusColor = [NSColor systemRedColor];
-                self.statusLabel.stringValue = @"Offline, but paired";
+                statusText = @"Offline, but paired";
             }
             break;
         case StateUnknown:
+        default:
             statusColor = [NSColor systemGrayColor];
-            toolTipText = @"Unknown";
+            statusText = @"Unknown";
             break;
     }
 
-    
+    // Update UI elements
     self.statusLightView.backgroundColor = statusColor;
-    self.statusLightView.toolTip = toolTipText;
+    self.statusLabel.stringValue = statusText;
 }
 
 @end

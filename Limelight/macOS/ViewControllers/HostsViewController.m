@@ -34,7 +34,6 @@
 @property (nonatomic, strong) NSAlert *addHostManuallyAlert;
 
 @property (nonatomic, strong) NSArray *hostList;
-@property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
 
 @property (nonatomic, strong) NSOperationQueue *opQueue;
@@ -72,8 +71,6 @@
     
     self.getSearchField.delegate = self;
     self.getSearchField.placeholderString = @"Search Hosts";
-
-    [self updateHostCellsStatusStates];
 }
 
 - (void)viewDidAppear {
@@ -252,8 +249,7 @@
     if ([control.identifier isEqualToString:@"addHostField"]) {
         self.addHostManuallyAlert.buttons.firstObject.enabled = control.stringValue.length != 0;
     } else {
-        self.filterText = ((NSTextField *)obj.object).stringValue;
-        [self displayHosts];
+        [self filterHostsByString:((NSTextField *)obj.object).stringValue];
     }
 }
 
@@ -326,7 +322,8 @@
     DataManager* dataMan = [[DataManager alloc] init];
     NSArray* hosts = [dataMan getHosts];
     @synchronized(self.hosts) {
-        self.hosts = hosts;
+        // Sort the host list in alphabetical order
+        self.hosts = [hosts sortedArrayUsingSelector:@selector(compareName:)];
         
         // Initialize the non-persistent host state
         for (TemporaryHost* host in self.hosts) {
@@ -353,18 +350,10 @@
     }
 }
 
-- (void)updateHostCellsStatusStates {
-    NSInteger numberOfItems = [self.collectionView numberOfItemsInSection:0];
-    for (NSInteger itemIndex = 0; itemIndex < numberOfItems; itemIndex++) {
-        HostCell *cell = (HostCell *)[self.collectionView itemAtIndex:itemIndex];
-        [cell updateHostState];
-    }
-}
-
-- (void)displayHosts {
+- (void)filterHostsByString:(NSString *)filterString {
     NSPredicate *predicate;
-    if (self.filterText.length != 0) {
-        predicate = [NSPredicate predicateWithFormat:@"name CONTAINS[cd] %@", self.filterText];
+    if (filterString.length != 0) {
+        predicate = [NSPredicate predicateWithFormat:@"name CONTAINS[cd] %@", filterString];
     } else {
         predicate = [NSPredicate predicateWithValue:YES];
     }
@@ -372,7 +361,6 @@
     self.hosts = [filteredHosts sortedArrayUsingSelector:@selector(compareName:)];
 
     [self.collectionView reloadData];
-    [self updateHostCellsStatusStates];
 }
 
 
@@ -433,6 +421,7 @@
         @synchronized(self.hosts) {
             self.hosts = hosts;
         }
+        
         [self updateHosts];
     });
 }
