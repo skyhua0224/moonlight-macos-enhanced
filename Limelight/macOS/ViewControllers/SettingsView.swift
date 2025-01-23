@@ -94,6 +94,7 @@ struct Sidebar: View {
     @Binding var selectedPane: SettingsPaneType
 
     var body: some View {
+        // This "selectionBinding" is needed to make selection work with a macOS 11 Big Sur compatible List() constructor
         let selectionBinding = Binding<SettingsPaneType?>(get: {
             selectedPane
         }, set: { newValue in
