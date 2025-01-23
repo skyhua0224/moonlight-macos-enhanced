@@ -269,8 +269,6 @@ struct StreamView: View {
                         Slider(value: $settingsModel.bitrateSliderValue, in: 0...Float(SettingsModel.bitrateSteps.count - 1), step: 1)
                     }
                 }
-                
-                Spacer()
             }
             .padding()
             .onAppear {
@@ -334,8 +332,6 @@ struct VideoAndAudioView: View {
                 FormSection(title: "Audio") {
                     ToggleCell(title: "Play Sound on Host", boolBinding: $settingsModel.audioOnPC)
                 }
-                
-                Spacer()
             }
             .padding()
         }
@@ -395,8 +391,6 @@ struct InputView: View {
                         }
                     })
                 }
-                
-                Spacer()
             }
             .padding()
         }
@@ -426,10 +420,8 @@ struct AppView: View {
                     })
                 }
             }
-            
-            Spacer()
+            .padding()
         }
-        .padding()
     }
 }
 
@@ -443,8 +435,8 @@ struct LegacyView: View {
                     ToggleCell(title: "Optimize Game Settings", boolBinding: $settingsModel.optimize)
                 }
             }
+            .padding()
         }
-        .padding()
     }
 }
 
