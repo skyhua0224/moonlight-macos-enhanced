@@ -332,6 +332,29 @@ struct VideoAndAudioView: View {
                 
                 FormSection(title: "Audio") {
                     ToggleCell(title: "Play Sound on Host", boolBinding: $settingsModel.audioOnPC)
+
+                    Divider()
+                    
+                    VStack(alignment: .center) {
+                        Text("Volume")
+
+                        let volume = Int(settingsModel.volumeLevel * 100)
+                        Slider(value: $settingsModel.volumeLevel, in: 0.0...1.0) {
+                            ZStack(alignment: .leading) {
+                                Text("\(100)%")
+                                    .availableMonospacedDigit()
+                                    .hidden()
+                                Text("\(volume)%")
+                                    .availableMonospacedDigit()
+                            }
+                        } minimumValueLabel: {
+                            Image(systemName: "speaker.wave.1.fill")
+                        } maximumValueLabel: {
+                            Image(systemName: "speaker.wave.3.fill")
+                        } onEditingChanged: { changed in
+                            
+                        }
+                    }
                 }
             }
             .padding()

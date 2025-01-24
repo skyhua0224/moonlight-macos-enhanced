@@ -92,6 +92,12 @@ class SettingsModel: ObservableObject {
             saveSettings()
         }
     }
+    @Published var volumeLevel: CGFloat {
+        didSet {
+            saveSettings()
+            NotificationCenter.default.post(name: Notification.Name("volumeSettingChanged"), object: nil)
+        }
+    }
     @Published var selectedMultiControllerMode: String {
         didSet {
             saveSettings()
@@ -208,6 +214,7 @@ class SettingsModel: ObservableObject {
     static let defaultHdr = false
     static let defaultPacingOptions = "Smoothest Video"
     static let defaultAudioOnPC = false
+    static let defaultVolumeLevel = 1.0
     static let defaultMultiControllerMode = "Auto"
     static let defaultSwapButtons = false
     static let defaultOptimize = false
@@ -250,6 +257,7 @@ class SettingsModel: ObservableObject {
         selectedPacingOptions = Self.defaultPacingOptions
         
         audioOnPC = Self.defaultAudioOnPC
+        volumeLevel = Self.defaultVolumeLevel
         
         selectedMultiControllerMode = Self.defaultMultiControllerMode
         swapButtons = Self.defaultSwapButtons
@@ -281,7 +289,8 @@ class SettingsModel: ObservableObject {
         selectedPacingOptions = Self.defaultPacingOptions
         
         audioOnPC = Self.defaultAudioOnPC
-        
+        volumeLevel = Self.defaultVolumeLevel
+
         selectedMultiControllerMode = Self.defaultMultiControllerMode
         swapButtons = Self.defaultSwapButtons
         
@@ -339,6 +348,7 @@ class SettingsModel: ObservableObject {
                 selectedPacingOptions = Self.getString(from: settings.framePacing, in: Self.pacingOptions)
                 
                 audioOnPC = settings.audioOnPC
+                volumeLevel = settings.volumeLevel
                 
                 selectedMultiControllerMode = Self.getString(from: settings.multiController, in: Self.multiControllerModes)
                 swapButtons = settings.swapABXYButtons
@@ -426,6 +436,7 @@ class SettingsModel: ObservableObject {
             hdr: hdr,
             framePacing: framePacing,
             audioOnPC: audioOnPC,
+            volumeLevel: volumeLevel,
             multiController: multiController,
             swapABXYButtons: swapButtons,
             optimize: optimize,

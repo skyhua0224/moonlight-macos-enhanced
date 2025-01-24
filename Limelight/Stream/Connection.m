@@ -9,6 +9,8 @@
 #import "Connection.h"
 #import "Utils.h"
 
+#import "Moonlight-Swift.h"
+
 #import <AudioUnit/AudioUnit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <VideoToolbox/VideoToolbox.h>
@@ -44,6 +46,10 @@ static int audioBufferReadIndex;
 static int audioBufferStride;
 static int audioSamplesPerFrame;
 static short* audioCircularBuffer;
+
+static int channelCount;
+static float audioVolumeMultiplier = 1.0f;
+static NSString *hostAddress;
 
 #define AUDIO_QUEUE_BUFFERS 4
 
@@ -126,6 +132,8 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
         Log(LOG_E, @"Error allocating output queue\n");
         return -1;
     }
+    
+    channelCount = opusConfig.channelCount;
     
     switch (opusConfig.channelCount) {
         case 2:
@@ -260,6 +268,12 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     decodeLen = opus_multistream_decode(opusDecoder, (unsigned char *)sampleData, sampleLength,
                                         (short*)&audioCircularBuffer[audioBufferWriteIndex * audioBufferStride], audioSamplesPerFrame, 0);
     if (decodeLen > 0) {
+        // Apply volume adjustment to each audio sample
+        short* buffer = &audioCircularBuffer[audioBufferWriteIndex * audioBufferStride];
+        for (int i = 0; i < decodeLen * channelCount; i++) {
+            buffer[i] = (short)(buffer[i] * audioVolumeMultiplier);
+        }
+        
         // Use a full memory barrier to ensure the circular buffer is written before incrementing the index
         __sync_synchronize();
         
@@ -267,6 +281,13 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         // race since we'll either read the original value of s_WriteIndex (which is safe,
         // we just won't consider this sample) or the new value of s_WriteIndex
         audioBufferWriteIndex = (audioBufferWriteIndex + 1) % audioBufferEntries;
+    }
+}
+
+- (void)updateVolume {
+    if (hostAddress != nil) {
+        NSString *uuid = [SettingsClass getHostUUIDFrom:hostAddress];
+        audioVolumeMultiplier = [SettingsClass volumeLevelFor:uuid];
     }
 }
 
@@ -335,11 +356,16 @@ void ClConnectionStatusUpdate(int status)
 {
     self = [super init];
 
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateVolume) name:@"volumeSettingChanged" object:nil];
+    
     // Use a lock to ensure that only one thread is initializing
     // or deinitializing a connection at a time.
     if (initLock == nil) {
         initLock = [[NSLock alloc] init];
     }
+    
+    hostAddress = config.host;
+    [self updateVolume];
     
     strncpy(_hostString,
             [config.host cStringUsingEncoding:NSUTF8StringEncoding],

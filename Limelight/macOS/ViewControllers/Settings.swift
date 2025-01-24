@@ -18,6 +18,7 @@ struct Settings: Encodable, Decodable {
     let hdr: Bool
     let framePacing: Int
     let audioOnPC: Bool
+    let volumeLevel: CGFloat
     let multiController: Bool
     let swapABXYButtons: Bool
     let optimize: Bool
@@ -62,6 +63,7 @@ class SettingsClass: NSObject {
                     "hdr": settings.hdr,
                     "framePacing": settings.framePacing,
                     "audioOnPC": settings.audioOnPC,
+                    "volumeLevel": settings.volumeLevel,
                     "multiController": settings.multiController,
                     "swapABXYButtons": settings.swapABXYButtons,
                     "optimize": settings.optimize,
@@ -111,12 +113,28 @@ class SettingsClass: NSObject {
         }
     }
     
+    @objc static func getHostUUID(from address: String) -> String? {
+        if let hosts = DataManager().getHosts() as? [TemporaryHost] {
+            if let matchingHost = hosts.first(where: { host in
+                if let potentialAddress = host.localAddress {
+                    return potentialAddress == address
+                } else {
+                    return false
+                }
+            }) {
+                return matchingHost.uuid
+            }
+        }
+        
+        return nil
+    }
+    
     @objc static func autoFullscreen(for key: String) -> Bool {
         if let settings = Settings.getSettings(for: key) {
             return settings.autoFullscreen
         }
         
-        return true
+        return SettingsModel.defaultAutoFullscreen
     }
     
     @objc static func rumble(for key: String) -> Bool {
@@ -124,7 +142,7 @@ class SettingsClass: NSObject {
             return settings.rumble
         }
         
-        return true
+        return SettingsModel.defaultRumble
     }
     
     @objc static func controllerDriver(for key: String) -> Int {
@@ -132,7 +150,7 @@ class SettingsClass: NSObject {
             return settings.controllerDriver
         }
         
-        return 0
+        return SettingsModel.getInt(from: SettingsModel.defaultControllerDriver, in: SettingsModel.controllerDrivers)
     }
     
     @objc static func mouseDriver(for key: String) -> Int {
@@ -140,7 +158,7 @@ class SettingsClass: NSObject {
             return settings.mouseDriver
         }
         
-        return 0
+        return SettingsModel.getInt(from: SettingsModel.defaultMouseDriver, in: SettingsModel.mouseDrivers)
     }
     
     @objc static func appArtworkDimensions(for key: String) -> CGSize {
@@ -158,6 +176,14 @@ class SettingsClass: NSObject {
             return settings.dimNonHoveredArtwork
         }
         
-        return true
+        return SettingsModel.defaultDimNonHoveredArtwork
+    }
+    
+    @objc static func volumeLevel(for key: String) -> CGFloat {
+        if let settings = Settings.getSettings(for: key) {
+            return settings.volumeLevel
+        }
+        
+        return SettingsModel.defaultVolumeLevel
     }
 }
