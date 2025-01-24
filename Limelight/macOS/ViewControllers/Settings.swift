@@ -18,7 +18,7 @@ struct Settings: Encodable, Decodable {
     let hdr: Bool
     let framePacing: Int
     let audioOnPC: Bool
-    let volumeLevel: CGFloat
+    let volumeLevel: CGFloat?
     let multiController: Bool
     let swapABXYButtons: Bool
     let optimize: Bool
@@ -181,7 +181,7 @@ class SettingsClass: NSObject {
     
     @objc static func volumeLevel(for key: String) -> CGFloat {
         if let settings = Settings.getSettings(for: key) {
-            return settings.volumeLevel
+            return settings.volumeLevel ?? SettingsModel.defaultVolumeLevel
         }
         
         return SettingsModel.defaultVolumeLevel

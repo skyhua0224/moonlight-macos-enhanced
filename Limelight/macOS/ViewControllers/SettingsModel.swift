@@ -348,7 +348,7 @@ class SettingsModel: ObservableObject {
                 selectedPacingOptions = Self.getString(from: settings.framePacing, in: Self.pacingOptions)
                 
                 audioOnPC = settings.audioOnPC
-                volumeLevel = settings.volumeLevel
+                volumeLevel = settings.volumeLevel ?? SettingsModel.defaultVolumeLevel
                 
                 selectedMultiControllerMode = Self.getString(from: settings.multiController, in: Self.multiControllerModes)
                 swapButtons = settings.swapABXYButtons
