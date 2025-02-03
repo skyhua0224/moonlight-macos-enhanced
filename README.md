@@ -52,9 +52,10 @@ Moonlight macOS is a native macOS client for NVIDIA's GameStream. It allows you 
 
 1. Run the following line in your Terminal:
 
-```Bash
-git clone --recursive https://github.com/MichaelMKenny/moonlight-macos.git
-```
+   ```Bash
+   git clone --recursive https://github.com/MichaelMKenny/moonlight-macos.git
+   ```
+1. Install XCFramework dependencies by downloading [the latest built frameworks](https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip). Unzip that file, and place the `.xcframework` files into the `xcframeworks` directory in this project.
 
 2. Open `Moonlight.xcodeproj`  in Xcode.
 3. Open the Project file (the first item in the sidebar, labelled “Moonlight”).

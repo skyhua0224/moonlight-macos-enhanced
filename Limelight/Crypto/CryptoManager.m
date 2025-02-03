@@ -9,9 +9,6 @@
 #import "CryptoManager.h"
 #import "mkcert.h"
 
-#import "DatabaseSingleton.h"
-
-#include <openssl/aes.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
@@ -47,46 +44,47 @@ static NSData* p12 = nil;
 }
 
 - (NSData*) aesEncrypt:(NSData*)data withKey:(NSData*)key {
-    AES_KEY aesKey;
-    AES_set_encrypt_key([key bytes], 128, &aesKey);
-    int size = [self getEncryptSize:data];
-    unsigned char* buffer = malloc(size);
-    unsigned char* blockRoundedBuffer = calloc(1, size);
-    memcpy(blockRoundedBuffer, [data bytes], [data length]);
+    EVP_CIPHER_CTX* cipher;
+    int ciphertextLen;
+
+    cipher = EVP_CIPHER_CTX_new();
+
+    EVP_EncryptInit(cipher, EVP_aes_128_ecb(), [key bytes], NULL);
+    EVP_CIPHER_CTX_set_padding(cipher, 0);
+
+    NSMutableData* ciphertext = [NSMutableData dataWithLength:[data length]];
+    EVP_EncryptUpdate(cipher,
+                      [ciphertext mutableBytes],
+                      &ciphertextLen,
+                      [data bytes],
+                      (int)[data length]);
+    assert(ciphertextLen == [ciphertext length]);
+
+    EVP_CIPHER_CTX_free(cipher);
     
-    // AES_encrypt only encrypts the first 16 bytes so iterate the entire buffer
-    int blockOffset = 0;
-    while (blockOffset < size) {
-        AES_encrypt(blockRoundedBuffer + blockOffset, buffer + blockOffset, &aesKey);
-        blockOffset += 16;
-    }
-    
-    NSData* encryptedData = [NSData dataWithBytes:buffer length:size];
-    free(buffer);
-    free(blockRoundedBuffer);
-    return encryptedData;
+    return ciphertext;
 }
 
 - (NSData*) aesDecrypt:(NSData*)data withKey:(NSData*)key {
-    AES_KEY aesKey;
-    AES_set_decrypt_key([key bytes], 128, &aesKey);
-    unsigned char* buffer = malloc([data length]);
-    
-    // AES_decrypt only decrypts the first 16 bytes so iterate the entire buffer
-    int blockOffset = 0;
-    while (blockOffset < [data length]) {
-        AES_decrypt([data bytes] + blockOffset, buffer + blockOffset, &aesKey);
-        blockOffset += 16;
-    }
-    
-    NSData* decryptedData = [NSData dataWithBytes:buffer length:[data length]];
-    free(buffer);
-    return decryptedData;
-}
+    EVP_CIPHER_CTX* cipher;
+    int plaintextLen;
 
-- (int) getEncryptSize:(NSData*)data {
-    // the size is the length of the data ceiling to the nearest 16 bytes
-    return (((int)[data length] + 15) / 16) * 16;
+    cipher = EVP_CIPHER_CTX_new();
+
+    EVP_DecryptInit(cipher, EVP_aes_128_ecb(), [key bytes], NULL);
+    EVP_CIPHER_CTX_set_padding(cipher, 0);
+
+    NSMutableData* plaintext = [NSMutableData dataWithLength:[data length]];
+    EVP_DecryptUpdate(cipher,
+                      [plaintext mutableBytes],
+                      &plaintextLen,
+                      [data bytes],
+                      (int)[data length]);
+    assert(plaintextLen == [plaintext length]);
+
+    EVP_CIPHER_CTX_free(cipher);
+    
+    return plaintext;
 }
 
 + (NSData*) pemToDer:(NSData*)pemCertBytes {
@@ -98,6 +96,7 @@ static NSData* p12 = nil;
     
     bio = BIO_new(BIO_s_mem());
     i2d_X509_bio(bio, x509);
+    X509_free(x509);
 
     BUF_MEM* mem;
     BIO_get_mem_ptr(bio, &mem);
@@ -174,9 +173,10 @@ static NSData* p12 = nil;
 #if TARGET_OS_TV
     return [[NSUserDefaults standardUserDefaults] dataForKey:item];
 #else
-    NSURL *applicationSupportDirectory = [DatabaseSingleton applicationSupportDirectory];
-    NSURL *file = [applicationSupportDirectory URLByAppendingPathComponent:item isDirectory:NO];
-    return [NSData dataWithContentsOfURL:file];
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths objectAtIndex:0];
+    NSString *file = [documentsDirectory stringByAppendingPathComponent:item];
+    return [NSData dataWithContentsOfFile:file];
 #endif
 }
 
@@ -184,9 +184,10 @@ static NSData* p12 = nil;
 #if TARGET_OS_TV
     [[NSUserDefaults standardUserDefaults] setObject:data forKey:item];
 #else
-    NSURL *applicationSupportDirectory = [DatabaseSingleton applicationSupportDirectory];
-    NSURL *file = [applicationSupportDirectory URLByAppendingPathComponent:item isDirectory:NO];
-    [data writeToURL:file atomically:NO];
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths objectAtIndex:0];
+    NSString *file = [documentsDirectory stringByAppendingPathComponent:item];
+    [data writeToFile:file atomically:NO];
 #endif
 }
 
@@ -222,6 +223,7 @@ static NSData* p12 = nil;
 + (NSData *)getSignatureFromCert:(NSData *)cert {
     BIO* bio = BIO_new_mem_buf([cert bytes], (int)[cert length]);
     X509* x509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+    BIO_free(bio);
     
     if (!x509) {
         Log(LOG_E, @"Unable to parse certificate in memory!");
@@ -285,8 +287,6 @@ static NSData* p12 = nil;
     static dispatch_once_t pred;
     dispatch_once(&pred, ^{
         if (![CryptoManager keyPairExists]) {
-            [self deleteKeychainCertificate];
-            
             Log(LOG_I, @"Generating Certificate... ");
             CertKeyPair certKeyPair = generateCertKeyPair();
             
@@ -303,18 +303,6 @@ static NSData* p12 = nil;
             Log(LOG_I, @"Certificate created");
         }
     });
-}
-
-+ (void)deleteKeychainCertificate {
-    NSDictionary *query = @{
-                            (NSString *)kSecClass: (NSString *)kSecClassCertificate,
-                            (NSString *)kSecAttrLabel: (NSString *)@"NVIDIA GameStream Client",
-                            (NSString *)kSecMatchLimit: (NSString *)kSecMatchLimitOne
-                            };
-    OSStatus status = SecItemDelete((CFDictionaryRef)query);
-    if (status != errSecSuccess) {
-        Log(LOG_E, @"Couldn't delete old certificate (%d)", status);
-    }
 }
 
 @end
