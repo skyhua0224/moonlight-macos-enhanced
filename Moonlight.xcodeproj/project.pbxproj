@@ -370,7 +370,6 @@
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Limelight/macOS/Supporting Files/Limelight-Prefix.pch";
 				HEADER_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/libs/**",
 					"$(SDKROOT)/usr/include/libxml2",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
 				);
@@ -378,11 +377,6 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/libs/openssl/lib",
-					"$(PROJECT_DIR)/libs/opus/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				MARKETING_VERSION = 1.1.0;
@@ -423,7 +417,6 @@
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Limelight/macOS/Supporting Files/Limelight-Prefix.pch";
 				HEADER_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/libs/**",
 					"$(SDKROOT)/usr/include/libxml2",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
 				);
@@ -431,11 +424,6 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/libs/openssl/lib",
-					"$(PROJECT_DIR)/libs/opus/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				MARKETING_VERSION = 1.1.0;
