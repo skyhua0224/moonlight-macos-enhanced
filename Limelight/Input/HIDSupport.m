@@ -478,7 +478,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         }
         _mappings = [NSDictionary dictionaryWithDictionary:d];
         
-        [self initializeDisplayLink];
+//        [self initializeDisplayLink];
     }
     return self;
 }
@@ -691,8 +691,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         return;
     }
     
-    self.mouseDeltaX += event.deltaX;
-    self.mouseDeltaY += event.deltaY;
+    if (event.deltaX != 0 || event.deltaY != 0) {
+        if (self.shouldSendInputEvents) {
+            LiSendMouseMoveEvent(event.deltaX, event.deltaY);
+        }
+    }
 }
 
 - (void)scrollWheel:(NSEvent *)event {
