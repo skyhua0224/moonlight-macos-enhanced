@@ -127,16 +127,17 @@
                         <action selector="wakeMenuItemClicked:" target="-1" id="QRb-YP-iMw"/>
                     </connections>
                 </menuItem>
-                <menuItem title="Remove Host" image="trash" catalog="system" identifier="removeHostMenuItem" id="xzr-nr-OxJ">
-                    <modifierMask key="keyEquivalentModifierMask"/>
-                    <connections>
-                        <action selector="removeHostMenuItemClicked:" target="-1" id="tfu-ld-UU0"/>
-                    </connections>
-                </menuItem>
                 <menuItem title="Show Hidden Apps" image="eye" catalog="system" identifier="showHiddenAppsMenuItem" id="RwF-WV-9CR">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="showHiddenAppsMenuItemClicked:" target="-1" id="s7m-Rv-gUh"/>
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="OSO-o5-BuN"/>
+                <menuItem title="Remove Host" image="trash" catalog="system" identifier="removeHostMenuItem" id="xzr-nr-OxJ">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="removeHostMenuItemClicked:" target="-1" id="tfu-ld-UU0"/>
                     </connections>
                 </menuItem>
             </items>
