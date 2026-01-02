@@ -522,6 +522,7 @@
     // Auto-adjust bitrate (mirrors moonlight-qt default algorithm)
     BOOL autoAdjustBitrate = prefs ? [prefs[@"autoAdjustBitrate"] boolValue] : NO;
     if (autoAdjustBitrate) {
+        BOOL enableYuv444 = prefs ? [prefs[@"yuv444"] boolValue] : NO;
         int modeWidth = streamConfig.width;
         int modeHeight = streamConfig.height;
         int modeFps = streamConfig.frameRate;
@@ -579,6 +580,10 @@
                 resolutionFactor = (float)resTable[i-1].factor;
                 break;
             }
+        }
+
+        if (enableYuv444) {
+            resolutionFactor *= 2.f;
         }
 
         int defaultKbps = (int)lroundf(resolutionFactor * frameRateFactor) * 1000;

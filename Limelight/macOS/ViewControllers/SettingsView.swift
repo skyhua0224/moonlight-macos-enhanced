@@ -6,9 +6,9 @@
 //  Copyright © 2024 Moonlight Game Streaming Project. All rights reserved.
 //
 
-import SwiftUI
 import AppKit
 import CoreGraphics
+import SwiftUI
 
 enum SettingsPaneType: Int, CaseIterable {
   case stream
@@ -204,7 +204,9 @@ struct StreamView: View {
 
   private func nativeDisplayPixelSize() -> CGSize? {
     guard let screen = NSScreen.main else { return nil }
-    guard let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    guard
+      let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+        as? NSNumber
     else { return nil }
 
     let displayID = CGDirectDisplayID(screenNumber.uint32Value)
@@ -251,10 +253,10 @@ struct StreamView: View {
               .font(.footnote)
               .foregroundColor(.secondary)
             }
-            
+
             Divider()
           }
-          
+
           FormCell(title: "Language", contentWidth: 150) {
             Picker("", selection: $languageManager.currentLanguage) {
               ForEach(AppLanguage.allCases) { lang in
@@ -364,7 +366,8 @@ struct StreamView: View {
 
           Divider()
 
-          ToggleCell(title: "Remote Resolution", boolBinding: $settingsModel.remoteResolutionEnabled)
+          ToggleCell(
+            title: "Remote Resolution", boolBinding: $settingsModel.remoteResolutionEnabled)
 
           if settingsModel.remoteResolutionEnabled {
             Divider()
@@ -377,7 +380,8 @@ struct StreamView: View {
                     if resolution == .zero {
                       Text(languageManager.localize("Custom"))
                     } else {
-                      Text(verbatim: resolution.height == 2160 ? "4K" : "\(Int(resolution.height))p")
+                      Text(
+                        verbatim: resolution.height == 2160 ? "4K" : "\(Int(resolution.height))p")
                     }
                   }
                 }
@@ -429,10 +433,11 @@ struct StreamView: View {
                 title: "Remote Custom FPS", contentWidth: 0,
                 content: {
                   TextField(
-                    "60", value: $settingsModel.remoteCustomFps, formatter: NumberOnlyFormatter())
-                    .multilineTextAlignment(.trailing)
-                    .textFieldStyle(.plain)
-                    .fixedSize()
+                    "60", value: $settingsModel.remoteCustomFps, formatter: NumberOnlyFormatter()
+                  )
+                  .multilineTextAlignment(.trailing)
+                  .textFieldStyle(.plain)
+                  .fixedSize()
                 })
             }
           }
@@ -441,7 +446,7 @@ struct StreamView: View {
             Text(languageManager.localize("Remote overrides apply to the host render mode only."))
               .font(.footnote)
               .foregroundColor(.secondary)
-            Text(languageManager.localize("Enable Remote Resolution/FPS to override the /launch mode parameter."))
+            Text(languageManager.localize("Remote overrides hint"))
               .font(.footnote)
               .foregroundColor(.secondary)
           }
@@ -452,45 +457,12 @@ struct StreamView: View {
           .frame(height: 32)
 
         FormSection(title: "Bitrate") {
-          VStack(alignment: .leading) {
+          VStack(alignment: .leading, spacing: 10) {
             Toggle(isOn: $settingsModel.autoAdjustBitrate) {
               Text(languageManager.localize("Auto Adjust Bitrate"))
             }
             .toggleStyle(.switch)
             .controlSize(.small)
-
-            HStack {
-              let steps = SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate)
-              let index = max(0, min(Int(settingsModel.bitrateSliderValue), steps.count - 1))
-              let stepKbps = Int(steps[index] * 1000.0)
-              let bitrateKbps = settingsModel.customBitrate ?? stepKbps
-              let bitrateMbps = max(0, bitrateKbps / 1000)
-
-              Text(verbatim: "\(bitrateMbps) Mbps")
-                .availableMonospacedDigit()
-
-              Spacer()
-
-              let customBitrateMbpsBinding = Binding<Int?>(
-                get: {
-                  guard let kbps = settingsModel.customBitrate else { return nil }
-                  return kbps / 1000
-                },
-                set: { newMbps in
-                  if let newMbps {
-                    settingsModel.customBitrate = max(0, newMbps) * 1000
-                  } else {
-                    settingsModel.customBitrate = nil
-                  }
-                }
-              )
-
-              TextField("Mbps", value: customBitrateMbpsBinding, formatter: NumberOnlyFormatter())
-                .multilineTextAlignment(.trailing)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .disabled(settingsModel.autoAdjustBitrate)
-            }
 
             Toggle(isOn: $settingsModel.unlockMaxBitrate) {
               Text(languageManager.localize("Unlock max bitrate (1000 Mbps)"))
@@ -498,10 +470,60 @@ struct StreamView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
 
-            Slider(
-              value: $settingsModel.bitrateSliderValue,
-              in: 0...Float(max(0, SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate).count - 1)), step: 1)
-            .disabled(settingsModel.autoAdjustBitrate)
+            let steps = SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate)
+            let index = max(0, min(Int(settingsModel.bitrateSliderValue), steps.count - 1))
+            let stepKbps = Int(steps[index] * 1000.0)
+            let bitrateKbps = settingsModel.customBitrate ?? stepKbps
+            let bitrateMbps = max(0, bitrateKbps / 1000)
+
+            if settingsModel.autoAdjustBitrate {
+              HStack {
+                Text(languageManager.localize("Target Bitrate"))
+                Spacer()
+                Text(verbatim: "\(bitrateMbps) Mbps")
+                  .availableMonospacedDigit()
+              }
+              Text(languageManager.localize("Auto bitrate hint"))
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            } else {
+              HStack {
+                Text(verbatim: "\(bitrateMbps) Mbps")
+                  .availableMonospacedDigit()
+
+                Spacer()
+
+                let customBitrateMbpsBinding = Binding<Int?>(
+                  get: {
+                    guard let kbps = settingsModel.customBitrate else { return nil }
+                    return kbps / 1000
+                  },
+                  set: { newMbps in
+                    if let newMbps {
+                      settingsModel.customBitrate = max(0, newMbps) * 1000
+                    } else {
+                      settingsModel.customBitrate = nil
+                    }
+                  }
+                )
+
+                TextField("Mbps", value: customBitrateMbpsBinding, formatter: NumberOnlyFormatter())
+                  .multilineTextAlignment(.trailing)
+                  .textFieldStyle(.roundedBorder)
+                  .frame(width: 80)
+              }
+
+              Slider(
+                value: $settingsModel.bitrateSliderValue,
+                in:
+                  0...Float(
+                    max(
+                      0,
+                      SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate).count - 1
+                    )),
+                step: 1
+              )
+            }
           }
         }
       }
@@ -518,7 +540,8 @@ struct StreamView: View {
             settingsModel.remoteResolutionEnabled && settingsModel.selectedRemoteResolution == .zero
         }
         func updateRemoteCustomFpsGroup() {
-          showRemoteCustomFpsGroup = settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
+          showRemoteCustomFpsGroup =
+            settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
         }
 
         updateCustomResolutionGroup()
@@ -550,12 +573,14 @@ struct StreamView: View {
       }
       .onChange(of: settingsModel.remoteFpsEnabled) { _ in
         withAnimation {
-          showRemoteCustomFpsGroup = settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
+          showRemoteCustomFpsGroup =
+            settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
         }
       }
       .onChange(of: settingsModel.selectedRemoteFps) { _ in
         withAnimation {
-          showRemoteCustomFpsGroup = settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
+          showRemoteCustomFpsGroup =
+            settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
         }
       }
     }
@@ -565,6 +590,12 @@ struct StreamView: View {
 struct VideoAndAudioView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
+
+  private func warningText(_ key: String) -> some View {
+    Text(languageManager.localize(key))
+      .font(.footnote)
+      .foregroundColor(Color(nsColor: .systemOrange))
+  }
 
   var body: some View {
     ScrollView {
@@ -585,6 +616,15 @@ struct VideoAndAudioView: View {
           Divider()
 
           ToggleCell(title: "HDR", boolBinding: $settingsModel.hdr)
+
+          Divider()
+
+          ToggleCell(
+            title: "Enable YUV 4:4:4",
+            boolBinding: $settingsModel.enableYUV444
+          )
+
+          warningText("YUV 4:4:4 hint")
 
           Divider()
 
@@ -630,6 +670,15 @@ struct VideoAndAudioView: View {
           Divider()
 
           ToggleCell(title: "Play Sound on Host", boolBinding: $settingsModel.audioOnPC)
+
+          Divider()
+
+          ToggleCell(
+            title: "Enable Microphone",
+            boolBinding: $settingsModel.enableMicrophone
+          )
+
+          warningText("Microphone hint")
 
           Divider()
 
@@ -996,7 +1045,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
       return nil
     }
 
-    let val = NSLocalizedString(key, tableName: nil, bundle: bundle, value: "___MISSING___", comment: "")
+    let val = NSLocalizedString(
+      key, tableName: nil, bundle: bundle, value: "___MISSING___", comment: "")
     return val == "___MISSING___" ? nil : val
   }
 
@@ -1058,8 +1108,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Remote FPS": "Remote FPS",
     "Remote FPS Value": "Remote FPS Value",
     "Remote Custom FPS": "Remote Custom FPS",
-    "Remote overrides apply to the host render mode only.": "Remote overrides apply to the host render mode only.",
-    "Enable Remote Resolution/FPS to override the /launch mode parameter.": "Enable Remote Resolution/FPS to override the /launch mode parameter.",
+    "Remote overrides apply to the host render mode only.":
+      "Remote overrides apply to the host render mode only.",
+    "Enable Remote Resolution/FPS to override the /launch mode parameter.":
+      "Enable Remote Resolution/FPS to override the /launch mode parameter.",
 
     "Bitrate": "Bitrate",
 
@@ -1157,7 +1209,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Remote FPS Value": "远程帧率选项",
     "Remote Custom FPS": "远程自定义帧率",
     "Remote overrides apply to the host render mode only.": "远程选项仅影响主机端渲染/编码模式，不改变本地显示设置。",
-    "Enable Remote Resolution/FPS to override the /launch mode parameter.": "需开启远程分辨率/帧率才会覆盖启动参数（/launch mode）。",
+    "Enable Remote Resolution/FPS to override the /launch mode parameter.":
+      "需开启远程分辨率/帧率才会覆盖启动参数（/launch mode）。",
 
     "Bitrate": "视频比特率",
 
