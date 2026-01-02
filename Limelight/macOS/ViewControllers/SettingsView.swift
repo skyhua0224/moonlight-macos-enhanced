@@ -294,9 +294,23 @@ struct StreamView: View {
 
         FormSection(title: "Bitrate") {
           VStack(alignment: .leading) {
-            let bitrate = Int(SettingsModel.bitrateSteps[Int(settingsModel.bitrateSliderValue)])
-            Text("\(bitrate) Mbps")
-              .availableMonospacedDigit()
+            HStack {
+              let bitrate =
+                settingsModel.customBitrate
+                ?? Int(SettingsModel.bitrateSteps[Int(settingsModel.bitrateSliderValue)])
+              Text(verbatim: "\(bitrate) Mbps")
+                .availableMonospacedDigit()
+
+              Spacer()
+
+              TextField(
+                "Custom", value: $settingsModel.customBitrate, formatter: NumberOnlyFormatter()
+              )
+              .multilineTextAlignment(.trailing)
+              .textFieldStyle(.roundedBorder)
+              .frame(width: 80)
+            }
+
             Slider(
               value: $settingsModel.bitrateSliderValue,
               in: 0...Float(SettingsModel.bitrateSteps.count - 1), step: 1)
@@ -353,6 +367,10 @@ struct VideoAndAudioView: View {
 
           Divider()
 
+          ToggleCell(title: "V-Sync", boolBinding: $settingsModel.enableVsync)
+
+          Divider()
+
           FormCell(
             title: "Frame Pacing", contentWidth: 155,
             content: {
@@ -362,12 +380,29 @@ struct VideoAndAudioView: View {
                 }
               }
             })
+
+          Divider()
+
+          ToggleCell(
+            title: "Performance Overlay", boolBinding: $settingsModel.showPerformanceOverlay)
         }
 
         Spacer()
           .frame(height: 32)
 
         FormSection(title: "Audio") {
+          FormCell(
+            title: "Audio Configuration", contentWidth: 155,
+            content: {
+              Picker("", selection: $settingsModel.selectedAudioConfiguration) {
+                ForEach(SettingsModel.audioConfigurations, id: \.self) { config in
+                  Text(languageManager.localize(config))
+                }
+              }
+            })
+
+          Divider()
+
           ToggleCell(title: "Play Sound on Host", boolBinding: $settingsModel.audioOnPC)
 
           Divider()
@@ -420,6 +455,15 @@ struct InputView: View {
           Divider()
 
           ToggleCell(title: "Rumble Controller", boolBinding: $settingsModel.rumble)
+        }
+
+        Spacer()
+          .frame(height: 32)
+
+        FormSection(title: "Keyboard") {
+          ToggleCell(
+            title: "Capture system keyboard shortcuts",
+            boolBinding: $settingsModel.captureSystemShortcuts)
         }
 
         Spacer()
@@ -699,7 +743,10 @@ class LanguageManager: ObservableObject {
     "Smoothest Video": "Smoothest Video",
 
     "Audio": "Audio",
+    "Audio Configuration": "Audio Configuration",
     "Play Sound on Host": "Play Sound on Host",
+    "V-Sync": "V-Sync",
+    "Performance Overlay": "Performance Overlay",
     "Volume": "Volume",
 
     "Controller": "Controller",
@@ -715,6 +762,8 @@ class LanguageManager: ObservableObject {
     "Mouse Driver": "Mouse Driver",
     "HID": "HID",
     "MFi": "MFi",
+    "Keyboard": "Keyboard",
+    "Capture system keyboard shortcuts": "Capture system keyboard shortcuts",
 
     "Behaviour": "Behaviour",
     "Automatically Fullscreen Stream Window": "Automatically Fullscreen Stream Window",
@@ -734,7 +783,7 @@ class LanguageManager: ObservableObject {
     "Input": "输入设置",
     "App": "应用设置",
     "Legacy": "其他设置",
-    "General": "通用",
+    "General": "常规",
     "Language": "语言 (Language)",
     "System": "系统默认 (System)",
 
@@ -756,7 +805,10 @@ class LanguageManager: ObservableObject {
     "Smoothest Video": "最流畅视频",
 
     "Audio": "音频",
+    "Audio Configuration": "音频配置",
     "Play Sound on Host": "在主机上播放声音",
+    "V-Sync": "垂直同步",
+    "Performance Overlay": "显示性能统计",
     "Volume": "音量",
 
     "Controller": "手柄设置",
@@ -772,6 +824,8 @@ class LanguageManager: ObservableObject {
     "Mouse Driver": "鼠标驱动",
     "HID": "HID (推荐)",
     "MFi": "MFi (原生)",
+    "Keyboard": "键盘",
+    "Capture system keyboard shortcuts": "捕获系统快捷键",
 
     "Behaviour": "行为",
     "Automatically Fullscreen Stream Window": "自动全屏显示",
