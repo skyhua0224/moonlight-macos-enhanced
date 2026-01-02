@@ -10,6 +10,7 @@
 #import "RendererLayerContainer.h"
 
 #include "Limelight.h"
+#include <pthread.h>
 
 @import VideoToolbox;
 
@@ -18,6 +19,7 @@
 @property (nonatomic) int frameRate;
 
 @end
+
 
 @implementation VideoDecoderRenderer {
     OSView *_view;
@@ -249,8 +251,53 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     }
 }
 
-// This function must free data for bufferType == BUFFER_TYPE_PICDATA
-- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType frameType:(int)frameType pts:(unsigned int)pts
+- (int)submitDecodeUnit:(void *)du_void {
+    PDECODE_UNIT decodeUnit = (PDECODE_UNIT)du_void;
+    int offset = 0;
+    int ret;
+    
+    // Fallback to standard malloc to avoid potential pool/locking issues
+    unsigned char* data = (unsigned char*) malloc(decodeUnit->fullLength);
+    if (data == NULL) {
+        return DR_NEED_IDR;
+    }
+
+    PLENTRY entry = decodeUnit->bufferList;
+    while (entry != NULL) {
+        if (entry->bufferType != BUFFER_TYPE_PICDATA) {
+            ret = [self submitDecodeBuffer:(unsigned char*)entry->data
+                                    length:entry->length
+                                bufferType:entry->bufferType
+                                 frameType:decodeUnit->frameType
+                                       pts:decodeUnit->presentationTimeMs];
+            if (ret != DR_OK) {
+                free(data);
+                return ret;
+            }
+        }
+        else {
+            memcpy(&data[offset], entry->data, entry->length);
+            offset += entry->length;
+        }
+
+        entry = entry->next;
+    }
+
+    // Standard submission - renderer takes ownership and will free()
+    return [self submitDecodeBuffer:data
+                             length:offset
+                         bufferType:BUFFER_TYPE_PICDATA
+                          frameType:decodeUnit->frameType
+                                pts:decodeUnit->presentationTimeMs];
+}
+
+// Legacy entry point
+- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType frameType:(int)frameType pts:(unsigned int)pts {
+    return [self submitDecodeBuffer:data length:length bufferType:bufferType frameType:frameType pts:pts blockSource:NULL];
+}
+
+// This function must free data for bufferType == BUFFER_TYPE_PICDATA (if blockSource is NULL)
+- (int)submitDecodeBuffer:(unsigned char *)data length:(int)length bufferType:(int)bufferType frameType:(int)frameType pts:(unsigned int)pts blockSource:(CMBlockBufferCustomBlockSource *)blockSource
 {
     OSStatus status;
 
@@ -357,10 +404,20 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     CMBlockBufferRef frameBlockBuffer;
     CMBlockBufferRef dataBlockBuffer;
     
-    status = CMBlockBufferCreateWithMemoryBlock(NULL, data, length, kCFAllocatorDefault, NULL, 0, length, 0, &dataBlockBuffer);
+    if (blockSource != NULL) {
+        status = CMBlockBufferCreateWithMemoryBlock(NULL, data, length, kCFAllocatorNull, blockSource, 0, length, 0, &dataBlockBuffer);
+    } else {
+        // Legacy path: uses kCFAllocatorDefault which calls free()
+        status = CMBlockBufferCreateWithMemoryBlock(NULL, data, length, kCFAllocatorDefault, NULL, 0, length, 0, &dataBlockBuffer);
+    }
+    
     if (status != noErr) {
         Log(LOG_E, @"CMBlockBufferCreateWithMemoryBlock failed: %d", (int)status);
-        free(data);
+        if (blockSource != NULL) {
+            blockSource->FreeBlock(NULL, data, length);
+        } else {
+            free(data);
+        }
         return DR_NEED_IDR;
     }
     

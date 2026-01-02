@@ -51,4 +51,6 @@ typedef struct {
                 frameType:(int)frameType
                       pts:(unsigned int)pts;
 
+- (int)submitDecodeUnit:(void *)du;
+
 @end

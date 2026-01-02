@@ -33,6 +33,11 @@ typedef enum : NSUInteger {
 
 @implementation AppDelegateForAppKit
 
+// Opt in explicitly to secure restorable state to avoid the system warning on some macOS versions.
+- (BOOL)applicationSupportsSecureRestorableState:(NSApplication *)app {
+    return YES;
+}
+
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     [self createMainWindow];
     

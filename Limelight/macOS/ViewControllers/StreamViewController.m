@@ -121,7 +121,11 @@
                 if (weakSelf.useSystemControllerDriver) {
                     [weakSelf.controllerSupport cleanup];
                 }
-                [weakSelf.streamMan stopStream];
+                // Stopping the stream can block while common-c tears down sockets/ENet.
+                // Do it off the main thread so window close doesn't feel like a hang.
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    [weakSelf.streamMan stopStream];
+                });
             });
         }
     }];

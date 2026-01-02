@@ -110,42 +110,8 @@ void DrStop(void)
 
 int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
 {
-    int offset = 0;
-    int ret;
-    unsigned char* data = (unsigned char*) malloc(decodeUnit->fullLength);
-    if (data == NULL) {
-        // A frame was lost due to OOM condition
-        return DR_NEED_IDR;
-    }
-
-    PLENTRY entry = decodeUnit->bufferList;
-    while (entry != NULL) {
-        // Submit parameter set NALUs directly since no copy is required by the decoder
-        if (entry->bufferType != BUFFER_TYPE_PICDATA) {
-            ret = [renderer submitDecodeBuffer:(unsigned char*)entry->data
-                                        length:entry->length
-                                    bufferType:entry->bufferType
-                                     frameType:decodeUnit->frameType
-                                           pts:decodeUnit->presentationTimeMs];
-            if (ret != DR_OK) {
-                free(data);
-                return ret;
-            }
-        }
-        else {
-            memcpy(&data[offset], entry->data, entry->length);
-            offset += entry->length;
-        }
-
-        entry = entry->next;
-    }
-
-    // This function will take our picture data buffer
-    return [renderer submitDecodeBuffer:data
-                                 length:offset
-                             bufferType:BUFFER_TYPE_PICDATA
-                              frameType:decodeUnit->frameType
-                                    pts:decodeUnit->presentationTimeMs];
+    // Use the optimized renderer path which includes buffer pooling
+    return [renderer submitDecodeUnit:decodeUnit];
 }
 
 int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusConfig, void* context, int flags)
@@ -353,7 +319,9 @@ void ClConnectionStarted(void)
 void ClConnectionTerminated(int errorCode)
 {
 #if defined(LI_MIC_CONTROL_START)
-    dispatch_async(dispatch_get_main_queue(), ^{
+    // Stopping AVAudioEngine can occasionally block under CoreAudio stress.
+    // Keep it off the main thread so UI doesn't appear frozen during disconnect.
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [activeConnection stopMicrophoneIfNeeded];
     });
 #endif
@@ -362,10 +330,30 @@ void ClConnectionTerminated(int errorCode)
 
 void ClLogMessage(const char* format, ...)
 {
+    static uint64_t lastDropLogTime = 0;
+    static int accumulatedDropCount = 0;
+    
+    // Simple heuristic to detect dropped frame logs from common-c
+    bool isDropLog = (strstr(format, "Network dropped") != NULL);
+
+    if (isDropLog) {
+        accumulatedDropCount++;
+        uint64_t now = LiGetMillis();
+        if (now - lastDropLogTime < 1000) {
+            return; // Suppress this log
+        }
+        lastDropLogTime = now;
+    }
+
     va_list va;
     va_start(va, format);
     vfprintf(stderr, format, va);
     va_end(va);
+    
+    if (isDropLog && accumulatedDropCount > 1) {
+        fprintf(stderr, " (and %d more dropped frame messages suppressed)\n", accumulatedDropCount - 1);
+        accumulatedDropCount = 0;
+    }
 }
 
 void ClRumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor)
