@@ -90,15 +90,18 @@
     struct addrinfo* result;
     int err;
     
+    NSString* hostAddress;
+    [Utils parseAddress:address intoHost:&hostAddress andPort:nil];
+
     // We're explicitly using AF_INET here because we don't want to
     // ever receive a synthesized IPv6 address here, even on NAT64.
     // IPv6 addresses are not restricted here because we cannot easily
     // tell whether they are local or not.
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
-    err = getaddrinfo([address UTF8String], NULL, &hints, &result);
+    err = getaddrinfo([hostAddress UTF8String], NULL, &hints, &result);
     if (err != 0 || result == NULL) {
-        Log(LOG_W, @"getaddrinfo(%@) failed: %d", address, err);
+        Log(LOG_W, @"getaddrinfo(%@) failed: %d", hostAddress, err);
         return NO;
     }
     
@@ -179,7 +182,10 @@
                 callback(nil, prohibitedAddressMessage);
                 return;
             }
-            else if ([DiscoveryManager isAddressLAN:inet_addr([hostAddress UTF8String])]) {
+            
+            NSString* cleanHostAddress;
+            [Utils parseAddress:hostAddress intoHost:&cleanHostAddress andPort:nil];
+            if ([DiscoveryManager isAddressLAN:inet_addr([cleanHostAddress UTF8String])]) {
                 // Don't send a STUN request if we're connected to a VPN. We'll likely get the VPN
                 // gateway's external address rather than the external address of the LAN.
                 if (![Utils isActiveNetworkVPN]) {

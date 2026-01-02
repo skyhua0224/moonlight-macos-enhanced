@@ -27,6 +27,7 @@
     char _hostString[256];
     char _appVersionString[32];
     char _gfeVersionString[32];
+    char _rtspSessionUrl[1024];
 }
 
 static NSLock* initLock;
@@ -367,8 +368,11 @@ void ClConnectionStatusUpdate(int status)
     hostAddress = config.host;
     [self updateVolume];
     
+    NSString* cleanHost;
+    [Utils parseAddress:config.host intoHost:&cleanHost andPort:nil];
+    
     strncpy(_hostString,
-            [config.host cStringUsingEncoding:NSUTF8StringEncoding],
+            [cleanHost cStringUsingEncoding:NSUTF8StringEncoding],
             sizeof(_hostString));
     strncpy(_appVersionString,
             [config.appVersion cStringUsingEncoding:NSUTF8StringEncoding],
@@ -384,6 +388,12 @@ void ClConnectionStatusUpdate(int status)
     _serverInfo.serverInfoAppVersion = _appVersionString;
     if (config.gfeVersion != nil) {
         _serverInfo.serverInfoGfeVersion = _gfeVersionString;
+    }
+
+    if (config.sessionUrl != nil) {
+        strncpy(_rtspSessionUrl, [config.sessionUrl UTF8String], sizeof(_rtspSessionUrl) - 1);
+        _rtspSessionUrl[sizeof(_rtspSessionUrl) - 1] = '\0';
+        _serverInfo.rtspSessionUrl = _rtspSessionUrl;
     }
 
     renderer = myRenderer;
