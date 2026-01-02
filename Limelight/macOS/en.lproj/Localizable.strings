@@ -1,0 +1,60 @@
+/* Settings Pane Titles */
+"Stream" = "Stream";
+"Video and Audio" = "Video and Audio";
+"Input" = "Input";
+"App" = "App";
+"Legacy" = "Legacy";
+
+/* Toolbar */
+"Profile:" = "Profile:";
+
+/* Stream Settings */
+"Resolution and FPS" = "Resolution and FPS";
+"Resolution" = "Resolution";
+"Custom" = "Custom";
+"Custom Resolution" = "Custom Resolution";
+"FPS" = "FPS";
+"Custom FPS" = "Custom FPS";
+"Bitrate" = "Bitrate";
+
+/* Video Settings */
+"Video" = "Video";
+"Video Codec" = "Video Codec";
+"HDR" = "HDR";
+"Frame Pacing" = "Frame Pacing";
+"Lowest Latency" = "Lowest Latency";
+"Smoothest Video" = "Smoothest Video";
+
+/* Audio Settings */
+"Audio" = "Audio";
+"Play Sound on Host" = "Play Sound on Host";
+"Volume" = "Volume";
+
+/* Input Settings */
+"Controller" = "Controller";
+"Multi-Controller Mode" = "Multi-Controller Mode";
+"Single" = "Single";
+"Auto" = "Auto";
+"Rumble Controller" = "Rumble Controller";
+"Buttons" = "Buttons";
+"Swap A/B and X/Y Buttons" = "Swap A/B and X/Y Buttons";
+"Emulate Guide Button" = "Emulate Guide Button";
+"Drivers" = "Drivers";
+"Controller Driver" = "Controller Driver";
+"Mouse Driver" = "Mouse Driver";
+"HID" = "HID";
+"MFi" = "MFi";
+
+/* App Settings */
+"Behaviour" = "Behaviour";
+"Automatically Fullscreen Stream Window" = "Automatically Fullscreen Stream Window";
+"Visuals" = "Visuals";
+"Dim Non-Hovered Apps" = "Dim Non-Hovered Apps";
+"Custom Artwork Dimensions" = "Custom Artwork Dimensions";
+
+/* Legacy Settings */
+"Geforce Experience" = "Geforce Experience";
+"Optimize Game Settings" = "Optimize Game Settings";
+
+/* Misc */
+"Not supported" = "Not supported";

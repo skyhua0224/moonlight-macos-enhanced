@@ -1,0 +1,60 @@
+/* Settings Pane Titles */
+"Stream" = "串流";
+"Video and Audio" = "音视频";
+"Input" = "输入";
+"App" = "应用";
+"Legacy" = "旧版";
+
+/* Toolbar */
+"Profile:" = "配置文件:";
+
+/* Stream Settings */
+"Resolution and FPS" = "分辨率与帧率";
+"Resolution" = "分辨率";
+"Custom" = "自定义";
+"Custom Resolution" = "自定义分辨率";
+"FPS" = "帧率";
+"Custom FPS" = "自定义帧率";
+"Bitrate" = "比特率";
+
+/* Video Settings */
+"Video" = "视频";
+"Video Codec" = "视频编码";
+"HDR" = "HDR";
+"Frame Pacing" = "帧率平滑";
+"Lowest Latency" = "最低延迟";
+"Smoothest Video" = "最流畅视频";
+
+/* Audio Settings */
+"Audio" = "音频";
+"Play Sound on Host" = "在主机上播放声音";
+"Volume" = "音量";
+
+/* Input Settings */
+"Controller" = "手柄";
+"Multi-Controller Mode" = "多手柄模式";
+"Single" = "单人";
+"Auto" = "自动";
+"Rumble Controller" = "手柄震动";
+"Buttons" = "按键";
+"Swap A/B and X/Y Buttons" = "交换 A/B 和 X/Y 键";
+"Emulate Guide Button" = "模拟 Guide 键";
+"Drivers" = "驱动";
+"Controller Driver" = "手柄驱动";
+"Mouse Driver" = "鼠标驱动";
+"HID" = "HID";
+"MFi" = "MFi";
+
+/* App Settings */
+"Behaviour" = "行为";
+"Automatically Fullscreen Stream Window" = "自动全屏串流窗口";
+"Visuals" = "视觉";
+"Dim Non-Hovered Apps" = "未悬停应用变暗";
+"Custom Artwork Dimensions" = "自定义封面尺寸";
+
+/* Legacy Settings */
+"Geforce Experience" = "Geforce Experience";
+"Optimize Game Settings" = "优化游戏设置";
+
+/* Misc */
+"Not supported" = "不支持";
