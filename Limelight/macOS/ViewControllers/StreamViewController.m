@@ -45,6 +45,9 @@
 
 @property (nonatomic) IOPMAssertionID powerAssertionID;
 
+@property (nonatomic, strong) NSTextField *overlayLabel;
+@property (nonatomic, strong) NSTimer *statsTimer;
+
 @end
 
 @implementation StreamViewController
@@ -471,7 +474,17 @@
     streamConfig.multiController = streamSettings.multiController;
     streamConfig.gamepadMask = self.useSystemControllerDriver ? [ControllerSupport getConnectedGamepadMask:streamConfig] : 1;
     
-    streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
+    int audioConfigSelection = [SettingsClass audioConfigurationFor:self.app.host.uuid];
+    int audioConfig = AUDIO_CONFIGURATION_STEREO;
+    if (audioConfigSelection == 1) {
+        audioConfig = AUDIO_CONFIGURATION_51_SURROUND;
+    } else if (audioConfigSelection == 2) {
+        audioConfig = AUDIO_CONFIGURATION_71_SURROUND;
+    }
+    streamConfig.audioConfiguration = audioConfig;
+    
+    streamConfig.enableVsync = [SettingsClass enableVsyncFor:self.app.host.uuid];
+    streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
 
     if (self.useSystemControllerDriver) {
         if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
@@ -483,6 +496,42 @@
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:self.streamMan];
+    
+    if (streamConfig.showPerformanceOverlay) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self setupOverlay];
+        });
+    }
+}
+
+- (void)setupOverlay {
+    if (self.overlayLabel) {
+        [self.overlayLabel removeFromSuperview];
+    }
+    
+    self.overlayLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 20, 300, 100)];
+    self.overlayLabel.bezeled = NO;
+    self.overlayLabel.drawsBackground = NO;
+    self.overlayLabel.editable = NO;
+    self.overlayLabel.selectable = NO;
+    self.overlayLabel.textColor = [NSColor greenColor];
+    self.overlayLabel.font = [NSFont monospacedDigitSystemFontOfSize:14 weight:NSFontWeightBold];
+    self.overlayLabel.stringValue = @"Loading stats...";
+    
+    [self.view addSubview:self.overlayLabel];
+    
+    self.statsTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(updateStats) userInfo:nil repeats:YES];
+}
+
+- (void)updateStats {
+    uint32_t rtt = 0;
+    uint32_t rttVar = 0;
+    
+    if (LiGetEstimatedRttInfo(&rtt, &rttVar)) {
+        self.overlayLabel.stringValue = [NSString stringWithFormat:@"RTT: %u ms\nVariance: %u ms", rtt, rttVar];
+    } else {
+        self.overlayLabel.stringValue = @"Stats unavailable";
+    }
 }
 
 
@@ -530,6 +579,18 @@
 
 - (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld", errorCode);
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.statsTimer) {
+            [self.statsTimer invalidate];
+            self.statsTimer = nil;
+        }
+        if (self.overlayLabel) {
+            [self.overlayLabel removeFromSuperview];
+            self.overlayLabel = nil;
+        }
+    });
+    
     [self closeWindowFromMainQueueWithMessage:nil];
 }
 

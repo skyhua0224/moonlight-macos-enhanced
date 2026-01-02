@@ -25,6 +25,8 @@
 @property BOOL playAudioOnPC;
 @property int audioConfiguration;
 @property BOOL enableHdr;
+@property BOOL enableVsync;
+@property BOOL showPerformanceOverlay;
 @property BOOL multiController;
 @property BOOL allowHevc;
 @property NSData *serverCert;
