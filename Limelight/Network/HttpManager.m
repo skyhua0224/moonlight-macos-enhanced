@@ -10,6 +10,7 @@
 #import "HttpRequest.h"
 #import "CryptoManager.h"
 #import "TemporaryApp.h"
+#import "Moonlight-Swift.h"
 
 #include <libxml2/libxml/xmlreader.h>
 #include <string.h>
@@ -228,18 +229,60 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (NSURLRequest*) newLaunchRequest:(StreamConfiguration*)config {
     BOOL sops = config.optimizeGameSettings;
+
+    int modeWidth = config.width;
+    int modeHeight = config.height;
+    int modeFps = config.frameRate;
+
+    // Remote host mode overrides (mirrors moonlight-qt behavior): override only the /launch mode
+    // parameter without changing the local client's configured stream settings.
+    @try {
+        NSString* uuid = nil;
+        if (config.host != nil) {
+            uuid = [SettingsClass getHostUUIDFrom:config.host];
+        }
+
+        NSString* settingsKey = uuid != nil ? uuid : @"__global__";
+        NSDictionary* settings = [SettingsClass getSettingsFor:settingsKey];
+
+        if (settings != nil) {
+            NSNumber* remoteResolution = settings[@"remoteResolution"];
+            if (remoteResolution != nil && [remoteResolution boolValue]) {
+                int rw = [settings[@"remoteResolutionWidth"] intValue];
+                int rh = [settings[@"remoteResolutionHeight"] intValue];
+                if (rw > 0 && rh > 0) {
+                    modeWidth = rw;
+                    modeHeight = rh;
+                }
+            }
+
+            NSNumber* remoteFps = settings[@"remoteFps"];
+            if (remoteFps != nil && [remoteFps boolValue]) {
+                int rfps = [settings[@"remoteFpsRate"] intValue];
+                if (rfps > 0) {
+                    modeFps = rfps;
+                }
+            }
+        }
+    } @catch (NSException* exception) {
+        // Best-effort only; keep defaults on any failure.
+    }
+
+    // Ensure even dimensions (some encoders/decoders require this)
+    modeWidth &= ~1;
+    modeHeight &= ~1;
     
     // Using an FPS value over 60 causes SOPS to default to 720p60.
     // We used to set it to 60, but that stopped working in GFE 3.20.3.
     // Disabling SOPS allows the actual game frame rate to exceed 60.
-    if (config.frameRate > 60) {
+    if (modeFps > 60) {
         sops = NO;
     }
     
     NSString* urlString = [NSString stringWithFormat:@"%@/launch?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
                            _baseHTTPSURL, _uniqueId,
                            config.appID,
-                           config.width, config.height, config.frameRate,
+                           modeWidth, modeHeight, modeFps,
                            sops ? 1 : 0,
                            [Utils bytesToHex:config.riKey], config.riKeyId,
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
@@ -252,18 +295,56 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (NSURLRequest*) newResumeRequest:(StreamConfiguration*)config {
     BOOL sops = config.optimizeGameSettings;
+
+    int modeWidth = config.width;
+    int modeHeight = config.height;
+    int modeFps = config.frameRate;
+
+    @try {
+        NSString* uuid = nil;
+        if (config.host != nil) {
+            uuid = [SettingsClass getHostUUIDFrom:config.host];
+        }
+
+        NSString* settingsKey = uuid != nil ? uuid : @"__global__";
+        NSDictionary* settings = [SettingsClass getSettingsFor:settingsKey];
+
+        if (settings != nil) {
+            NSNumber* remoteResolution = settings[@"remoteResolution"];
+            if (remoteResolution != nil && [remoteResolution boolValue]) {
+                int rw = [settings[@"remoteResolutionWidth"] intValue];
+                int rh = [settings[@"remoteResolutionHeight"] intValue];
+                if (rw > 0 && rh > 0) {
+                    modeWidth = rw;
+                    modeHeight = rh;
+                }
+            }
+
+            NSNumber* remoteFps = settings[@"remoteFps"];
+            if (remoteFps != nil && [remoteFps boolValue]) {
+                int rfps = [settings[@"remoteFpsRate"] intValue];
+                if (rfps > 0) {
+                    modeFps = rfps;
+                }
+            }
+        }
+    } @catch (NSException* exception) {
+    }
+
+    modeWidth &= ~1;
+    modeHeight &= ~1;
     
     // Using an FPS value over 60 causes SOPS to default to 720p60.
     // We used to set it to 60, but that stopped working in GFE 3.20.3.
     // Disabling SOPS allows the actual game frame rate to exceed 60.
-    if (config.frameRate > 60) {
+    if (modeFps > 60) {
         sops = NO;
     }
     
     NSString* urlString = [NSString stringWithFormat:@"%@/resume?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
                            _baseHTTPSURL, _uniqueId,
                            config.appID,
-                           config.width, config.height, config.frameRate,
+                           modeWidth, modeHeight, modeFps,
                            sops ? 1 : 0,
                            [Utils bytesToHex:config.riKey], config.riKeyId,
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",

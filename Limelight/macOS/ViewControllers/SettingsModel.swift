@@ -7,6 +7,8 @@
 //
 
 import SwiftUI
+import AppKit
+import CoreGraphics
 
 struct Host: Identifiable, Hashable {
   let id: String
@@ -14,182 +16,390 @@ struct Host: Identifiable, Hashable {
 }
 
 class SettingsModel: ObservableObject {
-  static var hosts: [Host?]? = {
+  static let globalHostId = "__global__"
+  static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
+
+  // Remote host display mode override (affects /launch mode parameter)
+  static var remoteResolutions: [CGSize] = [
+    CGSizeMake(1280, 720), CGSizeMake(1920, 1080), CGSizeMake(2560, 1440), CGSizeMake(3840, 2160),
+    .zero,
+  ]
+
+  static var hosts: [Host?]? {
+    let global = Host(id: globalHostId, name: "Global")
+
     let dataMan = DataManager()
     if let tempHosts = dataMan.getHosts() as? [TemporaryHost] {
       let hosts = tempHosts.map { host in
         Host(id: host.uuid, name: host.name)
       }
 
-      return hosts
+      return [global] + hosts
     }
 
-    return nil
-  }()
+    return [global]
+  }
 
   @Published var selectedHost: Host? {
     didSet {
-      if selectedHost != nil {
-        UserDefaults.standard.set(selectedHost?.id, forKey: "selectedSettingsProfile")
-        loadSettings()
-      }
+      guard !isLoading else { return }
+      UserDefaults.standard.set(selectedHost?.id, forKey: "selectedSettingsProfile")
+      loadSettings()
     }
   }
+
+  private var isLoading = false
+  private var isAdjustingBitrate = false
 
   var resolutionChangedCallback: (() -> Void)?
   var fpsChangedCallback: (() -> Void)?
 
   @Published var selectedResolution: CGSize {
     didSet {
+      guard !isLoading else { return }
+      applyAutoBitrateIfNeeded()
       saveSettings()
       resolutionChangedCallback?()
     }
   }
   @Published var selectedFps: Int {
     didSet {
+      guard !isLoading else { return }
+      applyAutoBitrateIfNeeded()
       saveSettings()
       fpsChangedCallback?()
     }
   }
+
+  // Remote host overrides (enabled only when toggled)
+  @Published var remoteResolutionEnabled: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedRemoteResolution: CGSize {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var remoteCustomResWidth: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var remoteCustomResHeight: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var remoteFpsEnabled: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedRemoteFps: Int {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var remoteCustomFps: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var customFps: CGFloat? {
     didSet {
+      guard !isLoading else { return }
+      applyAutoBitrateIfNeeded()
       saveSettings()
     }
   }
   @Published var customResWidth: CGFloat? {
     didSet {
+      guard !isLoading else { return }
+      applyAutoBitrateIfNeeded()
       saveSettings()
     }
   }
   @Published var customResHeight: CGFloat? {
     didSet {
+      guard !isLoading else { return }
+      applyAutoBitrateIfNeeded()
+      saveSettings()
+    }
+  }
+
+  // moonlight-qt parity (P0)
+  @Published var autoAdjustBitrate: Bool {
+    didSet {
+      guard !isLoading else { return }
+      applyAutoBitrateIfNeeded(force: true)
+      saveSettings()
+    }
+  }
+
+  @Published var ignoreAspectRatio: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
+  @Published var showLocalCursor: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
+  @Published var streamResolutionScale: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
+  @Published var streamResolutionScaleRatio: Int {
+    didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var bitrateSliderValue: Float {
     didSet {
-      // When slider moves, clear custom bitrate
-      if customBitrate != nil {
-        customBitrate = nil
+      guard !isLoading else { return }
+      let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
+      let index = max(0, min(Int(bitrateSliderValue), steps.count - 1))
+      let kbps = Int(steps[index] * 1000.0)
+
+      if !isAdjustingBitrate {
+        isAdjustingBitrate = true
+        customBitrate = kbps
+        isAdjustingBitrate = false
       }
+
       saveSettings()
     }
   }
   @Published var customBitrate: Int? {
     didSet {
+      guard !isLoading else { return }
+      guard !isAdjustingBitrate else {
+        saveSettings()
+        return
+      }
+
+      // Keep slider roughly in sync with typed value
+      if let customBitrate {
+        let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
+        var bitrateIndex = 0
+        for i in 0..<steps.count {
+          if Float(customBitrate) <= steps[i] * 1000.0 {
+            bitrateIndex = i
+            break
+          }
+        }
+        isAdjustingBitrate = true
+        bitrateSliderValue = Float(bitrateIndex)
+        isAdjustingBitrate = false
+      }
+
+      saveSettings()
+    }
+  }
+
+  @Published var unlockMaxBitrate: Bool {
+    didSet {
+      guard !isLoading else { return }
+      // Clamp slider to new range
+      let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
+      let maxIndex = Float(max(0, steps.count - 1))
+      if bitrateSliderValue > maxIndex {
+        bitrateSliderValue = maxIndex
+      }
+
+      // Recompute bitrate value from slider under new scale
+      let index = max(0, min(Int(bitrateSliderValue), steps.count - 1))
+      let kbps = Int(steps[index] * 1000.0)
+      isAdjustingBitrate = true
+      customBitrate = kbps
+      isAdjustingBitrate = false
+
       saveSettings()
     }
   }
   @Published var selectedVideoCodec: String {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var hdr: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var selectedPacingOptions: String {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var audioOnPC: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var selectedAudioConfiguration: String {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var enableVsync: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var showPerformanceOverlay: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var captureSystemShortcuts: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var volumeLevel: CGFloat {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
       NotificationCenter.default.post(name: Notification.Name("volumeSettingChanged"), object: nil)
     }
   }
   @Published var selectedMultiControllerMode: String {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var swapButtons: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var optimize: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
 
   @Published var autoFullscreen: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var rumble: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var selectedControllerDriver: String {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var selectedMouseDriver: String {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
 
   @Published var emulateGuide: Bool {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var appArtworkWidth: CGFloat? {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var appArtworkHeight: CGFloat? {
     didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
   @Published var dimNonHoveredArtwork: Bool {
     didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
+  // Host Settings
+  @Published var quitAppAfterStream: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
+  // Input Settings
+  @Published var absoluteMouseMode: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var swapMouseButtons: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var reverseScrollDirection: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedTouchscreenMode: String {
+    didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
 
   static var resolutions: [CGSize] = [
+    matchDisplayResolutionSentinel,
     CGSizeMake(1280, 720), CGSizeMake(1920, 1080), CGSizeMake(2560, 1440), CGSizeMake(3840, 2160),
     .zero,
   ]
   static var fpss: [Int] = [30, 60, 90, 120, 144, .zero]
-  static var bitrateSteps: [Float] = [
+  private static var lockedBitrateSteps: [Float] = [
     0.5,
     1,
     1.5,
@@ -219,6 +429,14 @@ class SettingsModel: ObservableObject {
     120,
     150,
   ]
+
+  static func bitrateSteps(unlocked: Bool) -> [Float] {
+    if !unlocked {
+      return lockedBitrateSteps
+    }
+    // Extended steps up to 1000 Mbps (avoid too many slider ticks)
+    return lockedBitrateSteps + [200, 250, 300, 350, 400, 500, 600, 800, 1000]
+  }
   static var videoCodecs: [String] = ["H.264", "H.265"]
   static var pacingOptions: [String] = ["Lowest Latency", "Smoothest Video"]
   static var audioConfigurations: [String] = ["Stereo", "5.1 surround sound", "7.1 surround sound"]
@@ -226,16 +444,25 @@ class SettingsModel: ObservableObject {
 
   static var controllerDrivers: [String] = ["HID", "MFi"]
   static var mouseDrivers: [String] = ["HID", "MFi"]
+  static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
 
   static let defaultResolution = CGSizeMake(1920, 1080)
   static let defaultCustomResWidth: CGFloat? = nil
   static let defaultCustomResHeight: CGFloat? = nil
   static let defaultFps = 60
   static let defaultCustomFps: CGFloat? = nil
+
+  static let defaultRemoteResolutionEnabled = false
+  static let defaultRemoteResolution = CGSizeMake(1920, 1080)
+  static let defaultRemoteCustomResWidth: CGFloat? = nil
+  static let defaultRemoteCustomResHeight: CGFloat? = nil
+  static let defaultRemoteFpsEnabled = false
+  static let defaultRemoteFps = 60
+  static let defaultRemoteCustomFps: CGFloat? = nil
   static let defaultBitrateSliderValue = {
     var bitrateIndex = 0
-    for i in 0..<SettingsModel.bitrateSteps.count {
-      if 10000.0 <= SettingsModel.bitrateSteps[i] * 1000.0 {
+    for i in 0..<SettingsModel.lockedBitrateSteps.count {
+      if 10000.0 <= SettingsModel.lockedBitrateSteps[i] * 1000.0 {
         bitrateIndex = i
         break
       }
@@ -261,23 +488,151 @@ class SettingsModel: ObservableObject {
   static let defaultEmulateGuide = false
   static let defaultAppArtworkWidth: CGFloat? = nil
   static let defaultAppArtworkHeight: CGFloat? = nil
+  static let defaultQuitAppAfterStream = false
+  static let defaultAbsoluteMouseMode = false
+  static let defaultSwapMouseButtons = false
+  static let defaultReverseScrollDirection = false
+  static let defaultTouchscreenMode = 0  // Trackpad
   static let defaultDimNonHoveredArtwork = true
+  static let defaultUnlockMaxBitrate = false
+
+  // moonlight-qt defaults (tuned for macOS)
+  static let defaultAutoAdjustBitrate = true
+  static let defaultIgnoreAspectRatio = true
+  static let defaultShowLocalCursor = false
+  static let defaultStreamResolutionScale = false
+  static let defaultStreamResolutionScaleRatio = 100
+
+  private static func mainDisplayPixelSize() -> CGSize? {
+    guard let screen = NSScreen.main,
+      let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    else {
+      return nil
+    }
+
+    let displayID = CGDirectDisplayID(screenNumber.uint32Value)
+    guard let mode = CGDisplayCopyDisplayMode(displayID) else { return nil }
+
+    func even(_ v: CGFloat) -> CGFloat {
+      let i = Int(v)
+      return CGFloat(i - (i % 2))
+    }
+
+    return CGSize(width: even(CGFloat(mode.pixelWidth)), height: even(CGFloat(mode.pixelHeight)))
+  }
+
+  // Copied from moonlight-qt (StreamingPreferences::getDefaultBitrate)
+  static func getDefaultBitrateKbps(width: Int, height: Int, fps: Int, yuv444: Bool) -> Int {
+    let fpsf = Float(max(1, fps))
+    let frameRateFactor: Float = ((fps <= 60 ? fpsf : (sqrtf(fpsf / 60.0) * 60.0)) / 30.0)
+
+    struct ResEntry {
+      let pixels: Int
+      let factor: Float
+    }
+
+    let table: [ResEntry] = [
+      .init(pixels: 640 * 360, factor: 1),
+      .init(pixels: 854 * 480, factor: 2),
+      .init(pixels: 1280 * 720, factor: 5),
+      .init(pixels: 1920 * 1080, factor: 10),
+      .init(pixels: 2560 * 1440, factor: 20),
+      .init(pixels: 3840 * 2160, factor: 40),
+    ]
+
+    let pixels = max(1, width * height)
+    var resolutionFactor: Float = table.first?.factor ?? 10
+
+    for i in 0..<table.count {
+      if pixels == table[i].pixels {
+        resolutionFactor = table[i].factor
+        break
+      } else if pixels < table[i].pixels {
+        if i == 0 {
+          resolutionFactor = table[i].factor
+        } else {
+          let lo = table[i - 1]
+          let hi = table[i]
+          let t = Float(pixels - lo.pixels) / Float(hi.pixels - lo.pixels)
+          resolutionFactor = t * (hi.factor - lo.factor) + lo.factor
+        }
+        break
+      } else if i == table.count - 1 {
+        resolutionFactor = table[i].factor
+      }
+    }
+
+    if yuv444 {
+      resolutionFactor *= 2
+    }
+
+    return Int(roundf(resolutionFactor * frameRateFactor)) * 1000
+  }
+
+  private func effectiveResolutionForBitrate() -> CGSize {
+    if selectedResolution == Self.matchDisplayResolutionSentinel {
+      return Self.mainDisplayPixelSize() ?? Self.defaultResolution
+    }
+
+    if selectedResolution == .zero {
+      if let w = customResWidth, let h = customResHeight, w > 0, h > 0 {
+        return CGSize(width: w, height: h)
+      }
+      return Self.defaultResolution
+    }
+
+    return selectedResolution
+  }
+
+  private func effectiveFpsForBitrate() -> Int {
+    if selectedFps == .zero {
+      if let customFps, customFps > 0 {
+        return Int(customFps)
+      }
+      return Self.defaultFps
+    }
+    return selectedFps
+  }
+
+  private func applyAutoBitrateIfNeeded(force: Bool = false) {
+    guard autoAdjustBitrate else { return }
+    guard force || !isAdjustingBitrate else { return }
+
+    let res = effectiveResolutionForBitrate()
+    let fps = effectiveFpsForBitrate()
+    let kbps = Self.getDefaultBitrateKbps(
+      width: Int(res.width), height: Int(res.height), fps: fps, yuv444: false)
+
+    let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
+    var bitrateIndex = 0
+    for i in 0..<steps.count {
+      if Float(kbps) <= steps[i] * 1000.0 {
+        bitrateIndex = i
+        break
+      }
+    }
+
+    isAdjustingBitrate = true
+    customBitrate = kbps
+    bitrateSliderValue = Float(bitrateIndex)
+    isAdjustingBitrate = false
+  }
 
   init() {
+    isLoading = true
+    defer { isLoading = false }
+
     if let hosts = Self.hosts {
-      if let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile") {
-        for (_, host) in hosts.enumerated() {
-          if let host {
-            if host.id == selectedProfile {
-              selectedHost = host
-            }
-          }
-        }
+      let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile")
+      if let selectedProfile,
+        let match = hosts.compactMap({ $0 }).first(where: { $0.id == selectedProfile })
+      {
+        selectedHost = match
       } else {
-        if let firstHost = hosts.first {
-          selectedHost = firstHost
-        }
+        selectedHost = hosts.compactMap({ $0 }).first(where: { $0.id == Self.globalHostId })
       }
+    } else {
+      selectedHost = Host(id: Self.globalHostId, name: "Global")
     }
 
     selectedResolution = Self.defaultResolution
@@ -286,7 +641,23 @@ class SettingsModel: ObservableObject {
     selectedFps = Self.defaultFps
     customFps = Self.defaultCustomFps
 
+    remoteResolutionEnabled = Self.defaultRemoteResolutionEnabled
+    selectedRemoteResolution = Self.defaultRemoteResolution
+    remoteCustomResWidth = Self.defaultRemoteCustomResWidth
+    remoteCustomResHeight = Self.defaultRemoteCustomResHeight
+    remoteFpsEnabled = Self.defaultRemoteFpsEnabled
+    selectedRemoteFps = Self.defaultRemoteFps
+    remoteCustomFps = Self.defaultRemoteCustomFps
+
     bitrateSliderValue = Self.defaultBitrateSliderValue
+    customBitrate = Int(Self.bitrateSteps(unlocked: Self.defaultUnlockMaxBitrate)[Int(Self.defaultBitrateSliderValue)] * 1000.0)
+    unlockMaxBitrate = Self.defaultUnlockMaxBitrate
+
+    autoAdjustBitrate = Self.defaultAutoAdjustBitrate
+    ignoreAspectRatio = Self.defaultIgnoreAspectRatio
+    showLocalCursor = Self.defaultShowLocalCursor
+    streamResolutionScale = Self.defaultStreamResolutionScale
+    streamResolutionScaleRatio = Self.defaultStreamResolutionScaleRatio
 
     selectedVideoCodec = Self.defaultVideoCodec
     hdr = Self.defaultHdr
@@ -309,6 +680,13 @@ class SettingsModel: ObservableObject {
     selectedControllerDriver = Self.defaultControllerDriver
     selectedMouseDriver = Self.defaultMouseDriver
 
+    quitAppAfterStream = Self.defaultQuitAppAfterStream
+    absoluteMouseMode = Self.defaultAbsoluteMouseMode
+    swapMouseButtons = Self.defaultSwapMouseButtons
+    reverseScrollDirection = Self.defaultReverseScrollDirection
+    selectedTouchscreenMode = Self.getString(
+      from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
+
     emulateGuide = Self.defaultEmulateGuide
     appArtworkWidth = Self.defaultAppArtworkWidth
     appArtworkHeight = Self.defaultAppArtworkHeight
@@ -316,13 +694,32 @@ class SettingsModel: ObservableObject {
   }
 
   func loadDefaultSettings() {
+    isLoading = true
+    defer { isLoading = false }
+
     selectedResolution = Self.defaultResolution
     customResWidth = Self.defaultCustomResWidth
     customResHeight = Self.defaultCustomResHeight
     selectedFps = Self.defaultFps
     customFps = Self.defaultCustomFps
 
+    remoteResolutionEnabled = Self.defaultRemoteResolutionEnabled
+    selectedRemoteResolution = Self.defaultRemoteResolution
+    remoteCustomResWidth = Self.defaultRemoteCustomResWidth
+    remoteCustomResHeight = Self.defaultRemoteCustomResHeight
+    remoteFpsEnabled = Self.defaultRemoteFpsEnabled
+    selectedRemoteFps = Self.defaultRemoteFps
+    remoteCustomFps = Self.defaultRemoteCustomFps
+
     bitrateSliderValue = Self.defaultBitrateSliderValue
+    customBitrate = Int(Self.bitrateSteps(unlocked: Self.defaultUnlockMaxBitrate)[Int(Self.defaultBitrateSliderValue)] * 1000.0)
+    unlockMaxBitrate = Self.defaultUnlockMaxBitrate
+
+    autoAdjustBitrate = Self.defaultAutoAdjustBitrate
+    ignoreAspectRatio = Self.defaultIgnoreAspectRatio
+    showLocalCursor = Self.defaultShowLocalCursor
+    streamResolutionScale = Self.defaultStreamResolutionScale
+    streamResolutionScaleRatio = Self.defaultStreamResolutionScaleRatio
 
     selectedVideoCodec = Self.defaultVideoCodec
     hdr = Self.defaultHdr
@@ -343,6 +740,13 @@ class SettingsModel: ObservableObject {
     autoFullscreen = Self.defaultAutoFullscreen
     rumble = Self.defaultRumble
     selectedControllerDriver = Self.defaultControllerDriver
+
+    quitAppAfterStream = Self.defaultQuitAppAfterStream
+    absoluteMouseMode = Self.defaultAbsoluteMouseMode
+    swapMouseButtons = Self.defaultSwapMouseButtons
+    reverseScrollDirection = Self.defaultReverseScrollDirection
+    selectedTouchscreenMode = Self.getString(
+      from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
     selectedMouseDriver = Self.defaultMouseDriver
 
     emulateGuide = Self.defaultEmulateGuide
@@ -357,9 +761,16 @@ class SettingsModel: ObservableObject {
   }
 
   func loadSettings() {
-    if let selectedHost {
-      if let settings = Settings.getSettings(for: selectedHost.id) {
+    isLoading = true
+    defer { isLoading = false }
+
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    if let settings = Settings.getSettings(for: hostId) {
         selectedResolution = settings.resolution
+
+        if settings.matchDisplayResolution ?? false {
+          selectedResolution = Self.matchDisplayResolutionSentinel
+        }
 
         let customResolution = loadNillableDimensionSetting(
           inputDimensions: settings.customResolution)
@@ -379,28 +790,27 @@ class SettingsModel: ObservableObject {
           }
         }
 
-        if let custom = settings.customBitrate {
-          customBitrate = custom
-          // Approximate slider position
-          var bitrateIndex = 0
-          for i in 0..<Self.bitrateSteps.count {
-            if Float(custom) <= Self.bitrateSteps[i] * 1000.0 {
-              bitrateIndex = i
-              break
-            }
+        unlockMaxBitrate = settings.unlockMaxBitrate ?? Self.defaultUnlockMaxBitrate
+
+        autoAdjustBitrate = settings.autoAdjustBitrate ?? Self.defaultAutoAdjustBitrate
+        ignoreAspectRatio = settings.ignoreAspectRatio ?? Self.defaultIgnoreAspectRatio
+        showLocalCursor = settings.showLocalCursor ?? Self.defaultShowLocalCursor
+        streamResolutionScale = settings.streamResolutionScale ?? Self.defaultStreamResolutionScale
+        streamResolutionScaleRatio = settings.streamResolutionScaleRatio ?? Self.defaultStreamResolutionScaleRatio
+
+        let effectiveBitrateKbps = settings.customBitrate ?? settings.bitrate
+        customBitrate = effectiveBitrateKbps
+        let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
+        var bitrateIndex = 0
+        for i in 0..<steps.count {
+          if Float(effectiveBitrateKbps) <= steps[i] * 1000.0 {
+            bitrateIndex = i
+            break
           }
-          bitrateSliderValue = Float(bitrateIndex)
-        } else {
-          customBitrate = nil
-          var bitrateIndex = 0
-          for i in 0..<Self.bitrateSteps.count {
-            if Float(settings.bitrate) <= Self.bitrateSteps[i] * 1000.0 {
-              bitrateIndex = i
-              break
-            }
-          }
-          bitrateSliderValue = Float(bitrateIndex)
         }
+        bitrateSliderValue = Float(bitrateIndex)
+
+        applyAutoBitrateIfNeeded(force: true)
 
         selectedVideoCodec = Self.getString(from: settings.codec, in: Self.videoCodecs)
         hdr = settings.hdr
@@ -437,6 +847,52 @@ class SettingsModel: ObservableObject {
 
         dimNonHoveredArtwork = settings.dimNonHoveredArtwork
 
+        quitAppAfterStream = settings.quitAppAfterStream ?? Self.defaultQuitAppAfterStream
+        absoluteMouseMode = settings.absoluteMouseMode ?? Self.defaultAbsoluteMouseMode
+        swapMouseButtons = settings.swapMouseButtons ?? Self.defaultSwapMouseButtons
+        reverseScrollDirection =
+          settings.reverseScrollDirection ?? Self.defaultReverseScrollDirection
+        selectedTouchscreenMode = Self.getString(
+          from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
+
+        remoteResolutionEnabled = settings.remoteResolution ?? Self.defaultRemoteResolutionEnabled
+        if remoteResolutionEnabled,
+          let w = settings.remoteResolutionWidth,
+          let h = settings.remoteResolutionHeight,
+          w > 0,
+          h > 0
+        {
+          let remoteSize = CGSize(width: CGFloat(w), height: CGFloat(h))
+          if Self.remoteResolutions.contains(remoteSize) {
+            selectedRemoteResolution = remoteSize
+            remoteCustomResWidth = nil
+            remoteCustomResHeight = nil
+          } else {
+            selectedRemoteResolution = .zero
+            remoteCustomResWidth = CGFloat(w)
+            remoteCustomResHeight = CGFloat(h)
+          }
+        } else {
+          selectedRemoteResolution = Self.defaultRemoteResolution
+          remoteCustomResWidth = Self.defaultRemoteCustomResWidth
+          remoteCustomResHeight = Self.defaultRemoteCustomResHeight
+        }
+
+        remoteFpsEnabled = settings.remoteFps ?? Self.defaultRemoteFpsEnabled
+        if remoteFpsEnabled {
+          let rate = settings.remoteFpsRate ?? 0
+          if Self.fpss.contains(rate), rate != 0 {
+            selectedRemoteFps = rate
+            remoteCustomFps = nil
+          } else {
+            selectedRemoteFps = .zero
+            remoteCustomFps = rate > 0 ? CGFloat(rate) : nil
+          }
+        } else {
+          selectedRemoteFps = Self.defaultRemoteFps
+          remoteCustomFps = Self.defaultRemoteCustomFps
+        }
+
         func loadNillableDimensionSetting(inputDimensions: CGSize?) -> CGSize? {
           let finalSize: CGSize?
 
@@ -452,25 +908,30 @@ class SettingsModel: ObservableObject {
 
           return finalSize
         }
-      } else {
-        loadAndSaveDefaultSettings()
-      }
     } else {
       loadAndSaveDefaultSettings()
     }
   }
 
   func saveSettings() {
+    guard !isLoading else { return }
+
+    let hostId = selectedHost?.id ?? Self.globalHostId
+
     // Ensure customBitrate is nil if it matches the slider value to keep it clean,
     // but if user typed it, we prefer customBitrate.
     // Actually, logic: use customBitrate if not nil, else use slider.
 
+    let matchDisplayResolution = selectedResolution == Self.matchDisplayResolutionSentinel
+
     var customResolution: CGSize? = nil
-    if let customResWidth, let customResHeight {
-      if customResWidth == 0 || customResHeight == 0 {
-        customResolution = nil
-      } else {
-        customResolution = CGSizeMake(CGFloat(customResWidth), CGFloat(customResHeight))
+    if !matchDisplayResolution {
+      if let customResWidth, let customResHeight {
+        if customResWidth == 0 || customResHeight == 0 {
+          customResolution = nil
+        } else {
+          customResolution = CGSizeMake(CGFloat(customResWidth), CGFloat(customResHeight))
+        }
       }
     }
 
@@ -483,7 +944,46 @@ class SettingsModel: ObservableObject {
       }
     }
 
-    let bitrate = customBitrate ?? Int(Self.bitrateSteps[Int(bitrateSliderValue)] * 1000)
+    let touchscreenMode = Self.getInt(from: selectedTouchscreenMode, in: Self.touchscreenModes)
+
+    var remoteResolutionWidth: Int? = nil
+    var remoteResolutionHeight: Int? = nil
+    if remoteResolutionEnabled {
+      if selectedRemoteResolution == .zero {
+        if let w = remoteCustomResWidth, let h = remoteCustomResHeight, w > 0, h > 0 {
+          remoteResolutionWidth = Int(w)
+          remoteResolutionHeight = Int(h)
+        }
+      } else {
+        remoteResolutionWidth = Int(selectedRemoteResolution.width)
+        remoteResolutionHeight = Int(selectedRemoteResolution.height)
+      }
+    }
+
+    var remoteFpsRate: Int? = nil
+    if remoteFpsEnabled {
+      if selectedRemoteFps == .zero {
+        if let v = remoteCustomFps, v > 0 {
+          remoteFpsRate = Int(v)
+        }
+      } else {
+        remoteFpsRate = selectedRemoteFps
+      }
+    }
+
+    let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
+    let index = max(0, min(Int(bitrateSliderValue), steps.count - 1))
+    let effectiveBitrate = customBitrate ?? Int(steps[index] * 1000)
+
+    // If enabled, recompute bitrate using the moonlight-qt algorithm.
+    let bitrate: Int
+    if autoAdjustBitrate {
+      let res = effectiveResolutionForBitrate()
+      let fps = effectiveFpsForBitrate()
+      bitrate = Self.getDefaultBitrateKbps(width: Int(res.width), height: Int(res.height), fps: fps, yuv444: false)
+    } else {
+      bitrate = effectiveBitrate
+    }
     let codec = Self.getInt(from: selectedVideoCodec, in: Self.videoCodecs)
     let framePacing = Self.getInt(from: selectedPacingOptions, in: Self.pacingOptions)
     let audioConfig = Self.getInt(from: selectedAudioConfiguration, in: Self.audioConfigurations)
@@ -502,12 +1002,27 @@ class SettingsModel: ObservableObject {
     }
 
     let settings = Settings(
-      resolution: selectedResolution,
+      resolution: matchDisplayResolution ? Self.defaultResolution : selectedResolution,
+      matchDisplayResolution: matchDisplayResolution,
       customResolution: customResolution,
       fps: selectedFps,
       customFps: finalCustomFps,
+
+      autoAdjustBitrate: autoAdjustBitrate,
+      ignoreAspectRatio: ignoreAspectRatio,
+      showLocalCursor: showLocalCursor,
+      streamResolutionScale: streamResolutionScale,
+      streamResolutionScaleRatio: streamResolutionScaleRatio,
+
+      remoteResolution: remoteResolutionEnabled,
+      remoteResolutionWidth: remoteResolutionWidth,
+      remoteResolutionHeight: remoteResolutionHeight,
+      remoteFps: remoteFpsEnabled,
+      remoteFpsRate: remoteFpsRate,
+
       bitrate: bitrate,
-      customBitrate: customBitrate,
+      customBitrate: autoAdjustBitrate ? nil : customBitrate,
+      unlockMaxBitrate: unlockMaxBitrate,
       codec: codec,
       hdr: hdr,
       framePacing: framePacing,
@@ -526,13 +1041,16 @@ class SettingsModel: ObservableObject {
       mouseDriver: mouseDriver,
       emulateGuide: emulateGuide,
       appArtworkDimensions: appArtworkDimensions,
-      dimNonHoveredArtwork: dimNonHoveredArtwork
+      dimNonHoveredArtwork: dimNonHoveredArtwork,
+      quitAppAfterStream: quitAppAfterStream,
+      absoluteMouseMode: absoluteMouseMode,
+      swapMouseButtons: swapMouseButtons,
+      reverseScrollDirection: reverseScrollDirection,
+      touchscreenMode: touchscreenMode
     )
 
     if let data = try? PropertyListEncoder().encode(settings) {
-      if let selectedHost {
-        UserDefaults.standard.set(data, forKey: SettingsClass.profileKey(for: selectedHost.id))
-      }
+      UserDefaults.standard.set(data, forKey: SettingsClass.profileKey(for: hostId))
     }
   }
 

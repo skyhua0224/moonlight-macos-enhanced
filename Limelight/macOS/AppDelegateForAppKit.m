@@ -40,6 +40,8 @@ typedef enum : NSUInteger {
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
+    [[LanguageManager shared] applyAppLanguage];
+
     Theme theme = [[NSUserDefaults standardUserDefaults] integerForKey:@"theme"];
     [self changeTheme:theme withMenuItem:[self menuItemForTheme:theme forMenu:self.themeMenuItem.submenu]];
 }

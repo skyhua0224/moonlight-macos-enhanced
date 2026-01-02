@@ -25,6 +25,8 @@
     Connection* _connection;
 }
 
+@synthesize connection = _connection;
+
 - (id) initWithConfig:(StreamConfiguration*)config renderView:(OSView*)view connectionCallbacks:(id<ConnectionCallbacks>)callbacks {
     self = [super init];
     _config = config;

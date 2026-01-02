@@ -32,6 +32,9 @@
 #import "DiscoveryWorker.h"
 #import "ConnectionHelper.h"
 
+#undef NSLocalizedString
+#define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]
+
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, NSSearchFieldDelegate, NSMenuItemValidation>
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *cmsIdToId;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
@@ -78,6 +81,19 @@ const CGFloat scaleBase = 1.125;
     self.runningApp = [self findRunningApp:self.host];
     
     self.boxArtCache = [[NSCache alloc] init];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)languageChanged:(NSNotification *)note {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.getSearchField.placeholderString = NSLocalizedString(@"Search Apps", @"Search Apps");
+        [self.collectionView reloadData];
+    });
 }
 
 - (void)viewWillAppear {
@@ -94,7 +110,7 @@ const CGFloat scaleBase = 1.125;
 
 
     self.getSearchField.delegate = self;
-    self.getSearchField.placeholderString = @"Search Apps";
+    self.getSearchField.placeholderString = NSLocalizedString(@"Search Apps", @"Search Apps");
 }
 
 - (void)viewDidAppear {
@@ -361,7 +377,7 @@ const CGFloat scaleBase = 1.125;
         dispatch_async(dispatch_get_main_queue(), ^{
             // If it fails, display an error and stop the current operation
             if (quitResponse.statusCode != 200) {
-                [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Failed to quit app" message:@"If this app was started by another device, you'll need to quit from that device." window:self.view.window completionHandler:nil];
+                [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Failed to quit app", @"Failed to quit app") message:NSLocalizedString(@"Quit App Error Message", @"Quit App Error Message") window:self.view.window completionHandler:nil];
                 if (completion != nil) {
                     completion(NO);
                 }
@@ -386,17 +402,17 @@ const CGFloat scaleBase = 1.125;
     NSMenuItem *hideAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"hideAppMenuItem" inMenu:menu];
     NSMenuItem *pinAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"pinAppMenuItem" inMenu:menu];
     if (app.pinned) {
-        pinAppMenuItem.title = @"Unpin App";
+        pinAppMenuItem.title = NSLocalizedString(@"Unpin App", @"Unpin App");
         pinAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"pin.slash" accessibilityDescription:nil];
     } else {
-        pinAppMenuItem.title = @"Pin App";
+        pinAppMenuItem.title = NSLocalizedString(@"Pin App", @"Pin App");
         pinAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"pin" accessibilityDescription:nil];
     }
     if (app.hidden) {
-        hideAppMenuItem.title = @"Show App";
+        hideAppMenuItem.title = NSLocalizedString(@"Show App", @"Show App");
         hideAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"eye" accessibilityDescription:nil];
     } else {
-        hideAppMenuItem.title = @"Hide App";
+        hideAppMenuItem.title = NSLocalizedString(@"Hide App", @"Hide App");
         hideAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"eye.slash" accessibilityDescription:nil];
     }
 
@@ -545,10 +561,10 @@ static const CGFloat runningAnimationDuration = 1.0;
     NSAlert *alert = [[NSAlert alloc] init];
     
     alert.alertStyle = NSAlertStyleInformational;
-    alert.messageText = [NSString stringWithFormat:@"%@ is still running.\n\nDo you want to quit %@ and start %@?", currentApp.name, currentApp.name, newApp.name];
+    alert.messageText = [NSString stringWithFormat:NSLocalizedString(@"App Running Alert", @"App Running Alert"), currentApp.name, currentApp.name, newApp.name];
     
-    [alert addButtonWithTitle:@"Yes"];
-    [alert addButtonWithTitle:@"Cancel"];
+    [alert addButtonWithTitle:NSLocalizedString(@"Yes", @"Yes")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
     
     NSModalResponse response = [alert runModal];
     
@@ -703,7 +719,7 @@ static const CGFloat runningAnimationDuration = 1.0;
         if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
             Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
             dispatch_async(dispatch_get_main_queue(), ^{
-                [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Fetching App List Failed" message:@"The connection to the PC was interrupted." window:self.view.window completionHandler:^(NSModalResponse returnCode) {
+                [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Fetching App List Failed", @"Fetching App List Failed") message:NSLocalizedString(@"Connection Interrupted", @"Connection Interrupted") window:self.view.window completionHandler:^(NSModalResponse returnCode) {
                     host.state = StateOffline;
                     [self transitionToHostsVC];
                 }];

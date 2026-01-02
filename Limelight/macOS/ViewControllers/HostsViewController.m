@@ -27,6 +27,9 @@
 #import "PairManager.h"
 #import "WakeOnLanManager.h"
 
+#undef NSLocalizedString
+#define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]
+
 @interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, NSSearchFieldDelegate, NSControlTextEditingDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback, NSMenuItemValidation>
 @property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
 @property (nonatomic, strong) TemporaryHost *selectedHost;
@@ -55,6 +58,19 @@
     self.hosts = [NSArray array];
     
     [self prepareDiscovery];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)languageChanged:(NSNotification *)note {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.getSearchField.placeholderString = NSLocalizedString(@"Search Hosts", @"Search Hosts");
+        [self.collectionView reloadData];
+    });
 }
 
 - (void)viewWillAppear {
@@ -70,7 +86,7 @@
 #pragma clang diagnostic pop
     
     self.getSearchField.delegate = self;
-    self.getSearchField.placeholderString = @"Search Hosts";
+    self.getSearchField.placeholderString = NSLocalizedString(@"Search Hosts", @"Search Hosts");
 }
 
 - (void)viewDidAppear {
@@ -171,17 +187,17 @@
     NSAlert *alert = [[NSAlert alloc] init];
     
     alert.alertStyle = NSAlertStyleInformational;
-    alert.messageText = @"Add Host Manually";
-    alert.informativeText = @"If Moonlight doesn't find your local gaming PC automatically,\nenter the IP address of your PC";
+    alert.messageText = NSLocalizedString(@"Add Host Manually", @"Add Host Manually");
+    alert.informativeText = NSLocalizedString(@"Add Host Info", @"Add Host Info");
 
     NSTextField *inputField = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 200, 24)];
     inputField.identifier = @"addHostField";
-    inputField.placeholderString = @"IP address";
+    inputField.placeholderString = NSLocalizedString(@"IP address", @"IP address");
     inputField.delegate = self;
     [alert setAccessoryView:inputField];
 
-    [alert addButtonWithTitle:@"Add"];
-    [alert addButtonWithTitle:@"Cancel"];
+    [alert addButtonWithTitle:NSLocalizedString(@"Add", @"Add")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
     
     alert.buttons.firstObject.enabled = NO;
     
@@ -227,6 +243,8 @@
     item.hostName.stringValue = host.name;
     item.host = host;
     item.delegate = self;
+    
+    [item updateHostState];
     
     return item;
 }
@@ -382,9 +400,9 @@
     NSAlert *alert = [[NSAlert alloc] init];
 
     alert.alertStyle = NSAlertStyleInformational;
-    alert.messageText = [NSString stringWithFormat:@"%@ is offline, do you want to try and wake it?", host.name];
-    [alert addButtonWithTitle:@"Wake"];
-    [alert addButtonWithTitle:@"Cancel"];
+    alert.messageText = [NSString stringWithFormat:NSLocalizedString(@"Host Offline Alert", @"Host Offline Alert"), host.name];
+    [alert addButtonWithTitle:NSLocalizedString(@"Wake", @"Wake")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
 
     NavigatableAlertView *alertView = [[NavigatableAlertView alloc] init];
     alertView.responder = alert.window;
@@ -431,7 +449,7 @@
 
 - (void)startPairing:(NSString *)PIN {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational title:[NSString stringWithFormat:@"Enter the following PIN on %@: %@", self.selectedHost.name, PIN] message:nil window:self.view.window completionHandler:nil];
+        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational title:[NSString stringWithFormat:NSLocalizedString(@"Enter PIN", @"Enter PIN"), self.selectedHost.name, PIN] message:nil window:self.view.window completionHandler:nil];
     });
 }
 
@@ -451,7 +469,7 @@
             [self.view.window endSheet:self.pairAlert.window];
             self.pairAlert = nil;
         }
-        [AlertPresenter displayAlert:NSAlertStyleWarning title:[NSString stringWithFormat:@"Pairing Failed"] message:message window:self.view.window completionHandler:nil];
+        [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Pairing Failed", @"Pairing Failed") message:message window:self.view.window completionHandler:nil];
         [self->_discMan startDiscovery];
     });
 }

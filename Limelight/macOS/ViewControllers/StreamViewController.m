@@ -22,6 +22,9 @@
 
 #import "Moonlight-Swift.h"
 
+#undef NSLocalizedString
+#define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]
+
 #include "Limelight.h"
 
 @import VideoToolbox;
@@ -45,6 +48,7 @@
 
 @property (nonatomic) IOPMAssertionID powerAssertionID;
 
+@property (nonatomic, strong) NSVisualEffectView *overlayContainer;
 @property (nonatomic, strong) NSTextField *overlayLabel;
 @property (nonatomic, strong) NSTimer *statsTimer;
 
@@ -133,7 +137,24 @@
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
     
-    self.view.window.contentAspectRatio = NSMakeSize([self.class getResolution].width, [self.class getResolution].height);
+    NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    BOOL ignoreAspectRatio = prefs ? [prefs[@"ignoreAspectRatio"] boolValue] : NO;
+
+    if (!ignoreAspectRatio) {
+        int width = [self.class getResolution].width;
+        int height = [self.class getResolution].height;
+
+        BOOL scaleEnabled = prefs ? [prefs[@"streamResolutionScale"] boolValue] : NO;
+        int ratio = prefs ? [prefs[@"streamResolutionScaleRatio"] intValue] : 100;
+        if (scaleEnabled && ratio > 0 && ratio != 100) {
+            int scaledWidth = width * ratio / 100;
+            int scaledHeight = height * ratio / 100;
+            width = (scaledWidth / 8) * 8;
+            height = (scaledHeight / 8) * 8;
+        }
+
+        self.view.window.contentAspectRatio = NSMakeSize(width, height);
+    }
     self.view.window.frameAutosaveName = @"Stream Window";
     [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
     
@@ -273,6 +294,11 @@
         return NO;
     }
     
+    if (event.keyCode == kVK_ANSI_S && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
+        [self toggleOverlay];
+        return YES;
+    }
+    
     [self.hidSupport keyDown:event];
     [self.hidSupport keyUp:event];
     
@@ -289,11 +315,11 @@
     NSAlert *alert = [[NSAlert alloc] init];
     
     alert.alertStyle = NSAlertStyleInformational;
-    alert.messageText = @"Disconnect from Stream, or Close and Quit App?";
+    alert.messageText = NSLocalizedString(@"Disconnect Alert", @"Disconnect Alert");
 
-    [alert addButtonWithTitle:@"Disconnect from Stream"];
-    [alert addButtonWithTitle:@"Close and Quit App"];
-    [alert addButtonWithTitle:@"Cancel"];
+    [alert addButtonWithTitle:NSLocalizedString(@"Disconnect from Stream", @"Disconnect from Stream")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Close and Quit App", @"Close and Quit App")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
 
     NSModalResponse response = [alert runModal];
     switch (response) {
@@ -336,17 +362,24 @@
 }
 
 - (void)captureMouse {
-    CGAssociateMouseAndMouseCursorPosition(NO);
-    if (self.cursorHiddenCounter == 0) {
-        [NSCursor hide];
-        self.cursorHiddenCounter ++;
+    NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    BOOL showLocalCursor = prefs ? [prefs[@"showLocalCursor"] boolValue] : NO;
+
+    if (!showLocalCursor) {
+        CGAssociateMouseAndMouseCursorPosition(NO);
+        if (self.cursorHiddenCounter == 0) {
+            [NSCursor hide];
+            self.cursorHiddenCounter ++;
+        }
     }
     
-    CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
-    CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
-    CGFloat screenHeight = self.view.window.screen.frame.size.height;
-    CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
-    CGWarpMouseCursorPosition(cursorPoint);
+    if (!showLocalCursor) {
+        CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
+        CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
+        CGFloat screenHeight = self.view.window.screen.frame.size.height;
+        CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
+        CGWarpMouseCursorPosition(cursorPoint);
+    }
     
     [self enableMenuItems:NO];
     
@@ -358,10 +391,15 @@
 }
 
 - (void)uncaptureMouse {
-    CGAssociateMouseAndMouseCursorPosition(YES);
-    if (self.cursorHiddenCounter != 0) {
-        [NSCursor unhide];
-        self.cursorHiddenCounter --;
+    NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    BOOL showLocalCursor = prefs ? [prefs[@"showLocalCursor"] boolValue] : NO;
+
+    if (!showLocalCursor) {
+        CGAssociateMouseAndMouseCursorPosition(YES);
+        if (self.cursorHiddenCounter != 0) {
+            [NSCursor unhide];
+            self.cursorHiddenCounter --;
+        }
     }
     
     [self enableMenuItems:YES];
@@ -465,7 +503,87 @@
     streamConfig.height = [self.class getResolution].height;
 
     streamConfig.frameRate = [streamSettings.framerate intValue];
+
+    NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+
+    // Apply resolution scaling (mirrors moonlight-qt behavior)
+    BOOL scaleEnabled = prefs ? [prefs[@"streamResolutionScale"] boolValue] : NO;
+    int scaleRatio = prefs ? [prefs[@"streamResolutionScaleRatio"] intValue] : 100;
+    if (scaleEnabled && scaleRatio > 0 && scaleRatio != 100) {
+        int scaledWidth = streamConfig.width * scaleRatio / 100;
+        int scaledHeight = streamConfig.height * scaleRatio / 100;
+        streamConfig.width = (scaledWidth / 8) * 8;
+        streamConfig.height = (scaledHeight / 8) * 8;
+    }
+
+    // Default bitrate (may be overridden by auto-adjust below)
     streamConfig.bitRate = [streamSettings.bitrate intValue];
+
+    // Auto-adjust bitrate (mirrors moonlight-qt default algorithm)
+    BOOL autoAdjustBitrate = prefs ? [prefs[@"autoAdjustBitrate"] boolValue] : NO;
+    if (autoAdjustBitrate) {
+        int modeWidth = streamConfig.width;
+        int modeHeight = streamConfig.height;
+        int modeFps = streamConfig.frameRate;
+
+        // Incorporate remote overrides (host render mode) for bitrate calculation
+        if (prefs != nil) {
+            if ([prefs[@"remoteResolution"] boolValue]) {
+                int rw = [prefs[@"remoteResolutionWidth"] intValue];
+                int rh = [prefs[@"remoteResolutionHeight"] intValue];
+                if (rw > 0 && rh > 0) {
+                    modeWidth = rw;
+                    modeHeight = rh;
+                }
+            }
+            if ([prefs[@"remoteFps"] boolValue]) {
+                int rfps = [prefs[@"remoteFpsRate"] intValue];
+                if (rfps > 0) {
+                    modeFps = rfps;
+                }
+            }
+        }
+
+        // Keep even dimensions
+        modeWidth &= ~1;
+        modeHeight &= ~1;
+
+        // Copied from moonlight-qt (StreamingPreferences::getDefaultBitrate)
+        float frameRateFactor = (modeFps <= 60 ? (float)modeFps : (sqrtf((float)modeFps / 60.f) * 60.f)) / 30.f;
+
+        struct ResEntry { int pixels; int factor; };
+        static const struct ResEntry resTable[] = {
+            { 640 * 360, 1 },
+            { 854 * 480, 2 },
+            { 1280 * 720, 5 },
+            { 1920 * 1080, 10 },
+            { 2560 * 1440, 20 },
+            { 3840 * 2160, 40 },
+            { -1, -1 },
+        };
+
+        int pixels = modeWidth * modeHeight;
+        float resolutionFactor = 10.f;
+        for (int i = 0;; i++) {
+            if (pixels == resTable[i].pixels) {
+                resolutionFactor = (float)resTable[i].factor;
+                break;
+            } else if (pixels < resTable[i].pixels) {
+                if (i == 0) {
+                    resolutionFactor = (float)resTable[i].factor;
+                } else {
+                    resolutionFactor = ((float)(pixels - resTable[i-1].pixels) / (resTable[i].pixels - resTable[i-1].pixels)) * (resTable[i].factor - resTable[i-1].factor) + resTable[i-1].factor;
+                }
+                break;
+            } else if (resTable[i].pixels == -1) {
+                resolutionFactor = (float)resTable[i-1].factor;
+                break;
+            }
+        }
+
+        int defaultKbps = (int)lroundf(resolutionFactor * frameRateFactor) * 1000;
+        streamConfig.bitRate = defaultKbps;
+    }
     streamConfig.optimizeGameSettings = streamSettings.optimizeGames;
     streamConfig.playAudioOnPC = streamSettings.playAudioOnPC;
     streamConfig.allowHevc = streamSettings.useHevc;
@@ -504,34 +622,139 @@
     }
 }
 
+- (void)toggleOverlay {
+    if (self.overlayContainer) {
+        [self.overlayContainer removeFromSuperview];
+        self.overlayContainer = nil;
+        self.overlayLabel = nil;
+        [self.statsTimer invalidate];
+        self.statsTimer = nil;
+    } else {
+        [self setupOverlay];
+    }
+}
+
 - (void)setupOverlay {
-    if (self.overlayLabel) {
-        [self.overlayLabel removeFromSuperview];
+    if (self.overlayContainer) {
+        [self.overlayContainer removeFromSuperview];
     }
     
-    self.overlayLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 20, 300, 100)];
+    self.overlayContainer = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
+    self.overlayContainer.material = NSVisualEffectMaterialHUDWindow;
+    self.overlayContainer.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    self.overlayContainer.state = NSVisualEffectStateActive;
+    self.overlayContainer.wantsLayer = YES;
+    self.overlayContainer.layer.cornerRadius = 10.0;
+    self.overlayContainer.layer.masksToBounds = YES;
+    
+    self.overlayLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
     self.overlayLabel.bezeled = NO;
     self.overlayLabel.drawsBackground = NO;
     self.overlayLabel.editable = NO;
     self.overlayLabel.selectable = NO;
-    self.overlayLabel.textColor = [NSColor greenColor];
-    self.overlayLabel.font = [NSFont monospacedDigitSystemFontOfSize:14 weight:NSFontWeightBold];
-    self.overlayLabel.stringValue = @"Loading stats...";
+    self.overlayLabel.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
     
-    [self.view addSubview:self.overlayLabel];
+    [self.overlayContainer addSubview:self.overlayLabel];
+    [self.view addSubview:self.overlayContainer];
     
     self.statsTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(updateStats) userInfo:nil repeats:YES];
+    [self updateStats]; // Initial update
 }
 
 - (void)updateStats {
+    if (!self.overlayContainer) return;
+
+    VideoStats stats = self.streamMan.connection.renderer.videoStats;
+    int videoFormat = self.streamMan.connection.renderer.videoFormat;
+    
+    NSString *codecString = @"Unknown";
+    if (videoFormat & VIDEO_FORMAT_MASK_H264) {
+        codecString = @"H.264";
+    } else if (videoFormat & VIDEO_FORMAT_MASK_H265) {
+        if (videoFormat & VIDEO_FORMAT_MASK_10BIT) {
+            codecString = @"HEVC 10-bit";
+        } else {
+            codecString = @"HEVC";
+        }
+    }
+    
+    DataManager* dataMan = [[DataManager alloc] init];
+    TemporarySettings* streamSettings = [dataMan getSettings];
+
+    struct Resolution res = [self.class getResolution];
+    int configuredFps = streamSettings.framerate != nil ? [streamSettings.framerate intValue] : 0;
+    
     uint32_t rtt = 0;
     uint32_t rttVar = 0;
+    LiGetEstimatedRttInfo(&rtt, &rttVar);
     
-    if (LiGetEstimatedRttInfo(&rtt, &rttVar)) {
-        self.overlayLabel.stringValue = [NSString stringWithFormat:@"RTT: %u ms\nVariance: %u ms", rtt, rttVar];
-    } else {
-        self.overlayLabel.stringValue = @"Stats unavailable";
-    }
+    float loss = stats.totalFrames > 0 ? (float)stats.networkDroppedFrames / stats.totalFrames * 100.0f : 0;
+    
+    float renderTime = stats.renderedFrames > 0 ? (float)stats.totalRenderTime / stats.renderedFrames : 0;
+    float decodeTime = stats.decodedFrames > 0 ? (float)stats.totalDecodeTime / stats.decodedFrames : 0;
+    float encodeTime = stats.framesWithHostProcessingLatency > 0 ? (float)stats.totalHostProcessingLatency / 10.0f / stats.framesWithHostProcessingLatency : 0;
+    
+    NSMutableAttributedString *attrString = [[NSMutableAttributedString alloc] init];
+    
+    NSDictionary *labelAttrs = @{
+        NSForegroundColorAttributeName: [NSColor whiteColor],
+        NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightRegular]
+    };
+    
+    NSDictionary *valueAttrs = @{
+        NSForegroundColorAttributeName: [NSColor colorWithRed:1.0 green:1.0 blue:0.5 alpha:1.0], // Light Yellow
+        NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightBold]
+    };
+    
+    void (^append)(NSString *, NSDictionary *) = ^(NSString *str, NSDictionary *attrs) {
+        [attrString appendAttributedString:[[NSAttributedString alloc] initWithString:str attributes:attrs]];
+    };
+    
+    // Resolution & FPS (use configured FPS for the left-side value)
+    append([NSString stringWithFormat:@"%dx%d@%d", res.width, res.height, configuredFps], valueAttrs);
+    append(@"  ", labelAttrs);
+    append(codecString, valueAttrs);
+    append(@"  FPS ", labelAttrs);
+    append([NSString stringWithFormat:@"%.1f", stats.receivedFps], valueAttrs);
+    append(@" Rx · ", labelAttrs);
+    append([NSString stringWithFormat:@"%.1f", stats.decodedFps], valueAttrs);
+    append(@" De · ", labelAttrs);
+    append([NSString stringWithFormat:@"%.1f", stats.renderedFps], valueAttrs);
+    append(@" Rd", labelAttrs);
+    
+    // Network
+    append(@"  Network ", labelAttrs);
+    append([NSString stringWithFormat:@"%u", rtt], valueAttrs);
+    append(@" ± ", labelAttrs);
+    append([NSString stringWithFormat:@"%u", rttVar], valueAttrs);
+    append(@" ms  Loss ", labelAttrs);
+    append([NSString stringWithFormat:@"%.2f%%", loss], valueAttrs);
+    
+    // Latency
+    append(@"  |  Render ", labelAttrs);
+    append([NSString stringWithFormat:@"%.2f", renderTime], valueAttrs);
+    append(@" ms · Decode ", labelAttrs);
+    append([NSString stringWithFormat:@"%.2f", decodeTime], valueAttrs);
+    append(@" ms · Encode ", labelAttrs);
+    append([NSString stringWithFormat:@"%.1f", encodeTime], valueAttrs);
+    append(@" ms", labelAttrs);
+
+    self.overlayLabel.attributedStringValue = attrString;
+    [self.overlayLabel sizeToFit];
+    
+    // Layout
+    CGFloat padding = 10.0;
+    NSRect labelFrame = self.overlayLabel.frame;
+    NSRect containerFrame = NSMakeRect(0, 0, labelFrame.size.width + padding * 2, labelFrame.size.height + padding * 2);
+    
+    // Center top
+    CGFloat x = (self.view.bounds.size.width - containerFrame.size.width) / 2;
+    CGFloat y = self.view.bounds.size.height - containerFrame.size.height - 20; // 20px from top
+    
+    containerFrame.origin = NSMakePoint(x, y);
+    self.overlayContainer.frame = containerFrame;
+    
+    self.overlayLabel.frame = NSMakeRect(padding, padding, labelFrame.size.width, labelFrame.size.height);
 }
 
 
@@ -585,13 +808,18 @@
             [self.statsTimer invalidate];
             self.statsTimer = nil;
         }
-        if (self.overlayLabel) {
-            [self.overlayLabel removeFromSuperview];
+        if (self.overlayContainer) {
+            [self.overlayContainer removeFromSuperview];
+            self.overlayContainer = nil;
             self.overlayLabel = nil;
         }
+        
+        if (errorCode == 0 && [SettingsClass quitAppAfterStreamFor:self.app.host.uuid]) {
+            [self.delegate quitApp:self.app completion:nil];
+        } else {
+            [self closeWindowFromMainQueueWithMessage:nil];
+        }
     });
-    
-    [self closeWindowFromMainQueueWithMessage:nil];
 }
 
 - (void)stageFailed:(const char *)stageName withError:(int)errorCode {
