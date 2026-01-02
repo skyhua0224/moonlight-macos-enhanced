@@ -21,14 +21,31 @@
 "Video" = "视频";
 "Video Codec" = "视频编码";
 "HDR" = "HDR";
+"Enable YUV 4:4:4" = "启用 YUV 4:4:4";
+"YUV 4:4:4 hint" = "需要主机端支持。可能增加带宽占用与延迟；不支持时可能无效果或自动回退。";
 "Frame Pacing" = "帧率平滑";
 "Lowest Latency" = "最低延迟";
 "Smoothest Video" = "最流畅视频";
 
 /* Audio Settings */
 "Audio" = "音频";
+"Enable Microphone" = "启用麦克风";
+"Microphone hint" = "需要主机端支持；不支持时可能不会生效。";
 "Play Sound on Host" = "在主机上播放声音";
 "Volume" = "音量";
+
+/* Sunshine Feature Warnings */
+"Sunshine support required" = "需要 Sunshine 支持";
+"YUV 4:4:4 requires Sunshine support" = "此选项需要 Sunshine（或兼容主机）支持 YUV 4:4:4。若主机不支持，串流可能失败或自动回退。";
+"Microphone requires Sunshine support" = "此选项需要 Sunshine（或兼容主机）支持麦克风输入。若主机不支持，可能不会生效。";
+"OK" = "好";
+
+/* Remote Overrides */
+"Remote overrides hint" = "这些选项仅影响主机端渲染/编码模式。大多数情况下保持关闭即可。";
+
+/* Bitrate */
+"Target Bitrate" = "目标码率";
+"Auto bitrate hint" = "自动码率会根据分辨率与帧率计算；启用 YUV 4:4:4 可能提高目标码率。";
 
 /* Input Settings */
 "Controller" = "手柄";

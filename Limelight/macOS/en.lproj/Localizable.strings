@@ -21,14 +21,31 @@
 "Video" = "Video";
 "Video Codec" = "Video Codec";
 "HDR" = "HDR";
+"Enable YUV 4:4:4" = "Enable YUV 4:4:4";
+"YUV 4:4:4 hint" = "Requires host support. May increase bandwidth and latency. If unsupported, it may be ignored or fall back.";
 "Frame Pacing" = "Frame Pacing";
 "Lowest Latency" = "Lowest Latency";
 "Smoothest Video" = "Smoothest Video";
 
 /* Audio Settings */
 "Audio" = "Audio";
+"Enable Microphone" = "Enable Microphone";
+"Microphone hint" = "Requires host support. If unsupported, it may have no effect.";
 "Play Sound on Host" = "Play Sound on Host";
 "Volume" = "Volume";
+
+/* Sunshine Feature Warnings */
+"Sunshine support required" = "Sunshine support required";
+"YUV 4:4:4 requires Sunshine support" = "This option requires Sunshine (or a compatible host) to support YUV 4:4:4. If unsupported, the stream may fail or fall back.";
+"Microphone requires Sunshine support" = "This option requires Sunshine (or a compatible host) to support microphone input. If unsupported, it may have no effect.";
+"OK" = "OK";
+
+/* Remote Overrides */
+"Remote overrides hint" = "These options are for the host-side render/encode mode only. Most users can leave them off.";
+
+/* Bitrate */
+"Target Bitrate" = "Target Bitrate";
+"Auto bitrate hint" = "Auto bitrate uses your resolution and FPS. YUV 4:4:4 may increase the target bitrate.";
 
 /* Input Settings */
 "Controller" = "Controller";

@@ -230,6 +230,8 @@ static const NSString* HTTPS_PORT = @"47984";
 - (NSURLRequest*) newLaunchRequest:(StreamConfiguration*)config {
     BOOL sops = config.optimizeGameSettings;
 
+    NSMutableString* extraParams = [NSMutableString string];
+
     int modeWidth = config.width;
     int modeHeight = config.height;
     int modeFps = config.frameRate;
@@ -263,6 +265,14 @@ static const NSString* HTTPS_PORT = @"47984";
                     modeFps = rfps;
                 }
             }
+
+            // Optional Sunshine protocol extensions (best-effort)
+            if ([settings[@"yuv444"] boolValue]) {
+                [extraParams appendString:@"&yuv444=1"];
+            }
+            if ([settings[@"microphone"] boolValue]) {
+                [extraParams appendString:@"&microphone=1"];
+            }
         }
     } @catch (NSException* exception) {
         // Best-effort only; keep defaults on any failure.
@@ -279,13 +289,14 @@ static const NSString* HTTPS_PORT = @"47984";
         sops = NO;
     }
     
-    NSString* urlString = [NSString stringWithFormat:@"%@/launch?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
+    NSString* urlString = [NSString stringWithFormat:@"%@/launch?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
                            _baseHTTPSURL, _uniqueId,
                            config.appID,
                            modeWidth, modeHeight, modeFps,
                            sops ? 1 : 0,
                            [Utils bytesToHex:config.riKey], config.riKeyId,
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
+                           extraParams,
                            config.playAudioOnPC ? 1 : 0,
                            SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
     Log(LOG_I, @"Requesting: %@", urlString);
@@ -295,6 +306,8 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (NSURLRequest*) newResumeRequest:(StreamConfiguration*)config {
     BOOL sops = config.optimizeGameSettings;
+
+    NSMutableString* extraParams = [NSMutableString string];
 
     int modeWidth = config.width;
     int modeHeight = config.height;
@@ -327,6 +340,14 @@ static const NSString* HTTPS_PORT = @"47984";
                     modeFps = rfps;
                 }
             }
+
+            // Optional Sunshine protocol extensions (best-effort)
+            if ([settings[@"yuv444"] boolValue]) {
+                [extraParams appendString:@"&yuv444=1"];
+            }
+            if ([settings[@"microphone"] boolValue]) {
+                [extraParams appendString:@"&microphone=1"];
+            }
         }
     } @catch (NSException* exception) {
     }
@@ -341,13 +362,14 @@ static const NSString* HTTPS_PORT = @"47984";
         sops = NO;
     }
     
-    NSString* urlString = [NSString stringWithFormat:@"%@/resume?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
+    NSString* urlString = [NSString stringWithFormat:@"%@/resume?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
                            _baseHTTPSURL, _uniqueId,
                            config.appID,
                            modeWidth, modeHeight, modeFps,
                            sops ? 1 : 0,
                            [Utils bytesToHex:config.riKey], config.riKeyId,
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
+                           extraParams,
                            config.playAudioOnPC ? 1 : 0,
                            SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
     Log(LOG_I, @"Requesting: %@", urlString);

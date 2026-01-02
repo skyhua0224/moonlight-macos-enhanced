@@ -6,9 +6,9 @@
 //  Copyright © 2023 Moonlight Game Streaming Project. All rights reserved.
 //
 
-import SwiftUI
 import AppKit
 import CoreGraphics
+import SwiftUI
 
 struct Host: Identifiable, Hashable {
   let id: String
@@ -145,6 +145,14 @@ class SettingsModel: ObservableObject {
     }
   }
 
+  @Published var enableYUV444: Bool {
+    didSet {
+      guard !isLoading else { return }
+      applyAutoBitrateIfNeeded(force: true)
+      saveSettings()
+    }
+  }
+
   @Published var ignoreAspectRatio: Bool {
     didSet {
       guard !isLoading else { return }
@@ -153,6 +161,13 @@ class SettingsModel: ObservableObject {
   }
 
   @Published var showLocalCursor: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
+  @Published var enableMicrophone: Bool {
     didSet {
       guard !isLoading else { return }
       saveSettings()
@@ -498,14 +513,17 @@ class SettingsModel: ObservableObject {
 
   // moonlight-qt defaults (tuned for macOS)
   static let defaultAutoAdjustBitrate = true
+  static let defaultEnableYUV444 = false
   static let defaultIgnoreAspectRatio = true
   static let defaultShowLocalCursor = false
+  static let defaultEnableMicrophone = false
   static let defaultStreamResolutionScale = false
   static let defaultStreamResolutionScaleRatio = 100
 
   private static func mainDisplayPixelSize() -> CGSize? {
     guard let screen = NSScreen.main,
-      let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+      let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+        as? NSNumber
     else {
       return nil
     }
@@ -601,7 +619,7 @@ class SettingsModel: ObservableObject {
     let res = effectiveResolutionForBitrate()
     let fps = effectiveFpsForBitrate()
     let kbps = Self.getDefaultBitrateKbps(
-      width: Int(res.width), height: Int(res.height), fps: fps, yuv444: false)
+      width: Int(res.width), height: Int(res.height), fps: fps, yuv444: enableYUV444)
 
     let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
     var bitrateIndex = 0
@@ -650,12 +668,16 @@ class SettingsModel: ObservableObject {
     remoteCustomFps = Self.defaultRemoteCustomFps
 
     bitrateSliderValue = Self.defaultBitrateSliderValue
-    customBitrate = Int(Self.bitrateSteps(unlocked: Self.defaultUnlockMaxBitrate)[Int(Self.defaultBitrateSliderValue)] * 1000.0)
+    customBitrate = Int(
+      Self.bitrateSteps(unlocked: Self.defaultUnlockMaxBitrate)[Int(Self.defaultBitrateSliderValue)]
+        * 1000.0)
     unlockMaxBitrate = Self.defaultUnlockMaxBitrate
 
     autoAdjustBitrate = Self.defaultAutoAdjustBitrate
+    enableYUV444 = Self.defaultEnableYUV444
     ignoreAspectRatio = Self.defaultIgnoreAspectRatio
     showLocalCursor = Self.defaultShowLocalCursor
+    enableMicrophone = Self.defaultEnableMicrophone
     streamResolutionScale = Self.defaultStreamResolutionScale
     streamResolutionScaleRatio = Self.defaultStreamResolutionScaleRatio
 
@@ -712,12 +734,16 @@ class SettingsModel: ObservableObject {
     remoteCustomFps = Self.defaultRemoteCustomFps
 
     bitrateSliderValue = Self.defaultBitrateSliderValue
-    customBitrate = Int(Self.bitrateSteps(unlocked: Self.defaultUnlockMaxBitrate)[Int(Self.defaultBitrateSliderValue)] * 1000.0)
+    customBitrate = Int(
+      Self.bitrateSteps(unlocked: Self.defaultUnlockMaxBitrate)[Int(Self.defaultBitrateSliderValue)]
+        * 1000.0)
     unlockMaxBitrate = Self.defaultUnlockMaxBitrate
 
     autoAdjustBitrate = Self.defaultAutoAdjustBitrate
+    enableYUV444 = Self.defaultEnableYUV444
     ignoreAspectRatio = Self.defaultIgnoreAspectRatio
     showLocalCursor = Self.defaultShowLocalCursor
+    enableMicrophone = Self.defaultEnableMicrophone
     streamResolutionScale = Self.defaultStreamResolutionScale
     streamResolutionScaleRatio = Self.defaultStreamResolutionScaleRatio
 
@@ -766,148 +792,151 @@ class SettingsModel: ObservableObject {
 
     let hostId = selectedHost?.id ?? Self.globalHostId
     if let settings = Settings.getSettings(for: hostId) {
-        selectedResolution = settings.resolution
+      selectedResolution = settings.resolution
 
-        if settings.matchDisplayResolution ?? false {
-          selectedResolution = Self.matchDisplayResolutionSentinel
+      if settings.matchDisplayResolution ?? false {
+        selectedResolution = Self.matchDisplayResolutionSentinel
+      }
+
+      let customResolution = loadNillableDimensionSetting(
+        inputDimensions: settings.customResolution)
+      customResWidth = customResolution != nil ? customResolution!.width : nil
+      customResHeight = customResolution != nil ? customResolution!.height : nil
+      if customResolution == nil {
+        if selectedResolution == .zero {
+          selectedResolution = Self.defaultResolution
         }
+      }
 
-        let customResolution = loadNillableDimensionSetting(
-          inputDimensions: settings.customResolution)
-        customResWidth = customResolution != nil ? customResolution!.width : nil
-        customResHeight = customResolution != nil ? customResolution!.height : nil
-        if customResolution == nil {
-          if selectedResolution == .zero {
-            selectedResolution = Self.defaultResolution
-          }
+      selectedFps = settings.fps
+      customFps = settings.customFps
+      if customFps == nil {
+        if selectedFps == 0 {
+          selectedFps = Self.defaultFps
         }
+      }
 
-        selectedFps = settings.fps
-        customFps = settings.customFps
-        if customFps == nil {
-          if selectedFps == 0 {
-            selectedFps = Self.defaultFps
-          }
+      unlockMaxBitrate = settings.unlockMaxBitrate ?? Self.defaultUnlockMaxBitrate
+
+      autoAdjustBitrate = settings.autoAdjustBitrate ?? Self.defaultAutoAdjustBitrate
+      enableYUV444 = settings.enableYUV444 ?? Self.defaultEnableYUV444
+      ignoreAspectRatio = settings.ignoreAspectRatio ?? Self.defaultIgnoreAspectRatio
+      showLocalCursor = settings.showLocalCursor ?? Self.defaultShowLocalCursor
+      enableMicrophone = settings.enableMicrophone ?? Self.defaultEnableMicrophone
+      streamResolutionScale = settings.streamResolutionScale ?? Self.defaultStreamResolutionScale
+      streamResolutionScaleRatio =
+        settings.streamResolutionScaleRatio ?? Self.defaultStreamResolutionScaleRatio
+
+      let effectiveBitrateKbps = settings.customBitrate ?? settings.bitrate
+      customBitrate = effectiveBitrateKbps
+      let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
+      var bitrateIndex = 0
+      for i in 0..<steps.count {
+        if Float(effectiveBitrateKbps) <= steps[i] * 1000.0 {
+          bitrateIndex = i
+          break
         }
+      }
+      bitrateSliderValue = Float(bitrateIndex)
 
-        unlockMaxBitrate = settings.unlockMaxBitrate ?? Self.defaultUnlockMaxBitrate
+      applyAutoBitrateIfNeeded(force: true)
 
-        autoAdjustBitrate = settings.autoAdjustBitrate ?? Self.defaultAutoAdjustBitrate
-        ignoreAspectRatio = settings.ignoreAspectRatio ?? Self.defaultIgnoreAspectRatio
-        showLocalCursor = settings.showLocalCursor ?? Self.defaultShowLocalCursor
-        streamResolutionScale = settings.streamResolutionScale ?? Self.defaultStreamResolutionScale
-        streamResolutionScaleRatio = settings.streamResolutionScaleRatio ?? Self.defaultStreamResolutionScaleRatio
+      selectedVideoCodec = Self.getString(from: settings.codec, in: Self.videoCodecs)
+      hdr = settings.hdr
+      selectedPacingOptions = Self.getString(from: settings.framePacing, in: Self.pacingOptions)
 
-        let effectiveBitrateKbps = settings.customBitrate ?? settings.bitrate
-        customBitrate = effectiveBitrateKbps
-        let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
-        var bitrateIndex = 0
-        for i in 0..<steps.count {
-          if Float(effectiveBitrateKbps) <= steps[i] * 1000.0 {
-            bitrateIndex = i
-            break
-          }
-        }
-        bitrateSliderValue = Float(bitrateIndex)
+      audioOnPC = settings.audioOnPC
+      selectedAudioConfiguration = Self.getString(
+        from: settings.audioConfiguration, in: Self.audioConfigurations)
+      enableVsync = settings.enableVsync ?? SettingsModel.defaultEnableVsync
+      showPerformanceOverlay =
+        settings.showPerformanceOverlay ?? SettingsModel.defaultShowPerformanceOverlay
+      captureSystemShortcuts =
+        settings.captureSystemShortcuts ?? SettingsModel.defaultCaptureSystemShortcuts
+      volumeLevel = settings.volumeLevel ?? SettingsModel.defaultVolumeLevel
 
-        applyAutoBitrateIfNeeded(force: true)
+      selectedMultiControllerMode = Self.getString(
+        from: settings.multiController, in: Self.multiControllerModes)
+      swapButtons = settings.swapABXYButtons
 
-        selectedVideoCodec = Self.getString(from: settings.codec, in: Self.videoCodecs)
-        hdr = settings.hdr
-        selectedPacingOptions = Self.getString(from: settings.framePacing, in: Self.pacingOptions)
+      optimize = settings.optimize
 
-        audioOnPC = settings.audioOnPC
-        selectedAudioConfiguration = Self.getString(
-          from: settings.audioConfiguration, in: Self.audioConfigurations)
-        enableVsync = settings.enableVsync ?? SettingsModel.defaultEnableVsync
-        showPerformanceOverlay =
-          settings.showPerformanceOverlay ?? SettingsModel.defaultShowPerformanceOverlay
-        captureSystemShortcuts =
-          settings.captureSystemShortcuts ?? SettingsModel.defaultCaptureSystemShortcuts
-        volumeLevel = settings.volumeLevel ?? SettingsModel.defaultVolumeLevel
+      autoFullscreen = settings.autoFullscreen
+      rumble = settings.rumble
+      selectedControllerDriver = Self.getString(
+        from: settings.controllerDriver, in: Self.controllerDrivers)
+      selectedMouseDriver = Self.getString(from: settings.mouseDriver, in: Self.mouseDrivers)
 
-        selectedMultiControllerMode = Self.getString(
-          from: settings.multiController, in: Self.multiControllerModes)
-        swapButtons = settings.swapABXYButtons
+      emulateGuide = settings.emulateGuide
 
-        optimize = settings.optimize
+      let appArtworkDimensions = loadNillableDimensionSetting(
+        inputDimensions: settings.appArtworkDimensions)
+      appArtworkWidth = appArtworkDimensions != nil ? appArtworkDimensions!.width : nil
+      appArtworkHeight = appArtworkDimensions != nil ? appArtworkDimensions!.height : nil
 
-        autoFullscreen = settings.autoFullscreen
-        rumble = settings.rumble
-        selectedControllerDriver = Self.getString(
-          from: settings.controllerDriver, in: Self.controllerDrivers)
-        selectedMouseDriver = Self.getString(from: settings.mouseDriver, in: Self.mouseDrivers)
+      dimNonHoveredArtwork = settings.dimNonHoveredArtwork
 
-        emulateGuide = settings.emulateGuide
+      quitAppAfterStream = settings.quitAppAfterStream ?? Self.defaultQuitAppAfterStream
+      absoluteMouseMode = settings.absoluteMouseMode ?? Self.defaultAbsoluteMouseMode
+      swapMouseButtons = settings.swapMouseButtons ?? Self.defaultSwapMouseButtons
+      reverseScrollDirection =
+        settings.reverseScrollDirection ?? Self.defaultReverseScrollDirection
+      selectedTouchscreenMode = Self.getString(
+        from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
 
-        let appArtworkDimensions = loadNillableDimensionSetting(
-          inputDimensions: settings.appArtworkDimensions)
-        appArtworkWidth = appArtworkDimensions != nil ? appArtworkDimensions!.width : nil
-        appArtworkHeight = appArtworkDimensions != nil ? appArtworkDimensions!.height : nil
-
-        dimNonHoveredArtwork = settings.dimNonHoveredArtwork
-
-        quitAppAfterStream = settings.quitAppAfterStream ?? Self.defaultQuitAppAfterStream
-        absoluteMouseMode = settings.absoluteMouseMode ?? Self.defaultAbsoluteMouseMode
-        swapMouseButtons = settings.swapMouseButtons ?? Self.defaultSwapMouseButtons
-        reverseScrollDirection =
-          settings.reverseScrollDirection ?? Self.defaultReverseScrollDirection
-        selectedTouchscreenMode = Self.getString(
-          from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
-
-        remoteResolutionEnabled = settings.remoteResolution ?? Self.defaultRemoteResolutionEnabled
-        if remoteResolutionEnabled,
-          let w = settings.remoteResolutionWidth,
-          let h = settings.remoteResolutionHeight,
-          w > 0,
-          h > 0
-        {
-          let remoteSize = CGSize(width: CGFloat(w), height: CGFloat(h))
-          if Self.remoteResolutions.contains(remoteSize) {
-            selectedRemoteResolution = remoteSize
-            remoteCustomResWidth = nil
-            remoteCustomResHeight = nil
-          } else {
-            selectedRemoteResolution = .zero
-            remoteCustomResWidth = CGFloat(w)
-            remoteCustomResHeight = CGFloat(h)
-          }
+      remoteResolutionEnabled = settings.remoteResolution ?? Self.defaultRemoteResolutionEnabled
+      if remoteResolutionEnabled,
+        let w = settings.remoteResolutionWidth,
+        let h = settings.remoteResolutionHeight,
+        w > 0,
+        h > 0
+      {
+        let remoteSize = CGSize(width: CGFloat(w), height: CGFloat(h))
+        if Self.remoteResolutions.contains(remoteSize) {
+          selectedRemoteResolution = remoteSize
+          remoteCustomResWidth = nil
+          remoteCustomResHeight = nil
         } else {
-          selectedRemoteResolution = Self.defaultRemoteResolution
-          remoteCustomResWidth = Self.defaultRemoteCustomResWidth
-          remoteCustomResHeight = Self.defaultRemoteCustomResHeight
+          selectedRemoteResolution = .zero
+          remoteCustomResWidth = CGFloat(w)
+          remoteCustomResHeight = CGFloat(h)
         }
+      } else {
+        selectedRemoteResolution = Self.defaultRemoteResolution
+        remoteCustomResWidth = Self.defaultRemoteCustomResWidth
+        remoteCustomResHeight = Self.defaultRemoteCustomResHeight
+      }
 
-        remoteFpsEnabled = settings.remoteFps ?? Self.defaultRemoteFpsEnabled
-        if remoteFpsEnabled {
-          let rate = settings.remoteFpsRate ?? 0
-          if Self.fpss.contains(rate), rate != 0 {
-            selectedRemoteFps = rate
-            remoteCustomFps = nil
-          } else {
-            selectedRemoteFps = .zero
-            remoteCustomFps = rate > 0 ? CGFloat(rate) : nil
-          }
+      remoteFpsEnabled = settings.remoteFps ?? Self.defaultRemoteFpsEnabled
+      if remoteFpsEnabled {
+        let rate = settings.remoteFpsRate ?? 0
+        if Self.fpss.contains(rate), rate != 0 {
+          selectedRemoteFps = rate
+          remoteCustomFps = nil
         } else {
-          selectedRemoteFps = Self.defaultRemoteFps
-          remoteCustomFps = Self.defaultRemoteCustomFps
+          selectedRemoteFps = .zero
+          remoteCustomFps = rate > 0 ? CGFloat(rate) : nil
         }
+      } else {
+        selectedRemoteFps = Self.defaultRemoteFps
+        remoteCustomFps = Self.defaultRemoteCustomFps
+      }
 
-        func loadNillableDimensionSetting(inputDimensions: CGSize?) -> CGSize? {
-          let finalSize: CGSize?
+      func loadNillableDimensionSetting(inputDimensions: CGSize?) -> CGSize? {
+        let finalSize: CGSize?
 
-          if let nonNilDimensions = inputDimensions {
-            if nonNilDimensions.width == .zero || nonNilDimensions.height == .zero {
-              finalSize = nil
-            } else {
-              finalSize = nonNilDimensions
-            }
-          } else {
+        if let nonNilDimensions = inputDimensions {
+          if nonNilDimensions.width == .zero || nonNilDimensions.height == .zero {
             finalSize = nil
+          } else {
+            finalSize = nonNilDimensions
           }
-
-          return finalSize
+        } else {
+          finalSize = nil
         }
+
+        return finalSize
+      }
     } else {
       loadAndSaveDefaultSettings()
     }
@@ -980,7 +1009,8 @@ class SettingsModel: ObservableObject {
     if autoAdjustBitrate {
       let res = effectiveResolutionForBitrate()
       let fps = effectiveFpsForBitrate()
-      bitrate = Self.getDefaultBitrateKbps(width: Int(res.width), height: Int(res.height), fps: fps, yuv444: false)
+      bitrate = Self.getDefaultBitrateKbps(
+        width: Int(res.width), height: Int(res.height), fps: fps, yuv444: enableYUV444)
     } else {
       bitrate = effectiveBitrate
     }
@@ -1009,8 +1039,10 @@ class SettingsModel: ObservableObject {
       customFps: finalCustomFps,
 
       autoAdjustBitrate: autoAdjustBitrate,
+      enableYUV444: enableYUV444,
       ignoreAspectRatio: ignoreAspectRatio,
       showLocalCursor: showLocalCursor,
+      enableMicrophone: enableMicrophone,
       streamResolutionScale: streamResolutionScale,
       streamResolutionScaleRatio: streamResolutionScaleRatio,
 

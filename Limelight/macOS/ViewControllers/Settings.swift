@@ -6,9 +6,9 @@
 //  Copyright © 2024 Moonlight Game Streaming Project. All rights reserved.
 //
 
-import SwiftUI
 import AppKit
 import CoreGraphics
+import SwiftUI
 
 struct Settings: Encodable, Decodable {
   let resolution: CGSize
@@ -19,8 +19,10 @@ struct Settings: Encodable, Decodable {
 
   // Streaming preferences parity with moonlight-qt
   let autoAdjustBitrate: Bool?
+  let enableYUV444: Bool?
   let ignoreAspectRatio: Bool?
   let showLocalCursor: Bool?
+  let enableMicrophone: Bool?
   let streamResolutionScale: Bool?
   let streamResolutionScaleRatio: Int?
 
@@ -96,52 +98,54 @@ class SettingsClass: NSObject {
 
   @objc static func getSettings(for key: String) -> [String: Any]? {
     if let settings = Settings.getSettings(for: key) {
-        let objcSettings: [String: Any?] = [
-          "resolution": settings.resolution,
-          "matchDisplayResolution": settings.matchDisplayResolution,
-          "customResolution": settings.customResolution,
-          "fps": settings.fps,
-          "customFps": settings.customFps,
-          "autoAdjustBitrate": settings.autoAdjustBitrate ?? true,
-          "ignoreAspectRatio": settings.ignoreAspectRatio ?? true,
-          "showLocalCursor": settings.showLocalCursor ?? false,
-          "streamResolutionScale": settings.streamResolutionScale ?? false,
-          "streamResolutionScaleRatio": settings.streamResolutionScaleRatio ?? 100,
-          "remoteResolution": settings.remoteResolution ?? false,
-          "remoteResolutionWidth": settings.remoteResolutionWidth ?? 0,
-          "remoteResolutionHeight": settings.remoteResolutionHeight ?? 0,
-          "remoteFps": settings.remoteFps ?? false,
-          "remoteFpsRate": settings.remoteFpsRate ?? 0,
-          "bitrate": settings.bitrate,
-          "customBitrate": settings.customBitrate,
-          "unlockMaxBitrate": settings.unlockMaxBitrate,
-          "codec": settings.codec,
-          "hdr": settings.hdr,
-          "framePacing": settings.framePacing,
-          "audioOnPC": settings.audioOnPC,
-          "audioConfiguration": settings.audioConfiguration,
-          "enableVsync": settings.enableVsync,
-          "showPerformanceOverlay": settings.showPerformanceOverlay,
-          "captureSystemShortcuts": settings.captureSystemShortcuts,
-          "volumeLevel": settings.volumeLevel,
-          "multiController": settings.multiController,
-          "swapABXYButtons": settings.swapABXYButtons,
-          "optimize": settings.optimize,
-          "autoFullscreen": settings.autoFullscreen,
-          "rumble": settings.rumble,
-          "controllerDriver": settings.controllerDriver,
-          "mouseDriver": settings.mouseDriver,
-          "emulateGuide": settings.emulateGuide,
-          "appArtworkDimensions": settings.appArtworkDimensions,
-          "dimNonHoveredArtwork": settings.dimNonHoveredArtwork,
-          "quitAppAfterStream": settings.quitAppAfterStream,
-          "absoluteMouseMode": settings.absoluteMouseMode,
-          "swapMouseButtons": settings.swapMouseButtons,
-          "reverseScrollDirection": settings.reverseScrollDirection,
-          "touchscreenMode": settings.touchscreenMode,
-        ]
+      let objcSettings: [String: Any?] = [
+        "resolution": settings.resolution,
+        "matchDisplayResolution": settings.matchDisplayResolution,
+        "customResolution": settings.customResolution,
+        "fps": settings.fps,
+        "customFps": settings.customFps,
+        "autoAdjustBitrate": settings.autoAdjustBitrate ?? true,
+        "yuv444": settings.enableYUV444 ?? false,
+        "ignoreAspectRatio": settings.ignoreAspectRatio ?? true,
+        "showLocalCursor": settings.showLocalCursor ?? false,
+        "microphone": settings.enableMicrophone ?? false,
+        "streamResolutionScale": settings.streamResolutionScale ?? false,
+        "streamResolutionScaleRatio": settings.streamResolutionScaleRatio ?? 100,
+        "remoteResolution": settings.remoteResolution ?? false,
+        "remoteResolutionWidth": settings.remoteResolutionWidth ?? 0,
+        "remoteResolutionHeight": settings.remoteResolutionHeight ?? 0,
+        "remoteFps": settings.remoteFps ?? false,
+        "remoteFpsRate": settings.remoteFpsRate ?? 0,
+        "bitrate": settings.bitrate,
+        "customBitrate": settings.customBitrate,
+        "unlockMaxBitrate": settings.unlockMaxBitrate,
+        "codec": settings.codec,
+        "hdr": settings.hdr,
+        "framePacing": settings.framePacing,
+        "audioOnPC": settings.audioOnPC,
+        "audioConfiguration": settings.audioConfiguration,
+        "enableVsync": settings.enableVsync,
+        "showPerformanceOverlay": settings.showPerformanceOverlay,
+        "captureSystemShortcuts": settings.captureSystemShortcuts,
+        "volumeLevel": settings.volumeLevel,
+        "multiController": settings.multiController,
+        "swapABXYButtons": settings.swapABXYButtons,
+        "optimize": settings.optimize,
+        "autoFullscreen": settings.autoFullscreen,
+        "rumble": settings.rumble,
+        "controllerDriver": settings.controllerDriver,
+        "mouseDriver": settings.mouseDriver,
+        "emulateGuide": settings.emulateGuide,
+        "appArtworkDimensions": settings.appArtworkDimensions,
+        "dimNonHoveredArtwork": settings.dimNonHoveredArtwork,
+        "quitAppAfterStream": settings.quitAppAfterStream,
+        "absoluteMouseMode": settings.absoluteMouseMode,
+        "swapMouseButtons": settings.swapMouseButtons,
+        "reverseScrollDirection": settings.reverseScrollDirection,
+        "touchscreenMode": settings.touchscreenMode,
+      ]
 
-        return objcSettings
+      return objcSettings
     }
 
     return nil
@@ -157,7 +161,9 @@ class SettingsClass: NSObject {
         // (e.g. 3840x2160) even when macOS is running in HiDPI scaled mode.
 
         let displayID: CGDirectDisplayID?
-        if let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+        if let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+          as? NSNumber
+        {
           displayID = CGDirectDisplayID(screenNumber.uint32Value)
         } else {
           displayID = nil
@@ -184,7 +190,8 @@ class SettingsClass: NSObject {
         dataResolutionHeight = size.height
       } else {
         dataResolutionWidth =
-          settings.resolution == .zero ? settings.customResolution!.width : settings.resolution.width
+          settings.resolution == .zero
+          ? settings.customResolution!.width : settings.resolution.width
         dataResolutionHeight =
           settings.resolution == .zero
           ? settings.customResolution!.height : settings.resolution.height
