@@ -32,7 +32,12 @@
     CMVideoFormatDescriptionRef formatDesc;
 
     CVDisplayLinkRef _displayLink;
+    
+    VideoStats _activeWndVideoStats;
+    int _lastFrameNumber;
 }
+
+@synthesize videoFormat;
 
 - (void)reinitializeDisplayLayer
 {
@@ -80,6 +85,9 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 {
     self->videoFormat = videoFormat;
     self.frameRate = frameRate;
+    memset(&_activeWndVideoStats, 0, sizeof(_activeWndVideoStats));
+    _lastFrameNumber = 0;
+    _videoStats = (VideoStats){0};
 }
 
 - (void)start
@@ -119,7 +127,46 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     PDECODE_UNIT du;
     
     while (LiPollNextVideoFrame(&handle, &du)) {
-        LiCompleteVideoFrame(handle, DrSubmitDecodeUnit(du));
+        if (!self->_lastFrameNumber) {
+            self->_activeWndVideoStats.measurementStartTimestamp = LiGetMillis();
+            self->_lastFrameNumber = du->frameNumber;
+        } else {
+            self->_activeWndVideoStats.networkDroppedFrames += du->frameNumber - (self->_lastFrameNumber + 1);
+            self->_activeWndVideoStats.totalFrames += du->frameNumber - (self->_lastFrameNumber + 1);
+            self->_lastFrameNumber = du->frameNumber;
+        }
+        
+        uint64_t now = LiGetMillis();
+        if (now - self->_activeWndVideoStats.measurementStartTimestamp >= 1000) {
+            self->_activeWndVideoStats.totalFps = (float)self->_activeWndVideoStats.totalFrames;
+            self->_activeWndVideoStats.receivedFps = (float)self->_activeWndVideoStats.receivedFrames;
+            self->_activeWndVideoStats.decodedFps = (float)self->_activeWndVideoStats.decodedFrames;
+            self->_activeWndVideoStats.renderedFps = (float)self->_activeWndVideoStats.renderedFrames;
+            
+            self->_videoStats = self->_activeWndVideoStats;
+            
+            memset(&self->_activeWndVideoStats, 0, sizeof(VideoStats));
+            self->_activeWndVideoStats.measurementStartTimestamp = now;
+        }
+        
+        self->_activeWndVideoStats.receivedFrames++;
+        self->_activeWndVideoStats.totalFrames++;
+        
+        if (du->frameHostProcessingLatency != 0) {
+            self->_activeWndVideoStats.totalHostProcessingLatency += du->frameHostProcessingLatency;
+            self->_activeWndVideoStats.framesWithHostProcessingLatency++;
+        }
+        
+        uint64_t decodeStart = LiGetMillis();
+        int ret = DrSubmitDecodeUnit(du);
+        LiCompleteVideoFrame(handle, ret);
+        
+        if (ret == DR_OK) {
+            self->_activeWndVideoStats.decodedFrames++;
+            self->_activeWndVideoStats.renderedFrames++;
+            self->_activeWndVideoStats.totalDecodeTime += LiGetMillis() - decodeStart;
+            self->_activeWndVideoStats.totalRenderTime += LiGetMillis() - du->enqueueTimeMs;
+        }
         
         // Calculate the actual display refresh rate
         double displayRefreshRate = 1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(self->_displayLink);

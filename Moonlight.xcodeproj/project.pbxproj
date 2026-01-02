@@ -10,6 +10,7 @@
 		4C38E7F91FEE085B000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
 		4C38E7FC1FEE0875000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
 		4C38E8011FEE08AA000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
+		A4B1C1002D9F0A1B00C0FF04 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */; };
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		A42858422D5065B800E39078 /* OpenSSL in Frameworks */ = {isa = PBXBuildFile; productRef = A42858412D5065B800E39078 /* OpenSSL */; };
 		A42858472D5066A000E39078 /* FFmpeg.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858432D5066A000E39078 /* FFmpeg.xcframework */; };
@@ -53,6 +54,8 @@
 		4C2556A121F56F280009838E /* Moonlight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Moonlight.entitlements; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CD17E9B2733C0FC004D438C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		A4B1C1002D9F0A1B00C0FF02 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Limelight/macOS/en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A4B1C1002D9F0A1B00C0FF03 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "Limelight/macOS/zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
 		A42858432D5066A000E39078 /* FFmpeg.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:KHSNQKXT55:Martin Kenny"; lastKnownFileType = wrapper.xcframework; name = FFmpeg.xcframework; path = xcframeworks/FFmpeg.xcframework; sourceTree = "<group>"; };
 		A42858442D5066A000E39078 /* Opus.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:KHSNQKXT55:Martin Kenny"; lastKnownFileType = wrapper.xcframework; name = Opus.xcframework; path = xcframeworks/Opus.xcframework; sourceTree = "<group>"; };
@@ -184,6 +187,7 @@
 				4C2556A121F56F280009838E /* Moonlight.entitlements */,
 				98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */,
 				A40F5A3F2D432ABE006DA227 /* Limelight */,
+				A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */,
 				FB290CF019B2C406004C83CF /* Frameworks */,
 				FB290CEF19B2C406004C83CF /* Products */,
 			);
@@ -295,10 +299,23 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A4B1C1002D9F0A1B00C0FF04 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A4B1C1002D9F0A1B00C0FF02 /* en */,
+				A4B1C1002D9F0A1B00C0FF03 /* zh-Hans */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4C7E0A761FECBFFD00684411 /* Sources */ = {

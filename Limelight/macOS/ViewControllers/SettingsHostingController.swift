@@ -11,6 +11,8 @@ import SwiftUI
 import Combine
 
 class SettingsHostingController<RootView: View>: NSWindowController {
+    private var languageObserver: Any?
+
     convenience init(rootView: RootView) {
         let hostingController = NSHostingController(rootView: rootView)
         
@@ -18,9 +20,21 @@ class SettingsHostingController<RootView: View>: NSWindowController {
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.collectionBehavior = [.fullScreenNone]
         window.tabbingMode = .disallowed
-        window.title = "Settings"
-        
+        window.title = LanguageManager.shared.localize("Settings")
+
         self.init(window: window)
+
+        languageObserver = NotificationCenter.default.addObserver(
+            forName: .init("LanguageChanged"), object: nil, queue: .main
+        ) { [weak window] _ in
+            window?.title = LanguageManager.shared.localize("Settings")
+        }
+    }
+
+    deinit {
+        if let languageObserver {
+            NotificationCenter.default.removeObserver(languageObserver)
+        }
     }
 }
 

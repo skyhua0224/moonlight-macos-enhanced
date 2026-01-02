@@ -58,3 +58,52 @@
 
 /* Misc */
 "Not supported" = "Not supported";
+
+/* General UI */
+"Search Apps" = "Search Apps";
+"Search Hosts" = "Search Hosts";
+"Yes" = "Yes";
+"Cancel" = "Cancel";
+"Add" = "Add";
+"Wake" = "Wake";
+"Close and Quit App" = "Close and Quit App";
+"Disconnect from Stream" = "Disconnect from Stream";
+
+/* Alerts */
+"App Running Alert" = "%@ is still running.\n\nDo you want to quit %@ and start %@?";
+"Failed to quit app" = "Failed to quit app";
+"Quit App Error Message" = "If this app was started by another device, you'll need to quit from that device.";
+"Fetching App List Failed" = "Fetching App List Failed";
+"Connection Interrupted" = "The connection to the PC was interrupted.";
+"Add Host Manually" = "Add Host Manually";
+"Add Host Info" = "If Moonlight doesn't find your local gaming PC automatically,\nenter the IP address of your PC";
+"IP address" = "IP address";
+"Host Offline Alert" = "%@ is offline, do you want to try and wake it?";
+"Enter PIN" = "Enter the following PIN on %@: %@";
+"Pairing Failed" = "Pairing Failed";
+"Disconnect Alert" = "Disconnect from Stream, or Close and Quit App?";
+
+/* Context Menu */
+"Unpin App" = "Unpin App";
+"Pin App" = "Pin App";
+"Show App" = "Show App";
+"Hide App" = "Hide App";
+
+/* Host Settings */
+"Quit App After Stream" = "Quit App After Stream";
+
+/* Input Settings */
+"Mouse" = "Mouse";
+"Absolute Mouse Mode" = "Absolute Mouse Mode";
+"Swap Mouse Buttons" = "Swap Mouse Buttons";
+"Reverse Scroll Direction" = "Reverse Scroll Direction";
+"Touchscreen Mode" = "Touchscreen Mode";
+"Trackpad" = "Trackpad";
+"Touchscreen" = "Touchscreen";
+
+/* Host Status */
+"Online, but not paired" = "Online, but not paired";
+"Online, and paired" = "Online, and paired";
+"Offline, and not paired" = "Offline, and not paired";
+"Offline, but paired" = "Offline, but paired";
+"Unknown" = "Unknown";

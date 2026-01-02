@@ -58,3 +58,52 @@
 
 /* Misc */
 "Not supported" = "不支持";
+
+/* General UI */
+"Search Apps" = "搜索应用";
+"Search Hosts" = "搜索主机";
+"Yes" = "是";
+"Cancel" = "取消";
+"Add" = "添加";
+"Wake" = "唤醒";
+"Close and Quit App" = "关闭并退出应用";
+"Disconnect from Stream" = "断开串流";
+
+/* Alerts */
+"App Running Alert" = "%@ 仍在运行。\n\n您想退出 %@ 并启动 %@ 吗？";
+"Failed to quit app" = "退出应用失败";
+"Quit App Error Message" = "如果此应用是由其他设备启动的，您需要从该设备退出。";
+"Fetching App List Failed" = "获取应用列表失败";
+"Connection Interrupted" = "与 PC 的连接已中断。";
+"Add Host Manually" = "手动添加主机";
+"Add Host Info" = "如果 Moonlight 没有自动找到您的本地游戏 PC，\n请输入您 PC 的 IP 地址";
+"IP address" = "IP 地址";
+"Host Offline Alert" = "%@ 处于离线状态，您想尝试唤醒它吗？";
+"Enter PIN" = "在 %@ 上输入以下 PIN 码: %@";
+"Pairing Failed" = "配对失败";
+"Disconnect Alert" = "断开串流，还是关闭并退出应用？";
+
+/* Context Menu */
+"Unpin App" = "取消置顶";
+"Pin App" = "置顶应用";
+"Show App" = "显示应用";
+"Hide App" = "隐藏应用";
+
+/* Host Settings */
+"Quit App After Stream" = "结束串流后退出应用";
+
+/* Input Settings */
+"Mouse" = "鼠标";
+"Absolute Mouse Mode" = "绝对鼠标模式 (远程桌面)";
+"Swap Mouse Buttons" = "交换鼠标按键";
+"Reverse Scroll Direction" = "反转滚动方向";
+"Touchscreen Mode" = "触摸屏模式";
+"Trackpad" = "触控板";
+"Touchscreen" = "触摸屏";
+
+/* Host Status */
+"Online, but not paired" = "在线，未配对";
+"Online, and paired" = "在线，已配对";
+"Offline, and not paired" = "离线，未配对";
+"Offline, but paired" = "离线，已配对";
+"Unknown" = "未知";

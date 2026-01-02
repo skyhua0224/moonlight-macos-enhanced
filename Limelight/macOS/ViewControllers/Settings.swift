@@ -7,13 +7,33 @@
 //
 
 import SwiftUI
+import AppKit
+import CoreGraphics
 
 struct Settings: Encodable, Decodable {
   let resolution: CGSize
+  let matchDisplayResolution: Bool?
   let customResolution: CGSize?
   let fps: Int
   let customFps: CGFloat?
+
+  // Streaming preferences parity with moonlight-qt
+  let autoAdjustBitrate: Bool?
+  let ignoreAspectRatio: Bool?
+  let showLocalCursor: Bool?
+  let streamResolutionScale: Bool?
+  let streamResolutionScaleRatio: Int?
+
+  // Remote host display mode override (affects /launch mode parameter)
+  let remoteResolution: Bool?
+  let remoteResolutionWidth: Int?
+  let remoteResolutionHeight: Int?
+  let remoteFps: Bool?
+  let remoteFpsRate: Int?
+
   let bitrate: Int
+  let customBitrate: Int?
+  let unlockMaxBitrate: Bool?
   let codec: Int
   let hdr: Bool
   let framePacing: Int
@@ -21,6 +41,7 @@ struct Settings: Encodable, Decodable {
   let audioConfiguration: Int
   let enableVsync: Bool?
   let showPerformanceOverlay: Bool?
+  let captureSystemShortcuts: Bool?
   let volumeLevel: CGFloat?
   let multiController: Bool
   let swapABXYButtons: Bool
@@ -35,8 +56,28 @@ struct Settings: Encodable, Decodable {
   let appArtworkDimensions: CGSize?
   let dimNonHoveredArtwork: Bool
 
+  // Host Settings
+  let quitAppAfterStream: Bool?
+
+  // Input Settings
+  let absoluteMouseMode: Bool?
+  let swapMouseButtons: Bool?
+  let reverseScrollDirection: Bool?
+  let touchscreenMode: Int?
+
+  private static func globalProfileKey() -> String {
+    SettingsClass.profileKey(for: SettingsModel.globalHostId)
+  }
+
   static func getSettings(for key: String) -> Self? {
     if let data = UserDefaults.standard.data(forKey: SettingsClass.profileKey(for: key)) {
+      if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
+        return settings
+      }
+    }
+
+    // Fallback to global settings when no host-specific settings exist
+    if let data = UserDefaults.standard.data(forKey: globalProfileKey()) {
       if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
         return settings
       }
@@ -54,14 +95,26 @@ class SettingsClass: NSObject {
   }
 
   @objc static func getSettings(for key: String) -> [String: Any]? {
-    if let data = UserDefaults.standard.data(forKey: SettingsClass.profileKey(for: key)) {
-      if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
+    if let settings = Settings.getSettings(for: key) {
         let objcSettings: [String: Any?] = [
           "resolution": settings.resolution,
+          "matchDisplayResolution": settings.matchDisplayResolution,
           "customResolution": settings.customResolution,
           "fps": settings.fps,
           "customFps": settings.customFps,
+          "autoAdjustBitrate": settings.autoAdjustBitrate ?? true,
+          "ignoreAspectRatio": settings.ignoreAspectRatio ?? true,
+          "showLocalCursor": settings.showLocalCursor ?? false,
+          "streamResolutionScale": settings.streamResolutionScale ?? false,
+          "streamResolutionScaleRatio": settings.streamResolutionScaleRatio ?? 100,
+          "remoteResolution": settings.remoteResolution ?? false,
+          "remoteResolutionWidth": settings.remoteResolutionWidth ?? 0,
+          "remoteResolutionHeight": settings.remoteResolutionHeight ?? 0,
+          "remoteFps": settings.remoteFps ?? false,
+          "remoteFpsRate": settings.remoteFpsRate ?? 0,
           "bitrate": settings.bitrate,
+          "customBitrate": settings.customBitrate,
+          "unlockMaxBitrate": settings.unlockMaxBitrate,
           "codec": settings.codec,
           "hdr": settings.hdr,
           "framePacing": settings.framePacing,
@@ -69,6 +122,7 @@ class SettingsClass: NSObject {
           "audioConfiguration": settings.audioConfiguration,
           "enableVsync": settings.enableVsync,
           "showPerformanceOverlay": settings.showPerformanceOverlay,
+          "captureSystemShortcuts": settings.captureSystemShortcuts,
           "volumeLevel": settings.volumeLevel,
           "multiController": settings.multiController,
           "swapABXYButtons": settings.swapABXYButtons,
@@ -80,10 +134,14 @@ class SettingsClass: NSObject {
           "emulateGuide": settings.emulateGuide,
           "appArtworkDimensions": settings.appArtworkDimensions,
           "dimNonHoveredArtwork": settings.dimNonHoveredArtwork,
+          "quitAppAfterStream": settings.quitAppAfterStream,
+          "absoluteMouseMode": settings.absoluteMouseMode,
+          "swapMouseButtons": settings.swapMouseButtons,
+          "reverseScrollDirection": settings.reverseScrollDirection,
+          "touchscreenMode": settings.touchscreenMode,
         ]
 
         return objcSettings
-      }
     }
 
     return nil
@@ -93,11 +151,44 @@ class SettingsClass: NSObject {
     if let settings = Settings.getSettings(for: key) {
       let dataMan = DataManager()
 
-      let dataResolutionWidth =
-        settings.resolution == .zero ? settings.customResolution!.width : settings.resolution.width
-      let dataResolutionHeight =
-        settings.resolution == .zero
-        ? settings.customResolution!.height : settings.resolution.height
+      func displayPixelSize() -> CGSize? {
+        guard let screen = NSScreen.main else { return nil }
+        // Use the display's native pixel size. This matches the panel's physical resolution
+        // (e.g. 3840x2160) even when macOS is running in HiDPI scaled mode.
+
+        let displayID: CGDirectDisplayID?
+        if let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+          displayID = CGDirectDisplayID(screenNumber.uint32Value)
+        } else {
+          displayID = nil
+        }
+
+        guard let displayID, let mode = CGDisplayCopyDisplayMode(displayID) else { return nil }
+
+        let size = CGSize(width: mode.pixelWidth, height: mode.pixelHeight)
+
+        func even(_ v: CGFloat) -> CGFloat {
+          let i = Int(v)
+          return CGFloat(i - (i % 2))
+        }
+
+        return CGSize(width: even(size.width), height: even(size.height))
+      }
+
+      let usingMatchDisplayResolution = settings.matchDisplayResolution ?? false
+
+      let dataResolutionWidth: CGFloat
+      let dataResolutionHeight: CGFloat
+      if usingMatchDisplayResolution, let size = displayPixelSize() {
+        dataResolutionWidth = size.width
+        dataResolutionHeight = size.height
+      } else {
+        dataResolutionWidth =
+          settings.resolution == .zero ? settings.customResolution!.width : settings.resolution.width
+        dataResolutionHeight =
+          settings.resolution == .zero
+          ? settings.customResolution!.height : settings.resolution.height
+      }
       let dataFps = settings.fps == .zero ? Int(settings.customFps!) : settings.fps
       let dataBitrate = settings.bitrate
       let dataCodec = SettingsModel.getBool(from: settings.codec, in: SettingsModel.videoCodecs)
@@ -125,11 +216,11 @@ class SettingsClass: NSObject {
   @objc static func getHostUUID(from address: String) -> String? {
     if let hosts = DataManager().getHosts() as? [TemporaryHost] {
       if let matchingHost = hosts.first(where: { host in
-        if let potentialAddress = host.localAddress {
-          return potentialAddress == address
-        } else {
-          return false
-        }
+        return host.activeAddress == address
+          || host.localAddress == address
+          || host.externalAddress == address
+          || host.ipv6Address == address
+          || host.address == address
       }) {
         return matchingHost.uuid
       }
@@ -217,5 +308,47 @@ class SettingsClass: NSObject {
       return settings.showPerformanceOverlay ?? SettingsModel.defaultShowPerformanceOverlay
     }
     return SettingsModel.defaultShowPerformanceOverlay
+  }
+
+  @objc static func captureSystemShortcuts(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.captureSystemShortcuts ?? SettingsModel.defaultCaptureSystemShortcuts
+    }
+    return SettingsModel.defaultCaptureSystemShortcuts
+  }
+
+  @objc static func quitAppAfterStream(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.quitAppAfterStream ?? SettingsModel.defaultQuitAppAfterStream
+    }
+    return SettingsModel.defaultQuitAppAfterStream
+  }
+
+  @objc static func absoluteMouseMode(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.absoluteMouseMode ?? SettingsModel.defaultAbsoluteMouseMode
+    }
+    return SettingsModel.defaultAbsoluteMouseMode
+  }
+
+  @objc static func swapMouseButtons(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.swapMouseButtons ?? SettingsModel.defaultSwapMouseButtons
+    }
+    return SettingsModel.defaultSwapMouseButtons
+  }
+
+  @objc static func reverseScrollDirection(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.reverseScrollDirection ?? SettingsModel.defaultReverseScrollDirection
+    }
+    return SettingsModel.defaultReverseScrollDirection
+  }
+
+  @objc static func touchscreenMode(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.touchscreenMode ?? SettingsModel.defaultTouchscreenMode
+    }
+    return SettingsModel.defaultTouchscreenMode
   }
 }

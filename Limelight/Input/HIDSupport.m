@@ -566,7 +566,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         me.mouseDeltaX = 0;
         me.mouseDeltaY = 0;
         if (me.shouldSendInputEvents) {
-            LiSendMouseMoveEvent(deltaX, deltaY);
+            BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:me.host.uuid];
+            int touchscreenMode = [SettingsClass touchscreenModeFor:me.host.uuid];
+            if (!absoluteMouse && touchscreenMode != 1) {
+                LiSendMouseMoveEvent(deltaX, deltaY);
+            }
         }
     }
 
@@ -671,6 +675,14 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         return;
     }
     
+    if ([SettingsClass swapMouseButtonsFor:self.host.uuid]) {
+        if (button == BUTTON_LEFT) {
+            button = BUTTON_RIGHT;
+        } else if (button == BUTTON_RIGHT) {
+            button = BUTTON_LEFT;
+        }
+    }
+    
     if (self.shouldSendInputEvents) {
         LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
     }
@@ -679,6 +691,14 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 - (void)mouseUp:(NSEvent *)event withButton:(int)button {
     if (self.useGCMouse) {
         return;
+    }
+    
+    if ([SettingsClass swapMouseButtonsFor:self.host.uuid]) {
+        if (button == BUTTON_LEFT) {
+            button = BUTTON_RIGHT;
+        } else if (button == BUTTON_RIGHT) {
+            button = BUTTON_LEFT;
+        }
     }
     
     if (self.shouldSendInputEvents) {
@@ -691,9 +711,19 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         return;
     }
     
-    if (event.deltaX != 0 || event.deltaY != 0) {
-        if (self.shouldSendInputEvents) {
-            LiSendMouseMoveEvent(event.deltaX, event.deltaY);
+    if (self.shouldSendInputEvents) {
+        BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:self.host.uuid];
+        int touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
+        
+        if (absoluteMouse || touchscreenMode == 1) {
+            NSPoint loc = [event locationInWindow];
+            NSSize size = event.window.contentView.frame.size;
+            // Invert Y for top-left origin
+            LiSendMousePositionEvent((short)loc.x, (short)(size.height - loc.y), (short)size.width, (short)size.height);
+        } else {
+            if (event.deltaX != 0 || event.deltaY != 0) {
+                LiSendMouseMoveEvent(event.deltaX, event.deltaY);
+            }
         }
     }
 }
@@ -701,19 +731,27 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 - (void)scrollWheel:(NSEvent *)event {
     CGFloat absDeltaX = fabs(event.scrollingDeltaX);
     CGFloat absDeltaY = fabs(event.scrollingDeltaY);
+    
+    CGFloat deltaX = event.scrollingDeltaX;
+    CGFloat deltaY = event.scrollingDeltaY;
+    
+    if ([SettingsClass reverseScrollDirectionFor:self.host.uuid]) {
+        deltaX = -deltaX;
+        deltaY = -deltaY;
+    }
 
     if (self.shouldSendInputEvents) {
         if (event.hasPreciseScrollingDeltas) {
             if (absDeltaX > absDeltaY) {
-                LiSendHighResHScrollEvent(-event.scrollingDeltaX);
+                LiSendHighResHScrollEvent(-deltaX);
             } else {
-                LiSendHighResScrollEvent(event.scrollingDeltaY);
+                LiSendHighResScrollEvent(deltaY);
             }
         } else {
             if (absDeltaX > absDeltaY) {
-                LiSendHScrollEvent(-event.scrollingDeltaX);
+                LiSendHScrollEvent(-deltaX);
             } else {
-                LiSendScrollEvent(event.scrollingDeltaY);
+                LiSendScrollEvent(deltaY);
             }
         }
     }

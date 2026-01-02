@@ -30,6 +30,8 @@
     char _rtspSessionUrl[1024];
 }
 
+@synthesize renderer = _renderer;
+
 static NSLock* initLock;
 static OpusMSDecoder* opusDecoder;
 static id<ConnectionCallbacks> _callbacks;
@@ -397,6 +399,7 @@ void ClConnectionStatusUpdate(int status)
     }
 
     renderer = myRenderer;
+    _renderer = myRenderer;
     _callbacks = callbacks;
 
     LiInitializeStreamConfiguration(&_streamConfig);

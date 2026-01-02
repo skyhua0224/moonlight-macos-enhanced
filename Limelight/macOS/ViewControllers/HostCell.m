@@ -11,10 +11,15 @@
 #import "NSApplication+Moonlight.h"
 #import "HostCellView.h"
 #import "NSView+Moonlight.h"
+#import "Moonlight-Swift.h"
+
+#undef NSLocalizedString
+#define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]
 
 @interface HostCell () <NSMenuDelegate>
 @property (weak) IBOutlet BackgroundColorView *imageContainer;
 @property (weak) IBOutlet NSView *labelContainer;
+@property (nonatomic) id languageObserver;
 
 @end
 
@@ -39,11 +44,21 @@
     self.statusLightView.alphaValue = 0.66;
     
     ((HostCellView *)self.view).delegate = self;
+
+    __weak typeof(self) weakSelf = self;
+    self.languageObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"LanguageChanged" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        [weakSelf updateHostState];
+    }];
     
     [self updateSelectedState:NO];
 }
 
 - (void)dealloc {
+    if (self.languageObserver != nil) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.languageObserver];
+        self.languageObserver = nil;
+    }
+
     @try {
         [_host removeObserver:self forKeyPath:@"pairState"];
         [_host removeObserver:self forKeyPath:@"state"];
@@ -144,25 +159,25 @@
         case StateOnline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemOrangeColor];
-                statusText = @"Online, but not paired";
+                statusText = NSLocalizedString(@"Online, but not paired", @"Online, but not paired");
             } else {
                 statusColor = [NSColor systemGreenColor];
-                statusText = @"Online, and paired";
+                statusText = NSLocalizedString(@"Online, and paired", @"Online, and paired");
             }
             break;
         case StateOffline:
             if (self.host.pairState == PairStateUnpaired) {
                 statusColor = [NSColor systemGrayColor];
-                statusText = @"Offline, and not paired";
+                statusText = NSLocalizedString(@"Offline, and not paired", @"Offline, and not paired");
             } else {
                 statusColor = [NSColor systemRedColor];
-                statusText = @"Offline, but paired";
+                statusText = NSLocalizedString(@"Offline, but paired", @"Offline, but paired");
             }
             break;
         case StateUnknown:
         default:
             statusColor = [NSColor systemGrayColor];
-            statusText = @"Unknown";
+            statusText = NSLocalizedString(@"Unknown", @"Unknown");
             break;
     }
 
