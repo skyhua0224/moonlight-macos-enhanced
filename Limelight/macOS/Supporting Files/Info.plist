@@ -31,6 +31,8 @@
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2017-2021 Michael Kenny, Martin Kenny, and Moonlight Stream.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Used to capture microphone audio for streaming to the host.</string>
 	<key>NSMainStoryboardFile</key>
 	<string>Main</string>
 	<key>NSPrincipalClass</key>

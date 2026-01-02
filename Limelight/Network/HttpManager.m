@@ -232,6 +232,14 @@ static const NSString* HTTPS_PORT = @"47984";
 
     NSMutableString* extraParams = [NSMutableString string];
 
+#if defined(VIDEO_FORMAT_H264_HIGH8_444)
+    // Newer moonlight-common-c provides recommended query parameters for Sunshine extensions.
+    const char* launchParams = LiGetLaunchUrlQueryParameters();
+    if (launchParams != NULL && launchParams[0] != '\0') {
+        [extraParams appendString:[NSString stringWithUTF8String:launchParams]];
+    }
+#endif
+
     int modeWidth = config.width;
     int modeHeight = config.height;
     int modeFps = config.frameRate;
@@ -308,6 +316,14 @@ static const NSString* HTTPS_PORT = @"47984";
     BOOL sops = config.optimizeGameSettings;
 
     NSMutableString* extraParams = [NSMutableString string];
+
+#if defined(VIDEO_FORMAT_H264_HIGH8_444)
+    // Newer moonlight-common-c provides recommended query parameters for Sunshine extensions.
+    const char* launchParams = LiGetLaunchUrlQueryParameters();
+    if (launchParams != NULL && launchParams[0] != '\0') {
+        [extraParams appendString:[NSString stringWithUTF8String:launchParams]];
+    }
+#endif
 
     int modeWidth = config.width;
     int modeHeight = config.height;

@@ -1,0 +1,2 @@
+/* macOS 在请求麦克风权限时展示 */
+"NSMicrophoneUsageDescription" = "用于采集麦克风音频并推流到主机端（需要主机端支持）。";

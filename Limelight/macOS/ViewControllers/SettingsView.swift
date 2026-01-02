@@ -6,6 +6,7 @@
 //  Copyright © 2024 Moonlight Game Streaming Project. All rights reserved.
 //
 
+import AVFoundation
 import AppKit
 import CoreGraphics
 import SwiftUI
@@ -591,12 +592,6 @@ struct VideoAndAudioView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
 
-  private func warningText(_ key: String) -> some View {
-    Text(languageManager.localize(key))
-      .font(.footnote)
-      .foregroundColor(Color(nsColor: .systemOrange))
-  }
-
   var body: some View {
     ScrollView {
       VStack {
@@ -621,10 +616,9 @@ struct VideoAndAudioView: View {
 
           ToggleCell(
             title: "Enable YUV 4:4:4",
+            hintKey: "YUV 4:4:4 hint",
             boolBinding: $settingsModel.enableYUV444
           )
-
-          warningText("YUV 4:4:4 hint")
 
           Divider()
 
@@ -675,10 +669,31 @@ struct VideoAndAudioView: View {
 
           ToggleCell(
             title: "Enable Microphone",
+            hintKey: "Microphone hint",
             boolBinding: $settingsModel.enableMicrophone
           )
+          .onChange(of: settingsModel.enableMicrophone) { newValue in
+            guard newValue else { return }
 
-          warningText("Microphone hint")
+            let status = AVCaptureDevice.authorizationStatus(for: .audio)
+            switch status {
+            case .authorized:
+              break
+            case .notDetermined:
+              AVCaptureDevice.requestAccess(for: .audio) { granted in
+                DispatchQueue.main.async {
+                  if !granted {
+                    settingsModel.enableMicrophone = false
+                  }
+                }
+              }
+            case .denied, .restricted:
+              // Don’t pop alerts; just revert the toggle.
+              settingsModel.enableMicrophone = false
+            @unknown default:
+              settingsModel.enableMicrophone = false
+            }
+          }
 
           Divider()
 
@@ -886,17 +901,60 @@ struct LegacyView: View {
 
 struct ToggleCell: View {
   let title: String
+  let hintKey: String?
   @Binding var boolBinding: Bool
   @ObservedObject var languageManager = LanguageManager.shared
 
+  init(title: String, hintKey: String? = nil, boolBinding: Binding<Bool>) {
+    self.title = title
+    self.hintKey = hintKey
+    self._boolBinding = boolBinding
+  }
+
   var body: some View {
-    FormCell(
-      title: title, contentWidth: 0,
-      content: {
-        Toggle("", isOn: $boolBinding)
-          .toggleStyle(.switch)
-          .controlSize(.small)
-      })
+    HStack {
+      HStack(spacing: 6) {
+        Text(languageManager.localize(title))
+        if let hintKey {
+          InfoHintButton(hintKey: hintKey)
+        }
+      }
+
+      Spacer()
+
+      Toggle("", isOn: $boolBinding)
+        .toggleStyle(.switch)
+        .controlSize(.small)
+    }
+  }
+}
+
+private struct InfoHintButton: View {
+  let hintKey: String
+  @ObservedObject var languageManager = LanguageManager.shared
+  @SwiftUI.State private var showPopover = false
+
+  private var hintText: String {
+    languageManager.localize(hintKey)
+  }
+
+  var body: some View {
+    Button {
+      showPopover.toggle()
+    } label: {
+      Image(systemName: "info.circle")
+        .imageScale(.small)
+        .foregroundColor(.secondary)
+    }
+    .buttonStyle(.plain)
+    .help(hintText)
+    .popover(isPresented: $showPopover, arrowEdge: .top) {
+      Text(hintText)
+        .font(.callout)
+        .padding(10)
+        .frame(maxWidth: 320, alignment: .leading)
+    }
+    .accessibilityLabel(Text(hintText))
   }
 }
 

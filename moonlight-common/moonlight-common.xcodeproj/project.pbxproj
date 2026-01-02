@@ -11,6 +11,7 @@
 		4C1F46A9268C6CC7007056FC /* RtpAudioQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C1F46A5268C6CC7007056FC /* RtpAudioQueue.c */; };
 		4C1F46AA268C6CC7007056FC /* RtpVideoQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C1F46A8268C6CC7007056FC /* RtpVideoQueue.c */; };
 		4C7CB91A2446D19D002B8D4E /* SimpleStun.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB9192446D19D002B8D4E /* SimpleStun.c */; };
+		4C9D1D0B2B3C4D5E6F708193 /* MicrophoneStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D1D0A2B3C4D5E6F708192 /* MicrophoneStream.c */; };
 		9857AEF01EBE85E10084F99E /* rs.c in Sources */ = {isa = PBXBuildFile; fileRef = 9857AEEE1EBE85E10084F99E /* rs.c */; };
 		98AB2E401CAD425A0089BB98 /* AudioStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1A1CAD423B0089BB98 /* AudioStream.c */; };
 		98AB2E411CAD425A0089BB98 /* ByteBuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1B1CAD423B0089BB98 /* ByteBuffer.c */; };
@@ -46,6 +47,7 @@
 		4C1F46A7268C6CC7007056FC /* RtpVideoQueue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RtpVideoQueue.h; sourceTree = "<group>"; };
 		4C1F46A8268C6CC7007056FC /* RtpVideoQueue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = RtpVideoQueue.c; sourceTree = "<group>"; };
 		4C7CB9192446D19D002B8D4E /* SimpleStun.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = SimpleStun.c; sourceTree = "<group>"; };
+		4C9D1D0A2B3C4D5E6F708192 /* MicrophoneStream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = MicrophoneStream.c; sourceTree = "<group>"; };
 		9857AEEE1EBE85E10084F99E /* rs.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = rs.c; path = "moonlight-common-c/reedsolomon/rs.c"; sourceTree = "<group>"; };
 		9857AEEF1EBE85E10084F99E /* rs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = rs.h; path = "moonlight-common-c/reedsolomon/rs.h"; sourceTree = "<group>"; };
 		98AB2DF01CAD422B0089BB98 /* callbacks.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = callbacks.c; sourceTree = "<group>"; };
@@ -217,6 +219,7 @@
 				4C1F46A7268C6CC7007056FC /* RtpVideoQueue.h */,
 				4C1F46A5268C6CC7007056FC /* RtpAudioQueue.c */,
 				4C1F46A8268C6CC7007056FC /* RtpVideoQueue.c */,
+				4C9D1D0A2B3C4D5E6F708192 /* MicrophoneStream.c */,
 				98AB2E1A1CAD423B0089BB98 /* AudioStream.c */,
 				98AB2E1B1CAD423B0089BB98 /* ByteBuffer.c */,
 				98AB2E1C1CAD423B0089BB98 /* ByteBuffer.h */,
@@ -329,6 +332,7 @@
 				98AB2E461CAD425A0089BB98 /* LinkedBlockingQueue.c in Sources */,
 				4C1F46AA268C6CC7007056FC /* RtpVideoQueue.c in Sources */,
 				98AB2E471CAD425A0089BB98 /* Misc.c in Sources */,
+				4C9D1D0B2B3C4D5E6F708193 /* MicrophoneStream.c in Sources */,
 				98AB2E481CAD425A0089BB98 /* Platform.c in Sources */,
 				98AB2E491CAD425A0089BB98 /* PlatformSockets.c in Sources */,
 				4C1F46A4268C6C7E007056FC /* PlatformCrypto.c in Sources */,
