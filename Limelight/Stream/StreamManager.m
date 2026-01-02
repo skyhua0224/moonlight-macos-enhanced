@@ -110,6 +110,11 @@
     HttpResponse* launchResp = [[HttpResponse alloc] init];
     [hMan executeRequestSynchronously:[HttpRequest requestForResponse:launchResp withUrlRequest:[hMan newLaunchRequest:_config]]];
     NSString *gameSession = [launchResp getStringTag:@"gamesession"];
+    NSString *sessionUrl = [launchResp getStringTag:@"sessionUrl0"];
+    if (sessionUrl != nil) {
+        _config.sessionUrl = sessionUrl;
+    }
+
     if (![launchResp isStatusOk]) {
         [_callbacks launchFailed:launchResp.statusMessage];
         Log(LOG_E, @"Failed Launch Response: %@", launchResp.statusMessage);
@@ -127,6 +132,11 @@
     HttpResponse* resumeResp = [[HttpResponse alloc] init];
     [hMan executeRequestSynchronously:[HttpRequest requestForResponse:resumeResp withUrlRequest:[hMan newResumeRequest:_config]]];
     NSString* resume = [resumeResp getStringTag:@"resume"];
+    NSString *sessionUrl = [resumeResp getStringTag:@"sessionUrl0"];
+    if (sessionUrl != nil) {
+        _config.sessionUrl = sessionUrl;
+    }
+
     if (![resumeResp isStatusOk]) {
         [_callbacks launchFailed:resumeResp.statusMessage];
         Log(LOG_E, @"Failed Resume Response: %@", resumeResp.statusMessage);

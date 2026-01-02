@@ -3,3 +3,5 @@
 Build
 DerivedData
 Limelight/Version.xcconfig
+.reference/
+.DS_Store

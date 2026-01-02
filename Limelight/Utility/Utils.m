@@ -50,6 +50,37 @@ NSString *const deviceName = @"roth";
     return hex;
 }
 
++ (void) parseAddress:(NSString*)address intoHost:(NSString**)host andPort:(NSString**)port {
+    NSString* hostStr = address;
+    NSString* portStr = nil;
+    
+    if ([address containsString:@"]"]) {
+        // IPv6 enclosed in brackets
+        NSRange closingBracket = [address rangeOfString:@"]"];
+        if (closingBracket.location != NSNotFound && closingBracket.location < address.length - 1) {
+            NSString* suffix = [address substringFromIndex:closingBracket.location + 1];
+            if ([suffix hasPrefix:@":"]) {
+                hostStr = [address substringWithRange:NSMakeRange(1, closingBracket.location - 1)];
+                portStr = [suffix substringFromIndex:1];
+            } else {
+                 hostStr = [address substringWithRange:NSMakeRange(1, closingBracket.location - 1)];
+            }
+        } else if (closingBracket.location != NSNotFound) {
+             hostStr = [address substringWithRange:NSMakeRange(1, closingBracket.location - 1)];
+        }
+    } else if ([address containsString:@":"]) {
+         // Determine if this is IPv6 literal or Host/IPv4 + port
+         NSArray* components = [address componentsSeparatedByString:@":"];
+         if (components.count == 2) {
+             hostStr = components[0];
+             portStr = components[1];
+         }
+    }
+    
+    if (host) *host = hostStr;
+    if (port) *port = portStr;
+}
+
 + (BOOL)isActiveNetworkVPN {
     NSDictionary *dict = CFBridgingRelease(CFNetworkCopySystemProxySettings());
     NSArray *keys = [dict[@"__SCOPED__"] allKeys];

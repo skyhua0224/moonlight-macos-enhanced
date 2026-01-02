@@ -9,31 +9,30 @@
 @interface Utils : NSObject
 
 typedef NS_ENUM(int, PairState) {
-    PairStateUnknown,
-    PairStateUnpaired,
-    PairStatePaired
+  PairStateUnknown,
+  PairStateUnpaired,
+  PairStatePaired
 };
 
-typedef NS_ENUM(int, State) {
-    StateUnknown,
-    StateOffline,
-    StateOnline
-};
+typedef NS_ENUM(int, State) { StateUnknown, StateOffline, StateOnline };
 
 FOUNDATION_EXPORT NSString *const deviceName;
 
-+ (NSData*) randomBytes:(NSInteger)length;
-+ (NSString*) bytesToHex:(NSData*)data;
-+ (NSData*) hexToBytes:(NSString*) hex;
++ (NSData *)randomBytes:(NSInteger)length;
++ (NSString *)bytesToHex:(NSData *)data;
++ (NSData *)hexToBytes:(NSString *)hex;
++ (void)parseAddress:(NSString *)address
+            intoHost:(NSString **)host
+             andPort:(NSString **)port;
 #if TARGET_OS_IPHONE
-+ (void) addHelpOptionToDialog:(UIAlertController*)dialog;
++ (void)addHelpOptionToDialog:(UIAlertController *)dialog;
 #endif
-+ (BOOL) isActiveNetworkVPN;
++ (BOOL)isActiveNetworkVPN;
 
 @end
 
 @interface NSString (NSStringWithTrim)
 
-- (NSString*) trim;
+- (NSString *)trim;
 
 @end
