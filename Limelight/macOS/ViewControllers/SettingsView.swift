@@ -15,13 +15,12 @@ enum SettingsPaneType: Int, CaseIterable {
   case app
   case legacy
 
-  var title: LocalizedStringKey {
+  var title: String {
     switch self {
     case .stream:
       return "Stream"
     case .videoAndAudio:
       return "Video and Audio"
-
     case .input:
       return "Input"
     case .app:
@@ -77,6 +76,7 @@ extension Color {
 
 struct SettingsView: View {
   @StateObject var settingsModel = SettingsModel()
+  @ObservedObject var languageManager = LanguageManager.shared
 
   @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .stream
 
@@ -92,6 +92,7 @@ struct SettingsView: View {
 
 struct Sidebar: View {
   @Binding var selectedPane: SettingsPaneType
+  @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
     // This "selectionBinding" is needed to make selection work with a macOS 11 Big Sur compatible List() constructor
@@ -117,6 +118,7 @@ struct Detail: View {
   var pane: SettingsPaneType
 
   @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
     Group {
@@ -144,12 +146,12 @@ struct Detail: View {
       }
     }
     .environmentObject(settingsModel)
-    .navigationSubtitle(Text(pane.title))
+    .navigationSubtitle(Text(languageManager.localize(pane.title)))
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         if let hosts = SettingsModel.hosts {
           HStack {
-            Text("Profile:")
+            Text(languageManager.localize("Profile:"))
 
             Picker("", selection: $settingsModel.selectedHost) {
               ForEach(hosts, id: \.self) { host in
@@ -184,6 +186,7 @@ struct SettingPaneLoader<Content: View>: View {
 
 struct PaneCellView: View {
   let pane: SettingsPaneType
+  @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
     let iconSize = CGFloat(14)
@@ -200,13 +203,14 @@ struct PaneCellView: View {
             .foregroundColor(pane.color)
         )
 
-      Text(pane.title)
+      Text(languageManager.localize(pane.title))
     }
   }
 }
 
 struct StreamView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
 
   @SwiftUI.State private var showCustomResolutionGroup = false
   @SwiftUI.State private var showCustomFpsGroup = false
@@ -214,6 +218,19 @@ struct StreamView: View {
   var body: some View {
     ScrollView {
       VStack {
+        FormSection(title: "General") {
+          FormCell(title: "Language", contentWidth: 150) {
+            Picker("", selection: $languageManager.currentLanguage) {
+              ForEach(AppLanguage.allCases) { lang in
+                Text(languageManager.localize(lang.rawValue)).tag(lang)
+              }
+            }
+          }
+        }
+
+        Spacer()
+          .frame(height: 32)
+
         FormSection(title: "Resolution and FPS") {
           FormCell(
             title: "Resolution", contentWidth: 100,
@@ -221,7 +238,7 @@ struct StreamView: View {
               Picker("", selection: $settingsModel.selectedResolution) {
                 ForEach(SettingsModel.resolutions, id: \.self) { resolution in
                   if resolution == .zero {
-                    Text("Custom")
+                    Text(languageManager.localize("Custom"))
                   } else {
                     Text(verbatim: resolution.height == 2160 ? "4K" : "\(Int(resolution.height))p")
                   }
@@ -250,7 +267,7 @@ struct StreamView: View {
               Picker("", selection: $settingsModel.selectedFps) {
                 ForEach(SettingsModel.fpss, id: \.self) { fps in
                   if fps == .zero {
-                    Text("Custom")
+                    Text(languageManager.localize("Custom"))
                   } else {
                     Text("\(fps)")
                   }
@@ -314,6 +331,7 @@ struct StreamView: View {
 
 struct VideoAndAudioView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
     ScrollView {
@@ -324,7 +342,7 @@ struct VideoAndAudioView: View {
             content: {
               Picker("", selection: $settingsModel.selectedVideoCodec) {
                 ForEach(SettingsModel.videoCodecs, id: \.self) { codec in
-                  Text(LocalizedStringKey(codec))
+                  Text(languageManager.localize(codec))
                 }
               }
             })
@@ -340,7 +358,7 @@ struct VideoAndAudioView: View {
             content: {
               Picker("", selection: $settingsModel.selectedPacingOptions) {
                 ForEach(SettingsModel.pacingOptions, id: \.self) { pacingOption in
-                  Text(LocalizedStringKey(pacingOption))
+                  Text(languageManager.localize(pacingOption))
                 }
               }
             })
@@ -355,7 +373,7 @@ struct VideoAndAudioView: View {
           Divider()
 
           VStack(alignment: .center) {
-            Text("Volume")
+            Text(languageManager.localize("Volume"))
 
             let volume = Int(settingsModel.volumeLevel * 100)
             Slider(value: $settingsModel.volumeLevel, in: 0.0...1.0) {
@@ -383,6 +401,7 @@ struct VideoAndAudioView: View {
 
 struct InputView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
     ScrollView {
@@ -393,7 +412,7 @@ struct InputView: View {
             content: {
               Picker("", selection: $settingsModel.selectedMultiControllerMode) {
                 ForEach(SettingsModel.multiControllerModes, id: \.self) { mode in
-                  Text(LocalizedStringKey(mode))
+                  Text(languageManager.localize(mode))
                 }
               }
             })
@@ -423,7 +442,7 @@ struct InputView: View {
             content: {
               Picker("", selection: $settingsModel.selectedControllerDriver) {
                 ForEach(SettingsModel.controllerDrivers, id: \.self) { mode in
-                  Text(LocalizedStringKey(mode))
+                  Text(languageManager.localize(mode))
                 }
               }
             })
@@ -435,7 +454,7 @@ struct InputView: View {
             content: {
               Picker("", selection: $settingsModel.selectedMouseDriver) {
                 ForEach(SettingsModel.mouseDrivers, id: \.self) { mode in
-                  Text(LocalizedStringKey(mode))
+                  Text(languageManager.localize(mode))
                 }
               }
             })
@@ -448,6 +467,7 @@ struct InputView: View {
 
 struct AppView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
     ScrollView {
@@ -484,6 +504,7 @@ struct AppView: View {
 
 struct LegacyView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
     ScrollView {
@@ -498,8 +519,9 @@ struct LegacyView: View {
 }
 
 struct ToggleCell: View {
-  let title: LocalizedStringKey
+  let title: String
   @Binding var boolBinding: Bool
+  @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
     FormCell(
@@ -543,10 +565,11 @@ struct DimensionsInputView: View {
 }
 
 struct FormSection<Content: View>: View {
-  let title: LocalizedStringKey
+  let title: String
   let content: Content
+  @ObservedObject var languageManager = LanguageManager.shared
 
-  init(title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
+  init(title: String, @ViewBuilder content: () -> Content) {
     self.title = title
     self.content = content()
   }
@@ -564,7 +587,7 @@ struct FormSection<Content: View>: View {
         .padding([.leading, .trailing], 6)
       },
       label: {
-        Text(title)
+        Text(languageManager.localize(title))
           .font(
             .system(.body, design: .rounded)
               .weight(.semibold)
@@ -575,11 +598,12 @@ struct FormSection<Content: View>: View {
 }
 
 struct FormCell<Content: View>: View {
-  let title: LocalizedStringKey
+  let title: String
   let contentWidth: CGFloat
   let content: Content
+  @ObservedObject var languageManager = LanguageManager.shared
 
-  init(title: LocalizedStringKey, contentWidth: CGFloat, @ViewBuilder content: () -> Content) {
+  init(title: String, contentWidth: CGFloat, @ViewBuilder content: () -> Content) {
     self.title = title
     self.contentWidth = contentWidth
     self.content = content()
@@ -587,7 +611,7 @@ struct FormCell<Content: View>: View {
 
   var body: some View {
     HStack {
-      Text(title)
+      Text(languageManager.localize(title))
 
       Spacer()
 
