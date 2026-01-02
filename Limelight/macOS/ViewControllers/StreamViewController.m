@@ -495,6 +495,7 @@
     streamConfig.appID = self.app.id;
     streamConfig.appName = self.app.name;
     streamConfig.serverCert = self.app.host.serverCert;
+    streamConfig.serverCodecModeSupport = self.app.host.serverCodecModeSupport;
     
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
@@ -620,11 +621,8 @@
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
     [opQueue addOperation:self.streamMan];
     
-    if (streamConfig.showPerformanceOverlay) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self setupOverlay];
-        });
-    }
+    // Don’t create the overlay before streaming starts. The video view may be inserted later
+    // and would otherwise cover the overlay.
 }
 
 - (void)toggleOverlay {
@@ -660,7 +658,12 @@
     self.overlayLabel.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
     
     [self.overlayContainer addSubview:self.overlayLabel];
-    [self.view addSubview:self.overlayContainer];
+
+    // Ensure overlay is always above the video render view.
+    [self.view addSubview:self.overlayContainer positioned:NSWindowAbove relativeTo:nil];
+
+    // Hide until we have at least one received frame (avoid showing a black HUD during RTSP handshake).
+    self.overlayContainer.hidden = YES;
     
     self.statsTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(updateStats) userInfo:nil repeats:YES];
     [self updateStats]; // Initial update
@@ -671,6 +674,12 @@
 
     VideoStats stats = self.streamMan.connection.renderer.videoStats;
     int videoFormat = self.streamMan.connection.renderer.videoFormat;
+
+    if (stats.receivedFrames == 0) {
+        self.overlayContainer.hidden = YES;
+        return;
+    }
+    self.overlayContainer.hidden = NO;
     
     NSString *codecString = @"Unknown";
     if (videoFormat & VIDEO_FORMAT_MASK_H264) {
@@ -682,6 +691,8 @@
             codecString = @"HEVC";
         }
     }
+
+    NSString *chromaString = (videoFormat & VIDEO_FORMAT_MASK_YUV444) ? @"4:4:4" : @"4:2:0";
     
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
@@ -719,6 +730,8 @@
     append([NSString stringWithFormat:@"%dx%d@%d", res.width, res.height, configuredFps], valueAttrs);
     append(@"  ", labelAttrs);
     append(codecString, valueAttrs);
+    append(@"  ", labelAttrs);
+    append(chromaString, valueAttrs);
     append(@"  FPS ", labelAttrs);
     append([NSString stringWithFormat:@"%.1f", stats.receivedFps], valueAttrs);
     append(@" Rx · ", labelAttrs);
@@ -794,6 +807,11 @@
 - (void)connectionStarted {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
+
+        // Create overlay after streaming starts so it stays on top of the video view.
+        if ([SettingsClass showPerformanceOverlayFor:self.app.host.uuid] && !self.overlayContainer) {
+            [self setupOverlay];
+        }
         
         if ([SettingsClass autoFullscreenFor:self.app.host.uuid]) {
             if (!(self.view.window.styleMask & NSWindowStyleMaskFullScreen)) {

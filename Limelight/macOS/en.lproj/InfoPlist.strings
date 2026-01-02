@@ -1,0 +1,2 @@
+/* Permission prompt shown by macOS when microphone access is requested */
+"NSMicrophoneUsageDescription" = "Used to capture microphone audio for streaming to the host.";

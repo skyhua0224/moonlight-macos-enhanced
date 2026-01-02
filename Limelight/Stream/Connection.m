@@ -15,8 +15,18 @@
 #import <AVFoundation/AVFoundation.h>
 #import <VideoToolbox/VideoToolbox.h>
 
+#import <arpa/inet.h>
+
 #include "Limelight.h"
 #include "opus_multistream.h"
+
+@interface Connection ()
+#if defined(LI_MIC_CONTROL_START)
+@property (nonatomic, strong) AVAudioEngine* micAudioEngine;
+@property (nonatomic, strong) AVAudioConverter* micConverter;
+@property (nonatomic, strong) AVAudioFormat* micOutputFormat;
+#endif
+@end
 
 @implementation Connection {
     SERVER_INFORMATION _serverInfo;
@@ -35,6 +45,8 @@
 static NSLock* initLock;
 static OpusMSDecoder* opusDecoder;
 static id<ConnectionCallbacks> _callbacks;
+
+static Connection* activeConnection;
 
 #define OUTPUT_BUS 0
 
@@ -59,6 +71,23 @@ static NSString *hostAddress;
 static AudioQueueRef audioQueue;
 static AudioQueueBufferRef audioBuffers[AUDIO_QUEUE_BUFFERS];
 static VideoDecoderRenderer* renderer;
+
+static void FillOutputBuffer(void *aqData,
+                             AudioQueueRef inAQ,
+                             AudioQueueBufferRef inBuffer);
+
+#if defined(LI_MIC_CONTROL_START)
+static dispatch_queue_t micQueue;
+static OpusMSEncoder* micEncoder;
+static NSMutableData* micPcmQueue;
+static uint16_t micSeq;
+static uint32_t micTimestamp;
+static uint32_t micSsrc;
+static const int micSampleRate = 48000;
+static const int micChannels = 1;
+static const int micFrameSize = 960; // 20 ms at 48 kHz
+static const int micBitrate = 64000;
+#endif
 
 int DrDecoderSetup(int videoFormat, int width, int height, int redrawRate, void* context, int drFlags)
 {
@@ -312,10 +341,22 @@ void ClStageFailed(int stage, int errorCode)
 void ClConnectionStarted(void)
 {
     [_callbacks connectionStarted];
+
+#if defined(LI_MIC_CONTROL_START)
+    // Start microphone after the stream is fully established
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [activeConnection startMicrophoneIfNeeded];
+    });
+#endif
 }
 
 void ClConnectionTerminated(int errorCode)
 {
+#if defined(LI_MIC_CONTROL_START)
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [activeConnection stopMicrophoneIfNeeded];
+    });
+#endif
     [_callbacks connectionTerminated: errorCode];
 }
 
@@ -388,6 +429,9 @@ void ClConnectionStatusUpdate(int status)
     LiInitializeServerInformation(&_serverInfo);
     _serverInfo.address = _hostString;
     _serverInfo.serverInfoAppVersion = _appVersionString;
+    // Some common-c forks (e.g. microphone protocol branches) assert that this field must be set.
+    // If the host hasn't been refreshed yet and we don't have it, fall back to the safest baseline.
+    _serverInfo.serverCodecModeSupport = (config.serverCodecModeSupport != 0) ? config.serverCodecModeSupport : SCM_H264;
     if (config.gfeVersion != nil) {
         _serverInfo.serverInfoGfeVersion = _gfeVersionString;
     }
@@ -402,28 +446,57 @@ void ClConnectionStatusUpdate(int status)
     _renderer = myRenderer;
     _callbacks = callbacks;
 
+    activeConnection = self;
+
     LiInitializeStreamConfiguration(&_streamConfig);
     _streamConfig.width = config.width;
     _streamConfig.height = config.height;
     _streamConfig.fps = config.frameRate;
     _streamConfig.bitrate = config.bitRate;
-    _streamConfig.enableHdr = config.enableHdr;
     _streamConfig.audioConfiguration = config.audioConfiguration;
     _streamConfig.colorSpace = COLORSPACE_REC_709;
-    
+
+#if defined(LI_MIC_CONTROL_START)
+    // Enable microphone streaming only if requested in settings. The host may ignore it.
+    BOOL enableMic = NO;
+    @try {
+        NSString* uuid = nil;
+        if (config.host != nil) {
+            uuid = [SettingsClass getHostUUIDFrom:config.host];
+        }
+
+        NSString* settingsKey = uuid != nil ? uuid : @"__global__";
+        NSDictionary* settings = [SettingsClass getSettingsFor:settingsKey];
+        if (settings != nil) {
+            enableMic = [settings[@"microphone"] boolValue];
+        }
+    } @catch (NSException* exception) {
+        enableMic = NO;
+    }
+
+    _streamConfig.enableMic = enableMic;
+#endif
+
+#if !defined(VIDEO_FORMAT_H264_HIGH8_444)
+    // Legacy moonlight-common-c
+    _streamConfig.enableHdr = config.enableHdr;
+
     // Use some of the HEVC encoding efficiency improvements to
     // reduce bandwidth usage while still gaining some image
     // quality improvement.
     _streamConfig.hevcBitratePercentageMultiplier = 75;
+#endif
     
-    if ([Utils isActiveNetworkVPN]) {
-        // Force remote streaming mode when a VPN is connected
+    // Some moonlight-common-c builds assert if streamingRemotely remains AUTO by SDP generation time.
+    // We resolve it here to LOCAL/REMOTE using our own remote detection.
+    if ([Utils isActiveNetworkVPN] || config.streamingRemotely) {
+        // Force remote streaming mode when a VPN is connected or when the caller has determined
+        // this is a remote session.
         _streamConfig.streamingRemotely = STREAM_CFG_REMOTE;
         _streamConfig.packetSize = 1024;
     }
     else {
-        // Detect remote streaming automatically based on the IP address of the target
-        _streamConfig.streamingRemotely = STREAM_CFG_AUTO;
+        _streamConfig.streamingRemotely = STREAM_CFG_LOCAL;
         _streamConfig.packetSize = 1392;
     }
     
@@ -437,12 +510,59 @@ void ClConnectionStatusUpdate(int status)
     // Additionally, iPhone X had a bug which would cause video
     // to freeze after a few minutes with HEVC prior to iOS 11.3.
     // As a result, we will only use HEVC on iOS 11.3 or later.
+#if defined(VIDEO_FORMAT_H264_HIGH8_444)
+    // Newer moonlight-common-c uses supportedVideoFormats for codec negotiation.
+    BOOL hevcSupported = NO;
+    if (@available(iOS 11.3, tvOS 11.3, macOS 10.14, *)) {
+        hevcSupported = config.allowHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
+    }
+
+    // If HDR is requested, HEVC decode support is required.
+    assert(!config.enableHdr || hevcSupported);
+
+    BOOL enableYuv444 = NO;
+    @try {
+        NSString* uuid = nil;
+        if (config.host != nil) {
+            uuid = [SettingsClass getHostUUIDFrom:config.host];
+        }
+
+        NSString* settingsKey = uuid != nil ? uuid : @"__global__";
+        NSDictionary* settings = [SettingsClass getSettingsFor:settingsKey];
+        if (settings != nil) {
+            enableYuv444 = [settings[@"yuv444"] boolValue];
+        }
+    } @catch (NSException* exception) {
+        enableYuv444 = NO;
+    }
+
+    int supportedVideoFormats = VIDEO_FORMAT_H264;
+    if (hevcSupported) {
+        supportedVideoFormats |= VIDEO_FORMAT_H265;
+        if (config.enableHdr) {
+            supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
+        }
+    }
+
+    if (enableYuv444) {
+        supportedVideoFormats |= VIDEO_FORMAT_H264_HIGH8_444;
+        if (hevcSupported) {
+            supportedVideoFormats |= VIDEO_FORMAT_H265_REXT8_444;
+            if (config.enableHdr) {
+                supportedVideoFormats |= VIDEO_FORMAT_H265_REXT10_444;
+            }
+        }
+    }
+
+    _streamConfig.supportedVideoFormats = supportedVideoFormats;
+#else
     if (@available(iOS 11.3, tvOS 11.3, macOS 10.14, *)) {
         _streamConfig.supportsHevc = config.allowHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
     }
-    
+
     // HEVC must be supported when HDR is enabled
     assert(!_streamConfig.enableHdr || _streamConfig.supportsHevc);
+#endif
 
     memcpy(_streamConfig.remoteInputAesKey, [config.riKey bytes], [config.riKey length]);
     memset(_streamConfig.remoteInputAesIv, 0, 16);
@@ -479,6 +599,177 @@ void ClConnectionStatusUpdate(int status)
 
     return self;
 }
+
+#if defined(LI_MIC_CONTROL_START)
+- (void)startMicrophoneIfNeeded
+{
+    if (!_streamConfig.enableMic) {
+        return;
+    }
+
+    // Create encoder/queue once
+    if (micQueue == nil) {
+        micQueue = dispatch_queue_create("moonlight.mic.encode", DISPATCH_QUEUE_SERIAL);
+    }
+    if (micPcmQueue == nil) {
+        micPcmQueue = [NSMutableData data];
+    }
+
+    // Ask for permission on macOS
+    [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL granted) {
+        if (!granted) {
+            Log(LOG_W, @"Microphone permission denied\n");
+            return;
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self startMicrophoneEngineLocked];
+        });
+    }];
+}
+
+- (void)startMicrophoneEngineLocked
+{
+    if (self.micAudioEngine != nil && self.micAudioEngine.isRunning) {
+        return;
+    }
+
+    if (initializeMicrophoneStream() != 0) {
+        Log(LOG_W, @"Failed to initialize microphone stream socket\n");
+        return;
+    }
+
+    // Tell the host to start accepting microphone packets and which format we'll send.
+    // Qt sends this control message; without it the host may ignore UDP mic packets.
+    int micCtlErr = LiSendMicrophoneControl(LI_MIC_CONTROL_START, micSampleRate, micChannels, micBitrate);
+    if (micCtlErr != 0) {
+        Log(LOG_W, @"Failed to send microphone START control: %d\n", micCtlErr);
+    }
+
+    int err = 0;
+    if (micEncoder == NULL) {
+        unsigned char mapping[1] = { 0 };
+        micEncoder = opus_multistream_encoder_create(micSampleRate,
+                                                     micChannels,
+                                                     1, /* streams */
+                                                     0, /* coupled */
+                                                     mapping,
+                                                     OPUS_APPLICATION_VOIP,
+                                                     &err);
+        if (micEncoder == NULL || err != OPUS_OK) {
+            Log(LOG_W, @"Failed to create Opus encoder for microphone: %d\n", err);
+            micEncoder = NULL;
+            return;
+        }
+
+        micSeq = 0;
+        micTimestamp = 0;
+        micSsrc = (uint32_t)arc4random();
+
+        opus_multistream_encoder_ctl(micEncoder, OPUS_SET_BITRATE(micBitrate));
+    }
+
+    self.micAudioEngine = [[AVAudioEngine alloc] init];
+    AVAudioInputNode* input = self.micAudioEngine.inputNode;
+    self.micOutputFormat = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatInt16
+                                                            sampleRate:micSampleRate
+                                                              channels:micChannels
+                                                           interleaved:YES];
+
+    __weak typeof(self) weakSelf = self;
+    [input removeTapOnBus:0];
+    // Ask the engine to provide 48 kHz mono int16 directly. This avoids doing format conversion
+    // on the real-time audio thread and reduces the chance of HAL overloads.
+    [input installTapOnBus:0 bufferSize:(AVAudioFrameCount)micFrameSize format:self.micOutputFormat block:^(AVAudioPCMBuffer* buffer, AVAudioTime* when) {
+        __strong typeof(self) strongSelf = weakSelf;
+        if (strongSelf == nil) {
+            return;
+        }
+        if (!strongSelf->_streamConfig.enableMic) {
+            return;
+        }
+
+        // Copy data off the audio thread (engine provides int16 PCM in AudioBufferList)
+        const AudioBufferList* abl = buffer.audioBufferList;
+        if (abl == NULL || abl->mNumberBuffers < 1) {
+            return;
+        }
+
+        const AudioBuffer ab = abl->mBuffers[0];
+        if (ab.mData == NULL || ab.mDataByteSize == 0) {
+            return;
+        }
+
+        NSData* chunk = [NSData dataWithBytes:ab.mData length:(NSUInteger)ab.mDataByteSize];
+        dispatch_async(micQueue, ^{
+            [micPcmQueue appendData:chunk];
+            [strongSelf drainMicPcmAndSend];
+        });
+    }];
+
+    NSError* startErr = nil;
+    BOOL started = [self.micAudioEngine startAndReturnError:&startErr];
+    if (!started || startErr != nil) {
+        Log(LOG_W, @"Failed to start microphone capture: %@\n", startErr.localizedDescription);
+        [self.micAudioEngine stop];
+        self.micAudioEngine = nil;
+    }
+}
+
+- (void)drainMicPcmAndSend
+{
+    if (micEncoder == NULL) {
+        return;
+    }
+
+    const NSUInteger bytesPerFrame = sizeof(int16_t) * micChannels;
+    const NSUInteger packetPcmBytes = (NSUInteger)micFrameSize * bytesPerFrame;
+
+    while (micPcmQueue.length >= packetPcmBytes) {
+        const int16_t* pcm = (const int16_t*)micPcmQueue.bytes;
+
+        unsigned char opusPayload[1500];
+        int opusLen = opus_multistream_encode(micEncoder, pcm, micFrameSize, opusPayload, (opus_int32)sizeof(opusPayload));
+        if (opusLen > 0) {
+            // RTP header (V=2, PT=97) + Opus payload
+            unsigned char packet[12 + 1500];
+            packet[0] = 0x80;
+            packet[1] = 0x61;
+            *(uint16_t*)(packet + 2) = htons(micSeq++);
+            *(uint32_t*)(packet + 4) = htonl(micTimestamp);
+            *(uint32_t*)(packet + 8) = htonl(micSsrc);
+            memcpy(packet + 12, opusPayload, (size_t)opusLen);
+
+            int sent = sendMicrophoneData((const char*)packet, 12 + opusLen);
+            if (sent < 0) {
+                // Log errors, but keep running to tolerate transient network issues.
+                Log(LOG_W, @"sendMicrophoneData failed: %d\n", sent);
+            }
+            micTimestamp += micFrameSize;
+        }
+
+        // Pop consumed PCM
+        [micPcmQueue replaceBytesInRange:NSMakeRange(0, packetPcmBytes) withBytes:NULL length:0];
+    }
+}
+
+- (void)stopMicrophoneIfNeeded
+{
+    if (self.micAudioEngine != nil) {
+        [self.micAudioEngine.inputNode removeTapOnBus:0];
+        [self.micAudioEngine stop];
+        self.micAudioEngine = nil;
+    }
+
+    dispatch_async(micQueue ?: dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [micPcmQueue setLength:0];
+    });
+
+    LiSendMicrophoneControl(LI_MIC_CONTROL_STOP, 0, 0, 0);
+
+    destroyMicrophoneStream();
+}
+#endif
 
 static void FillOutputBuffer(void *aqData,
                              AudioQueueRef inAQ,
