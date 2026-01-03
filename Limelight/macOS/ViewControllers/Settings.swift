@@ -67,6 +67,7 @@ struct Settings: Encodable, Decodable {
   let swapMouseButtons: Bool?
   let reverseScrollDirection: Bool?
   let touchscreenMode: Int?
+  let gamepadMouseMode: Bool?
 
   private static func globalProfileKey() -> String {
     SettingsClass.profileKey(for: SettingsModel.globalHostId)
@@ -144,6 +145,7 @@ class SettingsClass: NSObject {
         "absoluteMouseMode": settings.absoluteMouseMode,
         "swapMouseButtons": settings.swapMouseButtons,
         "reverseScrollDirection": settings.reverseScrollDirection,
+        "gamepadMouseMode": settings.gamepadMouseMode,
         "touchscreenMode": settings.touchscreenMode,
       ]
 
@@ -366,5 +368,12 @@ class SettingsClass: NSObject {
       return settings.touchscreenMode ?? SettingsModel.defaultTouchscreenMode
     }
     return SettingsModel.defaultTouchscreenMode
+  }
+
+  @objc static func gamepadMouseMode(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.gamepadMouseMode ?? SettingsModel.defaultGamepadMouseMode
+    }
+    return SettingsModel.defaultGamepadMouseMode
   }
 }

@@ -89,6 +89,9 @@ class LanguageManager: ObservableObject {
     "Geforce Experience": "Geforce Experience",
     "Optimize Game Settings": "Optimize Game Settings",
 
+    "Mouse Mode On": "Mouse Mode On",
+    "Mouse Mode Off": "Mouse Mode Off",
+
     "Not supported": "Not supported",
   ]
 
@@ -145,6 +148,9 @@ class LanguageManager: ObservableObject {
 
     "Geforce Experience": "Geforce Experience",
     "Optimize Game Settings": "优化游戏设置",
+
+    "Mouse Mode On": "鼠标模式开启",
+    "Mouse Mode Off": "鼠标模式关闭",
 
     "Not supported": "不支持",
   ]

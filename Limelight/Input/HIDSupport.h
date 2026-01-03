@@ -6,12 +6,15 @@
 //  Copyright © 2017 Moonlight Stream. All rights reserved.
 //
 
-#import <Foundation/Foundation.h>
 #import "TemporaryHost.h"
+#import <Foundation/Foundation.h>
+
+extern NSString *const HIDMouseModeToggledNotification;
+extern NSString *const HIDGamepadQuitNotification;
 
 @interface HIDSupport : NSObject
-@property (atomic) BOOL shouldSendInputEvents;
-@property (atomic) TemporaryHost *host;
+@property(atomic) BOOL shouldSendInputEvents;
+@property(atomic) TemporaryHost *host;
 
 - (instancetype)init:(TemporaryHost *)host;
 
@@ -26,7 +29,8 @@
 - (void)mouseMoved:(NSEvent *)event;
 - (void)scrollWheel:(NSEvent *)event;
 
-- (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor;
+- (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor
+             highFreqMotor:(unsigned short)highFreqMotor;
 
 - (void)tearDownHidManager;
 
