@@ -41,7 +41,9 @@ typedef struct {
 
 - (id)initWithView:(OSView *)view;
 
-- (void)setupWithVideoFormat:(int)videoFormat frameRate:(int)frameRate;
+- (void)setupWithVideoFormat:(int)videoFormat
+                   frameRate:(int)frameRate
+               upscalingMode:(int)upscalingMode;
 - (void)start;
 - (void)stop;
 

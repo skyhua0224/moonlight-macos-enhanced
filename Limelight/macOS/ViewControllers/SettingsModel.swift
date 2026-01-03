@@ -419,6 +419,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var selectedUpscalingMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
 
   static var resolutions: [CGSize] = [
     matchDisplayResolutionSentinel,
@@ -472,6 +478,9 @@ class SettingsModel: ObservableObject {
   static var controllerDrivers: [String] = ["HID", "MFi"]
   static var mouseDrivers: [String] = ["HID", "MFi"]
   static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
+  static var upscalingModes: [String] = [
+    "Off", "MetalFX Spatial (Quality)", "MetalFX Spatial (Performance)",
+  ]
 
   static let defaultResolution = CGSizeMake(1920, 1080)
   static let defaultCustomResWidth: CGFloat? = nil
@@ -522,6 +531,7 @@ class SettingsModel: ObservableObject {
   static let defaultReverseScrollDirection = false
   static let defaultTouchscreenMode = 0  // Trackpad
   static let defaultGamepadMouseMode = false
+  static let defaultUpscalingMode = 0
   static let defaultDimNonHoveredArtwork = true
   static let defaultUnlockMaxBitrate = false
 
@@ -726,6 +736,7 @@ class SettingsModel: ObservableObject {
     appArtworkHeight = Self.defaultAppArtworkHeight
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
+    selectedUpscalingMode = Self.getString(from: Self.defaultUpscalingMode, in: Self.upscalingModes)
   }
 
   func loadDefaultSettings() {
@@ -794,6 +805,7 @@ class SettingsModel: ObservableObject {
     appArtworkHeight = Self.defaultAppArtworkHeight
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
+    selectedUpscalingMode = Self.getString(from: Self.defaultUpscalingMode, in: Self.upscalingModes)
   }
 
   func loadAndSaveDefaultSettings() {
@@ -901,6 +913,8 @@ class SettingsModel: ObservableObject {
       selectedTouchscreenMode = Self.getString(
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
+      selectedUpscalingMode = Self.getString(
+        from: settings.upscalingMode ?? Self.defaultUpscalingMode, in: Self.upscalingModes)
 
       remoteResolutionEnabled = settings.remoteResolution ?? Self.defaultRemoteResolutionEnabled
       if remoteResolutionEnabled,
@@ -992,6 +1006,7 @@ class SettingsModel: ObservableObject {
     }
 
     let touchscreenMode = Self.getInt(from: selectedTouchscreenMode, in: Self.touchscreenModes)
+    let upscalingMode = Self.getInt(from: selectedUpscalingMode, in: Self.upscalingModes)
 
     var remoteResolutionWidth: Int? = nil
     var remoteResolutionHeight: Int? = nil
@@ -1098,7 +1113,8 @@ class SettingsModel: ObservableObject {
       swapMouseButtons: swapMouseButtons,
       reverseScrollDirection: reverseScrollDirection,
       touchscreenMode: touchscreenMode,
-      gamepadMouseMode: gamepadMouseMode
+      gamepadMouseMode: gamepadMouseMode,
+      upscalingMode: upscalingMode
     )
 
     if let data = try? PropertyListEncoder().encode(settings) {

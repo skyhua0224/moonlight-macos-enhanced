@@ -607,9 +607,23 @@ struct VideoAndAudioView: View {
 
           Divider()
 
-          ToggleCell(title: "HDR", boolBinding: $settingsModel.hdr)
+          FormCell(
+            title: "Upscaling", contentWidth: 200,
+            content: {
+              Picker("", selection: $settingsModel.selectedUpscalingMode) {
+                ForEach(SettingsModel.upscalingModes, id: \.self) { mode in
+                  Text(languageManager.localize(mode))
+                }
+              }
+              .labelsHidden()
+              .frame(maxWidth: .infinity, alignment: .trailing)
+            })
 
           Divider()
+
+          ToggleCell(title: "HDR", boolBinding: $settingsModel.hdr)
+
+            Divider()
 
           ToggleCell(
             title: "Enable YUV 4:4:4",
@@ -809,8 +823,9 @@ struct InputView: View {
           Divider()
 
           ToggleCell(
-            title: "Gamepad Mouse Emulation (!)", hintKey: "Gamepad Mouse Hint",
+            title: "Gamepad Mouse Emulation", hintKey: "Gamepad Mouse Hint",
             boolBinding: $settingsModel.gamepadMouseMode)
+
         }
 
         Spacer()
@@ -1284,6 +1299,11 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     "Video": "视频",
     "Video Codec": "视频编解码器",
+    "Upscaling": "画面缩放",
+    "MetalFX Spatial (Quality)": "MetalFX 空间缩放 (画质优先)",
+    "MetalFX Spatial (Performance)": "MetalFX 空间缩放 (性能优先)",
+    "Enable YUV 4:4:4": "启用 YUV 4:4:4",
+    "YUV 4:4:4 hint": "启用高保真色彩模式 (需要显卡支持)",
     "HDR": "HDR (高动态范围)",
     "Frame Pacing": "帧速调节",
     "Lowest Latency": "最低延迟",
@@ -1310,6 +1330,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Buttons": "按键",
     "Swap A/B and X/Y Buttons": "交换手柄的 A/B 和 X/Y 按钮",
     "Emulate Guide Button": "模拟 Guide 键 (长按 Start)",
+    "Gamepad Mouse Emulation (!)": "手柄模拟鼠标 (!)",
+    "Gamepad Mouse Hint": "使用手柄模拟鼠标操作 (长按 Start 切换)",
     "Mouse": "鼠标",
     "Optimize mouse for remote desktop": "优化远程桌面鼠标 (绝对位置)",
     "Swap Left and Right Mouse Buttons": "交换鼠标左右键",

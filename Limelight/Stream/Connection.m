@@ -65,6 +65,7 @@ static short* audioCircularBuffer;
 static int channelCount;
 static float audioVolumeMultiplier = 1.0f;
 static NSString *hostAddress;
+static int currentUpscalingMode = 0;
 
 #define AUDIO_QUEUE_BUFFERS 4
 
@@ -91,7 +92,7 @@ static const int micBitrate = 64000;
 
 int DrDecoderSetup(int videoFormat, int width, int height, int redrawRate, void* context, int drFlags)
 {
-    [renderer setupWithVideoFormat:videoFormat frameRate:redrawRate];
+    [renderer setupWithVideoFormat:videoFormat frameRate:redrawRate upscalingMode:currentUpscalingMode];
     return 0;
 }
 
@@ -435,6 +436,8 @@ void ClConnectionStatusUpdate(int status)
     _callbacks = callbacks;
 
     activeConnection = self;
+    
+    currentUpscalingMode = config.upscalingMode;
 
     LiInitializeStreamConfiguration(&_streamConfig);
     _streamConfig.width = config.width;

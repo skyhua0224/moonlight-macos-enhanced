@@ -11,22 +11,56 @@
 
 #include "Limelight.h"
 #include <pthread.h>
+#import "Moonlight-Swift.h"
 
 @import VideoToolbox;
+@import MetalKit;
+@import MetalFX;
 
-
-@interface VideoDecoderRenderer ()
+@interface VideoDecoderRenderer () <MTKViewDelegate>
 @property (nonatomic) int frameRate;
 
 @end
 
+static NSString *const kMetalShaderSource = @"#include <metal_stdlib>\n"
+"using namespace metal;\n"
+"kernel void ycbcrToRgb(texture2d<float, access::read> textureY [[texture(0)]],\n"
+"                       texture2d<float, access::read> textureCbCr [[texture(1)]],\n"
+"                       texture2d<float, access::write> textureRGB [[texture(2)]],\n"
+"                       uint2 gid [[thread_position_in_grid]]) {\n"
+"    if (gid.x >= textureRGB.get_width() || gid.y >= textureRGB.get_height()) return;\n"
+"    float3 colorOffset = float3(0, -0.5, -0.5);\n"
+"    float3x3 colorMatrix = float3x3(\n"
+"        float3(1, 1, 1),\n"
+"        float3(0, -0.3441, 1.772),\n"
+"        float3(1.402, -0.7141, 0)\n"
+"    );\n"
+"    float y = textureY.read(gid).r;\n"
+"    float2 cbcr = textureCbCr.read(gid / 2).rg;\n"
+"    float3 ycbcr = float3(y, cbcr.x, cbcr.y);\n"
+"    float3 rgb = colorMatrix * (ycbcr + colorOffset);\n"
+"    textureRGB.write(float4(rgb, 1.0), gid);\n"
+"}\n";
 
 @implementation VideoDecoderRenderer {
     OSView *_view;
 
+    // AVSampleBufferDisplayLayer (Legacy)
     AVSampleBufferDisplayLayer* displayLayer;
     RendererLayerContainer *layerContainer;
+    
+    // Metal (Modern)
+    MTKView *_metalView;
+    id<MTLDevice> _device;
+    id<MTLCommandQueue> _commandQueue;
+    CVMetalTextureCacheRef _textureCache;
+    id<MTLFXSpatialScaler> _spatialScaler;
+    id<MTLTexture> _upscaledTexture;
+    id<MTLComputePipelineState> _computePipelineState;
+    
+    // Common
     Boolean waitingForSps, waitingForPps, waitingForVps;
+
     int videoFormat;
     
     NSData *spsData, *ppsData, *vpsData;
@@ -37,12 +71,21 @@
     
     VideoStats _activeWndVideoStats;
     int _lastFrameNumber;
+    
+    int _upscalingMode;
+    VTDecompressionSessionRef _decompressionSession;
+    CVImageBufferRef _currentFrame;
 }
 
 @synthesize videoFormat;
 
 - (void)reinitializeDisplayLayer
 {
+    if (_metalView) {
+        [_metalView removeFromSuperview];
+        _metalView = nil;
+    }
+    
     [layerContainer removeFromSuperview];
     layerContainer = [[RendererLayerContainer alloc] init];
     layerContainer.frame = _view.bounds;
@@ -83,13 +126,251 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     return self;
 }
 
-- (void)setupWithVideoFormat:(int)videoFormat frameRate:(int)frameRate
+- (void)setupWithVideoFormat:(int)videoFormat frameRate:(int)frameRate upscalingMode:(int)upscalingMode
 {
     self->videoFormat = videoFormat;
     self.frameRate = frameRate;
+    self->_upscalingMode = upscalingMode;
     memset(&_activeWndVideoStats, 0, sizeof(_activeWndVideoStats));
     _lastFrameNumber = 0;
     _videoStats = (VideoStats){0};
+    
+    if (_currentFrame) {
+        CVBufferRelease(_currentFrame);
+        _currentFrame = NULL;
+    }
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_upscalingMode > 0) {
+            [self setupMetalRenderer];
+        } else {
+            if (self->_metalView) {
+                [self->_metalView removeFromSuperview];
+                self->_metalView = nil;
+                [self reinitializeDisplayLayer];
+            }
+        }
+    });
+}
+
+- (void)setupMetalRenderer {
+    if (_metalView) return;
+    
+    // Tear down AVSBDL
+    [layerContainer removeFromSuperview];
+    layerContainer = nil;
+    displayLayer = nil;
+    
+    _device = MTLCreateSystemDefaultDevice();
+    if (!_device) {
+        Log(LOG_E, @"Failed to create Metal device");
+        return;
+    }
+    
+    _metalView = [[MTKView alloc] initWithFrame:_view.bounds device:_device];
+    _metalView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _metalView.delegate = self;
+    // We blit/copy into the drawable texture (and sometimes render into it),
+    // which is not allowed when framebufferOnly is enabled.
+    _metalView.framebufferOnly = NO;
+    _metalView.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+    
+    [_view addSubview:_metalView];
+    
+    _commandQueue = [_device newCommandQueue];
+    
+    CVReturn err = CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, _device, nil, &_textureCache);
+    if (err != kCVReturnSuccess) {
+        Log(LOG_E, @"Failed to create texture cache: %d", err);
+    }
+    
+    Log(LOG_I, @"Metal renderer initialized with upscaling mode: %d", _upscalingMode);
+}
+
+- (void)setupMetalPipeline {
+    NSError *error = nil;
+    id<MTLLibrary> library = [_device newLibraryWithSource:kMetalShaderSource options:nil error:&error];
+    if (!library) {
+        Log(LOG_E, @"Failed to create metal library: %@", error);
+        return;
+    }
+    
+    id<MTLFunction> fn = [library newFunctionWithName:@"ycbcrToRgb"];
+    _computePipelineState = [_device newComputePipelineStateWithFunction:fn error:&error];
+    if (!_computePipelineState) {
+        Log(LOG_E, @"Failed to create pipeline state: %@", error);
+    }
+}
+
+void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFrameRefCon, OSStatus status, VTDecodeInfoFlags infoFlags, CVImageBufferRef imageBuffer, CMTime presentationTimeStamp, CMTime presentationDuration) {
+    VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)decompressionOutputRefCon;
+    if (status == noErr && imageBuffer) {
+        [self handleDecompressionOutput:imageBuffer];
+    }
+}
+
+- (void)handleDecompressionOutput:(CVImageBufferRef)imageBuffer {
+    @synchronized(self) {
+        if (_currentFrame) {
+            CVBufferRelease(_currentFrame);
+        }
+        _currentFrame = CVBufferRetain(imageBuffer);
+    }
+}
+
+- (void)createDecompressionSession {
+    if (_decompressionSession) {
+        VTDecompressionSessionInvalidate(_decompressionSession);
+        CFRelease(_decompressionSession);
+        _decompressionSession = NULL;
+    }
+    
+    VTDecompressionOutputCallbackRecord callbackRecord;
+    callbackRecord.decompressionOutputCallback = decompressionOutputCallback;
+    callbackRecord.decompressionOutputRefCon = (__bridge void *)self;
+    
+    NSDictionary *destinationImageBufferAttributes = @{
+        (id)kCVPixelBufferMetalCompatibilityKey: @YES,
+    };
+    
+    OSStatus status = VTDecompressionSessionCreate(kCFAllocatorDefault,
+                                                   formatDesc,
+                                                   NULL,
+                                                   (__bridge CFDictionaryRef)destinationImageBufferAttributes,
+                                                   &callbackRecord,
+                                                   &_decompressionSession);
+    if (status != noErr) {
+        Log(LOG_E, @"VTDecompressionSessionCreate failed: %d", (int)status);
+    }
+}
+
+- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size {
+}
+
+- (void)drawInMTKView:(MTKView *)view {
+    CVImageBufferRef frame = NULL;
+    @synchronized(self) {
+        if (_currentFrame) {
+            frame = CVBufferRetain(_currentFrame);
+        }
+    }
+    
+    if (!frame) return;
+    
+    // Lazy init pipeline
+    if (!_computePipelineState) {
+        [self setupMetalPipeline];
+    }
+    if (!_computePipelineState || !_textureCache) {
+        CVBufferRelease(frame);
+        return;
+    }
+    
+    size_t width = CVPixelBufferGetWidth(frame);
+    size_t height = CVPixelBufferGetHeight(frame);
+    
+    // Create textures from YUV planes
+    CVMetalTextureRef yTextureRef = NULL;
+    CVMetalTextureRef uvTextureRef = NULL;
+    
+    CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, _textureCache, frame, nil, MTLPixelFormatR8Unorm, width, height, 0, &yTextureRef);
+    CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, _textureCache, frame, nil, MTLPixelFormatRG8Unorm, width / 2, height / 2, 1, &uvTextureRef);
+    
+    if (yTextureRef && uvTextureRef) {
+        id<MTLTexture> yTexture = CVMetalTextureGetTexture(yTextureRef);
+        id<MTLTexture> uvTexture = CVMetalTextureGetTexture(uvTextureRef);
+        
+        id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
+        id<MTLTexture> drawableTexture = view.currentDrawable.texture;
+        
+        if (drawableTexture) {
+            // 1. YUV -> RGB
+            MTLTextureDescriptor *desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:width height:height mipmapped:NO];
+            desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+            desc.storageMode = MTLStorageModePrivate;
+            id<MTLTexture> intermediateTexture = [_device newTextureWithDescriptor:desc];
+            
+            id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
+            [computeEncoder setComputePipelineState:_computePipelineState];
+            [computeEncoder setTexture:yTexture atIndex:0];
+            [computeEncoder setTexture:uvTexture atIndex:1];
+            [computeEncoder setTexture:intermediateTexture atIndex:2];
+            
+            NSUInteger w = _computePipelineState.threadExecutionWidth;
+            NSUInteger h = _computePipelineState.maxTotalThreadsPerThreadgroup / w;
+            MTLSize threadsPerThreadgroup = MTLSizeMake(w, h, 1);
+            MTLSize threadgroups = MTLSizeMake((width + w - 1) / w, (height + h - 1) / h, 1);
+            
+            [computeEncoder dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
+            [computeEncoder endEncoding];
+            
+            // 2. MetalFX Upscaling
+            if (!_spatialScaler) {
+                MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
+                scalerDesc.inputWidth = width;
+                scalerDesc.inputHeight = height;
+                scalerDesc.outputWidth = drawableTexture.width;
+                scalerDesc.outputHeight = drawableTexture.height;
+                scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
+                scalerDesc.outputTextureFormat = view.colorPixelFormat;
+                scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
+                
+                _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
+            }
+            
+            // Handle Resize
+            if (_spatialScaler.inputWidth != width || _spatialScaler.inputHeight != height || _spatialScaler.outputWidth != drawableTexture.width || _spatialScaler.outputHeight != drawableTexture.height) {
+                 _spatialScaler = nil;
+                 MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
+                 scalerDesc.inputWidth = width;
+                 scalerDesc.inputHeight = height;
+                 scalerDesc.outputWidth = drawableTexture.width;
+                 scalerDesc.outputHeight = drawableTexture.height;
+                 scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
+                 scalerDesc.outputTextureFormat = view.colorPixelFormat;
+                 scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
+                 _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
+            }
+            
+            if (_spatialScaler) {
+                id<MTLTexture> targetTexture = drawableTexture;
+                
+                // MetalFX requires the output texture to be in private storage mode.
+                // If the drawable texture is not private (e.g. Managed), we must render to an intermediate private texture.
+                if (drawableTexture.storageMode != MTLStorageModePrivate) {
+                    if (!_upscaledTexture || _upscaledTexture.width != drawableTexture.width || _upscaledTexture.height != drawableTexture.height || _upscaledTexture.pixelFormat != drawableTexture.pixelFormat) {
+                        MTLTextureDescriptor *upscaledDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:drawableTexture.pixelFormat width:drawableTexture.width height:drawableTexture.height mipmapped:NO];
+                        upscaledDesc.storageMode = MTLStorageModePrivate;
+                        // MetalFXSpatialScaler internally uses a render pass for output; the output texture must be a render target.
+                        upscaledDesc.usage = MTLTextureUsageShaderWrite | MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+                        _upscaledTexture = [_device newTextureWithDescriptor:upscaledDesc];
+                    }
+                    targetTexture = _upscaledTexture;
+                }
+                
+                _spatialScaler.colorTexture = intermediateTexture;
+                _spatialScaler.outputTexture = targetTexture;
+                [_spatialScaler encodeToCommandBuffer:commandBuffer];
+                
+                if (targetTexture != drawableTexture) {
+                    id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+                    [blit copyFromTexture:targetTexture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0) sourceSize:MTLSizeMake(targetTexture.width, targetTexture.height, 1) toTexture:drawableTexture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+                    [blit endEncoding];
+                }
+            } else {
+                id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+                [blit copyFromTexture:intermediateTexture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0) sourceSize:MTLSizeMake(width, height, 1) toTexture:drawableTexture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+                [blit endEncoding];
+            }
+            
+            [commandBuffer presentDrawable:view.currentDrawable];
+            [commandBuffer commit];
+        }
+    }
+    
+    if (yTextureRef) CFRelease(yTextureRef);
+    if (uvTextureRef) CFRelease(uvTextureRef);
+    CVBufferRelease(frame);
 }
 
 - (void)start
@@ -194,6 +475,16 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         CVDisplayLinkStop(_displayLink);
         CVDisplayLinkRelease(_displayLink);
         _displayLink = NULL;
+    }
+    
+    if (_currentFrame) {
+        CVBufferRelease(_currentFrame);
+        _currentFrame = NULL;
+    }
+    if (_decompressionSession) {
+        VTDecompressionSessionInvalidate(_decompressionSession);
+        CFRelease(_decompressionSession);
+        _decompressionSession = NULL;
     }
 }
 
@@ -372,6 +663,10 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                     formatDesc = NULL;
                 }
             }
+            
+            if (_upscalingMode > 0) {
+                [self createDecompressionSession];
+            }
         }
         
         // Data is NOT to be freed here. It's a direct usage of the caller's buffer.
@@ -387,7 +682,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     }
     
     // Check for previous decoder errors before doing anything
-    if (displayLayer.status == AVQueuedSampleBufferRenderingStatusFailed) {
+    if (displayLayer && displayLayer.status == AVQueuedSampleBufferRenderingStatusFailed) {
         Log(LOG_E, @"Display layer rendering failed: %@", displayLayer.error);
         
         // Recreate the display layer
@@ -487,7 +782,13 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     }
 
     // Enqueue the next frame
-    [displayLayer enqueueSampleBuffer:sampleBuffer];
+    if (_upscalingMode > 0) {
+        if (_decompressionSession) {
+            VTDecompressionSessionDecodeFrame(_decompressionSession, sampleBuffer, 0, NULL, NULL);
+        }
+    } else {
+        [displayLayer enqueueSampleBuffer:sampleBuffer];
+    }
     
     // Dereference the buffers
     CFRelease(dataBlockBuffer);
