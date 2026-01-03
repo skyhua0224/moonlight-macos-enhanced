@@ -643,6 +643,12 @@ struct VideoAndAudioView: View {
           ToggleCell(
             title: "Performance Overlay (⌃⌥S)",
             boolBinding: $settingsModel.showPerformanceOverlay)
+
+          Divider()
+
+          ToggleCell(
+            title: "Show Connection Warnings",
+            boolBinding: $settingsModel.showConnectionWarnings)
         }
 
         Spacer()
@@ -1189,6 +1195,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "V-Sync": "V-Sync",
     "Performance Overlay": "Performance Overlay",
     "Performance Overlay (⌃⌥S)": "Performance Overlay (⌃⌥S)",
+    "Show Connection Warnings": "Show Connection Warnings",
     "Unlock max bitrate (1000 Mbps)": "Unlock max bitrate (1000 Mbps)",
     "Volume": "Volume",
 
@@ -1288,6 +1295,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "V-Sync": "垂直同步",
     "Performance Overlay": "显示性能统计",
     "Performance Overlay (⌃⌥S)": "显示性能统计（⌃⌥S）",
+    "Show Connection Warnings": "显示连接质量警告",
     "Unlock max bitrate (1000 Mbps)": "解锁最高码率（最高 1000 Mbps）",
     "Volume": "音量",
 

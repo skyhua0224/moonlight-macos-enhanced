@@ -124,3 +124,5 @@
 "Offline, and not paired" = "Offline, and not paired";
 "Offline, but paired" = "Offline, but paired";
 "Unknown" = "Unknown";
+
+"Poor Connection" = "⚠️ Poor Connection";

@@ -124,3 +124,5 @@
 "Offline, and not paired" = "离线，未配对";
 "Offline, but paired" = "离线，已配对";
 "Unknown" = "未知";
+
+"Poor Connection" = "⚠️ 连接质量差";

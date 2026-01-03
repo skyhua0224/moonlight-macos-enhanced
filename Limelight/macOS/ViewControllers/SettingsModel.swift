@@ -292,6 +292,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var showConnectionWarnings: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var captureSystemShortcuts: Bool {
     didSet {
       guard !isLoading else { return }
@@ -491,6 +497,7 @@ class SettingsModel: ObservableObject {
   static let defaultAudioConfiguration = "Stereo"
   static let defaultEnableVsync = true
   static let defaultShowPerformanceOverlay = false
+  static let defaultShowConnectionWarnings = true
   static let defaultCaptureSystemShortcuts = false
   static let defaultVolumeLevel = 1.0
   static let defaultMultiControllerMode = "Auto"
@@ -689,6 +696,7 @@ class SettingsModel: ObservableObject {
     selectedAudioConfiguration = Self.defaultAudioConfiguration
     enableVsync = Self.defaultEnableVsync
     showPerformanceOverlay = Self.defaultShowPerformanceOverlay
+    showConnectionWarnings = Self.defaultShowConnectionWarnings
     captureSystemShortcuts = Self.defaultCaptureSystemShortcuts
     volumeLevel = Self.defaultVolumeLevel
 
@@ -755,6 +763,7 @@ class SettingsModel: ObservableObject {
     selectedAudioConfiguration = Self.defaultAudioConfiguration
     enableVsync = Self.defaultEnableVsync
     showPerformanceOverlay = Self.defaultShowPerformanceOverlay
+    showConnectionWarnings = Self.defaultShowConnectionWarnings
     captureSystemShortcuts = Self.defaultCaptureSystemShortcuts
     volumeLevel = Self.defaultVolumeLevel
 
@@ -851,6 +860,8 @@ class SettingsModel: ObservableObject {
       enableVsync = settings.enableVsync ?? SettingsModel.defaultEnableVsync
       showPerformanceOverlay =
         settings.showPerformanceOverlay ?? SettingsModel.defaultShowPerformanceOverlay
+      showConnectionWarnings =
+        settings.showConnectionWarnings ?? SettingsModel.defaultShowConnectionWarnings
       captureSystemShortcuts =
         settings.captureSystemShortcuts ?? SettingsModel.defaultCaptureSystemShortcuts
       volumeLevel = settings.volumeLevel ?? SettingsModel.defaultVolumeLevel
@@ -1062,6 +1073,7 @@ class SettingsModel: ObservableObject {
       audioConfiguration: audioConfig,
       enableVsync: enableVsync,
       showPerformanceOverlay: showPerformanceOverlay,
+      showConnectionWarnings: showConnectionWarnings,
       captureSystemShortcuts: captureSystemShortcuts,
       volumeLevel: volumeLevel,
       multiController: multiController,

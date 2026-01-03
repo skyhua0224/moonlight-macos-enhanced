@@ -43,6 +43,7 @@ struct Settings: Encodable, Decodable {
   let audioConfiguration: Int
   let enableVsync: Bool?
   let showPerformanceOverlay: Bool?
+  let showConnectionWarnings: Bool?
   let captureSystemShortcuts: Bool?
   let volumeLevel: CGFloat?
   let multiController: Bool
@@ -126,6 +127,7 @@ class SettingsClass: NSObject {
         "audioConfiguration": settings.audioConfiguration,
         "enableVsync": settings.enableVsync,
         "showPerformanceOverlay": settings.showPerformanceOverlay,
+        "showConnectionWarnings": settings.showConnectionWarnings,
         "captureSystemShortcuts": settings.captureSystemShortcuts,
         "volumeLevel": settings.volumeLevel,
         "multiController": settings.multiController,
@@ -315,6 +317,13 @@ class SettingsClass: NSObject {
       return settings.showPerformanceOverlay ?? SettingsModel.defaultShowPerformanceOverlay
     }
     return SettingsModel.defaultShowPerformanceOverlay
+  }
+
+  @objc static func showConnectionWarnings(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.showConnectionWarnings ?? SettingsModel.defaultShowConnectionWarnings
+    }
+    return SettingsModel.defaultShowConnectionWarnings
   }
 
   @objc static func captureSystemShortcuts(for key: String) -> Bool {
