@@ -1409,7 +1409,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     "Video": "视频",
     "Video Codec": "视频编解码器",
-    "Upscaling": "画面缩放",
     "MetalFX Spatial (Quality)": "MetalFX（画质）",
     "MetalFX Spatial (Performance)": "MetalFX（性能）",
     "Enable YUV 4:4:4": "启用 YUV 4:4:4",
