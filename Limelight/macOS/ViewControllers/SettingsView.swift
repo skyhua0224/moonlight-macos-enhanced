@@ -12,18 +12,22 @@ import CoreGraphics
 import SwiftUI
 
 enum SettingsPaneType: Int, CaseIterable {
-  case stream
-  case videoAndAudio
-  case input
-  case app
-  case legacy
+  // NOTE: Raw values are pinned to keep backward compatibility with persisted selection.
+  case stream = 0
+  case video = 1
+  case audio = 5
+  case input = 2
+  case app = 3
+  case legacy = 4
 
   var title: String {
     switch self {
     case .stream:
       return "Stream"
-    case .videoAndAudio:
-      return "Video and Audio"
+    case .video:
+      return "Video"
+    case .audio:
+      return "Audio"
     case .input:
       return "Input"
     case .app:
@@ -37,8 +41,10 @@ enum SettingsPaneType: Int, CaseIterable {
     switch self {
     case .stream:
       return "airplayvideo"
-    case .videoAndAudio:
+    case .video:
       return "video.fill"
+    case .audio:
+      return "speaker.wave.2.fill"
     case .input:
       return "keyboard.fill"
     case .app:
@@ -52,8 +58,10 @@ enum SettingsPaneType: Int, CaseIterable {
     switch self {
     case .stream:
       return .blue
-    case .videoAndAudio:
+    case .video:
       return .orange
+    case .audio:
+      return Color(hex: 0x2FA7A0)
     case .input:
       return .purple
     case .app:
@@ -130,9 +138,13 @@ struct Detail: View {
         SettingPaneLoader(settingsModel) {
           StreamView()
         }
-      case .videoAndAudio:
+      case .video:
         SettingPaneLoader(settingsModel) {
-          VideoAndAudioView()
+          VideoView()
+        }
+      case .audio:
+        SettingPaneLoader(settingsModel) {
+          AudioView()
         }
       case .input:
         SettingPaneLoader(settingsModel) {
@@ -284,7 +296,7 @@ struct StreamView: View {
         Spacer()
           .frame(height: 32)
 
-        FormSection(title: "Resolution and FPS") {
+        FormSection(title: "Resolution & Scaling") {
           FormCell(
             title: "Resolution", contentWidth: 220,
             content: {
@@ -318,51 +330,76 @@ struct StreamView: View {
 
           Divider()
 
-          FormCell(
-            title: "FPS", contentWidth: 100,
-            content: {
-              Picker("", selection: $settingsModel.selectedFps) {
-                ForEach(SettingsModel.fpss, id: \.self) { fps in
-                  if fps == .zero {
-                    Text(languageManager.localize("Custom"))
-                  } else {
-                    Text("\(fps)")
-                  }
-                }
-              }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            })
-
-          if showCustomFpsGroup {
-            Divider()
-
-            FormCell(
-              title: "Custom FPS", contentWidth: 0,
-              content: {
-                TextField("40", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
-                  .multilineTextAlignment(.trailing)
-                  .textFieldStyle(.plain)
-                  .fixedSize()
-              })
-          }
+          ToggleCell(
+            title: "Resolution Scale",
+            hintKey: "Resolution Scale hint",
+            boolBinding: $settingsModel.streamResolutionScale
+          )
 
           Divider()
 
-          ToggleCell(title: "Resolution Scale", boolBinding: $settingsModel.streamResolutionScale)
+          FormCell(title: "Resolution Scale Ratio", contentWidth: 120) {
+            Picker("", selection: $settingsModel.streamResolutionScaleRatio) {
+              Text("50%").tag(50)
+              Text("75%").tag(75)
+              Text("100%").tag(100)
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .trailing)
+          }
+          .disabled(!settingsModel.streamResolutionScale)
+          .opacity(settingsModel.streamResolutionScale ? 1.0 : 0.55)
 
-          if settingsModel.streamResolutionScale {
+          Divider()
+
+          if SettingsModel.isMetalFXSupported {
+            FormCell(
+              title: "Upscaling", contentWidth: 200,
+              content: {
+                Picker("", selection: $settingsModel.selectedUpscalingMode) {
+                  ForEach(SettingsModel.upscalingModes, id: \.self) { mode in
+                    Text(languageManager.localize(mode))
+                  }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .trailing)
+              })
+          } else {
+            VStack(alignment: .leading, spacing: 6) {
+              HStack {
+                Text(languageManager.localize("Upscaling"))
+                Spacer()
+                Text(languageManager.localize("Not supported"))
+                  .foregroundColor(.secondary)
+              }
+              Text(languageManager.localize("MetalFX requires macOS 13 or later."))
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+          }
+
+          Text(languageManager.localize("AI enhancement recommended hint"))
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+          Divider()
+
+          Text(languageManager.localize("Scale vs Upscaling hint"))
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+          if settingsModel.streamResolutionScale && settingsModel.streamResolutionScaleRatio < 100
+            && settingsModel.selectedUpscalingMode == "Off"
+          {
             Divider()
 
-            FormCell(title: "Resolution Scale Ratio", contentWidth: 120) {
-              Picker("", selection: $settingsModel.streamResolutionScaleRatio) {
-                Text("50%").tag(50)
-                Text("75%").tag(75)
-                Text("100%").tag(100)
-              }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            }
+            Text(languageManager.localize("Resolution Scale + Upscaling hint"))
+              .font(.footnote)
+              .foregroundColor(.secondary)
+              .frame(maxWidth: .infinity, alignment: .leading)
           }
 
           Divider()
@@ -405,6 +442,40 @@ struct StreamView: View {
                     placeholderDimensions: CGSize(width: 1920, height: 1080))
                 })
             }
+          }
+        }
+
+        Spacer()
+          .frame(height: 32)
+
+        FormSection(title: "Frame Rate") {
+          FormCell(
+            title: "FPS", contentWidth: 100,
+            content: {
+              Picker("", selection: $settingsModel.selectedFps) {
+                ForEach(SettingsModel.fpss, id: \.self) { fps in
+                  if fps == .zero {
+                    Text(languageManager.localize("Custom"))
+                  } else {
+                    Text("\(fps)")
+                  }
+                }
+              }
+              .labelsHidden()
+              .frame(maxWidth: .infinity, alignment: .trailing)
+            })
+
+          if showCustomFpsGroup {
+            Divider()
+
+            FormCell(
+              title: "Custom FPS", contentWidth: 0,
+              content: {
+                TextField("40", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
+                  .multilineTextAlignment(.trailing)
+                  .textFieldStyle(.plain)
+                  .fixedSize()
+              })
           }
 
           Divider()
@@ -585,7 +656,7 @@ struct StreamView: View {
   }
 }
 
-struct VideoAndAudioView: View {
+struct VideoView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
 
@@ -607,23 +678,9 @@ struct VideoAndAudioView: View {
 
           Divider()
 
-          FormCell(
-            title: "Upscaling", contentWidth: 200,
-            content: {
-              Picker("", selection: $settingsModel.selectedUpscalingMode) {
-                ForEach(SettingsModel.upscalingModes, id: \.self) { mode in
-                  Text(languageManager.localize(mode))
-                }
-              }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            })
-
-          Divider()
-
           ToggleCell(title: "HDR", boolBinding: $settingsModel.hdr)
 
-            Divider()
+          Divider()
 
           ToggleCell(
             title: "Enable YUV 4:4:4",
@@ -661,10 +718,19 @@ struct VideoAndAudioView: View {
             title: "Show Connection Warnings",
             boolBinding: $settingsModel.showConnectionWarnings)
         }
+      }
+      .padding()
+    }
+  }
+}
 
-        Spacer()
-          .frame(height: 32)
+struct AudioView: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
 
+  var body: some View {
+    ScrollView {
+      VStack {
         FormSection(title: "Audio") {
           FormCell(
             title: "Audio Configuration", contentWidth: 200,
@@ -744,40 +810,11 @@ struct VideoAndAudioView: View {
 struct InputView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
+  @SwiftUI.State private var showAdvancedInput = false
 
   var body: some View {
     ScrollView {
       VStack {
-        FormSection(title: "Controller") {
-          FormCell(
-            title: "Multi-Controller Mode", contentWidth: 88,
-            content: {
-              Picker("", selection: $settingsModel.selectedMultiControllerMode) {
-                ForEach(SettingsModel.multiControllerModes, id: \.self) { mode in
-                  Text(languageManager.localize(mode))
-                }
-              }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            })
-
-          Divider()
-
-          ToggleCell(title: "Rumble Controller", boolBinding: $settingsModel.rumble)
-        }
-
-        Spacer()
-          .frame(height: 32)
-
-        FormSection(title: "Keyboard") {
-          ToggleCell(
-            title: "Capture system keyboard shortcuts",
-            boolBinding: $settingsModel.captureSystemShortcuts)
-        }
-
-        Spacer()
-          .frame(height: 32)
-
         FormSection(title: "Mouse") {
           ToggleCell(
             title: "Optimize mouse for remote desktop",
@@ -813,7 +850,34 @@ struct InputView: View {
         Spacer()
           .frame(height: 32)
 
-        FormSection(title: "Buttons") {
+        FormSection(title: "Keyboard") {
+          ToggleCell(
+            title: "Capture system keyboard shortcuts",
+            boolBinding: $settingsModel.captureSystemShortcuts)
+        }
+
+        Spacer()
+          .frame(height: 32)
+
+        FormSection(title: "Controller") {
+          FormCell(
+            title: "Multi-Controller Mode", contentWidth: 88,
+            content: {
+              Picker("", selection: $settingsModel.selectedMultiControllerMode) {
+                ForEach(SettingsModel.multiControllerModes, id: \.self) { mode in
+                  Text(languageManager.localize(mode))
+                }
+              }
+              .labelsHidden()
+              .frame(maxWidth: .infinity, alignment: .trailing)
+            })
+
+          Divider()
+
+          ToggleCell(title: "Rumble Controller", boolBinding: $settingsModel.rumble)
+
+          Divider()
+
           ToggleCell(title: "Swap A/B and X/Y Buttons", boolBinding: $settingsModel.swapButtons)
 
           Divider()
@@ -825,41 +889,62 @@ struct InputView: View {
           ToggleCell(
             title: "Gamepad Mouse Emulation", hintKey: "Gamepad Mouse Hint",
             boolBinding: $settingsModel.gamepadMouseMode)
-
         }
 
         Spacer()
           .frame(height: 32)
 
-        FormSection(title: "Drivers") {
-          FormCell(
-            title: "Controller Driver", contentWidth: 120,
+        FormSection(title: "Advanced") {
+          DisclosureGroup(
+            isExpanded: $showAdvancedInput,
             content: {
-              Picker("", selection: $settingsModel.selectedControllerDriver) {
-                ForEach(SettingsModel.controllerDrivers, id: \.self) { mode in
-                  Text(languageManager.localize(mode))
-                }
-              }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            })
+              VStack {
+                FormCell(
+                  title: "Controller Driver", contentWidth: 120,
+                  content: {
+                    Picker("", selection: $settingsModel.selectedControllerDriver) {
+                      ForEach(SettingsModel.controllerDrivers, id: \.self) { mode in
+                        Text(languageManager.localize(mode))
+                      }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                  })
 
-          Divider()
+                Divider()
 
-          FormCell(
-            title: "Mouse Driver", contentWidth: 120,
-            content: {
-              Picker("", selection: $settingsModel.selectedMouseDriver) {
-                ForEach(SettingsModel.mouseDrivers, id: \.self) { mode in
-                  Text(languageManager.localize(mode))
-                }
+                FormCell(
+                  title: "Mouse Driver", contentWidth: 120,
+                  content: {
+                    Picker("", selection: $settingsModel.selectedMouseDriver) {
+                      ForEach(SettingsModel.mouseDrivers, id: \.self) { mode in
+                        Text(languageManager.localize(mode))
+                      }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                  })
               }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            })
+            },
+            label: {
+              Text(languageManager.localize("Drivers"))
+            }
+          )
+          .modifier(MoonlightDisclosureGroupStyleCompat())
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
       .padding()
+    }
+  }
+}
+
+private struct MoonlightDisclosureGroupStyleCompat: ViewModifier {
+  func body(content: Content) -> some View {
+    if #available(macOS 13.0, *) {
+      content.disclosureGroupStyle(.automatic)
+    } else {
+      content
     }
   }
 }
@@ -1175,21 +1260,33 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Match Display": "Match Display",
     "Custom": "Custom",
     "Custom Resolution": "Custom Resolution",
+    "Frame Rate": "Frame Rate",
     "FPS": "FPS",
     "Custom FPS": "Custom FPS",
 
     "Resolution Scale": "Resolution Scale",
     "Resolution Scale Ratio": "Resolution Scale Ratio",
+    "Resolution & Scaling": "Resolution & Scaling",
+    "Resolution Scale hint": "Reduces resolution to save bandwidth.",
+    "Upscaling": "AI Quality Enhancement",
+    "Scale vs Upscaling hint": "Scale saves bandwidth. AI enhancement improves quality.",
+    "AI enhancement recommended hint": "Recommended for low resolution/low bitrate.",
+    "Resolution Scale + Upscaling hint": "Tip: Lower scale + AI enhancement = clearer image.",
+    "MetalFX requires macOS 13 or later.": "Requires macOS 13+.",
+
+    "MetalFX Spatial (Quality)": "MetalFX (Quality)",
+    "MetalFX Spatial (Performance)": "MetalFX (Performance)",
     "Auto Adjust Bitrate": "Auto Adjust Bitrate",
     "Ignore Aspect Ratio": "Ignore Aspect Ratio",
     "Show Local Cursor": "Show Local Cursor",
 
-    "Remote Resolution": "Remote Resolution",
-    "Remote Resolution Value": "Remote Resolution Value",
-    "Remote Custom Resolution": "Remote Custom Resolution",
-    "Remote FPS": "Remote FPS",
-    "Remote FPS Value": "Remote FPS Value",
-    "Remote Custom FPS": "Remote Custom FPS",
+    "Remote Resolution": "Host Render Resolution",
+    "Remote Resolution Value": "Host Render Resolution",
+    "Remote Custom Resolution": "Host Custom Render Resolution",
+    "Remote FPS": "Host Render FPS",
+    "Remote FPS Value": "Host Render FPS",
+    "Remote Custom FPS": "Host Custom Render FPS",
+    "Remote overrides hint": "Forces the host to render at this value.",
     "Remote overrides apply to the host render mode only.":
       "Remote overrides apply to the host render mode only.",
     "Enable Remote Resolution/FPS to override the /launch mode parameter.":
@@ -1225,7 +1322,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Buttons": "Buttons",
     "Swap A/B and X/Y Buttons": "Swap A/B and X/Y Buttons",
     "Emulate Guide Button": "Emulate Guide Button",
+    "Gamepad Mouse Emulation": "Gamepad Mouse Emulation",
+    "Gamepad Mouse Hint": "Use the gamepad as a mouse (hold Start to toggle).",
     "Drivers": "Drivers",
+    "Advanced": "Advanced",
     "Controller Driver": "Controller Driver",
     "Mouse Driver": "Mouse Driver",
     "HID": "HID",
@@ -1256,6 +1356,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
   ]
 
   private let zhHans: [String: String] = [
+    "Advanced": "高级",
     "Stream": "基本设置",
     "Video and Audio": "音视频设置",
     "Input": "输入设置",
@@ -1276,22 +1377,31 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Match Display": "跟随屏幕",
     "Custom": "自定义",
     "Custom Resolution": "自定义分辨率",
+    "Frame Rate": "帧率",
     "FPS": "帧率",
     "Custom FPS": "自定义帧率",
 
     "Resolution Scale": "分辨率缩放",
     "Resolution Scale Ratio": "缩放比例",
+    "Resolution & Scaling": "分辨率与缩放",
+    "Resolution Scale hint": "降低分辨率以节省带宽。",
+    "Upscaling": "AI 画质增强",
+    "Scale vs Upscaling hint": "缩放节省带宽，AI 画质增强提升画质。",
+    "AI enhancement recommended hint": "建议在低分辨率/低码率下使用。",
+    "Resolution Scale + Upscaling hint": "提示：降低缩放 + AI 画质增强 = 更清晰。",
+    "MetalFX requires macOS 13 or later.": "需要 macOS 13+。",
     "Auto Adjust Bitrate": "自动调整码率",
     "Ignore Aspect Ratio": "忽略宽高比限制",
     "Show Local Cursor": "显示本地光标",
 
-    "Remote Resolution": "远程分辨率",
-    "Remote Resolution Value": "远程分辨率选项",
-    "Remote Custom Resolution": "远程自定义分辨率",
-    "Remote FPS": "远程帧率",
-    "Remote FPS Value": "远程帧率选项",
-    "Remote Custom FPS": "远程自定义帧率",
-    "Remote overrides apply to the host render mode only.": "远程选项仅影响主机端渲染/编码模式，不改变本地显示设置。",
+    "Remote Resolution": "主机渲染分辨率",
+    "Remote Resolution Value": "主机渲染分辨率",
+    "Remote Custom Resolution": "主机自定义渲染分辨率",
+    "Remote FPS": "主机渲染帧率",
+    "Remote FPS Value": "主机渲染帧率",
+    "Remote Custom FPS": "主机自定义渲染帧率",
+    "Remote overrides hint": "强制被控端按该值渲染。",
+    "Remote overrides apply to the host render mode only.": "仅影响被控端渲染/编码。",
     "Enable Remote Resolution/FPS to override the /launch mode parameter.":
       "需开启远程分辨率/帧率才会覆盖启动参数（/launch mode）。",
 
@@ -1300,8 +1410,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Video": "视频",
     "Video Codec": "视频编解码器",
     "Upscaling": "画面缩放",
-    "MetalFX Spatial (Quality)": "MetalFX 空间缩放 (画质优先)",
-    "MetalFX Spatial (Performance)": "MetalFX 空间缩放 (性能优先)",
+    "MetalFX Spatial (Quality)": "MetalFX（画质）",
+    "MetalFX Spatial (Performance)": "MetalFX（性能）",
     "Enable YUV 4:4:4": "启用 YUV 4:4:4",
     "YUV 4:4:4 hint": "启用高保真色彩模式 (需要显卡支持)",
     "HDR": "HDR (高动态范围)",
@@ -1330,8 +1440,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Buttons": "按键",
     "Swap A/B and X/Y Buttons": "交换手柄的 A/B 和 X/Y 按钮",
     "Emulate Guide Button": "模拟 Guide 键 (长按 Start)",
-    "Gamepad Mouse Emulation (!)": "手柄模拟鼠标 (!)",
-    "Gamepad Mouse Hint": "使用手柄模拟鼠标操作 (长按 Start 切换)",
+    "Gamepad Mouse Emulation": "手柄模拟鼠标",
+    "Gamepad Mouse Emulation (!)": "手柄模拟鼠标",
+    "Gamepad Mouse Hint": "使用手柄模拟鼠标（长按 Start 切换）。",
     "Mouse": "鼠标",
     "Optimize mouse for remote desktop": "优化远程桌面鼠标 (绝对位置)",
     "Swap Left and Right Mouse Buttons": "交换鼠标左右键",

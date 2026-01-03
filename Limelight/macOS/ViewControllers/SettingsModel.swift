@@ -478,9 +478,21 @@ class SettingsModel: ObservableObject {
   static var controllerDrivers: [String] = ["HID", "MFi"]
   static var mouseDrivers: [String] = ["HID", "MFi"]
   static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
-  static var upscalingModes: [String] = [
+
+  static var isMetalFXSupported: Bool {
+    if #available(macOS 13.0, *) {
+      return true
+    }
+    return false
+  }
+
+  private static let allUpscalingModes: [String] = [
     "Off", "MetalFX Spatial (Quality)", "MetalFX Spatial (Performance)",
   ]
+
+  static var upscalingModes: [String] {
+    isMetalFXSupported ? allUpscalingModes : ["Off"]
+  }
 
   static let defaultResolution = CGSizeMake(1920, 1080)
   static let defaultCustomResWidth: CGFloat? = nil
@@ -1006,7 +1018,10 @@ class SettingsModel: ObservableObject {
     }
 
     let touchscreenMode = Self.getInt(from: selectedTouchscreenMode, in: Self.touchscreenModes)
-    let upscalingMode = Self.getInt(from: selectedUpscalingMode, in: Self.upscalingModes)
+
+    // Persist Off on unsupported systems to avoid saving an unusable mode.
+    let rawUpscalingMode = Self.getInt(from: selectedUpscalingMode, in: Self.upscalingModes)
+    let upscalingMode = Self.isMetalFXSupported ? rawUpscalingMode : 0
 
     var remoteResolutionWidth: Int? = nil
     var remoteResolutionHeight: Int? = nil
