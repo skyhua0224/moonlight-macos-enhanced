@@ -15,12 +15,31 @@
 
 @import VideoToolbox;
 @import MetalKit;
-@import MetalFX;
+
+#if __has_include(<MetalFX/MetalFX.h>)
+#import <MetalFX/MetalFX.h>
+#define ML_HAS_METALFX 1
+#else
+#define ML_HAS_METALFX 0
+@protocol MTLFXSpatialScaler;
+@end
+#endif
 
 @interface VideoDecoderRenderer () <MTKViewDelegate>
 @property (nonatomic) int frameRate;
 
 @end
+
+static BOOL MLMetalFXIsSupported(void)
+{
+#if ML_HAS_METALFX
+    if (@available(macOS 13.0, *)) {
+        // If MetalFX is weak-linked on older systems, class lookup will be nil.
+        return NSClassFromString(@"MTLFXSpatialScalerDescriptor") != nil;
+    }
+#endif
+    return NO;
+}
 
 static NSString *const kMetalShaderSource = @"#include <metal_stdlib>\n"
 "using namespace metal;\n"
@@ -130,6 +149,14 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 {
     self->videoFormat = videoFormat;
     self.frameRate = frameRate;
+
+    // MetalFX is macOS 13+. If user selected it on a newer OS but runs on an older
+    // deployment target at runtime, force fallback to legacy rendering.
+    if (upscalingMode > 0 && !MLMetalFXIsSupported()) {
+        Log(LOG_I, @"MetalFX requested (mode=%d) but not supported on this OS. Falling back.", upscalingMode);
+        upscalingMode = 0;
+    }
+
     self->_upscalingMode = upscalingMode;
     memset(&_activeWndVideoStats, 0, sizeof(_activeWndVideoStats));
     _lastFrameNumber = 0;
@@ -304,62 +331,116 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
             [computeEncoder dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
             [computeEncoder endEncoding];
             
-            // 2. MetalFX Upscaling
-            if (!_spatialScaler) {
-                MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
-                scalerDesc.inputWidth = width;
-                scalerDesc.inputHeight = height;
-                scalerDesc.outputWidth = drawableTexture.width;
-                scalerDesc.outputHeight = drawableTexture.height;
-                scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
-                scalerDesc.outputTextureFormat = view.colorPixelFormat;
-                scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
-                
-                _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
-            }
-            
-            // Handle Resize
-            if (_spatialScaler.inputWidth != width || _spatialScaler.inputHeight != height || _spatialScaler.outputWidth != drawableTexture.width || _spatialScaler.outputHeight != drawableTexture.height) {
-                 _spatialScaler = nil;
-                 MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
-                 scalerDesc.inputWidth = width;
-                 scalerDesc.inputHeight = height;
-                 scalerDesc.outputWidth = drawableTexture.width;
-                 scalerDesc.outputHeight = drawableTexture.height;
-                 scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
-                 scalerDesc.outputTextureFormat = view.colorPixelFormat;
-                 scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
-                 _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
-            }
-            
-            if (_spatialScaler) {
-                id<MTLTexture> targetTexture = drawableTexture;
-                
-                // MetalFX requires the output texture to be in private storage mode.
-                // If the drawable texture is not private (e.g. Managed), we must render to an intermediate private texture.
-                if (drawableTexture.storageMode != MTLStorageModePrivate) {
-                    if (!_upscaledTexture || _upscaledTexture.width != drawableTexture.width || _upscaledTexture.height != drawableTexture.height || _upscaledTexture.pixelFormat != drawableTexture.pixelFormat) {
-                        MTLTextureDescriptor *upscaledDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:drawableTexture.pixelFormat width:drawableTexture.width height:drawableTexture.height mipmapped:NO];
-                        upscaledDesc.storageMode = MTLStorageModePrivate;
-                        // MetalFXSpatialScaler internally uses a render pass for output; the output texture must be a render target.
-                        upscaledDesc.usage = MTLTextureUsageShaderWrite | MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
-                        _upscaledTexture = [_device newTextureWithDescriptor:upscaledDesc];
-                    }
-                    targetTexture = _upscaledTexture;
+            // 2. Upscaling (MetalFX on supported systems, else fallback)
+            const BOOL wantsUpscaling = (_upscalingMode > 0);
+            const BOOL canUseMetalFX = wantsUpscaling && MLMetalFXIsSupported();
+
+            if (canUseMetalFX) {
+#if ML_HAS_METALFX
+                // Lazy init spatial scaler
+                if (!_spatialScaler) {
+                    MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
+                    scalerDesc.inputWidth = width;
+                    scalerDesc.inputHeight = height;
+                    scalerDesc.outputWidth = drawableTexture.width;
+                    scalerDesc.outputHeight = drawableTexture.height;
+                    scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
+                    scalerDesc.outputTextureFormat = view.colorPixelFormat;
+                    scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
+
+                    _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
                 }
-                
-                _spatialScaler.colorTexture = intermediateTexture;
-                _spatialScaler.outputTexture = targetTexture;
-                [_spatialScaler encodeToCommandBuffer:commandBuffer];
-                
-                if (targetTexture != drawableTexture) {
+
+                // Handle resize (recreate scaler)
+                if (_spatialScaler
+                    && (_spatialScaler.inputWidth != width || _spatialScaler.inputHeight != height
+                        || _spatialScaler.outputWidth != drawableTexture.width || _spatialScaler.outputHeight != drawableTexture.height)) {
+                    _spatialScaler = nil;
+                }
+                if (!_spatialScaler) {
+                    MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
+                    scalerDesc.inputWidth = width;
+                    scalerDesc.inputHeight = height;
+                    scalerDesc.outputWidth = drawableTexture.width;
+                    scalerDesc.outputHeight = drawableTexture.height;
+                    scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
+                    scalerDesc.outputTextureFormat = view.colorPixelFormat;
+                    scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
+                    _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
+                }
+
+                if (_spatialScaler) {
+                    id<MTLTexture> targetTexture = drawableTexture;
+
+                    // MetalFX requires the output texture to be in private storage mode.
+                    if (drawableTexture.storageMode != MTLStorageModePrivate) {
+                        if (!_upscaledTexture || _upscaledTexture.width != drawableTexture.width
+                            || _upscaledTexture.height != drawableTexture.height
+                            || _upscaledTexture.pixelFormat != drawableTexture.pixelFormat) {
+                            MTLTextureDescriptor *upscaledDesc =
+                                [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:drawableTexture.pixelFormat
+                                                                                      width:drawableTexture.width
+                                                                                     height:drawableTexture.height
+                                                                                  mipmapped:NO];
+                            upscaledDesc.storageMode = MTLStorageModePrivate;
+                            upscaledDesc.usage = MTLTextureUsageShaderWrite | MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+                            _upscaledTexture = [_device newTextureWithDescriptor:upscaledDesc];
+                        }
+                        targetTexture = _upscaledTexture;
+                    }
+
+                    _spatialScaler.colorTexture = intermediateTexture;
+                    _spatialScaler.outputTexture = targetTexture;
+                    [_spatialScaler encodeToCommandBuffer:commandBuffer];
+
+                    if (targetTexture != drawableTexture) {
+                        id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+                        [blit copyFromTexture:targetTexture
+                                 sourceSlice:0
+                                 sourceLevel:0
+                                sourceOrigin:MTLOriginMake(0, 0, 0)
+                                  sourceSize:MTLSizeMake(targetTexture.width, targetTexture.height, 1)
+                                   toTexture:drawableTexture
+                            destinationSlice:0
+                            destinationLevel:0
+                           destinationOrigin:MTLOriginMake(0, 0, 0)];
+                        [blit endEncoding];
+                    }
+                } else {
+                    // Scaler creation failed; fall back.
                     id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
-                    [blit copyFromTexture:targetTexture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0) sourceSize:MTLSizeMake(targetTexture.width, targetTexture.height, 1) toTexture:drawableTexture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+                    [blit copyFromTexture:intermediateTexture
+                             sourceSlice:0
+                             sourceLevel:0
+                            sourceOrigin:MTLOriginMake(0, 0, 0)
+                              sourceSize:MTLSizeMake(width, height, 1)
+                               toTexture:drawableTexture
+                        destinationSlice:0
+                        destinationLevel:0
+                       destinationOrigin:MTLOriginMake(0, 0, 0)];
                     [blit endEncoding];
                 }
+#else
+                // Shouldn't happen: canUseMetalFX implies support, but keep safe fallback.
+                id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+                [blit copyFromTexture:intermediateTexture sourceSlice:0 sourceLevel:0
+                        sourceOrigin:MTLOriginMake(0, 0, 0)
+                          sourceSize:MTLSizeMake(width, height, 1)
+                           toTexture:drawableTexture destinationSlice:0 destinationLevel:0
+                    destinationOrigin:MTLOriginMake(0, 0, 0)];
+                [blit endEncoding];
+#endif
             } else {
                 id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
-                [blit copyFromTexture:intermediateTexture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0) sourceSize:MTLSizeMake(width, height, 1) toTexture:drawableTexture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+                [blit copyFromTexture:intermediateTexture
+                         sourceSlice:0
+                         sourceLevel:0
+                        sourceOrigin:MTLOriginMake(0, 0, 0)
+                          sourceSize:MTLSizeMake(width, height, 1)
+                           toTexture:drawableTexture
+                    destinationSlice:0
+                    destinationLevel:0
+                   destinationOrigin:MTLOriginMake(0, 0, 0)];
                 [blit endEncoding];
             }
             
