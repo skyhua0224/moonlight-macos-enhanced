@@ -12,6 +12,7 @@
 #import "OnScreenControls.h"
 
 #import "DataManager.h"
+#import "HIDSupport.h"
 #include "Limelight.h"
 
 @import GameController;
@@ -189,6 +190,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     bool _oscEnabled;
     char _controllerNumbers;
     bool _multiController;
+    bool _gamepadMouseModeEnabled;
+    bool _isMouseModeActive;
+    NSDate *_startPressTime;
+    float _accumulatedMouseX;
+    float _accumulatedMouseY;
+    NSTimer *_mouseTimer;
 
     NSMutableDictionary<NSNumber * /* key flag */, NSMutableDictionary<NSNumber * /* player index */, ButtonDebouncer *> *> *_debouncers;
 }
@@ -301,15 +308,54 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 -(void) updateFinished:(Controller*)controller
 {
-    [_controllerStreamLock lock];
-    @synchronized(controller) {
-        if (self.shouldSendInputEvents) {
-            // Player 1 is always present for OSC
-            LiSendMultiControllerEvent(_multiController ? controller.playerIndex : 0,
-                                       (_multiController ? _controllerNumbers : 1) | (_oscEnabled ? 1 : 0), controller.lastButtonFlags, controller.lastLeftTrigger, controller.lastRightTrigger, controller.lastLeftStickX, controller.lastLeftStickY, controller.lastRightStickX, controller.lastRightStickY);
-        }
+    if (!_shouldSendInputEvents) {
+        return;
     }
-    [_controllerStreamLock unlock];
+    
+    @synchronized(controller) {
+        // Quit Combo: Start+Select+L1+R1
+        // Note: ButtonDebouncer converts Start+Select to SPECIAL_FLAG (Guide)
+        // So we check for Guide + L1 + R1
+        int quitFlags = SPECIAL_FLAG | LB_FLAG | RB_FLAG;
+        if ((controller.lastButtonFlags & quitFlags) == quitFlags) {
+             dispatch_async(dispatch_get_main_queue(), ^{
+                 [[NSNotificationCenter defaultCenter] postNotificationName:HIDGamepadQuitNotification object:nil];
+             });
+            // Clear flags to avoid sending
+            controller.lastButtonFlags = 0;
+        }
+
+        if (controller.isMouseMode) {
+            // Don't send controller events while in mouse mode
+            return;
+        }
+
+        // Standard Controller Mode
+        [_controllerStreamLock lock];
+        
+        if (_multiController) {
+            LiSendMultiControllerEvent(controller.playerIndex,
+                                       [ControllerSupport getConnectedGamepadMask:nil],
+                                       controller.lastButtonFlags,
+                                       controller.lastLeftTrigger,
+                                       controller.lastRightTrigger,
+                                       controller.lastLeftStickX,
+                                       controller.lastLeftStickY,
+                                       controller.lastRightStickX,
+                                       controller.lastRightStickY);
+        }
+        else {
+            LiSendControllerEvent(controller.lastButtonFlags,
+                                  controller.lastLeftTrigger,
+                                  controller.lastRightTrigger,
+                                  controller.lastLeftStickX,
+                                  controller.lastLeftStickY,
+                                  controller.lastRightStickX,
+                                  controller.lastRightStickY);
+        }
+        
+        [_controllerStreamLock unlock];
+    }
 }
 
 #if TARGET_OS_IPHONE
@@ -394,9 +440,32 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 short leftStickX, leftStickY;
                 short rightStickX, rightStickY;
                 unsigned char leftTrigger, rightTrigger;
+
+                if (limeController.isMouseMode) {
+                    // Mouse Toggle and Movement are handled by timer
+                    
+                    // Mouse Clicks (A = Left, B = Right)
+                    BOOL currentA = gamepad.buttonA.pressed;
+                    BOOL currentB = gamepad.buttonB.pressed;
+                    BOOL lastA = (limeController.lastMouseModeButtonFlags & A_FLAG) != 0;
+                    BOOL lastB = (limeController.lastMouseModeButtonFlags & B_FLAG) != 0;
+                    
+                    if (currentA != lastA) {
+                        LiSendMouseButtonEvent(currentA ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                        if (currentA) limeController.lastMouseModeButtonFlags |= A_FLAG;
+                        else limeController.lastMouseModeButtonFlags &= ~A_FLAG;
+                    }
+                    if (currentB != lastB) {
+                        LiSendMouseButtonEvent(currentB ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                        if (currentB) limeController.lastMouseModeButtonFlags |= B_FLAG;
+                        else limeController.lastMouseModeButtonFlags &= ~B_FLAG;
+                    }
+                }
                 
-                UPDATE_BUTTON_FLAG(limeController, A_FLAG, gamepad.buttonA.pressed);
-                UPDATE_BUTTON_FLAG(limeController, B_FLAG, gamepad.buttonB.pressed);
+                BOOL suppress = limeController.isMouseMode;
+                
+                UPDATE_BUTTON_FLAG(limeController, A_FLAG, suppress ? NO : gamepad.buttonA.pressed);
+                UPDATE_BUTTON_FLAG(limeController, B_FLAG, suppress ? NO : gamepad.buttonB.pressed);
                 UPDATE_BUTTON_FLAG(limeController, X_FLAG, gamepad.buttonX.pressed);
                 UPDATE_BUTTON_FLAG(limeController, Y_FLAG, gamepad.buttonY.pressed);
                 
@@ -419,13 +488,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 }
                 
                 if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
+                    // For older MFi gamepads, the menu button will already be handled by
+                    // the controllerPausedHandler.
+                    UPDATE_BUTTON_FLAG(limeController, PLAY_FLAG, gamepad.buttonMenu.pressed);
+                    
                     // Options button is optional (only present on Xbox One S and PS4 gamepads)
                     if (gamepad.buttonOptions != nil) {
                         UPDATE_BUTTON_FLAG(limeController, BACK_FLAG, gamepad.buttonOptions.pressed);
-
-                        // For older MFi gamepads, the menu button will already be handled by
-                        // the controllerPausedHandler.
-                        UPDATE_BUTTON_FLAG(limeController, PLAY_FLAG, gamepad.buttonMenu.pressed);
                     }
                 }
                 
@@ -438,8 +507,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 leftStickX = gamepad.leftThumbstick.xAxis.value * 0x7FFE;
                 leftStickY = gamepad.leftThumbstick.yAxis.value * 0x7FFE;
                 
-                rightStickX = gamepad.rightThumbstick.xAxis.value * 0x7FFE;
-                rightStickY = gamepad.rightThumbstick.yAxis.value * 0x7FFE;
+                rightStickX = suppress ? 0 : (gamepad.rightThumbstick.xAxis.value * 0x7FFE);
+                rightStickY = suppress ? 0 : (gamepad.rightThumbstick.yAxis.value * 0x7FFE);
                 
                 leftTrigger = gamepad.leftTrigger.value * 0xFF;
                 rightTrigger = gamepad.rightTrigger.value * 0xFF;
@@ -701,11 +770,16 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     _controllers = [[NSMutableDictionary alloc] init];
     _controllerNumbers = 0;
     _multiController = streamConfig.multiController;
+    _gamepadMouseModeEnabled = streamConfig.gamepadMouseMode;
     _presenceDelegate = delegate;
 
     _debouncers = [[NSMutableDictionary alloc] init];
     _debouncers[@(PLAY_FLAG)] = [[NSMutableDictionary alloc] init];
     _debouncers[@(BACK_FLAG)] = [[NSMutableDictionary alloc] init];
+
+    if (_gamepadMouseModeEnabled) {
+        _mouseTimer = [NSTimer scheduledTimerWithTimeInterval:0.016 target:self selector:@selector(mouseTimerCallback:) userInfo:nil repeats:YES];
+    }
 
     _player0osc = [[Controller alloc] init];
     _player0osc.playerIndex = 0;
@@ -722,15 +796,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         if ([ControllerSupport isSupportedGamepad:controller]) {
             [self assignController:controller];
             [self registerControllerCallbacks:controller];
-
-            if (@available(iOS 13.0, macOS 10.15, *)) {
-                ButtonDebouncer *play = [[ButtonDebouncer alloc] initWithButton:PLAY_FLAG input:controller.extendedGamepad.buttonMenu controllerSupport:self chordButton:SPECIAL_FLAG];
-                ButtonDebouncer *back = [[ButtonDebouncer alloc] initWithButton:BACK_FLAG input:controller.extendedGamepad.buttonOptions controllerSupport:self chordButton:SPECIAL_FLAG];
-                play.other = back;
-                back.other = play;
-                _debouncers[@(PLAY_FLAG)][@(controller.playerIndex)] = play;
-                _debouncers[@(BACK_FLAG)][@(controller.playerIndex)] = back;
-            }
+            [self setupDebouncersForController:[_controllers objectForKey:@(controller.playerIndex)]];
         }
     }
     
@@ -756,6 +822,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         
         // Register callbacks on the new controller
         [self registerControllerCallbacks:controller];
+        
+        [self setupDebouncersForController:[self->_controllers objectForKey:@(controller.playerIndex)]];
         
         // Re-evaluate the on-screen control mode
         [self updateAutoOnScreenControlMode];
@@ -844,6 +912,20 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     return self;
 }
 
+-(void) setupDebouncersForController:(Controller*)controller {
+    if (@available(iOS 13.0, macOS 10.15, *)) {
+        if (controller.gamepad.extendedGamepad == nil) return;
+        
+        ButtonDebouncer *play = [[ButtonDebouncer alloc] initWithButton:PLAY_FLAG input:controller.gamepad.extendedGamepad.buttonMenu controllerSupport:self chordButton:SPECIAL_FLAG];
+        ButtonDebouncer *back = [[ButtonDebouncer alloc] initWithButton:BACK_FLAG input:controller.gamepad.extendedGamepad.buttonOptions controllerSupport:self chordButton:SPECIAL_FLAG];
+        play.other = back;
+        back.other = play;
+        
+        _debouncers[@(PLAY_FLAG)][@(controller.playerIndex)] = play;
+        _debouncers[@(BACK_FLAG)][@(controller.playerIndex)] = back;
+    }
+}
+
 -(void) cleanup
 {
     [[NSNotificationCenter defaultCenter] removeObserver:_controllerConnectObserver];
@@ -884,6 +966,87 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         }
     }
 #endif
+    
+    if (_mouseTimer) {
+        [_mouseTimer invalidate];
+        _mouseTimer = nil;
+    }
+}
+
+-(void) mouseTimerCallback:(NSTimer*)timer {
+    for (Controller* controller in [_controllers allValues]) {
+        if (controller.gamepad == nil) continue;
+        
+        GCController *gcController = controller.gamepad;
+        GCExtendedGamepad *gamepad = gcController.extendedGamepad;
+        
+        // 1. Mouse Mode Toggle Logic: Long Press Start (Menu) for > 1.0s, triggered on RELEASE
+        BOOL startPressed = NO;
+        
+        if (gamepad) {
+            if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
+                startPressed = gamepad.buttonMenu.pressed;
+            }
+        }
+        
+        if (startPressed) {
+            if (controller.startButtonDownTime == nil) {
+                controller.startButtonDownTime = [NSDate date];
+            }
+        } else {
+            // Start released
+            if (controller.startButtonDownTime != nil) {
+                // Check if it was held long enough
+                if ([controller.startButtonDownTime timeIntervalSinceNow] < -1.0) {
+                    // Toggle
+                    controller.isMouseMode = !controller.isMouseMode;
+                    
+                    // Notify delegate
+                    if ([self->_presenceDelegate respondsToSelector:@selector(mouseModeToggled:)]) {
+                        [self->_presenceDelegate mouseModeToggled:controller.isMouseMode];
+                    }
+                    
+                    // Rumble to indicate toggle
+                    [self rumble:controller.playerIndex lowFreqMotor:0xFFFF highFreqMotor:0xFFFF];
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        [self rumble:controller.playerIndex lowFreqMotor:0 highFreqMotor:0];
+                    });
+                }
+                
+                // Reset
+                controller.startButtonDownTime = nil;
+            }
+        }
+        
+        // 2. Mouse Movement Logic
+        if (controller.isMouseMode) {
+            float deltaX = 0;
+            float deltaY = 0;
+            
+            if (gamepad) {
+                deltaX = gamepad.rightThumbstick.xAxis.value;
+                deltaY = gamepad.rightThumbstick.yAxis.value;
+            }
+            
+            // Apply deadzone and sensitivity
+            if (fabs(deltaX) > 0.1 || fabs(deltaY) > 0.1) {
+                // Sensitivity 15.0 per frame (approx 900px/sec at 60Hz)
+                float sensitivity = 15.0;
+                
+                self->_accumulatedMouseX += deltaX * sensitivity;
+                self->_accumulatedMouseY += -deltaY * sensitivity;
+                
+                short truncX = (short)self->_accumulatedMouseX;
+                short truncY = (short)self->_accumulatedMouseY;
+                
+                if (truncX != 0 || truncY != 0) {
+                    LiSendMouseMoveEvent(truncX, truncY);
+                    self->_accumulatedMouseX -= truncX;
+                    self->_accumulatedMouseY -= truncY;
+                }
+            }
+        }
+    }
 }
 
 @end

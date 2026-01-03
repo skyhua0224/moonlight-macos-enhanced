@@ -7,6 +7,7 @@
 //
 
 #import "StreamViewController.h"
+#import <QuartzCore/QuartzCore.h>
 #import "StreamViewMac.h"
 #import "AppsViewController.h"
 #import "NSWindow+Moonlight.h"
@@ -54,6 +55,13 @@
 
 @property (nonatomic, strong) NSVisualEffectView *connectionWarningContainer;
 @property (nonatomic, strong) NSTextField *connectionWarningLabel;
+
+@property (nonatomic, strong) NSVisualEffectView *notificationContainer;
+@property (nonatomic, strong) NSTextField *notificationLabel;
+@property (nonatomic, strong) NSTimer *notificationTimer;
+
+@property (nonatomic, strong) NSVisualEffectView *mouseModeContainer;
+@property (nonatomic, strong) NSTextField *mouseModeLabel;
 
 @end
 
@@ -133,6 +141,8 @@
         }
     }];
     
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleMouseModeToggledNotification:) name:HIDMouseModeToggledNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleGamepadQuitNotification:) name:HIDGamepadQuitNotification object:nil];
 }
 
 - (void)viewDidAppear {
@@ -174,6 +184,8 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidResignKeyNotification];
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyNotification];
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowWillCloseNotification];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:HIDMouseModeToggledNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:HIDGamepadQuitNotification object:nil];
 
     [self.hidSupport tearDownHidManager];
     self.hidSupport = nil;
@@ -182,7 +194,9 @@
 - (void)flagsChanged:(NSEvent *)event {
     [self.hidSupport flagsChanged:event];
     
-    if (event.modifierFlags == 786721) {
+    // Uncapture mouse when Option key is pressed
+    if ((event.keyCode == kVK_Option || event.keyCode == kVK_RightOption) &&
+        (event.modifierFlags & NSEventModifierFlagOption)) {
         [self.hidSupport releaseAllModifierKeys];
         [self uncaptureMouse];
     }
@@ -328,19 +342,21 @@
     [alert addButtonWithTitle:NSLocalizedString(@"Close and Quit App", @"Close and Quit App")];
     [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
 
-    NSModalResponse response = [alert runModal];
-    switch (response) {
-        case NSAlertFirstButtonReturn:
-            [self doCommandBySelector:@selector(performCloseStreamWindow:)];
-            break;
-            
-        case NSAlertSecondButtonReturn:
-            [self doCommandBySelector:@selector(performCloseAndQuitApp:)];
-            break;
+    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+        switch (returnCode) {
+            case NSAlertFirstButtonReturn:
+                [self doCommandBySelector:@selector(performCloseStreamWindow:)];
+                break;
+                
+            case NSAlertSecondButtonReturn:
+                [self doCommandBySelector:@selector(performCloseAndQuitApp:)];
+                break;
 
-        default:
-            break;
-    }
+            default:
+                [self captureMouse];
+                break;
+        }
+    }];
 }
 
 - (IBAction)performCloseStreamWindow:(id)sender {
@@ -616,6 +632,7 @@
     
     streamConfig.enableVsync = [SettingsClass enableVsyncFor:self.app.host.uuid];
     streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
+    streamConfig.gamepadMouseMode = [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
 
     if (self.useSystemControllerDriver) {
         if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
@@ -843,6 +860,11 @@
             self.overlayContainer = nil;
             self.overlayLabel = nil;
         }
+        if (self.mouseModeContainer) {
+            [self.mouseModeContainer removeFromSuperview];
+            self.mouseModeContainer = nil;
+            self.mouseModeLabel = nil;
+        }
         
         if (errorCode == 0 && [SettingsClass quitAppAfterStreamFor:self.app.host.uuid]) {
             [self.delegate quitApp:self.app completion:nil];
@@ -927,6 +949,7 @@
 - (void)viewDidLayout {
     [super viewDidLayout];
     [self layoutConnectionWarning];
+    [self layoutMouseModeIndicator];
 }
 
 - (void)layoutConnectionWarning {
@@ -968,6 +991,164 @@
 }
 
 - (void)mousePresenceChanged {
+}
+
+- (void)mouseModeToggled:(BOOL)enabled {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *message = enabled ? @"🖱️ Mouse Mode On" : @"🎮 Mouse Mode Off";
+        // Localize if possible, but icons help universally
+        if (enabled) {
+             message = [NSString stringWithFormat:@"🖱️ %@", NSLocalizedString(@"Mouse Mode On", @"Notification")];
+             [self showMouseModeIndicator];
+        } else {
+             message = [NSString stringWithFormat:@"🎮 %@", NSLocalizedString(@"Mouse Mode Off", @"Notification")];
+             [self hideMouseModeIndicator];
+        }
+        [self showNotification:message];
+    });
+}
+
+- (void)showMouseModeIndicator {
+    if (self.mouseModeContainer) {
+        return;
+    }
+
+    self.mouseModeContainer = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
+    self.mouseModeContainer.material = NSVisualEffectMaterialHUDWindow;
+    self.mouseModeContainer.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    self.mouseModeContainer.state = NSVisualEffectStateActive;
+    self.mouseModeContainer.wantsLayer = YES;
+    self.mouseModeContainer.layer.cornerRadius = 10.0;
+    self.mouseModeContainer.layer.masksToBounds = YES;
+
+    self.mouseModeLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    self.mouseModeLabel.bezeled = NO;
+    self.mouseModeLabel.drawsBackground = NO;
+    self.mouseModeLabel.editable = NO;
+    self.mouseModeLabel.selectable = NO;
+    self.mouseModeLabel.font = [NSFont systemFontOfSize:24 weight:NSFontWeightRegular]; // Larger font for icon
+    self.mouseModeLabel.textColor = [NSColor whiteColor];
+    self.mouseModeLabel.stringValue = @"🖱️";
+    [self.mouseModeLabel sizeToFit];
+
+    [self.mouseModeContainer addSubview:self.mouseModeLabel];
+    [self.view addSubview:self.mouseModeContainer positioned:NSWindowAbove relativeTo:nil];
+
+    [self layoutMouseModeIndicator];
+    
+    // Fade in animation
+    self.mouseModeContainer.alphaValue = 0.0;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.5;
+        self.mouseModeContainer.animator.alphaValue = 1.0;
+    } completionHandler:nil];
+}
+
+- (void)layoutMouseModeIndicator {
+    if (!self.mouseModeContainer) return;
+    
+    CGFloat padding = 10.0;
+    NSRect labelFrame = self.mouseModeLabel.frame;
+    NSRect containerFrame = NSMakeRect(0, 0, labelFrame.size.width + padding * 2, labelFrame.size.height + padding * 2);
+
+    // Position bottom left to avoid traffic lights
+    CGFloat x = 20;
+    CGFloat y = 20;
+
+    containerFrame.origin = NSMakePoint(x, y);
+    self.mouseModeContainer.frame = containerFrame;
+    self.mouseModeLabel.frame = NSMakeRect(padding, padding, labelFrame.size.width, labelFrame.size.height);
+}
+
+- (void)hideMouseModeIndicator {
+    if (!self.mouseModeContainer) {
+        return;
+    }
+    
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.5;
+        self.mouseModeContainer.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        [self.mouseModeContainer removeFromSuperview];
+        self.mouseModeContainer = nil;
+        self.mouseModeLabel = nil;
+    }];
+}
+
+- (void)handleMouseModeToggledNotification:(NSNotification *)note {
+    BOOL enabled = [note.userInfo[@"enabled"] boolValue];
+    [self mouseModeToggled:enabled];
+}
+
+- (void)handleGamepadQuitNotification:(NSNotification *)note {
+    [self performCloseAndQuitApp:nil];
+}
+
+- (void)showNotification:(NSString *)message {
+    [self.notificationTimer invalidate];
+    if (self.notificationContainer) {
+        [self.notificationContainer removeFromSuperview];
+    }
+
+    self.notificationContainer = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
+    self.notificationContainer.material = NSVisualEffectMaterialHUDWindow;
+    self.notificationContainer.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    self.notificationContainer.state = NSVisualEffectStateActive;
+    self.notificationContainer.wantsLayer = YES;
+    self.notificationContainer.layer.cornerRadius = 10.0;
+    self.notificationContainer.layer.masksToBounds = YES;
+
+    self.notificationLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    self.notificationLabel.bezeled = NO;
+    self.notificationLabel.drawsBackground = NO;
+    self.notificationLabel.editable = NO;
+    self.notificationLabel.selectable = NO;
+    self.notificationLabel.font = [NSFont systemFontOfSize:16 weight:NSFontWeightBold];
+    self.notificationLabel.textColor = [NSColor whiteColor];
+    self.notificationLabel.stringValue = message;
+    [self.notificationLabel sizeToFit];
+
+    [self.notificationContainer addSubview:self.notificationLabel];
+    [self.view addSubview:self.notificationContainer positioned:NSWindowAbove relativeTo:nil];
+
+    CGFloat padding = 15.0;
+    NSRect labelFrame = self.notificationLabel.frame;
+    NSRect containerFrame = NSMakeRect(0, 0, labelFrame.size.width + padding * 2, labelFrame.size.height + padding * 2);
+
+    // Center of screen
+    CGFloat x = (self.view.bounds.size.width - containerFrame.size.width) / 2;
+    CGFloat y = (self.view.bounds.size.height - containerFrame.size.height) / 2;
+
+    containerFrame.origin = NSMakePoint(x, y);
+    self.notificationContainer.frame = containerFrame;
+    self.notificationLabel.frame = NSMakeRect(padding, padding, labelFrame.size.width, labelFrame.size.height);
+
+    // Animation
+    self.notificationContainer.alphaValue = 0.0;
+    self.notificationContainer.layer.transform = CATransform3DMakeScale(0.8, 0.8, 1.0);
+    
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.2;
+        self.notificationContainer.animator.alphaValue = 1.0;
+    } completionHandler:nil];
+
+    CABasicAnimation *scaleAnim = [CABasicAnimation animationWithKeyPath:@"transform"];
+    scaleAnim.fromValue = [NSValue valueWithCATransform3D:CATransform3DMakeScale(0.8, 0.8, 1.0)];
+    scaleAnim.toValue = [NSValue valueWithCATransform3D:CATransform3DIdentity];
+    scaleAnim.duration = 0.2;
+    self.notificationContainer.layer.transform = CATransform3DIdentity;
+    [self.notificationContainer.layer addAnimation:scaleAnim forKey:@"scale"];
+
+    // Auto hide
+    self.notificationTimer = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:NO block:^(NSTimer * _Nonnull timer) {
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+            context.duration = 0.5;
+            self.notificationContainer.animator.alphaValue = 0.0;
+        } completionHandler:^{
+            [self.notificationContainer removeFromSuperview];
+            self.notificationContainer = nil;
+        }];
+    }];
 }
 
 @end

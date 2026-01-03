@@ -34,5 +34,6 @@
 @property(nonatomic, copy) NSData *serverCert;
 @property(nonatomic) int serverCodecModeSupport;
 @property(nonatomic, copy) NSString *sessionUrl;
+@property(nonatomic) BOOL gamepadMouseMode;
 
 @end

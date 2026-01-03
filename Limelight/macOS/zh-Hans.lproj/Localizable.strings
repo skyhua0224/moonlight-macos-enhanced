@@ -22,7 +22,7 @@
 "Video Codec" = "视频编码";
 "HDR" = "HDR";
 "Enable YUV 4:4:4" = "启用 YUV 4:4:4";
-"YUV 4:4:4 hint" = "需要主机端支持。可能增加带宽占用与延迟；不支持时可能无效果或自动回退。";
+"YUV 4:4:4 hint" = "需要主机端支持。可能增加延迟。";
 "Frame Pacing" = "帧率平滑";
 "Lowest Latency" = "最低延迟";
 "Smoothest Video" = "最流畅视频";
@@ -126,3 +126,9 @@
 "Unknown" = "未知";
 
 "Poor Connection" = "⚠️ 连接质量差";
+
+"Gamepad Mouse Emulation (!)" = "手柄模拟鼠标";
+"Gamepad Mouse Hint" = "长按 Start (菜单) 键切换鼠标模式。右摇杆移动，A键点击。";
+
+"Mouse Mode On" = "鼠标模式开启";
+"Mouse Mode Off" = "鼠标模式关闭";

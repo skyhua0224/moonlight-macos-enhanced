@@ -413,6 +413,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var gamepadMouseMode: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
 
   static var resolutions: [CGSize] = [
     matchDisplayResolutionSentinel,
@@ -515,6 +521,7 @@ class SettingsModel: ObservableObject {
   static let defaultSwapMouseButtons = false
   static let defaultReverseScrollDirection = false
   static let defaultTouchscreenMode = 0  // Trackpad
+  static let defaultGamepadMouseMode = false
   static let defaultDimNonHoveredArtwork = true
   static let defaultUnlockMaxBitrate = false
 
@@ -644,9 +651,6 @@ class SettingsModel: ObservableObject {
   }
 
   init() {
-    isLoading = true
-    defer { isLoading = false }
-
     if let hosts = Self.hosts {
       let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile")
       if let selectedProfile,
@@ -721,6 +725,7 @@ class SettingsModel: ObservableObject {
     appArtworkWidth = Self.defaultAppArtworkWidth
     appArtworkHeight = Self.defaultAppArtworkHeight
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
+    gamepadMouseMode = Self.defaultGamepadMouseMode
   }
 
   func loadDefaultSettings() {
@@ -788,6 +793,7 @@ class SettingsModel: ObservableObject {
     appArtworkWidth = Self.defaultAppArtworkWidth
     appArtworkHeight = Self.defaultAppArtworkHeight
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
+    gamepadMouseMode = Self.defaultGamepadMouseMode
   }
 
   func loadAndSaveDefaultSettings() {
@@ -894,6 +900,7 @@ class SettingsModel: ObservableObject {
         settings.reverseScrollDirection ?? Self.defaultReverseScrollDirection
       selectedTouchscreenMode = Self.getString(
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
+      gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
 
       remoteResolutionEnabled = settings.remoteResolution ?? Self.defaultRemoteResolutionEnabled
       if remoteResolutionEnabled,
@@ -1090,7 +1097,8 @@ class SettingsModel: ObservableObject {
       absoluteMouseMode: absoluteMouseMode,
       swapMouseButtons: swapMouseButtons,
       reverseScrollDirection: reverseScrollDirection,
-      touchscreenMode: touchscreenMode
+      touchscreenMode: touchscreenMode,
+      gamepadMouseMode: gamepadMouseMode
     )
 
     if let data = try? PropertyListEncoder().encode(settings) {

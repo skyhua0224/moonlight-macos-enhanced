@@ -368,7 +368,10 @@ struct StreamView: View {
           Divider()
 
           ToggleCell(
-            title: "Remote Resolution", boolBinding: $settingsModel.remoteResolutionEnabled)
+            title: "Remote Resolution",
+            hintKey: "Remote overrides hint",
+            boolBinding: $settingsModel.remoteResolutionEnabled
+          )
 
           if settingsModel.remoteResolutionEnabled {
             Divider()
@@ -406,7 +409,11 @@ struct StreamView: View {
 
           Divider()
 
-          ToggleCell(title: "Remote FPS", boolBinding: $settingsModel.remoteFpsEnabled)
+          ToggleCell(
+            title: "Remote FPS",
+            hintKey: "Remote overrides hint",
+            boolBinding: $settingsModel.remoteFpsEnabled
+          )
 
           if settingsModel.remoteFpsEnabled {
             Divider()
@@ -442,16 +449,6 @@ struct StreamView: View {
                 })
             }
           }
-
-          VStack(alignment: .leading, spacing: 4) {
-            Text(languageManager.localize("Remote overrides apply to the host render mode only."))
-              .font(.footnote)
-              .foregroundColor(.secondary)
-            Text(languageManager.localize("Remote overrides hint"))
-              .font(.footnote)
-              .foregroundColor(.secondary)
-          }
-          .padding(.top, 6)
         }
 
         Spacer()
@@ -808,6 +805,12 @@ struct InputView: View {
           Divider()
 
           ToggleCell(title: "Emulate Guide Button", boolBinding: $settingsModel.emulateGuide)
+
+          Divider()
+
+          ToggleCell(
+            title: "Gamepad Mouse Emulation (!)", hintKey: "Gamepad Mouse Hint",
+            boolBinding: $settingsModel.gamepadMouseMode)
         }
 
         Spacer()

@@ -22,6 +22,9 @@
 
 @import GameController;
 
+NSString *const HIDMouseModeToggledNotification = @"HIDMouseModeToggledNotification";
+NSString *const HIDGamepadQuitNotification = @"HIDGamepadQuitNotification";
+
 struct KeyMapping {
     unsigned short mac;
     short windows;
@@ -437,6 +440,7 @@ typedef enum {
 @property (nonatomic) id mouseDisconnectObserver;
 
 @property (nonatomic) BOOL useGCMouse;
+@property (nonatomic) dispatch_queue_t inputQueue;
 @end
 
 @implementation HIDSupport
@@ -447,6 +451,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     self = [super init];
     if (self) {
         self.host = host;
+        self.inputQueue = dispatch_queue_create("com.moonlight.input", DISPATCH_QUEUE_SERIAL);
         
         [self setupHidManager];
         
@@ -478,7 +483,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         }
         _mappings = [NSDictionary dictionaryWithDictionary:d];
         
-//        [self initializeDisplayLink];
+        [self initializeDisplayLink];
     }
     return self;
 }
@@ -543,7 +548,31 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 
 - (void)sendControllerEvent {
     if (self.shouldSendInputEvents) {
-        LiSendMultiControllerEvent(self.controller.playerIndex, 1, self.controller.lastButtonFlags, self.controller.lastLeftTrigger, self.controller.lastRightTrigger, self.controller.lastLeftStickX, self.controller.lastLeftStickY, self.controller.lastRightStickX, self.controller.lastRightStickY);
+        // Capture state
+        int playerIndex = self.controller.playerIndex;
+        int lastButtonFlags = self.controller.lastButtonFlags;
+        
+        // Guide Button Emulation (Start + Select)
+        // If both Start and Select are pressed, convert to Guide
+        if ((lastButtonFlags & (PLAY_FLAG | BACK_FLAG)) == (PLAY_FLAG | BACK_FLAG)) {
+            lastButtonFlags &= ~(PLAY_FLAG | BACK_FLAG);
+            lastButtonFlags |= SPECIAL_FLAG;
+        }
+        
+        unsigned char lastLeftTrigger = self.controller.lastLeftTrigger;
+        unsigned char lastRightTrigger = self.controller.lastRightTrigger;
+        short lastLeftStickX = self.controller.lastLeftStickX;
+        short lastLeftStickY = self.controller.lastLeftStickY;
+        short lastRightStickX = self.controller.lastRightStickX;
+        short lastRightStickY = self.controller.lastRightStickY;
+        
+        if (self.controller.isMouseMode) {
+            return;
+        }
+
+        dispatch_async(self.inputQueue, ^{
+            LiSendMultiControllerEvent(playerIndex, 1, lastButtonFlags, lastLeftTrigger, lastRightTrigger, lastLeftStickX, lastLeftStickY, lastRightStickX, lastRightStickY);
+        });
     }
 }
 
@@ -569,7 +598,49 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:me.host.uuid];
             int touchscreenMode = [SettingsClass touchscreenModeFor:me.host.uuid];
             if (!absoluteMouse && touchscreenMode != 1) {
-                LiSendMouseMoveEvent(deltaX, deltaY);
+                dispatch_async(me.inputQueue, ^{
+                    LiSendMouseMoveEvent(deltaX, deltaY);
+                });
+            }
+        }
+    }
+    
+    // Mouse Emulation Movement
+    if (me.controller.isMouseMode && me.shouldSendInputEvents) {
+        short rx = me.controller.lastRightStickX;
+        short ry = me.controller.lastRightStickY;
+        short deadzone = 4000;
+        float sensitivity = 15.0f; // Approx match to Qt/ControllerSupport
+        
+        if (abs(rx) > deadzone || abs(ry) > deadzone) {
+            float dx = (float)(abs(rx) > deadzone ? rx : 0) / 32767.0f * sensitivity;
+            float dy = (float)(abs(ry) > deadzone ? ry : 0) / 32767.0f * sensitivity;
+            
+            // Invert Y? Usually stick Y is up=negative or positive depending on driver.
+            // HID usage: Y min is top (-32768), max is bottom (32767).
+            // Mouse move: +Y is down.
+            // So +StickY should be +MouseY.
+            // ControllerSupport uses -dy. Let's try direct map first.
+            // ControllerSupport: dy = -dy * sens.
+            // Let's use -dy for now.
+            
+            short moveX = (short)dx;
+            short moveY = (short)dy; // Try positive first based on HID mapping logic above (MIN(-(val), ...)) inverted already?
+            
+            // Wait, updateButtonFlags logic:
+            // kHIDUsage_GD_Y: self.controller.lastLeftStickY = MIN(-(intValue - 32768), 32767);
+            // It inverts it. So Up is Positive?
+            // Standard XInput: Up is Positive.
+            // Mouse Move: +Y is Down.
+            // So Up (+Stick) -> Up (-Mouse).
+            // So we need to invert Y.
+            
+            moveY = (short)(-dy);
+            
+            if (moveX != 0 || moveY != 0) {
+                dispatch_async(me.inputQueue, ^{
+                    LiSendMouseMoveEvent(moveX, moveY);
+                });
             }
         }
     }
@@ -606,8 +677,12 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     return YES;
 }
 
-- (int)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
-    return LiSendKeyboardEvent(keyCode, event.modifierFlags & modifierFlag ? KEY_ACTION_DOWN : KEY_ACTION_UP, [self translateKeyModifierWithEvent:event]);
+- (void)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
+    char modifiers = [self translateKeyModifierWithEvent:event];
+    char action = event.modifierFlags & modifierFlag ? KEY_ACTION_DOWN : KEY_ACTION_UP;
+    dispatch_async(self.inputQueue, ^{
+        LiSendKeyboardEvent(keyCode, action, modifiers);
+    });
 }
 
 - (void)flagsChanged:(NSEvent *)event {
@@ -649,25 +724,36 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 
 - (void)keyDown:(NSEvent *)event {
     if (self.shouldSendInputEvents) {
-        LiSendKeyboardEvent(0x8000 | [self translateKeyCodeWithEvent:event], KEY_ACTION_DOWN, [self translateKeyModifierWithEvent:event]);
+        short keyCode = 0x8000 | [self translateKeyCodeWithEvent:event];
+        char modifiers = [self translateKeyModifierWithEvent:event];
+        dispatch_async(self.inputQueue, ^{
+            LiSendKeyboardEvent(keyCode, KEY_ACTION_DOWN, modifiers);
+        });
     }
 }
 
 - (void)keyUp:(NSEvent *)event {
     if (self.shouldSendInputEvents) {
-        LiSendKeyboardEvent(0x8000 | [self translateKeyCodeWithEvent:event], KEY_ACTION_UP, [self translateKeyModifierWithEvent:event]);
+        short keyCode = 0x8000 | [self translateKeyCodeWithEvent:event];
+        char modifiers = [self translateKeyModifierWithEvent:event];
+        dispatch_async(self.inputQueue, ^{
+            LiSendKeyboardEvent(keyCode, KEY_ACTION_UP, modifiers);
+        });
     }
 }
 
 - (void)releaseAllModifierKeys {
-    LiSendKeyboardEvent(0x5B, KEY_ACTION_UP, 0);
-    LiSendKeyboardEvent(0x5C, KEY_ACTION_UP, 0);
-    LiSendKeyboardEvent(0xA0, KEY_ACTION_UP, 0);
-    LiSendKeyboardEvent(0xA1, KEY_ACTION_UP, 0);
-    LiSendKeyboardEvent(0xA2, KEY_ACTION_UP, 0);
-    LiSendKeyboardEvent(0xA3, KEY_ACTION_UP, 0);
-    LiSendKeyboardEvent(0xA4, KEY_ACTION_UP, 0);
-    LiSendKeyboardEvent(0xA5, KEY_ACTION_UP, 0);
+    // Send asynchronously to avoid blocking the main thread if the connection is dead
+    dispatch_async(self.inputQueue, ^{
+        LiSendKeyboardEvent(0x5B, KEY_ACTION_UP, 0);
+        LiSendKeyboardEvent(0x5C, KEY_ACTION_UP, 0);
+        LiSendKeyboardEvent(0xA0, KEY_ACTION_UP, 0);
+        LiSendKeyboardEvent(0xA1, KEY_ACTION_UP, 0);
+        LiSendKeyboardEvent(0xA2, KEY_ACTION_UP, 0);
+        LiSendKeyboardEvent(0xA3, KEY_ACTION_UP, 0);
+        LiSendKeyboardEvent(0xA4, KEY_ACTION_UP, 0);
+        LiSendKeyboardEvent(0xA5, KEY_ACTION_UP, 0);
+    });
 }
 
 - (void)mouseDown:(NSEvent *)event withButton:(int)button {
@@ -1808,10 +1894,70 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 
 
 - (void)updateButtonFlags:(int)flag state:(BOOL)set {
+    // Mouse Mode Toggle Logic (Long Press Start)
+    if (flag == PLAY_FLAG) {
+        if (set) {
+            if (self.controller.startButtonDownTime == nil) {
+                self.controller.startButtonDownTime = [NSDate date];
+            }
+        } else {
+            // Released
+            if (self.controller.startButtonDownTime != nil) {
+                if ([self.controller.startButtonDownTime timeIntervalSinceNow] < -1.0) {
+                    // Toggle
+                    self.controller.isMouseMode = !self.controller.isMouseMode;
+                    
+                    // Notify UI
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [[NSNotificationCenter defaultCenter] postNotificationName:HIDMouseModeToggledNotification object:nil userInfo:@{@"enabled": @(self.controller.isMouseMode)}];
+                    });
+                    
+                    // Rumble
+                    [self rumbleLowFreqMotor:0xFFFF highFreqMotor:0xFFFF];
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        [self rumbleLowFreqMotor:0 highFreqMotor:0];
+                    });
+                }
+                self.controller.startButtonDownTime = nil;
+            }
+        }
+    }
+    
+    // Mouse Click Logic
+    if (self.controller.isMouseMode) {
+        if (flag == A_FLAG) {
+            // Left Click
+            if (set) {
+                 dispatch_async(self.inputQueue, ^{ LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT); });
+            } else {
+                 dispatch_async(self.inputQueue, ^{ LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT); });
+            }
+            return; // Don't set flag
+        }
+        if (flag == B_FLAG) {
+            // Right Click
+            if (set) {
+                 dispatch_async(self.inputQueue, ^{ LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_RIGHT); });
+            } else {
+                 dispatch_async(self.inputQueue, ^{ LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_RIGHT); });
+            }
+            return; // Don't set flag
+        }
+    }
+
     if (set) {
         self.controller.lastButtonFlags |= flag;
     } else {
         self.controller.lastButtonFlags &= ~flag;
+    }
+    
+    // Gamepad Quit Combo (Start + Select + LB + RB)
+    int quitCombo = PLAY_FLAG | BACK_FLAG | LB_FLAG | RB_FLAG;
+    if ((self.controller.lastButtonFlags & quitCombo) == quitCombo) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:HIDGamepadQuitNotification object:nil];
+        });
+        self.controller.lastButtonFlags = 0;
     }
 }
 

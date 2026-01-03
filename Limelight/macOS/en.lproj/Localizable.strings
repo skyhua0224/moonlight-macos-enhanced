@@ -22,7 +22,7 @@
 "Video Codec" = "Video Codec";
 "HDR" = "HDR";
 "Enable YUV 4:4:4" = "Enable YUV 4:4:4";
-"YUV 4:4:4 hint" = "Requires host support. May increase bandwidth and latency. If unsupported, it may be ignored or fall back.";
+"YUV 4:4:4 hint" = "Requires host support. May increase latency.";
 "Frame Pacing" = "Frame Pacing";
 "Lowest Latency" = "Lowest Latency";
 "Smoothest Video" = "Smoothest Video";
@@ -126,3 +126,9 @@
 "Unknown" = "Unknown";
 
 "Poor Connection" = "⚠️ Poor Connection";
+
+"Gamepad Mouse Emulation (!)" = "Gamepad Mouse Emulation";
+"Gamepad Mouse Hint" = "Long press Start (Menu) to toggle mouse mode. Right Stick to move, A to click.";
+
+"Mouse Mode On" = "Mouse Mode On";
+"Mouse Mode Off" = "Mouse Mode Off";
