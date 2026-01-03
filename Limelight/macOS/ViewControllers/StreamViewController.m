@@ -52,6 +52,9 @@
 @property (nonatomic, strong) NSTextField *overlayLabel;
 @property (nonatomic, strong) NSTimer *statsTimer;
 
+@property (nonatomic, strong) NSVisualEffectView *connectionWarningContainer;
+@property (nonatomic, strong) NSTextField *connectionWarningLabel;
+
 @end
 
 @implementation StreamViewController
@@ -871,7 +874,92 @@
 }
 
 - (void)connectionStatusUpdate:(int)status {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (status == CONN_STATUS_POOR) {
+            if ([SettingsClass showConnectionWarningsFor:self.app.host.uuid]) {
+                [self showConnectionWarning];
+            }
+        } else if (status == CONN_STATUS_OKAY) {
+            [self hideConnectionWarning];
+        }
+    });
 }
+
+- (void)showConnectionWarning {
+    if (self.connectionWarningContainer) {
+        return;
+    }
+
+    self.connectionWarningContainer = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
+    self.connectionWarningContainer.material = NSVisualEffectMaterialHUDWindow;
+    self.connectionWarningContainer.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    self.connectionWarningContainer.state = NSVisualEffectStateActive;
+    self.connectionWarningContainer.wantsLayer = YES;
+    self.connectionWarningContainer.layer.cornerRadius = 10.0;
+    self.connectionWarningContainer.layer.masksToBounds = YES;
+
+    self.connectionWarningLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    self.connectionWarningLabel.bezeled = NO;
+    self.connectionWarningLabel.drawsBackground = NO;
+    self.connectionWarningLabel.editable = NO;
+    self.connectionWarningLabel.selectable = NO;
+    self.connectionWarningLabel.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
+    self.connectionWarningLabel.textColor = [NSColor whiteColor];
+    
+    // Use a warning symbol if possible, or just text
+    NSString *warningText = NSLocalizedString(@"Poor Connection", @"Connection warning overlay");
+    self.connectionWarningLabel.stringValue = warningText;
+    [self.connectionWarningLabel sizeToFit];
+
+    [self.connectionWarningContainer addSubview:self.connectionWarningLabel];
+    [self.view addSubview:self.connectionWarningContainer positioned:NSWindowAbove relativeTo:nil];
+
+    [self layoutConnectionWarning];
+    
+    // Fade in animation
+    self.connectionWarningContainer.alphaValue = 0.0;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.5;
+        self.connectionWarningContainer.animator.alphaValue = 1.0;
+    } completionHandler:nil];
+}
+
+- (void)viewDidLayout {
+    [super viewDidLayout];
+    [self layoutConnectionWarning];
+}
+
+- (void)layoutConnectionWarning {
+    if (!self.connectionWarningContainer) return;
+    
+    CGFloat padding = 10.0;
+    NSRect labelFrame = self.connectionWarningLabel.frame;
+    NSRect containerFrame = NSMakeRect(0, 0, labelFrame.size.width + padding * 2, labelFrame.size.height + padding * 2);
+
+    // Position top right
+    CGFloat x = self.view.bounds.size.width - containerFrame.size.width - 20;
+    CGFloat y = self.view.bounds.size.height - containerFrame.size.height - 20;
+
+    containerFrame.origin = NSMakePoint(x, y);
+    self.connectionWarningContainer.frame = containerFrame;
+    self.connectionWarningLabel.frame = NSMakeRect(padding, padding, labelFrame.size.width, labelFrame.size.height);
+}
+
+- (void)hideConnectionWarning {
+    if (!self.connectionWarningContainer) {
+        return;
+    }
+    
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.5;
+        self.connectionWarningContainer.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        [self.connectionWarningContainer removeFromSuperview];
+        self.connectionWarningContainer = nil;
+        self.connectionWarningLabel = nil;
+    }];
+}
+
 
 
 #pragma mark - InputPresenceDelegate
