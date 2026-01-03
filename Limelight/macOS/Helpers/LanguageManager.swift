@@ -57,6 +57,10 @@ class LanguageManager: ObservableObject {
 
     "Video": "Video",
     "Video Codec": "Video Codec",
+    "Upscaling": "Upscaling",
+    "Off": "Off",
+    "MetalFX Spatial (Quality)": "MetalFX Spatial (Quality)",
+    "MetalFX Spatial (Performance)": "MetalFX Spatial (Performance)",
     "HDR": "HDR",
     "Frame Pacing": "Frame Pacing",
     "Lowest Latency": "Lowest Latency",
@@ -117,6 +121,10 @@ class LanguageManager: ObservableObject {
 
     "Video": "视频",
     "Video Codec": "视频编码",
+    "Upscaling": "画质增强 (Upscaling)",
+    "Off": "关闭",
+    "MetalFX Spatial (Quality)": "MetalFX 空间缩放 (画质优先)",
+    "MetalFX Spatial (Performance)": "MetalFX 空间缩放 (性能优先)",
     "HDR": "HDR",
     "Frame Pacing": "帧率平滑",
     "Lowest Latency": "最低延迟",

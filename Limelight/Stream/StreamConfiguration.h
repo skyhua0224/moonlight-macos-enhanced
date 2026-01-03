@@ -35,5 +35,6 @@
 @property(nonatomic) int serverCodecModeSupport;
 @property(nonatomic, copy) NSString *sessionUrl;
 @property(nonatomic) BOOL gamepadMouseMode;
+@property(nonatomic) int upscalingMode;
 
 @end

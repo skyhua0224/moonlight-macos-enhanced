@@ -68,6 +68,7 @@ struct Settings: Encodable, Decodable {
   let reverseScrollDirection: Bool?
   let touchscreenMode: Int?
   let gamepadMouseMode: Bool?
+  let upscalingMode: Int?
 
   private static func globalProfileKey() -> String {
     SettingsClass.profileKey(for: SettingsModel.globalHostId)
@@ -147,6 +148,7 @@ class SettingsClass: NSObject {
         "reverseScrollDirection": settings.reverseScrollDirection,
         "gamepadMouseMode": settings.gamepadMouseMode,
         "touchscreenMode": settings.touchscreenMode,
+        "upscalingMode": settings.upscalingMode,
       ]
 
       return objcSettings
@@ -375,5 +377,12 @@ class SettingsClass: NSObject {
       return settings.gamepadMouseMode ?? SettingsModel.defaultGamepadMouseMode
     }
     return SettingsModel.defaultGamepadMouseMode
+  }
+
+  @objc static func upscalingMode(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.upscalingMode ?? SettingsModel.defaultUpscalingMode
+    }
+    return SettingsModel.defaultUpscalingMode
   }
 }

@@ -63,6 +63,10 @@
 @property (nonatomic, strong) NSVisualEffectView *mouseModeContainer;
 @property (nonatomic, strong) NSTextField *mouseModeLabel;
 
+@property (nonatomic) BOOL disconnectWasUserInitiated;
+@property (nonatomic) uint64_t suppressConnectionWarningsUntilMs;
+@property (nonatomic) BOOL isMouseCaptured;
+
 @end
 
 @implementation StreamViewController
@@ -77,6 +81,9 @@
     [super viewDidLoad];
     
     self.cursorHiddenCounter = 0;
+    self.isMouseCaptured = NO;
+    self.disconnectWasUserInitiated = NO;
+    self.suppressConnectionWarningsUntilMs = 0;
     
     [self prepareForStreaming];
     
@@ -128,14 +135,21 @@
     
     self.windowWillCloseNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowWillCloseNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            [weakSelf markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:@"window-will-close"]; 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                if (weakSelf.useSystemControllerDriver) {
-                    [weakSelf.controllerSupport cleanup];
-                }
                 // Stopping the stream can block while common-c tears down sockets/ENet.
-                // Do it off the main thread so window close doesn't feel like a hang.
+                // Do cleanup/stop off the main thread so window close doesn't feel like a hang.
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    double start = CACurrentMediaTime();
+                    if (weakSelf.useSystemControllerDriver) {
+                        double cleanupStart = CACurrentMediaTime();
+                        [weakSelf.controllerSupport cleanup];
+                        Log(LOG_I, @"Controller cleanup took %.3fs", CACurrentMediaTime() - cleanupStart);
+                    }
+
+                    double stopStart = CACurrentMediaTime();
                     [weakSelf.streamMan stopStream];
+                    Log(LOG_I, @"Stream stop took %.3fs (total %.3fs)", CACurrentMediaTime() - stopStart, CACurrentMediaTime() - start);
                 });
             });
         }
@@ -198,6 +212,8 @@
     if ((event.keyCode == kVK_Option || event.keyCode == kVK_RightOption) &&
         (event.modifierFlags & NSEventModifierFlagOption)) {
         [self.hidSupport releaseAllModifierKeys];
+        // User is intentionally detaching local input/cursor; suppress transient connection warnings.
+        [self suppressConnectionWarningsForSeconds:2.0 reason:@"option-uncapture"]; 
         [self uncaptureMouse];
     }
 }
@@ -361,10 +377,12 @@
 
 - (IBAction)performCloseStreamWindow:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
+    [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:@"disconnect-from-stream"]; 
     [self.nextResponder doCommandBySelector:@selector(performClose:)];
 }
 
 - (IBAction)performCloseAndQuitApp:(id)sender {
+    [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:@"close-and-quit"]; 
     [self.delegate quitApp:self.app completion:nil];
 }
 
@@ -385,6 +403,10 @@
 }
 
 - (void)captureMouse {
+    if (self.isMouseCaptured) {
+        return;
+    }
+
     NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
     BOOL showLocalCursor = prefs ? [prefs[@"showLocalCursor"] boolValue] : NO;
 
@@ -411,9 +433,15 @@
     self.hidSupport.shouldSendInputEvents = YES;
     self.controllerSupport.shouldSendInputEvents = YES;
     self.view.window.acceptsMouseMovedEvents = YES;
+
+    self.isMouseCaptured = YES;
 }
 
 - (void)uncaptureMouse {
+    if (!self.isMouseCaptured && self.cursorHiddenCounter == 0 && !self.hidSupport.shouldSendInputEvents) {
+        return;
+    }
+
     NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
     BOOL showLocalCursor = prefs ? [prefs[@"showLocalCursor"] boolValue] : NO;
 
@@ -432,6 +460,27 @@
     self.hidSupport.shouldSendInputEvents = NO;
     self.controllerSupport.shouldSendInputEvents = NO;
     self.view.window.acceptsMouseMovedEvents = NO;
+
+    self.isMouseCaptured = NO;
+}
+
+- (uint64_t)nowMs {
+    return (uint64_t)(CACurrentMediaTime() * 1000.0);
+}
+
+- (void)suppressConnectionWarningsForSeconds:(double)seconds reason:(NSString *)reason {
+    uint64_t now = [self nowMs];
+    uint64_t until = now + (uint64_t)(seconds * 1000.0);
+    if (until > self.suppressConnectionWarningsUntilMs) {
+        self.suppressConnectionWarningsUntilMs = until;
+    }
+    Log(LOG_I, @"Suppressing connection warnings for %.2fs (%@)", seconds, reason);
+    [self hideConnectionWarning];
+}
+
+- (void)markUserInitiatedDisconnectAndSuppressWarningsForSeconds:(double)seconds reason:(NSString *)reason {
+    self.disconnectWasUserInitiated = YES;
+    [self suppressConnectionWarningsForSeconds:seconds reason:reason];
 }
 
 - (BOOL)isWindowInCurrentSpace {
@@ -633,8 +682,10 @@
     streamConfig.enableVsync = [SettingsClass enableVsyncFor:self.app.host.uuid];
     streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
     streamConfig.gamepadMouseMode = [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
+    streamConfig.upscalingMode = [SettingsClass upscalingModeFor:self.app.host.uuid];
 
     if (self.useSystemControllerDriver) {
+
         if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
             self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig presenceDelegate:self];
         }
@@ -898,6 +949,12 @@
 - (void)connectionStatusUpdate:(int)status {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (status == CONN_STATUS_POOR) {
+            uint64_t now = [self nowMs];
+            if (self.disconnectWasUserInitiated || now < self.suppressConnectionWarningsUntilMs) {
+                // Avoid showing a misleading warning during intentional teardown/detach.
+                [self hideConnectionWarning];
+                return;
+            }
             if ([SettingsClass showConnectionWarningsFor:self.app.host.uuid]) {
                 [self showConnectionWarning];
             }
@@ -1081,6 +1138,7 @@
 }
 
 - (void)handleGamepadQuitNotification:(NSNotification *)note {
+    [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:@"gamepad-quit"]; 
     [self performCloseAndQuitApp:nil];
 }
 
