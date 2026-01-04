@@ -73,7 +73,7 @@ static NSString *const kMetalShaderSource = @"#include <metal_stdlib>\n"
     id<MTLDevice> _device;
     id<MTLCommandQueue> _commandQueue;
     CVMetalTextureCacheRef _textureCache;
-    id<MTLFXSpatialScaler> _spatialScaler;
+    id _spatialScaler;
     id<MTLTexture> _upscaledTexture;
     id<MTLComputePipelineState> _computePipelineState;
     
@@ -94,6 +94,11 @@ static NSString *const kMetalShaderSource = @"#include <metal_stdlib>\n"
     int _upscalingMode;
     VTDecompressionSessionRef _decompressionSession;
     CVImageBufferRef _currentFrame;
+
+    // Stats helpers
+    uint64_t _lastFrameReceiveTimeMs;
+    unsigned int _lastFramePresentationTimeMs;
+    float _jitterMsEstimate;
 }
 
 @synthesize videoFormat;
@@ -161,6 +166,10 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     memset(&_activeWndVideoStats, 0, sizeof(_activeWndVideoStats));
     _lastFrameNumber = 0;
     _videoStats = (VideoStats){0};
+
+    _lastFrameReceiveTimeMs = 0;
+    _lastFramePresentationTimeMs = 0;
+    _jitterMsEstimate = 0;
     
     if (_currentFrame) {
         CVBufferRelease(_currentFrame);
@@ -337,69 +346,84 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
 
             if (canUseMetalFX) {
 #if ML_HAS_METALFX
-                // Lazy init spatial scaler
-                if (!_spatialScaler) {
-                    MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
-                    scalerDesc.inputWidth = width;
-                    scalerDesc.inputHeight = height;
-                    scalerDesc.outputWidth = drawableTexture.width;
-                    scalerDesc.outputHeight = drawableTexture.height;
-                    scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
-                    scalerDesc.outputTextureFormat = view.colorPixelFormat;
-                    scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
+                if (@available(macOS 13.0, *)) {
+                    // Lazy init spatial scaler
+                    if (!_spatialScaler) {
+                        MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
+                        scalerDesc.inputWidth = width;
+                        scalerDesc.inputHeight = height;
+                        scalerDesc.outputWidth = drawableTexture.width;
+                        scalerDesc.outputHeight = drawableTexture.height;
+                        scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
+                        scalerDesc.outputTextureFormat = view.colorPixelFormat;
+                        scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
 
-                    _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
-                }
-
-                // Handle resize (recreate scaler)
-                if (_spatialScaler
-                    && (_spatialScaler.inputWidth != width || _spatialScaler.inputHeight != height
-                        || _spatialScaler.outputWidth != drawableTexture.width || _spatialScaler.outputHeight != drawableTexture.height)) {
-                    _spatialScaler = nil;
-                }
-                if (!_spatialScaler) {
-                    MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
-                    scalerDesc.inputWidth = width;
-                    scalerDesc.inputHeight = height;
-                    scalerDesc.outputWidth = drawableTexture.width;
-                    scalerDesc.outputHeight = drawableTexture.height;
-                    scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
-                    scalerDesc.outputTextureFormat = view.colorPixelFormat;
-                    scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
-                    _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
-                }
-
-                if (_spatialScaler) {
-                    id<MTLTexture> targetTexture = drawableTexture;
-
-                    // MetalFX requires the output texture to be in private storage mode.
-                    if (drawableTexture.storageMode != MTLStorageModePrivate) {
-                        if (!_upscaledTexture || _upscaledTexture.width != drawableTexture.width
-                            || _upscaledTexture.height != drawableTexture.height
-                            || _upscaledTexture.pixelFormat != drawableTexture.pixelFormat) {
-                            MTLTextureDescriptor *upscaledDesc =
-                                [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:drawableTexture.pixelFormat
-                                                                                      width:drawableTexture.width
-                                                                                     height:drawableTexture.height
-                                                                                  mipmapped:NO];
-                            upscaledDesc.storageMode = MTLStorageModePrivate;
-                            upscaledDesc.usage = MTLTextureUsageShaderWrite | MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
-                            _upscaledTexture = [_device newTextureWithDescriptor:upscaledDesc];
-                        }
-                        targetTexture = _upscaledTexture;
+                        _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
                     }
 
-                    _spatialScaler.colorTexture = intermediateTexture;
-                    _spatialScaler.outputTexture = targetTexture;
-                    [_spatialScaler encodeToCommandBuffer:commandBuffer];
+                    // Handle resize (recreate scaler)
+                    if (_spatialScaler
+                        && ([_spatialScaler inputWidth] != width || [_spatialScaler inputHeight] != height
+                            || [_spatialScaler outputWidth] != drawableTexture.width || [_spatialScaler outputHeight] != drawableTexture.height)) {
+                        _spatialScaler = nil;
+                    }
+                    if (!_spatialScaler) {
+                        MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
+                        scalerDesc.inputWidth = width;
+                        scalerDesc.inputHeight = height;
+                        scalerDesc.outputWidth = drawableTexture.width;
+                        scalerDesc.outputHeight = drawableTexture.height;
+                        scalerDesc.colorTextureFormat = MTLPixelFormatBGRA8Unorm;
+                        scalerDesc.outputTextureFormat = view.colorPixelFormat;
+                        scalerDesc.colorProcessingMode = MTLFXSpatialScalerColorProcessingModePerceptual;
+                        _spatialScaler = [scalerDesc newSpatialScalerWithDevice:_device];
+                    }
 
-                    if (targetTexture != drawableTexture) {
+                    if (_spatialScaler) {
+                        id<MTLTexture> targetTexture = drawableTexture;
+
+                        // MetalFX requires the output texture to be in private storage mode.
+                        if (drawableTexture.storageMode != MTLStorageModePrivate) {
+                            if (!_upscaledTexture || _upscaledTexture.width != drawableTexture.width
+                                || _upscaledTexture.height != drawableTexture.height
+                                || _upscaledTexture.pixelFormat != drawableTexture.pixelFormat) {
+                                MTLTextureDescriptor *upscaledDesc =
+                                    [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:drawableTexture.pixelFormat
+                                                                                          width:drawableTexture.width
+                                                                                         height:drawableTexture.height
+                                                                                      mipmapped:NO];
+                                upscaledDesc.storageMode = MTLStorageModePrivate;
+                                upscaledDesc.usage = MTLTextureUsageShaderWrite | MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+                                _upscaledTexture = [_device newTextureWithDescriptor:upscaledDesc];
+                            }
+                            targetTexture = _upscaledTexture;
+                        }
+
+                        [_spatialScaler setColorTexture:intermediateTexture];
+                        [_spatialScaler setOutputTexture:targetTexture];
+                        [_spatialScaler encodeToCommandBuffer:commandBuffer];
+
+                        if (targetTexture != drawableTexture) {
+                            id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+                            [blit copyFromTexture:targetTexture
+                                     sourceSlice:0
+                                     sourceLevel:0
+                                    sourceOrigin:MTLOriginMake(0, 0, 0)
+                                      sourceSize:MTLSizeMake(targetTexture.width, targetTexture.height, 1)
+                                       toTexture:drawableTexture
+                                destinationSlice:0
+                                destinationLevel:0
+                               destinationOrigin:MTLOriginMake(0, 0, 0)];
+                            [blit endEncoding];
+                        }
+                    } else {
+                        // Scaler creation failed; fall back.
                         id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
-                        [blit copyFromTexture:targetTexture
+                        [blit copyFromTexture:intermediateTexture
                                  sourceSlice:0
                                  sourceLevel:0
                                 sourceOrigin:MTLOriginMake(0, 0, 0)
-                                  sourceSize:MTLSizeMake(targetTexture.width, targetTexture.height, 1)
+                                  sourceSize:MTLSizeMake(width, height, 1)
                                    toTexture:drawableTexture
                             destinationSlice:0
                             destinationLevel:0
@@ -407,7 +431,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
                         [blit endEncoding];
                     }
                 } else {
-                    // Scaler creation failed; fall back.
+                    // Fallback for older macOS versions
                     id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
                     [blit copyFromTexture:intermediateTexture
                              sourceSlice:0
@@ -491,6 +515,12 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     PDECODE_UNIT du;
     
     while (LiPollNextVideoFrame(&handle, &du)) {
+        // Cache fields before LiCompleteVideoFrame() frees the decode unit.
+        const uint64_t enqueueTimeMs = du->enqueueTimeMs;
+        const uint64_t receiveTimeMs = du->receiveTimeMs;
+        const unsigned int presentationTimeMs = du->presentationTimeMs;
+        const int fullLengthBytes = du->fullLength;
+
         if (!self->_lastFrameNumber) {
             self->_activeWndVideoStats.measurementStartTimestamp = LiGetMillis();
             self->_lastFrameNumber = du->frameNumber;
@@ -506,6 +536,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             self->_activeWndVideoStats.receivedFps = (float)self->_activeWndVideoStats.receivedFrames;
             self->_activeWndVideoStats.decodedFps = (float)self->_activeWndVideoStats.decodedFrames;
             self->_activeWndVideoStats.renderedFps = (float)self->_activeWndVideoStats.renderedFrames;
+
+            self->_activeWndVideoStats.jitterMs = self->_jitterMsEstimate;
             
             self->_videoStats = self->_activeWndVideoStats;
             
@@ -515,6 +547,21 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         
         self->_activeWndVideoStats.receivedFrames++;
         self->_activeWndVideoStats.totalFrames++;
+
+        if (fullLengthBytes > 0) {
+            self->_activeWndVideoStats.receivedBytes += (uint64_t)fullLengthBytes;
+        }
+
+        // RFC3550-style jitter estimate using frame timing deltas.
+        if (self->_lastFrameReceiveTimeMs != 0 && self->_lastFramePresentationTimeMs != 0) {
+            int64_t arrivalDelta = (int64_t)(receiveTimeMs - self->_lastFrameReceiveTimeMs);
+            int64_t nominalDelta = (int64_t)((int64_t)presentationTimeMs - (int64_t)self->_lastFramePresentationTimeMs);
+            int64_t d = arrivalDelta - nominalDelta;
+            if (d < 0) d = -d;
+            self->_jitterMsEstimate += ((float)d - self->_jitterMsEstimate) / 16.0f;
+        }
+        self->_lastFrameReceiveTimeMs = receiveTimeMs;
+        self->_lastFramePresentationTimeMs = presentationTimeMs;
         
         if (du->frameHostProcessingLatency != 0) {
             self->_activeWndVideoStats.totalHostProcessingLatency += du->frameHostProcessingLatency;
@@ -529,7 +576,10 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             self->_activeWndVideoStats.decodedFrames++;
             self->_activeWndVideoStats.renderedFrames++;
             self->_activeWndVideoStats.totalDecodeTime += LiGetMillis() - decodeStart;
-            self->_activeWndVideoStats.totalRenderTime += LiGetMillis() - du->enqueueTimeMs;
+            // Queue delay (assemble->now). Not actual GPU present time.
+            if (enqueueTimeMs != 0) {
+                self->_activeWndVideoStats.totalRenderTime += LiGetMillis() - enqueueTimeMs;
+            }
         }
         
         // Calculate the actual display refresh rate

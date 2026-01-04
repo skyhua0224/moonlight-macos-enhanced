@@ -151,7 +151,7 @@ class SettingsClass: NSObject {
         "upscalingMode": settings.upscalingMode,
       ]
 
-      return objcSettings
+      return objcSettings.compactMapValues { $0 }
     }
 
     return nil

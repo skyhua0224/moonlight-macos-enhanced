@@ -441,6 +441,8 @@ typedef enum {
 
 @property (nonatomic) BOOL useGCMouse;
 @property (nonatomic) dispatch_queue_t inputQueue;
+
+- (int)switchActuallyRumbleJoystick:(IOHIDDeviceRef)device low_frequency_rumble:(UInt16)low_frequency_rumble high_frequency_rumble:(UInt16)high_frequency_rumble;
 @end
 
 @implementation HIDSupport
@@ -596,7 +598,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         me.mouseDeltaY = 0;
         if (me.shouldSendInputEvents) {
             BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:me.host.uuid];
-            int touchscreenMode = [SettingsClass touchscreenModeFor:me.host.uuid];
+            NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:me.host.uuid];
             if (!absoluteMouse && touchscreenMode != 1) {
                 dispatch_async(me.inputQueue, ^{
                     LiSendMouseMoveEvent(deltaX, deltaY);
@@ -799,7 +801,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     
     if (self.shouldSendInputEvents) {
         BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:self.host.uuid];
-        int touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
+        NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
         
         if (absoluteMouse || touchscreenMode == 1) {
             NSPoint loc = [event locationInWindow];
@@ -1498,10 +1500,10 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
                         self.controller.lastRightStickY = MAX(MIN(-(intValue - 32768), 32767), -32768);
                         break;
                     case kHIDUsage_GD_Z:
-                        self.controller.lastLeftTrigger = (unsigned char)(intValue / 4);
+                        self.controller.lastLeftTrigger = (unsigned char)((int)intValue / 4);
                         break;
                     case kHIDUsage_GD_Rz:
-                        self.controller.lastRightTrigger = (unsigned char)(intValue / 4);
+                        self.controller.lastRightTrigger = (unsigned char)((int)intValue / 4);
                         break;
                         
                     case kHIDUsage_GD_Hatswitch:
@@ -1780,13 +1782,13 @@ void myHIDReportCallback (
                 
                 [self handleDpad:packet->ucStickHat];
 
-                axis = packet->sJoystickLeft[0] - INT_MAX;
+                axis = (short)(packet->sJoystickLeft[0] - INT_MAX);
                 self.controller.lastLeftStickX = axis;
-                axis = packet->sJoystickLeft[1] - INT_MAX;
+                axis = (short)(packet->sJoystickLeft[1] - INT_MAX);
                 self.controller.lastLeftStickY = axis;
-                axis = packet->sJoystickRight[0] - INT_MAX;
+                axis = (short)(packet->sJoystickRight[0] - INT_MAX);
                 self.controller.lastRightStickX = axis;
-                axis = packet->sJoystickRight[1] - INT_MAX;
+                axis = (short)(packet->sJoystickRight[1] - INT_MAX);
                 self.controller.lastRightStickY = axis;
                 
                 if (self.controllerDriver == 0) {

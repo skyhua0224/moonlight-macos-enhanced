@@ -10,13 +10,13 @@
 		4C38E7F91FEE085B000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
 		4C38E7FC1FEE0875000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
 		4C38E8011FEE08AA000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
-		A4B1C1002D9F0A1B00C0FF04 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */; };
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		A42858422D5065B800E39078 /* OpenSSL in Frameworks */ = {isa = PBXBuildFile; productRef = A42858412D5065B800E39078 /* OpenSSL */; };
 		A42858472D5066A000E39078 /* FFmpeg.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858432D5066A000E39078 /* FFmpeg.xcframework */; };
 		A42858482D5066A000E39078 /* Opus.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858442D5066A000E39078 /* Opus.xcframework */; };
 		A42858492D50682400E39078 /* SDL2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858452D5066A000E39078 /* SDL2.xcframework */; };
 		A428584A2D50682400E39078 /* SDL2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A42858452D5066A000E39078 /* SDL2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A4B1C1002D9F0A1B00C0FF04 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,12 +54,12 @@
 		4C2556A121F56F280009838E /* Moonlight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Moonlight.entitlements; sourceTree = "<group>"; };
 		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CD17E9B2733C0FC004D438C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		A4B1C1002D9F0A1B00C0FF02 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Limelight/macOS/en.lproj/Localizable.strings; sourceTree = "<group>"; };
-		A4B1C1002D9F0A1B00C0FF03 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "Limelight/macOS/zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
 		A42858432D5066A000E39078 /* FFmpeg.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:KHSNQKXT55:Martin Kenny"; lastKnownFileType = wrapper.xcframework; name = FFmpeg.xcframework; path = xcframeworks/FFmpeg.xcframework; sourceTree = "<group>"; };
 		A42858442D5066A000E39078 /* Opus.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:KHSNQKXT55:Martin Kenny"; lastKnownFileType = wrapper.xcframework; name = Opus.xcframework; path = xcframeworks/Opus.xcframework; sourceTree = "<group>"; };
 		A42858452D5066A000E39078 /* SDL2.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:KHSNQKXT55:Martin Kenny"; lastKnownFileType = wrapper.xcframework; name = SDL2.xcframework; path = xcframeworks/SDL2.xcframework; sourceTree = "<group>"; };
+		A4B1C1002D9F0A1B00C0FF02 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Limelight/macOS/en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A4B1C1002D9F0A1B00C0FF03 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "Limelight/macOS/zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -241,7 +241,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 0730;
-				LastUpgradeCheck = 1510;
+				LastUpgradeCheck = 2600;
 				ORGANIZATIONNAME = "Moonlight Game Streaming Project";
 				TargetAttributes = {
 					4C7E0A791FECBFFD00684411 = {
@@ -305,18 +305,6 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXVariantGroup section */
-		A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */ = {
-			isa = PBXVariantGroup;
-			children = (
-				A4B1C1002D9F0A1B00C0FF02 /* en */,
-				A4B1C1002D9F0A1B00C0FF03 /* zh-Hans */,
-			);
-			name = Localizable.strings;
-			sourceTree = "<group>";
-		};
-/* End PBXVariantGroup section */
-
 /* Begin PBXSourcesBuildPhase section */
 		4C7E0A761FECBFFD00684411 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -337,6 +325,18 @@
 			targetProxy = 4C38E82F1FF0C726000425CD /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A4B1C1002D9F0A1B00C0FF02 /* en */,
+				A4B1C1002D9F0A1B00C0FF03 /* zh-Hans */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		4C7E0A8B1FECBFFD00684411 /* Debug */ = {
@@ -362,8 +362,12 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 4439TAX9XJ;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_USB = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Limelight/macOS/Supporting Files/Limelight-Prefix.pch";
@@ -376,7 +380,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.1.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				OTHER_LDFLAGS = (
@@ -416,8 +420,12 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 4439TAX9XJ;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_USB = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Limelight/macOS/Supporting Files/Limelight-Prefix.pch";
@@ -430,7 +438,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_LDFLAGS = (
@@ -449,6 +457,7 @@
 		FB290D1E19B2C406004C83CF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -476,8 +485,10 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 4439TAX9XJ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -490,9 +501,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -501,6 +513,7 @@
 		FB290D1F19B2C406004C83CF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -528,8 +541,10 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = YES;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 4439TAX9XJ;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -538,9 +553,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				PROVISIONING_PROFILE = "";
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 				TARGETED_DEVICE_FAMILY = "1,2";

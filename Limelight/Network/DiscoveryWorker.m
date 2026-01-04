@@ -43,6 +43,12 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
 - (NSArray*) getHostAddressList {
     NSMutableArray *array = [[NSMutableArray alloc] initWithCapacity:3];
 
+    // Try the active address first if we have one. This prevents
+    // waiting for timeouts on unreachable local addresses when
+    // we're connected remotely.
+    if (_host.activeAddress != nil) {
+        [array addObject:_host.activeAddress];
+    }
     if (_host.localAddress != nil) {
         [array addObject:_host.localAddress];
     }

@@ -32,6 +32,14 @@ typedef struct {
   float renderedFps;
 
   uint64_t measurementStartTimestamp;
+
+  // Bytes of video payload received during this measurement window.
+  // Can be used to estimate current bitrate.
+  uint64_t receivedBytes;
+
+  // RFC3550-style inter-arrival jitter estimate (ms) derived from frame
+  // receiveTimeMs and presentationTimeMs deltas.
+  float jitterMs;
 } VideoStats;
 
 @interface VideoDecoderRenderer : NSObject
