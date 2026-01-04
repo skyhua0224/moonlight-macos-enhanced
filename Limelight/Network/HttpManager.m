@@ -23,15 +23,11 @@
 #define EXTRA_LONG_TIMEOUT_SEC 180
 
 @implementation HttpManager {
-    NSURLSession* _urlSession;
     NSString* _baseHTTPURL;
     NSString* _baseHTTPSURL;
     NSString* _uniqueId;
     NSString* _deviceName;
     NSData* _serverCert;
-    NSMutableData* _respData;
-    NSData* _requestResp;
-    dispatch_semaphore_t _requestLock;
     
     NSError* _error;
 }
@@ -57,8 +53,6 @@ static const NSString* HTTPS_PORT = @"47984";
     _uniqueId = @"0123456789ABCDEF";
     _deviceName = deviceName;
     _serverCert = serverCert;
-    _requestLock = dispatch_semaphore_create(0);
-    _respData = [[NSMutableData alloc] init];
     
     NSString* hostAddress;
     NSString* customPort;
@@ -92,45 +86,63 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (void) executeRequestSynchronously:(HttpRequest*)request {
     NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-    _urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+    NSURLSession* urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
 
-    [_respData setLength:0];
-    _error = nil;
+    __block NSMutableData* respData = [[NSMutableData alloc] init];
+    __block NSError* requestError = nil;
+    __block NSData* requestResp = nil;
+    dispatch_semaphore_t requestLock = dispatch_semaphore_create(0);
     
     Log(LOG_D, @"Making Request: %@", request);
     __weak typeof(self) weakSelf = self;
-    [[_urlSession dataTaskWithRequest:request.request completionHandler:^(NSData * __nullable data, NSURLResponse * __nullable response, NSError * __nullable error) {
+    NSURLSessionDataTask* task = [urlSession dataTaskWithRequest:request.request completionHandler:^(NSData * __nullable data, NSURLResponse * __nullable response, NSError * __nullable error) {
         
         assert(weakSelf != nil);
         typeof(self) strongSelf = weakSelf;
         
         if (error != NULL) {
             Log(LOG_D, @"Connection error: %@", error);
-            strongSelf->_error = error;
+            requestError = error;
         }
         else {
             Log(LOG_D, @"Received response: %@", response);
 
             if (data != NULL) {
                 Log(LOG_D, @"\n\nReceived data: %@\n\n", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
-                [strongSelf->_respData appendData:data];
-                if ([[NSString alloc] initWithData:strongSelf->_respData encoding:NSUTF8StringEncoding] != nil) {
-                    strongSelf->_requestResp = [HttpManager fixXmlVersion:strongSelf->_respData];
+                [respData appendData:data];
+                if ([[NSString alloc] initWithData:respData encoding:NSUTF8StringEncoding] != nil) {
+                    requestResp = [HttpManager fixXmlVersion:respData];
                 } else {
-                    strongSelf->_requestResp = strongSelf->_respData;
+                    requestResp = respData;
                 }
             }
         }
         
-        dispatch_semaphore_signal(strongSelf->_requestLock);
-    }] resume];
-    dispatch_semaphore_wait(_requestLock, DISPATCH_TIME_FOREVER);
+        (void)strongSelf; // Keep strongSelf alive during callback
+        dispatch_semaphore_signal(requestLock);
+    }];
+    [task resume];
 
-    [_urlSession finishTasksAndInvalidate];
-    _urlSession = nil;
+    // Bound the synchronous wait. We've seen cases where the completion handler
+    // never runs (e.g., during teardown or certain TLS failure modes), which
+    // would otherwise deadlock the calling thread indefinitely.
+    NSTimeInterval timeout = request.request.timeoutInterval;
+    if (timeout <= 0) {
+        timeout = NORMAL_TIMEOUT_SEC;
+    }
+    dispatch_time_t waitTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 2.0) * NSEC_PER_SEC));
+    if (dispatch_semaphore_wait(requestLock, waitTime) != 0) {
+        Log(LOG_E, @"Request timed out waiting for completion handler: %@", request.request.URL);
+        [urlSession invalidateAndCancel];
+        requestError = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil];
+    } else {
+        [urlSession finishTasksAndInvalidate];
+    }
+
+    _error = requestError;
 
     if (!_error && request.response) {
-        [request.response populateWithData:_requestResp];
+        [request.response populateWithData:requestResp];
         
         // If the fallback error code was detected, issue the fallback request
         if (request.response.statusCode == request.fallbackError && request.fallbackRequest != NULL) {
@@ -459,7 +471,22 @@ static const NSString* HTTPS_PORT = @"47984";
             return;
         }
         
-        SecCertificateRef actualCert = SecTrustGetCertificateAtIndex(challenge.protectionSpace.serverTrust, 0);
+        SecCertificateRef actualCert = NULL;
+        if (@available(macOS 12.0, *)) {
+            CFArrayRef certs = SecTrustCopyCertificateChain(challenge.protectionSpace.serverTrust);
+            if (certs) {
+                if (CFArrayGetCount(certs) > 0) {
+                    actualCert = (SecCertificateRef)CFArrayGetValueAtIndex(certs, 0);
+                }
+                CFRelease(certs);
+            }
+        } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            actualCert = SecTrustGetCertificateAtIndex(challenge.protectionSpace.serverTrust, 0);
+#pragma clang diagnostic pop
+        }
+
         if (actualCert == nil) {
             Log(LOG_E, @"Server certificate parsing error");
             completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, NULL);

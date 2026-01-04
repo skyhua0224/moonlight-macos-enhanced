@@ -66,6 +66,7 @@
 @property (nonatomic) BOOL disconnectWasUserInitiated;
 @property (nonatomic) uint64_t suppressConnectionWarningsUntilMs;
 @property (nonatomic) BOOL isMouseCaptured;
+@property (atomic) BOOL stopStreamInProgress;
 
 @end
 
@@ -84,9 +85,10 @@
     self.isMouseCaptured = NO;
     self.disconnectWasUserInitiated = NO;
     self.suppressConnectionWarningsUntilMs = 0;
+    self.stopStreamInProgress = NO;
     
     [self prepareForStreaming];
-    
+
     __weak typeof(self) weakSelf = self;
 
     self.windowDidExitFullScreenNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
@@ -135,28 +137,41 @@
     
     self.windowWillCloseNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowWillCloseNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
-            [weakSelf markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:@"window-will-close"]; 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                // Stopping the stream can block while common-c tears down sockets/ENet.
-                // Do cleanup/stop off the main thread so window close doesn't feel like a hang.
-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                    double start = CACurrentMediaTime();
-                    if (weakSelf.useSystemControllerDriver) {
-                        double cleanupStart = CACurrentMediaTime();
-                        [weakSelf.controllerSupport cleanup];
-                        Log(LOG_I, @"Controller cleanup took %.3fs", CACurrentMediaTime() - cleanupStart);
-                    }
-
-                    double stopStart = CACurrentMediaTime();
-                    [weakSelf.streamMan stopStream];
-                    Log(LOG_I, @"Stream stop took %.3fs (total %.3fs)", CACurrentMediaTime() - stopStart, CACurrentMediaTime() - start);
-                });
-            });
+            [weakSelf beginStopStreamIfNeededWithReason:@"window-will-close"]; 
         }
     }];
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleMouseModeToggledNotification:) name:HIDMouseModeToggledNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleGamepadQuitNotification:) name:HIDGamepadQuitNotification object:nil];
+}
+
+- (void)beginStopStreamIfNeededWithReason:(NSString *)reason {
+    @synchronized (self) {
+        if (self.stopStreamInProgress) {
+            return;
+        }
+        self.stopStreamInProgress = YES;
+    }
+
+    // Treat window close / quit shortcuts as a user-initiated disconnect to avoid
+    // showing transient "connection is slow" warnings during teardown.
+    [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:reason];
+
+    // Stopping the stream can block while common-c tears down sockets/ENet.
+    // Do cleanup/stop off the main thread so window close doesn't feel like a hang.
+    __strong typeof(self) strongSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        double start = CACurrentMediaTime();
+        if (strongSelf.useSystemControllerDriver) {
+            double cleanupStart = CACurrentMediaTime();
+            [strongSelf.controllerSupport cleanup];
+            Log(LOG_I, @"Controller cleanup took %.3fs", CACurrentMediaTime() - cleanupStart);
+        }
+
+        double stopStart = CACurrentMediaTime();
+        [strongSelf.streamMan stopStream];
+        Log(LOG_I, @"Stream stop took %.3fs (total %.3fs)", CACurrentMediaTime() - stopStart, CACurrentMediaTime() - start);
+    });
 }
 
 - (void)viewDidAppear {
@@ -377,7 +392,7 @@
 
 - (IBAction)performCloseStreamWindow:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
-    [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:@"disconnect-from-stream"]; 
+    [self beginStopStreamIfNeededWithReason:@"disconnect-from-stream"]; 
     [self.nextResponder doCommandBySelector:@selector(performClose:)];
 }
 
@@ -668,9 +683,9 @@
     streamConfig.enableHdr = streamSettings.useHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) ? streamSettings.enableHdr : NO;
 
     streamConfig.multiController = streamSettings.multiController;
-    streamConfig.gamepadMask = self.useSystemControllerDriver ? [ControllerSupport getConnectedGamepadMask:streamConfig] : 1;
+    streamConfig.gamepadMask = self.useSystemControllerDriver ? (int)[ControllerSupport getConnectedGamepadMask:streamConfig] : 1;
     
-    int audioConfigSelection = [SettingsClass audioConfigurationFor:self.app.host.uuid];
+    NSInteger audioConfigSelection = [SettingsClass audioConfigurationFor:self.app.host.uuid];
     int audioConfig = AUDIO_CONFIGURATION_STEREO;
     if (audioConfigSelection == 1) {
         audioConfig = AUDIO_CONFIGURATION_51_SURROUND;
@@ -682,7 +697,7 @@
     streamConfig.enableVsync = [SettingsClass enableVsyncFor:self.app.host.uuid];
     streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
     streamConfig.gamepadMouseMode = [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
-    streamConfig.upscalingMode = [SettingsClass upscalingModeFor:self.app.host.uuid];
+    streamConfig.upscalingMode = (int)[SettingsClass upscalingModeFor:self.app.host.uuid];
 
     if (self.useSystemControllerDriver) {
 
@@ -780,6 +795,10 @@
     LiGetEstimatedRttInfo(&rtt, &rttVar);
     
     float loss = stats.totalFrames > 0 ? (float)stats.networkDroppedFrames / stats.totalFrames * 100.0f : 0;
+    float jitter = stats.jitterMs;
+
+    // Approximate current video bitrate over the last measurement window (≈1s)
+    double bitrateMbps = (double)stats.receivedBytes * 8.0 / 1000.0 / 1000.0;
     
     float renderTime = stats.renderedFrames > 0 ? (float)stats.totalRenderTime / stats.renderedFrames : 0;
     float decodeTime = stats.decodedFrames > 0 ? (float)stats.totalDecodeTime / stats.decodedFrames : 0;
@@ -822,9 +841,15 @@
     append([NSString stringWithFormat:@"%u", rttVar], valueAttrs);
     append(@" ms  Loss ", labelAttrs);
     append([NSString stringWithFormat:@"%.2f%%", loss], valueAttrs);
+
+    append(@"  Jit ", labelAttrs);
+    append([NSString stringWithFormat:@"%.1f", jitter], valueAttrs);
+    append(@" ms  Br ", labelAttrs);
+    append([NSString stringWithFormat:@"%.1f", bitrateMbps], valueAttrs);
+    append(@" Mbps", labelAttrs);
     
     // Latency
-    append(@"  |  Render ", labelAttrs);
+    append(@"  |  Queue ", labelAttrs);
     append([NSString stringWithFormat:@"%.2f", renderTime], valueAttrs);
     append(@" ms · Decode ", labelAttrs);
     append([NSString stringWithFormat:@"%.2f", decodeTime], valueAttrs);
@@ -899,7 +924,7 @@
 }
 
 - (void)connectionTerminated:(int)errorCode {
-    Log(LOG_I, @"Connection terminated: %ld", errorCode);
+    Log(LOG_I, @"Connection terminated: %ld", (long)errorCode);
     
     dispatch_async(dispatch_get_main_queue(), ^{
         if (self.statsTimer) {
@@ -1138,8 +1163,7 @@
 }
 
 - (void)handleGamepadQuitNotification:(NSNotification *)note {
-    [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:@"gamepad-quit"]; 
-    [self performCloseAndQuitApp:nil];
+    [self performCloseStreamWindow:nil];
 }
 
 - (void)showNotification:(NSString *)message {

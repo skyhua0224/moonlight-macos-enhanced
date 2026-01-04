@@ -16,8 +16,8 @@
 
 @implementation WakeOnLanManager
 
-static const int numPorts = 5;
-static const int ports[numPorts] = {7, 9, 47998, 47999, 48000};
+#define NUM_PORTS 5
+static const int ports[NUM_PORTS] = {7, 9, 47998, 47999, 48000};
 
 + (void) populateAddress:(struct sockaddr_storage*)addr withPort:(unsigned short)port {
     if (addr->ss_family == AF_INET) {
@@ -82,7 +82,7 @@ static const int ports[numPorts] = {7, 9, 47998, 47999, 48000};
             memset(&addr, 0, sizeof(addr));
             memcpy(&addr, curr->ai_addr, curr->ai_addrlen);
             
-            for (int j = 0; j < numPorts; j++) {
+            for (int j = 0; j < NUM_PORTS; j++) {
                 [WakeOnLanManager populateAddress:&addr withPort:ports[j]];
                 long err = sendto(wolSocket,
                                  [wolPayload bytes],
