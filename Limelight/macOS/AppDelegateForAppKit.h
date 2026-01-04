@@ -10,4 +10,6 @@
 
 @interface AppDelegateForAppKit : NSObject
 
+- (void)showPreferencesForHost:(NSString *)hostId;
+
 @end

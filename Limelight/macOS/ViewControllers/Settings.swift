@@ -69,6 +69,7 @@ struct Settings: Encodable, Decodable {
   let touchscreenMode: Int?
   let gamepadMouseMode: Bool?
   let upscalingMode: Int?
+  let connectionMethod: String?
 
   private static func globalProfileKey() -> String {
     SettingsClass.profileKey(for: SettingsModel.globalHostId)

@@ -90,45 +90,95 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
 }
 
 - (void) discoverHost {
-    BOOL receivedResponse = NO;
     NSArray *addresses = [self getHostAddressList];
     
     Log(LOG_D, @"%@ has %d unique addresses", _host.name, [addresses count]);
     
-    // Give the PC 2 tries to respond before declaring it offline if we've seen it before.
-    // If this is an unknown PC, update the status after 1 attempt to get the UI refreshed quickly.
-    for (int i = 0; i < (_host.state == StateUnknown ? 1 : 2); i++) {
-        for (NSString *address in addresses) {
-            if (self.cancelled) {
-                // Get out without updating the status because
-                // it might not have finished checking the various
-                // addresses
+    dispatch_group_t group = dispatch_group_create();
+    NSMutableDictionary *latencies = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *states = [[NSMutableDictionary alloc] init];
+    NSLock *lock = [[NSLock alloc] init];
+    
+    __block BOOL receivedResponse = NO;
+    __block double minLatency = DBL_MAX;
+    __block NSString *bestAddress = nil;
+    __block ServerInfoResponse *bestResp = nil;
+    
+    __weak typeof(self) weakSelf = self;
+    for (NSString *address in addresses) {
+        if (self.cancelled) break;
+        
+        dispatch_group_enter(group);
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                dispatch_group_leave(group);
                 return;
             }
+
+            NSDate *start = [NSDate date];
+            ServerInfoResponse* serverInfoResp = [strongSelf requestInfoAtAddress:address cert:[strongSelf getHost].serverCert];
+            NSTimeInterval rtt = -[start timeIntervalSinceNow] * 1000.0;
             
-            ServerInfoResponse* serverInfoResp = [self requestInfoAtAddress:address cert:_host.serverCert];
-            receivedResponse = [self checkResponse:serverInfoResp];
-            if (receivedResponse) {
-                [serverInfoResp populateHost:_host];
-                _host.activeAddress = address;
+            BOOL success = [strongSelf checkResponse:serverInfoResp];
+            
+            [lock lock];
+            if (success) {
+                receivedResponse = YES;
+                [latencies setObject:@((int)rtt) forKey:address];
+                [states setObject:@(1) forKey:address];
                 
-                // Update the database using the response
-                DataManager *dataManager = [[DataManager alloc] init];
-                [dataManager updateHost:_host];
-                break;
+                if (rtt < minLatency) {
+                    minLatency = rtt;
+                    bestAddress = address;
+                    bestResp = serverInfoResp;
+                }
+            } else {
+                [states setObject:@(0) forKey:address];
             }
+            [lock unlock];
+            
+            dispatch_group_leave(group);
+        });
+    }
+    
+    // Wait for requests to complete, checking for cancellation periodically
+    // This allows stopDiscoveryBlocking to return quickly even if network requests are hanging
+    while (dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC)) != 0) {
+        if (self.cancelled) {
+            return;
         }
+    }
+    
+    if (self.cancelled) return;
+    
+    _host.addressLatencies = latencies;
+    _host.addressStates = states;
+    
+    _host.state = receivedResponse ? StateOnline : StateOffline;
+    
+    if (receivedResponse && bestResp) {
+        [bestResp populateHost:_host];
+        _host.activeAddress = bestAddress;
         
-        if (receivedResponse) {
-            Log(LOG_D, @"Received serverinfo response on try %d", i);
-            break;
-        }
+        DataManager *dataManager = [[DataManager alloc] init];
+        [dataManager updateHost:_host];
+        
+        Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t ipv6Address:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n\t latency:%f ms\n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.ipv6Address, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress, minLatency);
     }
 
-    _host.state = receivedResponse ? StateOnline : StateOffline;
-    if (receivedResponse) {
-        Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t ipv6Address:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.ipv6Address, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress);
-    }
+    // Broadcast latency update for UI (SettingsModel)
+    __weak typeof(self) weakSelf2 = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf2) strongSelf = weakSelf2;
+        if (strongSelf) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"HostLatencyUpdated" object:nil userInfo:@{
+                @"uuid": [strongSelf getHost].uuid,
+                @"latencies": latencies,
+                @"states": states
+            }];
+        }
+    });
 }
 
 - (ServerInfoResponse*) requestInfoAtAddress:(NSString*)address cert:(NSData*)cert {

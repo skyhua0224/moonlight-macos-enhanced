@@ -132,3 +132,30 @@
 
 "Mouse Mode On" = "鼠标模式开启";
 "Mouse Mode Off" = "鼠标模式关闭";
+
+/* Connection Method */
+"Connection Method" = "连接方式";
+"Auto (Recommended)" = "自动 (推荐)";
+"Offline" = "离线";
+"Settings" = "设置";
+"Connection Details" = "连接详情";
+
+/* Detail Fields */
+"Host Name" = "主机名称";
+"Status" = "状态";
+"Active Address" = "活动地址";
+"UUID" = "UUID";
+"Pair Name" = "配对名称";
+"Local Address" = "局域网地址";
+"External Address" = "公网地址";
+"IPv6 Address" = "IPv6 地址";
+"Manual Address" = "手动地址";
+"MAC Address" = "MAC 地址";
+"Pair State" = "配对状态";
+"Running Game ID" = "运行游戏 ID";
+"Addresses" = "地址列表";
+"Paired" = "已配对";
+"Unpaired" = "未配对";
+"Online" = "在线";
+"Offline" = "离线";
+"Unknown" = "未知";

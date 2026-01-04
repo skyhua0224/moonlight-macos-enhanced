@@ -16,6 +16,8 @@
 #import "MASPreferencesWindowController.h"
 #import "GeneralPrefsPaneVC.h"
 
+#import "AppsViewController.h"
+#import "TemporaryHost.h"
 #import "Moonlight-Swift.h"
 
 typedef enum : NSUInteger {
@@ -74,21 +76,50 @@ typedef enum : NSUInteger {
     [mainWC.window makeKeyAndOrderFront:nil];
 }
 
-- (NSWindowController *)preferencesWC {
-    if (_preferencesWC == nil) {
-        _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindow];
-        _preferencesWC.window.delegate = self;
+- (NSWindowController *)preferencesWCWithHostId:(NSString *)hostId {
+    if (_preferencesWC != nil) {
+        [_preferencesWC close];
+        _preferencesWC = nil;
     }
+
+    // Always recreate to ensure state is clean and correct host is selected
+    _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindowWithHostId:hostId];
+    _preferencesWC.window.delegate = self;
 
     return _preferencesWC;
 }
 
-- (IBAction)showPreferences:(id)sender {
-    self.preferencesWC.window.frameAutosaveName = @"Preferences Window";
-    [self.preferencesWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
+- (void)showPreferencesForHost:(NSString *)hostId {
+    NSWindowController *prefsWC = [self preferencesWCWithHostId:hostId];
+    prefsWC.window.frameAutosaveName = @"Preferences Window";
+    [prefsWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
 
-    [self.preferencesWC showWindow:nil];
-    [self.preferencesWC.window makeKeyAndOrderFront:nil];
+    [prefsWC showWindow:nil];
+    [prefsWC.window makeKeyAndOrderFront:nil];
+}
+
+- (IBAction)showPreferences:(id)sender {
+    NSString *hostId = nil;
+    
+    // Detect context
+    NSViewController *contentVC = NSApplication.sharedApplication.mainWindow.contentViewController;
+    if (contentVC) {
+        // Check if AppsViewController is the active view controller
+        // Based on HostsViewController implementation, AppsVC is added as a child of the main content VC
+        for (NSViewController *child in contentVC.childViewControllers) {
+            if ([child isKindOfClass:[AppsViewController class]]) {
+                hostId = ((AppsViewController *)child).host.uuid;
+                break;
+            }
+        }
+    }
+
+    NSWindowController *prefsWC = [self preferencesWCWithHostId:hostId];
+    prefsWC.window.frameAutosaveName = @"Preferences Window";
+    [prefsWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
+
+    [prefsWC showWindow:nil];
+    [prefsWC.window makeKeyAndOrderFront:nil];
 }
 
 - (IBAction)showAbout:(id)sender {

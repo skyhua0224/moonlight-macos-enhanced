@@ -91,6 +91,12 @@ struct SettingsView: View {
 
   @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .stream
 
+  var hostId: String?
+
+  init(hostId: String? = nil) {
+    self.hostId = hostId
+  }
+
   var body: some View {
     NavigationView {
       Sidebar(selectedPane: $selectedPane)
@@ -98,6 +104,20 @@ struct SettingsView: View {
         .environmentObject(settingsModel)
     }
     .frame(minWidth: 575, minHeight: 275)
+    .onAppear {
+      if let hostId {
+        settingsModel.selectHost(id: hostId)
+      } else {
+        // If opened without hostId, verify if we should lock global (e.g. from main menu)
+        // For now, let's allow selection if no hostId is passed (or default to global but unlocked?)
+        // The requirement is "Homepage -> Global", "Host -> Host Profile".
+        // If we pass nil for Homepage, we can select Global and lock it?
+        // Or keep existing behavior (remember last selection).
+        // User said: "主页时是全局配置". So if we pass Global ID, we lock it.
+        // If we pass nil, maybe we just let it be?
+        // But we will modify callers to pass Global ID for homepage.
+      }
+    }
   }
 }
 
@@ -239,19 +259,32 @@ struct StreamView: View {
       VStack {
         FormSection(title: "General") {
           if let hosts = SettingsModel.hosts {
-            FormCell(title: "Profile:", contentWidth: 150) {
-              Picker("", selection: $settingsModel.selectedHost) {
-                ForEach(hosts, id: \.self) { host in
-                  if let host {
-                    let name =
-                      host.id == SettingsModel.globalHostId
-                      ? languageManager.localize("Global (Default)") : host.name
-                    Text(name).tag(Optional(host))
+            if !settingsModel.isProfileLocked {
+              FormCell(title: "Profile:", contentWidth: 150) {
+                Picker("", selection: $settingsModel.selectedHost) {
+                  ForEach(hosts, id: \.self) { host in
+                    if let host {
+                      let name =
+                        host.id == SettingsModel.globalHostId
+                        ? languageManager.localize("Global (Default)") : host.name
+                      Text(name).tag(Optional(host))
+                    }
                   }
                 }
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .trailing)
               }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+              HStack {
+                Text(languageManager.localize("Profile:"))
+                Spacer()
+                let name =
+                  settingsModel.selectedHost?.id == SettingsModel.globalHostId
+                  ? languageManager.localize("Global (Default)")
+                  : (settingsModel.selectedHost?.name ?? "")
+                Text(name)
+                  .foregroundColor(.secondary)
+              }
             }
 
             HStack {
@@ -269,6 +302,39 @@ struct StreamView: View {
 
             Divider()
           }
+
+          FormCell(title: "Connection Method", contentWidth: 250) {
+            HStack {
+            Picker("", selection: $settingsModel.selectedConnectionMethod) {
+              ForEach(settingsModel.connectionCandidates, id: \.0) { candidate in
+                HStack {
+                  if candidate.0 != "Auto" {
+                    Image(systemName: "circle.fill")
+                      .foregroundColor(candidate.2 ? .green : .red)
+                      .font(.system(size: 8))
+                  }
+                  Text(candidate.1)
+                }
+                .tag(candidate.0)
+              }
+            }
+              .labelsHidden()
+
+              Button(action: {
+                if let uuid = settingsModel.selectedHost?.id, uuid != SettingsModel.globalHostId {
+                  NotificationCenter.default.post(
+                    name: NSNotification.Name("MoonlightRequestHostDiscovery"), object: nil,
+                    userInfo: ["uuid": uuid])
+                }
+              }) {
+                Image(systemName: "arrow.clockwise")
+              }
+              .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+          }
+
+          Divider()
 
           FormCell(title: "Language", contentWidth: 150) {
             Picker("", selection: $languageManager.currentLanguage) {

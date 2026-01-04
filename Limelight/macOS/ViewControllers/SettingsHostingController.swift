@@ -39,7 +39,7 @@ class SettingsHostingController<RootView: View>: NSWindowController {
 }
 
 @objc class SettingsWindowObjCBridge: NSView {
-  @objc class func makeSettingsWindow() -> NSWindowController {
-    SettingsHostingController(rootView: SettingsView())
+  @objc class func makeSettingsWindow(hostId: String?) -> NSWindowController {
+    SettingsHostingController(rootView: SettingsView(hostId: hostId))
   }
 }
