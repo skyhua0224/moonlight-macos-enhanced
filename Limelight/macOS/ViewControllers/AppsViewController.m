@@ -100,7 +100,7 @@ const CGFloat scaleBase = 1.125;
     [super viewWillAppear];
     
     self.parentViewController.title = self.host.name;
-    self.parentViewController.view.window.subtitle = self.host.activeAddress;
+    [self updateWindowSubtitle];
     
     [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
 #pragma clang diagnostic push
@@ -121,7 +121,29 @@ const CGFloat scaleBase = 1.125;
         [weakSelf updateRunningAppState];
         
         [SettingsClass loadMoonlightSettingsFor:self.host.uuid];
+        [weakSelf updateWindowSubtitle];
     }];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateWindowSubtitle) name:NSUserDefaultsDidChangeNotification object:nil];
+    // Also listen for latency updates to update the IP in Auto mode
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateWindowSubtitle) name:@"HostLatencyUpdated" object:nil];
+}
+
+- (void)updateWindowSubtitle {
+    NSDictionary *settings = [SettingsClass getSettingsFor:self.host.uuid];
+    NSString *method = settings[@"connectionMethod"];
+    NSString *displayAddress = self.host.activeAddress;
+    
+    if (method && ![method isEqualToString:@"Auto"]) {
+        displayAddress = method;
+    } else {
+        // Auto
+        displayAddress = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"Auto", nil), self.host.activeAddress ?: NSLocalizedString(@"Unknown", nil)];
+    }
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.parentViewController.view.window.subtitle = displayAddress;
+    });
 }
 
 - (BOOL)becomeFirstResponder {

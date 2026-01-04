@@ -19,6 +19,8 @@ class SettingsModel: ObservableObject {
   static let globalHostId = "__global__"
   static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
 
+  private var latencyCache: [String: [String: Any]] = [:]
+
   // Remote host display mode override (affects /launch mode parameter)
   static var remoteResolutions: [CGSize] = [
     CGSizeMake(1280, 720), CGSizeMake(1920, 1080), CGSizeMake(2560, 1440), CGSizeMake(3840, 2160),
@@ -45,6 +47,22 @@ class SettingsModel: ObservableObject {
       guard !isLoading else { return }
       UserDefaults.standard.set(selectedHost?.id, forKey: "selectedSettingsProfile")
       loadSettings()
+    }
+  }
+
+  @Published var isProfileLocked = false
+
+  func selectHost(id: String?) {
+    if let id {
+      if let host = Self.hosts?.compactMap({ $0 }).first(where: { $0.id == id }) {
+        selectedHost = host
+        isProfileLocked = true
+      }
+    } else {
+      if let host = Self.hosts?.compactMap({ $0 }).first(where: { $0.id == Self.globalHostId }) {
+        selectedHost = host
+        isProfileLocked = true
+      }
     }
   }
 
@@ -425,6 +443,58 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var selectedConnectionMethod: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
+  var connectionCandidates: [(String, String, Bool)] {
+    var candidates: [(String, String, Bool)] = []
+    candidates.append(("Auto", LanguageManager.shared.localize("Auto (Recommended)"), true))
+
+    guard let hostId = selectedHost?.id, hostId != Self.globalHostId else {
+      return candidates
+    }
+
+    let dataMan = DataManager()
+    if let hosts = dataMan.getHosts() as? [TemporaryHost],
+      let host = hosts.first(where: { $0.uuid == hostId })
+    {
+      var latencies: [String: NSNumber] = [:]
+      var states: [String: NSNumber] = [:]
+
+      if let cached = latencyCache[hostId] {
+        latencies = cached["latencies"] as? [String: NSNumber] ?? [:]
+        states = cached["states"] as? [String: NSNumber] ?? [:]
+      } else {
+        latencies = host.addressLatencies as? [String: NSNumber] ?? [:]
+        states = host.addressStates as? [String: NSNumber] ?? [:]
+      }
+
+      var addresses = Set<String>()
+      if let addr = host.address { addresses.insert(addr) }
+      if let addr = host.localAddress { addresses.insert(addr) }
+      if let addr = host.externalAddress { addresses.insert(addr) }
+      if let addr = host.ipv6Address { addresses.insert(addr) }
+
+      for addr in addresses {
+        let online = (states[addr]?.intValue ?? 0) == 1
+        let latency = latencies[addr]?.intValue ?? -1
+
+        var label = addr
+        if online && latency >= 0 {
+          label += " (\(latency)ms)"
+        } else if !online {
+          label += " (\(LanguageManager.shared.localize("Offline")))"
+        }
+
+        candidates.append((addr, label, online))
+      }
+    }
+    return candidates
+  }
 
   static var resolutions: [CGSize] = [
     matchDisplayResolutionSentinel,
@@ -749,6 +819,24 @@ class SettingsModel: ObservableObject {
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
     selectedUpscalingMode = Self.getString(from: Self.defaultUpscalingMode, in: Self.upscalingModes)
+    selectedConnectionMethod = "Auto"
+
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleHostLatencyUpdate),
+      name: NSNotification.Name("HostLatencyUpdated"), object: nil)
+  }
+
+  @objc func handleHostLatencyUpdate(_ notification: Notification) {
+    guard let userInfo = notification.userInfo,
+      let uuid = userInfo["uuid"] as? String
+    else { return }
+
+    DispatchQueue.main.async {
+      self.latencyCache[uuid] = userInfo as? [String: Any]
+      if self.selectedHost?.id == uuid {
+        self.objectWillChange.send()
+      }
+    }
   }
 
   func loadDefaultSettings() {
@@ -818,6 +906,7 @@ class SettingsModel: ObservableObject {
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
     selectedUpscalingMode = Self.getString(from: Self.defaultUpscalingMode, in: Self.upscalingModes)
+    selectedConnectionMethod = "Auto"
   }
 
   func loadAndSaveDefaultSettings() {
@@ -927,6 +1016,7 @@ class SettingsModel: ObservableObject {
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
       selectedUpscalingMode = Self.getString(
         from: settings.upscalingMode ?? Self.defaultUpscalingMode, in: Self.upscalingModes)
+      selectedConnectionMethod = settings.connectionMethod ?? "Auto"
 
       remoteResolutionEnabled = settings.remoteResolution ?? Self.defaultRemoteResolutionEnabled
       if remoteResolutionEnabled,
@@ -1129,7 +1219,8 @@ class SettingsModel: ObservableObject {
       reverseScrollDirection: reverseScrollDirection,
       touchscreenMode: touchscreenMode,
       gamepadMouseMode: gamepadMouseMode,
-      upscalingMode: upscalingMode
+      upscalingMode: upscalingMode,
+      connectionMethod: selectedConnectionMethod
     )
 
     if let data = try? PropertyListEncoder().encode(settings) {

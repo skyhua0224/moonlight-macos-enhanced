@@ -17,6 +17,8 @@
     self.appList = [[NSMutableSet alloc] init];
     self.currentGame = @"0";
     self.state = StateUnknown;
+    self.addressLatencies = [[NSMutableDictionary alloc] init];
+    self.addressStates = [[NSMutableDictionary alloc] init];
     
     return self;
 }

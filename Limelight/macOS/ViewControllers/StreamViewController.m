@@ -183,7 +183,7 @@
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
     
-    NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
     BOOL ignoreAspectRatio = prefs ? [prefs[@"ignoreAspectRatio"] boolValue] : NO;
 
     if (!ignoreAspectRatio) {
@@ -579,6 +579,15 @@
     StreamConfiguration *streamConfig = [[StreamConfiguration alloc] init];
     
     streamConfig.host = self.app.host.activeAddress;
+    
+    NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    if (prefs) {
+        NSString *connectionMethod = prefs[@"connectionMethod"];
+        if (connectionMethod && ![connectionMethod isEqualToString:@"Auto"]) {
+            streamConfig.host = connectionMethod;
+        }
+    }
+    
     streamConfig.appID = self.app.id;
     streamConfig.appName = self.app.name;
     streamConfig.serverCert = self.app.host.serverCert;
@@ -591,8 +600,6 @@
     streamConfig.height = [self.class getResolution].height;
 
     streamConfig.frameRate = [streamSettings.framerate intValue];
-
-    NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
 
     // Apply resolution scaling (mirrors moonlight-qt behavior)
     BOOL scaleEnabled = prefs ? [prefs[@"streamResolutionScale"] boolValue] : NO;

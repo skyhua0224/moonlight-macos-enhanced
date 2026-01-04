@@ -16,6 +16,7 @@
 #import "NSCollectionView+Moonlight.h"
 #import "Helpers.h"
 #import "NavigatableAlertView.h"
+#import "AppDelegateForAppKit.h"
 
 #import "Moonlight-Swift.h"
 
@@ -60,6 +61,7 @@
     [self prepareDiscovery];
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refreshHostDiscovery:) name:@"MoonlightRequestHostDiscovery" object:nil];
 }
 
 - (void)dealloc {
@@ -71,6 +73,27 @@
         self.getSearchField.placeholderString = NSLocalizedString(@"Search Hosts", @"Search Hosts");
         [self.collectionView reloadData];
     });
+}
+
+- (void)refreshHostDiscovery:(NSNotification *)note {
+    NSString *uuid = note.userInfo[@"uuid"];
+    if (uuid) {
+        TemporaryHost *targetHost = nil;
+        @synchronized(self.hosts) {
+            for (TemporaryHost *host in self.hosts) {
+                if ([host.uuid isEqualToString:uuid]) {
+                    targetHost = host;
+                    break;
+                }
+            }
+        }
+        
+        if (targetHost) {
+            [self.discMan resumeDiscoveryForHost:targetHost];
+            // Force immediate check
+            [self.discMan startDiscovery];
+        }
+    }
 }
 
 - (void)viewWillAppear {
@@ -297,6 +320,110 @@
         }
     }
     showHiddenAppsMenuItem.state = host.showHiddenApps ? NSControlStateValueOn : NSControlStateValueOff;
+
+    [menu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *settingsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Settings", @"Settings") action:@selector(openHostSettings:) keyEquivalent:@""];
+    [settingsItem setTarget:self];
+    [menu addItem:settingsItem];
+
+    NSMenuItem *detailsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Connection Details", @"Connection Details") action:@selector(showConnectionDetails:) keyEquivalent:@""];
+    [detailsItem setTarget:self];
+    [menu addItem:detailsItem];
+}
+
+- (void)openHostSettings:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host != nil) {
+        AppDelegateForAppKit *appDelegate = (AppDelegateForAppKit *)[NSApplication sharedApplication].delegate;
+        [appDelegate showPreferencesForHost:host.uuid];
+    }
+}
+
+- (void)showConnectionDetails:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host == nil) {
+        return;
+    }
+
+    if (@available(macOS 10.12, *)) {
+        NSGridView *gridView = [NSGridView gridViewWithViews:@[]];
+        gridView.columnSpacing = 10;
+        gridView.rowSpacing = 5;
+        
+        // Helper block to add row
+        void (^addRow)(NSString *, NSString *) = ^(NSString *label, NSString *value) {
+            NSTextField *labelField = [NSTextField labelWithString:[label stringByAppendingString:@":"]];
+            labelField.font = [NSFont boldSystemFontOfSize:12];
+            labelField.alignment = NSTextAlignmentRight;
+            
+            NSTextField *valueField = [NSTextField labelWithString:value ?: @"-"];
+            valueField.selectable = YES; // Allow copying
+            
+            [gridView addRowWithViews:@[labelField, valueField]];
+        };
+
+        NSString *statusString;
+        if (host.state == StateOnline) {
+            statusString = NSLocalizedString(@"Online", nil);
+        } else if (host.state == StateOffline) {
+            statusString = NSLocalizedString(@"Offline", nil);
+        } else {
+            statusString = NSLocalizedString(@"Unknown", nil);
+        }
+        
+        NSString *pairStateString = host.pairState == PairStatePaired ? NSLocalizedString(@"Paired", nil) : NSLocalizedString(@"Unpaired", nil);
+
+        addRow(NSLocalizedString(@"Host Name", nil), host.name);
+        addRow(NSLocalizedString(@"Status", nil), statusString);
+        addRow(NSLocalizedString(@"Active Address", nil), host.activeAddress);
+        addRow(NSLocalizedString(@"UUID", nil), host.uuid);
+        addRow(NSLocalizedString(@"Pair Name", nil), deviceName);
+        addRow(NSLocalizedString(@"Local Address", nil), host.localAddress);
+        addRow(NSLocalizedString(@"External Address", nil), host.externalAddress);
+        addRow(NSLocalizedString(@"IPv6 Address", nil), host.ipv6Address);
+        addRow(NSLocalizedString(@"Manual Address", nil), host.address);
+        addRow(NSLocalizedString(@"MAC Address", nil), host.mac);
+        addRow(NSLocalizedString(@"Pair State", nil), pairStateString);
+        addRow(NSLocalizedString(@"Running Game ID", nil), host.currentGame);
+        
+        if (host.addressLatencies.count > 0) {
+            NSTextField *spacer = [NSTextField labelWithString:@""];
+            [gridView addRowWithViews:@[spacer, spacer]];
+            
+            NSTextField *header = [NSTextField labelWithString:NSLocalizedString(@"Addresses", nil)];
+            header.font = [NSFont boldSystemFontOfSize:12];
+            [gridView addRowWithViews:@[header, [NSGridCell emptyContentView]]];
+            
+            for (NSString *addr in host.addressLatencies) {
+                NSNumber *latency = host.addressLatencies[addr];
+                NSNumber *state = host.addressStates[addr];
+                NSString *addrStatus = [state boolValue] ? NSLocalizedString(@"Online", nil) : NSLocalizedString(@"Offline", nil);
+                NSString *detail = [NSString stringWithFormat:@"%@ (%@ms)", addrStatus, latency];
+                
+                NSTextField *addrLabel = [NSTextField labelWithString:[addr stringByAppendingString:@":"]];
+                addrLabel.alignment = NSTextAlignmentRight;
+                NSTextField *detailLabel = [NSTextField labelWithString:detail];
+                
+                [gridView addRowWithViews:@[addrLabel, detailLabel]];
+            }
+        }
+        
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.messageText = NSLocalizedString(@"Connection Details", @"Connection Details");
+        alert.accessoryView = gridView;
+        [alert runModal];
+    } else {
+        // Fallback for older macOS if needed, but 10.12 is very old.
+        // Assuming min target is decent.
+        NSMutableString *details = [NSMutableString string];
+        [details appendFormat:@"%@: %@\n", NSLocalizedString(@"Host Name", nil), host.name];
+        // ... simplified fallback
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.messageText = NSLocalizedString(@"Connection Details", @"Connection Details");
+        alert.informativeText = details;
+        [alert runModal];
+    }
 }
 
 
@@ -385,15 +512,18 @@
 #pragma mark - Host Operations
 
 - (void)setupPairing:(TemporaryHost *)host {
-    // Polling the server while pairing causes the server to screw up
-    [self.discMan stopDiscoveryBlocking];
-    
-    NSString *uniqueId = [IdManager getUniqueId];
-    NSData *cert = [CryptoManager readCertFromFile];
+    // Run setup asynchronously to avoid blocking the main thread while waiting for discovery to stop
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // Polling the server while pairing causes the server to screw up
+        [self.discMan stopDiscoveryBlocking];
+        
+        NSString *uniqueId = [IdManager getUniqueId];
+        NSData *cert = [CryptoManager readCertFromFile];
 
-    HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId serverCert:host.serverCert];
-    PairManager* pMan = [[PairManager alloc] initWithManager:hMan clientCert:cert callback:self];
-    [self.opQueue addOperation:pMan];
+        HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId serverCert:host.serverCert];
+        PairManager* pMan = [[PairManager alloc] initWithManager:hMan clientCert:cert callback:self];
+        [self.opQueue addOperation:pMan];
+    });
 }
 
 - (void)handleOfflineHost:(TemporaryHost *)host {

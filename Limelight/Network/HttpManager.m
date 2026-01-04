@@ -153,20 +153,14 @@ static const NSString* HTTPS_PORT = @"47984";
             [self executeRequestSynchronously:request];
         }
     }
-    else if (_error && [_error code] == NSURLErrorServerCertificateUntrusted) {
-        // We must have a pinned cert for HTTPS. If we fail, it must be due to
-        // a non-matching cert, not because we had no cert at all.
-        assert(_serverCert != nil);
-        
-        if (request.fallbackRequest) {
-            // This will fall back to HTTP on serverinfo queries to allow us to pair again
-            // and get the server cert updated.
-            Log(LOG_D, @"Attempting fallback request after certificate trust failure");
-            request.request = request.fallbackRequest;
-            request.fallbackError = 0;
-            request.fallbackRequest = NULL;
-            [self executeRequestSynchronously:request];
-        }
+    else if (_error && request.fallbackRequest) {
+        // Fallback on any error if fallback is present (e.g. HTTP fallback for HTTPS discovery)
+        // This handles cases like certificate mismatches (-1202) or other TLS errors
+        Log(LOG_W, @"Request failed with error %ld, attempting fallback", (long)[_error code]);
+        request.request = request.fallbackRequest;
+        request.fallbackError = 0;
+        request.fallbackRequest = NULL;
+        [self executeRequestSynchronously:request];
     }
     else if (_error && request.response) {
         request.response.statusCode = [_error code];
@@ -501,7 +495,7 @@ static const NSString* HTTPS_PORT = @"47984";
         }
         
         if (!CFEqual(actualCertData, (__bridge CFDataRef)_serverCert)) {
-            Log(LOG_E, @"Server certificate mismatch");
+            Log(LOG_W, @"Server certificate mismatch");
             CFRelease(actualCertData);
             completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, NULL);
             return;
