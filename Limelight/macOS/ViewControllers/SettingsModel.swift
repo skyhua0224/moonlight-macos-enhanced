@@ -469,8 +469,8 @@ class SettingsModel: ObservableObject {
         latencies = cached["latencies"] as? [String: NSNumber] ?? [:]
         states = cached["states"] as? [String: NSNumber] ?? [:]
       } else {
-        latencies = host.addressLatencies as? [String: NSNumber] ?? [:]
-        states = host.addressStates as? [String: NSNumber] ?? [:]
+        latencies = host.addressLatencies ?? [:]
+        states = host.addressStates ?? [:]
       }
 
       var addresses = Set<String>()
@@ -600,7 +600,7 @@ class SettingsModel: ObservableObject {
   static let defaultMultiControllerMode = "Auto"
   static let defaultSwapButtons = false
   static let defaultOptimize = false
-  static let defaultAutoFullscreen = true
+  static let defaultAutoFullscreen = false
   static let defaultRumble = true
   static let defaultControllerDriver = "HID"
   static let defaultMouseDriver = "HID"

@@ -145,6 +145,8 @@
 				Stream/StreamConfiguration.m,
 				Stream/StreamManager.m,
 				Stream/VideoDecoderRenderer.m,
+				Utility/LogBuffer.h,
+				Utility/LogBuffer.m,
 				Utility/Logger.m,
 				Utility/Utils.m,
 			);

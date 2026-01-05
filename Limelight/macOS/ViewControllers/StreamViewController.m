@@ -23,8 +23,9 @@
 
 #import "Moonlight-Swift.h"
 
-#undef NSLocalizedString
-#define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]
+#import "LogBuffer.h"
+
+#define MLString(key, comment) [[LanguageManager shared] localize:key]
 
 #include "Limelight.h"
 
@@ -39,6 +40,7 @@
 @property (nonatomic, strong) HIDSupport *hidSupport;
 @property (nonatomic) BOOL useSystemControllerDriver;
 @property (nonatomic, strong) StreamManager *streamMan;
+@property (nonatomic, strong) NSOperationQueue *streamOpQueue;
 @property (nonatomic, readonly) StreamViewMac *streamView;
 @property (nonatomic, strong) id windowDidExitFullScreenNotification;
 @property (nonatomic, strong) id windowDidEnterFullScreenNotification;
@@ -68,6 +70,49 @@
 @property (nonatomic) BOOL isMouseCaptured;
 @property (atomic) BOOL stopStreamInProgress;
 
+@property (nonatomic) BOOL shouldAttemptReconnect;
+@property (nonatomic) NSInteger reconnectAttemptCount;
+@property (nonatomic) BOOL reconnectInProgress;
+
+@property (nonatomic) BOOL reconnectPreserveFullscreenStateValid;
+@property (nonatomic) BOOL reconnectPreservedWasFullscreen;
+
+@property (nonatomic, strong) NSTitlebarAccessoryViewController *menuTitlebarAccessory;
+@property (nonatomic, strong) NSButton *menuTitlebarButton;
+@property (nonatomic, strong) NSButton *edgeMenuButton;
+
+@property (nonatomic, strong) NSMenu *streamMenu;
+
+@property (nonatomic, strong) NSVisualEffectView *controlCenterPill;
+@property (nonatomic, strong) NSImageView *controlCenterSignalImageView;
+@property (nonatomic, strong) NSTextField *controlCenterTimeLabel;
+@property (nonatomic, strong) NSTextField *controlCenterTitleLabel;
+@property (nonatomic, strong) NSTimer *controlCenterTimer;
+@property (nonatomic, strong) NSDate *streamStartDate;
+
+@property (nonatomic) BOOL hideFullscreenControlBall;
+@property (nonatomic, strong) NSSlider *menuVolumeSlider;
+
+@property (nonatomic, strong) NSVisualEffectView *logOverlayContainer;
+@property (nonatomic, strong) NSScrollView *logOverlayScrollView;
+@property (nonatomic, strong) NSTextView *logOverlayTextView;
+@property (nonatomic, strong) id logDidAppendObserver;
+
+@property (nonatomic, strong) NSVisualEffectView *reconnectOverlayContainer;
+@property (nonatomic, strong) NSProgressIndicator *reconnectSpinner;
+@property (nonatomic, strong) NSTextField *reconnectLabel;
+
+@property (nonatomic, strong) NSVisualEffectView *timeoutOverlayContainer;
+@property (nonatomic, strong) NSTextField *timeoutLabel;
+@property (nonatomic, strong) NSButton *timeoutSwitchMethodButton;
+@property (nonatomic, strong) NSButton *timeoutExitButton;
+
+@property (nonatomic) NSInteger connectWatchdogToken;
+@property (nonatomic) BOOL didAutoReconnectAfterTimeout;
+
+@property (nonatomic, strong) id settingsDidChangeObserver;
+@property (nonatomic, strong) id hostLatencyUpdatedObserver;
+
 @end
 
 @implementation StreamViewController
@@ -86,6 +131,14 @@
     self.disconnectWasUserInitiated = NO;
     self.suppressConnectionWarningsUntilMs = 0;
     self.stopStreamInProgress = NO;
+    self.shouldAttemptReconnect = YES;
+    self.reconnectAttemptCount = 0;
+    self.reconnectInProgress = NO;
+    self.connectWatchdogToken = 0;
+    self.didAutoReconnectAfterTimeout = NO;
+    self.streamOpQueue = [[NSOperationQueue alloc] init];
+
+    self.hideFullscreenControlBall = [[NSUserDefaults standardUserDefaults] boolForKey:[self fullscreenControlBallDefaultsKey]];
     
     [self prepareForStreaming];
 
@@ -93,6 +146,7 @@
 
     self.windowDidExitFullScreenNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            [weakSelf updateStreamMenuEntrypointsVisibility];
             if ([weakSelf.view.window isKeyWindow]) {
                 [weakSelf uncaptureMouse];
                 [weakSelf captureMouse];
@@ -102,6 +156,7 @@
 
     self.windowDidEnterFullScreenNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            [weakSelf updateStreamMenuEntrypointsVisibility];
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf isWindowFullscreen]) {
                     if ([weakSelf.view.window isKeyWindow]) {
@@ -143,6 +198,168 @@
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleMouseModeToggledNotification:) name:HIDMouseModeToggledNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleGamepadQuitNotification:) name:HIDGamepadQuitNotification object:nil];
+
+    [self installStreamMenuEntrypoints];
+}
+
+- (BOOL)hasReceivedAnyVideoFrames {
+    @try {
+        if (!self.streamMan) {
+            return NO;
+        }
+        return self.streamMan.connection.renderer.videoStats.receivedFrames > 0;
+    } @catch (NSException *ex) {
+        return NO;
+    }
+}
+
+- (void)startConnectWatchdog {
+    self.connectWatchdogToken += 1;
+    NSInteger token = self.connectWatchdogToken;
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+        if (token != strongSelf.connectWatchdogToken) {
+            return;
+        }
+
+        // If we have video frames, the connection is alive.
+        if ([strongSelf hasReceivedAnyVideoFrames]) {
+            return;
+        }
+
+        if (strongSelf.timeoutOverlayContainer) {
+            return;
+        }
+
+        // 10s with no frames: attempt a single auto-reconnect (once per stream VC lifetime), then show timeout UI.
+        if (!strongSelf.reconnectInProgress && !strongSelf.didAutoReconnectAfterTimeout && strongSelf.shouldAttemptReconnect) {
+            strongSelf.didAutoReconnectAfterTimeout = YES;
+            [strongSelf showReconnectOverlayWithMessage:@"网络无响应，正在尝试重连…"]; 
+            [strongSelf attemptReconnectWithReason:@"connect-timeout-auto"]; 
+            return;
+        }
+
+        [strongSelf showConnectionTimeoutOverlay];
+    });
+}
+
+- (void)showConnectionTimeoutOverlay {
+    if (self.timeoutOverlayContainer) {
+        return;
+    }
+
+    NSVisualEffectView *container = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
+    container.material = NSVisualEffectMaterialHUDWindow;
+    container.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    container.state = NSVisualEffectStateActive;
+    container.wantsLayer = YES;
+    container.layer.cornerRadius = 12.0;
+    container.layer.masksToBounds = YES;
+    container.alphaValue = 0.0;
+
+    NSTextField *label = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    label.bezeled = NO;
+    label.drawsBackground = NO;
+    label.editable = NO;
+    label.selectable = NO;
+    label.alignment = NSTextAlignmentCenter;
+    label.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
+    label.textColor = [NSColor whiteColor];
+    label.stringValue = @"连接超时（10 秒无画面）";
+
+    NSButton *switchBtn = [NSButton buttonWithTitle:@"切换连接方式" target:self action:@selector(handleTimeoutSwitchConnectionMethod:)];
+    switchBtn.bezelStyle = NSBezelStyleRounded;
+
+    NSButton *exitBtn = [NSButton buttonWithTitle:@"退出串流" target:self action:@selector(handleTimeoutExitStream:)];
+    exitBtn.bezelStyle = NSBezelStyleRounded;
+
+    self.timeoutOverlayContainer = container;
+    self.timeoutLabel = label;
+    self.timeoutSwitchMethodButton = switchBtn;
+    self.timeoutExitButton = exitBtn;
+
+    [container addSubview:label];
+    [container addSubview:switchBtn];
+    [container addSubview:exitBtn];
+
+    [self.view addSubview:container positioned:NSWindowAbove relativeTo:nil];
+    [self viewDidLayout];
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.12;
+        container.animator.alphaValue = 1.0;
+    } completionHandler:nil];
+}
+
+- (void)hideConnectionTimeoutOverlay {
+    if (!self.timeoutOverlayContainer) {
+        return;
+    }
+
+    NSVisualEffectView *container = self.timeoutOverlayContainer;
+    self.timeoutOverlayContainer = nil;
+    self.timeoutLabel = nil;
+    self.timeoutSwitchMethodButton = nil;
+    self.timeoutExitButton = nil;
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.15;
+        container.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        [container removeFromSuperview];
+    }];
+}
+
+- (void)handleTimeoutExitStream:(id)sender {
+    [self performCloseStreamWindow:sender];
+}
+
+- (void)handleTimeoutSwitchConnectionMethod:(id)sender {
+    // Present a small menu with connection method options at window center.
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    NSString *method = prefs[@"connectionMethod"] ?: @"Auto";
+
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"连接方式"]; 
+    void (^setSymbol)(NSMenuItem *, NSString *) = ^(NSMenuItem *item, NSString *symbolName) {
+        if (@available(macOS 11.0, *)) {
+            item.image = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:nil];
+        }
+    };
+
+    NSMenuItem *autoItem = [[NSMenuItem alloc] initWithTitle:@"自动" action:@selector(selectConnectionMethodFromMenu:) keyEquivalent:@""];
+    autoItem.target = self;
+    autoItem.representedObject = @"Auto";
+    autoItem.state = [method isEqualToString:@"Auto"] ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(autoItem, @"wand.and.stars");
+    [menu addItem:autoItem];
+
+    NSArray<NSString *> *candidates = @[ self.app.host.localAddress ?: @"", self.app.host.address ?: @"", self.app.host.externalAddress ?: @"", self.app.host.ipv6Address ?: @"" ];
+    NSMutableOrderedSet<NSString *> *unique = [[NSMutableOrderedSet alloc] init];
+    for (NSString *addr in candidates) {
+        if (addr.length > 0) {
+            [unique addObject:addr];
+        }
+    }
+    if (unique.count > 0) {
+        [menu addItem:[NSMenuItem separatorItem]];
+        for (NSString *addr in unique) {
+            NSMenuItem *addrItem = [[NSMenuItem alloc] initWithTitle:addr action:@selector(selectConnectionMethodFromMenu:) keyEquivalent:@""];
+            addrItem.target = self;
+            addrItem.representedObject = addr;
+            addrItem.state = [method isEqualToString:addr] ? NSControlStateValueOn : NSControlStateValueOff;
+            setSymbol(addrItem, @"link");
+            [menu addItem:addrItem];
+        }
+    }
+
+    NSRect bounds = self.view.bounds;
+    NSPoint p = NSMakePoint(NSMidX(bounds), NSMidY(bounds));
+    [menu popUpMenuPositioningItem:nil atLocation:p inView:self.view];
 }
 
 - (void)beginStopStreamIfNeededWithReason:(NSString *)reason {
@@ -152,6 +369,10 @@
         }
         self.stopStreamInProgress = YES;
     }
+
+    // If we are intentionally stopping, don't attempt auto-reconnect.
+    self.shouldAttemptReconnect = NO;
+    self.reconnectInProgress = NO;
 
     // Treat window close / quit shortcuts as a user-initiated disconnect to avoid
     // showing transient "connection is slow" warnings during teardown.
@@ -205,6 +426,64 @@
     [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
+
+    [self updateWindowSubtitle];
+
+    [self updateStreamMenuEntrypointsVisibility];
+
+    if (!self.streamStartDate) {
+        self.streamStartDate = [NSDate date];
+    }
+    [self startControlCenterTimerIfNeeded];
+
+    __weak typeof(self) weakSelf = self;
+    self.settingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf updateWindowSubtitle];
+    }];
+    self.hostLatencyUpdatedObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"HostLatencyUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf updateWindowSubtitle];
+    }];
+
+    self.logDidAppendObserver = [[NSNotificationCenter defaultCenter] addObserverForName:MoonlightLogDidAppendNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        NSString *line = note.userInfo[MoonlightLogNotificationLineKey];
+        if (line) {
+            [weakSelf appendLogLineToOverlay:line];
+        }
+    }];
+}
+
+- (void)updateWindowSubtitle {
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    NSString *method = prefs[@"connectionMethod"];
+
+    NSString* (^addressLabel)(NSString*) = ^NSString* (NSString* addr) {
+        if (!addr) {
+            return MLString(@"Unknown", nil);
+        }
+
+        NSNumber *state = self.app.host.addressStates[addr];
+        NSNumber *latency = self.app.host.addressLatencies[addr];
+        BOOL online = state ? (state.intValue == 1) : YES;
+
+        if (!online) {
+            return [NSString stringWithFormat:@"%@ (%@)", addr, MLString(@"Offline", nil)];
+        }
+        if (latency && latency.intValue >= 0) {
+            return [NSString stringWithFormat:@"%@ (%dms)", addr, latency.intValue];
+        }
+        return addr;
+    };
+
+    NSString *subtitle = nil;
+    if (method && ![method isEqualToString:@"Auto"]) {
+        subtitle = [NSString stringWithFormat:@"%@ (%@)", MLString(@"Manual", nil), addressLabel(method)];
+    } else {
+        subtitle = [NSString stringWithFormat:@"%@ (%@)", MLString(@"Auto", nil), addressLabel(self.app.host.activeAddress)];
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.view.window.subtitle = subtitle;
+    });
 }
 
 - (void)dealloc {
@@ -215,6 +494,25 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self.windowWillCloseNotification];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:HIDMouseModeToggledNotification object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:HIDGamepadQuitNotification object:nil];
+
+    if (self.settingsDidChangeObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.settingsDidChangeObserver];
+        self.settingsDidChangeObserver = nil;
+    }
+    if (self.hostLatencyUpdatedObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.hostLatencyUpdatedObserver];
+        self.hostLatencyUpdatedObserver = nil;
+    }
+
+    if (self.logDidAppendObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.logDidAppendObserver];
+        self.logDidAppendObserver = nil;
+    }
+
+    if (self.controlCenterTimer) {
+        [self.controlCenterTimer invalidate];
+        self.controlCenterTimer = nil;
+    }
 
     [self.hidSupport tearDownHidManager];
     self.hidSupport = nil;
@@ -252,6 +550,14 @@
 }
 
 - (void)rightMouseDown:(NSEvent *)event {
+    // When mouse isn't captured (or user holds Control), treat right-click as local control center.
+    // Otherwise forward to the remote host.
+    BOOL forceLocalMenu = (event.modifierFlags & NSEventModifierFlagControl) != 0;
+    if (!self.isMouseCaptured || forceLocalMenu) {
+        [self presentStreamMenuAtEvent:event];
+        return;
+    }
+
     [self.hidSupport mouseDown:event withButton:BUTTON_RIGHT];
 }
 
@@ -350,6 +656,12 @@
         [self toggleOverlay];
         return YES;
     }
+
+    // Ctrl+Alt+G: toggle fullscreen floating control ball
+    if (event.keyCode == kVK_ANSI_G && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
+        [self toggleFullscreenControlBallVisibility];
+        return YES;
+    }
     
     [self.hidSupport keyDown:event];
     [self.hidSupport keyUp:event];
@@ -367,11 +679,11 @@
     NSAlert *alert = [[NSAlert alloc] init];
     
     alert.alertStyle = NSAlertStyleInformational;
-    alert.messageText = NSLocalizedString(@"Disconnect Alert", @"Disconnect Alert");
+    alert.messageText = MLString(@"Disconnect Alert", @"Disconnect Alert");
 
-    [alert addButtonWithTitle:NSLocalizedString(@"Disconnect from Stream", @"Disconnect from Stream")];
-    [alert addButtonWithTitle:NSLocalizedString(@"Close and Quit App", @"Close and Quit App")];
-    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
+    [alert addButtonWithTitle:MLString(@"Disconnect from Stream", @"Disconnect from Stream")];
+    [alert addButtonWithTitle:MLString(@"Close and Quit App", @"Close and Quit App")];
+    [alert addButtonWithTitle:MLString(@"Cancel", @"Cancel")];
 
     [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
         switch (returnCode) {
@@ -415,6 +727,507 @@
     NSMenu *appMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:1000].submenu;
     appMenu.autoenablesItems = enable;
     [self itemWithMenu:appMenu andAction:@selector(terminate:)].enabled = enable;
+}
+
+#pragma mark - Stream Menu Entrypoints
+
+- (NSString *)fullscreenControlBallDefaultsKey {
+    NSString *uuid = self.app.host.uuid ?: @"global";
+    return [NSString stringWithFormat:@"%@-hideFullscreenControlBall", uuid];
+}
+
+- (void)startControlCenterTimerIfNeeded {
+    if (self.controlCenterTimer) {
+        return;
+    }
+    self.controlCenterTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(updateControlCenterStatus) userInfo:nil repeats:YES];
+    [self updateControlCenterStatus];
+}
+
+- (void)bringStreamControlsToFront {
+    if (self.edgeMenuButton) {
+        [self.view addSubview:self.edgeMenuButton positioned:NSWindowAbove relativeTo:nil];
+    }
+    if (self.overlayContainer) {
+        [self.view addSubview:self.overlayContainer positioned:NSWindowAbove relativeTo:nil];
+    }
+    if (self.logOverlayContainer) {
+        [self.view addSubview:self.logOverlayContainer positioned:NSWindowAbove relativeTo:nil];
+    }
+    if (self.reconnectOverlayContainer) {
+        [self.view addSubview:self.reconnectOverlayContainer positioned:NSWindowAbove relativeTo:nil];
+    }
+}
+
+- (NSString *)formatElapsed:(NSTimeInterval)seconds {
+    NSInteger total = MAX(0, (NSInteger)llround(seconds));
+    NSInteger h = total / 3600;
+    NSInteger m = (total % 3600) / 60;
+    NSInteger s = total % 60;
+    if (h > 0) {
+        return [NSString stringWithFormat:@"%02ld:%02ld:%02ld", (long)h, (long)m, (long)s];
+    }
+    return [NSString stringWithFormat:@"%02ld:%02ld", (long)m, (long)s];
+}
+
+- (NSString *)currentPreferredAddressForStatus {
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    NSString *method = prefs[@"connectionMethod"];
+    if (method && ![method isEqualToString:@"Auto"]) {
+        return method;
+    }
+    return self.app.host.activeAddress;
+}
+
+- (NSInteger)currentLatencyMs {
+    NSString *addr = [self currentPreferredAddressForStatus];
+    NSNumber *latency = addr ? self.app.host.addressLatencies[addr] : nil;
+    if (!latency) {
+        return -1;
+    }
+    return latency.integerValue;
+}
+
+- (void)updateControlCenterStatus {
+    if (!self.controlCenterTimeLabel || !self.controlCenterSignalImageView) {
+        return;
+    }
+
+    NSTimeInterval elapsed = self.streamStartDate ? [[NSDate date] timeIntervalSinceDate:self.streamStartDate] : 0;
+    self.controlCenterTimeLabel.stringValue = [self formatElapsed:elapsed];
+
+    NSInteger latency = [self currentLatencyMs];
+    NSString *symbol = @"wifi";
+    if (latency < 0) {
+        symbol = @"wifi.slash";
+    } else if (latency <= 30) {
+        symbol = @"cellularbars";
+    } else if (latency <= 60) {
+        symbol = @"cellularbars.3";
+    } else if (latency <= 100) {
+        symbol = @"cellularbars.2";
+    } else {
+        symbol = @"cellularbars.1";
+    }
+
+    if (@available(macOS 11.0, *)) {
+        NSImage *img = [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil];
+        if (!img) {
+            img = [NSImage imageWithSystemSymbolName:@"wifi" accessibilityDescription:nil];
+        }
+        self.controlCenterSignalImageView.image = img;
+    }
+}
+
+- (void)installStreamMenuEntrypoints {
+    // Titlebar control center pill (windowed mode)
+    CGFloat pillWidth = 240;
+    CGFloat pillHeight = 28;
+    NSView *titlebarContainer = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, pillWidth, pillHeight)];
+
+    self.controlCenterPill = [[NSVisualEffectView alloc] initWithFrame:titlebarContainer.bounds];
+    self.controlCenterPill.material = NSVisualEffectMaterialHUDWindow;
+    self.controlCenterPill.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    self.controlCenterPill.state = NSVisualEffectStateActive;
+    self.controlCenterPill.wantsLayer = YES;
+    self.controlCenterPill.layer.cornerRadius = pillHeight / 2.0;
+    self.controlCenterPill.layer.masksToBounds = YES;
+    [titlebarContainer addSubview:self.controlCenterPill];
+
+    NSView *content = [[NSView alloc] initWithFrame:self.controlCenterPill.bounds];
+    content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self.controlCenterPill addSubview:content];
+
+    self.controlCenterSignalImageView = [[NSImageView alloc] initWithFrame:NSMakeRect(10, 6, 16, 16)];
+    self.controlCenterSignalImageView.contentTintColor = [NSColor whiteColor];
+    [content addSubview:self.controlCenterSignalImageView];
+
+    self.controlCenterTimeLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(32, 6, 70, 16)];
+    self.controlCenterTimeLabel.bezeled = NO;
+    self.controlCenterTimeLabel.drawsBackground = NO;
+    self.controlCenterTimeLabel.editable = NO;
+    self.controlCenterTimeLabel.selectable = NO;
+    self.controlCenterTimeLabel.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
+    self.controlCenterTimeLabel.textColor = [NSColor whiteColor];
+    self.controlCenterTimeLabel.stringValue = @"00:00";
+    [content addSubview:self.controlCenterTimeLabel];
+
+    self.controlCenterTitleLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(pillWidth - 88, 6, 78, 16)];
+    self.controlCenterTitleLabel.bezeled = NO;
+    self.controlCenterTitleLabel.drawsBackground = NO;
+    self.controlCenterTitleLabel.editable = NO;
+    self.controlCenterTitleLabel.selectable = NO;
+    self.controlCenterTitleLabel.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
+    self.controlCenterTitleLabel.textColor = [NSColor whiteColor];
+    self.controlCenterTitleLabel.alignment = NSTextAlignmentRight;
+    self.controlCenterTitleLabel.stringValue = @"控制中心";
+    [content addSubview:self.controlCenterTitleLabel];
+
+    self.menuTitlebarButton = [NSButton buttonWithTitle:@"" target:self action:@selector(handleStreamMenuButtonPressed:)];
+    self.menuTitlebarButton.bordered = NO;
+    self.menuTitlebarButton.frame = titlebarContainer.bounds;
+    self.menuTitlebarButton.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [titlebarContainer addSubview:self.menuTitlebarButton];
+
+    self.menuTitlebarAccessory = [[NSTitlebarAccessoryViewController alloc] init];
+    self.menuTitlebarAccessory.view = titlebarContainer;
+    self.menuTitlebarAccessory.layoutAttribute = NSLayoutAttributeRight;
+
+    // Edge button for fullscreen mode
+    self.edgeMenuButton = [NSButton buttonWithImage:[NSImage imageWithSystemSymbolName:@"slider.horizontal.3" accessibilityDescription:nil]
+                                             target:self
+                                             action:@selector(handleStreamMenuButtonPressed:)];
+    self.edgeMenuButton.bordered = NO;
+    self.edgeMenuButton.bezelStyle = NSBezelStyleTexturedRounded;
+    self.edgeMenuButton.controlSize = NSControlSizeRegular;
+    self.edgeMenuButton.contentTintColor = [NSColor whiteColor];
+    self.edgeMenuButton.wantsLayer = YES;
+    self.edgeMenuButton.layer.cornerRadius = 10.0;
+    self.edgeMenuButton.layer.backgroundColor = [[NSColor colorWithWhite:0 alpha:0.35] CGColor];
+    self.edgeMenuButton.layer.masksToBounds = YES;
+
+    self.edgeMenuButton.alphaValue = 0.85;
+    self.edgeMenuButton.hidden = YES;
+    [self.view addSubview:self.edgeMenuButton positioned:NSWindowAbove relativeTo:nil];
+
+    [self startControlCenterTimerIfNeeded];
+}
+
+- (void)updateStreamMenuEntrypointsVisibility {
+    if (!self.view.window) {
+        return;
+    }
+
+    BOOL isFullscreen = [self isWindowFullscreen];
+
+    if (isFullscreen) {
+        // NSWindow doesn't expose a public removeTitlebarAccessoryViewController: selector.
+        // Keep the accessory installed but hide it in fullscreen.
+        if (self.menuTitlebarAccessory) {
+            self.menuTitlebarAccessory.view.hidden = YES;
+        }
+
+        self.edgeMenuButton.hidden = self.hideFullscreenControlBall;
+
+        CGFloat buttonWidth = 40;
+        CGFloat buttonHeight = 56;
+        CGFloat insetY = 100;
+        CGFloat x = self.view.bounds.size.width - (buttonWidth / 2.0); // half-hidden
+        CGFloat y = (self.view.bounds.size.height - buttonHeight) / 2.0;
+        y = MAX(insetY, MIN(y, self.view.bounds.size.height - buttonHeight - insetY));
+
+        self.edgeMenuButton.frame = NSMakeRect(x, y, buttonWidth, buttonHeight);
+        [self bringStreamControlsToFront];
+    } else {
+        self.edgeMenuButton.hidden = YES;
+
+        if (self.menuTitlebarAccessory) {
+            self.menuTitlebarAccessory.view.hidden = NO;
+            // Avoid duplicates
+            if (![self.view.window.titlebarAccessoryViewControllers containsObject:self.menuTitlebarAccessory]) {
+                [self.view.window addTitlebarAccessoryViewController:self.menuTitlebarAccessory];
+            }
+        }
+    }
+}
+
+- (void)handleStreamMenuButtonPressed:(id)sender {
+    NSView *sourceView = nil;
+    if ([sender isKindOfClass:[NSView class]]) {
+        sourceView = (NSView *)sender;
+    } else {
+        sourceView = self.view;
+    }
+
+    [self presentStreamMenuFromView:sourceView];
+}
+
+- (void)presentStreamMenuFromView:(NSView *)sourceView {
+    [self rebuildStreamMenu];
+    NSMenu *menu = self.streamMenu;
+
+    NSRect bounds = sourceView.bounds;
+    NSPoint p = NSMakePoint(NSMidX(bounds), NSMinY(bounds));
+    if (sourceView == self.edgeMenuButton) {
+        // Edge button: open to the left
+        p = NSMakePoint(NSMinX(bounds), NSMidY(bounds));
+    }
+
+    [menu popUpMenuPositioningItem:nil atLocation:p inView:sourceView];
+}
+
+- (void)presentStreamMenuAtEvent:(NSEvent *)event {
+    [self rebuildStreamMenu];
+    NSPoint p = [self.view convertPoint:event.locationInWindow fromView:nil];
+    [self.streamMenu popUpMenuPositioningItem:nil atLocation:p inView:self.view];
+}
+
+- (void)rebuildStreamMenu {
+    if (!self.streamMenu) {
+        self.streamMenu = [[NSMenu alloc] initWithTitle:@"StreamMenu"];
+    }
+    [self.streamMenu removeAllItems];
+
+    void (^setSymbol)(NSMenuItem *, NSString *) = ^(NSMenuItem *item, NSString *symbolName) {
+        if (@available(macOS 11.0, *)) {
+            item.image = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:nil];
+        }
+    };
+
+    // 一级顶部：重连
+    NSMenuItem *reconnectItem = [[NSMenuItem alloc] initWithTitle:@"重连" action:@selector(reconnectFromMenu:) keyEquivalent:@""];
+    reconnectItem.target = self;
+    setSymbol(reconnectItem, @"arrow.triangle.2.circlepath");
+    [self.streamMenu addItem:reconnectItem];
+
+    [self.streamMenu addItem:[NSMenuItem separatorItem]];
+
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+
+    // 二级：窗口
+    NSMenuItem *windowItem = [[NSMenuItem alloc] initWithTitle:@"窗口" action:nil keyEquivalent:@""];
+    setSymbol(windowItem, @"macwindow");
+    NSMenu *windowMenu = [[NSMenu alloc] initWithTitle:@"窗口"]; 
+
+    NSString *fullscreenTitle = [self isWindowFullscreen] ? @"退出全屏" : @"进入全屏";
+    NSMenuItem *fullscreenItem = [[NSMenuItem alloc] initWithTitle:fullscreenTitle action:@selector(handleToggleFullscreenFromMenu:) keyEquivalent:@""];
+    fullscreenItem.target = self;
+    setSymbol(fullscreenItem, @"arrow.up.left.and.arrow.down.right");
+    [windowMenu addItem:fullscreenItem];
+
+    NSMenuItem *toggleBallItem = [[NSMenuItem alloc] initWithTitle:@"全屏显示悬浮球" action:@selector(toggleFullscreenControlBallFromMenu:) keyEquivalent:@""];
+    toggleBallItem.target = self;
+    toggleBallItem.state = self.hideFullscreenControlBall ? NSControlStateValueOff : NSControlStateValueOn;
+    setSymbol(toggleBallItem, @"dot.circle.and.hand.point.up.left.fill");
+    [windowMenu addItem:toggleBallItem];
+
+    [windowMenu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *detailsItem = [[NSMenuItem alloc] initWithTitle:@"连接详情" action:@selector(toggleOverlay) keyEquivalent:@""];
+    detailsItem.target = self;
+    detailsItem.state = self.overlayContainer ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(detailsItem, @"gauge.with.dots.needle.33percent");
+    [windowMenu addItem:detailsItem];
+
+    windowItem.submenu = windowMenu;
+    [self.streamMenu addItem:windowItem];
+
+    // 二级：画质（码率）
+    NSMenuItem *qualityItem = [[NSMenuItem alloc] initWithTitle:@"画质" action:nil keyEquivalent:@""];
+    setSymbol(qualityItem, @"sparkles");
+    NSMenu *qualityMenu = [[NSMenu alloc] initWithTitle:@"画质"]; 
+
+    NSMenuItem *bitrateHeader = [[NSMenuItem alloc] initWithTitle:@"码率" action:nil keyEquivalent:@""];
+    bitrateHeader.enabled = NO;
+    [qualityMenu addItem:bitrateHeader];
+
+    BOOL autoAdjust = prefs ? [prefs[@"autoAdjustBitrate"] boolValue] : YES;
+    NSNumber *customBitrate = prefs[@"customBitrate"]; // Kbps
+    NSNumber *fallbackBitrate = prefs[@"bitrate"]; // Kbps
+    NSInteger selectedKbps = customBitrate ? customBitrate.integerValue : (fallbackBitrate ? fallbackBitrate.integerValue : 0);
+
+    NSMenuItem *autoBitrateItem = [[NSMenuItem alloc] initWithTitle:@"自动" action:@selector(selectBitrateFromMenu:) keyEquivalent:@""];
+    autoBitrateItem.target = self;
+    autoBitrateItem.representedObject = @"auto";
+    autoBitrateItem.state = autoAdjust ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(autoBitrateItem, @"wand.and.stars");
+    [qualityMenu addItem:autoBitrateItem];
+
+    NSArray<NSNumber *> *bitrateMbpsChoices = @[ @5, @10, @20, @40, @80, @120, @200 ];
+    for (NSNumber *mbps in bitrateMbpsChoices) {
+        NSInteger kbps = mbps.integerValue * 1000;
+        NSString *title = [NSString stringWithFormat:@"%@ Mbps", mbps];
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(selectBitrateFromMenu:) keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = @(kbps);
+        item.state = (!autoAdjust && selectedKbps == kbps) ? NSControlStateValueOn : NSControlStateValueOff;
+        setSymbol(item, @"speedometer");
+        [qualityMenu addItem:item];
+    }
+
+    qualityItem.submenu = qualityMenu;
+    [self.streamMenu addItem:qualityItem];
+
+    // 二级：声音（音量滑杆）
+    NSMenuItem *audioItem = [[NSMenuItem alloc] initWithTitle:@"声音" action:nil keyEquivalent:@""];
+    setSymbol(audioItem, @"speaker.wave.2");
+    NSMenu *audioMenu = [[NSMenu alloc] initWithTitle:@"声音"]; 
+
+    NSView *volView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 240, 28)];
+    NSTextField *volLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(10, 6, 42, 16)];
+    volLabel.bezeled = NO;
+    volLabel.drawsBackground = NO;
+    volLabel.editable = NO;
+    volLabel.selectable = NO;
+    volLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightRegular];
+    volLabel.textColor = [NSColor labelColor];
+    volLabel.stringValue = @"音量";
+    [volView addSubview:volLabel];
+
+    if (!self.menuVolumeSlider) {
+        self.menuVolumeSlider = [[NSSlider alloc] initWithFrame:NSMakeRect(58, 4, 170, 20)];
+        self.menuVolumeSlider.minValue = 0.0;
+        self.menuVolumeSlider.maxValue = 1.0;
+        self.menuVolumeSlider.target = self;
+        self.menuVolumeSlider.action = @selector(handleVolumeSliderChanged:);
+        self.menuVolumeSlider.continuous = YES;
+    }
+    self.menuVolumeSlider.doubleValue = [SettingsClass volumeLevelFor:self.app.host.uuid];
+    [volView addSubview:self.menuVolumeSlider];
+
+    NSMenuItem *volSliderItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    volSliderItem.view = volView;
+    [audioMenu addItem:volSliderItem];
+
+    audioItem.submenu = audioMenu;
+    [self.streamMenu addItem:audioItem];
+
+    // 二级：网络（连接方式）
+    NSMenuItem *networkItem = [[NSMenuItem alloc] initWithTitle:@"网络" action:nil keyEquivalent:@""];
+    setSymbol(networkItem, @"network");
+    NSMenu *networkMenu = [[NSMenu alloc] initWithTitle:@"网络"]; 
+
+    NSString *method = prefs[@"connectionMethod"] ?: @"Auto";
+    NSMenuItem *autoItem = [[NSMenuItem alloc] initWithTitle:@"自动" action:@selector(selectConnectionMethodFromMenu:) keyEquivalent:@""];
+    autoItem.target = self;
+    autoItem.representedObject = @"Auto";
+    autoItem.state = [method isEqualToString:@"Auto"] ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(autoItem, @"wand.and.stars");
+    [networkMenu addItem:autoItem];
+
+    NSArray<NSString *> *candidates = @[ self.app.host.localAddress ?: @"", self.app.host.address ?: @"", self.app.host.externalAddress ?: @"", self.app.host.ipv6Address ?: @"" ];
+    NSMutableOrderedSet<NSString *> *unique = [[NSMutableOrderedSet alloc] init];
+    for (NSString *addr in candidates) {
+        if (addr.length > 0) {
+            [unique addObject:addr];
+        }
+    }
+    if (unique.count > 0) {
+        [networkMenu addItem:[NSMenuItem separatorItem]];
+        for (NSString *addr in unique) {
+            NSMenuItem *addrItem = [[NSMenuItem alloc] initWithTitle:addr action:@selector(selectConnectionMethodFromMenu:) keyEquivalent:@""];
+            addrItem.target = self;
+            addrItem.representedObject = addr;
+            addrItem.state = [method isEqualToString:addr] ? NSControlStateValueOn : NSControlStateValueOff;
+            setSymbol(addrItem, @"link");
+            [networkMenu addItem:addrItem];
+        }
+    }
+
+    networkItem.submenu = networkMenu;
+    [self.streamMenu addItem:networkItem];
+
+    // 二级：日志（显示/复制）
+    NSMenuItem *logsItem = [[NSMenuItem alloc] initWithTitle:@"日志" action:nil keyEquivalent:@""];
+    setSymbol(logsItem, @"text.justify.left");
+    NSMenu *logsMenu = [[NSMenu alloc] initWithTitle:@"日志"]; 
+
+    NSMenuItem *toggleLogsItem = [[NSMenuItem alloc] initWithTitle:@"显示日志" action:@selector(toggleLogOverlayFromMenu:) keyEquivalent:@""];
+    toggleLogsItem.target = self;
+    toggleLogsItem.state = self.logOverlayContainer ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(toggleLogsItem, @"text.justify.left");
+    [logsMenu addItem:toggleLogsItem];
+
+    NSMenuItem *copyLogsItem = [[NSMenuItem alloc] initWithTitle:@"复制日志" action:@selector(copyLogsFromMenu:) keyEquivalent:@""];
+    copyLogsItem.target = self;
+    setSymbol(copyLogsItem, @"doc.on.doc");
+    [logsMenu addItem:copyLogsItem];
+
+    logsItem.submenu = logsMenu;
+    [self.streamMenu addItem:logsItem];
+
+    // 二级：更多（把重连/退出放底部）
+    NSMenuItem *moreItem = [[NSMenuItem alloc] initWithTitle:@"更多" action:nil keyEquivalent:@""];
+    setSymbol(moreItem, @"ellipsis.circle");
+    NSMenu *moreMenu = [[NSMenu alloc] initWithTitle:@"更多"]; 
+
+    NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"关闭并退出应用" action:@selector(performCloseAndQuitApp:) keyEquivalent:@""];
+    quitItem.target = self;
+    setSymbol(quitItem, @"power");
+    [moreMenu addItem:quitItem];
+
+    moreItem.submenu = moreMenu;
+    [self.streamMenu addItem:moreItem];
+
+    // 一级底部：退出
+    [self.streamMenu addItem:[NSMenuItem separatorItem]];
+    NSMenuItem *disconnectItem = [[NSMenuItem alloc] initWithTitle:@"退出串流" action:@selector(performCloseStreamWindow:) keyEquivalent:@""];
+    disconnectItem.target = self;
+    setSymbol(disconnectItem, @"xmark.circle");
+    [self.streamMenu addItem:disconnectItem];
+}
+
+- (void)handleToggleFullscreenFromMenu:(id)sender {
+    [self.view.window toggleFullScreen:self];
+}
+
+- (void)toggleLogOverlayFromMenu:(id)sender {
+    [self toggleLogOverlay];
+}
+
+- (void)copyLogsFromMenu:(id)sender {
+    [self copyAllLogsToPasteboard];
+}
+
+- (void)reconnectFromMenu:(id)sender {
+    [self attemptReconnectWithReason:@"menu"]; 
+}
+
+- (void)selectConnectionMethodFromMenu:(NSMenuItem *)sender {
+    NSString *method = (NSString *)sender.representedObject;
+    if (method.length == 0) {
+        return;
+    }
+
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    NSString *current = prefs[@"connectionMethod"] ?: @"Auto";
+    if ([current isEqualToString:method]) {
+        return;
+    }
+
+    [SettingsClass setConnectionMethod:method for:self.app.host.uuid];
+    [self updateWindowSubtitle];
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    [self attemptReconnectWithReason:@"connection-method-changed"]; 
+}
+
+- (void)selectBitrateFromMenu:(NSMenuItem *)sender {
+    id rep = sender.representedObject;
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    BOOL currentAuto = prefs ? [prefs[@"autoAdjustBitrate"] boolValue] : YES;
+    NSNumber *currentCustom = prefs[@"customBitrate"]; // Kbps
+
+    if ([rep isKindOfClass:[NSString class]] && [(NSString *)rep isEqualToString:@"auto"]) {
+        if (currentAuto) {
+            return;
+        }
+        [SettingsClass setBitrateMode:YES customBitrateKbps:nil for:self.app.host.uuid];
+    } else if ([rep isKindOfClass:[NSNumber class]]) {
+        NSNumber *kbps = (NSNumber *)rep;
+        if (!currentAuto && currentCustom && currentCustom.integerValue == kbps.integerValue) {
+            return;
+        }
+        [SettingsClass setBitrateMode:NO customBitrateKbps:kbps for:self.app.host.uuid];
+    } else {
+        return;
+    }
+
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    [self attemptReconnectWithReason:@"bitrate-changed"]; 
+}
+
+- (void)handleVolumeSliderChanged:(NSSlider *)sender {
+    [SettingsClass setVolumeLevel:(CGFloat)sender.doubleValue for:self.app.host.uuid];
+}
+
+- (void)toggleFullscreenControlBallFromMenu:(NSMenuItem *)sender {
+    [self toggleFullscreenControlBallVisibility];
+}
+
+- (void)toggleFullscreenControlBallVisibility {
+    self.hideFullscreenControlBall = !self.hideFullscreenControlBall;
+    [[NSUserDefaults standardUserDefaults] setBool:self.hideFullscreenControlBall forKey:[self fullscreenControlBallDefaultsKey]];
+    [self updateStreamMenuEntrypointsVisibility];
 }
 
 - (void)captureMouse {
@@ -715,8 +1528,12 @@
     self.hidSupport = [[HIDSupport alloc] init:self.app.host];
     
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
-    NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
-    [opQueue addOperation:self.streamMan];
+    if (!self.streamOpQueue) {
+        self.streamOpQueue = [[NSOperationQueue alloc] init];
+    }
+    [self.streamOpQueue addOperation:self.streamMan];
+
+    [self startConnectWatchdog];
     
     // Don’t create the overlay before streaming starts. The video view may be inserted later
     // and would otherwise cover the overlay.
@@ -732,6 +1549,220 @@
     } else {
         [self setupOverlay];
     }
+}
+
+#pragma mark - Log Overlay
+
+- (void)toggleLogOverlay {
+    if (self.logOverlayContainer) {
+        [self hideLogOverlay];
+    } else {
+        [self showLogOverlay];
+    }
+}
+
+- (void)showLogOverlay {
+    if (self.logOverlayContainer) {
+        return;
+    }
+
+    self.logOverlayContainer = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
+    self.logOverlayContainer.material = NSVisualEffectMaterialHUDWindow;
+    self.logOverlayContainer.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    self.logOverlayContainer.state = NSVisualEffectStateActive;
+    self.logOverlayContainer.wantsLayer = YES;
+    self.logOverlayContainer.layer.cornerRadius = 12.0;
+    self.logOverlayContainer.layer.masksToBounds = YES;
+
+    self.logOverlayScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    self.logOverlayScrollView.hasVerticalScroller = YES;
+    self.logOverlayScrollView.drawsBackground = NO;
+
+    self.logOverlayTextView = [[NSTextView alloc] initWithFrame:NSZeroRect];
+    self.logOverlayTextView.editable = NO;
+    self.logOverlayTextView.selectable = YES;
+    self.logOverlayTextView.drawsBackground = NO;
+    self.logOverlayTextView.font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];
+    self.logOverlayTextView.textColor = [NSColor whiteColor];
+    self.logOverlayTextView.insertionPointColor = [NSColor whiteColor];
+
+    self.logOverlayScrollView.documentView = self.logOverlayTextView;
+    [self.logOverlayContainer addSubview:self.logOverlayScrollView];
+
+    [self.view addSubview:self.logOverlayContainer positioned:NSWindowAbove relativeTo:nil];
+    [self viewDidLayout];
+
+    // Seed with existing buffered logs
+    NSArray<NSString *> *lines = [[LogBuffer shared] allLines];
+    if (lines.count > 0) {
+        NSString *joined = [lines componentsJoinedByString:@"\n"];
+        self.logOverlayTextView.string = joined;
+        [self.logOverlayTextView scrollRangeToVisible:NSMakeRange(self.logOverlayTextView.string.length, 0)];
+    }
+
+    self.logOverlayContainer.alphaValue = 0.0;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.18;
+        self.logOverlayContainer.animator.alphaValue = 1.0;
+    } completionHandler:nil];
+}
+
+- (void)hideLogOverlay {
+    if (!self.logOverlayContainer) {
+        return;
+    }
+
+    NSVisualEffectView *container = self.logOverlayContainer;
+    self.logOverlayContainer = nil;
+    self.logOverlayScrollView = nil;
+    self.logOverlayTextView = nil;
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.15;
+        container.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        [container removeFromSuperview];
+    }];
+}
+
+- (void)appendLogLineToOverlay:(NSString *)line {
+    if (!self.logOverlayTextView || !line) {
+        return;
+    }
+
+    // Append while preserving selection
+    BOOL atEnd = NSMaxRange(self.logOverlayTextView.selectedRange) == self.logOverlayTextView.string.length;
+    NSString *existing = self.logOverlayTextView.string ?: @"";
+    NSString *newText = existing.length == 0 ? line : [existing stringByAppendingFormat:@"\n%@", line];
+    self.logOverlayTextView.string = newText;
+    if (atEnd) {
+        [self.logOverlayTextView scrollRangeToVisible:NSMakeRange(self.logOverlayTextView.string.length, 0)];
+    }
+}
+
+- (void)copyAllLogsToPasteboard {
+    NSArray<NSString *> *lines = [[LogBuffer shared] allLines];
+    NSString *joined = [lines componentsJoinedByString:@"\n"];
+    if (joined.length == 0) {
+        return;
+    }
+
+    NSPasteboard *pb = [NSPasteboard generalPasteboard];
+    [pb clearContents];
+    [pb setString:joined forType:NSPasteboardTypeString];
+
+    [self showNotification:MLString(@"Logs copied", nil) forSeconds:1.2];
+}
+
+#pragma mark - Reconnect Overlay
+
+- (void)showReconnectOverlayWithMessage:(NSString *)message {
+    if (!self.reconnectOverlayContainer) {
+        self.reconnectOverlayContainer = [[NSVisualEffectView alloc] initWithFrame:self.view.bounds];
+        self.reconnectOverlayContainer.material = NSVisualEffectMaterialHUDWindow;
+        self.reconnectOverlayContainer.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+        self.reconnectOverlayContainer.state = NSVisualEffectStateActive;
+        self.reconnectOverlayContainer.wantsLayer = YES;
+        self.reconnectOverlayContainer.layer.backgroundColor = [[NSColor colorWithWhite:0 alpha:0.55] CGColor];
+
+        self.reconnectSpinner = [[NSProgressIndicator alloc] initWithFrame:NSZeroRect];
+        self.reconnectSpinner.style = NSProgressIndicatorStyleSpinning;
+        self.reconnectSpinner.controlSize = NSControlSizeRegular;
+        [self.reconnectSpinner startAnimation:nil];
+
+        self.reconnectLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
+        self.reconnectLabel.bezeled = NO;
+        self.reconnectLabel.drawsBackground = NO;
+        self.reconnectLabel.editable = NO;
+        self.reconnectLabel.selectable = NO;
+        self.reconnectLabel.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
+        self.reconnectLabel.textColor = [NSColor whiteColor];
+        self.reconnectLabel.alignment = NSTextAlignmentCenter;
+
+        [self.reconnectOverlayContainer addSubview:self.reconnectSpinner];
+        [self.reconnectOverlayContainer addSubview:self.reconnectLabel];
+        [self.view addSubview:self.reconnectOverlayContainer positioned:NSWindowAbove relativeTo:nil];
+
+        self.reconnectOverlayContainer.alphaValue = 0.0;
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+            context.duration = 0.12;
+            self.reconnectOverlayContainer.animator.alphaValue = 1.0;
+        } completionHandler:nil];
+    }
+
+    self.reconnectLabel.stringValue = message ?: MLString(@"Reconnecting…", nil);
+    [self viewDidLayout];
+}
+
+- (void)hideReconnectOverlay {
+    if (!self.reconnectOverlayContainer) {
+        return;
+    }
+
+    NSVisualEffectView *container = self.reconnectOverlayContainer;
+    self.reconnectOverlayContainer = nil;
+    self.reconnectSpinner = nil;
+    self.reconnectLabel = nil;
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.15;
+        container.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        [container removeFromSuperview];
+    }];
+}
+
+- (void)attemptReconnectWithReason:(NSString *)reason {
+    if (!self.shouldAttemptReconnect) {
+        return;
+    }
+
+    // Preserve fullscreen/windowed state across reconnects.
+    self.reconnectPreserveFullscreenStateValid = YES;
+    self.reconnectPreservedWasFullscreen = [self isWindowFullscreen];
+
+    @synchronized (self) {
+        if (self.stopStreamInProgress) {
+            return;
+        }
+        self.stopStreamInProgress = YES;
+    }
+
+    self.reconnectInProgress = YES;
+    self.reconnectAttemptCount += 1;
+    NSString *msg = [NSString stringWithFormat:MLString(@"Reconnecting… (%ld)", nil), (long)self.reconnectAttemptCount];
+    [self showReconnectOverlayWithMessage:msg];
+
+    // Suppress transient warnings while we tear down/restart.
+    [self suppressConnectionWarningsForSeconds:5.0 reason:[NSString stringWithFormat:@"reconnect-%@", reason ?: @"unknown"]];
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        double stopStart = CACurrentMediaTime();
+        [weakSelf.streamMan stopStream];
+        Log(LOG_I, @"Reconnect stop took %.3fs", CACurrentMediaTime() - stopStart);
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(self) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+
+            @synchronized (strongSelf) {
+                strongSelf.stopStreamInProgress = NO;
+            }
+
+            if (strongSelf.useSystemControllerDriver) {
+                [strongSelf.controllerSupport cleanup];
+            }
+            [strongSelf.hidSupport tearDownHidManager];
+            strongSelf.hidSupport = nil;
+            strongSelf.controllerSupport = nil;
+
+            // Restart streaming without leaving the page.
+            [strongSelf prepareForStreaming];
+        });
+    });
 }
 
 - (void)setupOverlay {
@@ -915,16 +1946,32 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
 
+        BOOL wasReconnect = self.reconnectInProgress;
+        if (self.reconnectInProgress) {
+            self.reconnectInProgress = NO;
+            [self hideReconnectOverlay];
+        }
+
         // Create overlay after streaming starts so it stays on top of the video view.
         if ([SettingsClass showPerformanceOverlayFor:self.app.host.uuid] && !self.overlayContainer) {
             [self setupOverlay];
         }
         
-        if ([SettingsClass autoFullscreenFor:self.app.host.uuid]) {
+        BOOL desiredFullscreen = [SettingsClass autoFullscreenFor:self.app.host.uuid];
+        if (wasReconnect && self.reconnectPreserveFullscreenStateValid) {
+            desiredFullscreen = self.reconnectPreservedWasFullscreen;
+        }
+        self.reconnectPreserveFullscreenStateValid = NO;
+
+        if (desiredFullscreen) {
             if (!(self.view.window.styleMask & NSWindowStyleMaskFullScreen)) {
                 [self.view.window toggleFullScreen:self];
             }
         } else {
+            // Avoid forcing fullscreen during reconnect if the user was windowed.
+            if (self.view.window.styleMask & NSWindowStyleMaskFullScreen) {
+                [self.view.window toggleFullScreen:self];
+            }
             [self captureMouse];
         }
     });
@@ -934,6 +1981,7 @@
     Log(LOG_I, @"Connection terminated: %ld", (long)errorCode);
     
     dispatch_async(dispatch_get_main_queue(), ^{
+        [self hideConnectionTimeoutOverlay];
         if (self.statsTimer) {
             [self.statsTimer invalidate];
             self.statsTimer = nil;
@@ -947,6 +1995,10 @@
             [self.mouseModeContainer removeFromSuperview];
             self.mouseModeContainer = nil;
             self.mouseModeLabel = nil;
+        }
+
+        if (self.reconnectInProgress) {
+            return;
         }
         
         if (errorCode == 0 && [SettingsClass quitAppAfterStreamFor:self.app.host.uuid]) {
@@ -1018,7 +2070,7 @@
     self.connectionWarningLabel.textColor = [NSColor whiteColor];
     
     // Use a warning symbol if possible, or just text
-    NSString *warningText = NSLocalizedString(@"Poor Connection", @"Connection warning overlay");
+    NSString *warningText = MLString(@"Poor Connection", @"Connection warning overlay");
     self.connectionWarningLabel.stringValue = warningText;
     [self.connectionWarningLabel sizeToFit];
 
@@ -1039,6 +2091,49 @@
     [super viewDidLayout];
     [self layoutConnectionWarning];
     [self layoutMouseModeIndicator];
+
+    [self updateStreamMenuEntrypointsVisibility];
+
+    if (self.logOverlayContainer) {
+        CGFloat padding = 16.0;
+        CGFloat width = MIN(720.0, self.view.bounds.size.width - padding * 2);
+        CGFloat height = MIN(420.0, self.view.bounds.size.height - padding * 2);
+        self.logOverlayContainer.frame = NSMakeRect((self.view.bounds.size.width - width) / 2.0,
+                                                   (self.view.bounds.size.height - height) / 2.0,
+                                                   width,
+                                                   height);
+        self.logOverlayScrollView.frame = NSMakeRect(12, 12, width - 24, height - 24);
+        self.logOverlayTextView.frame = self.logOverlayScrollView.bounds;
+    }
+
+    if (self.reconnectOverlayContainer) {
+        self.reconnectOverlayContainer.frame = self.view.bounds;
+
+        CGFloat centerX = NSMidX(self.view.bounds);
+        CGFloat centerY = NSMidY(self.view.bounds);
+        self.reconnectSpinner.frame = NSMakeRect(centerX - 10, centerY + 6, 20, 20);
+        [self.reconnectLabel sizeToFit];
+        self.reconnectLabel.frame = NSMakeRect(centerX - self.reconnectLabel.frame.size.width / 2.0,
+                                               centerY - 24,
+                                               self.reconnectLabel.frame.size.width,
+                                               self.reconnectLabel.frame.size.height);
+    }
+
+    if (self.timeoutOverlayContainer) {
+        CGFloat width = 360.0;
+        CGFloat height = 140.0;
+        NSRect bounds = self.view.bounds;
+        self.timeoutOverlayContainer.frame = NSMakeRect((NSWidth(bounds) - width) / 2.0,
+                                                       (NSHeight(bounds) - height) / 2.0,
+                                                       width,
+                                                       height);
+
+        self.timeoutLabel.frame = NSMakeRect(16, height - 56, width - 32, 28);
+        self.timeoutSwitchMethodButton.frame = NSMakeRect(22, 26, (width - 54) / 2.0, 32);
+        self.timeoutExitButton.frame = NSMakeRect(22 + (width - 54) / 2.0 + 10, 26, (width - 54) / 2.0, 32);
+    }
+
+    [self bringStreamControlsToFront];
 }
 
 - (void)layoutConnectionWarning {
@@ -1087,10 +2182,10 @@
         NSString *message = enabled ? @"🖱️ Mouse Mode On" : @"🎮 Mouse Mode Off";
         // Localize if possible, but icons help universally
         if (enabled) {
-             message = [NSString stringWithFormat:@"🖱️ %@", NSLocalizedString(@"Mouse Mode On", @"Notification")];
+               message = [NSString stringWithFormat:@"🖱️ %@", MLString(@"Mouse Mode On", @"Notification")];
              [self showMouseModeIndicator];
         } else {
-             message = [NSString stringWithFormat:@"🎮 %@", NSLocalizedString(@"Mouse Mode Off", @"Notification")];
+               message = [NSString stringWithFormat:@"🎮 %@", MLString(@"Mouse Mode Off", @"Notification")];
              [self hideMouseModeIndicator];
         }
         [self showNotification:message];
@@ -1174,6 +2269,10 @@
 }
 
 - (void)showNotification:(NSString *)message {
+    [self showNotification:message forSeconds:2.0];
+}
+
+- (void)showNotification:(NSString *)message forSeconds:(NSTimeInterval)seconds {
     [self.notificationTimer invalidate];
     if (self.notificationContainer) {
         [self.notificationContainer removeFromSuperview];
@@ -1229,7 +2328,8 @@
     [self.notificationContainer.layer addAnimation:scaleAnim forKey:@"scale"];
 
     // Auto hide
-    self.notificationTimer = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:NO block:^(NSTimer * _Nonnull timer) {
+    NSTimeInterval interval = seconds > 0 ? seconds : 2.0;
+    self.notificationTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:NO block:^(NSTimer * _Nonnull timer) {
         [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
             context.duration = 0.5;
             self.notificationContainer.animator.alphaValue = 0.0;
