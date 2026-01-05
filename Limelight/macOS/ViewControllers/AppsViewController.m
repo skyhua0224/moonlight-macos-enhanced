@@ -132,17 +132,36 @@ const CGFloat scaleBase = 1.125;
 - (void)updateWindowSubtitle {
     NSDictionary *settings = [SettingsClass getSettingsFor:self.host.uuid];
     NSString *method = settings[@"connectionMethod"];
-    NSString *displayAddress = self.host.activeAddress;
-    
+
+    NSString* (^addressLabel)(NSString*) = ^NSString* (NSString* addr) {
+        if (!addr) {
+            return NSLocalizedString(@"Unknown", nil);
+        }
+
+        NSNumber *state = self.host.addressStates[addr];
+        NSNumber *latency = self.host.addressLatencies[addr];
+        BOOL online = state ? (state.intValue == 1) : YES;
+
+        if (!online) {
+            return [NSString stringWithFormat:@"%@ (%@)", addr, NSLocalizedString(@"Offline", nil)];
+        }
+        if (latency && latency.intValue >= 0) {
+            return [NSString stringWithFormat:@"%@ (%dms)", addr, latency.intValue];
+        }
+        return addr;
+    };
+
+    NSString *displaySubtitle = nil;
     if (method && ![method isEqualToString:@"Auto"]) {
-        displayAddress = method;
+        // Manual route: method holds the target address
+        displaySubtitle = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"Manual", nil), addressLabel(method)];
     } else {
-        // Auto
-        displayAddress = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"Auto", nil), self.host.activeAddress ?: NSLocalizedString(@"Unknown", nil)];
+        // Auto route: show activeAddress chosen by routing
+        displaySubtitle = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"Auto", nil), addressLabel(self.host.activeAddress)];
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.parentViewController.view.window.subtitle = displayAddress;
+        self.parentViewController.view.window.subtitle = displaySubtitle;
     });
 }
 

@@ -150,6 +150,8 @@ class SettingsClass: NSObject {
         "gamepadMouseMode": settings.gamepadMouseMode,
         "touchscreenMode": settings.touchscreenMode,
         "upscalingMode": settings.upscalingMode,
+        // Single source of truth: Settings.connectionMethod (persisted by SettingsModel)
+        "connectionMethod": settings.connectionMethod ?? "Auto",
       ]
 
       return objcSettings.compactMapValues { $0 }
