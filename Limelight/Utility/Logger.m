@@ -8,6 +8,8 @@
 
 #import "Logger.h"
 
+#import "LogBuffer.h"
+
 static LogLevel LoggerLogLevel = LOG_I;
 
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args);
@@ -57,5 +59,14 @@ void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
     } else {
         prefixedString = [NSString stringWithFormat:@"%@ %@", levelPrefix, fmt];
     }
+
+    // Build a formatted line for in-app log overlays without consuming the original va_list.
+    va_list argsCopy;
+    va_copy(argsCopy, args);
+    NSString *formattedLine = [[NSString alloc] initWithFormat:prefixedString arguments:argsCopy];
+    va_end(argsCopy);
+
+    [[LogBuffer shared] appendLine:formattedLine level:level];
+
     NSLogv(prefixedString, args);
 }

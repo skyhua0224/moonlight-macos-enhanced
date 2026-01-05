@@ -1517,7 +1517,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Touchscreen": "触摸屏",
 
     "Behaviour": "行为",
-    "Automatically Fullscreen Stream Window": "自动全屏显示",
+    "Automatically Fullscreen Stream Window": "进入串流时默认全屏",
     "Quit App After Stream": "流传输结束后退出程序",
     "Controller Driver": "手柄驱动",
     "Mouse Driver": "鼠标驱动",

@@ -100,6 +100,79 @@ class SettingsClass: NSObject {
     return profileKey
   }
 
+  private static func persist(_ settings: Settings, for key: String) {
+    if let data = try? PropertyListEncoder().encode(settings) {
+      UserDefaults.standard.set(data, forKey: SettingsClass.profileKey(for: key))
+    }
+  }
+
+  private static func copy(
+    _ settings: Settings,
+    connectionMethod: String? = nil,
+    autoAdjustBitrate: Bool? = nil,
+    bitrate: Int? = nil,
+    customBitrate: Int?? = nil,
+    volumeLevel: CGFloat? = nil
+  ) -> Settings {
+    Settings(
+      resolution: settings.resolution,
+      matchDisplayResolution: settings.matchDisplayResolution,
+      customResolution: settings.customResolution,
+      fps: settings.fps,
+      customFps: settings.customFps,
+
+      autoAdjustBitrate: autoAdjustBitrate ?? settings.autoAdjustBitrate,
+      enableYUV444: settings.enableYUV444,
+      ignoreAspectRatio: settings.ignoreAspectRatio,
+      showLocalCursor: settings.showLocalCursor,
+      enableMicrophone: settings.enableMicrophone,
+      streamResolutionScale: settings.streamResolutionScale,
+      streamResolutionScaleRatio: settings.streamResolutionScaleRatio,
+
+      remoteResolution: settings.remoteResolution,
+      remoteResolutionWidth: settings.remoteResolutionWidth,
+      remoteResolutionHeight: settings.remoteResolutionHeight,
+      remoteFps: settings.remoteFps,
+      remoteFpsRate: settings.remoteFpsRate,
+
+      bitrate: bitrate ?? settings.bitrate,
+      customBitrate: customBitrate ?? settings.customBitrate,
+      unlockMaxBitrate: settings.unlockMaxBitrate,
+      codec: settings.codec,
+      hdr: settings.hdr,
+      framePacing: settings.framePacing,
+      audioOnPC: settings.audioOnPC,
+      audioConfiguration: settings.audioConfiguration,
+      enableVsync: settings.enableVsync,
+      showPerformanceOverlay: settings.showPerformanceOverlay,
+      showConnectionWarnings: settings.showConnectionWarnings,
+      captureSystemShortcuts: settings.captureSystemShortcuts,
+      volumeLevel: volumeLevel ?? settings.volumeLevel,
+      multiController: settings.multiController,
+      swapABXYButtons: settings.swapABXYButtons,
+      optimize: settings.optimize,
+
+      autoFullscreen: settings.autoFullscreen,
+      rumble: settings.rumble,
+      controllerDriver: settings.controllerDriver,
+      mouseDriver: settings.mouseDriver,
+
+      emulateGuide: settings.emulateGuide,
+      appArtworkDimensions: settings.appArtworkDimensions,
+      dimNonHoveredArtwork: settings.dimNonHoveredArtwork,
+
+      quitAppAfterStream: settings.quitAppAfterStream,
+
+      absoluteMouseMode: settings.absoluteMouseMode,
+      swapMouseButtons: settings.swapMouseButtons,
+      reverseScrollDirection: settings.reverseScrollDirection,
+      touchscreenMode: settings.touchscreenMode,
+      gamepadMouseMode: settings.gamepadMouseMode,
+      upscalingMode: settings.upscalingMode,
+      connectionMethod: connectionMethod ?? settings.connectionMethod
+    )
+  }
+
   @objc static func getSettings(for key: String) -> [String: Any]? {
     if let settings = Settings.getSettings(for: key) {
       let objcSettings: [String: Any?] = [
@@ -158,6 +231,47 @@ class SettingsClass: NSObject {
     }
 
     return nil
+  }
+
+  @objc static func setConnectionMethod(_ method: String, for key: String) {
+    guard let settings = Settings.getSettings(for: key) else {
+      return
+    }
+
+    let updated = copy(settings, connectionMethod: method)
+    persist(updated, for: key)
+  }
+
+  // Menu-driven bitrate choice.
+  // - When autoAdjust = true, customBitrate is cleared.
+  // - When autoAdjust = false, customBitrate should be a Kbps value (e.g. 20000).
+  @objc static func setBitrateMode(_ autoAdjust: Bool, customBitrateKbps: NSNumber?, for key: String) {
+    guard let settings = Settings.getSettings(for: key) else {
+      return
+    }
+
+    if autoAdjust {
+      let updated = copy(settings, autoAdjustBitrate: true, customBitrate: .some(nil))
+      persist(updated, for: key)
+      return
+    }
+
+    let kbps = max(0, customBitrateKbps?.intValue ?? settings.bitrate)
+    let updated = copy(settings, autoAdjustBitrate: false, bitrate: kbps, customBitrate: .some(kbps))
+    persist(updated, for: key)
+  }
+
+  @objc static func setVolumeLevel(_ level: CGFloat, for key: String) {
+    guard let settings = Settings.getSettings(for: key) else {
+      return
+    }
+
+    let clamped = min(1.0, max(0.0, level))
+    let updated = copy(settings, volumeLevel: clamped)
+    persist(updated, for: key)
+
+    // Keep behavior aligned with SettingsModel (Connection listens for this).
+    NotificationCenter.default.post(name: Notification.Name("volumeSettingChanged"), object: nil)
   }
 
   @objc static func loadMoonlightSettings(for key: String) {

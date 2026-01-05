@@ -28,9 +28,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(atomic, nullable, retain) NSString *mac;
 @property(atomic) int serverCodecModeSupport;
 
-@property(atomic, retain, nullable)
+@property(atomic, retain)
     NSDictionary<NSString *, NSNumber *> *_Nullable addressLatencies;
-@property(atomic, retain, nullable) NSDictionary<NSString *, NSNumber *>
+@property(atomic, retain) NSDictionary<NSString *, NSNumber *>
     *_Nullable addressStates; // 1 = Online, 0 = Offline
 
 @property(atomic, retain) NSString *name;
