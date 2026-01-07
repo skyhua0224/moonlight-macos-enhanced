@@ -340,8 +340,10 @@ class SettingsClass: NSObject {
 
     // Recalculate bitrate if auto is enabled, since resolution changed
     if updated.autoAdjustBitrate == true {
-      let w = matchDisplay ? 1920 : width  // Approximation for calc if matching display (actual used later)
-      let h = matchDisplay ? 1080 : height
+      // If matchDisplay is true, we should try to determine real size, otherwise default to 1080p for calc.
+      // We can't easily get display size here without risk, so 1920x1080 is a safe bet for bitrate calc.
+      let w = (matchDisplay || width == 0) ? 1920 : width
+      let h = (matchDisplay || height == 0) ? 1080 : height
       let newBitrate = SettingsModel.getDefaultBitrateKbps(
         width: w, height: h, fps: fps, yuv444: updated.enableYUV444 ?? false)
       updated = Settings(
@@ -537,12 +539,12 @@ class SettingsClass: NSObject {
       } else {
         dataResolutionWidth =
           settings.resolution == .zero
-          ? settings.customResolution!.width : settings.resolution.width
+          ? (settings.customResolution?.width ?? 1280) : settings.resolution.width
         dataResolutionHeight =
           settings.resolution == .zero
-          ? settings.customResolution!.height : settings.resolution.height
+          ? (settings.customResolution?.height ?? 720) : settings.resolution.height
       }
-      let dataFps = settings.fps == .zero ? Int(settings.customFps!) : settings.fps
+      let dataFps = settings.fps == .zero ? Int(settings.customFps ?? 60.0) : settings.fps
       let dataBitrate = settings.bitrate
       let dataCodec = SettingsModel.getBool(from: settings.codec, in: SettingsModel.videoCodecs)
 
