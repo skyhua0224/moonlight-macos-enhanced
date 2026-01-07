@@ -51,6 +51,7 @@ struct Settings: Encodable, Decodable {
   let optimize: Bool
 
   let autoFullscreen: Bool
+  let displayMode: Int?
   let rumble: Bool
   let controllerDriver: Int
   let mouseDriver: Int
@@ -153,6 +154,7 @@ class SettingsClass: NSObject {
       optimize: settings.optimize,
 
       autoFullscreen: settings.autoFullscreen,
+      displayMode: settings.displayMode,
       rumble: settings.rumble,
       controllerDriver: settings.controllerDriver,
       mouseDriver: settings.mouseDriver,
@@ -210,6 +212,7 @@ class SettingsClass: NSObject {
         "swapABXYButtons": settings.swapABXYButtons,
         "optimize": settings.optimize,
         "autoFullscreen": settings.autoFullscreen,
+        "displayMode": settings.displayMode ?? (settings.autoFullscreen ? 1 : 0),
         "rumble": settings.rumble,
         "controllerDriver": settings.controllerDriver,
         "mouseDriver": settings.mouseDriver,
@@ -365,6 +368,17 @@ class SettingsClass: NSObject {
     }
 
     return SettingsModel.defaultAutoFullscreen
+  }
+
+  @objc static func displayMode(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      if let mode = settings.displayMode {
+        return mode
+      }
+      return settings.autoFullscreen ? 1 : 0
+    }
+
+    return SettingsModel.defaultDisplayMode
   }
 
   @objc static func rumble(for key: String) -> Bool {

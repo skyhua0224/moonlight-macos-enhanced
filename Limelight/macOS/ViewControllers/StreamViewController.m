@@ -34,6 +34,12 @@
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Carbon/Carbon.h>
 
+typedef NS_ENUM(NSInteger, PendingWindowMode) {
+    PendingWindowModeNone,
+    PendingWindowModeWindowed,
+    PendingWindowModeBorderless
+};
+
 @interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate, InputPresenceDelegate>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
@@ -113,9 +119,81 @@
 @property (nonatomic, strong) id settingsDidChangeObserver;
 @property (nonatomic, strong) id hostLatencyUpdatedObserver;
 
+@property (nonatomic) PendingWindowMode pendingWindowMode;
+- (void)applyBorderlessMode;
+- (void)applyWindowedMode;
+
+@property (nonatomic) BOOL menuTitlebarAccessoryInstalled;
+
+@property (nonatomic, strong) id localKeyDownMonitor;
+
+@property (nonatomic) BOOL savedPresentationOptionsValid;
+@property (nonatomic) NSApplicationPresentationOptions savedPresentationOptions;
+
+@property (nonatomic) BOOL savedContentAspectRatioValid;
+@property (nonatomic) NSSize savedContentAspectRatio;
+
 @end
 
 @implementation StreamViewController
+
+- (BOOL)windowSupportsTitlebarAccessoryControllers:(NSWindow *)window {
+    // Some NSWindow subclasses (and older macOS) don't implement the setter even if the getter exists.
+    // Never require setTitlebarAccessoryViewControllers:, because we can operate without it.
+    return window != nil
+        && [window respondsToSelector:@selector(titlebarAccessoryViewControllers)];
+}
+
+- (BOOL)windowAllowsTitlebarAccessories:(NSWindow *)window {
+    if (!window) {
+        return NO;
+    }
+    if ((window.styleMask & NSWindowStyleMaskTitled) == 0) {
+        return NO;
+    }
+    if ((window.styleMask & NSWindowStyleMaskBorderless) != 0) {
+        return NO;
+    }
+    if (![window respondsToSelector:@selector(addTitlebarAccessoryViewController:)]) {
+        return NO;
+    }
+    return YES;
+}
+
+- (BOOL)isMenuTitlebarAccessoryInstalledInWindow:(NSWindow *)window {
+    if (!window || !self.menuTitlebarAccessory) {
+        return NO;
+    }
+
+    if ([self windowSupportsTitlebarAccessoryControllers:window]) {
+        @try {
+            return [window.titlebarAccessoryViewControllers containsObject:self.menuTitlebarAccessory];
+        } @catch (NSException *exception) {
+            // If AppKit asserts for this style/transition, fall back to our local flag.
+        }
+    }
+
+    return self.menuTitlebarAccessoryInstalled;
+}
+
+- (void)enterBorderlessPresentationOptionsIfNeeded {
+    if (!self.savedPresentationOptionsValid) {
+        self.savedPresentationOptions = [NSApp presentationOptions];
+        self.savedPresentationOptionsValid = YES;
+    }
+
+    NSApplicationPresentationOptions opts = [NSApp presentationOptions];
+    opts |= (NSApplicationPresentationHideDock | NSApplicationPresentationHideMenuBar);
+    [NSApp setPresentationOptions:opts];
+}
+
+- (void)restorePresentationOptionsIfNeeded {
+    if (!self.savedPresentationOptionsValid) {
+        return;
+    }
+    [NSApp setPresentationOptions:self.savedPresentationOptions];
+    self.savedPresentationOptionsValid = NO;
+}
 
 #pragma mark - Lifecycle
 
@@ -146,6 +224,14 @@
 
     self.windowDidExitFullScreenNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            if (weakSelf.pendingWindowMode == PendingWindowModeBorderless) {
+                weakSelf.pendingWindowMode = PendingWindowModeNone;
+                [weakSelf applyBorderlessMode];
+            } else if (weakSelf.pendingWindowMode == PendingWindowModeWindowed) {
+                weakSelf.pendingWindowMode = PendingWindowModeNone;
+                [weakSelf applyWindowedMode];
+            }
+
             [weakSelf updateStreamMenuEntrypointsVisibility];
             if ([weakSelf.view.window isKeyWindow]) {
                 [weakSelf uncaptureMouse];
@@ -370,6 +456,19 @@
         self.stopStreamInProgress = YES;
     }
 
+    // If we are closing while in borderless, ensure we restore system UI state and window constraints.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self restorePresentationOptionsIfNeeded];
+        if (self.savedContentAspectRatioValid && self.view.window) {
+            @try {
+                self.view.window.contentAspectRatio = self.savedContentAspectRatio;
+            } @catch (NSException *exception) {
+                // ignore
+            }
+            self.savedContentAspectRatioValid = NO;
+        }
+    });
+
     // If we are intentionally stopping, don't attempt auto-reconnect.
     self.shouldAttemptReconnect = NO;
     self.reconnectInProgress = NO;
@@ -403,6 +502,8 @@
     self.streamView.statusText = @"Starting";
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
+
+    [self installLocalKeyMonitorIfNeeded];
     
     NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
     BOOL ignoreAspectRatio = prefs ? [prefs[@"ignoreAspectRatio"] boolValue] : NO;
@@ -514,8 +615,66 @@
         self.controlCenterTimer = nil;
     }
 
+    if (self.localKeyDownMonitor) {
+        [NSEvent removeMonitor:self.localKeyDownMonitor];
+        self.localKeyDownMonitor = nil;
+    }
+
     [self.hidSupport tearDownHidManager];
     self.hidSupport = nil;
+}
+
+- (BOOL)isWindowBorderlessMode {
+    if (!self.view.window) {
+        return NO;
+    }
+    BOOL isFullscreen = [self isWindowFullscreen];
+    return ((self.view.window.styleMask & NSWindowStyleMaskTitled) == 0) && !isFullscreen;
+}
+
+- (void)installLocalKeyMonitorIfNeeded {
+    if (self.localKeyDownMonitor) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    self.localKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent * _Nullable(NSEvent * _Nonnull event) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return event;
+        }
+
+        NSWindow *window = strongSelf.view.window;
+        if (!window) {
+            return event;
+        }
+
+        // Only intercept events intended for our stream window (or events without an attached window).
+        if (event.window && event.window != window) {
+            return event;
+        }
+
+        const NSEventModifierFlags allowed = (NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand | NSEventModifierFlagFunction);
+        const NSEventModifierFlags mods = event.modifierFlags & allowed;
+
+        // Escape hatch: Ctrl+Alt+Cmd+B toggles borderless <-> windowed.
+        if (event.keyCode == kVK_ANSI_B && mods == (NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand)) {
+            if ([strongSelf isWindowBorderlessMode]) {
+                [strongSelf switchToWindowedMode:nil];
+            } else {
+                [strongSelf switchToBorderlessMode:nil];
+            }
+            return nil;
+        }
+
+        // In borderless mode, Esc opens the local stream menu.
+        if (event.keyCode == kVK_Escape && [strongSelf isWindowBorderlessMode]) {
+            [strongSelf presentStreamMenuFromView:strongSelf.view];
+            return nil;
+        }
+
+        return event;
+    }];
 }
 
 - (void)flagsChanged:(NSEvent *)event {
@@ -705,7 +864,33 @@
 - (IBAction)performCloseStreamWindow:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
     [self beginStopStreamIfNeededWithReason:@"disconnect-from-stream"]; 
-    [self.nextResponder doCommandBySelector:@selector(performClose:)];
+
+    // In borderless/floating mode, relying on the responder chain can fail to close the window,
+    // leaving the last frame stuck. Restore a normal window style and close explicitly.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSWindow *w = self.view.window;
+        if (!w) {
+            return;
+        }
+
+        Log(LOG_I, @"performCloseStreamWindow: closing window (style=%llu level=%ld)", (unsigned long long)w.styleMask, (long)w.level);
+
+        [self restorePresentationOptionsIfNeeded];
+
+        if ((w.styleMask & NSWindowStyleMaskTitled) == 0) {
+            NSWindowStyleMask mask = w.styleMask;
+            mask &= ~NSWindowStyleMaskBorderless;
+            mask |= (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable);
+            @try {
+                [w setStyleMask:mask];
+                [w setLevel:NSNormalWindowLevel];
+            } @catch (NSException *exception) {
+                // ignore
+            }
+        }
+
+        [w performClose:nil];
+    });
 }
 
 - (IBAction)performCloseAndQuitApp:(id)sender {
@@ -899,15 +1084,28 @@
     }
 
     BOOL isFullscreen = [self isWindowFullscreen];
+    // During/after switching to borderless, AppKit can call layout while the style mask is in flux.
+    // Any call that touches the titlebarViewController (including addTitlebarAccessoryViewController:)
+    // can assert if the current style doesn't support a titlebar.
+    BOOL hasTitlebar = (self.view.window.styleMask & NSWindowStyleMaskTitled) != 0;
+    BOOL isBorderless = (!hasTitlebar) || (((self.view.window.styleMask & NSWindowStyleMaskTitled) == 0) && !isFullscreen);
 
-    if (isFullscreen) {
+    if (isFullscreen || isBorderless) {
         // NSWindow doesn't expose a public removeTitlebarAccessoryViewController: selector.
         // Keep the accessory installed but hide it in fullscreen.
         if (self.menuTitlebarAccessory) {
             self.menuTitlebarAccessory.view.hidden = YES;
         }
 
-        self.edgeMenuButton.hidden = self.hideFullscreenControlBall;
+        // Important: do NOT add/remove titlebar accessories when there's no titlebar.
+        // applyBorderlessMode already removes the accessory before stripping NSWindowStyleMaskTitled.
+
+        // Borderless should always have the floating button.
+        if (isBorderless) {
+            self.edgeMenuButton.hidden = NO;
+        } else {
+            self.edgeMenuButton.hidden = self.hideFullscreenControlBall;
+        }
 
         CGFloat buttonWidth = 40;
         CGFloat buttonHeight = 56;
@@ -923,9 +1121,18 @@
 
         if (self.menuTitlebarAccessory) {
             self.menuTitlebarAccessory.view.hidden = NO;
-            // Avoid duplicates
-            if (![self.view.window.titlebarAccessoryViewControllers containsObject:self.menuTitlebarAccessory]) {
-                [self.view.window addTitlebarAccessoryViewController:self.menuTitlebarAccessory];
+            // Only install the titlebar accessory when the current style supports a titlebar.
+            // Do NOT rely on setTitlebarAccessoryViewControllers: (not available on some windows).
+            if (hasTitlebar && [self windowAllowsTitlebarAccessories:self.view.window]) {
+                BOOL alreadyInstalled = [self isMenuTitlebarAccessoryInstalledInWindow:self.view.window];
+                if (!alreadyInstalled) {
+                    @try {
+                        [self.view.window addTitlebarAccessoryViewController:self.menuTitlebarAccessory];
+                        self.menuTitlebarAccessoryInstalled = YES;
+                    } @catch (NSException *exception) {
+                        // Ignore; AppKit may still be transitioning styles.
+                    }
+                }
             }
         }
     }
@@ -962,6 +1169,191 @@
     [self.streamMenu popUpMenuPositioningItem:nil atLocation:p inView:self.view];
 }
 
+- (void)applyWindowedMode {
+    NSWindow *window = self.view.window;
+    [self restorePresentationOptionsIfNeeded];
+
+    if (self.savedContentAspectRatioValid) {
+        @try {
+            window.contentAspectRatio = self.savedContentAspectRatio;
+        } @catch (NSException *exception) {
+            // ignore
+        }
+        self.savedContentAspectRatioValid = NO;
+    }
+
+    BOOL wasBorderless = (window.styleMask & NSWindowStyleMaskBorderless) != 0;
+
+    NSWindowStyleMask newMask = window.styleMask;
+    newMask &= ~NSWindowStyleMaskBorderless;
+    newMask |= (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable);
+    [window setStyleMask:newMask];
+    [window setLevel:NSNormalWindowLevel];
+
+    [window layoutIfNeeded];
+    [window.contentView layoutSubtreeIfNeeded];
+    [self.view setNeedsLayout:YES];
+    [self.view layoutSubtreeIfNeeded];
+    [window makeFirstResponder:self];
+    
+    // Restore a reasonable frame. When leaving borderless, don't keep a fullscreen-sized window
+    // (it looks like "real fullscreen" and can confuse the responder chain).
+    if (wasBorderless) {
+        NSScreen *screen = window.screen ?: [NSScreen mainScreen];
+        NSRect visible = screen ? screen.visibleFrame : window.frame;
+        CGFloat targetW = MIN(1280, visible.size.width);
+        CGFloat targetH = MIN(720, visible.size.height);
+        NSRect target = NSMakeRect(
+            NSMidX(visible) - targetW / 2.0,
+            NSMidY(visible) - targetH / 2.0,
+            targetW,
+            targetH
+        );
+        [window setFrame:target display:YES animate:YES];
+    } else {
+        [window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1280, 720)];
+    }
+    
+    [self captureMouse];
+    [self updateStreamMenuEntrypointsVisibility];
+
+    // If AppKit was mid-transition, try again on next runloop to restore the titlebar control center.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateStreamMenuEntrypointsVisibility];
+    });
+}
+
+- (void)switchToWindowedMode:(id)sender {
+    NSWindow *window = self.view.window;
+    if (window.styleMask & NSWindowStyleMaskFullScreen) {
+        self.pendingWindowMode = PendingWindowModeWindowed;
+        [window toggleFullScreen:self];
+        return;
+    }
+    
+    [self applyWindowedMode];
+}
+
+- (void)switchToFullscreenMode:(id)sender {
+    NSWindow *window = self.view.window;
+    if (window.styleMask & NSWindowStyleMaskBorderless) {
+        [self restorePresentationOptionsIfNeeded];
+
+        if (self.savedContentAspectRatioValid) {
+            @try {
+                window.contentAspectRatio = self.savedContentAspectRatio;
+            } @catch (NSException *exception) {
+                // ignore
+            }
+            self.savedContentAspectRatioValid = NO;
+        }
+
+        window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+        window.level = NSNormalWindowLevel;
+    }
+    
+    if ((window.styleMask & NSWindowStyleMaskFullScreen) == 0) {
+        [window toggleFullScreen:self];
+    }
+}
+
+- (void)applyBorderlessMode {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSWindow *window = self.view.window;
+        if (!window) return;
+
+        // Ensure we are not in fullscreen before applying borderless
+        if (window.styleMask & NSWindowStyleMaskFullScreen) {
+             [window toggleFullScreen:self];
+             return;
+        }
+
+        [self enterBorderlessPresentationOptionsIfNeeded];
+
+        // Borderless should cover the full screen frame. If the stream window has a fixed
+        // contentAspectRatio (e.g., 16:9), AppKit will refuse a 16:10 screen-sized frame and
+        // we end up with a visible blank strip. Temporarily set the aspect ratio to the screen.
+        NSScreen *screen = window.screen ?: [NSScreen mainScreen];
+        NSRect screenFrame = screen ? screen.frame : window.frame;
+        if (!self.savedContentAspectRatioValid) {
+            self.savedContentAspectRatio = window.contentAspectRatio;
+            self.savedContentAspectRatioValid = YES;
+        }
+        @try {
+            if (screenFrame.size.width > 0 && screenFrame.size.height > 0) {
+                window.contentAspectRatio = screenFrame.size;
+            }
+        } @catch (NSException *exception) {
+            // ignore
+        }
+
+        // Titlebar accessories can cause AppKit assertions when switching to borderless.
+        if (self.menuTitlebarAccessory) {
+            self.menuTitlebarAccessory.view.hidden = YES;
+        }
+
+        NSWindowStyleMask newMask = window.styleMask;
+        newMask &= ~(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable);
+        newMask |= NSWindowStyleMaskBorderless;
+        [window setStyleMask:newMask];
+        // Using NSMainMenuWindowLevel + 1 to ensure it covers the menu bar area
+        [window setLevel:NSMainMenuWindowLevel + 1];
+
+        NSRect targetFrame = screenFrame;
+        [window setFrame:targetFrame display:YES];
+
+        // Some configurations (space transitions / Stage Manager / presentationOptions updates)
+        // can cause the first setFrame to be adjusted. Re-apply shortly after to eliminate
+        // a persistent bottom gap.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NSWindow *w = self.view.window;
+            if (!w) {
+                return;
+            }
+            NSScreen *s = w.screen ?: [NSScreen mainScreen];
+            NSRect tf = s ? s.frame : w.frame;
+            // Fix for positioning issue where window is shifted up
+            if (s) {
+                 tf = s.frame;
+            }
+            [w setFrame:tf display:YES];
+            [w layoutIfNeeded];
+            [w.contentView layoutSubtreeIfNeeded];
+            [self.view setNeedsLayout:YES];
+            [self.view layoutSubtreeIfNeeded];
+        });
+
+        // Force a layout pass after styleMask/frame changes to avoid transient blank bars.
+        [window layoutIfNeeded];
+        [window.contentView layoutSubtreeIfNeeded];
+        [self.view setNeedsLayout:YES];
+        [self.view layoutSubtreeIfNeeded];
+
+        // Ensure our overlay/menu buttons don't steal key focus (which breaks key equivalents).
+        if (self.edgeMenuButton && [self.edgeMenuButton respondsToSelector:@selector(setRefusesFirstResponder:)]) {
+            self.edgeMenuButton.refusesFirstResponder = YES;
+        }
+        if (self.menuTitlebarButton && [self.menuTitlebarButton respondsToSelector:@selector(setRefusesFirstResponder:)]) {
+            self.menuTitlebarButton.refusesFirstResponder = YES;
+        }
+        [window makeFirstResponder:self];
+
+        [self captureMouse];
+        [self updateStreamMenuEntrypointsVisibility];
+    });
+}
+
+- (void)switchToBorderlessMode:(id)sender {
+    NSWindow *window = self.view.window;
+    if (window.styleMask & NSWindowStyleMaskFullScreen) {
+        self.pendingWindowMode = PendingWindowModeBorderless;
+        [window toggleFullScreen:self];
+        return;
+    }
+    
+    [self applyBorderlessMode];
+}
+
 - (void)rebuildStreamMenu {
     if (!self.streamMenu) {
         self.streamMenu = [[NSMenu alloc] initWithTitle:@"StreamMenu"];
@@ -989,11 +1381,29 @@
     setSymbol(windowItem, @"macwindow");
     NSMenu *windowMenu = [[NSMenu alloc] initWithTitle:@"窗口"]; 
 
-    NSString *fullscreenTitle = [self isWindowFullscreen] ? @"退出全屏" : @"进入全屏";
-    NSMenuItem *fullscreenItem = [[NSMenuItem alloc] initWithTitle:fullscreenTitle action:@selector(handleToggleFullscreenFromMenu:) keyEquivalent:@""];
+    BOOL isFullscreen = [self isWindowFullscreen];
+    BOOL isBorderless = ((self.view.window.styleMask & NSWindowStyleMaskTitled) == 0) && !isFullscreen;
+    BOOL isWindowed = !isFullscreen && !isBorderless;
+
+    NSMenuItem *windowedItem = [[NSMenuItem alloc] initWithTitle:@"窗口模式" action:@selector(switchToWindowedMode:) keyEquivalent:@""];
+    windowedItem.target = self;
+    windowedItem.state = isWindowed ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(windowedItem, @"macwindow");
+    [windowMenu addItem:windowedItem];
+
+    NSMenuItem *fullscreenItem = [[NSMenuItem alloc] initWithTitle:@"全屏模式" action:@selector(switchToFullscreenMode:) keyEquivalent:@""];
     fullscreenItem.target = self;
+    fullscreenItem.state = isFullscreen ? NSControlStateValueOn : NSControlStateValueOff;
     setSymbol(fullscreenItem, @"arrow.up.left.and.arrow.down.right");
     [windowMenu addItem:fullscreenItem];
+
+    NSMenuItem *borderlessItem = [[NSMenuItem alloc] initWithTitle:@"无边框窗口" action:@selector(switchToBorderlessMode:) keyEquivalent:@""];
+    borderlessItem.target = self;
+    borderlessItem.state = isBorderless ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(borderlessItem, @"rectangle.dashed");
+    [windowMenu addItem:borderlessItem];
+
+    [windowMenu addItem:[NSMenuItem separatorItem]];
 
     NSMenuItem *toggleBallItem = [[NSMenuItem alloc] initWithTitle:@"全屏显示悬浮球" action:@selector(toggleFullscreenControlBallFromMenu:) keyEquivalent:@""];
     toggleBallItem.target = self;
@@ -1946,6 +2356,8 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
 
+        Log(LOG_I, @"connectionStarted (t=%.0fms) window style=%llu level=%ld", CACurrentMediaTime() * 1000.0, (unsigned long long)self.view.window.styleMask, (long)self.view.window.level);
+
         BOOL wasReconnect = self.reconnectInProgress;
         if (self.reconnectInProgress) {
             self.reconnectInProgress = NO;
@@ -1957,23 +2369,40 @@
             [self setupOverlay];
         }
         
-        BOOL desiredFullscreen = [SettingsClass autoFullscreenFor:self.app.host.uuid];
+        NSInteger displayMode = [SettingsClass displayModeFor:self.app.host.uuid];
+        // 0: Windowed, 1: Fullscreen, 2: Borderless Windowed
+        
         if (wasReconnect && self.reconnectPreserveFullscreenStateValid) {
-            desiredFullscreen = self.reconnectPreservedWasFullscreen;
+            // If we were reconnecting, try to preserve state, but for now let's just respect the setting
+            // or maybe we should respect what it was.
+            // For simplicity, let's respect the setting as "default" implies startup state.
         }
         self.reconnectPreserveFullscreenStateValid = NO;
 
-        if (desiredFullscreen) {
+        // Make the stream interactive as soon as we have video.
+        // Without this, fullscreen transitions can leave input disabled until AppKit
+        // finishes space/key-window transitions, which can take several seconds.
+        [self captureMouse];
+
+        if (displayMode == 1) {
             if (!(self.view.window.styleMask & NSWindowStyleMaskFullScreen)) {
                 [self.view.window toggleFullScreen:self];
             }
+        } else if (displayMode == 2) {
+            [self switchToBorderlessMode:nil];
         } else {
             // Avoid forcing fullscreen during reconnect if the user was windowed.
             if (self.view.window.styleMask & NSWindowStyleMaskFullScreen) {
                 [self.view.window toggleFullScreen:self];
             }
-            [self captureMouse];
         }
+
+        // Re-assert capture shortly after mode switches in case AppKit temporarily steals focus.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (!self.isMouseCaptured) {
+                [self captureMouse];
+            }
+        });
     });
 }
 

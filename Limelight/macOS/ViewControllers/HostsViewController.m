@@ -18,12 +18,12 @@
 #import "NavigatableAlertView.h"
 #import "AppDelegateForAppKit.h"
 
+#import "TemporaryHost.h"
 #import "Moonlight-Swift.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
 #import "DiscoveryManager.h"
-#import "TemporaryHost.h"
 #import "DataManager.h"
 #import "PairManager.h"
 #import "WakeOnLanManager.h"
@@ -323,13 +323,21 @@
 
     [menu addItem:[NSMenuItem separatorItem]];
 
-    NSMenuItem *settingsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Settings", @"Settings") action:@selector(openHostSettings:) keyEquivalent:@""];
-    [settingsItem setTarget:self];
-    [menu addItem:settingsItem];
+    NSMenuItem *settingsItem = [HostsViewController getMenuItemForIdentifier:@"settingsItem" inMenu:menu];
+    if (settingsItem == nil) {
+        settingsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Settings", @"Settings") action:@selector(openHostSettings:) keyEquivalent:@""];
+        [settingsItem setTarget:self];
+        settingsItem.identifier = @"settingsItem";
+        [menu addItem:settingsItem];
+    }
 
-    NSMenuItem *detailsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Connection Details", @"Connection Details") action:@selector(showConnectionDetails:) keyEquivalent:@""];
-    [detailsItem setTarget:self];
-    [menu addItem:detailsItem];
+    NSMenuItem *detailsItem = [HostsViewController getMenuItemForIdentifier:@"detailsItem" inMenu:menu];
+    if (detailsItem == nil) {
+        detailsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Connection Details", @"Connection Details") action:@selector(showConnectionDetails:) keyEquivalent:@""];
+        [detailsItem setTarget:self];
+        detailsItem.identifier = @"detailsItem";
+        [menu addItem:detailsItem];
+    }
 }
 
 - (void)openHostSettings:(NSMenuItem *)sender {
@@ -346,84 +354,8 @@
         return;
     }
 
-    if (@available(macOS 10.12, *)) {
-        NSGridView *gridView = [NSGridView gridViewWithViews:@[]];
-        gridView.columnSpacing = 10;
-        gridView.rowSpacing = 5;
-        
-        // Helper block to add row
-        void (^addRow)(NSString *, NSString *) = ^(NSString *label, NSString *value) {
-            NSTextField *labelField = [NSTextField labelWithString:[label stringByAppendingString:@":"]];
-            labelField.font = [NSFont boldSystemFontOfSize:12];
-            labelField.alignment = NSTextAlignmentRight;
-            
-            NSTextField *valueField = [NSTextField labelWithString:value ?: @"-"];
-            valueField.selectable = YES; // Allow copying
-            
-            [gridView addRowWithViews:@[labelField, valueField]];
-        };
-
-        NSString *statusString;
-        if (host.state == StateOnline) {
-            statusString = NSLocalizedString(@"Online", nil);
-        } else if (host.state == StateOffline) {
-            statusString = NSLocalizedString(@"Offline", nil);
-        } else {
-            statusString = NSLocalizedString(@"Unknown", nil);
-        }
-        
-        NSString *pairStateString = host.pairState == PairStatePaired ? NSLocalizedString(@"Paired", nil) : NSLocalizedString(@"Unpaired", nil);
-
-        addRow(NSLocalizedString(@"Host Name", nil), host.name);
-        addRow(NSLocalizedString(@"Status", nil), statusString);
-        addRow(NSLocalizedString(@"Active Address", nil), host.activeAddress);
-        addRow(NSLocalizedString(@"UUID", nil), host.uuid);
-        addRow(NSLocalizedString(@"Pair Name", nil), deviceName);
-        addRow(NSLocalizedString(@"Local Address", nil), host.localAddress);
-        addRow(NSLocalizedString(@"External Address", nil), host.externalAddress);
-        addRow(NSLocalizedString(@"IPv6 Address", nil), host.ipv6Address);
-        addRow(NSLocalizedString(@"Manual Address", nil), host.address);
-        addRow(NSLocalizedString(@"MAC Address", nil), host.mac);
-        addRow(NSLocalizedString(@"Pair State", nil), pairStateString);
-        addRow(NSLocalizedString(@"Running Game ID", nil), host.currentGame);
-        
-        if (host.addressLatencies.count > 0) {
-            NSTextField *spacer = [NSTextField labelWithString:@""];
-            [gridView addRowWithViews:@[spacer, spacer]];
-            
-            NSTextField *header = [NSTextField labelWithString:NSLocalizedString(@"Addresses", nil)];
-            header.font = [NSFont boldSystemFontOfSize:12];
-            [gridView addRowWithViews:@[header, [NSGridCell emptyContentView]]];
-            
-            for (NSString *addr in host.addressLatencies) {
-                NSNumber *latency = host.addressLatencies[addr];
-                NSNumber *state = host.addressStates[addr];
-                NSString *addrStatus = [state boolValue] ? NSLocalizedString(@"Online", nil) : NSLocalizedString(@"Offline", nil);
-                NSString *detail = [NSString stringWithFormat:@"%@ (%@ms)", addrStatus, latency];
-                
-                NSTextField *addrLabel = [NSTextField labelWithString:[addr stringByAppendingString:@":"]];
-                addrLabel.alignment = NSTextAlignmentRight;
-                NSTextField *detailLabel = [NSTextField labelWithString:detail];
-                
-                [gridView addRowWithViews:@[addrLabel, detailLabel]];
-            }
-        }
-        
-        NSAlert *alert = [[NSAlert alloc] init];
-        alert.messageText = NSLocalizedString(@"Connection Details", @"Connection Details");
-        alert.accessoryView = gridView;
-        [alert runModal];
-    } else {
-        // Fallback for older macOS if needed, but 10.12 is very old.
-        // Assuming min target is decent.
-        NSMutableString *details = [NSMutableString string];
-        [details appendFormat:@"%@: %@\n", NSLocalizedString(@"Host Name", nil), host.name];
-        // ... simplified fallback
-        NSAlert *alert = [[NSAlert alloc] init];
-        alert.messageText = NSLocalizedString(@"Connection Details", @"Connection Details");
-        alert.informativeText = details;
-        [alert runModal];
-    }
+    ConnectionDetailsViewController *detailsVC = [[ConnectionDetailsViewController alloc] initWithHost:host];
+    [self presentViewControllerAsSheet:detailsVC];
 }
 
 

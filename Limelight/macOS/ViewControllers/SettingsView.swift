@@ -305,19 +305,19 @@ struct StreamView: View {
 
           FormCell(title: "Connection Method", contentWidth: 250) {
             HStack {
-            Picker("", selection: $settingsModel.selectedConnectionMethod) {
-              ForEach(settingsModel.connectionCandidates, id: \.0) { candidate in
-                HStack {
-                  if candidate.0 != "Auto" {
-                    Image(systemName: "circle.fill")
-                      .foregroundColor(candidate.2 ? .green : .red)
-                      .font(.system(size: 8))
+              Picker("", selection: $settingsModel.selectedConnectionMethod) {
+                ForEach(settingsModel.connectionCandidates, id: \.0) { candidate in
+                  HStack {
+                    if candidate.0 != "Auto" {
+                      Image(systemName: "circle.fill")
+                        .foregroundColor(candidate.2 ? .green : .red)
+                        .font(.system(size: 8))
+                    }
+                    Text(candidate.1)
                   }
-                  Text(candidate.1)
+                  .tag(candidate.0)
                 }
-                .tag(candidate.0)
               }
-            }
               .labelsHidden()
 
               Button(action: {
@@ -333,6 +333,20 @@ struct StreamView: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
           }
+
+          Divider()
+
+          FormCell(
+            title: "Default Display Mode", contentWidth: 150,
+            content: {
+              Picker("", selection: $settingsModel.selectedDisplayMode) {
+                ForEach(SettingsModel.displayModes, id: \.self) { mode in
+                  Text(languageManager.localize(mode))
+                }
+              }
+              .labelsHidden()
+              .frame(maxWidth: .infinity, alignment: .trailing)
+            })
 
           Divider()
 
@@ -1024,12 +1038,6 @@ struct AppView: View {
       VStack {
         FormSection(title: "Behaviour") {
           ToggleCell(
-            title: "Automatically Fullscreen Stream Window",
-            boolBinding: $settingsModel.autoFullscreen)
-
-          Divider()
-
-          ToggleCell(
             title: "Quit App After Stream",
             boolBinding: $settingsModel.quitAppAfterStream)
         }
@@ -1408,6 +1416,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Touchscreen": "Touchscreen",
 
     "Behaviour": "Behaviour",
+    "Default Display Mode": "Default Display Mode",
+    "Windowed": "Windowed",
+    "Fullscreen": "Fullscreen",
+    "Borderless Windowed": "Borderless Windowed",
     "Automatically Fullscreen Stream Window": "Automatically Fullscreen Stream Window",
     "Quit App After Stream": "Quit App After Stream",
     "Visuals": "Visuals",
@@ -1517,6 +1529,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     "Touchscreen": "触摸屏",
 
     "Behaviour": "行为",
+    "Default Display Mode": "默认显示模式",
+    "Windowed": "窗口模式",
+    "Fullscreen": "全屏模式",
+    "Borderless Windowed": "无边框窗口",
     "Automatically Fullscreen Stream Window": "进入串流时默认全屏",
     "Quit App After Stream": "流传输结束后退出程序",
     "Controller Driver": "手柄驱动",

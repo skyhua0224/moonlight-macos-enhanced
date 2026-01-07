@@ -97,6 +97,30 @@ class LanguageManager: ObservableObject {
     "Mouse Mode Off": "Mouse Mode Off",
 
     "Not supported": "Not supported",
+
+    // Connection Details
+    "Connection Details": "Connection Details",
+    "Basic Info": "Basic Info",
+    "Host Name": "Host Name",
+    "Status": "Status",
+    "Online": "Online",
+    "Offline": "Offline",
+    "Unknown": "Unknown",
+    "Pair State": "Pair State",
+    "Paired": "Paired",
+    "Unpaired": "Unpaired",
+    "Network": "Network",
+    "Active Address": "Active Address",
+    "Local Address": "Local Address",
+    "External Address": "External Address",
+    "IPv6 Address": "IPv6 Address",
+    "Manual Address": "Manual Address",
+    "MAC Address": "MAC Address",
+    "System": "System",
+    "UUID": "UUID",
+    "Running Game": "Running Game",
+    "Latency": "Latency",
+    "Close": "Close",
   ]
 
   private let zhHans: [String: String] = [
@@ -161,5 +185,29 @@ class LanguageManager: ObservableObject {
     "Mouse Mode Off": "鼠标模式关闭",
 
     "Not supported": "不支持",
+
+    // Connection Details
+    "Connection Details": "连接详情",
+    "Basic Info": "基本信息",
+    "Host Name": "主机名称",
+    "Status": "状态",
+    "Online": "在线",
+    "Offline": "离线",
+    "Unknown": "未知",
+    "Pair State": "配对状态",
+    "Paired": "已配对",
+    "Unpaired": "未配对",
+    "Network": "网络",
+    "Active Address": "活动地址",
+    "Local Address": "本地地址",
+    "External Address": "外部地址",
+    "IPv6 Address": "IPv6 地址",
+    "Manual Address": "手动地址",
+    "MAC Address": "MAC 地址",
+    "System": "系统",
+    "UUID": "UUID",
+    "Running Game": "运行游戏",
+    "Latency": "延迟",
+    "Close": "关闭",
   ]
 }
