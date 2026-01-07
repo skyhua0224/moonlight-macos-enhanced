@@ -98,6 +98,8 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
 @property (nonatomic) BOOL hideFullscreenControlBall;
 @property (nonatomic, strong) NSSlider *menuVolumeSlider;
+@property (nonatomic, strong) NSSlider *menuBitrateSlider;
+@property (nonatomic, strong) NSTextField *menuBitrateValueLabel;
 
 @property (nonatomic, strong) NSVisualEffectView *logOverlayContainer;
 @property (nonatomic, strong) NSScrollView *logOverlayScrollView;
@@ -1827,7 +1829,7 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     // 二级：画质（码率）
     NSMenuItem *qualityItem = [[NSMenuItem alloc] initWithTitle:@"画质" action:nil keyEquivalent:@""];
     setSymbol(qualityItem, @"sparkles");
-    NSMenu *qualityMenu = [[NSMenu alloc] initWithTitle:@"画质"]; 
+    NSMenu *qualityMenu = [[NSMenu alloc] initWithTitle:@"画质"];
 
     NSMenuItem *bitrateHeader = [[NSMenuItem alloc] initWithTitle:@"码率" action:nil keyEquivalent:@""];
     bitrateHeader.enabled = NO;
@@ -1846,16 +1848,114 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     [qualityMenu addItem:autoBitrateItem];
 
     NSArray<NSNumber *> *bitrateMbpsChoices = @[ @5, @10, @20, @40, @80, @120, @200 ];
+    BOOL isPresetSelected = NO;
     for (NSNumber *mbps in bitrateMbpsChoices) {
         NSInteger kbps = mbps.integerValue * 1000;
         NSString *title = [NSString stringWithFormat:@"%@ Mbps", mbps];
         NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(selectBitrateFromMenu:) keyEquivalent:@""];
         item.target = self;
         item.representedObject = @(kbps);
-        item.state = (!autoAdjust && selectedKbps == kbps) ? NSControlStateValueOn : NSControlStateValueOff;
+        BOOL selected = (!autoAdjust && selectedKbps == kbps);
+        if (selected) isPresetSelected = YES;
+        item.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
         setSymbol(item, @"speedometer");
         [qualityMenu addItem:item];
     }
+
+    [qualityMenu addItem:[NSMenuItem separatorItem]];
+
+    // 自定义选项（三级菜单，悬停展开滑块和输入框）
+    BOOL isCustomMode = !autoAdjust && !isPresetSelected && selectedKbps > 0;
+
+    NSMenuItem *customBitrateItem = [[NSMenuItem alloc] initWithTitle:@"自定义" action:nil keyEquivalent:@""];
+    customBitrateItem.state = isCustomMode ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(customBitrateItem, @"slider.horizontal.3");
+
+    // 三级菜单：自定义码率
+    NSMenu *customMenu = [[NSMenu alloc] initWithTitle:@"自定义"];
+
+    // 滑块视图
+    NSView *bitrateView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 280, 70)];
+
+    // 标题行
+    NSTextField *bitrateLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(16, 46, 60, 16)];
+    bitrateLabel.bezeled = NO;
+    bitrateLabel.drawsBackground = NO;
+    bitrateLabel.editable = NO;
+    bitrateLabel.selectable = NO;
+    bitrateLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
+    bitrateLabel.textColor = [NSColor labelColor];
+    bitrateLabel.stringValue = @"码率";
+    [bitrateView addSubview:bitrateLabel];
+
+    // 当前码率值显示（右侧）
+    self.menuBitrateValueLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(200, 46, 64, 16)];
+    self.menuBitrateValueLabel.bezeled = NO;
+    self.menuBitrateValueLabel.drawsBackground = NO;
+    self.menuBitrateValueLabel.editable = NO;
+    self.menuBitrateValueLabel.selectable = NO;
+    self.menuBitrateValueLabel.alignment = NSTextAlignmentRight;
+    self.menuBitrateValueLabel.font = [NSFont monospacedDigitSystemFontOfSize:12 weight:NSFontWeightSemibold];
+    self.menuBitrateValueLabel.textColor = [NSColor secondaryLabelColor];
+    NSInteger displayKbps = isCustomMode ? selectedKbps : (fallbackBitrate ? fallbackBitrate.integerValue : 20000);
+    CGFloat mbpsValue = displayKbps / 1000.0;
+    if (mbpsValue < 1.0) {
+        self.menuBitrateValueLabel.stringValue = [NSString stringWithFormat:@"%.1f Mbps", mbpsValue];
+    } else {
+        self.menuBitrateValueLabel.stringValue = [NSString stringWithFormat:@"%.0f Mbps", mbpsValue];
+    }
+    [bitrateView addSubview:self.menuBitrateValueLabel];
+
+    // 码率滑杆
+    self.menuBitrateSlider = [[NSSlider alloc] initWithFrame:NSMakeRect(16, 24, 248, 20)];
+    self.menuBitrateSlider.minValue = 0.0;
+    self.menuBitrateSlider.maxValue = 27.0; // bitrateSteps 数组长度 - 1
+    self.menuBitrateSlider.target = self;
+    self.menuBitrateSlider.action = @selector(handleBitrateSliderChanged:);
+    self.menuBitrateSlider.continuous = YES;
+    [self updateBitrateSliderPosition:displayKbps];
+    [bitrateView addSubview:self.menuBitrateSlider];
+
+    // 手动输入框
+    NSTextField *inputField = [[NSTextField alloc] initWithFrame:NSMakeRect(16, 2, 60, 20)];
+    inputField.bezeled = YES;
+    inputField.bezelStyle = NSTextFieldRoundedBezel;
+    inputField.editable = YES;
+    inputField.selectable = YES;
+    inputField.alignment = NSTextAlignmentCenter;
+    inputField.font = [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightRegular];
+    inputField.placeholderString = @"Mbps";
+    inputField.stringValue = [NSString stringWithFormat:@"%.0f", mbpsValue];
+    inputField.target = self;
+    inputField.action = @selector(handleBitrateInputChanged:);
+    inputField.tag = 1001; // 用于识别
+    [bitrateView addSubview:inputField];
+
+    NSTextField *inputSuffix = [[NSTextField alloc] initWithFrame:NSMakeRect(80, 4, 40, 16)];
+    inputSuffix.bezeled = NO;
+    inputSuffix.drawsBackground = NO;
+    inputSuffix.editable = NO;
+    inputSuffix.selectable = NO;
+    inputSuffix.font = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
+    inputSuffix.textColor = [NSColor secondaryLabelColor];
+    inputSuffix.stringValue = @"Mbps";
+    [bitrateView addSubview:inputSuffix];
+
+    // 应用按钮
+    NSButton *applyButton = [[NSButton alloc] initWithFrame:NSMakeRect(200, 2, 64, 20)];
+    applyButton.bezelStyle = NSBezelStyleRecessed;
+    applyButton.title = @"应用";
+    applyButton.target = self;
+    applyButton.action = @selector(handleBitrateApplyClicked:);
+    applyButton.font = [NSFont systemFontOfSize:11 weight:NSFontWeightMedium];
+    [bitrateView addSubview:applyButton];
+
+    NSMenuItem *bitrateSliderItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    bitrateSliderItem.view = bitrateView;
+    [customMenu addItem:bitrateSliderItem];
+
+    customBitrateItem.submenu = customMenu;
+    [qualityMenu addItem:customBitrateItem];
 
     qualityItem.submenu = qualityMenu;
     [self.streamMenu addItem:qualityItem];
@@ -2217,6 +2317,91 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
 - (void)handleVolumeSliderChanged:(NSSlider *)sender {
     [SettingsClass setVolumeLevel:(CGFloat)sender.doubleValue for:self.app.host.uuid];
+}
+
+#pragma mark - Bitrate Slider
+
+static NSArray<NSNumber *> *bitrateStepsArray(void) {
+    return @[@0.5, @1, @1.5, @2, @2.5, @3, @4, @5, @6, @7, @8, @9, @10,
+             @12, @15, @18, @20, @25, @30, @40, @50, @60, @70, @80, @90, @100, @120, @150];
+}
+
+- (void)updateBitrateSliderPosition:(NSInteger)currentKbps {
+    NSArray *steps = bitrateStepsArray();
+    NSInteger index = 0;
+    CGFloat currentMbps = currentKbps / 1000.0;
+    for (NSInteger i = 0; i < (NSInteger)steps.count; i++) {
+        if (currentMbps <= [steps[i] floatValue]) {
+            index = i;
+            break;
+        }
+        if (i == (NSInteger)steps.count - 1) {
+            index = i;
+        }
+    }
+    self.menuBitrateSlider.doubleValue = index;
+}
+
+- (void)handleBitrateSliderChanged:(NSSlider *)sender {
+    NSArray *steps = bitrateStepsArray();
+    NSInteger index = (NSInteger)round(sender.doubleValue);
+    index = MAX(0, MIN(index, (NSInteger)steps.count - 1));
+
+    CGFloat mbps = [steps[index] floatValue];
+    NSInteger kbps = (NSInteger)(mbps * 1000);
+
+    // 更新显示
+    if (mbps < 1.0) {
+        self.menuBitrateValueLabel.stringValue = [NSString stringWithFormat:@"%.1f Mbps", mbps];
+    } else {
+        self.menuBitrateValueLabel.stringValue = [NSString stringWithFormat:@"%.0f Mbps", mbps];
+    }
+
+    // 同步更新输入框
+    NSView *bitrateView = sender.superview;
+    for (NSView *subview in bitrateView.subviews) {
+        if ([subview isKindOfClass:[NSTextField class]] && subview.tag == 1001) {
+            NSTextField *inputField = (NSTextField *)subview;
+            if (mbps < 1.0) {
+                inputField.stringValue = [NSString stringWithFormat:@"%.1f", mbps];
+            } else {
+                inputField.stringValue = [NSString stringWithFormat:@"%.0f", mbps];
+            }
+            break;
+        }
+    }
+
+    // 保存设置（关闭自动模式，设置自定义码率）
+    [SettingsClass setBitrateMode:NO customBitrateKbps:@(kbps) for:self.app.host.uuid];
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+}
+
+- (void)handleBitrateInputChanged:(NSTextField *)sender {
+    CGFloat mbps = sender.doubleValue;
+    if (mbps < 0.5) mbps = 0.5;
+    if (mbps > 150) mbps = 150;
+
+    NSInteger kbps = (NSInteger)(mbps * 1000);
+
+    // 更新显示
+    if (mbps < 1.0) {
+        self.menuBitrateValueLabel.stringValue = [NSString stringWithFormat:@"%.1f Mbps", mbps];
+    } else {
+        self.menuBitrateValueLabel.stringValue = [NSString stringWithFormat:@"%.0f Mbps", mbps];
+    }
+
+    // 更新滑块位置
+    [self updateBitrateSliderPosition:kbps];
+
+    // 保存设置
+    [SettingsClass setBitrateMode:NO customBitrateKbps:@(kbps) for:self.app.host.uuid];
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+}
+
+- (void)handleBitrateApplyClicked:(NSButton *)sender {
+    // 触发重连以应用新码率
+    [self rebuildStreamMenu];
+    [self attemptReconnectWithReason:@"bitrate-changed"];
 }
 
 - (void)toggleFullscreenControlBallFromMenu:(NSMenuItem *)sender {
