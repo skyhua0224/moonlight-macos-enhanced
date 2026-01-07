@@ -261,7 +261,7 @@
                                 <gridCell row="1IO-hJ-aC7" column="Vyn-XC-Vk8" id="1Cy-gE-usa">
                                     <textField key="contentView" focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="fK2-L7-mAp">
                                         <rect key="frame" x="-2" y="102" width="144" height="16"/>
-                                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Auto Fullscreen:" id="0hz-gJ-Nfy">
+                                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Default Display Mode:" id="0hz-gJ-Nfy">
                                             <font key="font" metaFont="system"/>
                                             <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                             <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
@@ -269,16 +269,23 @@
                                     </textField>
                                 </gridCell>
                                 <gridCell row="1IO-hJ-aC7" column="pYn-tJ-FRL" id="glq-0a-stR">
-                                    <button key="contentView" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="7ME-vj-ZVX" userLabel="Auto fullscreen Checkbox">
-                                        <rect key="frame" x="150" y="101" width="274" height="18"/>
-                                        <buttonCell key="cell" type="check" title="Automatically fullscreen stream window" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="H6z-1W-SEf">
-                                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
-                                            <font key="font" metaFont="system"/>
-                                        </buttonCell>
+                                    <popUpButton key="contentView" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="7ME-vj-ZVX" userLabel="Default display mode selector">
+                                        <rect key="frame" x="149" y="95" width="170" height="25"/>
+                                        <popUpButtonCell key="cell" type="push" title="Windowed" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" selectedItem="kQn-jx-B9e" id="H6z-1W-SEf">
+                                            <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
+                                            <font key="font" metaFont="menu"/>
+                                            <menu key="menu" id="2hE-Uf-1rB">
+                                                <items>
+                                                    <menuItem title="Windowed" state="on" id="kQn-jx-B9e"/>
+                                                    <menuItem title="Fullscreen" tag="1" id="R2Y-1J-lu1"/>
+                                                    <menuItem title="Borderless Windowed" tag="2" id="yex-3E-7mK"/>
+                                                </items>
+                                            </menu>
+                                        </popUpButtonCell>
                                         <connections>
-                                            <action selector="didToggleAutoFullscreen:" target="-2" id="hRG-lZ-U46"/>
+                                            <action selector="didChangeDefaultDisplayMode:" target="-2" id="hRG-lZ-U46"/>
                                         </connections>
-                                    </button>
+                                    </popUpButton>
                                 </gridCell>
                                 <gridCell row="fDf-n7-Yh9" column="Vyn-XC-Vk8" id="gyc-0u-eeM">
                                     <textField key="contentView" focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="f96-Kc-ABh" userLabel="Controller Vibration:">

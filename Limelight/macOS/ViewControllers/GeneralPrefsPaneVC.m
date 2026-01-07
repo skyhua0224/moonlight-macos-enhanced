@@ -56,7 +56,7 @@ static float bitrateSteps[] = {
 @property (weak) IBOutlet NSButton *hdrCheckbox;
 @property (weak) IBOutlet NSButton *optimizeSettingsCheckbox;
 @property (weak) IBOutlet NSButton *playAudioOnPCCheckbox;
-@property (weak) IBOutlet NSButton *autoFullscreenCheckbox;
+@property (weak) IBOutlet NSPopUpButton *displayModeSelector;
 @property (weak) IBOutlet NSButton *controllerVibrationCheckbox;
 @property (weak) IBOutlet NSPopUpButton *controllerDriverSelector;
 @property (weak) IBOutlet NSButton *useGCMouseCheckbox;
@@ -90,7 +90,19 @@ static float bitrateSteps[] = {
     self.hdrCheckbox.state = streamSettings.enableHdr ? NSControlStateValueOn : NSControlStateValueOff;
     self.optimizeSettingsCheckbox.state = streamSettings.optimizeGames ? NSControlStateValueOn : NSControlStateValueOff;
     self.playAudioOnPCCheckbox.state = streamSettings.playAudioOnPC ? NSControlStateValueOn : NSControlStateValueOff;
-    self.autoFullscreenCheckbox.state = [self.standard boolForKey:@"autoFullscreen"] ? NSControlStateValueOn : NSControlStateValueOff;
+
+    // Default display mode (0: windowed, 1: fullscreen, 2: borderless)
+    NSInteger defaultMode = 0;
+    if ([self.standard objectForKey:@"defaultDisplayMode"] != nil) {
+        defaultMode = [self.standard integerForKey:@"defaultDisplayMode"];
+    } else {
+        defaultMode = [self.standard boolForKey:@"autoFullscreen"] ? 1 : 0;
+    }
+    if (defaultMode < 0 || defaultMode > 2) {
+        defaultMode = 0;
+    }
+    [self.displayModeSelector selectItemWithTag:defaultMode];
+
     self.controllerVibrationCheckbox.state = [self.standard boolForKey:@"rumbleGamepad"] ? NSControlStateValueOn : NSControlStateValueOff;
     [self.controllerDriverSelector selectItemWithTag:[self.standard integerForKey:@"controllerDriver"]];
     self.useGCMouseCheckbox.state = [self.standard boolForKey:@"useGCMouseDriver"] ? NSControlStateValueOn : NSControlStateValueOff;
@@ -183,8 +195,15 @@ static float bitrateSteps[] = {
     [self saveSettings];
 }
 
-- (IBAction)didToggleAutoFullscreen:(id)sender {
-    [self.standard setBool:self.autoFullscreenCheckbox.state == NSControlStateValueOn forKey:@"autoFullscreen"];
+- (IBAction)didChangeDefaultDisplayMode:(id)sender {
+    NSInteger mode = self.displayModeSelector.selectedTag;
+    if (mode < 0 || mode > 2) {
+        mode = 0;
+    }
+    [self.standard setInteger:mode forKey:@"defaultDisplayMode"];
+
+    // Backward compatibility: existing code may still read autoFullscreen.
+    [self.standard setBool:(mode == 1) forKey:@"autoFullscreen"];
 }
 
 - (IBAction)didToggleControllerVibration:(id)sender {

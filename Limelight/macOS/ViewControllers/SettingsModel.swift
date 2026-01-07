@@ -354,6 +354,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var selectedDisplayMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var rumble: Bool {
     didSet {
       guard !isLoading else { return }
@@ -548,6 +554,7 @@ class SettingsModel: ObservableObject {
   static var controllerDrivers: [String] = ["HID", "MFi"]
   static var mouseDrivers: [String] = ["HID", "MFi"]
   static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
+  static var displayModes: [String] = ["Windowed", "Fullscreen", "Borderless Windowed"]
 
   static var isMetalFXSupported: Bool {
     if #available(macOS 13.0, *) {
@@ -600,7 +607,20 @@ class SettingsModel: ObservableObject {
   static let defaultMultiControllerMode = "Auto"
   static let defaultSwapButtons = false
   static let defaultOptimize = false
-  static let defaultAutoFullscreen = false
+  static var defaultDisplayMode: Int {
+    let raw = UserDefaults.standard.object(forKey: "defaultDisplayMode") as? Int
+    let fallback = UserDefaults.standard.bool(forKey: "autoFullscreen") ? 1 : 0
+    let value = raw ?? fallback
+    return max(0, min(value, 2))
+  }
+
+  static var defaultAutoFullscreen: Bool {
+    // Keep compatibility with the historical autoFullscreen key.
+    if UserDefaults.standard.object(forKey: "defaultDisplayMode") != nil {
+      return defaultDisplayMode == 1
+    }
+    return UserDefaults.standard.bool(forKey: "autoFullscreen")
+  }
   static let defaultRumble = true
   static let defaultControllerDriver = "HID"
   static let defaultMouseDriver = "HID"
@@ -802,6 +822,7 @@ class SettingsModel: ObservableObject {
     optimize = Self.defaultOptimize
 
     autoFullscreen = Self.defaultAutoFullscreen
+    selectedDisplayMode = Self.getString(from: Self.defaultDisplayMode, in: Self.displayModes)
     rumble = Self.defaultRumble
     selectedControllerDriver = Self.defaultControllerDriver
     selectedMouseDriver = Self.defaultMouseDriver
@@ -889,6 +910,7 @@ class SettingsModel: ObservableObject {
     optimize = Self.defaultOptimize
 
     autoFullscreen = Self.defaultAutoFullscreen
+    selectedDisplayMode = Self.getString(from: Self.defaultDisplayMode, in: Self.displayModes)
     rumble = Self.defaultRumble
     selectedControllerDriver = Self.defaultControllerDriver
 
@@ -992,6 +1014,7 @@ class SettingsModel: ObservableObject {
       optimize = settings.optimize
 
       autoFullscreen = settings.autoFullscreen
+      selectedDisplayMode = Self.getString(from: settings.displayMode ?? (settings.autoFullscreen ? 1 : 0), in: Self.displayModes)
       rumble = settings.rumble
       selectedControllerDriver = Self.getString(
         from: settings.controllerDriver, in: Self.controllerDrivers)
@@ -1157,6 +1180,7 @@ class SettingsModel: ObservableObject {
     let audioConfig = Self.getInt(from: selectedAudioConfiguration, in: Self.audioConfigurations)
     let multiController = Self.getBool(
       from: selectedMultiControllerMode, in: Self.multiControllerModes)
+    let displayMode = Self.getInt(from: selectedDisplayMode, in: Self.displayModes)
     let controllerDriver = Self.getInt(from: selectedControllerDriver, in: Self.controllerDrivers)
     let mouseDriver = Self.getInt(from: selectedMouseDriver, in: Self.mouseDrivers)
 
@@ -1207,6 +1231,7 @@ class SettingsModel: ObservableObject {
       swapABXYButtons: swapButtons,
       optimize: optimize,
       autoFullscreen: autoFullscreen,
+      displayMode: displayMode,
       rumble: rumble,
       controllerDriver: controllerDriver,
       mouseDriver: mouseDriver,
