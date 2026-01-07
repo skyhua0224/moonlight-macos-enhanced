@@ -387,7 +387,7 @@ struct StreamView: View {
                   } else if resolution == .zero {
                     Text(languageManager.localize("Custom"))
                   } else {
-                    Text(verbatim: resolution.height == 2160 ? "4K" : "\(Int(resolution.height))p")
+                    Text(verbatim: "\(Int(resolution.width))x\(Int(resolution.height))")
                   }
                 }
               }
@@ -502,7 +502,7 @@ struct StreamView: View {
                       Text(languageManager.localize("Custom"))
                     } else {
                       Text(
-                        verbatim: resolution.height == 2160 ? "4K" : "\(Int(resolution.height))p")
+                        verbatim: "\(Int(resolution.width))x\(Int(resolution.height))")
                     }
                   }
                 }
