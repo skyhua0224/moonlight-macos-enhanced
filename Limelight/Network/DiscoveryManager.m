@@ -125,7 +125,8 @@
 - (ServerInfoResponse*) getServerInfoResponseForAddress:(NSString*)address {
     HttpManager* hMan = [[HttpManager alloc] initWithHost:address uniqueId:_uniqueId serverCert:nil];
     ServerInfoResponse* serverInfoResponse = [[ServerInfoResponse alloc] init];
-    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResponse withUrlRequest:[hMan newServerInfoRequest:false] fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
+    // Use fast failure for discovery (2s timeout) to speed up status updates
+    [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResponse withUrlRequest:[hMan newServerInfoRequest:true] fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest:true]]];
     return serverInfoResponse;
 }
 

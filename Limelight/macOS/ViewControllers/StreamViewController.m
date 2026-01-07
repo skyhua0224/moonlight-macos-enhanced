@@ -81,7 +81,7 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 @property (nonatomic) BOOL reconnectInProgress;
 
 @property (nonatomic) BOOL reconnectPreserveFullscreenStateValid;
-@property (nonatomic) BOOL reconnectPreservedWasFullscreen;
+@property (nonatomic) NSInteger reconnectPreservedWindowMode;
 
 @property (nonatomic, strong) NSTitlebarAccessoryViewController *menuTitlebarAccessory;
 @property (nonatomic, strong) NSButton *menuTitlebarButton;
@@ -109,9 +109,18 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 @property (nonatomic, strong) NSTextField *reconnectLabel;
 
 @property (nonatomic, strong) NSVisualEffectView *timeoutOverlayContainer;
+@property (nonatomic, strong) NSTextField *timeoutIconLabel;
+@property (nonatomic, strong) NSTextField *timeoutTitleLabel;
 @property (nonatomic, strong) NSTextField *timeoutLabel;
-@property (nonatomic, strong) NSButton *timeoutSwitchMethodButton;
+@property (nonatomic, strong) NSButton *timeoutReconnectButton;
+@property (nonatomic, strong) NSButton *timeoutWaitButton;
 @property (nonatomic, strong) NSButton *timeoutExitButton;
+@property (nonatomic, strong) NSButton *timeoutResolutionButton;
+@property (nonatomic, strong) NSButton *timeoutBitrateButton;
+@property (nonatomic, strong) NSButton *timeoutDisplayModeButton;
+@property (nonatomic, strong) NSButton *timeoutConnectionButton;
+@property (nonatomic, strong) NSButton *timeoutViewLogsButton;
+@property (nonatomic, strong) NSButton *timeoutCopyLogsButton;
 
 @property (nonatomic) NSInteger connectWatchdogToken;
 @property (nonatomic) BOOL didAutoReconnectAfterTimeout;
@@ -321,65 +330,217 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         if (strongSelf.timeoutOverlayContainer) {
             return;
         }
+        
+        // If we are stuck in reconnecting state for > 10s, force error overlay
+        if (strongSelf.reconnectInProgress) {
+            [strongSelf hideReconnectOverlay];
+            strongSelf.reconnectInProgress = NO;
+            [strongSelf showErrorOverlayWithTitle:@"重连超时"
+                                          message:@"重连过程耗时过长，连接可能已断开。\n请检查网络环境或调整设置。"
+                                          canWait:NO];
+            return;
+        }
 
         // 10s with no frames: attempt a single auto-reconnect (once per stream VC lifetime), then show timeout UI.
-        if (!strongSelf.reconnectInProgress && !strongSelf.didAutoReconnectAfterTimeout && strongSelf.shouldAttemptReconnect) {
+        if (!strongSelf.didAutoReconnectAfterTimeout && strongSelf.shouldAttemptReconnect) {
             strongSelf.didAutoReconnectAfterTimeout = YES;
             [strongSelf showReconnectOverlayWithMessage:@"网络无响应，正在尝试重连…"]; 
             [strongSelf attemptReconnectWithReason:@"connect-timeout-auto"]; 
             return;
         }
 
-        [strongSelf showConnectionTimeoutOverlay];
+        [strongSelf showErrorOverlayWithTitle:@"连接不稳定或无画面"
+                                      message:@"已持续 10 秒未接收到视频数据。\n请检查网络连接或尝试以下操作。"
+                                      canWait:YES];
     });
 }
 
-- (void)showConnectionTimeoutOverlay {
-    if (self.timeoutOverlayContainer) {
-        return;
+- (void)showErrorOverlayWithTitle:(NSString *)title message:(NSString *)message canWait:(BOOL)canWait {
+    if (!self.timeoutOverlayContainer) {
+        NSVisualEffectView *container = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
+        container.material = NSVisualEffectMaterialHUDWindow;
+        container.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+        container.state = NSVisualEffectStateActive;
+        container.wantsLayer = YES;
+        container.alphaValue = 0.0;
+        
+        // 为 NSVisualEffectView 设置圆角需要使用 maskedCorners
+        container.layer.cornerRadius = 24.0;
+        if (@available(macOS 10.13, *)) {
+            container.layer.cornerCurve = kCACornerCurveContinuous;
+            container.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner | kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+        }
+        container.layer.masksToBounds = YES;
+        
+        // Shadow for better visibility
+        NSShadow *shadow = [[NSShadow alloc] init];
+        shadow.shadowBlurRadius = 20.0;
+        shadow.shadowColor = [NSColor colorWithWhite:0.0 alpha:0.3];
+        shadow.shadowOffset = NSMakeSize(0, -5);
+        container.shadow = shadow;
+
+        // Icon
+        NSTextField *iconLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
+        iconLabel.bezeled = NO;
+        iconLabel.drawsBackground = NO;
+        iconLabel.editable = NO;
+        iconLabel.selectable = NO;
+        iconLabel.alignment = NSTextAlignmentCenter;
+        iconLabel.font = [NSFont systemFontOfSize:56 weight:NSFontWeightRegular];
+        iconLabel.textColor = [NSColor systemYellowColor];
+        iconLabel.stringValue = @"⚠️";
+
+        // Title
+        NSTextField *titleLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
+        titleLabel.bezeled = NO;
+        titleLabel.drawsBackground = NO;
+        titleLabel.editable = NO;
+        titleLabel.selectable = NO;
+        titleLabel.alignment = NSTextAlignmentCenter;
+        titleLabel.font = [NSFont systemFontOfSize:22 weight:NSFontWeightBold];
+        titleLabel.textColor = [NSColor whiteColor];
+
+        // Message
+        NSTextField *label = [[NSTextField alloc] initWithFrame:NSZeroRect];
+        label.bezeled = NO;
+        label.drawsBackground = NO;
+        label.editable = NO;
+        label.selectable = YES; // Allow copying error message
+        label.alignment = NSTextAlignmentCenter;
+        label.font = [NSFont systemFontOfSize:14 weight:NSFontWeightMedium];
+        label.textColor = [NSColor colorWithWhite:0.9 alpha:1.0];
+
+        // --- Core Actions ---
+        
+        NSButton *reconnectBtn = [NSButton buttonWithTitle:@"尝试重连" target:self action:@selector(handleTimeoutReconnect:)];
+        reconnectBtn.bezelStyle = NSBezelStyleRounded; // Standard pill style
+        reconnectBtn.controlSize = NSControlSizeLarge; 
+        reconnectBtn.font = [NSFont systemFontOfSize:14 weight:NSFontWeightSemibold];
+        reconnectBtn.keyEquivalent = @"\r";
+        // To make it look "filled" on HUD, rely on bezelStyle or use layer
+        // Standard macOS dark HUD usually handles rounded buttons well.
+
+        NSButton *waitBtn = [NSButton buttonWithTitle:@"继续等待" target:self action:@selector(handleTimeoutWait:)];
+        waitBtn.bezelStyle = NSBezelStyleRounded;
+        waitBtn.controlSize = NSControlSizeLarge;
+
+        NSButton *exitBtn = [NSButton buttonWithTitle:@"退出串流" target:self action:@selector(handleTimeoutExitStream:)];
+        exitBtn.bezelStyle = NSBezelStyleRounded;
+        exitBtn.controlSize = NSControlSizeLarge;
+
+        // --- Settings Strip ---
+        // Create custom "card" buttons to match screenshot design:
+        // Dark background, rounded corners (6pt), Icon + Text
+        
+        NSButton *(^createSettingsBtn)(NSString *, NSString *, SEL) = ^(NSString *title, NSString *iconName, SEL selector) {
+            NSButton *btn = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 100, 28)];
+            btn.target = self;
+            btn.action = selector;
+            btn.bezelStyle = NSBezelStyleRegularSquare;
+            btn.bordered = NO; // We draw our own background
+            btn.wantsLayer = YES;
+            btn.layer.backgroundColor = [[NSColor colorWithWhite:1.0 alpha:0.1] CGColor]; // Semi-transparent white => looks like lighter dark grey on dark background
+            btn.layer.cornerRadius = 6.0;
+            btn.layer.masksToBounds = YES;
+            
+            btn.title = title;
+            btn.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
+            if (@available(macOS 11.0, *)) {
+                btn.image = [NSImage imageWithSystemSymbolName:iconName accessibilityDescription:nil];
+                btn.imagePosition = NSImageLeading;
+                btn.contentTintColor = [NSColor whiteColor];
+                // 设置图标和文字的间距
+                btn.imageHugsTitle = YES;
+                // 调整按钮对齐方式为居中
+                btn.alignment = NSTextAlignmentCenter;
+            } else {
+                btn.imagePosition = NSImageLeft;
+            }
+            return btn;
+        };
+
+        NSButton *resBtn = createSettingsBtn(@"分辨率", @"display", @selector(handleTimeoutResolution:));
+        NSButton *bitrateBtn = createSettingsBtn(@"码率", @"speedometer", @selector(handleTimeoutBitrate:));
+        NSButton *displayModeBtn = createSettingsBtn(@"显示模式", @"macwindow", @selector(handleTimeoutDisplayMode:));
+        NSButton *connBtn = createSettingsBtn(@"连接方式", @"network", @selector(handleTimeoutConnection:));
+
+        // --- Log Tools - 改进样式，使用图标按钮 ---
+        
+        NSButton *(^createLogBtn)(NSString *, NSString *, SEL) = ^(NSString *title, NSString *iconName, SEL selector) {
+            NSButton *btn = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 90, 28)];
+            btn.target = self;
+            btn.action = selector;
+            btn.bezelStyle = NSBezelStyleRegularSquare;
+            btn.bordered = NO;
+            btn.wantsLayer = YES;
+            // 使用更浅的背景色，区别于设置按钮
+            btn.layer.backgroundColor = [[NSColor colorWithWhite:1.0 alpha:0.06] CGColor];
+            btn.layer.cornerRadius = 6.0;
+            btn.layer.borderWidth = 0.5;
+            btn.layer.borderColor = [[NSColor colorWithWhite:1.0 alpha:0.15] CGColor];
+            btn.layer.masksToBounds = YES;
+            
+            btn.title = title;
+            btn.font = [NSFont systemFontOfSize:11 weight:NSFontWeightMedium];
+            if (@available(macOS 11.0, *)) {
+                btn.image = [NSImage imageWithSystemSymbolName:iconName accessibilityDescription:nil];
+                btn.imagePosition = NSImageLeading;
+                btn.contentTintColor = [NSColor colorWithWhite:0.75 alpha:1.0];
+                btn.imageHugsTitle = YES;
+                btn.alignment = NSTextAlignmentCenter;
+            } else {
+                btn.imagePosition = NSImageLeft;
+            }
+            return btn;
+        };
+        
+        NSButton *viewLogBtn = createLogBtn(@"查看日志", @"doc.text.magnifyingglass", @selector(handleTimeoutViewLogs:));
+        NSButton *copyLogBtn = createLogBtn(@"复制日志", @"doc.on.doc", @selector(handleTimeoutCopyLogs:));
+
+        // --- Hierarchy ---
+
+        self.timeoutOverlayContainer = container;
+        self.timeoutIconLabel = iconLabel;
+        self.timeoutTitleLabel = titleLabel;
+        self.timeoutLabel = label;
+        self.timeoutReconnectButton = reconnectBtn;
+        self.timeoutWaitButton = waitBtn;
+        self.timeoutExitButton = exitBtn;
+        self.timeoutResolutionButton = resBtn;
+        self.timeoutBitrateButton = bitrateBtn;
+        self.timeoutDisplayModeButton = displayModeBtn;
+        self.timeoutConnectionButton = connBtn;
+        self.timeoutViewLogsButton = viewLogBtn;
+        self.timeoutCopyLogsButton = copyLogBtn;
+
+        [container addSubview:iconLabel];
+        [container addSubview:titleLabel];
+        [container addSubview:label];
+        [container addSubview:reconnectBtn];
+        [container addSubview:waitBtn];
+        [container addSubview:exitBtn];
+        [container addSubview:resBtn];
+        [container addSubview:bitrateBtn];
+        [container addSubview:displayModeBtn];
+        [container addSubview:connBtn];
+        [container addSubview:viewLogBtn];
+        [container addSubview:copyLogBtn];
+
+        [self.view addSubview:container positioned:NSWindowAbove relativeTo:nil];
+        
+        container.alphaValue = 0.0;
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+            context.duration = 0.25;
+            container.animator.alphaValue = 1.0;
+        } completionHandler:nil];
     }
+    
+    // Update content
+    self.timeoutTitleLabel.stringValue = title ?: @"连接异常";
+    self.timeoutLabel.stringValue = message ?: @"未知错误";
+    self.timeoutWaitButton.hidden = !canWait;
 
-    NSVisualEffectView *container = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
-    container.material = NSVisualEffectMaterialHUDWindow;
-    container.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-    container.state = NSVisualEffectStateActive;
-    container.wantsLayer = YES;
-    container.layer.cornerRadius = 12.0;
-    container.layer.masksToBounds = YES;
-    container.alphaValue = 0.0;
-
-    NSTextField *label = [[NSTextField alloc] initWithFrame:NSZeroRect];
-    label.bezeled = NO;
-    label.drawsBackground = NO;
-    label.editable = NO;
-    label.selectable = NO;
-    label.alignment = NSTextAlignmentCenter;
-    label.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
-    label.textColor = [NSColor whiteColor];
-    label.stringValue = @"连接超时（10 秒无画面）";
-
-    NSButton *switchBtn = [NSButton buttonWithTitle:@"切换连接方式" target:self action:@selector(handleTimeoutSwitchConnectionMethod:)];
-    switchBtn.bezelStyle = NSBezelStyleRounded;
-
-    NSButton *exitBtn = [NSButton buttonWithTitle:@"退出串流" target:self action:@selector(handleTimeoutExitStream:)];
-    exitBtn.bezelStyle = NSBezelStyleRounded;
-
-    self.timeoutOverlayContainer = container;
-    self.timeoutLabel = label;
-    self.timeoutSwitchMethodButton = switchBtn;
-    self.timeoutExitButton = exitBtn;
-
-    [container addSubview:label];
-    [container addSubview:switchBtn];
-    [container addSubview:exitBtn];
-
-    [self.view addSubview:container positioned:NSWindowAbove relativeTo:nil];
     [self viewDidLayout];
-
-    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-        context.duration = 0.12;
-        container.animator.alphaValue = 1.0;
-    } completionHandler:nil];
 }
 
 - (void)hideConnectionTimeoutOverlay {
@@ -389,63 +550,136 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
     NSVisualEffectView *container = self.timeoutOverlayContainer;
     self.timeoutOverlayContainer = nil;
+    self.timeoutIconLabel = nil;
+    self.timeoutTitleLabel = nil;
     self.timeoutLabel = nil;
-    self.timeoutSwitchMethodButton = nil;
+    self.timeoutReconnectButton = nil;
+    self.timeoutWaitButton = nil;
     self.timeoutExitButton = nil;
+    self.timeoutResolutionButton = nil;
+    self.timeoutBitrateButton = nil;
+    self.timeoutDisplayModeButton = nil;
+    self.timeoutConnectionButton = nil;
+    self.timeoutViewLogsButton = nil;
+    self.timeoutCopyLogsButton = nil;
 
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-        context.duration = 0.15;
+        context.duration = 0.2;
         container.animator.alphaValue = 0.0;
     } completionHandler:^{
         [container removeFromSuperview];
     }];
 }
 
+- (void)handleTimeoutReconnect:(id)sender {
+    [self hideConnectionTimeoutOverlay];
+    [self attemptReconnectWithReason:@"timeout-overlay-manual"];
+}
+
+- (void)handleTimeoutWait:(id)sender {
+    [self hideConnectionTimeoutOverlay];
+}
+
 - (void)handleTimeoutExitStream:(id)sender {
     [self performCloseStreamWindow:sender];
 }
 
-- (void)handleTimeoutSwitchConnectionMethod:(id)sender {
-    // Present a small menu with connection method options at window center.
-    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
-    NSString *method = prefs[@"connectionMethod"] ?: @"Auto";
-
-    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"连接方式"]; 
-    void (^setSymbol)(NSMenuItem *, NSString *) = ^(NSMenuItem *item, NSString *symbolName) {
-        if (@available(macOS 11.0, *)) {
-            item.image = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:nil];
+- (void)handleTimeoutResolution:(id)sender {
+    [self rebuildStreamMenu];
+    NSMenuItem *monitorItem = nil;
+    for (NSMenuItem *item in self.streamMenu.itemArray) {
+        if ([item.title isEqualToString:@"屏幕"]) {
+            monitorItem = item;
+            break;
         }
+    }
+    if (monitorItem && monitorItem.submenu) {
+        NSButton *btn = (NSButton *)sender;
+        NSPoint p = NSMakePoint(0, btn.bounds.size.height + 5);
+        [monitorItem.submenu popUpMenuPositioningItem:nil atLocation:p inView:btn];
+    }
+}
+
+- (void)handleTimeoutBitrate:(id)sender {
+    [self rebuildStreamMenu];
+    NSMenuItem *qualityItem = nil;
+    for (NSMenuItem *item in self.streamMenu.itemArray) {
+        if ([item.title isEqualToString:@"画质"]) {
+            qualityItem = item;
+            break;
+        }
+    }
+    if (qualityItem && qualityItem.submenu) {
+        NSButton *btn = (NSButton *)sender;
+        NSPoint p = NSMakePoint(0, btn.bounds.size.height + 5);
+        [qualityItem.submenu popUpMenuPositioningItem:nil atLocation:p inView:btn];
+    }
+}
+
+- (void)handleTimeoutDisplayMode:(id)sender {
+    [self rebuildStreamMenu];
+    NSMenuItem *windowItem = nil;
+    for (NSMenuItem *item in self.streamMenu.itemArray) {
+        if ([item.title isEqualToString:@"窗口"]) {
+            windowItem = item;
+            break;
+        }
+    }
+    if (windowItem && windowItem.submenu) {
+        NSButton *btn = (NSButton *)sender;
+        NSPoint p = NSMakePoint(0, btn.bounds.size.height + 5);
+        [windowItem.submenu popUpMenuPositioningItem:nil atLocation:p inView:btn];
+    }
+}
+
+- (void)handleTimeoutConnection:(id)sender {
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Connections"];
+    TemporaryHost *host = self.app.host;
+    
+    NSMutableSet *seen = [NSMutableSet set];
+    
+    void (^addItem)(NSString *, NSString *) = ^(NSString *title, NSString *addr) {
+        if (!addr || [seen containsObject:addr]) return;
+        [seen addObject:addr];
+        
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"%@: %@", title, addr] action:@selector(handleConnectionSelection:) keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = addr;
+        if ([addr isEqualToString:host.activeAddress]) {
+            item.state = NSControlStateValueOn;
+        }
+        [menu addItem:item];
     };
 
-    NSMenuItem *autoItem = [[NSMenuItem alloc] initWithTitle:@"自动" action:@selector(selectConnectionMethodFromMenu:) keyEquivalent:@""];
-    autoItem.target = self;
-    autoItem.representedObject = @"Auto";
-    autoItem.state = [method isEqualToString:@"Auto"] ? NSControlStateValueOn : NSControlStateValueOff;
-    setSymbol(autoItem, @"wand.and.stars");
-    [menu addItem:autoItem];
-
-    NSArray<NSString *> *candidates = @[ self.app.host.localAddress ?: @"", self.app.host.address ?: @"", self.app.host.externalAddress ?: @"", self.app.host.ipv6Address ?: @"" ];
-    NSMutableOrderedSet<NSString *> *unique = [[NSMutableOrderedSet alloc] init];
-    for (NSString *addr in candidates) {
-        if (addr.length > 0) {
-            [unique addObject:addr];
-        }
+    addItem(@"当前", host.activeAddress); // Ensure current is always first if valid
+    addItem(@"Local", host.localAddress);
+    addItem(@"IPv6", host.ipv6Address);
+    addItem(@"Public", host.externalAddress);
+    addItem(@"Manual", host.address);
+    
+    if (menu.itemArray.count == 0 && host.activeAddress) {
+        addItem(@"Default", host.activeAddress);
     }
-    if (unique.count > 0) {
-        [menu addItem:[NSMenuItem separatorItem]];
-        for (NSString *addr in unique) {
-            NSMenuItem *addrItem = [[NSMenuItem alloc] initWithTitle:addr action:@selector(selectConnectionMethodFromMenu:) keyEquivalent:@""];
-            addrItem.target = self;
-            addrItem.representedObject = addr;
-            addrItem.state = [method isEqualToString:addr] ? NSControlStateValueOn : NSControlStateValueOff;
-            setSymbol(addrItem, @"link");
-            [menu addItem:addrItem];
-        }
+    
+    if (menu.itemArray.count == 0) {
+        [menu addItemWithTitle:@"无可用地址" action:nil keyEquivalent:@""];
     }
 
-    NSRect bounds = self.view.bounds;
-    NSPoint p = NSMakePoint(NSMidX(bounds), NSMidY(bounds));
-    [menu popUpMenuPositioningItem:nil atLocation:p inView:self.view];
+    NSButton *btn = (NSButton *)sender;
+    NSPoint p = NSMakePoint(0, btn.bounds.size.height + 5);
+    [menu popUpMenuPositioningItem:nil atLocation:p inView:btn];
+}
+
+- (void)handleConnectionSelection:(NSMenuItem *)item {
+    NSString *addr = item.representedObject;
+    if (addr) {
+        self.app.host.activeAddress = addr;
+        [self attemptReconnectWithReason:@"manual-address-change"];
+    }
+}
+
+- (void)handleTimeoutViewLogs:(id)sender {
+    [self toggleLogOverlay];
 }
 
 - (void)beginStopStreamIfNeededWithReason:(NSString *)reason {
@@ -977,6 +1211,15 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 }
 
 - (NSInteger)currentLatencyMs {
+    // If we are actively streaming, use the real-time RTT.
+    if ([self hasReceivedAnyVideoFrames]) {
+        uint32_t rtt = 0;
+        uint32_t rttVar = 0;
+        if (LiGetEstimatedRttInfo(&rtt, &rttVar) == 0) {
+            return (NSInteger)rtt;
+        }
+    }
+
     NSString *addr = [self currentPreferredAddressForStatus];
     NSNumber *latency = addr ? self.app.host.addressLatencies[addr] : nil;
     if (!latency) {
@@ -2126,12 +2369,11 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self uncaptureMouse];
 
-        [self.delegate appDidQuit:self.app];
         if (message != nil) {
-            [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Connection Failed" message:message window:self.view.window completionHandler:^(NSModalResponse returnCode) {
-                [self.view.window close];
-            }];
+            // Show the error overlay and keep window open for retry/options
+            [self showErrorOverlayWithTitle:@"连接失败" message:message canWait:NO];
         } else {
+            [self.delegate appDidQuit:self.app];
             [self.view.window close];
         }
     });
@@ -2317,6 +2559,25 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     }
 }
 
+- (void)handleTimeoutCopyLogs:(id)sender {
+    NSArray *lines = [[LogBuffer shared] allLines];
+    NSString *fullLog = [lines componentsJoinedByString:@"\n"];
+    NSPasteboard *pb = [NSPasteboard generalPasteboard];
+    [pb clearContents];
+    [pb setString:fullLog forType:NSPasteboardTypeString];
+
+    if ([sender isKindOfClass:[NSButton class]]) {
+        NSButton *btn = (NSButton *)sender;
+        NSString *origTitle = btn.title;
+        btn.title = @"已复制";
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if ([btn.title isEqualToString:@"已复制"]) {
+                btn.title = origTitle;
+            }
+        });
+    }
+}
+
 - (void)showLogOverlay {
     if (self.logOverlayContainer) {
         return;
@@ -2329,6 +2590,13 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     self.logOverlayContainer.wantsLayer = YES;
     self.logOverlayContainer.layer.cornerRadius = 12.0;
     self.logOverlayContainer.layer.masksToBounds = YES;
+    
+    // Close Button
+    NSButton *closeBtn = [NSButton buttonWithTitle:@"关闭" target:self action:@selector(handleLogOverlayClose:)];
+    closeBtn.bezelStyle = NSBezelStyleRounded;
+    closeBtn.controlSize = NSControlSizeRegular;
+    closeBtn.tag = 999;
+    [self.logOverlayContainer addSubview:closeBtn];
 
     self.logOverlayScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     self.logOverlayScrollView.hasVerticalScroller = YES;
@@ -2340,7 +2608,13 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     self.logOverlayTextView.drawsBackground = NO;
     self.logOverlayTextView.font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];
     self.logOverlayTextView.textColor = [NSColor whiteColor];
-    self.logOverlayTextView.insertionPointColor = [NSColor whiteColor];
+    
+    self.logOverlayTextView.minSize = NSMakeSize(0.0, 0.0);
+    self.logOverlayTextView.maxSize = NSMakeSize(FLT_MAX, FLT_MAX);
+    self.logOverlayTextView.verticallyResizable = YES;
+    self.logOverlayTextView.horizontallyResizable = NO;
+    self.logOverlayTextView.textContainer.widthTracksTextView = YES;
+    self.logOverlayTextView.textContainer.containerSize = NSMakeSize(FLT_MAX, FLT_MAX);
 
     self.logOverlayScrollView.documentView = self.logOverlayTextView;
     [self.logOverlayContainer addSubview:self.logOverlayScrollView];
@@ -2367,7 +2641,10 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     if (!self.logOverlayContainer) {
         return;
     }
-
+    
+    // If opened from timeout menu (not stream menu), we allow closing it
+    // without closing the underlying timeout menu.
+    
     NSVisualEffectView *container = self.logOverlayContainer;
     self.logOverlayContainer = nil;
     self.logOverlayScrollView = nil;
@@ -2381,17 +2658,28 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     }];
 }
 
+- (void)handleLogOverlayClose:(id)sender {
+    [self hideLogOverlay];
+}
+
 - (void)appendLogLineToOverlay:(NSString *)line {
     if (!self.logOverlayTextView || !line) {
         return;
     }
 
-    // Append while preserving selection
-    BOOL atEnd = NSMaxRange(self.logOverlayTextView.selectedRange) == self.logOverlayTextView.string.length;
+    // Append while preserving scrolling if user is looking at history
+    // But default to auto-scroll if at bottom
+    
+    // Check if we are scrolled to the bottom (with some tolerance)
+    NSRect visible = self.logOverlayScrollView.contentView.documentVisibleRect;
+    NSRect docRect = self.logOverlayTextView.frame;
+    BOOL wasAtBottom = (NSMaxY(visible) >= NSMaxY(docRect) - 20.0);
+
     NSString *existing = self.logOverlayTextView.string ?: @"";
     NSString *newText = existing.length == 0 ? line : [existing stringByAppendingFormat:@"\n%@", line];
     self.logOverlayTextView.string = newText;
-    if (atEnd) {
+    
+    if (wasAtBottom) {
         [self.logOverlayTextView scrollRangeToVisible:NSMakeRange(self.logOverlayTextView.string.length, 0)];
     }
 }
@@ -2475,7 +2763,13 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
     // Preserve fullscreen/windowed state across reconnects.
     self.reconnectPreserveFullscreenStateValid = YES;
-    self.reconnectPreservedWasFullscreen = [self isWindowFullscreen];
+    if ([self isWindowFullscreen]) {
+        self.reconnectPreservedWindowMode = 1;
+    } else if ([self isWindowBorderlessMode]) {
+        self.reconnectPreservedWindowMode = 2;
+    } else {
+        self.reconnectPreservedWindowMode = 0;
+    }
 
     @synchronized (self) {
         if (self.stopStreamInProgress) {
@@ -2719,9 +3013,8 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         // 0: Windowed, 1: Fullscreen, 2: Borderless Windowed
         
         if (wasReconnect && self.reconnectPreserveFullscreenStateValid) {
-            // If we were reconnecting, try to preserve state, but for now let's just respect the setting
-            // or maybe we should respect what it was.
-            // For simplicity, let's respect the setting as "default" implies startup state.
+            // If we were reconnecting, try to preserve state
+            displayMode = self.reconnectPreservedWindowMode;
         }
         self.reconnectPreserveFullscreenStateValid = NO;
 
@@ -2776,10 +3069,31 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
             return;
         }
         
-        if (errorCode == 0 && [SettingsClass quitAppAfterStreamFor:self.app.host.uuid]) {
-            [self.delegate quitApp:self.app completion:nil];
+        // If it was user initiated, just close normally.
+        if (self.disconnectWasUserInitiated) {
+             if ([SettingsClass quitAppAfterStreamFor:self.app.host.uuid]) {
+                 [self.delegate quitApp:self.app completion:nil];
+             } else {
+                 [self closeWindowFromMainQueueWithMessage:nil];
+             }
+             return;
+        }
+        
+        // If error code is non-zero, treat as error.
+        if (errorCode != 0) {
+             // Try to be more specific if possible. (12345 = Special user request?? No, usually standard errnos)
+             NSString *msg = [NSString stringWithFormat:@"连接意外终止 (错误代码: %d)", errorCode];
+             if (errorCode == -1) {
+                 msg = @"连接已断开，请检查网络设置。";
+             }
+             [self closeWindowFromMainQueueWithMessage:msg];
         } else {
-            [self closeWindowFromMainQueueWithMessage:nil];
+             // errorCode == 0 means normal termination from host side or successful end.
+             if ([SettingsClass quitAppAfterStreamFor:self.app.host.uuid]) {
+                 [self.delegate quitApp:self.app completion:nil];
+             } else {
+                 [self closeWindowFromMainQueueWithMessage:nil];
+             }
         }
     });
 }
@@ -2877,8 +3191,25 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
                                                    (self.view.bounds.size.height - height) / 2.0,
                                                    width,
                                                    height);
-        self.logOverlayScrollView.frame = NSMakeRect(12, 12, width - 24, height - 24);
-        self.logOverlayTextView.frame = self.logOverlayScrollView.bounds;
+        
+        // Position Close Button (Tag 999)
+        NSButton *closeBtn = [self.logOverlayContainer viewWithTag:999];
+        CGFloat topMargin = 0;
+        if (closeBtn) {
+            [closeBtn sizeToFit];
+            CGFloat btnW = closeBtn.frame.size.width + 20; // Some extra padding for hit area
+            if (btnW < 60) btnW = 60;
+            CGFloat btnH = closeBtn.frame.size.height;
+            closeBtn.frame = NSMakeRect(width - btnW - 12, height - btnH - 12, btnW, btnH);
+            topMargin = btnH + 20;
+        } else {
+             topMargin = 12;
+        }
+
+        self.logOverlayScrollView.frame = NSMakeRect(12, 12, width - 24, height - 12 - topMargin);
+        // Do not force height, only width. Let layout manager handle it.
+        // Or if using manual frame, ensure it's at least the content width.
+        [self.logOverlayTextView setFrameSize:NSMakeSize(self.logOverlayScrollView.contentSize.width, self.logOverlayTextView.frame.size.height)];
     }
 
     if (self.reconnectOverlayContainer) {
@@ -2895,17 +3226,77 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     }
 
     if (self.timeoutOverlayContainer) {
-        CGFloat width = 360.0;
-        CGFloat height = 140.0;
+        CGFloat width = 480.0;  // 增加宽度
+        CGFloat height = 460.0;  // 增加高度以容纳更好的间距
         NSRect bounds = self.view.bounds;
         self.timeoutOverlayContainer.frame = NSMakeRect((NSWidth(bounds) - width) / 2.0,
                                                        (NSHeight(bounds) - height) / 2.0,
                                                        width,
                                                        height);
+        
+        // 为 NSVisualEffectView 应用圆角遮罩
+        CAShapeLayer *maskLayer = [CAShapeLayer layer];
+        NSBezierPath *roundedPath = [NSBezierPath bezierPathWithRoundedRect:self.timeoutOverlayContainer.bounds 
+                                                                    xRadius:24.0 
+                                                                    yRadius:24.0];
+        CGPathRef cgPath = [self CGPathFromNSBezierPath:roundedPath];
+        maskLayer.path = cgPath;
+        CGPathRelease(cgPath);
+        self.timeoutOverlayContainer.layer.mask = maskLayer;
 
-        self.timeoutLabel.frame = NSMakeRect(16, height - 56, width - 32, 28);
-        self.timeoutSwitchMethodButton.frame = NSMakeRect(22, 26, (width - 54) / 2.0, 32);
-        self.timeoutExitButton.frame = NSMakeRect(22 + (width - 54) / 2.0 + 10, 26, (width - 54) / 2.0, 32);
+        CGFloat centerX = width / 2.0;
+        CGFloat paddingTop = 30.0;  // 顶部内边距
+        CGFloat paddingSide = 30.0; // 左右内边距
+
+        // 图标和文本 - 从顶部开始布局
+        self.timeoutIconLabel.frame = NSMakeRect(0, height - paddingTop - 60, width, 60);
+        self.timeoutTitleLabel.frame = NSMakeRect(0, height - paddingTop - 96, width, 26);
+        self.timeoutLabel.frame = NSMakeRect(paddingSide, height - paddingTop - 150, width - paddingSide * 2, 44);
+
+        CGFloat largeBtnWidth = 140;
+        CGFloat largeBtnHeight = 32;
+        CGFloat mainBtnY = 220;  // 主按钮Y位置
+        
+        // Primary Action: Reconnect and Wait
+        if (self.timeoutWaitButton.hidden) {
+            // Reconnect centered
+            self.timeoutReconnectButton.frame = NSMakeRect(centerX - largeBtnWidth/2, mainBtnY, largeBtnWidth, largeBtnHeight);
+        } else {
+            // Reconnect | Wait
+            CGFloat gap = 16;
+            self.timeoutReconnectButton.frame = NSMakeRect(centerX - largeBtnWidth - gap/2, mainBtnY, largeBtnWidth, largeBtnHeight);
+            self.timeoutWaitButton.frame = NSMakeRect(centerX + gap/2, mainBtnY, largeBtnWidth, largeBtnHeight);
+        }
+        
+        // Exit Action
+        self.timeoutExitButton.frame = NSMakeRect(centerX - largeBtnWidth/2, mainBtnY - largeBtnHeight - 14, largeBtnWidth, largeBtnHeight);
+        
+        // Settings Row - 增加间距
+        CGFloat settingsY = 130;
+        CGFloat settingBtnWidth = 102; 
+        CGFloat settingBtnHeight = 30;
+        CGFloat gap = 10;
+        
+        // Row 1: Resolution, Bitrate, Display, Connection
+        NSButton *buttons[] = {self.timeoutResolutionButton, self.timeoutBitrateButton, self.timeoutDisplayModeButton, self.timeoutConnectionButton};
+        size_t count = sizeof(buttons) / sizeof(buttons[0]);
+        CGFloat totalSettingsW = settingBtnWidth * count + gap * (count - 1);
+        CGFloat startX = (width - totalSettingsW) / 2.0;
+
+        for (size_t i = 0; i < count; i++) {
+            buttons[i].frame = NSMakeRect(startX + (settingBtnWidth + gap) * i, settingsY, settingBtnWidth, settingBtnHeight);
+        }
+        
+        // Logs Row - 改进样式，调整位置和尺寸
+        CGFloat logsY = 80;  // 稍微往上移一点，给底部更多空间
+        CGFloat logsBtnWidth = 90;  // 使用新的宽度
+        CGFloat logsBtnHeight = 28; // 新的高度
+        CGFloat logsGap = 12;  // 缩小间距，更紧凑
+        CGFloat totalLogsW = logsBtnWidth * 2 + logsGap;
+        CGFloat logsStartX = (width - totalLogsW) / 2.0;
+        
+        self.timeoutViewLogsButton.frame = NSMakeRect(logsStartX, logsY, logsBtnWidth, logsBtnHeight);
+        self.timeoutCopyLogsButton.frame = NSMakeRect(logsStartX + logsBtnWidth + logsGap, logsY, logsBtnWidth, logsBtnHeight);
     }
 
     [self bringStreamControlsToFront];
@@ -3113,6 +3504,36 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
             self.notificationContainer = nil;
         }];
     }];
+}
+
+// 辅助方法：将 NSBezierPath 转换为 CGPath
+- (CGPathRef)CGPathFromNSBezierPath:(NSBezierPath *)bezierPath {
+    CGMutablePathRef path = CGPathCreateMutable();
+    NSInteger count = [bezierPath elementCount];
+    
+    for (NSInteger i = 0; i < count; i++) {
+        NSPoint points[3];
+        NSBezierPathElement element = [bezierPath elementAtIndex:i associatedPoints:points];
+        
+        switch (element) {
+            case NSBezierPathElementMoveTo:
+                CGPathMoveToPoint(path, NULL, points[0].x, points[0].y);
+                break;
+            case NSBezierPathElementLineTo:
+                CGPathAddLineToPoint(path, NULL, points[0].x, points[0].y);
+                break;
+            case NSBezierPathElementCurveTo:
+                CGPathAddCurveToPoint(path, NULL, points[0].x, points[0].y,
+                                    points[1].x, points[1].y,
+                                    points[2].x, points[2].y);
+                break;
+            case NSBezierPathElementClosePath:
+                CGPathCloseSubpath(path);
+                break;
+        }
+    }
+    
+    return path;
 }
 
 @end
