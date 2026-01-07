@@ -524,7 +524,19 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         self.view.window.contentAspectRatio = NSMakeSize(width, height);
     }
     self.view.window.frameAutosaveName = @"Stream Window";
-    [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
+    
+    struct Resolution res = [self.class getResolution];
+    CGFloat aspectRatio = (res.height > 0) ? ((CGFloat)res.width / (CGFloat)res.height) : (16.0 / 9.0);
+    CGFloat initialW = 1280.0;
+    CGFloat initialH = initialW / aspectRatio;
+
+    // Sanity check for portrait streams or extreme aspect ratios to avoid huge windows
+    if (initialH > 900.0) {
+        initialH = 900.0;
+        initialW = initialH * aspectRatio;
+    }
+    
+    [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(initialW, initialH)];
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
 
@@ -1198,11 +1210,21 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     
     // Restore a reasonable frame. When leaving borderless, don't keep a fullscreen-sized window
     // (it looks like "real fullscreen" and can confuse the responder chain).
+    struct Resolution res = [self.class getResolution];
+    CGFloat aspectRatio = (res.height > 0) ? ((CGFloat)res.width / (CGFloat)res.height) : (16.0 / 9.0);
+
     if (wasBorderless) {
         NSScreen *screen = window.screen ?: [NSScreen mainScreen];
         NSRect visible = screen ? screen.visibleFrame : window.frame;
-        CGFloat targetW = MIN(1280, visible.size.width);
-        CGFloat targetH = MIN(720, visible.size.height);
+        
+        CGFloat targetW = MIN(1280.0, visible.size.width * 0.9);
+        CGFloat targetH = targetW / aspectRatio;
+        
+        if (targetH > visible.size.height * 0.9) {
+            targetH = visible.size.height * 0.9;
+            targetW = targetH * aspectRatio;
+        }
+
         NSRect target = NSMakeRect(
             NSMidX(visible) - targetW / 2.0,
             NSMidY(visible) - targetH / 2.0,
@@ -1211,7 +1233,9 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         );
         [window setFrame:target display:YES animate:YES];
     } else {
-        [window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1280, 720)];
+        CGFloat w = 1280.0;
+        CGFloat h = w / aspectRatio;
+        [window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(w, h)];
     }
     
     [self captureMouse];
@@ -1422,6 +1446,141 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     windowItem.submenu = windowMenu;
     [self.streamMenu addItem:windowItem];
 
+    // 二级：屏幕（分辨率/帧率）
+    NSMenuItem *monitorItem = [[NSMenuItem alloc] initWithTitle:@"屏幕" action:nil keyEquivalent:@""];
+    setSymbol(monitorItem, @"display");
+    NSMenu *monitorMenu = [[NSMenu alloc] initWithTitle:@"屏幕"];
+
+    // 1. Follow Monitor
+    CGSize refreshLocalSize = CGSizeZero;
+    if ([self.view.window screen]) {
+        NSRect screenFrame = [self.view.window screen].frame;
+        CGFloat scale = [self.view.window screen].backingScaleFactor;
+        refreshLocalSize = CGSizeMake(screenFrame.size.width * scale, screenFrame.size.height * scale);
+    }
+    
+    NSString *matchDisplayTitle = @"跟随显示器";
+    if (refreshLocalSize.width > 0 && refreshLocalSize.height > 0) {
+        matchDisplayTitle = [NSString stringWithFormat:@"跟随显示器 (%.0fx%.0f)", refreshLocalSize.width, refreshLocalSize.height];
+    }
+
+    NSMenuItem *matchDisplayItem = [[NSMenuItem alloc] initWithTitle:matchDisplayTitle action:@selector(selectMatchDisplayFromMenu:) keyEquivalent:@""];
+    matchDisplayItem.target = self;
+    
+    NSDictionary *currentPrefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    BOOL isMatchDisplay = currentPrefs ? [currentPrefs[@"matchDisplayResolution"] boolValue] : NO;
+    matchDisplayItem.state = isMatchDisplay ? NSControlStateValueOn : NSControlStateValueOff;
+
+    setSymbol(matchDisplayItem, @"macwindow.badge.plus");
+    [monitorMenu addItem:matchDisplayItem];
+
+    struct Resolution currentRes = [self.class getResolution];
+    
+    int currentFps = 0;
+    if (prefs) {
+        int rawFps = [prefs[@"fps"] intValue];
+        if (rawFps == 0) {
+            currentFps = [prefs[@"customFps"] intValue];
+        } else {
+            currentFps = rawFps;
+        }
+    }
+    if (currentFps == 0) {
+        TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
+        currentFps = [tempSettings.framerate intValue];
+    }
+
+    // Check if effective config is 0x0 (which we interpret as Host Native)
+    BOOL isMatchHost = (!isMatchDisplay && currentRes.width == 0 && currentRes.height == 0);
+
+    [monitorMenu addItem:[NSMenuItem separatorItem]];
+    
+    // 3. Custom
+    NSMenuItem *customItem = [[NSMenuItem alloc] initWithTitle:@"自定义..." action:@selector(selectCustomResolutionFromMenu:) keyEquivalent:@""];
+    customItem.target = self;
+    setSymbol(customItem, @"slider.horizontal.below.rectangle");
+    [monitorMenu addItem:customItem];
+
+    [monitorMenu addItem:[NSMenuItem separatorItem]];
+
+    // 4. Resolutions Submenu
+    // Determine if we should show "Current Resolution" or if it is covered by standard list / custom.
+    BOOL currentIsStandard = NO;
+
+    NSArray<NSValue *> *resolutions = @[
+        [NSValue valueWithSize:NSMakeSize(3840, 2160)],
+        [NSValue valueWithSize:NSMakeSize(2560, 1440)],
+        [NSValue valueWithSize:NSMakeSize(1920, 1080)],
+        [NSValue valueWithSize:NSMakeSize(1280, 720)]
+    ];
+
+    for (NSValue *val in resolutions) {
+        NSSize size = val.sizeValue;
+        if ((int)size.width == currentRes.width && (int)size.height == currentRes.height) {
+            currentIsStandard = YES;
+        }
+        
+        NSString *title = [NSString stringWithFormat:@"%.0f x %.0f", size.width, size.height];
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(selectResolutionFromMenu:) keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = val;
+        
+        BOOL selected = (!isMatchDisplay && !isMatchHost && currentRes.width == (int)size.width && currentRes.height == (int)size.height);
+        item.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
+        
+        [monitorMenu addItem:item];
+    }
+    
+    // If current is NOT Follow Monitor, NOT Follow Host, and NOT Standard, we display it as "Effective Custom"
+    if (!isMatchDisplay && !isMatchHost && !currentIsStandard) {
+        NSString *customTitle = [NSString stringWithFormat:@"当前 (自定义): %dx%d", currentRes.width, currentRes.height];
+        NSMenuItem *currentItem = [[NSMenuItem alloc] initWithTitle:customTitle action:nil keyEquivalent:@""];
+        currentItem.state = NSControlStateValueOn;
+        [monitorMenu addItem:currentItem];
+    }
+
+    [monitorMenu addItem:[NSMenuItem separatorItem]];
+
+    // 5. Frame Rate Submenu
+    NSMenuItem *fpsSubItem = [[NSMenuItem alloc] initWithTitle:@"帧率" action:nil keyEquivalent:@""];
+    NSMenu *fpsSubMenu = [[NSMenu alloc] initWithTitle:@"帧率"];
+    
+    NSArray<NSNumber *> *fpsOptions = @[ @30, @60, @90, @120, @144 ];
+    BOOL currentFpsIsStandard = NO;
+    for (NSNumber *fps in fpsOptions) {
+        if (currentFps == fps.intValue) currentFpsIsStandard = YES;
+        
+        NSString *title = [NSString stringWithFormat:@"%@ FPS", fps];
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(selectFrameRateFromMenu:) keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = fps;
+        
+        BOOL selected = (currentFps == fps.intValue);
+        item.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
+        
+        [fpsSubMenu addItem:item];
+    }
+    
+    // If FPS is weird (custom), show it
+    if (!currentFpsIsStandard) {
+         NSString *title = [NSString stringWithFormat:@"当前: %d FPS", currentFps];
+         NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+         item.state = NSControlStateValueOn;
+         [fpsSubMenu addItem:item];
+    }
+
+    [fpsSubMenu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *customFpsItem = [[NSMenuItem alloc] initWithTitle:@"自定义..." action:@selector(selectCustomFpsFromMenu:) keyEquivalent:@""];
+    customFpsItem.target = self;
+    [fpsSubMenu addItem:customFpsItem];
+    
+    fpsSubItem.submenu = fpsSubMenu;
+    [monitorMenu addItem:fpsSubItem];
+
+    monitorItem.submenu = monitorMenu;
+    [self.streamMenu addItem:monitorItem];
+
     // 二级：画质（码率）
     NSMenuItem *qualityItem = [[NSMenuItem alloc] initWithTitle:@"画质" action:nil keyEquivalent:@""];
     setSymbol(qualityItem, @"sparkles");
@@ -1600,6 +1759,193 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
     [self attemptReconnectWithReason:@"connection-method-changed"]; 
 }
+
+- (void)selectFollowHostFromMenu:(id)sender {
+    // 0x0 resolution and 0 FPS usually signals "Native" or "Default" to the core library.
+    // We treat this as "Follow Host".
+    [SettingsClass setCustomResolution:0 :0 :0 for:self.app.host.uuid];
+    
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    [self attemptReconnectWithReason:@"resolution-changed"];
+}
+
+- (void)selectCustomResolutionFromMenu:(id)sender {
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"自定义分辨率与帧率";
+    alert.informativeText = @"请输入期望的分辨率（宽 x 高）和帧率（FPS）。\n设置为 0 代表由服务端决定（不建议）。";
+    [alert addButtonWithTitle:@"确定"];
+    [alert addButtonWithTitle:@"取消"];
+    
+    NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 200, 100)];
+    
+    // Width
+    NSTextField *widthLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 75, 50, 20)];
+    widthLabel.stringValue = @"宽:";
+    widthLabel.bezeled = NO;
+    widthLabel.drawsBackground = NO;
+    widthLabel.alignment = NSTextAlignmentRight;
+    [container addSubview:widthLabel];
+    
+    NSTextField *widthField = [[NSTextField alloc] initWithFrame:NSMakeRect(55, 75, 60, 22)];
+    widthField.placeholderString = @"1920";
+    [container addSubview:widthField];
+    
+    // Height
+    NSTextField *heightLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 45, 50, 20)];
+    heightLabel.stringValue = @"高:";
+    heightLabel.bezeled = NO;
+    heightLabel.drawsBackground = NO;
+    heightLabel.alignment = NSTextAlignmentRight;
+    [container addSubview:heightLabel];
+    
+    NSTextField *heightField = [[NSTextField alloc] initWithFrame:NSMakeRect(55, 45, 60, 22)];
+    heightField.placeholderString = @"1080";
+    [container addSubview:heightField];
+    
+    // FPS
+    NSTextField *fpsLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 15, 50, 20)];
+    fpsLabel.stringValue = @"FPS:";
+    fpsLabel.bezeled = NO;
+    fpsLabel.drawsBackground = NO;
+    fpsLabel.alignment = NSTextAlignmentRight;
+    [container addSubview:fpsLabel];
+    
+    NSTextField *fpsField = [[NSTextField alloc] initWithFrame:NSMakeRect(55, 15, 60, 22)];
+    fpsField.placeholderString = @"60";
+    [container addSubview:fpsField];
+    
+    // Pre-fill with current
+    struct Resolution res = [self.class getResolution];
+    TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
+    int currentFps = [tempSettings.framerate intValue];
+    
+    if (res.width > 0) widthField.intValue = res.width;
+    if (res.height > 0) heightField.intValue = res.height;
+    if (currentFps > 0) fpsField.intValue = currentFps;
+    
+    alert.accessoryView = container;
+    
+    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode == NSAlertFirstButtonReturn) {
+            int w = widthField.intValue;
+            int h = heightField.intValue;
+            int f = fpsField.intValue;
+            
+            // Basic validation
+            if (w < 0) w = 0;
+            if (h < 0) h = 0;
+            if (f < 0) f = 0;
+            
+            [SettingsClass setCustomResolution:w :h :f for:self.app.host.uuid];
+            [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+            [self attemptReconnectWithReason:@"custom-resolution"];
+        }
+    }];
+}
+
+- (void)selectMatchDisplayFromMenu:(id)sender {
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    BOOL currentMatch = prefs ? [prefs[@"matchDisplayResolution"] boolValue] : NO;
+    if (currentMatch) {
+         return;
+    }
+    
+    // Switch to match display
+    // We need current FPS because setResolutionAndFps requires it.
+    TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
+    int currentFps = [tempSettings.framerate intValue];
+
+    [SettingsClass setResolutionAndFps:0 :0 :currentFps matchDisplay:YES for:self.app.host.uuid];
+    
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    [self attemptReconnectWithReason:@"resolution-changed"];
+}
+
+- (void)selectResolutionFromMenu:(NSMenuItem *)sender {
+    NSValue *val = sender.representedObject;
+    if (!val) return;
+    NSSize size = val.sizeValue;
+    
+    TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
+    int currentFps = [tempSettings.framerate intValue];
+
+    // Disable match display, set explicit resolution
+    [SettingsClass setResolutionAndFps:(int)size.width :(int)size.height :currentFps matchDisplay:NO for:self.app.host.uuid];
+
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    [self attemptReconnectWithReason:@"resolution-changed"];
+}
+
+- (void)selectFrameRateFromMenu:(NSMenuItem *)sender {
+    NSNumber *fpsStats = sender.representedObject;
+    if (!fpsStats) return;
+    int newFps = fpsStats.intValue;
+
+    TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
+    int currentFps = [tempSettings.framerate intValue];
+    if (newFps == currentFps) return;
+    
+    // Get current resolution settings to preserve them
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    BOOL matchDisplay = prefs ? [prefs[@"matchDisplayResolution"] boolValue] : NO;
+    
+    // If not matching display, we need to know the explicit resolution.
+    // getResolution returns the currently streaming config resolution, which is what we want to keep.
+    struct Resolution currentRes = [self.class getResolution];
+    
+    [SettingsClass setResolutionAndFps:currentRes.width :currentRes.height :newFps matchDisplay:matchDisplay for:self.app.host.uuid];
+    
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    [self attemptReconnectWithReason:@"framerate-changed"];
+}
+
+- (void)selectCustomFpsFromMenu:(id)sender {
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"自定义帧率";
+    alert.informativeText = @"请输入期望的帧率（FPS）。";
+    [alert addButtonWithTitle:@"确定"];
+    [alert addButtonWithTitle:@"取消"];
+    
+    NSTextField *fpsField = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 200, 24)];
+    fpsField.placeholderString = @"60";
+    
+    // Pre-fill
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    int currentFps = 0;
+    if (prefs) {
+        int rawFps = [prefs[@"fps"] intValue];
+        if (rawFps == 0) {
+            currentFps = [prefs[@"customFps"] intValue];
+        } else {
+            currentFps = rawFps;
+        }
+    }
+    if (currentFps == 0) {
+        TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
+        currentFps = [tempSettings.framerate intValue];
+    }
+    
+    if (currentFps > 0) fpsField.intValue = currentFps;
+    
+    alert.accessoryView = fpsField;
+    
+    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode == NSAlertFirstButtonReturn) {
+            int f = fpsField.intValue;
+            if (f < 0) f = 0;
+            
+            NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+            BOOL matchDisplay = prefs ? [prefs[@"matchDisplayResolution"] boolValue] : NO;
+            struct Resolution currentRes = [self.class getResolution];
+            
+            [SettingsClass setResolutionAndFps:currentRes.width :currentRes.height :f matchDisplay:matchDisplay for:self.app.host.uuid];
+            
+            [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+            [self attemptReconnectWithReason:@"framerate-changed"];
+        }
+    }];
+}
+
 
 - (void)selectBitrateFromMenu:(NSMenuItem *)sender {
     id rep = sender.representedObject;

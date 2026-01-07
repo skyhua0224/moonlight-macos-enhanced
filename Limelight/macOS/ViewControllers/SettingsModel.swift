@@ -640,7 +640,7 @@ class SettingsModel: ObservableObject {
   // moonlight-qt defaults (tuned for macOS)
   static let defaultAutoAdjustBitrate = true
   static let defaultEnableYUV444 = false
-  static let defaultIgnoreAspectRatio = true
+  static let defaultIgnoreAspectRatio = false
   static let defaultShowLocalCursor = false
   static let defaultEnableMicrophone = false
   static let defaultStreamResolutionScale = false
@@ -1014,7 +1014,8 @@ class SettingsModel: ObservableObject {
       optimize = settings.optimize
 
       autoFullscreen = settings.autoFullscreen
-      selectedDisplayMode = Self.getString(from: settings.displayMode ?? (settings.autoFullscreen ? 1 : 0), in: Self.displayModes)
+      selectedDisplayMode = Self.getString(
+        from: settings.displayMode ?? (settings.autoFullscreen ? 1 : 0), in: Self.displayModes)
       rumble = settings.rumble
       selectedControllerDriver = Self.getString(
         from: settings.controllerDriver, in: Self.controllerDrivers)
