@@ -306,22 +306,37 @@ struct StreamView: View {
           FormCell(title: "Connection Method", contentWidth: 250) {
             HStack {
               Picker("", selection: $settingsModel.selectedConnectionMethod) {
-                ForEach(settingsModel.connectionCandidates, id: \.0) { candidate in
+                ForEach(settingsModel.connectionCandidates) { candidate in
                   HStack {
-                    if candidate.0 != "Auto" {
+                    if candidate.id != "Auto" {
                       Image(systemName: "circle.fill")
-                        .foregroundColor(candidate.2 ? .green : .red)
+                        .foregroundColor(candidate.state == 1 ? .green : (candidate.state == 0 ? .red : .gray))
                         .font(.system(size: 8))
                     }
-                    Text(candidate.1)
+                    Text(candidate.label)
                   }
-                  .tag(candidate.0)
+                  .tag(candidate.id)
                 }
               }
               .labelsHidden()
 
               Button(action: {
+                guard let uuid = settingsModel.selectedHost?.id,
+                  uuid != SettingsModel.globalHostId,
+                  let hosts = DataManager().getHosts() as? [TemporaryHost],
+                  let host = hosts.first(where: { $0.uuid == uuid })
+                else { return }
+
+                let editor = ConnectionEditorViewController(host: host)
+                NSApp.keyWindow?.contentViewController?.presentAsSheet(editor)
+              }) {
+                Image(systemName: "gearshape")
+              }
+              .buttonStyle(.plain)
+
+              Button(action: {
                 if let uuid = settingsModel.selectedHost?.id, uuid != SettingsModel.globalHostId {
+                  settingsModel.refreshConnectionCandidates()
                   NotificationCenter.default.post(
                     name: NSNotification.Name("MoonlightRequestHostDiscovery"), object: nil,
                     userInfo: ["uuid": uuid])
@@ -332,6 +347,9 @@ struct StreamView: View {
               .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
+          }
+          .onAppear {
+            settingsModel.refreshConnectionCandidates()
           }
 
           Divider()

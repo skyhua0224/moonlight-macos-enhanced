@@ -8,6 +8,8 @@
 
 #import "DiscoveryWorker.h"
 #import "Utils.h"
+#import "ConnectionEndpointStore.h"
+#import "LatencyProbe.h"
 #import "HttpManager.h"
 #import "ServerInfoResponse.h"
 #import "HttpRequest.h"
@@ -62,6 +64,14 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
         [orderedSet addObject:_host.ipv6Address];
     }
 
+    // Append manual endpoints from editor
+    NSArray<NSString *> *manualEndpoints = [ConnectionEndpointStore manualEndpointsForHost:_host.uuid];
+    for (NSString *endpoint in manualEndpoints) {
+        if (endpoint.length > 0) {
+            [orderedSet addObject:endpoint];
+        }
+    }
+
     return [orderedSet array];
 }
 
@@ -101,11 +111,17 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
             [lock lock];
             if (success) {
                 receivedResponse = YES;
-                [latencies setObject:@((int)rtt) forKey:address];
+                NSNumber *pingMs = [LatencyProbe icmpPingMsForAddress:address];
+                if (pingMs != nil) {
+                    [latencies setObject:pingMs forKey:address];
+                } else {
+                    [latencies setObject:@((int)rtt) forKey:address];
+                }
                 [states setObject:@(1) forKey:address];
-                
-                if (rtt < minLatency) {
-                    minLatency = rtt;
+
+                double bestMetric = pingMs != nil ? pingMs.doubleValue : rtt;
+                if (bestMetric < minLatency) {
+                    minLatency = bestMetric;
                     bestAddress = address;
                     bestResp = serverInfoResp;
                 }

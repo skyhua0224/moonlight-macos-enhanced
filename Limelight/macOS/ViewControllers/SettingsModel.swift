@@ -15,6 +15,12 @@ struct Host: Identifiable, Hashable {
   let name: String
 }
 
+struct ConnectionCandidate: Identifiable {
+  let id: String
+  let label: String
+  let state: Int
+}
+
 class SettingsModel: ObservableObject {
   static let globalHostId = "__global__"
   static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
@@ -462,9 +468,9 @@ class SettingsModel: ObservableObject {
     }
   }
 
-  var connectionCandidates: [(String, String, Bool)] {
-    var candidates: [(String, String, Bool)] = []
-    candidates.append(("Auto", LanguageManager.shared.localize("Auto (Recommended)"), true))
+  var connectionCandidates: [ConnectionCandidate] {
+    var candidates: [ConnectionCandidate] = []
+    candidates.append(ConnectionCandidate(id: "Auto", label: LanguageManager.shared.localize("Auto (Recommended)"), state: 1))
 
     guard let hostId = selectedHost?.id, hostId != Self.globalHostId else {
       return candidates
@@ -485,27 +491,134 @@ class SettingsModel: ObservableObject {
         states = host.addressStates ?? [:]
       }
 
-      var addresses = Set<String>()
-      if let addr = host.address { addresses.insert(addr) }
-      if let addr = host.localAddress { addresses.insert(addr) }
-      if let addr = host.externalAddress { addresses.insert(addr) }
-      if let addr = host.ipv6Address { addresses.insert(addr) }
-
-      for addr in addresses {
-        let online = (states[addr]?.intValue ?? 0) == 1
+      let endpoints = ConnectionEndpointStore.allEndpoints(for: host)
+      for addr in endpoints {
+        let stateVal = states[addr]?.intValue
         let latency = latencies[addr]?.intValue ?? -1
 
         var label = addr
-        if online && latency >= 0 {
-          label += " (\(latency)ms)"
-        } else if !online {
+        if stateVal == 1 {
+          if latency >= 0 {
+            label += " (\(latency)ms)"
+          } else {
+            label += " (\(LanguageManager.shared.localize("Online")))"
+          }
+        } else if stateVal == 0 {
           label += " (\(LanguageManager.shared.localize("Offline")))"
+        } else {
+          label += " (\(LanguageManager.shared.localize("Unknown")))"
         }
 
-        candidates.append((addr, label, online))
+        let state = stateVal ?? -1
+        candidates.append(ConnectionCandidate(id: addr, label: label, state: state))
       }
     }
     return candidates
+  }
+
+  func refreshConnectionCandidates() {
+    guard let hostId = selectedHost?.id, hostId != Self.globalHostId else { return }
+
+    func refreshConnectionCandidates() {
+      guard let hostId = selectedHost?.id, hostId != Self.globalHostId else { return }
+
+      let dataMan = DataManager()
+      guard let hosts = dataMan.getHosts() as? [TemporaryHost],
+        let host = hosts.first(where: { $0.uuid == hostId })
+      else { return }
+
+      let endpoints = ConnectionEndpointStore.allEndpoints(for: host)
+      if endpoints.isEmpty { return }
+
+      DispatchQueue.global(qos: .userInitiated).async {
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var latencies: [String: NSNumber] = [:]
+        var states: [String: NSNumber] = [:]
+        var receivedResponse = false
+        var minLatency = Double.greatestFiniteMagnitude
+        var bestAddress: String?
+
+        for address in endpoints {
+          group.enter()
+          DispatchQueue.global(qos: .userInitiated).async {
+            let start = Date()
+            guard let hMan = HttpManager(host: address, uniqueId: IdManager.getUniqueId(), serverCert: host.serverCert) else {
+              lock.lock()
+              states[address] = NSNumber(value: 0)
+              lock.unlock()
+              group.leave()
+              return
+            }
+            let serverInfo = ServerInfoResponse()
+            let request = HttpRequest(
+              for: serverInfo,
+              with: hMan.newServerInfoRequest(true),
+              fallbackError: 401,
+              fallbackRequest: hMan.newHttpServerInfoRequest(true)
+            )
+            hMan.executeRequestSynchronously(request)
+
+            let rtt = -start.timeIntervalSinceNow * 1000.0
+            let isOk = serverInfo.isStatusOk()
+            let uuid = serverInfo.getStringTag(TAG_UNIQUE_ID)
+            let matchesHost = uuid == host.uuid
+
+            lock.lock()
+            if isOk && matchesHost {
+              receivedResponse = true
+              let pingMs = LatencyProbe.icmpPingMs(forAddress: address)
+              if let pingMs {
+                latencies[address] = pingMs
+              } else {
+                latencies[address] = NSNumber(value: Int(rtt))
+              }
+              states[address] = NSNumber(value: 1)
+
+              let bestMetric = pingMs?.doubleValue ?? rtt
+              if bestMetric < minLatency {
+                minLatency = bestMetric
+                bestAddress = address
+              }
+            } else {
+              states[address] = NSNumber(value: 0)
+            }
+            lock.unlock()
+            group.leave()
+          }
+        }
+
+        group.wait()
+
+        DispatchQueue.main.async {
+          host.addressLatencies = latencies
+          host.addressStates = states
+          host.state = receivedResponse ? .online : .offline
+
+          if receivedResponse, let best = bestAddress {
+            host.activeAddress = best
+            DataManager().update(host)
+          }
+
+          NotificationCenter.default.post(
+            name: Notification.Name("HostLatencyUpdated"),
+            object: nil,
+            userInfo: ["uuid": hostId, "latencies": latencies, "states": states]
+          )
+
+          self.ensureConnectionMethodValid()
+          self.objectWillChange.send()
+        }
+      }
+    }
+
+  }
+
+  private func ensureConnectionMethodValid() {
+    let methods = Set(connectionCandidates.map { $0.id })
+    if !methods.contains(selectedConnectionMethod) {
+      selectedConnectionMethod = "Auto"
+    }
   }
 
   static var resolutions: [CGSize] = [
@@ -854,6 +967,14 @@ class SettingsModel: ObservableObject {
     NotificationCenter.default.addObserver(
       self, selector: #selector(handleHostLatencyUpdate),
       name: NSNotification.Name("HostLatencyUpdated"), object: nil)
+
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleEndpointUpdate),
+      name: NSNotification.Name("ConnectionEndpointsUpdated"), object: nil)
+
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleConnectionMethodUpdate),
+      name: NSNotification.Name("ConnectionMethodUpdated"), object: nil)
   }
 
   @objc func handleHostLatencyUpdate(_ notification: Notification) {
@@ -864,6 +985,35 @@ class SettingsModel: ObservableObject {
     DispatchQueue.main.async {
       self.latencyCache[uuid] = userInfo as? [String: Any]
       if self.selectedHost?.id == uuid {
+        self.ensureConnectionMethodValid()
+        self.objectWillChange.send()
+      }
+    }
+  }
+
+  @objc func handleEndpointUpdate(_ notification: Notification) {
+    guard let userInfo = notification.userInfo,
+      let uuid = userInfo["uuid"] as? String
+    else { return }
+
+    DispatchQueue.main.async {
+      if self.selectedHost?.id == uuid {
+        self.ensureConnectionMethodValid()
+        self.objectWillChange.send()
+      }
+    }
+  }
+
+  @objc func handleConnectionMethodUpdate(_ notification: Notification) {
+    guard let userInfo = notification.userInfo,
+      let uuid = userInfo["uuid"] as? String,
+      let method = userInfo["method"] as? String
+    else { return }
+
+    DispatchQueue.main.async {
+      if self.selectedHost?.id == uuid {
+        self.selectedConnectionMethod = method
+        self.ensureConnectionMethodValid()
         self.objectWillChange.send()
       }
     }
