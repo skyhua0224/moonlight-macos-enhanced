@@ -17,6 +17,7 @@
 #import "Helpers.h"
 #import "NavigatableAlertView.h"
 #import "AppDelegateForAppKit.h"
+#import "ConnectionEditorViewController.h"
 
 #import "TemporaryHost.h"
 #import "Moonlight-Swift.h"
@@ -338,6 +339,14 @@
         detailsItem.identifier = @"detailsItem";
         [menu addItem:detailsItem];
     }
+
+    NSMenuItem *connectionsItem = [HostsViewController getMenuItemForIdentifier:@"connectionsItem" inMenu:menu];
+    if (connectionsItem == nil) {
+        connectionsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Edit Connections", @"Edit Connections") action:@selector(showConnectionEditor:) keyEquivalent:@""];
+        [connectionsItem setTarget:self];
+        connectionsItem.identifier = @"connectionsItem";
+        [menu addItem:connectionsItem];
+    }
 }
 
 - (void)openHostSettings:(NSMenuItem *)sender {
@@ -356,6 +365,16 @@
 
     ConnectionDetailsViewController *detailsVC = [[ConnectionDetailsViewController alloc] initWithHost:host];
     [self presentViewControllerAsSheet:detailsVC];
+}
+
+- (void)showConnectionEditor:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host == nil) {
+        return;
+    }
+
+    ConnectionEditorViewController *editorVC = [[ConnectionEditorViewController alloc] initWithHost:host];
+    [self presentViewControllerAsSheet:editorVC];
 }
 
 
