@@ -94,6 +94,7 @@
 				"macOS/Helpers/Functional/NSNumber+F.m",
 				macOS/Helpers/Helpers.m,
 				macOS/Helpers/ImageFader.m,
+				macOS/Helpers/LanguageManager.swift,
 				macOS/Helpers/MASPreferences/MASPreferencesWindow.xib,
 				macOS/Helpers/MASPreferences/MASPreferencesWindowController.m,
 				"macOS/Helpers/NSApplication+Moonlight.m",

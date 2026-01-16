@@ -443,6 +443,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var mouseMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var selectedUpscalingMode: String {
     didSet {
       guard !isLoading else { return }
@@ -553,6 +559,7 @@ class SettingsModel: ObservableObject {
 
   static var controllerDrivers: [String] = ["HID", "MFi"]
   static var mouseDrivers: [String] = ["HID", "MFi"]
+  static var mouseModes: [String] = ["game", "remote"]
   static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
   static var displayModes: [String] = ["Windowed", "Fullscreen", "Borderless Windowed"]
 
@@ -633,6 +640,7 @@ class SettingsModel: ObservableObject {
   static let defaultReverseScrollDirection = false
   static let defaultTouchscreenMode = 0  // Trackpad
   static let defaultGamepadMouseMode = false
+  static let defaultMouseMode = "game"
   static let defaultUpscalingMode = 0
   static let defaultDimNonHoveredArtwork = true
   static let defaultUnlockMaxBitrate = false
@@ -839,6 +847,7 @@ class SettingsModel: ObservableObject {
     appArtworkHeight = Self.defaultAppArtworkHeight
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
+    mouseMode = Self.defaultMouseMode
     selectedUpscalingMode = Self.getString(from: Self.defaultUpscalingMode, in: Self.upscalingModes)
     selectedConnectionMethod = "Auto"
 
@@ -927,6 +936,7 @@ class SettingsModel: ObservableObject {
     appArtworkHeight = Self.defaultAppArtworkHeight
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
+    mouseMode = Self.defaultMouseMode
     selectedUpscalingMode = Self.getString(from: Self.defaultUpscalingMode, in: Self.upscalingModes)
     selectedConnectionMethod = "Auto"
   }
@@ -1038,6 +1048,7 @@ class SettingsModel: ObservableObject {
       selectedTouchscreenMode = Self.getString(
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
+      mouseMode = Self.getString(from: settings.mouseMode ?? (Self.defaultMouseMode == "game" ? 0 : 1), in: Self.mouseModes)
       selectedUpscalingMode = Self.getString(
         from: settings.upscalingMode ?? Self.defaultUpscalingMode, in: Self.upscalingModes)
       selectedConnectionMethod = settings.connectionMethod ?? "Auto"
@@ -1132,6 +1143,7 @@ class SettingsModel: ObservableObject {
     }
 
     let touchscreenMode = Self.getInt(from: selectedTouchscreenMode, in: Self.touchscreenModes)
+    let mouseModeVal = Self.getInt(from: mouseMode, in: Self.mouseModes)
 
     // Persist Off on unsupported systems to avoid saving an unusable mode.
     let rawUpscalingMode = Self.getInt(from: selectedUpscalingMode, in: Self.upscalingModes)
@@ -1245,6 +1257,7 @@ class SettingsModel: ObservableObject {
       reverseScrollDirection: reverseScrollDirection,
       touchscreenMode: touchscreenMode,
       gamepadMouseMode: gamepadMouseMode,
+      mouseMode: mouseModeVal,
       upscalingMode: upscalingMode,
       connectionMethod: selectedConnectionMethod
     )

@@ -74,6 +74,7 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 @property (nonatomic) BOOL disconnectWasUserInitiated;
 @property (nonatomic) uint64_t suppressConnectionWarningsUntilMs;
 @property (nonatomic) BOOL isMouseCaptured;
+@property (nonatomic) BOOL isRemoteDesktopMode;
 @property (atomic) BOOL stopStreamInProgress;
 
 @property (nonatomic) BOOL shouldAttemptReconnect;
@@ -143,6 +144,9 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
 @property (nonatomic) BOOL savedContentAspectRatioValid;
 @property (nonatomic) NSSize savedContentAspectRatio;
+
+@property (nonatomic, strong) NSTrackingArea *mouseTrackingArea;
+@property (nonatomic) BOOL isMouseInsideView;
 
 @end
 
@@ -685,8 +689,15 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 }
 
 - (void)beginStopStreamIfNeededWithReason:(NSString *)reason {
+    [self beginStopStreamIfNeededWithReason:reason completion:nil];
+}
+
+- (void)beginStopStreamIfNeededWithReason:(NSString *)reason completion:(void (^)(void))completion {
     @synchronized (self) {
         if (self.stopStreamInProgress) {
+            if (completion) {
+                dispatch_async(dispatch_get_main_queue(), completion);
+            }
             return;
         }
         self.stopStreamInProgress = YES;
@@ -727,6 +738,10 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         double stopStart = CACurrentMediaTime();
         [strongSelf.streamMan stopStream];
         Log(LOG_I, @"Stream stop took %.3fs (total %.3fs)", CACurrentMediaTime() - stopStart, CACurrentMediaTime() - start);
+
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), completion);
+        }
     });
 }
 
@@ -740,6 +755,7 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     [self.view.window makeFirstResponder:self];
 
     [self installLocalKeyMonitorIfNeeded];
+    [self installMouseTrackingArea];
     
     NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
     BOOL ignoreAspectRatio = prefs ? [prefs[@"ignoreAspectRatio"] boolValue] : NO;
@@ -868,6 +884,11 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         self.localKeyDownMonitor = nil;
     }
 
+    if (self.mouseTrackingArea) {
+        [self.view removeTrackingArea:self.mouseTrackingArea];
+        self.mouseTrackingArea = nil;
+    }
+
     [self.hidSupport tearDownHidManager];
     self.hidSupport = nil;
 }
@@ -915,14 +936,54 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
             return nil;
         }
 
-        // In borderless mode, Esc opens the local stream menu.
-        if (event.keyCode == kVK_Escape && [strongSelf isWindowBorderlessMode]) {
-            [strongSelf presentStreamMenuFromView:strongSelf.view];
-            return nil;
+        // Ctrl+Option+C opens the control center in borderless/fullscreen mode
+        if (event.keyCode == kVK_ANSI_C && mods == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
+            if ([strongSelf isWindowBorderlessMode] || [strongSelf isWindowFullscreen]) {
+                [strongSelf presentStreamMenuFromView:strongSelf.view];
+                return nil;
+            }
         }
 
         return event;
     }];
+}
+
+#pragma mark - Mouse Tracking Area
+
+- (void)installMouseTrackingArea {
+    if (self.mouseTrackingArea) {
+        [self.view removeTrackingArea:self.mouseTrackingArea];
+        self.mouseTrackingArea = nil;
+    }
+
+    NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect;
+    self.mouseTrackingArea = [[NSTrackingArea alloc] initWithRect:self.view.bounds
+                                                          options:options
+                                                            owner:self
+                                                         userInfo:nil];
+    [self.view addTrackingArea:self.mouseTrackingArea];
+
+    // Check if mouse is currently inside the view
+    NSPoint mouseLocation = [NSEvent mouseLocation];
+    NSPoint windowPoint = [self.view.window convertPointFromScreen:mouseLocation];
+    NSPoint viewPoint = [self.view convertPoint:windowPoint fromView:nil];
+    self.isMouseInsideView = NSPointInRect(viewPoint, self.view.bounds);
+}
+
+- (void)mouseEntered:(NSEvent *)event {
+    self.isMouseInsideView = YES;
+    // In remote desktop mode, re-enable input when mouse enters the view
+    if (self.isRemoteDesktopMode && self.isMouseCaptured) {
+        self.hidSupport.shouldSendInputEvents = YES;
+    }
+}
+
+- (void)mouseExited:(NSEvent *)event {
+    self.isMouseInsideView = NO;
+    // In remote desktop mode, disable input when mouse leaves the view
+    if (self.isRemoteDesktopMode) {
+        self.hidSupport.shouldSendInputEvents = NO;
+    }
 }
 
 - (void)flagsChanged:(NSEvent *)event {
@@ -1064,6 +1125,11 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         return YES;
     }
 
+    if (event.keyCode == kVK_ANSI_M && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
+        [self toggleMouseMode];
+        return YES;
+    }
+
     // Ctrl+Alt+G: toggle fullscreen floating control ball
     if (event.keyCode == kVK_ANSI_G && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
         [self toggleFullscreenControlBallVisibility];
@@ -1111,19 +1177,25 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
 - (IBAction)performCloseStreamWindow:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
-    [self beginStopStreamIfNeededWithReason:@"disconnect-from-stream"]; 
 
     // In borderless/floating mode, relying on the responder chain can fail to close the window,
     // leaving the last frame stuck. Restore a normal window style and close explicitly.
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSWindow *w = self.view.window;
+    // Wait for stream stop to complete before closing window to avoid deadlock.
+    __weak typeof(self) weakSelf = self;
+    [self beginStopStreamIfNeededWithReason:@"disconnect-from-stream" completion:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+
+        NSWindow *w = strongSelf.view.window;
         if (!w) {
             return;
         }
 
         Log(LOG_I, @"performCloseStreamWindow: closing window (style=%llu level=%ld)", (unsigned long long)w.styleMask, (long)w.level);
 
-        [self restorePresentationOptionsIfNeeded];
+        [strongSelf restorePresentationOptionsIfNeeded];
 
         if ((w.styleMask & NSWindowStyleMaskTitled) == 0) {
             NSWindowStyleMask mask = w.styleMask;
@@ -1138,12 +1210,36 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         }
 
         [w performClose:nil];
-    });
+    }];
 }
 
 - (IBAction)performCloseAndQuitApp:(id)sender {
-    [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:2.0 reason:@"close-and-quit"]; 
-    [self.delegate quitApp:self.app completion:nil];
+    [self.hidSupport releaseAllModifierKeys];
+    [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:5.0 reason:@"close-and-quit"];
+
+    // First stop the stream, then quit app, then close window and terminate
+    __weak typeof(self) weakSelf = self;
+    [self beginStopStreamIfNeededWithReason:@"close-and-quit" completion:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            // If self is deallocated, just terminate the app
+            [[NSApplication sharedApplication] terminate:nil];
+            return;
+        }
+
+        // Quit the remote app
+        [strongSelf.delegate quitApp:strongSelf.app completion:^(BOOL success) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                // Close window and terminate regardless of quit success
+                NSWindow *w = strongSelf.view.window;
+                if (w) {
+                    [strongSelf restorePresentationOptionsIfNeeded];
+                    [w close];
+                }
+                [[NSApplication sharedApplication] terminate:nil];
+            });
+        }];
+    }];
 }
 
 - (IBAction)resizeWindowToActualResulution:(id)sender {
@@ -1505,7 +1601,8 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
 - (void)switchToFullscreenMode:(id)sender {
     NSWindow *window = self.view.window;
-    if (window.styleMask & NSWindowStyleMaskBorderless) {
+    // NSWindowStyleMaskBorderless is 0, so we must check for equality
+    if (window.styleMask == NSWindowStyleMaskBorderless) {
         [self restorePresentationOptionsIfNeeded];
 
         if (self.savedContentAspectRatioValid) {
@@ -1635,6 +1732,19 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         }
     };
 
+    // 一级顶部：鼠标模式切换
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    NSString *mouseMode = [SettingsClass mouseModeFor:self.app.host.uuid];
+    BOOL isRemoteMode = [mouseMode isEqualToString:@"remote"];
+
+    NSMenuItem *mouseModeItem = [[NSMenuItem alloc] initWithTitle:isRemoteMode ? @"远控模式" : @"游戏模式"
+                                                           action:@selector(toggleMouseModeFromMenu:)
+                                                    keyEquivalent:@"m"];
+    mouseModeItem.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagOption;
+    mouseModeItem.target = self;
+    setSymbol(mouseModeItem, isRemoteMode ? @"desktopcomputer" : @"gamecontroller");
+    [self.streamMenu addItem:mouseModeItem];
+
     // 一级顶部：重连
     NSMenuItem *reconnectItem = [[NSMenuItem alloc] initWithTitle:@"重连" action:@selector(reconnectFromMenu:) keyEquivalent:@""];
     reconnectItem.target = self;
@@ -1643,7 +1753,7 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
     [self.streamMenu addItem:[NSMenuItem separatorItem]];
 
-    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    // NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid]; // Already defined above
 
     // 二级：窗口
     NSMenuItem *windowItem = [[NSMenuItem alloc] initWithTitle:@"窗口" action:nil keyEquivalent:@""];
@@ -1660,7 +1770,8 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     setSymbol(windowedItem, @"macwindow");
     [windowMenu addItem:windowedItem];
 
-    NSMenuItem *fullscreenItem = [[NSMenuItem alloc] initWithTitle:@"全屏模式" action:@selector(switchToFullscreenMode:) keyEquivalent:@""];
+    NSMenuItem *fullscreenItem = [[NSMenuItem alloc] initWithTitle:@"全屏模式" action:@selector(switchToFullscreenMode:) keyEquivalent:@"f"];
+    fullscreenItem.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagCommand;
     fullscreenItem.target = self;
     fullscreenItem.state = isFullscreen ? NSControlStateValueOn : NSControlStateValueOff;
     setSymbol(fullscreenItem, @"arrow.up.left.and.arrow.down.right");
@@ -1682,7 +1793,8 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
     [windowMenu addItem:[NSMenuItem separatorItem]];
 
-    NSMenuItem *detailsItem = [[NSMenuItem alloc] initWithTitle:@"连接详情" action:@selector(toggleOverlay) keyEquivalent:@""];
+    NSMenuItem *detailsItem = [[NSMenuItem alloc] initWithTitle:@"连接详情" action:@selector(toggleOverlay) keyEquivalent:@"s"];
+    detailsItem.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagOption;
     detailsItem.target = self;
     detailsItem.state = self.overlayContainer ? NSControlStateValueOn : NSControlStateValueOff;
     setSymbol(detailsItem, @"gauge.with.dots.needle.33percent");
@@ -2063,7 +2175,8 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 
     // 一级底部：退出
     [self.streamMenu addItem:[NSMenuItem separatorItem]];
-    NSMenuItem *disconnectItem = [[NSMenuItem alloc] initWithTitle:@"退出串流" action:@selector(performCloseStreamWindow:) keyEquivalent:@""];
+    NSMenuItem *disconnectItem = [[NSMenuItem alloc] initWithTitle:@"退出串流" action:@selector(performCloseStreamWindow:) keyEquivalent:@"w"];
+    disconnectItem.keyEquivalentModifierMask = NSEventModifierFlagCommand;
     disconnectItem.target = self;
     setSymbol(disconnectItem, @"xmark.circle");
     [self.streamMenu addItem:disconnectItem];
@@ -2414,6 +2527,35 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     [self updateStreamMenuEntrypointsVisibility];
 }
 
+- (void)toggleMouseMode {
+    NSString *currentMode = [SettingsClass mouseModeFor:self.app.host.uuid];
+    NSString *newMode = [currentMode isEqualToString:@"game"] ? @"remote" : @"game";
+
+    [SettingsClass setMouseMode:newMode for:self.app.host.uuid];
+
+    // 重新应用鼠标状态
+    [self uncaptureMouse];
+    [self captureMouse];
+
+    // 显示通知
+    NSString *message = [newMode isEqualToString:@"remote"]
+        ? [NSString stringWithFormat:@"🖥️ %@", MLString(@"Remote Desktop Mode", @"Notification")]
+        : [NSString stringWithFormat:@"🎮 %@", MLString(@"Game Mode", @"Notification")];
+
+    // 如果没有本地化字符串，使用硬编码回退
+    if ([message containsString:@"Remote Desktop Mode"]) message = @"🖥️ 远控模式";
+    if ([message containsString:@"Game Mode"]) message = @"🎮 游戏模式";
+
+    [self showNotification:message];
+
+    // 重建菜单更新状态
+    [self rebuildStreamMenu];
+}
+
+- (void)toggleMouseModeFromMenu:(id)sender {
+    [self toggleMouseMode];
+}
+
 - (void)captureMouse {
     if (self.isMouseCaptured) {
         return;
@@ -2421,28 +2563,36 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 
     NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
     BOOL showLocalCursor = prefs ? [prefs[@"showLocalCursor"] boolValue] : NO;
+    NSString *mouseMode = [SettingsClass mouseModeFor:self.app.host.uuid];
+    self.isRemoteDesktopMode = [mouseMode isEqualToString:@"remote"];
 
+    // Hide system cursor in both game mode and remote desktop mode (unless showLocalCursor is enabled)
     if (!showLocalCursor) {
-        CGAssociateMouseAndMouseCursorPosition(NO);
         if (self.cursorHiddenCounter == 0) {
             [NSCursor hide];
-            self.cursorHiddenCounter ++;
+            self.cursorHiddenCounter++;
+        }
+        // In game mode, also disassociate mouse from cursor position
+        if (!self.isRemoteDesktopMode) {
+            CGAssociateMouseAndMouseCursorPosition(NO);
+            CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
+            CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
+            CGFloat screenHeight = self.view.window.screen.frame.size.height;
+            CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
+            CGWarpMouseCursorPosition(cursorPoint);
         }
     }
-    
-    if (!showLocalCursor) {
-        CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
-        CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
-        CGFloat screenHeight = self.view.window.screen.frame.size.height;
-        CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
-        CGWarpMouseCursorPosition(cursorPoint);
-    }
-    
+
     [self enableMenuItems:NO];
-    
+
     [self disallowDisplaySleep];
-    
-    self.hidSupport.shouldSendInputEvents = YES;
+
+    // In remote desktop mode, only enable input if mouse is inside the view
+    if (self.isRemoteDesktopMode) {
+        self.hidSupport.shouldSendInputEvents = self.isMouseInsideView;
+    } else {
+        self.hidSupport.shouldSendInputEvents = YES;
+    }
     self.controllerSupport.shouldSendInputEvents = YES;
     self.view.window.acceptsMouseMovedEvents = YES;
 
@@ -3711,6 +3861,9 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
                 CGPathAddCurveToPoint(path, NULL, points[0].x, points[0].y,
                                     points[1].x, points[1].y,
                                     points[2].x, points[2].y);
+                break;
+            case NSBezierPathElementQuadraticCurveTo:
+                CGPathAddQuadCurveToPoint(path, NULL, points[0].x, points[0].y, points[1].x, points[1].y);
                 break;
             case NSBezierPathElementClosePath:
                 CGPathCloseSubpath(path);

@@ -41,52 +41,28 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
 }
 
 - (NSArray*) getHostAddressList {
-    NSMutableArray *array = [[NSMutableArray alloc] initWithCapacity:3];
+    NSMutableOrderedSet *orderedSet = [[NSMutableOrderedSet alloc] initWithCapacity:5];
 
     // Try the active address first if we have one. This prevents
     // waiting for timeouts on unreachable local addresses when
     // we're connected remotely.
     if (_host.activeAddress != nil) {
-        [array addObject:_host.activeAddress];
+        [orderedSet addObject:_host.activeAddress];
     }
     if (_host.localAddress != nil) {
-        [array addObject:_host.localAddress];
+        [orderedSet addObject:_host.localAddress];
     }
     if (_host.address != nil) {
-        [array addObject:_host.address];
+        [orderedSet addObject:_host.address];
     }
     if (_host.externalAddress != nil) {
-        [array addObject:_host.externalAddress];
+        [orderedSet addObject:_host.externalAddress];
     }
     if (_host.ipv6Address != nil) {
-        [array addObject:_host.ipv6Address];
+        [orderedSet addObject:_host.ipv6Address];
     }
-    
-    // Remove duplicate addresses from the list.
-    // This is done using an array rather than a set
-    // to preserve insertion order of addresses.
-    for (int i = 0; i < [array count]; i++) {
-        NSString *addr1 = [array objectAtIndex:i];
-        
-        for (int j = 1; j < [array count]; j++) {
-            if (i == j) {
-                continue;
-            }
-            
-            NSString *addr2 = [array objectAtIndex:j];
-            
-            if ([addr1 isEqualToString:addr2]) {
-                // Remove the last address
-                [array removeObjectAtIndex:j];
-                
-                // Begin searching again from the start
-                i = -1;
-                break;
-            }
-        }
-    }
-    
-    return array;
+
+    return [orderedSet array];
 }
 
 - (void) discoverHost {
@@ -172,11 +148,14 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
     dispatch_async(dispatch_get_main_queue(), ^{
         __strong typeof(weakSelf2) strongSelf = weakSelf2;
         if (strongSelf) {
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"HostLatencyUpdated" object:nil userInfo:@{
-                @"uuid": [strongSelf getHost].uuid,
-                @"latencies": latencies,
-                @"states": states
-            }];
+            NSString *uuid = [strongSelf getHost].uuid;
+            if (uuid) {
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"HostLatencyUpdated" object:nil userInfo:@{
+                    @"uuid": uuid,
+                    @"latencies": latencies,
+                    @"states": states
+                }];
+            }
         }
     });
 }

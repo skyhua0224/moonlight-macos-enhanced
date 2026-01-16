@@ -120,7 +120,7 @@ import Cocoa
         addRow(label: "UUID", value: host.uuid, to: systemGrid)
         addRow(label: "Running Game", value: host.currentGame, to: systemGrid)
         
-        addSectionView(createSection(title: "System", content: systemGrid))
+        addSectionView(createSection(title: "System Info", content: systemGrid))
         
         // Latency
         if let latencies = host.addressLatencies, !latencies.isEmpty {
