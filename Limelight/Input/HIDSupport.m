@@ -2005,7 +2005,18 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
 }
 
-- (void)tearDownHidManager {    
+- (void)tearDownHidManager {
+    // Ensure we're on the main thread for RunLoop operations
+    if (![NSThread isMainThread]) {
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            [self tearDownHidManagerOnMainThread];
+        });
+    } else {
+        [self tearDownHidManagerOnMainThread];
+    }
+}
+
+- (void)tearDownHidManagerOnMainThread {
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseConnectObserver];
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseDisconnectObserver];
     self.mouseConnectObserver = nil;
@@ -2014,21 +2025,25 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     for (GCMouse *mouse in GCMouse.mice) {
         [self unregisterMouseCallbacks:mouse];
     }
-    
+
     if (self.displayLink != NULL) {
         CVDisplayLinkStop(self.displayLink);
         CVDisplayLinkRelease(self.displayLink);
+        self.displayLink = NULL;
     }
-    
+
     self.closeRumble = YES;
     self.isRumbleTimer = NO;
     dispatch_semaphore_signal(self.rumbleSemaphore);
-    
+
     self.rumbleQueue = nil;
-    
-    IOHIDManagerUnscheduleFromRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
-    IOHIDManagerClose(self.hidManager, kIOHIDOptionsTypeNone);
-    CFRelease(self.hidManager);
+
+    if (self.hidManager != NULL) {
+        IOHIDManagerUnscheduleFromRunLoop(self.hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+        IOHIDManagerClose(self.hidManager, kIOHIDOptionsTypeNone);
+        CFRelease(self.hidManager);
+        self.hidManager = NULL;
+    }
 }
 
 

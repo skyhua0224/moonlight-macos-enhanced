@@ -281,17 +281,48 @@
         
         // Update address of existing host
         if (host.address != nil) {
-            existingHost.address = host.address;
+            // If this is a new address, try to add it to an empty slot
+            // instead of overwriting the existing address immediately.
+            if (![existingHost.address isEqualToString:host.address] &&
+                ![existingHost.localAddress isEqualToString:host.address] &&
+                ![existingHost.externalAddress isEqualToString:host.address] &&
+                ![existingHost.ipv6Address isEqualToString:host.address]) {
+
+                if (existingHost.address == nil) {
+                    existingHost.address = host.address;
+                }
+                else if (existingHost.localAddress == nil) {
+                    existingHost.localAddress = host.address;
+                }
+                else if (existingHost.externalAddress == nil) {
+                    existingHost.externalAddress = host.address;
+                }
+                else if (existingHost.ipv6Address == nil) {
+                    existingHost.ipv6Address = host.address;
+                }
+                else {
+                    // No empty slots, overwrite the main address
+                    existingHost.address = host.address;
+                }
+            }
         }
-        if (host.localAddress != nil) {
-            existingHost.localAddress = host.localAddress;
+        if (host.localAddress != nil && ![host.localAddress isEqualToString:host.address]) {
+             if (existingHost.localAddress == nil) {
+                 existingHost.localAddress = host.localAddress;
+             }
         }
-        if (host.ipv6Address != nil) {
-            existingHost.ipv6Address = host.ipv6Address;
+        if (host.ipv6Address != nil && ![host.ipv6Address isEqualToString:host.address]) {
+             if (existingHost.ipv6Address == nil) {
+                 existingHost.ipv6Address = host.ipv6Address;
+             }
         }
-        if (host.externalAddress != nil) {
-            existingHost.externalAddress = host.externalAddress;
+        if (host.externalAddress != nil && ![host.externalAddress isEqualToString:host.address]) {
+             if (existingHost.externalAddress == nil) {
+                 existingHost.externalAddress = host.externalAddress;
+             }
         }
+
+        // Always update active address and state
         existingHost.activeAddress = host.activeAddress;
         existingHost.state = host.state;
         return NO;
