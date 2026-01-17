@@ -27,6 +27,7 @@
                   btMouseSupport:(BOOL)btMouseSupport;
 
 - (NSArray*) getHosts;
+- (void) removeHostsWithEmptyUuid;
 - (void) updateHost:(TemporaryHost*)host;
 - (void) updateAppsForExistingHost:(TemporaryHost *)host;
 - (void) removeHost:(TemporaryHost*)host;

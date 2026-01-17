@@ -37,8 +37,9 @@ class SettingsModel: ObservableObject {
     let global = Host(id: globalHostId, name: "Global")
 
     let dataMan = DataManager()
+    dataMan.removeHostsWithEmptyUuid()
     if let tempHosts = dataMan.getHosts() as? [TemporaryHost] {
-      let hosts = tempHosts.map { host in
+      let hosts = tempHosts.filter { !$0.uuid.isEmpty }.map { host in
         Host(id: host.uuid, name: host.name)
       }
 
@@ -478,7 +479,7 @@ class SettingsModel: ObservableObject {
 
     let dataMan = DataManager()
     if let hosts = dataMan.getHosts() as? [TemporaryHost],
-      let host = hosts.first(where: { $0.uuid == hostId })
+      let host = hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == hostId })
     {
       var latencies: [String: NSNumber] = [:]
       var states: [String: NSNumber] = [:]
@@ -496,21 +497,29 @@ class SettingsModel: ObservableObject {
         let stateVal = states[addr]?.intValue
         let latency = latencies[addr]?.intValue ?? -1
 
+        let effectiveState: Int
+        if let stateVal {
+          effectiveState = stateVal
+        } else if latency >= 0 {
+          effectiveState = 1
+        } else {
+          effectiveState = -1
+        }
+
         var label = addr
-        if stateVal == 1 {
+        if effectiveState == 1 {
           if latency >= 0 {
             label += " (\(latency)ms)"
           } else {
             label += " (\(LanguageManager.shared.localize("Online")))"
           }
-        } else if stateVal == 0 {
+        } else if effectiveState == 0 {
           label += " (\(LanguageManager.shared.localize("Offline")))"
         } else {
           label += " (\(LanguageManager.shared.localize("Unknown")))"
         }
 
-        let state = stateVal ?? -1
-        candidates.append(ConnectionCandidate(id: addr, label: label, state: state))
+        candidates.append(ConnectionCandidate(id: addr, label: label, state: effectiveState))
       }
     }
     return candidates
@@ -519,38 +528,36 @@ class SettingsModel: ObservableObject {
   func refreshConnectionCandidates() {
     guard let hostId = selectedHost?.id, hostId != Self.globalHostId else { return }
 
-    func refreshConnectionCandidates() {
-      guard let hostId = selectedHost?.id, hostId != Self.globalHostId else { return }
+    let dataMan = DataManager()
+    guard let hosts = dataMan.getHosts() as? [TemporaryHost],
+      let host = hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == hostId })
+    else { return }
 
-      let dataMan = DataManager()
-      guard let hosts = dataMan.getHosts() as? [TemporaryHost],
-        let host = hosts.first(where: { $0.uuid == hostId })
-      else { return }
+    let endpoints = ConnectionEndpointStore.allEndpoints(for: host)
+    if endpoints.isEmpty { return }
 
-      let endpoints = ConnectionEndpointStore.allEndpoints(for: host)
-      if endpoints.isEmpty { return }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let group = DispatchGroup()
+      let lock = NSLock()
+      let cached = self.latencyCache[hostId]
+      var latencies: [String: NSNumber] = cached?["latencies"] as? [String: NSNumber]
+        ?? host.addressLatencies ?? [:]
+      var states: [String: NSNumber] = cached?["states"] as? [String: NSNumber]
+        ?? host.addressStates ?? [:]
+      var receivedResponse = false
+      var receivedPing = false
+      var minLatency = Double.greatestFiniteMagnitude
+      var bestAddress: String?
 
-      DispatchQueue.global(qos: .userInitiated).async {
-        let group = DispatchGroup()
-        let lock = NSLock()
-        var latencies: [String: NSNumber] = [:]
-        var states: [String: NSNumber] = [:]
-        var receivedResponse = false
-        var minLatency = Double.greatestFiniteMagnitude
-        var bestAddress: String?
+      for address in endpoints {
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+          let pingMs = LatencyProbe.icmpPingMs(forAddress: address)
 
-        for address in endpoints {
-          group.enter()
-          DispatchQueue.global(qos: .userInitiated).async {
-            let start = Date()
-            guard let hMan = HttpManager(host: address, uniqueId: IdManager.getUniqueId(), serverCert: host.serverCert) else {
-              lock.lock()
-              states[address] = NSNumber(value: 0)
-              lock.unlock()
-              group.leave()
-              return
-            }
-            let serverInfo = ServerInfoResponse()
+          let start = Date()
+          let hMan = HttpManager(host: address, uniqueId: IdManager.getUniqueId(), serverCert: host.serverCert)
+          let serverInfo = ServerInfoResponse()
+          if let hMan {
             let request = HttpRequest(
               for: serverInfo,
               with: hMan.newServerInfoRequest(true),
@@ -558,60 +565,67 @@ class SettingsModel: ObservableObject {
               fallbackRequest: hMan.newHttpServerInfoRequest(true)
             )
             hMan.executeRequestSynchronously(request)
+          }
 
-            let rtt = -start.timeIntervalSinceNow * 1000.0
-            let isOk = serverInfo.isStatusOk()
-            let uuid = serverInfo.getStringTag(TAG_UNIQUE_ID)
-            let matchesHost = uuid == host.uuid
+          let rtt = -start.timeIntervalSinceNow * 1000.0
+          let isOk = serverInfo.isStatusOk()
+          let uuid = serverInfo.getStringTag(TAG_UNIQUE_ID)
+          let matchesHost = uuid == host.uuid
 
-            lock.lock()
-            if isOk && matchesHost {
-              receivedResponse = true
-              let pingMs = LatencyProbe.icmpPingMs(forAddress: address)
-              if let pingMs {
-                latencies[address] = pingMs
-              } else {
-                latencies[address] = NSNumber(value: Int(rtt))
-              }
-              states[address] = NSNumber(value: 1)
+          lock.lock()
+          if let pingMs {
+            latencies[address] = pingMs
+            receivedPing = true
+          }
 
-              let bestMetric = pingMs?.doubleValue ?? rtt
-              if bestMetric < minLatency {
-                minLatency = bestMetric
-                bestAddress = address
-              }
-            } else {
-              states[address] = NSNumber(value: 0)
+          if isOk && matchesHost {
+            receivedResponse = true
+            if latencies[address] == nil {
+              latencies[address] = NSNumber(value: Int(rtt))
             }
-            lock.unlock()
-            group.leave()
+            states[address] = NSNumber(value: 1)
+
+            let bestMetric = (latencies[address]?.doubleValue) ?? rtt
+            if bestMetric < minLatency {
+              minLatency = bestMetric
+              bestAddress = address
+            }
+          } else if pingMs != nil {
+            // ICMP success implies reachable; treat as online for UI purposes
+            states[address] = NSNumber(value: 1)
+            let bestMetric = pingMs?.doubleValue ?? rtt
+            if bestMetric < minLatency {
+              minLatency = bestMetric
+              bestAddress = address
+            }
           }
-        }
-
-        group.wait()
-
-        DispatchQueue.main.async {
-          host.addressLatencies = latencies
-          host.addressStates = states
-          host.state = receivedResponse ? .online : .offline
-
-          if receivedResponse, let best = bestAddress {
-            host.activeAddress = best
-            DataManager().update(host)
-          }
-
-          NotificationCenter.default.post(
-            name: Notification.Name("HostLatencyUpdated"),
-            object: nil,
-            userInfo: ["uuid": hostId, "latencies": latencies, "states": states]
-          )
-
-          self.ensureConnectionMethodValid()
-          self.objectWillChange.send()
+          lock.unlock()
+          group.leave()
         }
       }
-    }
 
+      group.wait()
+
+      DispatchQueue.main.async {
+        host.addressLatencies = latencies
+        host.addressStates = states
+        host.state = (receivedResponse || receivedPing) ? .online : .unknown
+
+        if let best = bestAddress {
+          host.activeAddress = best
+          DataManager().update(host)
+        }
+
+        NotificationCenter.default.post(
+          name: Notification.Name("HostLatencyUpdated"),
+          object: nil,
+          userInfo: ["uuid": hostId, "latencies": latencies, "states": states]
+        )
+
+        self.ensureConnectionMethodValid()
+        self.objectWillChange.send()
+      }
+    }
   }
 
   private func ensureConnectionMethodValid() {

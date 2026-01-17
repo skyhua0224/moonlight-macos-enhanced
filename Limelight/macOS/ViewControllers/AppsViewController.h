@@ -14,10 +14,18 @@
 
 #define CUSTOM_PRIVATE_GFE_PORT (49999)
 
+@class AppsViewController;
+
+@protocol AppsViewControllerNavigationDelegate <NSObject>
+- (void)appsViewControllerDidRequestBack:(AppsViewController *)controller;
+@end
+
 @interface AppsViewController : NSViewController
 @property (nonatomic, strong) TemporaryHost *host;
-@property (nonatomic, strong) HostsViewController *hostsVC;
+@property (nonatomic, weak) id<AppsViewControllerNavigationDelegate> navigationDelegate;
 @property (weak) IBOutlet CollectionView *collectionView;
+
+- (void)switchToHost:(TemporaryHost *)newHost;
 
 @end
 

@@ -11,3 +11,7 @@
 #import "ServerInfoResponse.h"
 #import "IdManager.h"
 #import "LatencyProbe.h"
+#import "StreamingSessionManager.h"
+#import "AppsWorkspaceViewController.h"
+#import "AppsViewController.h"
+

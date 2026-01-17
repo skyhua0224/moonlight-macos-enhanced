@@ -185,11 +185,43 @@
     return tempHosts;
 }
 
+- (void) removeHostsWithEmptyUuid {
+    [_managedObjectContext performBlockAndWait:^{
+        NSArray *hosts = [self fetchRecords:@"Host"];
+        BOOL didDelete = NO;
+        for (id host in hosts) {
+            NSString *uuid = [host valueForKey:@"uuid"];
+            if (uuid == nil || uuid.length == 0) {
+                [self->_managedObjectContext deleteObject:host];
+                didDelete = YES;
+            }
+        }
+        if (didDelete) {
+            [self saveData];
+        }
+    }];
+}
+
 // Only call from within performBlockAndWait!!!
 - (Host*) getHostForTemporaryHost:(TemporaryHost*)tempHost withHostRecords:(NSArray*)hosts {
     for (Host* host in hosts) {
-        if ([tempHost.uuid isEqualToString:host.uuid]) {
+        if (tempHost.uuid != nil && [tempHost.uuid isEqualToString:host.uuid]) {
             return host;
+        }
+    }
+
+    // Fallback matching when UUID is missing
+    if (tempHost.uuid == nil || tempHost.uuid.length == 0) {
+        for (Host* host in hosts) {
+            if (tempHost.mac != nil && host.mac != nil && [tempHost.mac isEqualToString:host.mac]) {
+                return host;
+            }
+            if (tempHost.address != nil && host.address != nil && [tempHost.address isEqualToString:host.address]) {
+                return host;
+            }
+            if (tempHost.name != nil && host.name != nil && [tempHost.name isEqualToString:host.name]) {
+                return host;
+            }
         }
     }
     
