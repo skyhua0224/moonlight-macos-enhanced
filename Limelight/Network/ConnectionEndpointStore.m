@@ -2,7 +2,7 @@
 //  ConnectionEndpointStore.m
 //  Moonlight for macOS
 //
-//  Created by GitHub Copilot on 2026/01/16.
+//  Created by GitHub SkyHua on 2026/01/16.
 //
 
 #import "ConnectionEndpointStore.h"

@@ -7,6 +7,7 @@
 //
 
 #import "StreamViewController.h"
+#import "StreamingSessionManager.h" // Import Session Manager
 #import <QuartzCore/QuartzCore.h>
 #import "StreamViewMac.h"
 #import "AppsViewController.h"
@@ -300,7 +301,24 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleMouseModeToggledNotification:) name:HIDMouseModeToggledNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleGamepadQuitNotification:) name:HIDGamepadQuitNotification object:nil];
 
+    // Listen for disconnect requests from the session manager
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleSessionDisconnectRequest:) name:@"StreamingSessionRequestDisconnect" object:nil];
+
     [self installStreamMenuEntrypoints];
+}
+
+- (void)handleSessionDisconnectRequest:(NSNotification *)note {
+    NSNumber *quitApp = note.userInfo[@"quitApp"];
+    if (quitApp != nil) {
+        if (quitApp.boolValue) {
+            [self performCloseAndQuitApp:nil];
+        } else {
+            [self performCloseStreamWindow:nil];
+        }
+        return;
+    }
+
+    [self performClose:nil];
 }
 
 - (BOOL)hasReceivedAnyVideoFrames {
@@ -703,6 +721,8 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         self.stopStreamInProgress = YES;
     }
 
+    [self broadcastHostOnlineStateForExit];
+
     // If we are closing while in borderless, ensure we restore system UI state and window constraints.
     dispatch_async(dispatch_get_main_queue(), ^{
         [self restorePresentationOptionsIfNeeded];
@@ -739,9 +759,38 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         [strongSelf.streamMan stopStream];
         Log(LOG_I, @"Stream stop took %.3fs (total %.3fs)", CACurrentMediaTime() - stopStart, CACurrentMediaTime() - start);
 
+        // Ensure global streaming state is cleared even if we don't receive a termination callback
+        if ([StreamingSessionManager shared].state != StreamingStateIdle) {
+            [[StreamingSessionManager shared] didDisconnect];
+        }
+
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), completion);
         }
+    });
+}
+
+- (void)broadcastHostOnlineStateForExit {
+    if (!self.app.host.uuid) {
+        return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.app.host.state = StateOnline;
+
+        NSMutableDictionary *states = [NSMutableDictionary dictionaryWithDictionary:self.app.host.addressStates ?: @{}];
+        if (self.app.host.activeAddress) {
+            states[self.app.host.activeAddress] = @(1);
+        }
+        self.app.host.addressStates = states;
+
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"HostLatencyUpdated"
+                                                            object:nil
+                                                          userInfo:@{
+                                                              @"uuid": self.app.host.uuid,
+                                                              @"latencies": self.app.host.addressLatencies ?: @{},
+                                                              @"states": states
+                                                          }];
     });
 }
 
@@ -1222,8 +1271,6 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     [self beginStopStreamIfNeededWithReason:@"close-and-quit" completion:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
-            // If self is deallocated, just terminate the app
-            [[NSApplication sharedApplication] terminate:nil];
             return;
         }
 
@@ -1236,7 +1283,6 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
                     [strongSelf restorePresentationOptionsIfNeeded];
                     [w close];
                 }
-                [[NSApplication sharedApplication] terminate:nil];
             });
         }];
     }];
@@ -3329,6 +3375,12 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 
 - (void)connectionStarted {
     dispatch_async(dispatch_get_main_queue(), ^{
+                // Notify session manager (main-thread only for window access)
+                [[StreamingSessionManager shared] startStreamingWithHost:self.app.host.uuid
+                                                                                                                     appId:self.app.id
+                                                                                                                 appName:self.app.name
+                                                                                                windowController:self.view.window.windowController];
+
         self.streamView.statusText = nil;
 
         Log(LOG_I, @"connectionStarted (t=%.0fms) window style=%llu level=%ld", CACurrentMediaTime() * 1000.0, (unsigned long long)self.view.window.styleMask, (long)self.view.window.level);
@@ -3382,7 +3434,10 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 
 - (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld", (long)errorCode);
-    
+
+    // Notify session manager
+    [[StreamingSessionManager shared] didDisconnect];
+
     dispatch_async(dispatch_get_main_queue(), ^{
         [self hideConnectionTimeoutOverlay];
         if (self.statsTimer) {

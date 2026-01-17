@@ -254,6 +254,18 @@ struct StreamView: View {
     return "\(base) (\(Int(size.width))×\(Int(size.height)))"
   }
 
+  private func statusDotImage(state: Int) -> Image {
+    let color: NSColor = (state == 1) ? .systemGreen : (state == 0 ? .systemRed : .systemGray)
+    let size = NSSize(width: 8, height: 8)
+    let image = NSImage(size: size)
+    image.lockFocus()
+    color.setFill()
+    let rect = NSRect(origin: .zero, size: size)
+    NSBezierPath(ovalIn: rect).fill()
+    image.unlockFocus()
+    return Image(nsImage: image)
+  }
+
   var body: some View {
     ScrollView {
       VStack {
@@ -309,9 +321,8 @@ struct StreamView: View {
                 ForEach(settingsModel.connectionCandidates) { candidate in
                   HStack {
                     if candidate.id != "Auto" {
-                      Image(systemName: "circle.fill")
-                        .foregroundColor(candidate.state == 1 ? .green : (candidate.state == 0 ? .red : .gray))
-                        .font(.system(size: 8))
+                      statusDotImage(state: candidate.state)
+                        .padding(.trailing, 4)
                     }
                     Text(candidate.label)
                   }
@@ -324,7 +335,7 @@ struct StreamView: View {
                 guard let uuid = settingsModel.selectedHost?.id,
                   uuid != SettingsModel.globalHostId,
                   let hosts = DataManager().getHosts() as? [TemporaryHost],
-                  let host = hosts.first(where: { $0.uuid == uuid })
+                  let host = hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == uuid })
                 else { return }
 
                 let editor = ConnectionEditorViewController(host: host)

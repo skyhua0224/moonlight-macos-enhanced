@@ -567,6 +567,7 @@ class SettingsClass: NSObject {
   @objc static func getHostUUID(from address: String) -> String? {
     if let hosts = DataManager().getHosts() as? [TemporaryHost] {
       if let matchingHost = hosts.first(where: { host in
+        guard !host.uuid.isEmpty else { return false }
         return host.activeAddress == address
           || host.localAddress == address
           || host.externalAddress == address

@@ -2,7 +2,7 @@
 //  ConnectionDetailsViewController.swift
 //  Moonlight for macOS
 //
-//  Created by GitHub Copilot on 2024/06/01.
+//  Created by GitHub SkyHua on 2024/06/01.
 //  Copyright © 2024 Moonlight Game Streaming Project. All rights reserved.
 //
 

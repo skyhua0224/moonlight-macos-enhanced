@@ -7,7 +7,7 @@
 //
 
 #import "AppsViewController.h"
-#import "AppsViewControllerDelegate.h"
+#import "AppsViewControllerDelegate.h" // Restore this import
 #import "AppCell.h"
 #import "AppCellView.h"
 #import "AlertPresenter.h"
@@ -19,6 +19,7 @@
 #import "NSView+Moonlight.h"
 
 #import "Moonlight-Swift.h"
+#import "StreamingSessionManager.h"
 
 #import "F.h"
 
@@ -31,6 +32,7 @@
 #import "ServerInfoResponse.h"
 #import "DiscoveryWorker.h"
 #import "ConnectionHelper.h"
+#import "WakeOnLanManager.h"
 
 #undef NSLocalizedString
 #define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]
@@ -52,6 +54,13 @@
 @property (nonatomic) id windowDidBecomeKeyObserver;
 
 @property (nonatomic, strong) TemporaryApp *currentlyHoveredApp;
+
+@property (nonatomic, strong) NSViewController *lockOverlayHostingController;
+@property (nonatomic, strong) NSViewController *offlineOverlayHostingController;
+@property (nonatomic, strong) id streamingStateObserver;
+@property (nonatomic, strong) id hostLatencyObserver;
+@property (nonatomic, copy) NSString *currentHostUUID;
+@property (nonatomic, copy) NSString *offlineOverlayHostUUID;
 
 @end
 
@@ -83,10 +92,23 @@ const CGFloat scaleBase = 1.125;
     self.boxArtCache = [[NSCache alloc] init];
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
+
+    // Subscribe to streaming state changes
+    __weak typeof(self) weakSelf = self;
+    self.streamingStateObserver = [[NSNotificationCenter defaultCenter]
+        addObserverForName:@"StreamingStateChanged"
+                    object:nil
+                     queue:[NSOperationQueue mainQueue]
+                usingBlock:^(NSNotification *note) {
+        [weakSelf handleStreamingStateChange:note];
+    }];
 }
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    if (self.streamingStateObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.streamingStateObserver];
+    }
 }
 
 - (void)languageChanged:(NSNotification *)note {
@@ -116,6 +138,9 @@ const CGFloat scaleBase = 1.125;
 - (void)viewDidAppear {
     [super viewDidAppear];
     
+    [self syncHostStateFromDatabase];
+    self.currentHostUUID = self.host.uuid;
+
     __weak typeof(self) weakSelf = self;
     self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:self.view.window queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateRunningAppState];
@@ -126,7 +151,274 @@ const CGFloat scaleBase = 1.125;
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateWindowSubtitle) name:NSUserDefaultsDidChangeNotification object:nil];
     // Also listen for latency updates to update the IP in Auto mode
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateWindowSubtitle) name:@"HostLatencyUpdated" object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleHostLatencyUpdate:) name:@"HostLatencyUpdated" object:nil];
+
+    // Check initial streaming state
+    [self handleStreamingStateChange:nil];
+
+    [self updateOfflineOverlayForCurrentHost];
+}
+
+- (void)updateOfflineOverlayForCurrentHost {
+    StreamingSessionManager *manager = [StreamingSessionManager shared];
+    BOOL isStreamingThisHost = (manager.activeHostUUID && [manager.activeHostUUID isEqualToString:self.host.uuid] && manager.state == StreamingStateStreaming);
+
+    if (self.host.state == StateOffline && !isStreamingThisHost) {
+        [self showOfflineOverlayIfCurrentHost];
+    } else {
+        [self hideOfflineOverlay];
+    }
+}
+
+- (void)syncHostStateFromDatabase {
+    if (!self.host.uuid) {
+        return;
+    }
+
+    DataManager *dataManager = [[DataManager alloc] init];
+    NSArray *hosts = [dataManager getHosts];
+    for (TemporaryHost *h in hosts) {
+        if ([h.uuid isEqualToString:self.host.uuid]) {
+            if (h.state != StateUnknown) {
+                self.host.state = h.state;
+            }
+            self.host.pairState = h.pairState;
+            self.host.addressLatencies = h.addressLatencies;
+            self.host.addressStates = h.addressStates;
+            if (h.activeAddress) {
+                self.host.activeAddress = h.activeAddress;
+            }
+            break;
+        }
+    }
+
+    [self updateWindowSubtitle];
+}
+
+- (void)handleHostLatencyUpdate:(NSNotification *)note {
+    NSString *uuid = note.userInfo[@"uuid"];
+    if (uuid == nil || ![uuid isEqualToString:self.host.uuid]) {
+        return;
+    }
+
+    NSDictionary *latencies = note.userInfo[@"latencies"];
+    NSDictionary *states = note.userInfo[@"states"];
+    if (latencies) {
+        self.host.addressLatencies = latencies;
+    }
+    if (states) {
+        self.host.addressStates = states;
+    }
+
+    [self syncHostStateFromDatabase];
+
+    [self updateOfflineOverlayForCurrentHost];
+
+    // If we were offline and now online, try to refresh apps
+    if (self.host.state != StateOffline && self.apps.count == 0) {
+        [self discoverAppsForHost:self.host];
+    }
+}
+
+- (void)requestHostRefresh {
+    if (!self.host.uuid) {
+        return;
+    }
+
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"MoonlightRequestHostDiscovery"
+                                                        object:nil
+                                                      userInfo:@{ @"uuid": self.host.uuid }];
+}
+
+- (void)handleStreamingStateChange:(NSNotification *)notification {
+    StreamingSessionManager *manager = [StreamingSessionManager shared];
+
+    // Check if THIS host is the one streaming
+    BOOL shouldShowOverlay = NO;
+    if (manager.activeHostUUID && [manager.activeHostUUID isEqualToString:self.host.uuid] && manager.state == StreamingStateStreaming) {
+        shouldShowOverlay = YES;
+    }
+
+    if (shouldShowOverlay) {
+        [self showLockOverlay];
+    } else {
+        [self hideLockOverlay];
+    }
+}
+
+- (void)showLockOverlay {
+    if (self.lockOverlayHostingController) return;
+
+    StreamingSessionManager *manager = [StreamingSessionManager shared];
+
+    NSString *hostName = self.host.name ?: @"Unknown Host";
+    NSString *appName = manager.activeAppName ?: @"Unknown App";
+
+    __weak typeof(self) weakSelf = self;
+    self.lockOverlayHostingController = [StreamingLockOverlayViewFactory createOverlayWithHostName:hostName
+                                                                                          appName:appName
+                                                                                     onShowWindow:^{
+        [[StreamingSessionManager shared] focusStreamWindow];
+    } onDisconnect:^{
+        [weakSelf presentStreamingDisconnectOptions];
+    }];
+
+    NSView *overlayView = self.lockOverlayHostingController.view;
+    overlayView.frame = self.view.bounds;
+    overlayView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+
+    [self.view addSubview:overlayView];
+    [self addChildViewController:self.lockOverlayHostingController];
+
+    // Animate in
+    overlayView.alphaValue = 0.0;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.25;
+        overlayView.animator.alphaValue = 1.0;
+    } completionHandler:nil];
+}
+
+- (void)presentStreamingDisconnectOptions {
+    StreamingSessionManager *manager = [StreamingSessionManager shared];
+    if (manager.state != StreamingStateStreaming) {
+        return;
+    }
+
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleInformational;
+    alert.messageText = NSLocalizedString(@"Disconnect Alert", @"Disconnect Alert");
+    [alert addButtonWithTitle:NSLocalizedString(@"Disconnect from Stream", @"Disconnect from Stream")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Close and Quit App", @"Close and Quit App")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
+
+    NSWindow *window = self.view.window;
+    if (!window) {
+        return;
+    }
+
+    [alert beginSheetModalForWindow:window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode == NSAlertFirstButtonReturn) {
+            [[StreamingSessionManager shared] requestDisconnectWithQuitApp:NO];
+        } else if (returnCode == NSAlertSecondButtonReturn) {
+            [[StreamingSessionManager shared] requestDisconnectWithQuitApp:YES];
+        }
+    }];
+}
+
+- (void)hideLockOverlay {
+    if (!self.lockOverlayHostingController) return;
+
+    NSViewController *overlayVC = self.lockOverlayHostingController;
+    self.lockOverlayHostingController = nil; // Clear reference first
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.2;
+        overlayVC.view.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        [overlayVC.view removeFromSuperview];
+        [overlayVC removeFromParentViewController];
+    }];
+}
+
+- (void)showOfflineOverlay {
+    if (self.offlineOverlayHostingController) return;
+
+    // Ensure we don't have the lock overlay on top (though unlikely to be streaming if offline)
+    [self hideLockOverlay];
+
+    NSString *hostName = self.host.name ?: @"Unknown Host";
+    self.offlineOverlayHostUUID = self.host.uuid;
+
+    __weak typeof(self) weakSelf = self;
+    self.offlineOverlayHostingController = [OfflineHostOverlayViewFactory createOverlayWithHostName:hostName
+                                                                                            onWake:^{
+        [WakeOnLanManager wakeHost:weakSelf.host];
+        [weakSelf requestHostRefresh];
+        // The UI handles the waiting state visually
+        // We rely on handleHostLatencyUpdate to detect when it comes online
+    } onRefresh:^{
+        [weakSelf requestHostRefresh];
+    } onCancel:^{
+        [weakSelf transitionToHostsVC];
+    }];
+
+    NSView *overlayView = self.offlineOverlayHostingController.view;
+    overlayView.frame = self.view.bounds;
+    overlayView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+
+    [self.view addSubview:overlayView];
+    [self addChildViewController:self.offlineOverlayHostingController];
+
+    // Animate in
+    overlayView.alphaValue = 0.0;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.25;
+        overlayView.animator.alphaValue = 1.0;
+    } completionHandler:nil];
+}
+
+- (void)showOfflineOverlayIfCurrentHost {
+    if (self.offlineOverlayHostingController && self.offlineOverlayHostUUID && ![self.offlineOverlayHostUUID isEqualToString:self.host.uuid]) {
+        [self hideOfflineOverlay];
+    }
+    if (!self.currentHostUUID || ![self.currentHostUUID isEqualToString:self.host.uuid]) {
+        return;
+    }
+    if (self.host.state != StateOffline) {
+        return;
+    }
+    [self showOfflineOverlay];
+}
+
+- (void)hideOfflineOverlay {
+    if (!self.offlineOverlayHostingController) return;
+
+    NSViewController *overlayVC = self.offlineOverlayHostingController;
+    self.offlineOverlayHostingController = nil;
+    self.offlineOverlayHostUUID = nil;
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.2;
+        overlayVC.view.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        [overlayVC.view removeFromSuperview];
+        [overlayVC removeFromParentViewController];
+    }];
+}
+
+- (void)switchToHost:(TemporaryHost *)newHost {
+    if ([self.host.uuid isEqualToString:newHost.uuid]) {
+        return;
+    }
+
+    self.host = newHost;
+    self.currentHostUUID = newHost.uuid;
+    [self hideOfflineOverlay];
+
+    // Sync latest state/address info for the selected host
+    [self syncHostStateFromDatabase];
+
+    // Clear current state
+    self.apps = @[];
+    self.runningApp = nil;
+    [self.collectionView reloadData];
+    [self.boxArtCache removeAllObjects];
+
+    // Update window title/subtitle
+    self.parentViewController.title = newHost.name;
+    [self updateWindowSubtitle];
+
+    // Load settings
+    [SettingsClass loadMoonlightSettingsFor:newHost.uuid];
+
+    // Reload apps
+    [self loadApps];
+    self.runningApp = [self findRunningApp:newHost];
+
+    // Check streaming state for new host
+    [self handleStreamingStateChange:nil];
+
+    [self updateOfflineOverlayForCurrentHost];
 }
 
 - (void)updateWindowSubtitle {
@@ -171,20 +463,10 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)transitionToHostsVC {
-    [[NSNotificationCenter defaultCenter] removeObserver:self.windowDidBecomeKeyObserver];
-    
-    [self.parentViewController.view.window makeFirstResponder:nil];
-    
-    [self.parentViewController transitionFromViewController:self toViewController:self.hostsVC options:NSViewControllerTransitionSlideRight completionHandler:^{
-        [self.parentViewController.view.window makeFirstResponder:self.hostsVC];
-        
-        [self.view removeFromSuperview];
-        [self removeFromParentViewController];
-        
-        self.appManager = nil;
-        self.apps = @[];
-        [self.collectionView reloadData];
-    }];
+    // Notify delegate to handle back navigation
+    if ([self.navigationDelegate respondsToSelector:@selector(appsViewControllerDidRequestBack:)]) {
+        [self.navigationDelegate appsViewControllerDidRequestBack:self];
+    }
 }
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
@@ -380,6 +662,16 @@ const CGFloat scaleBase = 1.125;
 #pragma mark - AppsViewControllerDelegate
 
 - (void)openApp:(TemporaryApp *)app {
+    // Check if this host is already streaming
+    if (![[StreamingSessionManager shared] canStartStreamForHost:self.host.uuid]) {
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.messageText = NSLocalizedString(@"Host Busy", @"Host Busy");
+        alert.informativeText = NSLocalizedString(@"This host is already streaming. Please disconnect first.", @"This host is already streaming. Please disconnect first.");
+        [alert addButtonWithTitle:NSLocalizedString(@"OK", @"OK")];
+        [alert runModal];
+        return;
+    }
+
     if (self.runningApp != nil && app != self.runningApp) {
         if ([self askWhetherToStopRunningApp:self.runningApp andStartNewApp:app]) {
             [self quitApp:self.runningApp completion:^(BOOL success) {
@@ -720,10 +1012,19 @@ static const CGFloat runningAnimationDuration = 1.0;
 
 - (void)loadApps {
     self.appManager = [[AppAssetManager alloc] initWithCallback:self];
-        
+
+    // If definitely offline, show overlay immediately and skip app display
+    if (self.host.state == StateOffline) {
+        [self showOfflineOverlayIfCurrentHost];
+        return;
+    }
+
     if (self.host.appList.count > 0) {
         [self displayApps];
     }
+
+    // Only discover if not definitely offline
+    // But we might want to discover if state is Unknown
     [self discoverAppsForHost:self.host];
 }
 
@@ -760,10 +1061,11 @@ static const CGFloat runningAnimationDuration = 1.0;
         if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
             Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
             dispatch_async(dispatch_get_main_queue(), ^{
-                [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Fetching App List Failed", @"Fetching App List Failed") message:NSLocalizedString(@"Connection Interrupted", @"Connection Interrupted") window:self.view.window completionHandler:^(NSModalResponse returnCode) {
-                    host.state = StateOffline;
-                    [self transitionToHostsVC];
-                }];
+                // Don't override host state based on app list failure. Rely on discovery state.
+                if ([self.host.uuid isEqualToString:host.uuid]) {
+                    [self requestHostRefresh];
+                    [self updateOfflineOverlayForCurrentHost];
+                }
             });
         } else {
             NSArray<TemporaryApp *> *oldItems = [self fetchApps];

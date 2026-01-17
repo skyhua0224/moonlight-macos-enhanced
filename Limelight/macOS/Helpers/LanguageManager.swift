@@ -2,7 +2,7 @@
 //  LanguageManager.swift
 //  Moonlight for macOS
 //
-//  Created by Cline on 2024/01/17.
+//  Created by SkyHua on 2024/01/17.
 //
 
 import SwiftUI
@@ -219,6 +219,25 @@ public class LanguageManager: NSObject, ObservableObject {
     "Running Game": "Running Game",
     "Latency": "Latency",
     "Close": "Close",
+
+    // Host Sidebar & Overlays
+    "Computers": "Computers",
+    "Streaming Active": "Streaming Active",
+    "Host: %@": "Host: %@",
+    "App: %@": "App: %@",
+    "Connected": "Connected",
+    "Show Stream Window": "Show Stream Window",
+    "Disconnect": "Disconnect",
+    "Disconnect Alert": "Disconnect Alert",
+    "Disconnect from Stream": "Disconnect from Stream",
+    "Close and Quit App": "Close and Quit App",
+    "%@ is Offline": "%@ is Offline",
+    "Sending Wake-on-LAN packets...": "Sending Wake-on-LAN packets...",
+    "This computer is currently offline or sleeping.": "This computer is currently offline or sleeping.",
+    "Waking...": "Waking...",
+    "Wake Host": "Wake Host",
+    "Refresh Status": "Refresh Status",
+    "Back to Computers": "Back to Computers",
   ]
 
   private let zhHans: [String: String] = [
@@ -365,5 +384,24 @@ public class LanguageManager: NSObject, ObservableObject {
     "Running Game": "运行游戏",
     "Latency": "延迟",
     "Close": "关闭",
+
+    // Host Sidebar & Overlays
+    "Computers": "计算机",
+    "Streaming Active": "串流进行中",
+    "Host: %@": "主机: %@",
+    "App: %@": "应用: %@",
+    "Connected": "已连接",
+    "Show Stream Window": "显示串流窗口",
+    "Disconnect": "断开连接",
+    "Disconnect Alert": "断开连接",
+    "Disconnect from Stream": "断开串流",
+    "Close and Quit App": "断开并退出应用",
+    "%@ is Offline": "%@ 离线",
+    "Sending Wake-on-LAN packets...": "正在发送网络唤醒数据包...",
+    "This computer is currently offline or sleeping.": "此计算机当前离线或休眠。",
+    "Waking...": "正在唤醒...",
+    "Wake Host": "唤醒主机",
+    "Refresh Status": "刷新状态",
+    "Back to Computers": "返回计算机列表",
   ]
 }

@@ -14,6 +14,7 @@
 #import "ServerInfoResponse.h"
 #import "HttpRequest.h"
 #import "DataManager.h"
+#import "StreamingSessionManager.h" // Import for streaming state check
 
 @implementation DiscoveryWorker {
     TemporaryHost* _host;
@@ -147,17 +148,31 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
     _host.addressLatencies = latencies;
     _host.addressStates = states;
     
-    _host.state = receivedResponse ? StateOnline : StateOffline;
+    // Check if this host is currently streaming
+    BOOL isStreamingThisHost = [[StreamingSessionManager shared].activeHostUUID isEqualToString:_host.uuid] &&
+                               [StreamingSessionManager shared].state == StreamingStateStreaming;
+
+    if (receivedResponse) {
+        _host.state = StateOnline;
+    } else if (isStreamingThisHost) {
+        // If we are currently streaming from this host, assume it is online even if discovery fails.
+        // Discovery often fails during streaming because the host is busy or ports are in use.
+        _host.state = StateOnline;
+        Log(LOG_I, @"Discovery failed for %@ but keeping Online because streaming is active", _host.name);
+    } else {
+        _host.state = StateOffline;
+    }
     
     if (receivedResponse && bestResp) {
         [bestResp populateHost:_host];
         _host.activeAddress = bestAddress;
-        
-        DataManager *dataManager = [[DataManager alloc] init];
-        [dataManager updateHost:_host];
-        
+
         Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t ipv6Address:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n\t latency:%f ms\n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.ipv6Address, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress, minLatency);
     }
+
+    // Persist state changes (including offline) so UI stays in sync
+    DataManager *dataManager = [[DataManager alloc] init];
+    [dataManager updateHost:_host];
 
     // Broadcast latency update for UI (SettingsModel)
     __weak typeof(self) weakSelf2 = self;

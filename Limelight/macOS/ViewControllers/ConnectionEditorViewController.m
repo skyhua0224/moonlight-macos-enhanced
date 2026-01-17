@@ -2,7 +2,7 @@
 //  ConnectionEditorViewController.m
 //  Moonlight for macOS
 //
-//  Created by GitHub Copilot on 2026/01/16.
+//  Created by GitHub SkyHua on 2026/01/16.
 //
 
 #import "ConnectionEditorViewController.h"
@@ -330,13 +330,15 @@
     NSNumber *state = self.host.addressStates[addr];
     NSNumber *latency = self.host.addressLatencies[addr];
 
-    if (state && state.intValue == 1) {
+    int effectiveState = state ? state.intValue : ((latency && latency.intValue >= 0) ? 1 : -1);
+
+    if (effectiveState == 1) {
         if (latency && latency.intValue >= 0) {
             return [NSString stringWithFormat:@"在线 (%dms)", latency.intValue];
         }
         return @"在线";
     }
-    if (state && state.intValue == 0) {
+    if (effectiveState == 0) {
         return @"离线";
     }
     return @"未知";
@@ -346,7 +348,8 @@
     BOOL anyOnline = NO;
     for (NSString *addr in self.endpoints) {
         NSNumber *state = self.host.addressStates[addr];
-        if (state && state.intValue == 1) {
+        NSNumber *latency = self.host.addressLatencies[addr];
+        if ((state && state.intValue == 1) || (latency && latency.intValue >= 0)) {
             anyOnline = YES;
             break;
         }
@@ -442,11 +445,12 @@
     }
 
     dispatch_group_t group = dispatch_group_create();
-    NSMutableDictionary *latencies = [[NSMutableDictionary alloc] init];
-    NSMutableDictionary *states = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *latencies = [NSMutableDictionary dictionaryWithDictionary:self.host.addressLatencies ?: @{}];
+    NSMutableDictionary *states = [NSMutableDictionary dictionaryWithDictionary:self.host.addressStates ?: @{}];
     NSLock *lock = [[NSLock alloc] init];
 
     __block BOOL receivedResponse = NO;
+    __block BOOL receivedPing = NO;
     __block double minLatency = DBL_MAX;
     __block NSString *bestAddress = nil;
 
@@ -458,23 +462,31 @@
             NSTimeInterval rtt = -[start timeIntervalSinceNow] * 1000.0;
             BOOL success = [self checkResponse:resp];
 
+            NSNumber *pingMs = [LatencyProbe icmpPingMsForAddress:address];
+
             [lock lock];
+            if (pingMs != nil) {
+                latencies[address] = pingMs;
+                receivedPing = YES;
+            }
             if (success) {
                 receivedResponse = YES;
-                NSNumber *pingMs = [LatencyProbe icmpPingMsForAddress:address];
-                if (pingMs != nil) {
-                    latencies[address] = pingMs;
-                } else {
+                if (latencies[address] == nil) {
                     latencies[address] = @((int)rtt);
                 }
                 states[address] = @(1);
-                double bestMetric = pingMs != nil ? pingMs.doubleValue : rtt;
+                double bestMetric = latencies[address] ? [latencies[address] doubleValue] : rtt;
                 if (bestMetric < minLatency) {
                     minLatency = bestMetric;
                     bestAddress = address;
                 }
-            } else {
-                states[address] = @(0);
+            } else if (pingMs != nil) {
+                states[address] = @(1);
+                double bestMetric = pingMs.doubleValue;
+                if (bestMetric < minLatency) {
+                    minLatency = bestMetric;
+                    bestAddress = address;
+                }
             }
             [lock unlock];
             dispatch_group_leave(group);
@@ -484,9 +496,9 @@
     dispatch_group_notify(group, dispatch_get_main_queue(), ^{
         self.host.addressLatencies = latencies;
         self.host.addressStates = states;
-        self.host.state = receivedResponse ? StateOnline : StateOffline;
+        self.host.state = (receivedResponse || receivedPing) ? StateOnline : StateUnknown;
 
-        if (receivedResponse && bestAddress.length > 0) {
+        if (bestAddress.length > 0) {
             self.host.activeAddress = bestAddress;
             DataManager *dataManager = [[DataManager alloc] init];
             [dataManager updateHost:self.host];

@@ -11,6 +11,7 @@
 #import "HostCellView.h"
 #import "HostsViewControllerDelegate.h"
 #import "AppsViewController.h"
+#import "AppsWorkspaceViewController.h" // Import Workspace VC
 #import "AlertPresenter.h"
 #import "NSWindow+Moonlight.h"
 #import "NSCollectionView+Moonlight.h"
@@ -131,22 +132,22 @@
 }
 
 - (void)transitionToAppsVCWithHost:(TemporaryHost *)host {
-    AppsViewController *appsVC = [self.storyboard instantiateControllerWithIdentifier:@"appsVC"];
-    appsVC.host = host;
-    appsVC.hostsVC = self;
-    
-    [self.parentViewController addChildViewController:appsVC];
-    [self.parentViewController.view addSubview:appsVC.view];
-    
-    appsVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    appsVC.view.frame = self.view.bounds;
-    
+    // Create AppsWorkspaceViewController instead of direct AppsViewController
+    NSArray<TemporaryHost *> *hostsSnapshot = self.hosts ?: @[];
+    AppsWorkspaceViewController *workspaceVC = [[AppsWorkspaceViewController alloc] initWithHost:host hostsSnapshot:hostsSnapshot];
+
+    [self.parentViewController addChildViewController:workspaceVC];
+    [self.parentViewController.view addSubview:workspaceVC.view];
+
+    workspaceVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    workspaceVC.view.frame = self.view.bounds;
+
     [SettingsClass loadMoonlightSettingsFor:host.uuid];
-    
+
     [self.parentViewController.view.window makeFirstResponder:nil];
 
-    [self.parentViewController transitionFromViewController:self toViewController:appsVC options:NSViewControllerTransitionSlideLeft completionHandler:^{
-        [self.parentViewController.view.window makeFirstResponder:appsVC];
+    [self.parentViewController transitionFromViewController:self toViewController:workspaceVC options:NSViewControllerTransitionSlideLeft completionHandler:^{
+        [self.parentViewController.view.window makeFirstResponder:workspaceVC];
     }];
 }
 
