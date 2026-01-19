@@ -765,16 +765,29 @@ void ClConnectionStatusUpdate(int status)
 static void FillOutputBuffer(void *aqData,
                              AudioQueueRef inAQ,
                              AudioQueueBufferRef inBuffer) {
-    inBuffer->mAudioDataByteSize = audioBufferStride * sizeof(short);
-    
-    assert(inBuffer->mAudioDataByteSize == inBuffer->mAudioDataBytesCapacity);
+    UInt32 bytesPerBuffer = (audioBufferStride > 0) ? (UInt32)(audioBufferStride * sizeof(short)) : 0;
+    if (bytesPerBuffer == 0 || audioCircularBuffer == NULL || audioBufferEntries == 0) {
+        bytesPerBuffer = MIN(inBuffer->mAudioDataBytesCapacity, bytesPerBuffer);
+        inBuffer->mAudioDataByteSize = bytesPerBuffer;
+        if (bytesPerBuffer > 0) {
+            memset(inBuffer->mAudioData, 0, bytesPerBuffer);
+        }
+        AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, NULL);
+        return;
+    }
+
+    if (bytesPerBuffer > inBuffer->mAudioDataBytesCapacity) {
+        bytesPerBuffer = inBuffer->mAudioDataBytesCapacity;
+    }
+
+    inBuffer->mAudioDataByteSize = bytesPerBuffer;
     
     // If the indexes aren't equal, we have a sample
     if (audioBufferWriteIndex != audioBufferReadIndex) {
         // Copy data to the audio buffer
-        memcpy(inBuffer->mAudioData,
-               &audioCircularBuffer[audioBufferReadIndex * audioBufferStride],
-               inBuffer->mAudioDataByteSize);
+         memcpy(inBuffer->mAudioData,
+             &audioCircularBuffer[audioBufferReadIndex * audioBufferStride],
+             inBuffer->mAudioDataByteSize);
         
         // Use a full memory barrier to ensure the circular buffer is read before incrementing the index
         __sync_synchronize();

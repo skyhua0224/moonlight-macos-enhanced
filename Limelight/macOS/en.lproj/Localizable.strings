@@ -101,6 +101,7 @@
 "Enter PIN" = "Enter the following PIN on %@: %@";
 "Pairing Failed" = "Pairing Failed";
 "Disconnect Alert" = "Disconnect from stream, or close and quit the app?";
+"Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC." = "Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC.";
 
 /* Context Menu */
 "Unpin App" = "Unpin App";
@@ -141,6 +142,7 @@
 "Offline" = "Offline";
 "Settings" = "Settings";
 "Connection Details" = "Connection Details";
+"Edit Connections" = "Edit Connections";
 
 /* Detail Fields */
 "Host Name" = "Host Name";

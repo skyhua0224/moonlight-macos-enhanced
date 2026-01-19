@@ -209,7 +209,7 @@
             callback(host, nil);
         }
     } else if (!prohibitedAddress) {
-        callback(nil, @"Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC.");
+        callback(nil, NSLocalizedString(@"Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC.", @"Host connect failure"));
     } else {
         callback(nil, prohibitedAddressMessage);
     }

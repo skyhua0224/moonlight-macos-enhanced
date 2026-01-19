@@ -251,7 +251,7 @@
                 });
             } else {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    [AlertPresenter displayAlert:NSAlertStyleWarning title:@"Add Host Manually" message:error window:self.view.window completionHandler:nil];
+                    [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Add Host Manually", @"Add Host Manually") message:error window:self.view.window completionHandler:nil];
                 });
             }
         }];

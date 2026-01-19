@@ -238,6 +238,10 @@ public class LanguageManager: NSObject, ObservableObject {
     "Wake Host": "Wake Host",
     "Refresh Status": "Refresh Status",
     "Back to Computers": "Back to Computers",
+    "Edit Connections": "Edit Connections",
+    "Add Host Manually": "Add Host Manually",
+    "Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC.":
+      "Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC.",
   ]
 
   private let zhHans: [String: String] = [
@@ -403,5 +407,9 @@ public class LanguageManager: NSObject, ObservableObject {
     "Wake Host": "唤醒主机",
     "Refresh Status": "刷新状态",
     "Back to Computers": "返回计算机列表",
+    "Edit Connections": "编辑连接",
+    "Add Host Manually": "手动添加主机",
+    "Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC.":
+      "无法连接到主机。请确保已在 GeForce Experience 中启用 GameStream。",
   ]
 }
