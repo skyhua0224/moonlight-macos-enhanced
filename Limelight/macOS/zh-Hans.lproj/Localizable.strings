@@ -99,6 +99,7 @@
 "Enter PIN" = "在 %@ 上输入以下 PIN 码: %@";
 "Pairing Failed" = "配对失败";
 "Disconnect Alert" = "断开串流，还是关闭并退出应用？";
+"Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC." = "无法连接到主机。请确保已在 GeForce Experience 中启用 GameStream。";
 
 /* Context Menu */
 "Unpin App" = "取消置顶";
@@ -139,6 +140,7 @@
 "Offline" = "离线";
 "Settings" = "设置";
 "Connection Details" = "连接详情";
+"Edit Connections" = "编辑连接";
 
 /* Detail Fields */
 "Host Name" = "主机名称";
