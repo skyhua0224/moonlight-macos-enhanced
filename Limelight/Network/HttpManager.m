@@ -32,6 +32,33 @@
     NSError* _error;
 }
 
+static uint64_t gLastServerInfoErrorLogMs = 0;
+static int gSuppressedServerInfoErrorLogs = 0;
+
+static BOOL IsServerInfoRequest(NSURL *url) {
+    if (!url) {
+        return NO;
+    }
+    NSString *abs = url.absoluteString.lowercaseString;
+    return [abs containsString:@"/serverinfo"];
+}
+
+static void LogServerInfoFallbackError(NSInteger code, NSURL *url) {
+    uint64_t nowMs = (uint64_t)(CFAbsoluteTimeGetCurrent() * 1000.0);
+    if (nowMs - gLastServerInfoErrorLogMs < 1000) {
+        gSuppressedServerInfoErrorLogs++;
+        return;
+    }
+
+    if (gSuppressedServerInfoErrorLogs > 0) {
+        Log(LOG_W, @"Request failed with error %ld, attempting fallback (suppressed %d repeats in last 1.0s)", (long)code, gSuppressedServerInfoErrorLogs);
+        gSuppressedServerInfoErrorLogs = 0;
+    } else {
+        Log(LOG_W, @"Request failed with error %ld, attempting fallback", (long)code);
+    }
+    gLastServerInfoErrorLogMs = nowMs;
+}
+
 static const NSString* HTTP_PORT = @"47989";
 static const NSString* HTTPS_PORT = @"47984";
 
@@ -156,7 +183,11 @@ static const NSString* HTTPS_PORT = @"47984";
     else if (_error && request.fallbackRequest) {
         // Fallback on any error if fallback is present (e.g. HTTP fallback for HTTPS discovery)
         // This handles cases like certificate mismatches (-1202) or other TLS errors
-        Log(LOG_W, @"Request failed with error %ld, attempting fallback", (long)[_error code]);
+        if (IsServerInfoRequest(request.request.URL)) {
+            LogServerInfoFallbackError([_error code], request.request.URL);
+        } else {
+            Log(LOG_W, @"Request failed with error %ld, attempting fallback", (long)[_error code]);
+        }
         request.request = request.fallbackRequest;
         request.fallbackError = 0;
         request.fallbackRequest = NULL;

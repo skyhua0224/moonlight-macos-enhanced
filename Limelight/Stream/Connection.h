@@ -26,11 +26,16 @@
 
 @interface Connection : NSOperation <NSStreamDelegate>
 
+// Returns the connection bound to the current thread context, if any.
++ (Connection *)currentConnection;
+
 @property(nonatomic, readonly) VideoDecoderRenderer *renderer;
 
 - (id)initWithConfig:(StreamConfiguration *)config
                renderer:(VideoDecoderRenderer *)myRenderer
     connectionCallbacks:(id<ConnectionCallbacks>)callbacks;
+- (void *)inputStreamContext;
+- (void *)controlStreamContext;
 - (void)terminate;
 - (void)main;
 

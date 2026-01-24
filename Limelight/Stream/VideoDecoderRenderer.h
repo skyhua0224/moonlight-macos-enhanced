@@ -44,6 +44,8 @@ typedef struct {
 
 @interface VideoDecoderRenderer : NSObject
 
+@property(nonatomic, assign) void *depacketizerContext;
+
 @property(nonatomic, readonly) VideoStats videoStats;
 @property(nonatomic, readonly) int videoFormat;
 

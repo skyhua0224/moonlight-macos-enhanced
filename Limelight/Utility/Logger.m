@@ -10,6 +10,10 @@
 
 #import "LogBuffer.h"
 
+static const NSTimeInterval kWarnRepeatSuppressWindowSec = 1.0;
+static NSMutableDictionary<NSString*, NSMutableDictionary*> *gWarnRepeatTracker = nil;
+static NSObject *gWarnRepeatLock = nil;
+
 static LogLevel LoggerLogLevel = LOG_I;
 
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args);
@@ -65,6 +69,52 @@ void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
     va_copy(argsCopy, args);
     NSString *formattedLine = [[NSString alloc] initWithFormat:prefixedString arguments:argsCopy];
     va_end(argsCopy);
+
+    // Suppress repeated warning lines within a short window to avoid log spam.
+    if (level == LOG_W) {
+        if (gWarnRepeatTracker == nil) {
+            gWarnRepeatTracker = [NSMutableDictionary dictionary];
+        }
+        if (gWarnRepeatLock == nil) {
+            gWarnRepeatLock = [[NSObject alloc] init];
+        }
+
+        BOOL shouldSuppress = NO;
+        NSString *summaryLine = nil;
+        NSTimeInterval now = CFAbsoluteTimeGetCurrent();
+
+        @synchronized (gWarnRepeatLock) {
+            NSMutableDictionary *entry = gWarnRepeatTracker[formattedLine];
+            if (!entry) {
+                entry = [@{ @"last": @(now), @"suppressed": @(0) } mutableCopy];
+                gWarnRepeatTracker[formattedLine] = entry;
+            }
+
+            NSTimeInterval last = [entry[@"last"] doubleValue];
+            NSInteger suppressed = [entry[@"suppressed"] integerValue];
+
+            if (now - last < kWarnRepeatSuppressWindowSec) {
+                entry[@"suppressed"] = @(suppressed + 1);
+                shouldSuppress = YES;
+            } else {
+                if (suppressed > 0) {
+                    summaryLine = [NSString stringWithFormat:@"%@ (suppressed %ld repeats in last %.1fs)",
+                                   formattedLine, (long)suppressed, kWarnRepeatSuppressWindowSec];
+                }
+                entry[@"suppressed"] = @(0);
+                entry[@"last"] = @(now);
+            }
+        }
+
+        if (summaryLine) {
+            [[LogBuffer shared] appendLine:summaryLine level:level];
+            NSLog(@"%@", summaryLine);
+        }
+
+        if (shouldSuppress) {
+            return;
+        }
+    }
 
     [[LogBuffer shared] appendLine:formattedLine level:level];
 

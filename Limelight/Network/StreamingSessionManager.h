@@ -49,17 +49,35 @@ typedef NS_ENUM(NSInteger, StreamingState) {
                 framerate:(NSInteger)framerate 
                   quality:(double)quality;
 
+// Query state for a specific host
+- (BOOL)isStreamingHost:(NSString *)hostUUID;
+
+// Get app name for a specific host
+- (nullable NSString *)appNameForHost:(NSString *)hostUUID;
+
+// Signal that disconnection occurred (cleanup) for a specific host
+- (void)didDisconnectForHost:(NSString *)hostUUID;
+
 // Signal that disconnection occurred (cleanup)
 - (void)didDisconnect;
 
 // Focus the streaming window
 - (void)focusStreamWindow;
 
+// Focus a specific host's streaming window
+- (void)focusStreamWindowForHost:(NSString *)hostUUID;
+
 // Request disconnection (active action)
 - (void)disconnect;
 
+// Request disconnection for a specific host
+- (void)disconnectHost:(NSString *)hostUUID;
+
 // Request disconnection with explicit action (quitApp=YES means quit Sunshine app only)
 - (void)requestDisconnectWithQuitApp:(BOOL)quitApp;
+
+// Request disconnection for a specific host (quitApp=YES means quit Sunshine app only)
+- (void)requestDisconnectWithQuitApp:(BOOL)quitApp hostUUID:(NSString *)hostUUID;
 
 @end
 

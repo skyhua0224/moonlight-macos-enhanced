@@ -8,6 +8,7 @@
 
 #import "StreamView.h"
 #include <Limelight.h>
+#include "Limelight-internal.h"
 #import "OnScreenControls.h"
 #import "DataManager.h"
 #import "ControllerSupport.h"
@@ -23,6 +24,10 @@
     float xDeltaFactor;
     float yDeltaFactor;
     float screenFactor;
+}
+
+static inline PML_INPUT_STREAM_CONTEXT StreamViewInputContext(StreamView *view) {
+    return (PML_INPUT_STREAM_CONTEXT)view.inputStreamContext;
 }
 
 - (void) setMouseDeltaFactors:(float)x y:(float)y {
@@ -72,7 +77,12 @@
 - (void)onDragStart:(NSTimer*)timer {
     if (!touchMoved && !isDragging){
         isDragging = true;
-        LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+        PML_INPUT_STREAM_CONTEXT inputCtx = StreamViewInputContext(self);
+        if (inputCtx) {
+            LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_PRESS, BUTTON_LEFT);
+        } else {
+            LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+        }
     }
 }
 
@@ -92,7 +102,12 @@
                 deltaY *= yDeltaFactor * screenFactor;
                 
                 if (deltaX != 0 || deltaY != 0) {
-                    LiSendMouseMoveEvent(deltaX, deltaY);
+                    PML_INPUT_STREAM_CONTEXT inputCtx = StreamViewInputContext(self);
+                    if (inputCtx) {
+                        LiSendMouseMoveEventCtx(inputCtx, deltaX, deltaY);
+                    } else {
+                        LiSendMouseMoveEvent(deltaX, deltaY);
+                    }
                     touchLocation = currentLocation;
                     
                     // If we've moved far enough to confirm this wasn't just human/machine error,
@@ -108,7 +123,12 @@
             
             CGPoint avgLocation = CGPointMake((firstLocation.x + secondLocation.x) / 2, (firstLocation.y + secondLocation.y) / 2);
             if (touchLocation.y != avgLocation.y) {
-                LiSendScrollEvent(avgLocation.y - touchLocation.y);
+                PML_INPUT_STREAM_CONTEXT inputCtx = StreamViewInputContext(self);
+                if (inputCtx) {
+                    LiSendScrollEventCtx(inputCtx, avgLocation.y - touchLocation.y);
+                } else {
+                    LiSendScrollEvent(avgLocation.y - touchLocation.y);
+                }
             }
 
             // If we've moved far enough to confirm this wasn't just human/machine error,
@@ -130,29 +150,53 @@
         dragTimer = nil;
         if (isDragging) {
             isDragging = false;
-            LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+            PML_INPUT_STREAM_CONTEXT inputCtx = StreamViewInputContext(self);
+            if (inputCtx) {
+                LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+            } else {
+                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+            }
         }
         else if (!touchMoved) {
             if ([[event allTouches] count]  == 2) {
                 Log(LOG_D, @"Sending right mouse button press");
                 
-                LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_RIGHT);
+                PML_INPUT_STREAM_CONTEXT inputCtx = StreamViewInputContext(self);
+                if (inputCtx) {
+                    LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_PRESS, BUTTON_RIGHT);
+                } else {
+                    LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_RIGHT);
+                }
                 
                 // Wait 100 ms to simulate a real button press
                 usleep(100 * 1000);
                 
-                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                if (inputCtx) {
+                    LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                } else {
+                    LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                }
             } else {
                 if (!isDragging){
                     Log(LOG_D, @"Sending left mouse button press");
                     
-                    LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+                    PML_INPUT_STREAM_CONTEXT inputCtx = StreamViewInputContext(self);
+                    if (inputCtx) {
+                        LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_PRESS, BUTTON_LEFT);
+                    } else {
+                        LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+                    }
                     
                     // Wait 100 ms to simulate a real button press
                     usleep(100 * 1000);
                 }
                 isDragging = false;
-                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                PML_INPUT_STREAM_CONTEXT inputCtx = StreamViewInputContext(self);
+                if (inputCtx) {
+                    LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                } else {
+                    LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                }
             }
         }
         

@@ -14,10 +14,19 @@
 #import "DataManager.h"
 #import "HIDSupport.h"
 #include "Limelight.h"
+#include "Limelight-internal.h"
 
 @import GameController;
 @import AudioToolbox;
 @import CoreHaptics;
+
+static inline PML_INPUT_STREAM_CONTEXT ControllerInputContext(ControllerSupport *support) {
+    PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)support.inputContext;
+    if (ctx != NULL && ctx->connectionContext != NULL) {
+        LiSetThreadConnectionContext(ctx->connectionContext);
+    }
+    return ctx;
+}
 
 enum ButtonDebouncerState {
     BDS_none,
@@ -332,26 +341,34 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
         // Standard Controller Mode
         [_controllerStreamLock lock];
+
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+        if (!inputCtx) {
+            [_controllerStreamLock unlock];
+            return;
+        }
         
         if (_multiController) {
-            LiSendMultiControllerEvent(controller.playerIndex,
-                                       [ControllerSupport getConnectedGamepadMask:nil],
-                                       controller.lastButtonFlags,
-                                       controller.lastLeftTrigger,
-                                       controller.lastRightTrigger,
-                                       controller.lastLeftStickX,
-                                       controller.lastLeftStickY,
-                                       controller.lastRightStickX,
-                                       controller.lastRightStickY);
+            LiSendMultiControllerEventCtx(inputCtx,
+                                          controller.playerIndex,
+                                          [ControllerSupport getConnectedGamepadMask:nil],
+                                          controller.lastButtonFlags,
+                                          controller.lastLeftTrigger,
+                                          controller.lastRightTrigger,
+                                          controller.lastLeftStickX,
+                                          controller.lastLeftStickY,
+                                          controller.lastRightStickX,
+                                          controller.lastRightStickY);
         }
         else {
-            LiSendControllerEvent(controller.lastButtonFlags,
-                                  controller.lastLeftTrigger,
-                                  controller.lastRightTrigger,
-                                  controller.lastLeftStickX,
-                                  controller.lastLeftStickY,
-                                  controller.lastRightStickX,
-                                  controller.lastRightStickY);
+            LiSendControllerEventCtx(inputCtx,
+                                     controller.lastButtonFlags,
+                                     controller.lastLeftTrigger,
+                                     controller.lastRightTrigger,
+                                     controller.lastLeftStickX,
+                                     controller.lastLeftStickY,
+                                     controller.lastRightStickX,
+                                     controller.lastRightStickY);
         }
         
         [_controllerStreamLock unlock];
@@ -449,14 +466,19 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     BOOL currentB = gamepad.buttonB.pressed;
                     BOOL lastA = (limeController.lastMouseModeButtonFlags & A_FLAG) != 0;
                     BOOL lastB = (limeController.lastMouseModeButtonFlags & B_FLAG) != 0;
+                    PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
                     
                     if (currentA != lastA) {
-                        LiSendMouseButtonEvent(currentA ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                        if (inputCtx) {
+                            LiSendMouseButtonEventCtx(inputCtx, currentA ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                        }
                         if (currentA) limeController.lastMouseModeButtonFlags |= A_FLAG;
                         else limeController.lastMouseModeButtonFlags &= ~A_FLAG;
                     }
                     if (currentB != lastB) {
-                        LiSendMouseButtonEvent(currentB ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                        if (inputCtx) {
+                            LiSendMouseButtonEventCtx(inputCtx, currentB ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                        }
                         if (currentB) limeController.lastMouseModeButtonFlags |= B_FLAG;
                         else limeController.lastMouseModeButtonFlags &= ~B_FLAG;
                     }
@@ -565,7 +587,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         short truncatedDeltaY = (short)self->accumulatedDeltaY;
         
         if (truncatedDeltaX != 0 || truncatedDeltaY != 0) {
-            LiSendMouseMoveEvent(truncatedDeltaX, truncatedDeltaY);
+            PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+            if (inputCtx) {
+                LiSendMouseMoveEventCtx(inputCtx, truncatedDeltaX, truncatedDeltaY);
+            }
             
             self->accumulatedDeltaX -= truncatedDeltaX;
             self->accumulatedDeltaY -= truncatedDeltaY;
@@ -573,24 +598,39 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     };
     
     mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+        if (inputCtx) {
+            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        }
     };
     mouse.mouseInput.middleButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+        if (inputCtx) {
+            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
+        }
     };
     mouse.mouseInput.rightButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+        if (inputCtx) {
+            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+        }
     };
     
     if (mouse.mouseInput.auxiliaryButtons != nil) {
         if (mouse.mouseInput.auxiliaryButtons.count >= 1) {
             mouse.mouseInput.auxiliaryButtons[0].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-                LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
+                PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                if (inputCtx) {
+                    LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
+                }
             };
         }
         if (mouse.mouseInput.auxiliaryButtons.count >= 2) {
             mouse.mouseInput.auxiliaryButtons[1].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-                LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
+                PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                if (inputCtx) {
+                    LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
+                }
             };
         }
     }
@@ -602,7 +642,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         short truncatedScrollY = (short)self->accumulatedScrollY;
         
         if (truncatedScrollY != 0) {
-            LiSendHighResScrollEvent(truncatedScrollY);
+            PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+            if (inputCtx) {
+                LiSendHighResScrollEventCtx(inputCtx, truncatedScrollY);
+            }
             
             self->accumulatedScrollY -= truncatedScrollY;
         }
@@ -657,7 +700,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         // Ensure the virtual gamepad disappears to avoid confusing some games.
         // If the mouse and keyboard disconnect later, it will reappear when the
         // first OSC input is received.
-        LiSendMultiControllerEvent(0, 0, 0, 0, 0, 0, 0, 0, 0);
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+        if (inputCtx) {
+            LiSendMultiControllerEventCtx(inputCtx, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
     }
     
     [_osc setLevel:level];
@@ -1040,7 +1086,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 short truncY = (short)self->_accumulatedMouseY;
                 
                 if (truncX != 0 || truncY != 0) {
-                    LiSendMouseMoveEvent(truncX, truncY);
+                    PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                    if (inputCtx) {
+                        LiSendMouseMoveEventCtx(inputCtx, truncX, truncY);
+                    }
                     self->_accumulatedMouseX -= truncX;
                     self->_accumulatedMouseY -= truncY;
                 }

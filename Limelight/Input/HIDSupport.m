@@ -13,6 +13,7 @@
 #import "Moonlight-Swift.h"
 
 #include "Limelight.h"
+#include "Limelight-internal.h"
 
 #import <Carbon/Carbon.h>
 
@@ -24,6 +25,7 @@
 
 NSString *const HIDMouseModeToggledNotification = @"HIDMouseModeToggledNotification";
 NSString *const HIDGamepadQuitNotification = @"HIDGamepadQuitNotification";
+
 
 struct KeyMapping {
     unsigned short mac;
@@ -445,6 +447,47 @@ typedef enum {
 - (int)switchActuallyRumbleJoystick:(IOHIDDeviceRef)device low_frequency_rumble:(UInt16)low_frequency_rumble high_frequency_rumble:(UInt16)high_frequency_rumble;
 @end
 
+static inline PML_INPUT_STREAM_CONTEXT HIDInputContext(HIDSupport *support) {
+    PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)support.inputContext;
+    if (ctx != NULL && ctx->connectionContext != NULL) {
+        LiSetThreadConnectionContext(ctx->connectionContext);
+    }
+    return ctx;
+}
+
+static inline bool HIDValidateInputContext(PML_INPUT_STREAM_CONTEXT ctx, const char *op) {
+    static CFAbsoluteTime lastLogTime = 0;
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (ctx == NULL) {
+        if (now - lastLogTime > 1.0) {
+            Log(LOG_W, @"Input dropped (%s): inputContext is NULL", op);
+            lastLogTime = now;
+        }
+        return false;
+    }
+    if (!LiInputContextIsInitialized(ctx)) {
+        if (now - lastLogTime > 1.0) {
+            Log(LOG_W, @"Input dropped (%s): inputContext not initialized (ctx=%p conn=%p)", op, ctx, LiInputContextGetConnectionCtx(ctx));
+            lastLogTime = now;
+        }
+        return false;
+    }
+    return true;
+}
+
+static inline void HIDDispatchInput(HIDSupport *support, PML_INPUT_STREAM_CONTEXT inputCtx, dispatch_block_t block) {
+    if (inputCtx == NULL) {
+        return;
+    }
+    PML_CONNECTION_CONTEXT connCtx = inputCtx->connectionContext;
+    dispatch_async(support.inputQueue, ^{
+        if (connCtx != NULL) {
+            LiSetThreadConnectionContext(connCtx);
+        }
+        block();
+    });
+}
+
 @implementation HIDSupport
 
 SwitchCommonOutputPacket_t switchRumblePacket;
@@ -506,28 +549,48 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     
     mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
         if (self.shouldSendInputEvents) {
-            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+            if (!inputCtx) {
+                return;
+            }
+            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
         }
     };
     mouse.mouseInput.middleButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
         if (self.shouldSendInputEvents) {
-            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
+            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+            if (!inputCtx) {
+                return;
+            }
+            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
         }
     };
     mouse.mouseInput.rightButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
         if (self.shouldSendInputEvents) {
-            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+            if (!inputCtx) {
+                return;
+            }
+            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
         }
     };
     
     mouse.mouseInput.auxiliaryButtons[0].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
         if (self.shouldSendInputEvents) {
-            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
+            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+            if (!inputCtx) {
+                return;
+            }
+            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
         }
     };
     mouse.mouseInput.auxiliaryButtons[1].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
         if (self.shouldSendInputEvents) {
-            LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
+            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+            if (!inputCtx) {
+                return;
+            }
+            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
         }
     };
 }
@@ -572,8 +635,12 @@ SwitchCommonOutputPacket_t switchRumblePacket;
             return;
         }
 
-        dispatch_async(self.inputQueue, ^{
-            LiSendMultiControllerEvent(playerIndex, 1, lastButtonFlags, lastLeftTrigger, lastRightTrigger, lastLeftStickX, lastLeftStickY, lastRightStickX, lastRightStickY);
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        if (!inputCtx) {
+            return;
+        }
+        HIDDispatchInput(self, inputCtx, ^{
+            LiSendMultiControllerEventCtx(inputCtx, playerIndex, 1, lastButtonFlags, lastLeftTrigger, lastRightTrigger, lastLeftStickX, lastLeftStickY, lastRightStickX, lastRightStickY);
         });
     }
 }
@@ -597,11 +664,15 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         me.mouseDeltaX = 0;
         me.mouseDeltaY = 0;
         if (me.shouldSendInputEvents) {
+            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(me);
+            if (!inputCtx) {
+                return kCVReturnSuccess;
+            }
             BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:me.host.uuid];
             NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:me.host.uuid];
             if (!absoluteMouse && touchscreenMode != 1) {
-                dispatch_async(me.inputQueue, ^{
-                    LiSendMouseMoveEvent(deltaX, deltaY);
+                HIDDispatchInput(me, inputCtx, ^{
+                    LiSendMouseMoveEventCtx(inputCtx, deltaX, deltaY);
                 });
             }
         }
@@ -609,6 +680,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     
     // Mouse Emulation Movement
     if (me.controller.isMouseMode && me.shouldSendInputEvents) {
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(me);
+        if (!inputCtx) {
+            return kCVReturnSuccess;
+        }
         short rx = me.controller.lastRightStickX;
         short ry = me.controller.lastRightStickY;
         short deadzone = 4000;
@@ -640,8 +715,8 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             moveY = (short)(-dy);
             
             if (moveX != 0 || moveY != 0) {
-                dispatch_async(me.inputQueue, ^{
-                    LiSendMouseMoveEvent(moveX, moveY);
+                HIDDispatchInput(me, inputCtx, ^{
+                    LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
                 });
             }
         }
@@ -682,8 +757,12 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 - (void)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
     char modifiers = [self translateKeyModifierWithEvent:event];
     char action = event.modifierFlags & modifierFlag ? KEY_ACTION_DOWN : KEY_ACTION_UP;
-    dispatch_async(self.inputQueue, ^{
-        LiSendKeyboardEvent(keyCode, action, modifiers);
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!inputCtx) {
+        return;
+    }
+    HIDDispatchInput(self, inputCtx, ^{
+        LiSendKeyboardEventCtx(inputCtx, keyCode, action, modifiers);
     });
 }
 
@@ -728,8 +807,12 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     if (self.shouldSendInputEvents) {
         short keyCode = 0x8000 | [self translateKeyCodeWithEvent:event];
         char modifiers = [self translateKeyModifierWithEvent:event];
-        dispatch_async(self.inputQueue, ^{
-            LiSendKeyboardEvent(keyCode, KEY_ACTION_DOWN, modifiers);
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        if (!HIDValidateInputContext(inputCtx, "keyDown")) {
+            return;
+        }
+        HIDDispatchInput(self, inputCtx, ^{
+            LiSendKeyboardEventCtx(inputCtx, keyCode, KEY_ACTION_DOWN, modifiers);
         });
     }
 }
@@ -738,23 +821,31 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     if (self.shouldSendInputEvents) {
         short keyCode = 0x8000 | [self translateKeyCodeWithEvent:event];
         char modifiers = [self translateKeyModifierWithEvent:event];
-        dispatch_async(self.inputQueue, ^{
-            LiSendKeyboardEvent(keyCode, KEY_ACTION_UP, modifiers);
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        if (!HIDValidateInputContext(inputCtx, "keyUp")) {
+            return;
+        }
+        HIDDispatchInput(self, inputCtx, ^{
+            LiSendKeyboardEventCtx(inputCtx, keyCode, KEY_ACTION_UP, modifiers);
         });
     }
 }
 
 - (void)releaseAllModifierKeys {
     // Send asynchronously to avoid blocking the main thread if the connection is dead
-    dispatch_async(self.inputQueue, ^{
-        LiSendKeyboardEvent(0x5B, KEY_ACTION_UP, 0);
-        LiSendKeyboardEvent(0x5C, KEY_ACTION_UP, 0);
-        LiSendKeyboardEvent(0xA0, KEY_ACTION_UP, 0);
-        LiSendKeyboardEvent(0xA1, KEY_ACTION_UP, 0);
-        LiSendKeyboardEvent(0xA2, KEY_ACTION_UP, 0);
-        LiSendKeyboardEvent(0xA3, KEY_ACTION_UP, 0);
-        LiSendKeyboardEvent(0xA4, KEY_ACTION_UP, 0);
-        LiSendKeyboardEvent(0xA5, KEY_ACTION_UP, 0);
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!inputCtx) {
+        return;
+    }
+    HIDDispatchInput(self, inputCtx, ^{
+        LiSendKeyboardEventCtx(inputCtx, 0x5B, KEY_ACTION_UP, 0);
+        LiSendKeyboardEventCtx(inputCtx, 0x5C, KEY_ACTION_UP, 0);
+        LiSendKeyboardEventCtx(inputCtx, 0xA0, KEY_ACTION_UP, 0);
+        LiSendKeyboardEventCtx(inputCtx, 0xA1, KEY_ACTION_UP, 0);
+        LiSendKeyboardEventCtx(inputCtx, 0xA2, KEY_ACTION_UP, 0);
+        LiSendKeyboardEventCtx(inputCtx, 0xA3, KEY_ACTION_UP, 0);
+        LiSendKeyboardEventCtx(inputCtx, 0xA4, KEY_ACTION_UP, 0);
+        LiSendKeyboardEventCtx(inputCtx, 0xA5, KEY_ACTION_UP, 0);
     });
 }
 
@@ -772,7 +863,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
     
     if (self.shouldSendInputEvents) {
-        LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        if (!HIDValidateInputContext(inputCtx, "mouseDown")) {
+            return;
+        }
+        LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_PRESS, button);
     }
 }
 
@@ -790,7 +885,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
     
     if (self.shouldSendInputEvents) {
-        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, button);
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        if (!HIDValidateInputContext(inputCtx, "mouseUp")) {
+            return;
+        }
+        LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_RELEASE, button);
     }
 }
 
@@ -800,6 +899,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
     
     if (self.shouldSendInputEvents) {
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        if (!HIDValidateInputContext(inputCtx, "mouseMoved")) {
+            return;
+        }
         BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:self.host.uuid];
         NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
         
@@ -807,10 +910,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             NSPoint loc = [event locationInWindow];
             NSSize size = event.window.contentView.frame.size;
             // Invert Y for top-left origin
-            LiSendMousePositionEvent((short)loc.x, (short)(size.height - loc.y), (short)size.width, (short)size.height);
+            LiSendMousePositionEventCtx(inputCtx, (short)loc.x, (short)(size.height - loc.y), (short)size.width, (short)size.height);
         } else {
             if (event.deltaX != 0 || event.deltaY != 0) {
-                LiSendMouseMoveEvent(event.deltaX, event.deltaY);
+                LiSendMouseMoveEventCtx(inputCtx, event.deltaX, event.deltaY);
             }
         }
     }
@@ -829,17 +932,21 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
 
     if (self.shouldSendInputEvents) {
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        if (!HIDValidateInputContext(inputCtx, "scrollWheel")) {
+            return;
+        }
         if (event.hasPreciseScrollingDeltas) {
             if (absDeltaX > absDeltaY) {
-                LiSendHighResHScrollEvent(-deltaX);
+                LiSendHighResHScrollEventCtx(inputCtx, -deltaX);
             } else {
-                LiSendHighResScrollEvent(deltaY);
+                LiSendHighResScrollEventCtx(inputCtx, deltaY);
             }
         } else {
             if (absDeltaX > absDeltaY) {
-                LiSendHScrollEvent(-deltaX);
+                LiSendHScrollEventCtx(inputCtx, -deltaX);
             } else {
-                LiSendScrollEvent(deltaY);
+                LiSendScrollEventCtx(inputCtx, deltaY);
             }
         }
     }
@@ -1930,18 +2037,34 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
         if (flag == A_FLAG) {
             // Left Click
             if (set) {
-                 dispatch_async(self.inputQueue, ^{ LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT); });
+                 PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                 if (!inputCtx) {
+                     return;
+                 }
+                HIDDispatchInput(self, inputCtx, ^{ LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_PRESS, BUTTON_LEFT); });
             } else {
-                 dispatch_async(self.inputQueue, ^{ LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT); });
+                 PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                 if (!inputCtx) {
+                     return;
+                 }
+                 HIDDispatchInput(self, inputCtx, ^{ LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_RELEASE, BUTTON_LEFT); });
             }
             return; // Don't set flag
         }
         if (flag == B_FLAG) {
             // Right Click
             if (set) {
-                 dispatch_async(self.inputQueue, ^{ LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_RIGHT); });
+                 PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                 if (!inputCtx) {
+                     return;
+                 }
+                 HIDDispatchInput(self, inputCtx, ^{ LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_PRESS, BUTTON_RIGHT); });
             } else {
-                 dispatch_async(self.inputQueue, ^{ LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_RIGHT); });
+                 PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                 if (!inputCtx) {
+                     return;
+                 }
+                 HIDDispatchInput(self, inputCtx, ^{ LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_RELEASE, BUTTON_RIGHT); });
             }
             return; // Don't set flag
         }
