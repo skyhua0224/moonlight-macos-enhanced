@@ -25,10 +25,12 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
 static const NSTimeInterval ADDRESS_FAILURE_COOLDOWN_SEC = 30.0;
 static NSMutableDictionary<NSString*, NSMutableDictionary<NSString*, NSNumber*>*> *gAddressCooldownByHost = nil;
 static NSObject *gAddressCooldownLock = nil;
+static dispatch_once_t gAddressCooldownOnceToken;
 static const double AUTO_SWITCH_PING_IMPROVEMENT_MS = 20.0;
 static const NSTimeInterval AUTO_SWITCH_COOLDOWN_SEC = 30.0;
 static NSMutableDictionary<NSString*, NSNumber*> *gAutoSwitchCooldownByHost = nil;
 static NSObject *gAutoSwitchCooldownLock = nil;
+static dispatch_once_t gAutoSwitchCooldownOnceToken;
 
 - (id) initWithHost:(TemporaryHost*)host uniqueId:(NSString*)uniqueId {
     self = [super init];
@@ -101,12 +103,11 @@ static NSObject *gAutoSwitchCooldownLock = nil;
         return NO;
     }
 
-    if (gAddressCooldownByHost == nil) {
-        gAddressCooldownByHost = [NSMutableDictionary dictionary];
-    }
-    if (gAddressCooldownLock == nil) {
+    // Thread-safe initialization using dispatch_once
+    dispatch_once(&gAddressCooldownOnceToken, ^{
         gAddressCooldownLock = [[NSObject alloc] init];
-    }
+        gAddressCooldownByHost = [NSMutableDictionary dictionary];
+    });
 
     NSString *hostUUID = _host.uuid ?: @"";
     if (hostUUID.length == 0) {
@@ -135,12 +136,11 @@ static NSObject *gAutoSwitchCooldownLock = nil;
         return;
     }
 
-    if (gAddressCooldownByHost == nil) {
-        gAddressCooldownByHost = [NSMutableDictionary dictionary];
-    }
-    if (gAddressCooldownLock == nil) {
+    // Thread-safe initialization using dispatch_once
+    dispatch_once(&gAddressCooldownOnceToken, ^{
         gAddressCooldownLock = [[NSObject alloc] init];
-    }
+        gAddressCooldownByHost = [NSMutableDictionary dictionary];
+    });
 
     NSString *hostUUID = _host.uuid ?: @"";
     if (hostUUID.length == 0) {
@@ -290,12 +290,11 @@ static NSObject *gAutoSwitchCooldownLock = nil;
             NSNumber *currentLatency = latencies[_host.activeAddress];
             NSNumber *bestLatency = latencies[bestAddress];
             if (currentLatency && bestLatency && (currentLatency.doubleValue - bestLatency.doubleValue) >= AUTO_SWITCH_PING_IMPROVEMENT_MS) {
-                if (gAutoSwitchCooldownByHost == nil) {
-                    gAutoSwitchCooldownByHost = [NSMutableDictionary dictionary];
-                }
-                if (gAutoSwitchCooldownLock == nil) {
+                // Thread-safe initialization using dispatch_once
+                dispatch_once(&gAutoSwitchCooldownOnceToken, ^{
                     gAutoSwitchCooldownLock = [[NSObject alloc] init];
-                }
+                    gAutoSwitchCooldownByHost = [NSMutableDictionary dictionary];
+                });
 
                 NSString *hostUUID = _host.uuid ?: @"";
                 NSTimeInterval now = CFAbsoluteTimeGetCurrent();

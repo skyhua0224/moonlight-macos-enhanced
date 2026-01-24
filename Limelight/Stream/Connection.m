@@ -421,8 +421,10 @@ void ClConnectionStarted(void)
 
 #if defined(LI_MIC_CONTROL_START)
     // Start microphone after the stream is fully established
-    Connection *micConn = conn;
+    // Use weak reference to avoid retaining the connection if it's deallocated before dispatch
+    __weak Connection *weakMicConn = conn;
     dispatch_async(dispatch_get_main_queue(), ^{
+        __strong Connection *micConn = weakMicConn;
         if (micConn) {
             [micConn startMicrophoneIfNeeded];
         }
@@ -433,10 +435,12 @@ void ClConnectionStarted(void)
 void ClConnectionTerminated(int errorCode)
 {
 #if defined(LI_MIC_CONTROL_START)
-    Connection *micConn = CurrentConnection();
+    // Capture a weak reference to avoid retaining the connection if it's being deallocated
+    __weak Connection *weakMicConn = CurrentConnection();
     // Stopping AVAudioEngine can occasionally block under CoreAudio stress.
     // Keep it off the main thread so UI doesn't appear frozen during disconnect.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        __strong Connection *micConn = weakMicConn;
         if (micConn) {
             [micConn stopMicrophoneIfNeeded];
         }
@@ -492,6 +496,12 @@ void ClConnectionStatusUpdate(int status)
     }
 }
 
+- (void)dealloc
+{
+    // Remove notification observer to prevent crashes from stale references
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+}
+
 -(void) terminate
 {
     // Interrupt any action blocking LiStartConnection(). This is
@@ -504,19 +514,26 @@ void ClConnectionStatusUpdate(int status)
     // Ensure mic queue is stopped before connection context teardown
     [self stopMicrophoneIfNeeded];
 #endif
-    
+
     // We dispatch this async to get out because this can be invoked
     // on a thread inside common and we don't want to deadlock. It also avoids
     // blocking on the caller's thread waiting to acquire initLock.
-    // Keep self alive until LiStopConnectionCtx finishes to avoid use-after-free
-    // of the embedded connection context.
-    __strong Connection *strongSelf = self;
-    PML_CONNECTION_CONTEXT ctx = &strongSelf->_connectionContext;
+    // IMPORTANT: Capture self strongly in the block to keep the Connection object
+    // alive until LiStopConnectionCtx finishes. The context pointer points to
+    // an embedded struct inside self, so self must outlive the async block.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+        // Prevent self from being deallocated during cleanup
+        __strong Connection *conn = self;
+        if (conn == nil) {
+            return;
+        }
+        PML_CONNECTION_CONTEXT ctx = &conn->_connectionContext;
         os_unfair_lock_lock(&gConnectionLifecycleLock);
         LiStopConnectionCtx(ctx);
         os_unfair_lock_unlock(&gConnectionLifecycleLock);
         UnregisterConnection(ctx);
+        // conn is released here after the block completes, ensuring
+        // the Connection object stays alive throughout cleanup
     });
 }
 
@@ -572,6 +589,15 @@ void ClConnectionStatusUpdate(int status)
     _currentUpscalingMode = config.upscalingMode;
 
     memset(&_connectionContext, 0, sizeof(_connectionContext));
+
+    // Initialize all socket fields to INVALID_SOCKET (-1) after memset zeroes them to 0.
+    // This prevents EXC_GUARD crashes on macOS when closeSocket() is called on an
+    // uninitialized socket field (fd 0 = stdin is guarded on macOS).
+    _connectionContext.videoContext.rtpSocket = INVALID_SOCKET;
+    _connectionContext.videoContext.firstFrameSocket = INVALID_SOCKET;
+    _connectionContext.audioContext.rtpSocket = INVALID_SOCKET;
+    _connectionContext.controlContext.ctlSock = INVALID_SOCKET;
+    _connectionContext.inputContext.inputSock = INVALID_SOCKET;
     _connectionContext.micContext.micSocket = INVALID_SOCKET;
     RegisterConnection(&_connectionContext, self);
     if (_renderer) {
@@ -938,7 +964,9 @@ void ClConnectionStatusUpdate(int status)
 
     LiSendMicrophoneControlCtx(&_connectionContext.inputContext, LI_MIC_CONTROL_STOP, 0, 0, 0);
 
-    destroyMicrophoneStream();
+    // Use context-aware version to avoid using global context which may have
+    // an uninitialized micSocket (value 0 = stdin, which is guarded on macOS)
+    destroyMicrophoneStreamCtx(&_connectionContext.micContext);
 }
 #endif
 
