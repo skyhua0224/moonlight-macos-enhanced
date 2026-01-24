@@ -385,6 +385,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(SDKROOT)/usr/include/libxml2",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
+					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/enet/include",
 				);
 				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -443,6 +444,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(SDKROOT)/usr/include/libxml2",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
+					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/enet/include",
 				);
 				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (

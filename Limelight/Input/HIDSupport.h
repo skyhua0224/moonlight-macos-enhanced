@@ -15,6 +15,7 @@ extern NSString *const HIDGamepadQuitNotification;
 @interface HIDSupport : NSObject
 @property(atomic) BOOL shouldSendInputEvents;
 @property(atomic) TemporaryHost *host;
+@property(nonatomic, assign) void *inputContext;
 
 - (instancetype)init:(TemporaryHost *)host;
 

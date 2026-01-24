@@ -92,6 +92,7 @@ const CGFloat scaleBase = 1.125;
     self.boxArtCache = [[NSCache alloc] init];
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleHostAutoAddressSwitched:) name:@"HostAutoAddressSwitched" object:nil];
 
     // Subscribe to streaming state changes
     __weak typeof(self) weakSelf = self;
@@ -161,7 +162,7 @@ const CGFloat scaleBase = 1.125;
 
 - (void)updateOfflineOverlayForCurrentHost {
     StreamingSessionManager *manager = [StreamingSessionManager shared];
-    BOOL isStreamingThisHost = (manager.activeHostUUID && [manager.activeHostUUID isEqualToString:self.host.uuid] && manager.state == StreamingStateStreaming);
+    BOOL isStreamingThisHost = (self.host.uuid != nil) && [manager isStreamingHost:self.host.uuid];
 
     if (self.host.state == StateOffline && !isStreamingThisHost) {
         [self showOfflineOverlayIfCurrentHost];
@@ -220,6 +221,33 @@ const CGFloat scaleBase = 1.125;
     }
 }
 
+- (void)handleHostAutoAddressSwitched:(NSNotification *)note {
+    NSString *uuid = note.userInfo[@"uuid"];
+    if (uuid == nil || ![uuid isEqualToString:self.host.uuid]) {
+        return;
+    }
+
+    if (!self.view.window || !self.view.window.isVisible) {
+        return;
+    }
+
+    NSString *oldAddress = note.userInfo[@"oldAddress"] ?: @"";
+    NSString *newAddress = note.userInfo[@"newAddress"] ?: @"";
+    NSNumber *oldLatency = note.userInfo[@"oldLatency"] ?: @(-1);
+    NSNumber *newLatency = note.userInfo[@"newLatency"] ?: @(-1);
+
+    NSString *title = NSLocalizedString(@"Auto Address Switched Title", @"Auto address switched alert title");
+    NSString *format = NSLocalizedString(@"Auto Address Switched Message", @"Auto address switched alert message");
+    NSString *message = [NSString stringWithFormat:format,
+                         self.host.name ?: @"",
+                         oldAddress,
+                         newAddress,
+                         oldLatency.doubleValue,
+                         newLatency.doubleValue];
+
+    [AlertPresenter displayAlert:NSAlertStyleInformational title:title message:message window:self.view.window completionHandler:nil];
+}
+
 - (void)requestHostRefresh {
     if (!self.host.uuid) {
         return;
@@ -231,13 +259,17 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (void)handleStreamingStateChange:(NSNotification *)notification {
+    if (notification) {
+        NSString *hostUUID = notification.userInfo[@"hostUUID"];
+        if (hostUUID && self.host.uuid && ![hostUUID isEqualToString:self.host.uuid]) {
+            return;
+        }
+    }
+
     StreamingSessionManager *manager = [StreamingSessionManager shared];
 
-    // Check if THIS host is the one streaming
-    BOOL shouldShowOverlay = NO;
-    if (manager.activeHostUUID && [manager.activeHostUUID isEqualToString:self.host.uuid] && manager.state == StreamingStateStreaming) {
-        shouldShowOverlay = YES;
-    }
+    // Check if THIS host is streaming
+    BOOL shouldShowOverlay = (self.host.uuid != nil) && [manager isStreamingHost:self.host.uuid];
 
     if (shouldShowOverlay) {
         [self showLockOverlay];
@@ -252,13 +284,15 @@ const CGFloat scaleBase = 1.125;
     StreamingSessionManager *manager = [StreamingSessionManager shared];
 
     NSString *hostName = self.host.name ?: @"Unknown Host";
-    NSString *appName = manager.activeAppName ?: @"Unknown App";
+    NSString *appName = (self.host.uuid != nil ? [manager appNameForHost:self.host.uuid] : nil) ?: @"Unknown App";
 
     __weak typeof(self) weakSelf = self;
     self.lockOverlayHostingController = [StreamingLockOverlayViewFactory createOverlayWithHostName:hostName
                                                                                           appName:appName
                                                                                      onShowWindow:^{
-        [[StreamingSessionManager shared] focusStreamWindow];
+        if (self.host.uuid) {
+            [[StreamingSessionManager shared] focusStreamWindowForHost:self.host.uuid];
+        }
     } onDisconnect:^{
         [weakSelf presentStreamingDisconnectOptions];
     }];
@@ -280,7 +314,7 @@ const CGFloat scaleBase = 1.125;
 
 - (void)presentStreamingDisconnectOptions {
     StreamingSessionManager *manager = [StreamingSessionManager shared];
-    if (manager.state != StreamingStateStreaming) {
+    if (!self.host.uuid || ![manager isStreamingHost:self.host.uuid]) {
         return;
     }
 
@@ -298,9 +332,9 @@ const CGFloat scaleBase = 1.125;
 
     [alert beginSheetModalForWindow:window completionHandler:^(NSModalResponse returnCode) {
         if (returnCode == NSAlertFirstButtonReturn) {
-            [[StreamingSessionManager shared] requestDisconnectWithQuitApp:NO];
+            [[StreamingSessionManager shared] requestDisconnectWithQuitApp:NO hostUUID:self.host.uuid];
         } else if (returnCode == NSAlertSecondButtonReturn) {
-            [[StreamingSessionManager shared] requestDisconnectWithQuitApp:YES];
+            [[StreamingSessionManager shared] requestDisconnectWithQuitApp:YES hostUUID:self.host.uuid];
         }
     }];
 }
@@ -425,6 +459,38 @@ const CGFloat scaleBase = 1.125;
     NSDictionary *settings = [SettingsClass getSettingsFor:self.host.uuid];
     NSString *method = settings[@"connectionMethod"];
 
+    NSString* (^bestKnownAddress)(void) = ^NSString* {
+        if (self.host.activeAddress.length > 0) {
+            return self.host.activeAddress;
+        }
+
+        NSArray<NSString *> *candidates = @[ self.host.localAddress ?: @"",
+                                             self.host.address ?: @"",
+                                             self.host.externalAddress ?: @"",
+                                             self.host.ipv6Address ?: @"" ];
+        NSString *bestAddr = nil;
+        NSInteger bestLatency = NSIntegerMax;
+
+        for (NSString *addr in candidates) {
+            if (addr.length == 0) continue;
+            NSNumber *state = self.host.addressStates[addr];
+            BOOL online = state ? (state.intValue == 1) : YES;
+            if (!online) continue;
+
+            NSNumber *latency = self.host.addressLatencies[addr];
+            if (latency != nil && latency.intValue >= 0) {
+                if (latency.intValue < bestLatency) {
+                    bestLatency = latency.intValue;
+                    bestAddr = addr;
+                }
+            } else if (bestAddr == nil) {
+                bestAddr = addr;
+            }
+        }
+
+        return bestAddr;
+    };
+
     NSString* (^addressLabel)(NSString*) = ^NSString* (NSString* addr) {
         if (!addr) {
             return NSLocalizedString(@"Unknown", nil);
@@ -449,7 +515,8 @@ const CGFloat scaleBase = 1.125;
         displaySubtitle = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"Manual", nil), addressLabel(method)];
     } else {
         // Auto route: show activeAddress chosen by routing
-        displaySubtitle = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"Auto", nil), addressLabel(self.host.activeAddress)];
+        NSString *autoAddr = bestKnownAddress();
+        displaySubtitle = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"Auto", nil), addressLabel(autoAddr)];
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -1054,6 +1121,15 @@ static const CGFloat runningAnimationDuration = 1.0;
 
 - (void)discoverAppsForHost:(TemporaryHost *)host {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        if (host.activeAddress == nil || host.activeAddress.length == 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.host.uuid isEqualToString:host.uuid]) {
+                    [self requestHostRefresh];
+                }
+            });
+            return;
+        }
+
         NSString *uniqueId = [IdManager getUniqueId];
         
         AppListResponse* appListResp = [ConnectionHelper getAppListForHostWithHostIP:host.activeAddress serverCert:host.serverCert uniqueID:uniqueId];

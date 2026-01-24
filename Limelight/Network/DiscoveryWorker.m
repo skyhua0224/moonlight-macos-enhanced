@@ -22,6 +22,13 @@
 }
 
 static const float POLL_RATE = 2.0f; // Poll every 2 seconds
+static const NSTimeInterval ADDRESS_FAILURE_COOLDOWN_SEC = 30.0;
+static NSMutableDictionary<NSString*, NSMutableDictionary<NSString*, NSNumber*>*> *gAddressCooldownByHost = nil;
+static NSObject *gAddressCooldownLock = nil;
+static const double AUTO_SWITCH_PING_IMPROVEMENT_MS = 20.0;
+static const NSTimeInterval AUTO_SWITCH_COOLDOWN_SEC = 30.0;
+static NSMutableDictionary<NSString*, NSNumber*> *gAutoSwitchCooldownByHost = nil;
+static NSObject *gAutoSwitchCooldownLock = nil;
 
 - (id) initWithHost:(TemporaryHost*)host uniqueId:(NSString*)uniqueId {
     self = [super init];
@@ -76,10 +83,90 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
     return [orderedSet array];
 }
 
+- (BOOL)shouldBypassCooldownForAddress:(NSString *)address {
+    if (address.length == 0) {
+        return NO;
+    }
+    if (_host.activeAddress != nil && [_host.activeAddress isEqualToString:address]) {
+        return YES;
+    }
+    return NO;
+}
+
+- (BOOL)shouldSkipAddressDueToCooldown:(NSString *)address {
+    if (address.length == 0) {
+        return YES;
+    }
+    if ([self shouldBypassCooldownForAddress:address]) {
+        return NO;
+    }
+
+    if (gAddressCooldownByHost == nil) {
+        gAddressCooldownByHost = [NSMutableDictionary dictionary];
+    }
+    if (gAddressCooldownLock == nil) {
+        gAddressCooldownLock = [[NSObject alloc] init];
+    }
+
+    NSString *hostUUID = _host.uuid ?: @"";
+    if (hostUUID.length == 0) {
+        return NO;
+    }
+
+    NSTimeInterval now = CFAbsoluteTimeGetCurrent();
+    @synchronized (gAddressCooldownLock) {
+        NSMutableDictionary<NSString*, NSNumber*> *hostMap = gAddressCooldownByHost[hostUUID];
+        if (!hostMap) {
+            return NO;
+        }
+        NSNumber *nextAllowed = hostMap[address];
+        if (!nextAllowed) {
+            return NO;
+        }
+        if (now < nextAllowed.doubleValue) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (void)recordAddress:(NSString *)address success:(BOOL)success {
+    if (address.length == 0) {
+        return;
+    }
+
+    if (gAddressCooldownByHost == nil) {
+        gAddressCooldownByHost = [NSMutableDictionary dictionary];
+    }
+    if (gAddressCooldownLock == nil) {
+        gAddressCooldownLock = [[NSObject alloc] init];
+    }
+
+    NSString *hostUUID = _host.uuid ?: @"";
+    if (hostUUID.length == 0) {
+        return;
+    }
+
+    NSTimeInterval now = CFAbsoluteTimeGetCurrent();
+    @synchronized (gAddressCooldownLock) {
+        NSMutableDictionary<NSString*, NSNumber*> *hostMap = gAddressCooldownByHost[hostUUID];
+        if (!hostMap) {
+            hostMap = [NSMutableDictionary dictionary];
+            gAddressCooldownByHost[hostUUID] = hostMap;
+        }
+        if (success) {
+            [hostMap removeObjectForKey:address];
+        } else {
+            hostMap[address] = @(now + ADDRESS_FAILURE_COOLDOWN_SEC);
+        }
+    }
+}
+
 - (void) discoverHost {
     NSArray *addresses = [self getHostAddressList];
+    NSMutableArray<NSString *> *filteredAddresses = [addresses mutableCopy];
     
-    Log(LOG_D, @"%@ has %d unique addresses", _host.name, [addresses count]);
+    Log(LOG_D, @"%@ has %d unique addresses", _host.name, [filteredAddresses count]);
     
     dispatch_group_t group = dispatch_group_create();
     NSMutableDictionary *latencies = [[NSMutableDictionary alloc] init];
@@ -90,9 +177,9 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
     __block double minLatency = DBL_MAX;
     __block NSString *bestAddress = nil;
     __block ServerInfoResponse *bestResp = nil;
-    
+
     __weak typeof(self) weakSelf = self;
-    for (NSString *address in addresses) {
+    for (NSString *address in filteredAddresses) {
         if (self.cancelled) break;
         
         dispatch_group_enter(group);
@@ -126,8 +213,10 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
                     bestAddress = address;
                     bestResp = serverInfoResp;
                 }
+                [strongSelf recordAddress:address success:YES];
             } else {
                 [states setObject:@(0) forKey:address];
+                [strongSelf recordAddress:address success:NO];
             }
             [lock unlock];
             
@@ -144,13 +233,26 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
     }
     
     if (self.cancelled) return;
-    
+
     _host.addressLatencies = latencies;
     _host.addressStates = states;
-    
+
     // Check if this host is currently streaming
-    BOOL isStreamingThisHost = [[StreamingSessionManager shared].activeHostUUID isEqualToString:_host.uuid] &&
-                               [StreamingSessionManager shared].state == StreamingStateStreaming;
+    BOOL isStreamingThisHost = [[StreamingSessionManager shared] isStreamingHost:_host.uuid];
+
+    NSString *firstOnlineAddress = nil;
+    int onlineCount = 0;
+    for (NSString *addr in filteredAddresses) {
+        NSNumber *state = states[addr];
+        if (state && state.intValue == 1) {
+            onlineCount++;
+            if (!firstOnlineAddress) {
+                firstOnlineAddress = addr;
+            }
+        }
+    }
+    int totalCount = (int)filteredAddresses.count;
+    int offlineCount = totalCount - onlineCount;
 
     if (receivedResponse) {
         _host.state = StateOnline;
@@ -162,12 +264,69 @@ static const float POLL_RATE = 2.0f; // Poll every 2 seconds
     } else {
         _host.state = StateOffline;
     }
-    
+
     if (receivedResponse && bestResp) {
         [bestResp populateHost:_host];
-        _host.activeAddress = bestAddress;
+        if (firstOnlineAddress != nil) {
+            _host.activeAddress = firstOnlineAddress;
+        } else if (bestAddress != nil) {
+            _host.activeAddress = bestAddress;
+        }
 
         Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t ipv6Address:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n\t latency:%f ms\n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.ipv6Address, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress, minLatency);
+    }
+
+    if (totalCount > 0) {
+        if (onlineCount > 0) {
+            Log(LOG_I, @"Discovery summary for %@: %d/%d online", _host.name, onlineCount, totalCount);
+        } else {
+            Log(LOG_W, @"Discovery summary for %@: %d online, %d offline", _host.name, onlineCount, offlineCount);
+        }
+    }
+
+    // Auto-switch to a significantly lower-latency address (>= 20ms improvement)
+    if (receivedResponse && !isStreamingThisHost && bestAddress != nil && _host.activeAddress != nil) {
+        if (![bestAddress isEqualToString:_host.activeAddress]) {
+            NSNumber *currentLatency = latencies[_host.activeAddress];
+            NSNumber *bestLatency = latencies[bestAddress];
+            if (currentLatency && bestLatency && (currentLatency.doubleValue - bestLatency.doubleValue) >= AUTO_SWITCH_PING_IMPROVEMENT_MS) {
+                if (gAutoSwitchCooldownByHost == nil) {
+                    gAutoSwitchCooldownByHost = [NSMutableDictionary dictionary];
+                }
+                if (gAutoSwitchCooldownLock == nil) {
+                    gAutoSwitchCooldownLock = [[NSObject alloc] init];
+                }
+
+                NSString *hostUUID = _host.uuid ?: @"";
+                NSTimeInterval now = CFAbsoluteTimeGetCurrent();
+                BOOL canSwitch = YES;
+                @synchronized (gAutoSwitchCooldownLock) {
+                    NSNumber *nextAllowed = gAutoSwitchCooldownByHost[hostUUID];
+                    if (nextAllowed && now < nextAllowed.doubleValue) {
+                        canSwitch = NO;
+                    } else if (hostUUID.length > 0) {
+                        gAutoSwitchCooldownByHost[hostUUID] = @(now + AUTO_SWITCH_COOLDOWN_SEC);
+                    }
+                }
+
+                if (canSwitch) {
+                    NSString *oldAddress = _host.activeAddress;
+                    _host.activeAddress = bestAddress;
+                    Log(LOG_I, @"Auto-switched %@ from %@ (%.0fms) to %@ (%.0fms)", _host.name, oldAddress, currentLatency.doubleValue, bestAddress, bestLatency.doubleValue);
+
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [[NSNotificationCenter defaultCenter] postNotificationName:@"HostAutoAddressSwitched" object:nil userInfo:@{
+                            @"uuid": _host.uuid ?: @"",
+                            @"hostName": _host.name ?: @"",
+                            @"oldAddress": oldAddress ?: @"",
+                            @"newAddress": bestAddress ?: @"",
+                            @"oldLatency": currentLatency ?: @(-1),
+                            @"newLatency": bestLatency ?: @(-1)
+                        }];
+                    });
+                }
+            }
+        }
     }
 
     // Persist state changes (including offline) so UI stays in sync

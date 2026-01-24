@@ -22,6 +22,7 @@
 @interface ControllerSupport : NSObject
 @property(nonatomic) BOOL shouldSendInputEvents;
 @property(nonatomic) BOOL gamepadMouseModeEnabled;
+@property(nonatomic, assign) void *inputContext;
 
 - (id)initWithConfig:(StreamConfiguration *)streamConfig
     presenceDelegate:(id<InputPresenceDelegate>)delegate;

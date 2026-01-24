@@ -54,6 +54,8 @@
 "Multi-Controller Mode" = "Multi-Controller Mode";
 "Single" = "Single";
 "Auto" = "Auto";
+"Auto Address Switched Title" = "Auto address switched";
+"Auto Address Switched Message" = "%@ auto-switched from %@ to %@ (%.0fms → %.0fms).";
 "Rumble Controller" = "Rumble Controller";
 "Buttons" = "Buttons";
 "Swap A/B and X/Y Buttons" = "Swap A/B and X/Y Buttons";

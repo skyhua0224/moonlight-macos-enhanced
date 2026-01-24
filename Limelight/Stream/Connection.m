@@ -14,11 +14,15 @@
 #import <AudioUnit/AudioUnit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <VideoToolbox/VideoToolbox.h>
+#import <os/lock.h>
 
 #import <arpa/inet.h>
 
 #include "Limelight.h"
+#include "Limelight-internal.h"
 #include "opus_multistream.h"
+
+#define AUDIO_QUEUE_BUFFERS 4
 
 @interface Connection ()
 #if defined(LI_MIC_CONTROL_START)
@@ -26,6 +30,7 @@
 @property (nonatomic, strong) AVAudioConverter* micConverter;
 @property (nonatomic, strong) AVAudioFormat* micOutputFormat;
 #endif
+- (void)updateVolume;
 @end
 
 @implementation Connection {
@@ -38,15 +43,48 @@
     char _appVersionString[32];
     char _gfeVersionString[32];
     char _rtspSessionUrl[1024];
+
+    ML_CONNECTION_CONTEXT _connectionContext;
+    NSLock *_initLock;
+
+    id<ConnectionCallbacks> _callbacks;
+
+    OpusMSDecoder *_opusDecoder;
+    int _audioBufferEntries;
+    int _audioBufferWriteIndex;
+    int _audioBufferReadIndex;
+    int _audioBufferStride;
+    int _audioSamplesPerFrame;
+    short *_audioCircularBuffer;
+
+    int _channelCount;
+    float _audioVolumeMultiplier;
+    NSString *_hostAddress;
+    int _currentUpscalingMode;
+
+    AudioQueueRef _audioQueue;
+    AudioQueueBufferRef _audioBuffers[AUDIO_QUEUE_BUFFERS];
+
+#if defined(LI_MIC_CONTROL_START)
+    dispatch_queue_t _micQueue;
+    OpusMSEncoder* _micEncoder;
+    NSMutableData* _micPcmQueue;
+    uint16_t _micSeq;
+    uint32_t _micTimestamp;
+    uint32_t _micSsrc;
+    int _micSendFailures;
+    BOOL _micStopping;
+#endif
 }
 
 @synthesize renderer = _renderer;
 
-static NSLock* initLock;
-static OpusMSDecoder* opusDecoder;
-static id<ConnectionCallbacks> _callbacks;
-
-static Connection* activeConnection;
+static NSMutableDictionary<NSValue*, Connection*>* gConnectionMap;
+static dispatch_queue_t gConnectionMapQueue;
+static void *gConnectionMapQueueKey = &gConnectionMapQueueKey;
+static os_unfair_lock gConnectionMapLock = OS_UNFAIR_LOCK_INIT;
+static os_unfair_lock gConnectionLifecycleLock = OS_UNFAIR_LOCK_INIT;
+static void *gMicQueueKey = &gMicQueueKey;
 
 #define OUTPUT_BUS 0
 
@@ -55,35 +93,66 @@ static Connection* activeConnection;
 // FIXME: Maybe we can use a smaller buffer on more modern iOS versions?
 #define CIRCULAR_BUFFER_DURATION 80
 
-static int audioBufferEntries;
-static int audioBufferWriteIndex;
-static int audioBufferReadIndex;
-static int audioBufferStride;
-static int audioSamplesPerFrame;
-static short* audioCircularBuffer;
+// (moved to instance fields)
 
-static int channelCount;
-static float audioVolumeMultiplier = 1.0f;
-static NSString *hostAddress;
-static int currentUpscalingMode = 0;
+static void EnsureConnectionMap(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        gConnectionMap = [NSMutableDictionary dictionary];
+        gConnectionMapQueue = dispatch_queue_create("moonlight.connection.map", DISPATCH_QUEUE_SERIAL);
+        dispatch_queue_set_specific(gConnectionMapQueue, gConnectionMapQueueKey, gConnectionMapQueueKey, NULL);
+    });
+}
 
-#define AUDIO_QUEUE_BUFFERS 4
+static void RegisterConnection(PML_CONNECTION_CONTEXT ctx, Connection* connection) {
+    if (ctx == NULL || connection == nil) {
+        return;
+    }
+    EnsureConnectionMap();
+    NSValue *key = [NSValue valueWithPointer:ctx];
+    os_unfair_lock_lock(&gConnectionMapLock);
+    gConnectionMap[key] = connection;
+    os_unfair_lock_unlock(&gConnectionMapLock);
+}
 
-static AudioQueueRef audioQueue;
-static AudioQueueBufferRef audioBuffers[AUDIO_QUEUE_BUFFERS];
-static VideoDecoderRenderer* renderer;
+static void UnregisterConnection(PML_CONNECTION_CONTEXT ctx) {
+    if (ctx == NULL) {
+        return;
+    }
+    EnsureConnectionMap();
+    NSValue *key = [NSValue valueWithPointer:ctx];
+    os_unfair_lock_lock(&gConnectionMapLock);
+    [gConnectionMap removeObjectForKey:key];
+    os_unfair_lock_unlock(&gConnectionMapLock);
+}
+
+static Connection* ConnectionForContext(PML_CONNECTION_CONTEXT ctx) {
+    if (ctx == NULL) {
+        return nil;
+    }
+    EnsureConnectionMap();
+    NSValue *key = [NSValue valueWithPointer:ctx];
+    __block Connection *conn = nil;
+    os_unfair_lock_lock(&gConnectionMapLock);
+    conn = gConnectionMap[key];
+    os_unfair_lock_unlock(&gConnectionMapLock);
+    return conn;
+}
+
+static Connection* CurrentConnection(void) {
+    return ConnectionForContext(LiGetThreadConnectionContext());
+}
+
++ (Connection *)currentConnection {
+    return CurrentConnection();
+}
 
 static void FillOutputBuffer(void *aqData,
                              AudioQueueRef inAQ,
                              AudioQueueBufferRef inBuffer);
 
 #if defined(LI_MIC_CONTROL_START)
-static dispatch_queue_t micQueue;
-static OpusMSEncoder* micEncoder;
-static NSMutableData* micPcmQueue;
-static uint16_t micSeq;
-static uint32_t micTimestamp;
-static uint32_t micSsrc;
+// (moved to instance fields)
 static const int micSampleRate = 48000;
 static const int micChannels = 1;
 static const int micFrameSize = 960; // 20 ms at 48 kHz
@@ -92,47 +161,66 @@ static const int micBitrate = 64000;
 
 int DrDecoderSetup(int videoFormat, int width, int height, int redrawRate, void* context, int drFlags)
 {
-    [renderer setupWithVideoFormat:videoFormat frameRate:redrawRate upscalingMode:currentUpscalingMode];
+    Connection *conn = context ? (__bridge Connection *)context : CurrentConnection();
+    if (conn == nil) {
+        return -1;
+    }
+    [conn->_renderer setupWithVideoFormat:videoFormat frameRate:redrawRate upscalingMode:conn->_currentUpscalingMode];
     return 0;
 }
 
 void DrStart(void)
 {
-    [renderer start];
+    Connection *conn = CurrentConnection();
+    if (conn != nil) {
+        [conn->_renderer start];
+    }
 }
 
 void DrStop(void)
 {
-    [renderer stop];
-
-    _callbacks = nil;
-    renderer = nil;
+    Connection *conn = CurrentConnection();
+    if (conn != nil) {
+        [conn->_renderer stop];
+        conn->_callbacks = nil;
+        conn->_renderer = nil;
+    }
 }
 
 int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
 {
     // Use the optimized renderer path which includes buffer pooling
-    return [renderer submitDecodeUnit:decodeUnit];
+    Connection *conn = CurrentConnection();
+    if (conn == nil || conn->_renderer == nil) {
+        return DR_OK;
+    }
+    return [conn->_renderer submitDecodeUnit:decodeUnit];
 }
 
 int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusConfig, void* context, int flags)
 {
+    Connection *conn = context ? (__bridge Connection *)context : CurrentConnection();
+    if (conn == nil) {
+        Log(LOG_E, @"ArInit called without connection context");
+        return -1;
+    }
+
     int err;
     AudioChannelLayout channelLayout = {};
     OPUS_MULTISTREAM_CONFIGURATION opusConfig = *originalOpusConfig;
     
     // Initialize the circular buffer
-    audioBufferWriteIndex = audioBufferReadIndex = 0;
-    audioSamplesPerFrame = opusConfig.samplesPerFrame;
-    audioBufferStride = opusConfig.channelCount * opusConfig.samplesPerFrame;
-    audioBufferEntries = CIRCULAR_BUFFER_DURATION / (opusConfig.samplesPerFrame / (opusConfig.sampleRate / 1000));
-    audioCircularBuffer = malloc(audioBufferEntries * audioBufferStride * sizeof(short));
-    if (audioCircularBuffer == NULL) {
+    conn->_audioBufferWriteIndex = conn->_audioBufferReadIndex = 0;
+    conn->_audioSamplesPerFrame = opusConfig.samplesPerFrame;
+    conn->_audioBufferStride = opusConfig.channelCount * opusConfig.samplesPerFrame;
+    conn->_audioBufferEntries = CIRCULAR_BUFFER_DURATION / (opusConfig.samplesPerFrame / (opusConfig.sampleRate / 1000));
+    conn->_audioCircularBuffer = malloc(conn->_audioBufferEntries * conn->_audioBufferStride * sizeof(short));
+    if (conn->_audioCircularBuffer == NULL) {
         Log(LOG_E, @"Error allocating output queue\n");
         return -1;
     }
     
-    channelCount = opusConfig.channelCount;
+    conn->_channelCount = opusConfig.channelCount;
     
     switch (opusConfig.channelCount) {
         case 2:
@@ -159,12 +247,12 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
             abort();
     }
     
-    opusDecoder = opus_multistream_decoder_create(opusConfig.sampleRate,
-                                                  opusConfig.channelCount,
-                                                  opusConfig.streams,
-                                                  opusConfig.coupledStreams,
-                                                  opusConfig.mapping,
-                                                  &err);
+    conn->_opusDecoder = opus_multistream_decoder_create(opusConfig.sampleRate,
+                                                         opusConfig.channelCount,
+                                                         opusConfig.streams,
+                                                         opusConfig.coupledStreams,
+                                                         opusConfig.mapping,
+                                                         &err);
 
 #if TARGET_OS_IPHONE
     // Configure the audio session for our app
@@ -196,30 +284,30 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     audioFormat.mFramesPerPacket = audioFormat.mBytesPerPacket / audioFormat.mBytesPerFrame;
     audioFormat.mReserved = 0;
 
-    status = AudioQueueNewOutput(&audioFormat, FillOutputBuffer, nil, nil, nil, 0, &audioQueue);
+    status = AudioQueueNewOutput(&audioFormat, FillOutputBuffer, (__bridge void *)conn, nil, nil, 0, &conn->_audioQueue);
     if (status != noErr) {
         Log(LOG_E, @"Error allocating output queue: %d\n", status);
         return status;
     }
     
     // We need to specify a channel layout for surround sound configurations
-    status = AudioQueueSetProperty(audioQueue, kAudioQueueProperty_ChannelLayout, &channelLayout, sizeof(channelLayout));
+    status = AudioQueueSetProperty(conn->_audioQueue, kAudioQueueProperty_ChannelLayout, &channelLayout, sizeof(channelLayout));
     if (status != noErr) {
         Log(LOG_E, @"Error configuring surround channel layout: %d\n", status);
         return status;
     }
     
     for (int i = 0; i < AUDIO_QUEUE_BUFFERS; i++) {
-        status = AudioQueueAllocateBuffer(audioQueue, audioFormat.mBytesPerFrame * opusConfig.samplesPerFrame, &audioBuffers[i]);
+        status = AudioQueueAllocateBuffer(conn->_audioQueue, audioFormat.mBytesPerFrame * opusConfig.samplesPerFrame, &conn->_audioBuffers[i]);
         if (status != noErr) {
             Log(LOG_E, @"Error allocating output buffer: %d\n", status);
             return status;
         }
         
-        FillOutputBuffer(nil, audioQueue, audioBuffers[i]);
+        FillOutputBuffer((__bridge void *)conn, conn->_audioQueue, conn->_audioBuffers[i]);
     }
     
-    status = AudioQueueStart(audioQueue, nil);
+    status = AudioQueueStart(conn->_audioQueue, nil);
     if (status != noErr) {
         Log(LOG_E, @"Error starting queue: %d\n", status);
         return status;
@@ -230,22 +318,27 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
 
 void ArCleanup(void)
 {
-    if (opusDecoder != NULL) {
-        opus_multistream_decoder_destroy(opusDecoder);
-        opusDecoder = NULL;
+    Connection *conn = CurrentConnection();
+    if (conn == nil) {
+        return;
+    }
+
+    if (conn->_opusDecoder != NULL) {
+        opus_multistream_decoder_destroy(conn->_opusDecoder);
+        conn->_opusDecoder = NULL;
     }
     
     // Stop before disposing to avoid massive delay inside
     // AudioQueueDispose() (iOS bug?)
-    AudioQueueStop(audioQueue, true);
+    AudioQueueStop(conn->_audioQueue, true);
     
     // Also frees buffers
-    AudioQueueDispose(audioQueue, true);
+    AudioQueueDispose(conn->_audioQueue, true);
     
     // Must be freed after the queue is stopped
-    if (audioCircularBuffer != NULL) {
-        free(audioCircularBuffer);
-        audioCircularBuffer = NULL;
+    if (conn->_audioCircularBuffer != NULL) {
+        free(conn->_audioCircularBuffer);
+        conn->_audioCircularBuffer = NULL;
     }
     
 #if TARGET_OS_IPHONE
@@ -256,21 +349,26 @@ void ArCleanup(void)
 
 void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 {
+    Connection *conn = CurrentConnection();
+    if (conn == nil || conn->_opusDecoder == NULL) {
+        return;
+    }
+
     int decodeLen;
     
     // Check if there is space for this sample in the buffer. Again, this can race
     // but in the worst case, we'll not see the sample callback having consumed a sample.
-    if (((audioBufferWriteIndex + 1) % audioBufferEntries) == audioBufferReadIndex) {
+    if (conn->_audioBufferEntries == 0 || ((conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries) == conn->_audioBufferReadIndex) {
         return;
     }
     
-    decodeLen = opus_multistream_decode(opusDecoder, (unsigned char *)sampleData, sampleLength,
-                                        (short*)&audioCircularBuffer[audioBufferWriteIndex * audioBufferStride], audioSamplesPerFrame, 0);
+    decodeLen = opus_multistream_decode(conn->_opusDecoder, (unsigned char *)sampleData, sampleLength,
+                                        (short*)&conn->_audioCircularBuffer[conn->_audioBufferWriteIndex * conn->_audioBufferStride], conn->_audioSamplesPerFrame, 0);
     if (decodeLen > 0) {
         // Apply volume adjustment to each audio sample
-        short* buffer = &audioCircularBuffer[audioBufferWriteIndex * audioBufferStride];
-        for (int i = 0; i < decodeLen * channelCount; i++) {
-            buffer[i] = (short)(buffer[i] * audioVolumeMultiplier);
+        short* buffer = &conn->_audioCircularBuffer[conn->_audioBufferWriteIndex * conn->_audioBufferStride];
+        for (int i = 0; i < decodeLen * conn->_channelCount; i++) {
+            buffer[i] = (short)(buffer[i] * conn->_audioVolumeMultiplier);
         }
         
         // Use a full memory barrier to ensure the circular buffer is written before incrementing the index
@@ -279,40 +377,55 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         // This can race with the reader in the sample callback, however this is a benign
         // race since we'll either read the original value of s_WriteIndex (which is safe,
         // we just won't consider this sample) or the new value of s_WriteIndex
-        audioBufferWriteIndex = (audioBufferWriteIndex + 1) % audioBufferEntries;
+        conn->_audioBufferWriteIndex = (conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries;
     }
 }
 
 - (void)updateVolume {
-    if (hostAddress != nil) {
-        NSString *uuid = [SettingsClass getHostUUIDFrom:hostAddress];
-        audioVolumeMultiplier = [SettingsClass volumeLevelFor:uuid];
+    if (_hostAddress != nil) {
+        NSString *uuid = [SettingsClass getHostUUIDFrom:_hostAddress];
+        _audioVolumeMultiplier = [SettingsClass volumeLevelFor:uuid];
     }
 }
 
 void ClStageStarting(int stage)
 {
-    [_callbacks stageStarting:LiGetStageName(stage)];
+    Connection *conn = CurrentConnection();
+    if (conn && conn->_callbacks) {
+        [conn->_callbacks stageStarting:LiGetStageName(stage)];
+    }
 }
 
 void ClStageComplete(int stage)
 {
-    [_callbacks stageComplete:LiGetStageName(stage)];
+    Connection *conn = CurrentConnection();
+    if (conn && conn->_callbacks) {
+        [conn->_callbacks stageComplete:LiGetStageName(stage)];
+    }
 }
 
 void ClStageFailed(int stage, int errorCode)
 {
-    [_callbacks stageFailed:LiGetStageName(stage) withError:errorCode];
+    Connection *conn = CurrentConnection();
+    if (conn && conn->_callbacks) {
+        [conn->_callbacks stageFailed:LiGetStageName(stage) withError:errorCode];
+    }
 }
 
 void ClConnectionStarted(void)
 {
-    [_callbacks connectionStarted];
+    Connection *conn = CurrentConnection();
+    if (conn && conn->_callbacks) {
+        [conn->_callbacks connectionStarted];
+    }
 
 #if defined(LI_MIC_CONTROL_START)
     // Start microphone after the stream is fully established
+    Connection *micConn = conn;
     dispatch_async(dispatch_get_main_queue(), ^{
-        [activeConnection startMicrophoneIfNeeded];
+        if (micConn) {
+            [micConn startMicrophoneIfNeeded];
+        }
     });
 #endif
 }
@@ -320,13 +433,19 @@ void ClConnectionStarted(void)
 void ClConnectionTerminated(int errorCode)
 {
 #if defined(LI_MIC_CONTROL_START)
+    Connection *micConn = CurrentConnection();
     // Stopping AVAudioEngine can occasionally block under CoreAudio stress.
     // Keep it off the main thread so UI doesn't appear frozen during disconnect.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [activeConnection stopMicrophoneIfNeeded];
+        if (micConn) {
+            [micConn stopMicrophoneIfNeeded];
+        }
     });
 #endif
-    [_callbacks connectionTerminated: errorCode];
+    Connection *conn = CurrentConnection();
+    if (conn && conn->_callbacks) {
+        [conn->_callbacks connectionTerminated: errorCode];
+    }
 }
 
 void ClLogMessage(const char* format, ...)
@@ -359,12 +478,18 @@ void ClLogMessage(const char* format, ...)
 
 void ClRumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor)
 {
-    [_callbacks rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+    Connection *conn = CurrentConnection();
+    if (conn && conn->_callbacks) {
+        [conn->_callbacks rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+    }
 }
 
 void ClConnectionStatusUpdate(int status)
 {
-    [_callbacks connectionStatusUpdate:status];
+    Connection *conn = CurrentConnection();
+    if (conn && conn->_callbacks) {
+        [conn->_callbacks connectionStatusUpdate:status];
+    }
 }
 
 -(void) terminate
@@ -373,15 +498,25 @@ void ClConnectionStatusUpdate(int status)
     // thread-safe and done outside initLock on purpose, since we
     // won't be able to acquire it if LiStartConnection is in
     // progress.
-    LiInterruptConnection();
+    LiInterruptConnectionCtx(&_connectionContext);
+
+#if defined(LI_MIC_CONTROL_START)
+    // Ensure mic queue is stopped before connection context teardown
+    [self stopMicrophoneIfNeeded];
+#endif
     
     // We dispatch this async to get out because this can be invoked
     // on a thread inside common and we don't want to deadlock. It also avoids
     // blocking on the caller's thread waiting to acquire initLock.
+    // Keep self alive until LiStopConnectionCtx finishes to avoid use-after-free
+    // of the embedded connection context.
+    __strong Connection *strongSelf = self;
+    PML_CONNECTION_CONTEXT ctx = &strongSelf->_connectionContext;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        [initLock lock];
-        LiStopConnection();
-        [initLock unlock];
+        os_unfair_lock_lock(&gConnectionLifecycleLock);
+        LiStopConnectionCtx(ctx);
+        os_unfair_lock_unlock(&gConnectionLifecycleLock);
+        UnregisterConnection(ctx);
     });
 }
 
@@ -393,11 +528,12 @@ void ClConnectionStatusUpdate(int status)
     
     // Use a lock to ensure that only one thread is initializing
     // or deinitializing a connection at a time.
-    if (initLock == nil) {
-        initLock = [[NSLock alloc] init];
+    if (_initLock == nil) {
+        _initLock = [[NSLock alloc] init];
     }
     
-    hostAddress = config.host;
+    _hostAddress = config.host;
+    _audioVolumeMultiplier = 1.0f;
     [self updateVolume];
     
     NSString* cleanHost;
@@ -431,13 +567,16 @@ void ClConnectionStatusUpdate(int status)
         _serverInfo.rtspSessionUrl = _rtspSessionUrl;
     }
 
-    renderer = myRenderer;
     _renderer = myRenderer;
     _callbacks = callbacks;
+    _currentUpscalingMode = config.upscalingMode;
 
-    activeConnection = self;
-    
-    currentUpscalingMode = config.upscalingMode;
+    memset(&_connectionContext, 0, sizeof(_connectionContext));
+    _connectionContext.micContext.micSocket = INVALID_SOCKET;
+    RegisterConnection(&_connectionContext, self);
+    if (_renderer) {
+        _renderer.depacketizerContext = &_connectionContext.videoContext.depacketizerContext;
+    }
 
     LiInitializeStreamConfiguration(&_streamConfig);
     _streamConfig.width = config.width;
@@ -591,6 +730,14 @@ void ClConnectionStatusUpdate(int status)
     return self;
 }
 
+- (void *)inputStreamContext {
+    return LiGetInputContextFromConnectionCtx(&_connectionContext);
+}
+
+- (void *)controlStreamContext {
+    return &_connectionContext.controlContext;
+}
+
 #if defined(LI_MIC_CONTROL_START)
 - (void)startMicrophoneIfNeeded
 {
@@ -598,12 +745,16 @@ void ClConnectionStatusUpdate(int status)
         return;
     }
 
+    _micSendFailures = 0;
+    _micStopping = NO;
+
     // Create encoder/queue once
-    if (micQueue == nil) {
-        micQueue = dispatch_queue_create("moonlight.mic.encode", DISPATCH_QUEUE_SERIAL);
+    if (_micQueue == nil) {
+        _micQueue = dispatch_queue_create("moonlight.mic.encode", DISPATCH_QUEUE_SERIAL);
+        dispatch_queue_set_specific(_micQueue, gMicQueueKey, gMicQueueKey, NULL);
     }
-    if (micPcmQueue == nil) {
-        micPcmQueue = [NSMutableData data];
+    if (_micPcmQueue == nil) {
+        _micPcmQueue = [NSMutableData data];
     }
 
     // Ask for permission on macOS
@@ -632,32 +783,32 @@ void ClConnectionStatusUpdate(int status)
 
     // Tell the host to start accepting microphone packets and which format we'll send.
     // Qt sends this control message; without it the host may ignore UDP mic packets.
-    int micCtlErr = LiSendMicrophoneControl(LI_MIC_CONTROL_START, micSampleRate, micChannels, micBitrate);
+    int micCtlErr = LiSendMicrophoneControlCtx(&_connectionContext.inputContext, LI_MIC_CONTROL_START, micSampleRate, micChannels, micBitrate);
     if (micCtlErr != 0) {
         Log(LOG_W, @"Failed to send microphone START control: %d\n", micCtlErr);
     }
 
     int err = 0;
-    if (micEncoder == NULL) {
+    if (_micEncoder == NULL) {
         unsigned char mapping[1] = { 0 };
-        micEncoder = opus_multistream_encoder_create(micSampleRate,
-                                                     micChannels,
-                                                     1, /* streams */
-                                                     0, /* coupled */
-                                                     mapping,
-                                                     OPUS_APPLICATION_VOIP,
-                                                     &err);
-        if (micEncoder == NULL || err != OPUS_OK) {
+        _micEncoder = opus_multistream_encoder_create(micSampleRate,
+                                                      micChannels,
+                                                      1, /* streams */
+                                                      0, /* coupled */
+                                                      mapping,
+                                                      OPUS_APPLICATION_VOIP,
+                                                      &err);
+        if (_micEncoder == NULL || err != OPUS_OK) {
             Log(LOG_W, @"Failed to create Opus encoder for microphone: %d\n", err);
-            micEncoder = NULL;
+            _micEncoder = NULL;
             return;
         }
 
-        micSeq = 0;
-        micTimestamp = 0;
-        micSsrc = (uint32_t)arc4random();
+        _micSeq = 0;
+        _micTimestamp = 0;
+        _micSsrc = (uint32_t)arc4random();
 
-        opus_multistream_encoder_ctl(micEncoder, OPUS_SET_BITRATE(micBitrate));
+        opus_multistream_encoder_ctl(_micEncoder, OPUS_SET_BITRATE(micBitrate));
     }
 
     self.micAudioEngine = [[AVAudioEngine alloc] init];
@@ -692,8 +843,8 @@ void ClConnectionStatusUpdate(int status)
         }
 
         NSData* chunk = [NSData dataWithBytes:ab.mData length:(NSUInteger)ab.mDataByteSize];
-        dispatch_async(micQueue, ^{
-            [micPcmQueue appendData:chunk];
+        dispatch_async(self->_micQueue, ^{
+            [self->_micPcmQueue appendData:chunk];
             [strongSelf drainMicPcmAndSend];
         });
     }];
@@ -709,54 +860,83 @@ void ClConnectionStatusUpdate(int status)
 
 - (void)drainMicPcmAndSend
 {
-    if (micEncoder == NULL) {
+    if (_micEncoder == NULL || _micStopping || !_streamConfig.enableMic) {
         return;
     }
+
+    // Ensure common-c uses this connection context on the mic queue
+    LiSetThreadConnectionContext(&_connectionContext);
 
     const NSUInteger bytesPerFrame = sizeof(int16_t) * micChannels;
     const NSUInteger packetPcmBytes = (NSUInteger)micFrameSize * bytesPerFrame;
 
-    while (micPcmQueue.length >= packetPcmBytes) {
-        const int16_t* pcm = (const int16_t*)micPcmQueue.bytes;
+    while (_micPcmQueue.length >= packetPcmBytes) {
+        const int16_t* pcm = (const int16_t*)_micPcmQueue.bytes;
 
         unsigned char opusPayload[1500];
-        int opusLen = opus_multistream_encode(micEncoder, pcm, micFrameSize, opusPayload, (opus_int32)sizeof(opusPayload));
+        int opusLen = opus_multistream_encode(_micEncoder, pcm, micFrameSize, opusPayload, (opus_int32)sizeof(opusPayload));
         if (opusLen > 0) {
             // RTP header (V=2, PT=97) + Opus payload
             unsigned char packet[12 + 1500];
             packet[0] = 0x80;
             packet[1] = 0x61;
-            *(uint16_t*)(packet + 2) = htons(micSeq++);
-            *(uint32_t*)(packet + 4) = htonl(micTimestamp);
-            *(uint32_t*)(packet + 8) = htonl(micSsrc);
+            *(uint16_t*)(packet + 2) = htons(_micSeq++);
+            *(uint32_t*)(packet + 4) = htonl(_micTimestamp);
+            *(uint32_t*)(packet + 8) = htonl(_micSsrc);
             memcpy(packet + 12, opusPayload, (size_t)opusLen);
 
             int sent = sendMicrophoneData((const char*)packet, 12 + opusLen);
             if (sent < 0) {
-                // Log errors, but keep running to tolerate transient network issues.
-                Log(LOG_W, @"sendMicrophoneData failed: %d\n", sent);
+                _micSendFailures++;
+                // If the mic stream isn't available (socket/context invalid), stop to avoid spam.
+                if (sent == -1 || _micSendFailures >= 5) {
+                    Log(LOG_W, @"sendMicrophoneData failed: %d (stopping mic)\n", sent);
+                    _streamConfig.enableMic = NO;
+                    [self stopMicrophoneIfNeeded];
+                    return;
+                }
+            } else {
+                _micSendFailures = 0;
             }
-            micTimestamp += micFrameSize;
+            _micTimestamp += micFrameSize;
         }
 
         // Pop consumed PCM
-        [micPcmQueue replaceBytesInRange:NSMakeRange(0, packetPcmBytes) withBytes:NULL length:0];
+        [_micPcmQueue replaceBytesInRange:NSMakeRange(0, packetPcmBytes) withBytes:NULL length:0];
     }
 }
 
 - (void)stopMicrophoneIfNeeded
 {
+    _micStopping = YES;
     if (self.micAudioEngine != nil) {
         [self.micAudioEngine.inputNode removeTapOnBus:0];
         [self.micAudioEngine stop];
         self.micAudioEngine = nil;
     }
 
-    dispatch_async(micQueue ?: dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [micPcmQueue setLength:0];
-    });
+    _micSendFailures = 0;
+    if (_micEncoder != NULL) {
+        opus_multistream_encoder_destroy(_micEncoder);
+        _micEncoder = NULL;
+    }
 
-    LiSendMicrophoneControl(LI_MIC_CONTROL_STOP, 0, 0, 0);
+    dispatch_block_t clearBlock = ^{
+        [self->_micPcmQueue setLength:0];
+    };
+    if (_micQueue != nil) {
+        if (dispatch_get_specific(gMicQueueKey) == gMicQueueKey) {
+            clearBlock();
+        } else {
+            dispatch_sync(_micQueue, clearBlock);
+        }
+    } else {
+        clearBlock();
+    }
+
+    _micQueue = nil;
+
+    LiSendMicrophoneControlCtx(&_connectionContext.inputContext, LI_MIC_CONTROL_STOP, 0, 0, 0);
 
     destroyMicrophoneStream();
 }
@@ -765,8 +945,9 @@ void ClConnectionStatusUpdate(int status)
 static void FillOutputBuffer(void *aqData,
                              AudioQueueRef inAQ,
                              AudioQueueBufferRef inBuffer) {
-    UInt32 bytesPerBuffer = (audioBufferStride > 0) ? (UInt32)(audioBufferStride * sizeof(short)) : 0;
-    if (bytesPerBuffer == 0 || audioCircularBuffer == NULL || audioBufferEntries == 0) {
+    Connection *conn = (__bridge Connection *)aqData;
+    UInt32 bytesPerBuffer = (conn && conn->_audioBufferStride > 0) ? (UInt32)(conn->_audioBufferStride * sizeof(short)) : 0;
+    if (conn == nil || bytesPerBuffer == 0 || conn->_audioCircularBuffer == NULL || conn->_audioBufferEntries == 0) {
         bytesPerBuffer = MIN(inBuffer->mAudioDataBytesCapacity, bytesPerBuffer);
         inBuffer->mAudioDataByteSize = bytesPerBuffer;
         if (bytesPerBuffer > 0) {
@@ -783,10 +964,10 @@ static void FillOutputBuffer(void *aqData,
     inBuffer->mAudioDataByteSize = bytesPerBuffer;
     
     // If the indexes aren't equal, we have a sample
-    if (audioBufferWriteIndex != audioBufferReadIndex) {
+    if (conn->_audioBufferWriteIndex != conn->_audioBufferReadIndex) {
         // Copy data to the audio buffer
          memcpy(inBuffer->mAudioData,
-             &audioCircularBuffer[audioBufferReadIndex * audioBufferStride],
+             &conn->_audioCircularBuffer[conn->_audioBufferReadIndex * conn->_audioBufferStride],
              inBuffer->mAudioDataByteSize);
         
         // Use a full memory barrier to ensure the circular buffer is read before incrementing the index
@@ -794,7 +975,7 @@ static void FillOutputBuffer(void *aqData,
         
         // This can race with the reader in the AudDecDecodeAndPlaySample function. This is
         // not a problem because at worst, it just won't see that we've consumed this sample yet.
-        audioBufferReadIndex = (audioBufferReadIndex + 1) % audioBufferEntries;
+        conn->_audioBufferReadIndex = (conn->_audioBufferReadIndex + 1) % conn->_audioBufferEntries;
     }
     else {
         // No data, so play silence
@@ -806,15 +987,18 @@ static void FillOutputBuffer(void *aqData,
 
 -(void) main
 {
-    [initLock lock];
-    LiStartConnection(&_serverInfo,
-                      &_streamConfig,
-                      &_clCallbacks,
-                      &_drCallbacks,
-                      &_arCallbacks,
-                      NULL, 0,
-                      NULL, 0);
-    [initLock unlock];
+    os_unfair_lock_lock(&gConnectionLifecycleLock);
+    LiSetThreadConnectionContext(&_connectionContext);
+    Log(LOG_I, @"LiStartConnectionCtx: connCtx=%p globalCtx=%p inputCtx=%p", &_connectionContext, LiGetGlobalConnectionContextPtr(), LiGetInputContextFromConnectionCtx(&_connectionContext));
+    LiStartConnectionCtx(&_connectionContext,
+                         &_serverInfo,
+                         &_streamConfig,
+                         &_clCallbacks,
+                         &_drCallbacks,
+                         &_arCallbacks,
+                         (__bridge void *)self, 0,
+                         (__bridge void *)self, 0);
+    os_unfair_lock_unlock(&gConnectionLifecycleLock);
 }
 
 @end

@@ -29,6 +29,7 @@
 #define MLString(key, comment) [[LanguageManager shared] localize:key]
 
 #include "Limelight.h"
+#include "Limelight-internal.h"
 
 @import VideoToolbox;
 
@@ -149,6 +150,9 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 @property (nonatomic, strong) NSTrackingArea *mouseTrackingArea;
 @property (nonatomic) BOOL isMouseInsideView;
 
+@property (nonatomic, strong) id activeSpaceDidChangeObserver;
+@property (nonatomic) BOOL spaceTransitionInProgress;
+
 @end
 
 @implementation StreamViewController
@@ -193,6 +197,12 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 }
 
 - (void)enterBorderlessPresentationOptionsIfNeeded {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self enterBorderlessPresentationOptionsIfNeeded];
+        });
+        return;
+    }
     if (!self.savedPresentationOptionsValid) {
         self.savedPresentationOptions = [NSApp presentationOptions];
         self.savedPresentationOptionsValid = YES;
@@ -204,6 +214,12 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 }
 
 - (void)restorePresentationOptionsIfNeeded {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self restorePresentationOptionsIfNeeded];
+        });
+        return;
+    }
     if (!self.savedPresentationOptionsValid) {
         return;
     }
@@ -297,6 +313,34 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
             [weakSelf beginStopStreamIfNeededWithReason:@"window-will-close"]; 
         }
     }];
+
+    self.activeSpaceDidChangeObserver = [[[NSWorkspace sharedWorkspace] notificationCenter]
+        addObserverForName:NSWorkspaceActiveSpaceDidChangeNotification
+                    object:nil
+                     queue:[NSOperationQueue mainQueue]
+                usingBlock:^(NSNotification *note) {
+        __strong typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+        if (strongSelf.stopStreamInProgress || strongSelf.reconnectInProgress) {
+            return;
+        }
+        strongSelf.spaceTransitionInProgress = YES;
+        [strongSelf uncaptureMouse];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (!strongSelf) {
+                return;
+            }
+            strongSelf.spaceTransitionInProgress = NO;
+            if (strongSelf.stopStreamInProgress || strongSelf.reconnectInProgress) {
+                return;
+            }
+            if ([strongSelf isWindowInCurrentSpace] && [strongSelf isWindowFullscreen] && strongSelf.view.window.isKeyWindow) {
+                [strongSelf captureMouse];
+            }
+        });
+    }];
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleMouseModeToggledNotification:) name:HIDMouseModeToggledNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleGamepadQuitNotification:) name:HIDGamepadQuitNotification object:nil];
@@ -308,6 +352,11 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 }
 
 - (void)handleSessionDisconnectRequest:(NSNotification *)note {
+    NSString *hostUUID = note.userInfo[@"hostUUID"];
+    if (hostUUID && self.app.host.uuid && ![hostUUID isEqualToString:self.app.host.uuid]) {
+        return;
+    }
+
     NSNumber *quitApp = note.userInfo[@"quitApp"];
     if (quitApp != nil) {
         if (quitApp.boolValue) {
@@ -380,6 +429,9 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 }
 
 - (void)showErrorOverlayWithTitle:(NSString *)title message:(NSString *)message canWait:(BOOL)canWait {
+    // 显示弹窗时释放键鼠捕获，让用户可以自由移动鼠标点击按钮
+    [self uncaptureMouse];
+
     if (!self.timeoutOverlayContainer) {
         NSVisualEffectView *container = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
         container.material = NSVisualEffectMaterialHUDWindow;
@@ -721,6 +773,11 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         self.stopStreamInProgress = YES;
     }
 
+    self.hidSupport.shouldSendInputEvents = NO;
+    self.controllerSupport.shouldSendInputEvents = NO;
+    self.hidSupport.inputContext = NULL;
+    self.controllerSupport.inputContext = NULL;
+
     [self broadcastHostOnlineStateForExit];
 
     // If we are closing while in borderless, ensure we restore system UI state and window constraints.
@@ -759,9 +816,9 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
         [strongSelf.streamMan stopStream];
         Log(LOG_I, @"Stream stop took %.3fs (total %.3fs)", CACurrentMediaTime() - stopStart, CACurrentMediaTime() - start);
 
-        // Ensure global streaming state is cleared even if we don't receive a termination callback
-        if ([StreamingSessionManager shared].state != StreamingStateIdle) {
-            [[StreamingSessionManager shared] didDisconnect];
+        // Ensure streaming state is cleared for this host even if we don't receive a termination callback
+        if (self.app.host.uuid) {
+            [[StreamingSessionManager shared] didDisconnectForHost:self.app.host.uuid];
         }
 
         if (completion) {
@@ -909,6 +966,11 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     [[NSNotificationCenter defaultCenter] removeObserver:self name:HIDMouseModeToggledNotification object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:HIDGamepadQuitNotification object:nil];
 
+    if (self.activeSpaceDidChangeObserver) {
+        [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self.activeSpaceDidChangeObserver];
+        self.activeSpaceDidChangeObserver = nil;
+    }
+
     if (self.settingsDidChangeObserver) {
         [[NSNotificationCenter defaultCenter] removeObserver:self.settingsDidChangeObserver];
         self.settingsDidChangeObserver = nil;
@@ -1022,7 +1084,7 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 - (void)mouseEntered:(NSEvent *)event {
     self.isMouseInsideView = YES;
     // In remote desktop mode, re-enable input when mouse enters the view
-    if (self.isRemoteDesktopMode && self.isMouseCaptured) {
+    if (self.isRemoteDesktopMode && !self.isMouseCaptured) {
         self.hidSupport.shouldSendInputEvents = YES;
     }
 }
@@ -1030,7 +1092,7 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 - (void)mouseExited:(NSEvent *)event {
     self.isMouseInsideView = NO;
     // In remote desktop mode, disable input when mouse leaves the view
-    if (self.isRemoteDesktopMode) {
+    if (self.isRemoteDesktopMode && !self.isMouseCaptured) {
         self.hidSupport.shouldSendInputEvents = NO;
     }
 }
@@ -1299,9 +1361,27 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 #pragma mark - Helpers
 
 - (void)enableMenuItems:(BOOL)enable {
-    NSMenu *appMenu = [[NSApplication sharedApplication].mainMenu itemWithTag:1000].submenu;
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self enableMenuItems:enable];
+        });
+        return;
+    }
+
+    NSMenu *mainMenu = [NSApplication sharedApplication].mainMenu;
+    if (!mainMenu) {
+        return;
+    }
+    NSMenuItem *appMenuItem = [mainMenu itemWithTag:1000];
+    NSMenu *appMenu = appMenuItem.submenu;
+    if (!appMenu) {
+        return;
+    }
     appMenu.autoenablesItems = enable;
-    [self itemWithMenu:appMenu andAction:@selector(terminate:)].enabled = enable;
+    NSMenuItem *terminateItem = [self itemWithMenu:appMenu andAction:@selector(terminate:)];
+    if (terminateItem) {
+        terminateItem.enabled = enable;
+    }
 }
 
 #pragma mark - Stream Menu Entrypoints
@@ -1351,7 +1431,35 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     if (method && ![method isEqualToString:@"Auto"]) {
         return method;
     }
-    return self.app.host.activeAddress;
+    if (self.app.host.activeAddress.length > 0) {
+        return self.app.host.activeAddress;
+    }
+
+    NSArray<NSString *> *candidates = @[ self.app.host.localAddress ?: @"",
+                                         self.app.host.address ?: @"",
+                                         self.app.host.externalAddress ?: @"",
+                                         self.app.host.ipv6Address ?: @"" ];
+    NSString *bestAddr = nil;
+    NSInteger bestLatency = NSIntegerMax;
+
+    for (NSString *addr in candidates) {
+        if (addr.length == 0) continue;
+        NSNumber *state = self.app.host.addressStates[addr];
+        BOOL online = state ? (state.intValue == 1) : YES;
+        if (!online) continue;
+
+        NSNumber *latency = self.app.host.addressLatencies[addr];
+        if (latency != nil && latency.intValue >= 0) {
+            if (latency.intValue < bestLatency) {
+                bestLatency = latency.intValue;
+                bestAddr = addr;
+            }
+        } else if (bestAddr == nil) {
+            bestAddr = addr;
+        }
+    }
+
+    return bestAddr;
 }
 
 - (NSInteger)currentLatencyMs {
@@ -1359,7 +1467,8 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     if ([self hasReceivedAnyVideoFrames]) {
         uint32_t rtt = 0;
         uint32_t rttVar = 0;
-        if (LiGetEstimatedRttInfo(&rtt, &rttVar) == 0) {
+        PML_CONTROL_STREAM_CONTEXT controlCtx = self.streamMan.connection ? (PML_CONTROL_STREAM_CONTEXT)[self.streamMan.connection controlStreamContext] : NULL;
+        if (controlCtx && LiGetEstimatedRttInfoCtx(controlCtx, &rtt, &rttVar)) {
             return (NSInteger)rtt;
         }
     }
@@ -1478,6 +1587,12 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 }
 
 - (void)updateStreamMenuEntrypointsVisibility {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self updateStreamMenuEntrypointsVisibility];
+        });
+        return;
+    }
     if (!self.view.window) {
         return;
     }
@@ -1767,6 +1882,12 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
 }
 
 - (void)rebuildStreamMenu {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self rebuildStreamMenu];
+        });
+        return;
+    }
     if (!self.streamMenu) {
         self.streamMenu = [[NSMenu alloc] initWithTitle:@"StreamMenu"];
     }
@@ -2603,7 +2724,33 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 }
 
 - (void)captureMouse {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self captureMouse];
+        });
+        return;
+    }
     if (self.isMouseCaptured) {
+        return;
+    }
+
+    if (self.stopStreamInProgress || self.reconnectInProgress) {
+        return;
+    }
+
+    if (self.spaceTransitionInProgress) {
+        return;
+    }
+
+    NSWindow *window = self.view.window;
+    if (!window) {
+        return;
+    }
+    if (![self isWindowInCurrentSpace]) {
+        return;
+    }
+    NSScreen *screen = window.screen;
+    if (!screen) {
         return;
     }
 
@@ -2622,8 +2769,11 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
         if (!self.isRemoteDesktopMode) {
             CGAssociateMouseAndMouseCursorPosition(NO);
             CGRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
-            CGRect rectInScreen = [self.view.window convertRectToScreen:rectInWindow];
-            CGFloat screenHeight = self.view.window.screen.frame.size.height;
+            CGRect rectInScreen = [window convertRectToScreen:rectInWindow];
+            CGFloat screenHeight = screen.frame.size.height;
+            if (screenHeight <= 0) {
+                return;
+            }
             CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
             CGWarpMouseCursorPosition(cursorPoint);
         }
@@ -2633,12 +2783,8 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 
     [self disallowDisplaySleep];
 
-    // In remote desktop mode, only enable input if mouse is inside the view
-    if (self.isRemoteDesktopMode) {
-        self.hidSupport.shouldSendInputEvents = self.isMouseInsideView;
-    } else {
-        self.hidSupport.shouldSendInputEvents = YES;
-    }
+    // Always enable input when capture is active to avoid accidental lockout
+    self.hidSupport.shouldSendInputEvents = YES;
     self.controllerSupport.shouldSendInputEvents = YES;
     self.view.window.acceptsMouseMovedEvents = YES;
 
@@ -2646,7 +2792,17 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 }
 
 - (void)uncaptureMouse {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self uncaptureMouse];
+        });
+        return;
+    }
     if (!self.isMouseCaptured && self.cursorHiddenCounter == 0 && !self.hidSupport.shouldSendInputEvents) {
+        return;
+    }
+
+    if (!self.view.window) {
         return;
     }
 
@@ -2692,8 +2848,14 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 }
 
 - (BOOL)isWindowInCurrentSpace {
+    if (!self.view.window) {
+        return NO;
+    }
     BOOL found = NO;
     CFArrayRef windowsInSpace = CGWindowListCopyWindowInfo(kCGWindowListOptionAll | kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+    if (windowsInSpace == NULL) {
+        return NO;
+    }
     for (NSDictionary *thisWindow in (__bridge NSArray *)windowsInSpace) {
         NSNumber *thisWindowNumber = (NSNumber *)thisWindow[(__bridge NSString *)kCGWindowNumber];
         if (self.view.window.windowNumber == thisWindowNumber.integerValue) {
@@ -2701,9 +2863,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
             break;
         }
     }
-    if (windowsInSpace != NULL) {
-        CFRelease(windowsInSpace);
-    }
+    CFRelease(windowsInSpace);
     return found;
 }
 
@@ -3261,7 +3421,10 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     
     uint32_t rtt = 0;
     uint32_t rttVar = 0;
-    LiGetEstimatedRttInfo(&rtt, &rttVar);
+    PML_CONTROL_STREAM_CONTEXT controlCtx = self.streamMan.connection ? (PML_CONTROL_STREAM_CONTEXT)[self.streamMan.connection controlStreamContext] : NULL;
+    if (controlCtx) {
+        LiGetEstimatedRttInfoCtx(controlCtx, &rtt, &rttVar);
+    }
     
     float loss = stats.totalFrames > 0 ? (float)stats.networkDroppedFrames / stats.totalFrames * 100.0f : 0;
     float jitter = stats.jitterMs;
@@ -3371,15 +3534,77 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 }
 
 - (void)stageComplete:(const char *)stageName {
+    if (stageName == NULL) {
+        return;
+    }
+
+    // Ensure input context is bound as soon as input stream establishment completes.
+    if (strcmp(stageName, "input stream establishment") == 0) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            void *inputContext = self.streamMan.connection ? [self.streamMan.connection inputStreamContext] : NULL;
+            if (inputContext == NULL) {
+                Log(LOG_W, @"Input stream established but inputContext is NULL");
+                return;
+            }
+            PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)inputContext;
+            Log(LOG_I, @"Input stream established: ctx=%p initialized=%d libInit=%d libConn=%p", ctx, ctx->initialized, LiInputContextIsInitialized(ctx), LiInputContextGetConnectionCtx(ctx));
+            if (ctx->initialized) {
+                self.hidSupport.inputContext = inputContext;
+                self.controllerSupport.inputContext = inputContext;
+                self.hidSupport.shouldSendInputEvents = YES;
+                self.controllerSupport.shouldSendInputEvents = YES;
+            }
+        });
+    }
 }
 
 - (void)connectionStarted {
+    Connection *callbackConn = [Connection currentConnection];
+    void *callbackInputContext = callbackConn ? [callbackConn inputStreamContext] : NULL;
     dispatch_async(dispatch_get_main_queue(), ^{
                 // Notify session manager (main-thread only for window access)
                 [[StreamingSessionManager shared] startStreamingWithHost:self.app.host.uuid
                                                                                                                      appId:self.app.id
                                                                                                                  appName:self.app.name
                                                                                                 windowController:self.view.window.windowController];
+
+                void *inputContext = callbackInputContext;
+                if (!inputContext && self.streamMan.connection) {
+                    inputContext = [self.streamMan.connection inputStreamContext];
+                }
+                if (inputContext) {
+                    PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)inputContext;
+                    Log(LOG_I, @"Input ABI: size=%u off_init=%u off_conn=%u", LiGetInputContextStructSize(), LiGetInputContextOffsetInitialized(), LiGetInputContextOffsetConnectionContext());
+                    Log(LOG_I, @"Binding input context on connection start: ctx=%p initialized=%d libInit=%d libConn=%p", ctx, ctx->initialized, LiInputContextIsInitialized(ctx), LiInputContextGetConnectionCtx(ctx));
+                    self.hidSupport.inputContext = inputContext;
+                    self.controllerSupport.inputContext = inputContext;
+                    // Ensure input is enabled immediately after stream start
+                    self.hidSupport.shouldSendInputEvents = YES;
+                    self.controllerSupport.shouldSendInputEvents = YES;
+
+                    // If input stream isn't initialized yet, retry briefly to bind after start
+                    __block int remainingAttempts = 20;
+                    __weak typeof(self) weakSelf = self;
+                    __block void (^retryBind)(void) = nil;
+                    retryBind = ^{
+                        __strong typeof(weakSelf) strongSelf = weakSelf;
+                        if (!strongSelf) {
+                            return;
+                        }
+                        PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)inputContext;
+                        if (ctx != NULL && LiInputContextIsInitialized(ctx)) {
+                            strongSelf.hidSupport.inputContext = inputContext;
+                            strongSelf.controllerSupport.inputContext = inputContext;
+                            return;
+                        }
+                        if (remainingAttempts-- <= 0) {
+                            Log(LOG_W, @"Input context still not initialized after retries");
+                            return;
+                        }
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), retryBind);
+                    };
+                    retryBind();
+                }
 
         self.streamView.statusText = nil;
 
@@ -3436,7 +3661,12 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     Log(LOG_I, @"Connection terminated: %ld", (long)errorCode);
 
     // Notify session manager
-    [[StreamingSessionManager shared] didDisconnect];
+    if (self.app.host.uuid) {
+        [[StreamingSessionManager shared] didDisconnectForHost:self.app.host.uuid];
+    }
+
+    self.hidSupport.inputContext = NULL;
+    self.controllerSupport.inputContext = NULL;
 
     dispatch_async(dispatch_get_main_queue(), ^{
         [self hideConnectionTimeoutOverlay];

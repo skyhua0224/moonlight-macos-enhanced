@@ -29,6 +29,7 @@
     NSPipe *pipe = [NSPipe pipe];
     task.standardOutput = pipe;
     task.standardError = pipe;
+    task.standardInput = [NSFileHandle fileHandleWithNullDevice];
 
     @try {
         [task launch];

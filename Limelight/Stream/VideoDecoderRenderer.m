@@ -7,6 +7,7 @@
 //
 
 #import "VideoDecoderRenderer.h"
+#include "Limelight-internal.h"
 #import "RendererLayerContainer.h"
 
 #include "Limelight.h"
@@ -510,11 +511,18 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                                           void *displayLinkContext)
 {
     VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)displayLinkContext;
+    PML_DEPACKETIZER_CONTEXT depacketizerCtx = (PML_DEPACKETIZER_CONTEXT)self.depacketizerContext;
+    if (depacketizerCtx == NULL) {
+        return kCVReturnSuccess;
+    }
+    if (depacketizerCtx->connectionContext != NULL) {
+        LiSetThreadConnectionContext(depacketizerCtx->connectionContext);
+    }
     
     VIDEO_FRAME_HANDLE handle;
     PDECODE_UNIT du;
     
-    while (LiPollNextVideoFrame(&handle, &du)) {
+    while (LiPollNextVideoFrameCtx(depacketizerCtx, &handle, &du)) {
         // Cache fields before LiCompleteVideoFrame() frees the decode unit.
         const uint64_t enqueueTimeMs = du->enqueueTimeMs;
         const uint64_t receiveTimeMs = du->receiveTimeMs;
@@ -570,7 +578,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         
         uint64_t decodeStart = LiGetMillis();
         int ret = DrSubmitDecodeUnit(du);
-        LiCompleteVideoFrame(handle, ret);
+        LiCompleteVideoFrameCtx(depacketizerCtx, handle, ret);
         
         if (ret == DR_OK) {
             self->_activeWndVideoStats.decodedFrames++;
@@ -591,7 +599,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         if (displayRefreshRate >= self.frameRate * 0.9f) {
             // Keep one pending frame to smooth out gaps due to
             // network jitter at the cost of 1 frame of latency
-            if (LiGetPendingVideoFrames() == 1) {
+            if (LiGetPendingVideoFramesCtx(depacketizerCtx) == 1) {
                 break;
             }
         }

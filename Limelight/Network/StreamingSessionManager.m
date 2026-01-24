@@ -13,6 +13,7 @@
 @property (nonatomic, readwrite, nullable) NSString *activeHostUUID;
 @property (nonatomic, readwrite, nullable) NSString *activeAppId;
 @property (nonatomic, readwrite, nullable) NSString *activeAppName;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, id> *sessions;
 
 // Stream statistics
 @property (nonatomic, readwrite) double currentLatency;
@@ -20,6 +21,21 @@
 @property (nonatomic, readwrite) NSInteger currentFramerate;
 @property (nonatomic, readwrite) double connectionQuality;
 
+@end
+
+@interface StreamingSession : NSObject
+@property (nonatomic, copy) NSString *hostUUID;
+@property (nonatomic, copy, nullable) NSString *appId;
+@property (nonatomic, copy, nullable) NSString *appName;
+@property (nonatomic, weak, nullable) NSWindowController *windowController;
+@property (nonatomic) StreamingState state;
+@property (nonatomic) double latency;
+@property (nonatomic, copy, nullable) NSString *resolution;
+@property (nonatomic) NSInteger framerate;
+@property (nonatomic) double quality;
+@end
+
+@implementation StreamingSession
 @end
 
 @implementation StreamingSessionManager
@@ -41,21 +57,36 @@
         _currentResolution = @"Unknown";
         _currentFramerate = 0;
         _connectionQuality = 1.0;
+        _sessions = [NSMutableDictionary dictionary];
     }
     return self;
 }
 
 - (BOOL)canStartStreamForHost:(NSString *)hostUUID {
-    // Allow if no active stream OR different host (multi-host streaming)
-    // If you want to restrict to single stream globally, remove the second condition
-    return self.state == StreamingStateIdle ||
-           ![self.activeHostUUID isEqualToString:hostUUID];
+    StreamingSession *session = self.sessions[hostUUID];
+    return (session == nil || session.state == StreamingStateIdle || session.state == StreamingStateDisconnecting);
 }
 
 - (void)startStreamingWithHost:(NSString *)hostUUID
                          appId:(NSString *)appId
                        appName:(NSString *)appName
             windowController:(NSWindowController *)windowController {
+
+    StreamingSession *session = self.sessions[hostUUID];
+    if (!session) {
+        session = [[StreamingSession alloc] init];
+        session.hostUUID = hostUUID;
+        self.sessions[hostUUID] = session;
+    }
+
+    session.appId = appId;
+    session.appName = appName;
+    session.windowController = windowController;
+    session.state = StreamingStateStreaming;
+    session.latency = 0;
+    session.resolution = nil;
+    session.framerate = 0;
+    session.quality = 1.0;
 
     self.activeHostUUID = hostUUID;
     self.activeAppId = appId;
@@ -69,13 +100,25 @@
     self.currentFramerate = 0;
     self.connectionQuality = 1.0;
 
-    [self postStateChangeNotification];
+    [self postStateChangeNotificationForHost:hostUUID];
 }
 
 - (void)updateStreamStats:(double)latency
                resolution:(NSString *)resolution
                 framerate:(NSInteger)framerate
                   quality:(double)quality {
+    if (!self.activeHostUUID) {
+        return;
+    }
+
+    StreamingSession *session = self.sessions[self.activeHostUUID];
+    if (session) {
+        session.latency = latency;
+        session.resolution = resolution;
+        session.framerate = framerate;
+        session.quality = quality;
+    }
+
     self.currentLatency = latency;
     self.currentResolution = resolution;
     self.currentFramerate = framerate;
@@ -86,18 +129,52 @@
 }
 
 - (void)didDisconnect {
-    self.activeHostUUID = nil;
-    self.activeAppId = nil;
-    self.activeAppName = nil;
-    self.streamWindowController = nil;
-    self.state = StreamingStateIdle;
+    if (self.activeHostUUID) {
+        [self didDisconnectForHost:self.activeHostUUID];
+    }
+}
 
-    [self postStateChangeNotification];
+- (BOOL)isStreamingHost:(NSString *)hostUUID {
+    StreamingSession *session = self.sessions[hostUUID];
+    return session != nil && session.state == StreamingStateStreaming;
+}
+
+- (nullable NSString *)appNameForHost:(NSString *)hostUUID {
+    StreamingSession *session = self.sessions[hostUUID];
+    return session.appName;
+}
+
+- (void)didDisconnectForHost:(NSString *)hostUUID {
+    StreamingSession *session = self.sessions[hostUUID];
+    if (session) {
+        session.state = StreamingStateIdle;
+        session.windowController = nil;
+        session.appId = nil;
+        session.appName = nil;
+    }
+
+    if ([self.activeHostUUID isEqualToString:hostUUID]) {
+        self.activeHostUUID = nil;
+        self.activeAppId = nil;
+        self.activeAppName = nil;
+        self.streamWindowController = nil;
+        self.state = StreamingStateIdle;
+    }
+
+    [self postStateChangeNotificationForHost:hostUUID];
 }
 
 - (void)focusStreamWindow {
-    if (self.streamWindowController && self.streamWindowController.window) {
-        NSWindow *window = self.streamWindowController.window;
+    if (self.activeHostUUID) {
+        [self focusStreamWindowForHost:self.activeHostUUID];
+    }
+}
+
+- (void)focusStreamWindowForHost:(NSString *)hostUUID {
+    StreamingSession *session = self.sessions[hostUUID];
+    NSWindowController *controller = session.windowController;
+    if (controller && controller.window) {
+        NSWindow *window = controller.window;
 
         // This handles Space switching automatically on macOS
         [window makeKeyAndOrderFront:nil];
@@ -116,43 +193,52 @@
     // For this implementation, since we have the window controller,
     // we can try to find the StreamViewController and tell it to stop.
 
-    if (self.streamWindowController) {
-        NSViewController *contentVC = self.streamWindowController.contentViewController;
-        if ([contentVC respondsToSelector:@selector(performSelector:)]) {
-            // Assuming StreamViewController has a method to stop stream or we close window
-            // If StreamViewController has a specific stop method, we should call it.
-            // For now, let's post a notification that StreamViewController can listen to,
-            // or simply close the window which usually triggers cleanup.
-
-            // Notification based approach (cleaner decoupling)
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"StreamingSessionRequestDisconnect" object:nil];
-        }
+    if (self.activeHostUUID) {
+        [self disconnectHost:self.activeHostUUID];
     } else if (self.state != StreamingStateIdle) {
-        // Fallback: If the window is already gone (controller is nil) but we are still in a streaming state,
-        // it means we have a "zombie" session. We should forcibly clean up.
-        // This prevents the "Ghost Session" issue where the overlay thinks we are streaming but we aren't.
         [self didDisconnect];
+    }
+}
+
+- (void)disconnectHost:(NSString *)hostUUID {
+    StreamingSession *session = self.sessions[hostUUID];
+    if (session.windowController) {
+        NSDictionary *userInfo = @{ @"hostUUID": hostUUID };
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"StreamingSessionRequestDisconnect"
+                                                            object:nil
+                                                          userInfo:userInfo];
+    } else {
+        [self didDisconnectForHost:hostUUID];
     }
 }
 
 - (void)requestDisconnectWithQuitApp:(BOOL)quitApp {
-    if (self.streamWindowController) {
-        NSDictionary *userInfo = @{ @"quitApp": @(quitApp) };
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"StreamingSessionRequestDisconnect"
-                                                            object:nil
-                                                          userInfo:userInfo];
+    if (self.activeHostUUID) {
+        [self requestDisconnectWithQuitApp:quitApp hostUUID:self.activeHostUUID];
     } else if (self.state != StreamingStateIdle) {
         [self didDisconnect];
     }
 }
 
-- (void)postStateChangeNotification {
-    NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
-    userInfo[@"state"] = @(self.state);
+- (void)requestDisconnectWithQuitApp:(BOOL)quitApp hostUUID:(NSString *)hostUUID {
+    StreamingSession *session = self.sessions[hostUUID];
+    if (session.windowController) {
+        NSDictionary *userInfo = @{ @"quitApp": @(quitApp), @"hostUUID": hostUUID };
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"StreamingSessionRequestDisconnect"
+                                                            object:nil
+                                                          userInfo:userInfo];
+    } else {
+        [self didDisconnectForHost:hostUUID];
+    }
+}
 
-    if (self.activeHostUUID) userInfo[@"hostUUID"] = self.activeHostUUID;
-    if (self.activeAppId) userInfo[@"appId"] = self.activeAppId;
-    if (self.activeAppName) userInfo[@"appName"] = self.activeAppName;
+- (void)postStateChangeNotificationForHost:(NSString *)hostUUID {
+    StreamingSession *session = self.sessions[hostUUID];
+    NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+    userInfo[@"state"] = @(session ? session.state : StreamingStateIdle);
+    userInfo[@"hostUUID"] = hostUUID;
+    if (session.appId) userInfo[@"appId"] = session.appId;
+    if (session.appName) userInfo[@"appName"] = session.appName;
 
     // Dispatch on main thread to ensure UI updates are safe
     dispatch_async(dispatch_get_main_queue(), ^{
