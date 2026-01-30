@@ -23,7 +23,7 @@ jobs:
     - name: Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: latest-stable
+        xcode-version: latest
 
     - name: Show Build Environment
       run: |
@@ -38,24 +38,24 @@ jobs:
         unzip -o xcframeworks.zip -d xcframeworks/
         ls -la xcframeworks/
 
-    - name: Build Universal Binary (arm64 + x86_64)
+    - name: Build for Apple Silicon (arm64)
       run: |
         xcodebuild -project Moonlight.xcodeproj \
           -scheme "Moonlight for macOS" \
           -configuration Release \
           -derivedDataPath build \
-          -destination 'platform=macOS' \
-          ARCHS="arm64 x86_64" \
-          ONLY_ACTIVE_ARCH=NO \
+          -destination 'platform=macOS,arch=arm64' \
+          ARCHS="arm64" \
+          ONLY_ACTIVE_ARCH=YES \
           CODE_SIGN_IDENTITY="-" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           BUILD_NUMBER=${{ github.run_number }} \
           build
 
-    - name: Verify Universal Binary
+    - name: Verify Binary
       run: |
-        echo "Checking architectures..."
+        echo "Checking architecture..."
         lipo -info "build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
         file "build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
 
