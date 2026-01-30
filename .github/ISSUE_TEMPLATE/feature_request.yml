@@ -1,0 +1,45 @@
+name: Feature Request | 功能建议
+description: Suggest a new feature | 建议新功能
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your suggestion! | 感谢你的建议！
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description | 功能描述
+      description: Describe the feature you'd like | 描述你想要的功能
+      placeholder: I would like to see...
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case | 使用场景
+      description: Why is this feature useful? | 这个功能为什么有用？
+      placeholder: This would help me to...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority | 优先级
+      options:
+        - Nice to have | 有更好
+        - Important | 重要
+        - Critical for my use case | 对我的使用场景至关重要
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution | 贡献意愿
+      options:
+        - label: I'm willing to help implement this feature | 我愿意帮助实现这个功能

@@ -1,0 +1,93 @@
+name: Bug Report | 问题报告
+description: Report a bug or crash | 报告 Bug 或闪退
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please fill out the form below.
+        感谢反馈！请填写以下信息。
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS Version | macOS 版本
+      placeholder: e.g., macOS 15.2 / macOS 14.3
+      description: Run `sw_vers` in Terminal to check | 在终端运行 `sw_vers` 查看
+    validations:
+      required: true
+
+  - type: input
+    id: chip
+    attributes:
+      label: Chip | 芯片类型
+      placeholder: e.g., Apple M3 Pro / Intel i7-9750H
+      description: Apple menu → About This Mac | 苹果菜单 → 关于本机
+    validations:
+      required: true
+
+  - type: dropdown
+    id: host-software
+    attributes:
+      label: Host Software | 主机端软件
+      options:
+        - Foundation Sunshine
+        - Sunshine (LizardByte)
+        - GeForce Experience
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: host-version
+    attributes:
+      label: Host Software Version | 主机端版本
+      placeholder: e.g., Foundation Sunshine 0.24.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description | 问题描述
+      description: What happened? | 发生了什么？
+      placeholder: Describe the bug clearly...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce | 复现步骤
+      description: How can we reproduce this bug? | 如何复现这个问题？
+      placeholder: |
+        1. Open the app
+        2. Click on...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior | 期望行为
+      description: What should happen? | 应该发生什么？
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots | 日志 / 截图
+      description: Paste logs or attach screenshots | 粘贴日志或附加截图
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist | 检查清单
+      options:
+        - label: I have searched existing issues and this is not a duplicate | 我已搜索现有 Issue，这不是重复问题
+          required: true
