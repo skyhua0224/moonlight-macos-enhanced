@@ -4,144 +4,25 @@
 
 [![Build](https://github.com/skyhua0224/moonlight-macos/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos?include_prereleases)](https://github.com/skyhua0224/moonlight-macos/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos/total)](https://github.com/skyhua0224/moonlight-macos/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)]() [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
-**Native macOS Game Streaming Client** | **原生 macOS 游戏串流客户端**
-
-A native macOS client for game streaming, built with AppKit/SwiftUI. Combines the smooth experience of a native Mac app with powerful community-enhanced features.
+**原生 macOS 游戏串流客户端**
 
 一款原生 macOS 游戏串流客户端，使用 AppKit/SwiftUI 构建。结合原生 Mac 应用的流畅体验与社区增强版的强大功能。
 
-[English](#-features) | [简体中文](#-特性)
+简体中文 | [English](README.en.md)
 
 </div>
 
 ---
 
-## ✨ Features
+## ✨ 核心特性
 
-### 🍎 Native macOS Experience
-- **Apple Silicon Optimized** - Native support for Apple Silicon chips
-- **Native UI** - Built with AppKit/SwiftUI, not a Qt port
-- **Dark Mode** - Full system dark mode support
-- **Localization** - English and Simplified Chinese
-
-#### 🎮 Streaming Performance
-- **Custom Resolution & FPS** - Configurable resolution and frame rate
-- **HEVC/H.264** - Hardware accelerated video decoding
-- **HDR** - High Dynamic Range support
-- **YUV 4:4:4** - Enhanced color sampling (requires Foundation Sunshine)
-- **V-Sync** - Vertical synchronization support
-- **Surround Sound** - 5.1/7.1 audio support
-
-#### 🚀 Enhanced Features (What's New)
-| Feature | Description |
-|---------|-------------|
-| 🎤 **Microphone Passthrough** | Stream your mic to the host (requires Foundation Sunshine) |
-| 📊 **Performance Overlay** | Real-time stats: latency, FPS, bitrate (⌃⌥S to toggle) |
-| 🖥️ **Multi-Host Streaming** | Connect to multiple hosts simultaneously |
-| 🎨 **MetalFX Upscaling** | Apple's AI-powered image enhancement |
-| 🌐 **Custom Ports/IPv6/Domain** | Flexible connection options |
-| 🔧 **Connection Manager** | Manage multiple connection methods per host |
-| 🎮 **Gamepad Mouse Mode** | Use controller as mouse |
-| ⚡ **Auto Bitrate** | Adaptive bitrate based on network |
-| 🖼️ **Display Modes** | Fullscreen / Borderless / Windowed |
-| 🔄 **Smart Reconnection** | Auto reconnect with timeout handling |
-
-### 🖥️ Host Compatibility
-
-| Host Software | Compatibility | Notes |
-|---------------|---------------|-------|
-| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ Recommended | Full feature support (Mic, YUV444, etc.) |
-| [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ Supported | Some advanced features unavailable |
-| GeForce Experience | ⚠️ Basic | Deprecated, no microphone support |
-
-> 💡 **Microphone, YUV 4:4:4** and other advanced features require [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine)
-
-### 📸 Screenshots
-
-| Host List | App List |
-|:---------:|:--------:|
-| <img src="readme-assets/images/host-list.png" width="400" alt="Host list"> | <img src="readme-assets/images/app-list.png" width="400" alt="App list"> |
-
-| Performance Overlay | Connection Manager |
-|:-------------------:|:------------------:|
-| <img src="readme-assets/images/performance-overlay.png" width="400" alt="Performance overlay"> | <img src="readme-assets/images/connection-manager.png" width="400" alt="Connection manager"> |
-
-| Streaming Overlay | Connection Error |
-|:-----------------:|:----------------:|
-| <img src="readme-assets/images/streaming-overlay.png" width="400" alt="Streaming overlay"> | <img src="readme-assets/images/connection-error.png" width="400" alt="Connection error"> |
-
-| Video Settings | Streaming Settings |
-|:--------------:|:------------------:|
-| <img src="readme-assets/images/settings-video.png" width="400" alt="Video settings"> | <img src="readme-assets/images/settings-streaming.png" width="400" alt="Streaming settings"> |
-
-### ⌨️ Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl` + `Option` | Release mouse cursor |
-| `Ctrl` + `Option` + `S` | Toggle performance overlay |
-| `Ctrl` + `Option` + `W` | Disconnect stream |
-| `Ctrl` + `Shift` + `W` | Quit application |
-
-### 🛠️ Installation
-
-#### Download Release
-Download the latest `.dmg` from [Releases](https://github.com/skyhua0224/moonlight-macos/releases).
-
-> ⚠️ **This app is not notarized.** On first launch:
-> - Right-click the app and select "Open", or
-> - Go to System Settings → Privacy & Security → Open Anyway, or
-> - Run in Terminal: `xattr -cr /Applications/Moonlight.app`
-
-#### Build from Source
-```bash
-git clone --recursive https://github.com/skyhua0224/moonlight-macos.git
-cd moonlight-macos
-# Open Moonlight.xcodeproj in Xcode and build
-```
-
-### 📅 Update Policy
-
-This is a personal project maintained in my spare time:
-- 🐛 Critical bugs and crashes are prioritized
-- 💡 New features added when time permits or when good suggestions come in
-- 📥 Issues and PRs are welcome, but response time may vary
-
-> I use this app daily myself, so I'm motivated to keep it working well!
-
-### 🐛 Issue Guidelines
-
-When reporting bugs, please include:
-- macOS version (e.g., macOS 14.2)
-- Chip type (Intel / M1 / M2 / M3 / M4)
-- Host software and version (Sunshine / Foundation Sunshine / GFE)
-- Steps to reproduce
-- Relevant logs or screenshots
-
-### 🤝 Contributing
-
-PRs are welcome! Please:
-- Follow existing code style
-- Test your changes
-- Provide clear descriptions
-
----
-
-<a name="简体中文"></a>
-
-## 🇨🇳 简体中文
-
-**Moonlight macOS Enhanced** 是一款原生 macOS 游戏串流客户端，使用 AppKit/SwiftUI 构建。它结合了原生 Mac 应用的流畅体验与社区增强版的强大功能。
-
-### ✨ 核心特性
-
-#### 🍎 原生 macOS 体验
+### 🍎 原生 macOS 体验
 - **Apple Silicon 优化** - 原生支持 Apple Silicon 芯片
 - **原生界面** - 使用 AppKit/SwiftUI 构建，非 Qt 移植
 - **深色模式** - 完整支持系统深色模式
 - **多语言** - 支持简体中文和英文
 
-#### 🎮 串流性能
+### 🎮 串流性能
 - **自定义分辨率和帧率** - 可配置分辨率和刷新率
 - **HEVC/H.264** - 硬件加速视频解码
 - **HDR** - 高动态范围支持
@@ -149,7 +30,7 @@ PRs are welcome! Please:
 - **垂直同步** - V-Sync 支持
 - **环绕声** - 5.1/7.1 音频支持
 
-#### 🚀 增强功能（新增特性）
+### 🚀 增强功能（新增特性）
 | 功能 | 说明 |
 |------|------|
 | 🎤 **麦克风直通** | 将麦克风音频传输到主机（需要 Foundation Sunshine） |
@@ -211,11 +92,26 @@ PRs are welcome! Please:
 > - 在终端运行：`xattr -cr /Applications/Moonlight.app`
 
 #### 从源码构建
-```bash
-git clone --recursive https://github.com/skyhua0224/moonlight-macos.git
-cd moonlight-macos
-# 在 Xcode 中打开 Moonlight.xcodeproj 并构建
-```
+
+1. 克隆仓库：
+   ```bash
+   git clone --recursive https://github.com/skyhua0224/moonlight-macos.git
+   cd moonlight-macos
+   ```
+
+2. 下载 XCFramework 依赖：
+   ```bash
+   curl -L -o xcframeworks.zip "https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip"
+   unzip -o xcframeworks.zip -d xcframeworks/
+   ```
+
+3. 在 Xcode 中打开 `Moonlight.xcodeproj`
+
+4. 前往 **Signing & Capabilities** 标签页，将 **Team** 改为你自己的开发者账号
+
+5. 将 **Bundle Identifier** 改为你自己的标识符（如 `com.yourname.MoonlightMac`）
+
+6. 选择 **Moonlight for macOS** scheme，目标选择 **My Mac**，按 ⌘R 构建运行
 
 ### 📅 更新策略
 
@@ -244,37 +140,36 @@ cd moonlight-macos
 
 ---
 
-## 📬 Contact | 联系方式
+## 📬 联系方式
 
 - 📧 Email: [dev@sky-hua.xyz](mailto:dev@sky-hua.xyz)
 - 💬 Telegram: [@skyhua](https://t.me/skyhua)
 - 🐧 QQ: 2110591491
-- 🔗 GitHub Issues: [Submit Issue](https://github.com/skyhua0224/moonlight-macos/issues)
+- 🔗 GitHub Issues: [提交 Issue](https://github.com/skyhua0224/moonlight-macos/issues)
 
-> 💡 Prefer GitHub Issues for bug reports and feature requests | 建议使用 GitHub Issues 提交问题和建议
-
----
-
-## 🙏 Acknowledgements | 致谢
-
-This project is built upon these excellent open-source projects:
-
-### Core Projects | 核心项目
-- **[moonlight-macos](https://github.com/MichaelMKenny/moonlight-macos)** by MichaelMKenny - Native macOS client foundation
-- **[moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c)** by Moonlight Team - Core streaming protocol
-
-### Feature References | 功能参考
-- **[Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine)** by qiin2333 - Enhanced host with microphone support
-- **[moonlight-qt](https://github.com/moonlight-stream/moonlight-qt)** by Moonlight Team - Official cross-platform client
-
-### Dependencies | 依赖库
-- [SDL2](https://www.libsdl.org/) - Input handling
-- [OpenSSL](https://www.openssl.org/) - Encryption
-- [MASPreferences](https://github.com/shpakovski/MASPreferences) - Settings UI
+> 💡 建议使用 GitHub Issues 提交问题和建议
 
 ---
 
-## 📄 License
+## 🙏 致谢
 
-This project is licensed under the [GPLv3 License](LICENSE.txt).
+本项目基于以下优秀的开源项目构建：
 
+### 核心项目
+- **[moonlight-macos](https://github.com/MichaelMKenny/moonlight-macos)** by MichaelMKenny - 原生 macOS 客户端基础
+- **[moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c)** by Moonlight Team - 核心串流协议
+
+### 功能参考
+- **[Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine)** by qiin2333 - 支持麦克风的增强主机端
+- **[moonlight-qt](https://github.com/moonlight-stream/moonlight-qt)** by Moonlight Team - 官方跨平台客户端
+
+### 依赖库
+- [SDL2](https://www.libsdl.org/) - 输入处理
+- [OpenSSL](https://www.openssl.org/) - 加密
+- [MASPreferences](https://github.com/shpakovski/MASPreferences) - 设置界面
+
+---
+
+## 📄 许可证
+
+本项目采用 [GPLv3 许可证](LICENSE.txt)。

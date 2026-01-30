@@ -32,6 +32,12 @@ jobs:
         echo "Available schemes:"
         xcodebuild -list -project Moonlight.xcodeproj || true
 
+    - name: Download XCFrameworks
+      run: |
+        curl -L -o xcframeworks.zip "https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip"
+        unzip -o xcframeworks.zip -d xcframeworks/
+        ls -la xcframeworks/
+
     - name: Build
       run: |
         xcodebuild -project Moonlight.xcodeproj \
