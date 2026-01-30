@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14  # Apple Silicon runner
+    runs-on: macos-26  # macOS 26 Tahoe (beta) - Apple Silicon runner
 
     steps:
     - name: Checkout
@@ -38,17 +38,26 @@ jobs:
         unzip -o xcframeworks.zip -d xcframeworks/
         ls -la xcframeworks/
 
-    - name: Build
+    - name: Build Universal Binary (arm64 + x86_64)
       run: |
         xcodebuild -project Moonlight.xcodeproj \
           -scheme "Moonlight for macOS" \
           -configuration Release \
           -derivedDataPath build \
           -destination 'platform=macOS' \
+          ARCHS="arm64 x86_64" \
+          ONLY_ACTIVE_ARCH=NO \
           CODE_SIGN_IDENTITY="-" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
+          BUILD_NUMBER=${{ github.run_number }} \
           build
+
+    - name: Verify Universal Binary
+      run: |
+        echo "Checking architectures..."
+        lipo -info "build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
+        file "build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
 
     - name: Create App Bundle
       run: |
@@ -70,16 +79,16 @@ jobs:
           --icon "Moonlight.app" 150 185 \
           --hide-extension "Moonlight.app" \
           --app-drop-link 450 185 \
-          "dist/Moonlight-macOS-Enhanced.dmg" \
+          "dist/Moonlight-macOS-Universal.dmg" \
           "dist/Moonlight.app" || \
         # 如果 create-dmg 失败，使用简单方式
-        hdiutil create -volname "Moonlight" -srcfolder "dist/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced.dmg"
+        hdiutil create -volname "Moonlight" -srcfolder "dist/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Universal.dmg"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Moonlight-macOS-Enhanced
-        path: dist/Moonlight-macOS-Enhanced.dmg
+        name: Moonlight-macOS-Universal
+        path: dist/Moonlight-macOS-Universal.dmg
         if-no-files-found: error
 
   release:
@@ -94,7 +103,7 @@ jobs:
     - name: Download Artifact
       uses: actions/download-artifact@v4
       with:
-        name: Moonlight-macOS-Enhanced
+        name: Moonlight-macOS-Universal
         path: dist
 
     - name: Get Version
@@ -107,18 +116,21 @@ jobs:
         name: ${{ steps.version.outputs.VERSION }}
         draft: false
         prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-        files: dist/Moonlight-macOS-Enhanced.dmg
+        files: dist/Moonlight-macOS-Universal.dmg
         generate_release_notes: true
         body: |
           ## Moonlight macOS Enhanced ${{ steps.version.outputs.VERSION }}
 
+          ### Download | 下载
+          - **Moonlight-macOS-Universal.dmg** - Universal Binary (Apple Silicon + Intel)
+
           ### Installation | 安装
-          1. Download `Moonlight-macOS-Enhanced.dmg`
+          1. Download `Moonlight-macOS-Universal.dmg`
           2. Open the DMG and drag Moonlight to Applications
           3. If macOS blocks the app, go to System Preferences → Security & Privacy → Open Anyway
 
           ---
 
-          1. 下载 `Moonlight-macOS-Enhanced.dmg`
+          1. 下载 `Moonlight-macOS-Universal.dmg`
           2. 打开 DMG 并将 Moonlight 拖到应用程序文件夹
           3. 如果 macOS 阻止打开，前往 系统偏好设置 → 安全性与隐私 → 仍要打开
