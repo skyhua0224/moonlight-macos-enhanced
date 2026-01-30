@@ -1,0 +1,118 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [master, main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: macos-14  # Apple Silicon runner
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+
+    - name: Show Build Environment
+      run: |
+        xcodebuild -version
+        swift --version
+        echo "Available schemes:"
+        xcodebuild -list -project Moonlight.xcodeproj || true
+
+    - name: Build
+      run: |
+        xcodebuild -project Moonlight.xcodeproj \
+          -scheme Moonlight \
+          -configuration Release \
+          -derivedDataPath build \
+          -destination 'platform=macOS' \
+          CODE_SIGN_IDENTITY="-" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          build
+
+    - name: Create App Bundle
+      run: |
+        mkdir -p dist
+        cp -R "build/Build/Products/Release/Moonlight.app" dist/
+
+    - name: Create DMG
+      run: |
+        # 安装 create-dmg
+        brew install create-dmg || true
+
+        # 创建 DMG
+        create-dmg \
+          --volname "Moonlight macOS Enhanced" \
+          --volicon "dist/Moonlight.app/Contents/Resources/AppIcon.icns" \
+          --window-pos 200 120 \
+          --window-size 600 400 \
+          --icon-size 100 \
+          --icon "Moonlight.app" 150 185 \
+          --hide-extension "Moonlight.app" \
+          --app-drop-link 450 185 \
+          "dist/Moonlight-macOS-Enhanced.dmg" \
+          "dist/Moonlight.app" || \
+        # 如果 create-dmg 失败，使用简单方式
+        hdiutil create -volname "Moonlight" -srcfolder "dist/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced.dmg"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Moonlight-macOS-Enhanced
+        path: dist/Moonlight-macOS-Enhanced.dmg
+        if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: Moonlight-macOS-Enhanced
+        path: dist
+
+    - name: Get Version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: ${{ steps.version.outputs.VERSION }}
+        draft: false
+        prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+        files: dist/Moonlight-macOS-Enhanced.dmg
+        generate_release_notes: true
+        body: |
+          ## Moonlight macOS Enhanced ${{ steps.version.outputs.VERSION }}
+
+          ### Installation | 安装
+          1. Download `Moonlight-macOS-Enhanced.dmg`
+          2. Open the DMG and drag Moonlight to Applications
+          3. If macOS blocks the app, go to System Preferences → Security & Privacy → Open Anyway
+
+          ---
+
+          1. 下载 `Moonlight-macOS-Enhanced.dmg`
+          2. 打开 DMG 并将 Moonlight 拖到应用程序文件夹
+          3. 如果 macOS 阻止打开，前往 系统偏好设置 → 安全性与隐私 → 仍要打开
