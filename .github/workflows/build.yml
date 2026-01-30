@@ -35,7 +35,7 @@ jobs:
     - name: Build
       run: |
         xcodebuild -project Moonlight.xcodeproj \
-          -scheme Moonlight \
+          -scheme "Moonlight for macOS" \
           -configuration Release \
           -derivedDataPath build \
           -destination 'platform=macOS' \
