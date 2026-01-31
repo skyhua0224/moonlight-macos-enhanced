@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Build](https://github.com/skyhua0224/moonlight-macos/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos?include_prereleases)](https://github.com/skyhua0224/moonlight-macos/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos/total)](https://github.com/skyhua0224/moonlight-macos/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)]() [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
+[![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)]() [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
 **Native macOS Game Streaming Client**
 
@@ -84,7 +84,7 @@ A native macOS client for game streaming, built with AppKit/SwiftUI. Combines th
 ### 🛠️ Installation
 
 #### Download Release
-Download the latest `.dmg` from [Releases](https://github.com/skyhua0224/moonlight-macos/releases).
+Download the latest `.dmg` from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases).
 
 > ⚠️ **This app is not notarized.** On first launch:
 > - Right-click the app and select "Open", or
@@ -93,8 +93,8 @@ Download the latest `.dmg` from [Releases](https://github.com/skyhua0224/moonlig
 
 #### Build from Source
 ```bash
-git clone --recursive https://github.com/skyhua0224/moonlight-macos.git
-cd moonlight-macos
+git clone --recursive https://github.com/skyhua0224/moonlight-macos-enhanced.git
+cd moonlight-macos-enhanced
 
 # Download XCFrameworks (FFmpeg, Opus, SDL2)
 curl -L -o xcframeworks.zip "https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip"
@@ -135,7 +135,7 @@ PRs are welcome! Please:
 - 📧 Email: [dev@sky-hua.xyz](mailto:dev@sky-hua.xyz)
 - 💬 Telegram: [@skyhua](https://t.me/skyhua)
 - 🐧 QQ: 2110591491
-- 🔗 GitHub Issues: [Submit Issue](https://github.com/skyhua0224/moonlight-macos/issues)
+- 🔗 GitHub Issues: [Submit Issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
 > 💡 Prefer GitHub Issues for bug reports and feature requests
 
@@ -146,7 +146,7 @@ PRs are welcome! Please:
 This project is built upon these excellent open-source projects:
 
 ### Core Projects
-- **[moonlight-macos](https://github.com/MichaelMKenny/moonlight-macos)** by MichaelMKenny - Native macOS client foundation
+- **[moonlight-macos-enhanced](https://github.com/MichaelMKenny/moonlight-macos-enhanced)** by MichaelMKenny - Native macOS client foundation
 - **[moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c)** by Moonlight Team - Core streaming protocol
 
 ### Feature References
