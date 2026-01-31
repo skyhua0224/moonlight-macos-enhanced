@@ -84,7 +84,7 @@
 ### 🛠️ 安装
 
 #### 下载发布版
-从 [Releases](https://github.com/skyhua0224/moonlight-macos/releases) 下载最新的 `.dmg` 文件。
+从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载最新的 `.dmg` 文件。
 
 > ⚠️ **此应用未经公证签名。** 首次启动时：
 > - 右键点击应用，选择"打开"，或
@@ -95,8 +95,8 @@
 
 1. 克隆仓库：
    ```bash
-   git clone --recursive https://github.com/skyhua0224/moonlight-macos.git
-   cd moonlight-macos
+   git clone --recursive https://github.com/skyhua0224/moonlight-macos-enhanced.git
+   cd moonlight-macos-enhanced
    ```
 
 2. 下载 XCFramework 依赖：
