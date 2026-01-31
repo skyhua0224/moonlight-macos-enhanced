@@ -146,7 +146,7 @@ PRs are welcome! Please:
 This project is built upon these excellent open-source projects:
 
 ### Core Projects
-- **[moonlight-macos-enhanced](https://github.com/MichaelMKenny/moonlight-macos-enhanced)** by MichaelMKenny - Native macOS client foundation
+- **[moonlight-macos](https://github.com/MichaelMKenny/moonlight-macos)** by MichaelMKenny - Native macOS client foundation
 - **[moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c)** by Moonlight Team - Core streaming protocol
 
 ### Feature References
