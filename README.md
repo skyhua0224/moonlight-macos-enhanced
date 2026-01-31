@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Build](https://github.com/skyhua0224/moonlight-macos/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos?include_prereleases)](https://github.com/skyhua0224/moonlight-macos/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos/total)](https://github.com/skyhua0224/moonlight-macos/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)]() [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
+[![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)]() [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
 **原生 macOS 游戏串流客户端**
 
