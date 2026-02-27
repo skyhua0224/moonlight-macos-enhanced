@@ -1,0 +1,16 @@
+# <type>(<scope>): <description>
+#
+# type: feat|fix|docs|refactor|perf|test|chore|style|build|ci
+# scope: optional, lowercase (e.g. pairing, ci, build)
+# description:
+# - English only
+# - imperative mood
+# - start with lowercase
+# - no period at end
+# - keep subject within 72 chars
+#
+# Example:
+# fix(pairing): support legacy macOS certificate import
+#
+# Body (optional):
+# Why this change is needed and impact.

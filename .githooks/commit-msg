@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+MSG_FILE="$1"
+SUBJECT="$(sed -n '1p' "$MSG_FILE" | tr -d '\r')"
+
+if [ -z "$SUBJECT" ]; then
+  echo "commit message is empty"
+  exit 1
+fi
+
+PATTERN_NO_SCOPE='^(feat|fix|docs|refactor|perf|test|chore|style|build|ci)!?: [a-z].*$'
+PATTERN_WITH_SCOPE='^(feat|fix|docs|refactor|perf|test|chore|style|build|ci)\([a-z0-9._-]+\)!?: [a-z].*$'
+
+if ! printf '%s\n' "$SUBJECT" | grep -Eq "$PATTERN_NO_SCOPE" \
+  && ! printf '%s\n' "$SUBJECT" | grep -Eq "$PATTERN_WITH_SCOPE"; then
+  cat <<'EOF'
+invalid commit subject.
+required format:
+  <type>(<scope>): <description>
+
+examples:
+  fix(pairing): support legacy macos certificate import
+  chore: update release notes
+EOF
+  exit 1
+fi
+
+if [ "${#SUBJECT}" -gt 72 ]; then
+  echo "commit subject too long (max 72 chars)"
+  exit 1
+fi
+
+# Enforce ASCII in subject to keep language consistent in history.
+if printf '%s' "$SUBJECT" | LC_ALL=C grep -q '[^ -~]'; then
+  echo "commit subject must be ASCII/English only"
+  exit 1
+fi
+
+exit 0
