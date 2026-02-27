@@ -186,3 +186,17 @@
 "Online" = "Online";
 "Offline" = "Offline";
 "Unknown" = "Unknown";
+
+/* Microphone */
+"Microphone" = "Microphone";
+"Microphone Device" = "Microphone Device";
+"System Default" = "System Default";
+"Microphone Permission" = "Microphone Permission";
+"Authorized" = "Authorized";
+"Denied" = "Denied";
+"Not Determined" = "Not Determined";
+"Open Settings" = "Open Settings";
+"Request" = "Request";
+"Test Microphone" = "Test Microphone";
+"Start Test" = "Start Test";
+"Stop" = "Stop";

@@ -20,6 +20,7 @@
     
     _managedObjectContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
     [_managedObjectContext setPersistentStoreCoordinator:[DatabaseSingleton shared].persistentStoreCoordinator];
+    [_managedObjectContext setMergePolicy:NSMergeByPropertyObjectTrumpMergePolicy];
     
     return self;
 }

@@ -2931,6 +2931,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     StreamConfiguration *streamConfig = [[StreamConfiguration alloc] init];
     
     streamConfig.host = self.app.host.activeAddress;
+    streamConfig.hostUUID = self.app.host.uuid;
     
     NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
     if (prefs) {

@@ -15,6 +15,7 @@
 + (NSData*) readP12FromFile;
 + (NSData*) getSignatureFromCert:(NSData*)cert;
 + (NSData*) pemToDer:(NSData*)pemCertBytes;
++ (bool) keyPairExists;
 
 - (NSData*) createAESKeyFromSaltSHA1:(NSData*)saltedPIN;
 - (NSData*) createAESKeyFromSaltSHA256:(NSData*)saltedPIN;

@@ -566,6 +566,7 @@ class SettingsClass: NSObject {
 
   @objc static func getHostUUID(from address: String) -> String? {
     if let hosts = DataManager().getHosts() as? [TemporaryHost] {
+      // Try exact match first
       if let matchingHost = hosts.first(where: { host in
         guard !host.uuid.isEmpty else { return false }
         return host.activeAddress == address
@@ -576,9 +577,41 @@ class SettingsClass: NSObject {
       }) {
         return matchingHost.uuid
       }
+
+      // Strip port and try again (activeAddress may include port like "host:57989")
+      let strippedAddress = Self.stripPort(from: address)
+      if strippedAddress != address {
+        if let matchingHost = hosts.first(where: { host in
+          guard !host.uuid.isEmpty else { return false }
+          let fields = [host.activeAddress, host.localAddress, host.externalAddress, host.ipv6Address, host.address]
+          return fields.contains(where: { field in
+            guard let field = field else { return false }
+            return field == strippedAddress || Self.stripPort(from: field) == strippedAddress
+          })
+        }) {
+          return matchingHost.uuid
+        }
+      }
     }
 
     return nil
+  }
+
+  private static func stripPort(from address: String) -> String {
+    // Handle IPv6 bracket notation [::1]:port
+    if address.hasPrefix("["), let closeBracket = address.lastIndex(of: "]") {
+      let afterBracket = address[address.index(after: closeBracket)...]
+      if afterBracket.hasPrefix(":") {
+        return String(address[...closeBracket])
+      }
+      return address
+    }
+    // hostname:port or IPv4:port — only strip if there's exactly one colon
+    let parts = address.split(separator: ":", maxSplits: 2)
+    if parts.count == 2, let _ = Int(parts[1]) {
+      return String(parts[0])
+    }
+    return address
   }
 
   @objc static func autoFullscreen(for key: String) -> Bool {

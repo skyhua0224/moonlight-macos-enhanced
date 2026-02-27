@@ -184,3 +184,17 @@
 "Online" = "在线";
 "Offline" = "离线";
 "Unknown" = "未知";
+
+/* Microphone Settings */
+"Microphone" = "麦克风";
+"Microphone Device" = "麦克风设备";
+"System Default" = "系统默认";
+"Microphone Permission" = "麦克风权限";
+"Authorized" = "已授权";
+"Denied" = "已拒绝";
+"Not Determined" = "未确定";
+"Open Settings" = "打开设置";
+"Request" = "请求授权";
+"Test Microphone" = "测试麦克风";
+"Start Test" = "开始测试";
+"Stop" = "停止";

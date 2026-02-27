@@ -201,6 +201,11 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     for (NSString *address in filteredAddresses) {
         if (self.cancelled) break;
         
+        if ([self shouldSkipAddressDueToCooldown:address]) {
+            Log(LOG_D, @"Skipping %@ for %@ (cooldown active)", address, _host.name);
+            continue;
+        }
+        
         dispatch_group_enter(group);
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;

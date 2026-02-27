@@ -480,11 +480,60 @@ static const NSString* HTTPS_PORT = @"47984";
     }
     [[NSFileManager defaultManager] removeItemAtPath:keychainPath error:nil];
 
+    // Remove any leftover moonlight.keychain from the system search list.
+    // Previous versions (or previous runs) may have added it, causing macOS
+    // to prompt "wants to use moonlight's keychain" when the keychain is locked.
+    CFArrayRef currentSearchList = NULL;
+    SecKeychainCopySearchList(&currentSearchList);
+    if (currentSearchList) {
+        NSMutableArray *cleanedList = [NSMutableArray array];
+        BOOL dirty = NO;
+        for (CFIndex i = 0; i < CFArrayGetCount(currentSearchList); i++) {
+            SecKeychainRef kc = (SecKeychainRef)CFArrayGetValueAtIndex(currentSearchList, i);
+            char kcPath[1024];
+            UInt32 kcPathLen = sizeof(kcPath);
+            if (SecKeychainGetPath(kc, &kcPathLen, kcPath) == errSecSuccess) {
+                NSString *kcPathStr = [[NSString alloc] initWithBytes:kcPath length:kcPathLen encoding:NSUTF8StringEncoding];
+                if ([kcPathStr hasSuffix:@"moonlight.keychain"]) {
+                    dirty = YES;
+                    continue; // skip — remove from search list
+                }
+            }
+            [cleanedList addObject:(__bridge id)kc];
+        }
+        if (dirty) {
+            SecKeychainSetSearchList((__bridge CFArrayRef)cleanedList);
+            Log(LOG_I, @"Removed leftover moonlight.keychain from system search list");
+        }
+        CFRelease(currentSearchList);
+    }
+
     OSStatus status = SecKeychainCreate(cPath, 9, "limelight", FALSE, NULL, &persistentKeychain);
     if (status != errSecSuccess) {
         Log(LOG_E, @"Temp keychain fallback: creation failed (%d)", (int)status);
         persistentKeychain = NULL;
         return nil;
+    }
+
+    // SecKeychainCreate auto-appends to the search list; remove it immediately
+    CFArrayRef postCreateList = NULL;
+    SecKeychainCopySearchList(&postCreateList);
+    if (postCreateList) {
+        NSMutableArray *filteredList = [NSMutableArray array];
+        for (CFIndex i = 0; i < CFArrayGetCount(postCreateList); i++) {
+            SecKeychainRef kc = (SecKeychainRef)CFArrayGetValueAtIndex(postCreateList, i);
+            char kcPath[1024];
+            UInt32 kcPathLen = sizeof(kcPath);
+            if (SecKeychainGetPath(kc, &kcPathLen, kcPath) == errSecSuccess) {
+                NSString *kcPathStr = [[NSString alloc] initWithBytes:kcPath length:kcPathLen encoding:NSUTF8StringEncoding];
+                if ([kcPathStr hasSuffix:@"moonlight.keychain"]) {
+                    continue;
+                }
+            }
+            [filteredList addObject:(__bridge id)kc];
+        }
+        SecKeychainSetSearchList((__bridge CFArrayRef)filteredList);
+        CFRelease(postCreateList);
     }
 
     const void *optKeys[] = { kSecImportExportPassphrase, kSecImportExportKeychain };
@@ -619,8 +668,15 @@ static const NSString* HTTPS_PORT = @"47984";
                 identityApp = [self importP12ViaTemporaryKeychain:p12Obj];
 
                 if (identityApp == nil && attempt == 0) {
-                    Log(LOG_W, @"Temp keychain fallback also failed, regenerating certificates");
-                    [CryptoManager regenerateKeyPairUsingSSL];
+                    // Only regenerate if the P12 file is missing or corrupt.
+                    // If import keeps failing with a valid file, regenerating
+                    // would destroy the existing pairing for no benefit.
+                    if (![CryptoManager keyPairExists]) {
+                        Log(LOG_W, @"Temp keychain fallback failed and cert files missing, regenerating certificates");
+                        [CryptoManager regenerateKeyPairUsingSSL];
+                    } else {
+                        Log(LOG_E, @"Temp keychain fallback failed but cert files exist on disk; skipping regeneration to preserve pairing");
+                    }
                 }
             }
         }
@@ -698,7 +754,9 @@ static const NSString* HTTPS_PORT = @"47984";
             return;
         }
         NSArray* certArray = [self getCertificate:identity];
-        NSURLCredential* newCredential = [NSURLCredential credentialWithIdentity:identity certificates:certArray persistence:NSURLCredentialPersistencePermanent];
+        // Use ForSession persistence to avoid macOS prompting for keychain password.
+        // We manage identity caching ourselves in getClientCertificate.
+        NSURLCredential* newCredential = [NSURLCredential credentialWithIdentity:identity certificates:certArray persistence:NSURLCredentialPersistenceForSession];
         completionHandler(NSURLSessionAuthChallengeUseCredential, newCredential);
         if (identity != nil) {
             CFRelease(identity);

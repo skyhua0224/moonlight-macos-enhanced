@@ -12,15 +12,28 @@
 #import "Moonlight-Swift.h"
 
 #import <AudioUnit/AudioUnit.h>
+#import <CoreAudio/CoreAudio.h>
 #import <AVFoundation/AVFoundation.h>
 #import <VideoToolbox/VideoToolbox.h>
 #import <os/lock.h>
 
 #import <arpa/inet.h>
+#include <netinet/in.h>
 
 #include "Limelight.h"
 #include "Limelight-internal.h"
 #include "opus_multistream.h"
+
+// Limelight-internal.h defines these as macros redirecting to
+// LiGetEffectiveConnectionContext()->xxx, which prevents direct
+// struct field access like _connectionContext.RemoteAddr.
+// Undef them so we can access ML_CONNECTION_CONTEXT fields directly.
+#undef RemoteAddr
+#undef LocalAddr
+#undef AddrLen
+#undef MicPingPayload
+#undef MicPortNumber
+#undef AudioEncryptionEnabled
 
 #define AUDIO_QUEUE_BUFFERS 4
 
@@ -69,11 +82,10 @@
     dispatch_queue_t _micQueue;
     OpusMSEncoder* _micEncoder;
     NSMutableData* _micPcmQueue;
-    uint16_t _micSeq;
-    uint32_t _micTimestamp;
-    uint32_t _micSsrc;
     int _micSendFailures;
     BOOL _micStopping;
+    uint64_t _micLastPingTimeMs;
+    uint32_t _micPingCount;
 #endif
 }
 
@@ -616,8 +628,8 @@ void ClConnectionStatusUpdate(int status)
     // Enable microphone streaming only if requested in settings. The host may ignore it.
     BOOL enableMic = NO;
     @try {
-        NSString* uuid = nil;
-        if (config.host != nil) {
+        NSString* uuid = config.hostUUID;
+        if (uuid == nil && config.host != nil) {
             uuid = [SettingsClass getHostUUIDFrom:config.host];
         }
 
@@ -626,7 +638,10 @@ void ClConnectionStatusUpdate(int status)
         if (settings != nil) {
             enableMic = [settings[@"microphone"] boolValue];
         }
+        Log(LOG_I, @"Microphone setting: enableMic=%d host=%@ uuid=%@ key=%@",
+            enableMic, config.host, uuid, settingsKey);
     } @catch (NSException* exception) {
+        Log(LOG_W, @"Exception reading microphone setting: %@", exception);
         enableMic = NO;
     }
 
@@ -678,8 +693,8 @@ void ClConnectionStatusUpdate(int status)
 
     BOOL enableYuv444 = NO;
     @try {
-        NSString* uuid = nil;
-        if (config.host != nil) {
+        NSString* uuid = config.hostUUID;
+        if (uuid == nil && config.host != nil) {
             uuid = [SettingsClass getHostUUIDFrom:config.host];
         }
 
@@ -768,8 +783,10 @@ void ClConnectionStatusUpdate(int status)
 - (void)startMicrophoneIfNeeded
 {
     if (!_streamConfig.enableMic) {
+        Log(LOG_I, @"Microphone disabled in settings, skipping mic start");
         return;
     }
+    Log(LOG_I, @"Starting microphone capture...");
 
     _micSendFailures = 0;
     _micStopping = NO;
@@ -796,23 +813,82 @@ void ClConnectionStatusUpdate(int status)
     }];
 }
 
+- (AudioDeviceID)audioDeviceIDForUID:(NSString*)uid
+{
+    AudioObjectPropertyAddress propAddr = {
+        .mSelector = kAudioHardwarePropertyDevices,
+        .mScope = kAudioObjectPropertyScopeGlobal,
+        .mElement = kAudioObjectPropertyElementMain
+    };
+    UInt32 dataSize = 0;
+    OSStatus status = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &propAddr, 0, NULL, &dataSize);
+    if (status != noErr) return 0;
+
+    int count = (int)(dataSize / sizeof(AudioDeviceID));
+    AudioDeviceID* devices = malloc(dataSize);
+    if (!devices) return 0;
+
+    status = AudioObjectGetPropertyData(kAudioObjectSystemObject, &propAddr, 0, NULL, &dataSize, devices);
+    if (status != noErr) { free(devices); return 0; }
+
+    AudioDeviceID result = 0;
+    for (int i = 0; i < count; i++) {
+        AudioObjectPropertyAddress uidAddr = {
+            .mSelector = kAudioDevicePropertyDeviceUID,
+            .mScope = kAudioObjectPropertyScopeGlobal,
+            .mElement = kAudioObjectPropertyElementMain
+        };
+        CFStringRef deviceUID = NULL;
+        UInt32 uidSize = sizeof(CFStringRef);
+        if (AudioObjectGetPropertyData(devices[i], &uidAddr, 0, NULL, &uidSize, &deviceUID) == noErr && deviceUID) {
+            if ([(__bridge NSString*)deviceUID isEqualToString:uid]) {
+                result = devices[i];
+                CFRelease(deviceUID);
+                break;
+            }
+            CFRelease(deviceUID);
+        }
+    }
+    free(devices);
+    return result;
+}
+
 - (void)startMicrophoneEngineLocked
 {
     if (self.micAudioEngine != nil && self.micAudioEngine.isRunning) {
         return;
     }
 
-    if (initializeMicrophoneStream() != 0) {
+    if (initializeMicrophoneStreamCtx(&_connectionContext.micContext, &_connectionContext) != 0) {
         Log(LOG_W, @"Failed to initialize microphone stream socket\n");
         return;
     }
 
-    // Tell the host to start accepting microphone packets and which format we'll send.
-    // Qt sends this control message; without it the host may ignore UDP mic packets.
-    int micCtlErr = LiSendMicrophoneControlCtx(&_connectionContext.inputContext, LI_MIC_CONTROL_START, micSampleRate, micChannels, micBitrate);
-    if (micCtlErr != 0) {
-        Log(LOG_W, @"Failed to send microphone START control: %d\n", micCtlErr);
+    // Log resolved addresses for diagnosis
+    {
+        char connAddrStr[INET6_ADDRSTRLEN] = {0};
+        char micAddrStr[INET6_ADDRSTRLEN] = {0};
+        struct sockaddr_storage *connAddr = &_connectionContext.RemoteAddr;
+        struct sockaddr_storage *micAddr = &_connectionContext.micContext.micRemoteAddr;
+        if (connAddr->ss_family == AF_INET) {
+            inet_ntop(AF_INET, &((struct sockaddr_in*)connAddr)->sin_addr, connAddrStr, sizeof(connAddrStr));
+        } else if (connAddr->ss_family == AF_INET6) {
+            inet_ntop(AF_INET6, &((struct sockaddr_in6*)connAddr)->sin6_addr, connAddrStr, sizeof(connAddrStr));
+        }
+        if (micAddr->ss_family == AF_INET) {
+            inet_ntop(AF_INET, &((struct sockaddr_in*)micAddr)->sin_addr, micAddrStr, sizeof(micAddrStr));
+        } else if (micAddr->ss_family == AF_INET6) {
+            inet_ntop(AF_INET6, &((struct sockaddr_in6*)micAddr)->sin6_addr, micAddrStr, sizeof(micAddrStr));
+        }
+        Log(LOG_I, @"Mic diag: connRemoteAddr=%s (family=%d addrLen=%d) micRemoteAddr=%s (family=%d addrLen=%d) micPort=%u",
+            connAddrStr, connAddr->ss_family, _connectionContext.AddrLen,
+            micAddrStr, micAddr->ss_family, _connectionContext.micContext.micAddrLen,
+            _connectionContext.micContext.micPortNumber);
     }
+
+    _micPingCount = 0;
+    _micLastPingTimeMs = PltGetMillis();
+    Log(LOG_I, @"Mic mode: default");
 
     int err = 0;
     if (_micEncoder == NULL) {
@@ -830,50 +906,166 @@ void ClConnectionStatusUpdate(int status)
             return;
         }
 
-        _micSeq = 0;
-        _micTimestamp = 0;
-        _micSsrc = (uint32_t)arc4random();
-
         opus_multistream_encoder_ctl(_micEncoder, OPUS_SET_BITRATE(micBitrate));
     }
 
     self.micAudioEngine = [[AVAudioEngine alloc] init];
+
+    // Set selected microphone device if configured
+    NSString* micDeviceUID = [[NSUserDefaults standardUserDefaults] stringForKey:@"selectedMicDeviceUID"];
+    if (micDeviceUID.length > 0) {
+        AudioDeviceID deviceID = [self audioDeviceIDForUID:micDeviceUID];
+        if (deviceID != 0) {
+            AVAudioInputNode* inputNode = self.micAudioEngine.inputNode;
+            AudioUnit audioUnit = inputNode.audioUnit;
+            if (audioUnit != NULL) {
+                OSStatus status = AudioUnitSetProperty(audioUnit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global, 0,
+                    &deviceID, sizeof(AudioDeviceID));
+                Log(LOG_I, @"Mic device set: uid=%@ deviceID=%u status=%d", micDeviceUID, deviceID, (int)status);
+            }
+        } else {
+            Log(LOG_W, @"Mic device not found for UID: %@, using system default", micDeviceUID);
+        }
+    }
+
     AVAudioInputNode* input = self.micAudioEngine.inputNode;
     self.micOutputFormat = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatInt16
                                                             sampleRate:micSampleRate
                                                               channels:micChannels
                                                            interleaved:YES];
 
+    // Use the hardware input format and convert manually.
+    // Passing a non-nil format to installTapOnBus can throw an exception on some devices
+    // when AVAudioIONodeImpl::SetOutputFormat rejects the requested conversion.
+    AVAudioFormat* hwFormat = [input outputFormatForBus:0];
+    Log(LOG_I, @"Microphone hardware format: %@", hwFormat);
+
+    // Check if we can do a direct Float32→Int16 conversion (same sample rate)
+    BOOL directConvert = (fabs(hwFormat.sampleRate - micSampleRate) < 1.0 &&
+                          hwFormat.commonFormat == AVAudioPCMFormatFloat32);
+
+    if (!directConvert) {
+        // Create a converter from hardware format → 48 kHz mono int16
+        self.micConverter = [[AVAudioConverter alloc] initFromFormat:hwFormat toFormat:self.micOutputFormat];
+        if (self.micConverter == nil) {
+            Log(LOG_W, @"Cannot create AVAudioConverter from %@ to %@", hwFormat, self.micOutputFormat);
+            self.micAudioEngine = nil;
+            return;
+        }
+        Log(LOG_I, @"Microphone using AVAudioConverter (sample rate conversion needed)");
+    } else {
+        Log(LOG_I, @"Microphone using direct Float32→Int16 conversion (same sample rate)");
+    }
+
     __weak typeof(self) weakSelf = self;
+    __block BOOL micDataLogged = NO;
+    __block int micAmplitudeLogCount = 0;
     [input removeTapOnBus:0];
-    // Ask the engine to provide 48 kHz mono int16 directly. This avoids doing format conversion
-    // on the real-time audio thread and reduces the chance of HAL overloads.
-    [input installTapOnBus:0 bufferSize:(AVAudioFrameCount)micFrameSize format:self.micOutputFormat block:^(AVAudioPCMBuffer* buffer, AVAudioTime* when) {
-        __strong typeof(self) strongSelf = weakSelf;
-        if (strongSelf == nil) {
-            return;
-        }
-        if (!strongSelf->_streamConfig.enableMic) {
-            return;
-        }
 
-        // Copy data off the audio thread (engine provides int16 PCM in AudioBufferList)
-        const AudioBufferList* abl = buffer.audioBufferList;
-        if (abl == NULL || abl->mNumberBuffers < 1) {
-            return;
-        }
+    @try {
+        // Pass nil format to receive audio in the hardware's native format.
+        [input installTapOnBus:0 bufferSize:(AVAudioFrameCount)(micFrameSize * (hwFormat.sampleRate / micSampleRate + 1)) format:nil block:^(AVAudioPCMBuffer* buffer, AVAudioTime* when) {
+            __strong typeof(self) strongSelf = weakSelf;
+            if (strongSelf == nil || !strongSelf->_streamConfig.enableMic) {
+                return;
+            }
 
-        const AudioBuffer ab = abl->mBuffers[0];
-        if (ab.mData == NULL || ab.mDataByteSize == 0) {
-            return;
-        }
+            NSData* chunk = nil;
 
-        NSData* chunk = [NSData dataWithBytes:ab.mData length:(NSUInteger)ab.mDataByteSize];
-        dispatch_async(self->_micQueue, ^{
-            [self->_micPcmQueue appendData:chunk];
-            [strongSelf drainMicPcmAndSend];
-        });
-    }];
+            if (directConvert) {
+                // Direct Float32 → Int16 conversion (bypasses AVAudioConverter entirely)
+                const float* srcFloat = buffer.floatChannelData ? buffer.floatChannelData[0] : NULL;
+                AVAudioFrameCount srcFrames = buffer.frameLength;
+                if (srcFloat == NULL || srcFrames == 0) {
+                    return;
+                }
+
+                NSMutableData* pcmData = [NSMutableData dataWithLength:srcFrames * sizeof(int16_t)];
+                int16_t* dst = (int16_t*)pcmData.mutableBytes;
+                float maxAbs = 0.0f;
+                for (AVAudioFrameCount i = 0; i < srcFrames; i++) {
+                    float raw = srcFloat[i];
+                    float absVal = raw < 0 ? -raw : raw;
+                    if (absVal > maxAbs) maxAbs = absVal;
+                    float s = raw * 32767.0f;
+                    if (s > 32767.0f) s = 32767.0f;
+                    else if (s < -32768.0f) s = -32768.0f;
+                    dst[i] = (int16_t)s;
+                }
+                // Log amplitude of first 10 buffers to verify real audio
+                if (micAmplitudeLogCount < 10) {
+                    micAmplitudeLogCount++;
+                    Log(LOG_I, @"Mic amplitude [%d]: maxAbs=%.6f frames=%u (Int16 max=%d)",
+                        micAmplitudeLogCount, maxAbs, (unsigned)srcFrames, (int)(maxAbs * 32767.0f));
+                }
+                chunk = pcmData;
+            } else {
+                // Use AVAudioConverter for sample rate conversion
+                AVAudioConverter* converter = strongSelf.micConverter;
+                AVAudioFormat* outFmt = strongSelf.micOutputFormat;
+                if (converter == nil || outFmt == nil) {
+                    return;
+                }
+
+                AVAudioFrameCount outputFrames = (AVAudioFrameCount)(buffer.frameLength * micSampleRate / hwFormat.sampleRate) + 1;
+                AVAudioPCMBuffer* converted = [[AVAudioPCMBuffer alloc] initWithPCMFormat:outFmt frameCapacity:outputFrames];
+                if (converted == nil) {
+                    return;
+                }
+
+                __block BOOL inputConsumed = NO;
+                NSError* convErr = nil;
+                [converter convertToBuffer:converted error:&convErr withInputFromBlock:^AVAudioBuffer* _Nullable(AVAudioFrameCount inNumberOfPackets, AVAudioConverterInputStatus* _Nonnull outStatus) {
+                    if (inputConsumed) {
+                        *outStatus = AVAudioConverterInputStatus_NoDataNow;
+                        return nil;
+                    }
+                    inputConsumed = YES;
+                    *outStatus = AVAudioConverterInputStatus_HaveData;
+                    return buffer;
+                }];
+
+                if (convErr != nil || converted.frameLength == 0) {
+                    if (!micDataLogged) {
+                        Log(LOG_W, @"AVAudioConverter error: %@ (frames=%u)", convErr, (unsigned)converted.frameLength);
+                        micDataLogged = YES;
+                    }
+                    return;
+                }
+
+                const AudioBufferList* abl = converted.audioBufferList;
+                if (abl == NULL || abl->mNumberBuffers < 1) {
+                    return;
+                }
+                const AudioBuffer ab = abl->mBuffers[0];
+                if (ab.mData == NULL || ab.mDataByteSize == 0) {
+                    return;
+                }
+                chunk = [NSData dataWithBytes:ab.mData length:(NSUInteger)ab.mDataByteSize];
+            }
+
+            if (chunk == nil || chunk.length == 0) {
+                return;
+            }
+
+            if (!micDataLogged) {
+                Log(LOG_I, @"Microphone PCM data flowing: %lu bytes per tap callback", (unsigned long)chunk.length);
+                micDataLogged = YES;
+            }
+
+            dispatch_async(strongSelf->_micQueue, ^{
+                [strongSelf->_micPcmQueue appendData:chunk];
+                [strongSelf drainMicPcmAndSend];
+            });
+        }];
+    } @catch (NSException* exception) {
+        Log(LOG_W, @"Failed to install microphone tap: %@ - %@", exception.name, exception.reason);
+        self.micAudioEngine = nil;
+        self.micConverter = nil;
+        return;
+    }
 
     NSError* startErr = nil;
     BOOL started = [self.micAudioEngine startAndReturnError:&startErr];
@@ -881,6 +1073,7 @@ void ClConnectionStatusUpdate(int status)
         Log(LOG_W, @"Failed to start microphone capture: %@\n", startErr.localizedDescription);
         [self.micAudioEngine stop];
         self.micAudioEngine = nil;
+        self.micConverter = nil;
     }
 }
 
@@ -890,7 +1083,6 @@ void ClConnectionStatusUpdate(int status)
         return;
     }
 
-    // Ensure common-c uses this connection context on the mic queue
     LiSetThreadConnectionContext(&_connectionContext);
 
     const NSUInteger bytesPerFrame = sizeof(int16_t) * micChannels;
@@ -902,19 +1094,12 @@ void ClConnectionStatusUpdate(int status)
         unsigned char opusPayload[1500];
         int opusLen = opus_multistream_encode(_micEncoder, pcm, micFrameSize, opusPayload, (opus_int32)sizeof(opusPayload));
         if (opusLen > 0) {
-            // RTP header (V=2, PT=97) + Opus payload
-            unsigned char packet[12 + 1500];
-            packet[0] = 0x80;
-            packet[1] = 0x61;
-            *(uint16_t*)(packet + 2) = htons(_micSeq++);
-            *(uint32_t*)(packet + 4) = htonl(_micTimestamp);
-            *(uint32_t*)(packet + 8) = htonl(_micSsrc);
-            memcpy(packet + 12, opusPayload, (size_t)opusLen);
+            int sent = sendMicrophoneOpusDataCtx(&_connectionContext.micContext,
+                                                 opusPayload,
+                                                 opusLen);
 
-            int sent = sendMicrophoneData((const char*)packet, 12 + opusLen);
             if (sent < 0) {
                 _micSendFailures++;
-                // If the mic stream isn't available (socket/context invalid), stop to avoid spam.
                 if (sent == -1 || _micSendFailures >= 5) {
                     Log(LOG_W, @"sendMicrophoneData failed: %d (stopping mic)\n", sent);
                     _streamConfig.enableMic = NO;
@@ -924,10 +1109,8 @@ void ClConnectionStatusUpdate(int status)
             } else {
                 _micSendFailures = 0;
             }
-            _micTimestamp += micFrameSize;
         }
 
-        // Pop consumed PCM
         [_micPcmQueue replaceBytesInRange:NSMakeRange(0, packetPcmBytes) withBytes:NULL length:0];
     }
 }
@@ -940,6 +1123,7 @@ void ClConnectionStatusUpdate(int status)
         [self.micAudioEngine stop];
         self.micAudioEngine = nil;
     }
+    self.micConverter = nil;
 
     _micSendFailures = 0;
     if (_micEncoder != NULL) {
@@ -961,11 +1145,6 @@ void ClConnectionStatusUpdate(int status)
     }
 
     _micQueue = nil;
-
-    LiSendMicrophoneControlCtx(&_connectionContext.inputContext, LI_MIC_CONTROL_STOP, 0, 0, 0);
-
-    // Use context-aware version to avoid using global context which may have
-    // an uninitialized micSocket (value 0 = stdin, which is guarded on macOS)
     destroyMicrophoneStreamCtx(&_connectionContext.micContext);
 }
 #endif
@@ -990,7 +1169,7 @@ static void FillOutputBuffer(void *aqData,
     }
 
     inBuffer->mAudioDataByteSize = bytesPerBuffer;
-    
+
     // If the indexes aren't equal, we have a sample
     if (conn->_audioBufferWriteIndex != conn->_audioBufferReadIndex) {
         // Copy data to the audio buffer
