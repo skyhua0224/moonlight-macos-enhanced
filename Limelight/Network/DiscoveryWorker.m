@@ -15,6 +15,7 @@
 #import "HttpRequest.h"
 #import "DataManager.h"
 #import "StreamingSessionManager.h" // Import for streaming state check
+#import "Moonlight-Swift.h"
 
 @implementation DiscoveryWorker {
     TemporaryHost* _host;
@@ -31,6 +32,10 @@ static const NSTimeInterval AUTO_SWITCH_COOLDOWN_SEC = 30.0;
 static NSMutableDictionary<NSString*, NSNumber*> *gAutoSwitchCooldownByHost = nil;
 static NSObject *gAutoSwitchCooldownLock = nil;
 static dispatch_once_t gAutoSwitchCooldownOnceToken;
+static const NSInteger PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED = 3;
+static NSMutableDictionary<NSString*, NSNumber*> *gUnpairedObservationCountByHost = nil;
+static NSObject *gUnpairedObservationLock = nil;
+static dispatch_once_t gUnpairedObservationOnceToken;
 
 - (id) initWithHost:(TemporaryHost*)host uniqueId:(NSString*)uniqueId {
     self = [super init];
@@ -165,6 +170,20 @@ static dispatch_once_t gAutoSwitchCooldownOnceToken;
 - (void) discoverHost {
     NSArray *addresses = [self getHostAddressList];
     NSMutableArray<NSString *> *filteredAddresses = [addresses mutableCopy];
+
+    NSDictionary *hostSettings = nil;
+    NSString *selectedConnectionMethod = nil;
+    BOOL autoConnectionMode = YES;
+    if (_host.uuid.length > 0) {
+        hostSettings = [SettingsClass getSettingsFor:_host.uuid];
+        if ([hostSettings isKindOfClass:[NSDictionary class]]) {
+            selectedConnectionMethod = hostSettings[@"connectionMethod"];
+            if (selectedConnectionMethod.length > 0 && ![selectedConnectionMethod isEqualToString:@"Auto"]) {
+                autoConnectionMode = NO;
+                filteredAddresses = [NSMutableArray arrayWithObject:selectedConnectionMethod];
+            }
+        }
+    }
     
     Log(LOG_D, @"%@ has %d unique addresses", _host.name, [filteredAddresses count]);
     
@@ -266,11 +285,66 @@ static dispatch_once_t gAutoSwitchCooldownOnceToken;
     }
 
     if (receivedResponse && bestResp) {
+        PairState previousPairState = _host.pairState;
+        BOOL hadPinnedCert = (_host.serverCert != nil);
+        NSInteger rawPairStatus = 0;
+        BOOL hasRawPairStatus = [bestResp getIntTag:TAG_PAIR_STATUS value:&rawPairStatus];
+
         [bestResp populateHost:_host];
-        if (firstOnlineAddress != nil) {
-            _host.activeAddress = firstOnlineAddress;
-        } else if (bestAddress != nil) {
-            _host.activeAddress = bestAddress;
+
+        // Guard against transient discovery responses falsely downgrading a paired host.
+        // We only accept Paired->Unpaired after several consecutive explicit observations.
+        if (hadPinnedCert && previousPairState == PairStatePaired) {
+            if (!hasRawPairStatus) {
+                if (_host.pairState != PairStatePaired) {
+                    Log(LOG_W, @"Ignoring pairState downgrade for %@ (missing PairStatus; keeping Paired)", _host.name);
+                }
+                _host.pairState = PairStatePaired;
+            } else if (rawPairStatus == 0) {
+                dispatch_once(&gUnpairedObservationOnceToken, ^{
+                    gUnpairedObservationLock = [[NSObject alloc] init];
+                    gUnpairedObservationCountByHost = [NSMutableDictionary dictionary];
+                });
+
+                NSString *hostUUID = _host.uuid ?: @"";
+                NSInteger observationCount = 0;
+                @synchronized (gUnpairedObservationLock) {
+                    NSNumber *existing = gUnpairedObservationCountByHost[hostUUID];
+                    observationCount = existing.integerValue + 1;
+                    gUnpairedObservationCountByHost[hostUUID] = @(observationCount);
+                }
+
+                if (observationCount < PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED) {
+                    Log(LOG_W, @"Ignoring transient unpaired state for %@ (%ld/%ld confirmations)",
+                        _host.name,
+                        (long)observationCount,
+                        (long)PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED);
+                    _host.pairState = PairStatePaired;
+                } else {
+                    Log(LOG_I, @"Accepting Paired->Unpaired for %@ after %ld confirmations",
+                        _host.name,
+                        (long)observationCount);
+                }
+            } else {
+                dispatch_once(&gUnpairedObservationOnceToken, ^{
+                    gUnpairedObservationLock = [[NSObject alloc] init];
+                    gUnpairedObservationCountByHost = [NSMutableDictionary dictionary];
+                });
+                NSString *hostUUID = _host.uuid ?: @"";
+                @synchronized (gUnpairedObservationLock) {
+                    [gUnpairedObservationCountByHost removeObjectForKey:hostUUID];
+                }
+            }
+        }
+
+        if (autoConnectionMode) {
+            if (firstOnlineAddress != nil) {
+                _host.activeAddress = firstOnlineAddress;
+            } else if (bestAddress != nil) {
+                _host.activeAddress = bestAddress;
+            }
+        } else if (selectedConnectionMethod.length > 0) {
+            _host.activeAddress = selectedConnectionMethod;
         }
 
         Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t ipv6Address:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n\t latency:%f ms\n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.ipv6Address, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress, minLatency);
@@ -285,7 +359,7 @@ static dispatch_once_t gAutoSwitchCooldownOnceToken;
     }
 
     // Auto-switch to a significantly lower-latency address (>= 20ms improvement)
-    if (receivedResponse && !isStreamingThisHost && bestAddress != nil && _host.activeAddress != nil) {
+    if (autoConnectionMode && receivedResponse && !isStreamingThisHost && bestAddress != nil && _host.activeAddress != nil) {
         if (![bestAddress isEqualToString:_host.activeAddress]) {
             NSNumber *currentLatency = latencies[_host.activeAddress];
             NSNumber *bestLatency = latencies[bestAddress];
@@ -313,10 +387,12 @@ static dispatch_once_t gAutoSwitchCooldownOnceToken;
                     _host.activeAddress = bestAddress;
                     Log(LOG_I, @"Auto-switched %@ from %@ (%.0fms) to %@ (%.0fms)", _host.name, oldAddress, currentLatency.doubleValue, bestAddress, bestLatency.doubleValue);
 
+                    NSString *uuidForNotification = _host.uuid ?: @"";
+                    NSString *hostNameForNotification = _host.name ?: @"";
                     dispatch_async(dispatch_get_main_queue(), ^{
                         [[NSNotificationCenter defaultCenter] postNotificationName:@"HostAutoAddressSwitched" object:nil userInfo:@{
-                            @"uuid": _host.uuid ?: @"",
-                            @"hostName": _host.name ?: @"",
+                            @"uuid": uuidForNotification,
+                            @"hostName": hostNameForNotification,
                             @"oldAddress": oldAddress ?: @"",
                             @"newAddress": bestAddress ?: @"",
                             @"oldLatency": currentLatency ?: @(-1),

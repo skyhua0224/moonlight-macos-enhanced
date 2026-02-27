@@ -3586,6 +3586,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
                     __block int remainingAttempts = 20;
                     __weak typeof(self) weakSelf = self;
                     __block void (^retryBind)(void) = nil;
+                    __weak void (^weakRetryBind)(void) = nil;
                     retryBind = ^{
                         __strong typeof(weakSelf) strongSelf = weakSelf;
                         if (!strongSelf) {
@@ -3601,8 +3602,13 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
                             Log(LOG_W, @"Input context still not initialized after retries");
                             return;
                         }
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), retryBind);
+                        void (^strongRetryBind)(void) = weakRetryBind;
+                        if (!strongRetryBind) {
+                            return;
+                        }
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), strongRetryBind);
                     };
+                    weakRetryBind = retryBind;
                     retryBind();
                 }
 

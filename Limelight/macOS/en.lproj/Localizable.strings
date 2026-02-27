@@ -79,6 +79,27 @@
 
 /* Misc */
 "Not supported" = "Not supported";
+"Misc" = "Misc";
+"Debug Log" = "Debug Log";
+"View Log" = "View Log";
+"Open Folder" = "Open Folder";
+"Open in Editor" = "Open in Editor";
+"Export Log…" = "Export Log…";
+"Live Debug Log" = "Live Debug Log";
+"Copy All" = "Copy All";
+"(No logs yet)" = "(No logs yet)";
+"Pairing Cache" = "Pairing Cache";
+"Reset Hosts (Recommended)" = "Reset Hosts (Recommended)";
+"Full Reset (Pairing + Cache)" = "Full Reset (Pairing + Cache)";
+"Dangerous Operation" = "Dangerous Operation";
+"I Understand, Continue" = "I Understand, Continue";
+"Reset Hosts Confirm Message" = "Please confirm you understand this action. This will remove all saved host entries in Moonlight on this device. Online hosts may appear again after discovery, but saved pairing state will be cleared.";
+"Full Reset Confirm Message" = "Please confirm you understand this action. This will remove all saved host entries and local pairing credentials (client certificates) on this device. You will need to pair again.";
+"Reset Completed" = "Reset Completed";
+"Hosts reset completed message" = "Host entries were cleared. Please restart the app and add your host again.";
+"Full reset completed message" = "Host entries and local pairing cache were cleared. Please restart the app and pair again.";
+"Restart App" = "Restart App";
+"Advanced Reset Separator" = "Advanced (deletes pairing certificates too)";
 
 /* General UI */
 "Search Apps" = "Search Apps";

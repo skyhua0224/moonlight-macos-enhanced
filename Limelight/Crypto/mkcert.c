@@ -5,6 +5,8 @@
 #include <stdlib.h>
 
 #include <openssl/pem.h>
+#include <openssl/pkcs12.h>
+#include <openssl/evp.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
 #include <openssl/rand.h>
@@ -70,9 +72,19 @@ struct CertKeyPair generateCertKeyPair(void) {
     
     mkcert(&x509, &pkey, NUM_BITS, SERIAL, NUM_YEARS);
 
-    p12 = PKCS12_create("limelight", "GameStream", pkey, x509, NULL, 0, 0, 0, 0, 0);
+    // Use legacy 3DES encryption + SHA-1 MAC for maximum compatibility with
+    // Apple's SecPKCS12Import across all macOS versions (including macOS 14).
+    // OpenSSL 3.x defaults to AES-256-CBC + SHA-256 MAC which macOS 14 cannot handle.
+    p12 = PKCS12_create("limelight", "GameStream", pkey, x509, NULL,
+                        NID_pbe_WithSHA1And3_Key_TripleDES_CBC,
+                        NID_pbe_WithSHA1And3_Key_TripleDES_CBC,
+                        0, 0, 0);
     if (p12 == NULL) {
         printf("Error generating a valid PKCS12 certificate.\n");
+    } else {
+        // OpenSSL 3.x defaults PKCS12 MAC to SHA-256, but macOS 14's
+        // SecPKCS12Import only supports SHA-1 MAC. Explicitly override.
+        PKCS12_set_mac(p12, "limelight", -1, NULL, 0, 0, EVP_sha1());
     }
     
     BIO_free(bio_err);

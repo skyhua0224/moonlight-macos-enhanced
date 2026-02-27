@@ -22,6 +22,7 @@
 
 #import "TemporaryHost.h"
 #import "Moonlight-Swift.h"
+#import "Utils.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -29,6 +30,9 @@
 #import "DataManager.h"
 #import "PairManager.h"
 #import "WakeOnLanManager.h"
+#import "HttpManager.h"
+#import "HttpRequest.h"
+#import "ServerInfoResponse.h"
 
 #undef NSLocalizedString
 #define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]
@@ -44,6 +48,9 @@
 
 @property (nonatomic, strong) NSOperationQueue *opQueue;
 @property (nonatomic, strong) DiscoveryManager *discMan;
+@property (nonatomic, copy) NSString *pairingAddressInFlight;
+@property (nonatomic, copy) NSString *pairingFallbackAddress;
+@property (nonatomic, assign) BOOL pairingFallbackAttempted;
 
 @end
 
@@ -120,6 +127,12 @@
     }
 
     if (!targetHost) {
+        return;
+    }
+
+    NSDictionary *settings = [SettingsClass getSettingsFor:uuid];
+    NSString *connectionMethod = settings[@"connectionMethod"];
+    if (connectionMethod.length > 0 && ![connectionMethod isEqualToString:@"Auto"]) {
         return;
     }
 
@@ -505,18 +518,187 @@
 
 #pragma mark - Host Operations
 
+- (BOOL)isStandardGameStreamPort:(NSString *)port {
+    return [port isEqualToString:@"47989"] || [port isEqualToString:@"47984"];
+}
+
+- (BOOL)isDecimalPortString:(NSString *)port {
+    if (port.length == 0 || port.length > 5) {
+        return NO;
+    }
+    NSCharacterSet *digits = [NSCharacterSet decimalDigitCharacterSet];
+    return [port rangeOfCharacterFromSet:[digits invertedSet]].location == NSNotFound;
+}
+
+- (NSString *)joinHost:(NSString *)host withPort:(NSInteger)port {
+    if (host.length == 0 || port <= 0) {
+        return nil;
+    }
+    if ([host containsString:@":"] && ![host hasPrefix:@"["]) {
+        return [NSString stringWithFormat:@"[%@]:%ld", host, (long)port];
+    }
+    return [NSString stringWithFormat:@"%@:%ld", host, (long)port];
+}
+
+- (NSString *)hostOnlyAddress:(NSString *)address {
+    if (address.length == 0) {
+        return nil;
+    }
+    NSString *hostPart = nil;
+    [Utils parseAddress:address intoHost:&hostPart andPort:nil];
+    return hostPart.length > 0 ? hostPart : address;
+}
+
+- (BOOL)isValidPairingEndpoint:(NSString *)candidate forHost:(TemporaryHost *)host {
+    if (candidate.length == 0) {
+        return NO;
+    }
+
+    HttpManager *probeManager = [[HttpManager alloc] initWithHost:candidate
+                                                          uniqueId:[IdManager getUniqueId]
+                                                        serverCert:host.serverCert];
+    ServerInfoResponse *resp = [[ServerInfoResponse alloc] init];
+    [probeManager executeRequestSynchronously:[HttpRequest requestForResponse:resp
+                                                               withUrlRequest:[probeManager newServerInfoRequest:true]
+                                                                 fallbackError:401
+                                                               fallbackRequest:[probeManager newHttpServerInfoRequest:true]]];
+    if (![resp isStatusOk]) {
+        return NO;
+    }
+
+    if (host.uuid.length == 0) {
+        return YES;
+    }
+    NSString *respUuid = [resp getStringTag:TAG_UNIQUE_ID];
+    return respUuid.length > 0 && [respUuid isEqualToString:host.uuid];
+}
+
+- (NSString *)resolvePairingAddressForHost:(TemporaryHost *)host {
+    NSString *active = host.activeAddress ?: @"";
+    NSString *activeHost = nil;
+    NSString *activePort = nil;
+    [Utils parseAddress:active intoHost:&activeHost andPort:&activePort];
+
+    NSMutableOrderedSet<NSString *> *candidates = [[NSMutableOrderedSet alloc] init];
+    BOOL addedActive = NO;
+    // If active endpoint accidentally points to WebUI (e.g. 47990/49990/57990),
+    // prioritize the previous port for pairing because Sunshine GameStream APIs
+    // are commonly exposed on that port.
+    if (activeHost.length > 0 && [self isDecimalPortString:activePort]) {
+        NSInteger p = [activePort integerValue];
+        BOOL likelyWebUiPort = [activePort hasSuffix:@"90"];
+        if (likelyWebUiPort && p > 1) {
+            NSString *previousPortCandidate = [self joinHost:activeHost withPort:(p - 1)];
+            if (previousPortCandidate.length > 0) {
+                [candidates addObject:previousPortCandidate];
+            }
+        }
+        if (active.length > 0) {
+            [candidates addObject:active];
+            addedActive = YES;
+        }
+        if (!likelyWebUiPort && p > 1) {
+            NSString *previousPortCandidate = [self joinHost:activeHost withPort:(p - 1)];
+            if (previousPortCandidate.length > 0) {
+                [candidates addObject:previousPortCandidate];
+            }
+        }
+        if ([self isStandardGameStreamPort:activePort]) {
+            [candidates addObject:activeHost];
+        }
+    }
+    if (!addedActive && active.length > 0) {
+        [candidates addObject:active];
+    }
+
+    NSString *localHost = [self hostOnlyAddress:host.localAddress];
+    if (localHost.length > 0) {
+        [candidates addObject:localHost];
+    }
+    NSString *primaryHost = [self hostOnlyAddress:host.address];
+    if (primaryHost.length > 0) {
+        [candidates addObject:primaryHost];
+    }
+    if (activeHost.length > 0) {
+        [candidates addObject:activeHost];
+    }
+    NSString *externalHost = [self hostOnlyAddress:host.externalAddress];
+    if (externalHost.length > 0) {
+        [candidates addObject:externalHost];
+    }
+
+    Log(LOG_I, @"Pairing candidates for %@: %@", host.name ?: @"", candidates.array ?: @[]);
+    for (NSString *candidate in candidates) {
+        if ([self isValidPairingEndpoint:candidate forHost:host]) {
+            return candidate;
+        }
+    }
+
+    // Last resort: keep previous behavior if probes all failed.
+    if (active.length > 0) {
+        return active;
+    }
+    return localHost ?: primaryHost ?: externalHost;
+}
+
+- (NSString *)previousPortAddressIfLikelyWebUi:(NSString *)address {
+    NSString *pairHost = nil;
+    NSString *pairPort = nil;
+    [Utils parseAddress:address intoHost:&pairHost andPort:&pairPort];
+    if (pairHost.length == 0 || ![self isDecimalPortString:pairPort] || ![pairPort hasSuffix:@"90"]) {
+        return nil;
+    }
+
+    NSInteger p = [pairPort integerValue];
+    if (p <= 1) {
+        return nil;
+    }
+    return [self joinHost:pairHost withPort:(p - 1)];
+}
+
+- (BOOL)isTransientNetworkPairFailureMessage:(NSString *)message {
+    NSString *msg = message.lowercaseString ?: @"";
+    NSArray<NSString *> *tokens = @[
+        @"timeout", @"timed out", @"network", @"disconnected", @"connection",
+        @"请求超时", @"网络连接已中断", @"无法连接"
+    ];
+    for (NSString *token in tokens) {
+        if ([msg containsString:token]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (void)startPairingForHost:(TemporaryHost *)host atAddress:(NSString *)pairingAddress {
+    self.pairingAddressInFlight = pairingAddress;
+    Log(LOG_I, @"Pairing target resolved: host=%@ active=%@ local=%@ address=%@ external=%@ selected=%@ fallback=%@",
+        host.name ?: @"",
+        host.activeAddress ?: @"",
+        host.localAddress ?: @"",
+        host.address ?: @"",
+        host.externalAddress ?: @"",
+        pairingAddress ?: @"",
+        self.pairingFallbackAddress ?: @"");
+
+    NSString *uniqueId = [IdManager getUniqueId];
+    NSData *cert = [CryptoManager readCertFromFile];
+    HttpManager* hMan = [[HttpManager alloc] initWithHost:pairingAddress uniqueId:uniqueId serverCert:host.serverCert];
+    PairManager* pMan = [[PairManager alloc] initWithManager:hMan clientCert:cert callback:self];
+    [self.opQueue addOperation:pMan];
+}
+
 - (void)setupPairing:(TemporaryHost *)host {
     // Run setup asynchronously to avoid blocking the main thread while waiting for discovery to stop
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         // Polling the server while pairing causes the server to screw up
         [self.discMan stopDiscoveryBlocking];
-        
-        NSString *uniqueId = [IdManager getUniqueId];
-        NSData *cert = [CryptoManager readCertFromFile];
 
-        HttpManager* hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:uniqueId serverCert:host.serverCert];
-        PairManager* pMan = [[PairManager alloc] initWithManager:hMan clientCert:cert callback:self];
-        [self.opQueue addOperation:pMan];
+        NSString *pairingAddress = [self resolvePairingAddressForHost:host];
+        NSString *fallback = [self previousPortAddressIfLikelyWebUi:pairingAddress];
+        self.pairingFallbackAddress = fallback;
+        self.pairingFallbackAttempted = NO;
+        [self startPairingForHost:host atAddress:pairingAddress];
     });
 }
 
@@ -579,16 +761,80 @@
 
 - (void)pairSuccessful:(NSData *)serverCert {
     dispatch_async(dispatch_get_main_queue(), ^{
+        self.pairingAddressInFlight = nil;
+        self.pairingFallbackAddress = nil;
+        self.pairingFallbackAttempted = NO;
+
+        if (self.selectedHost == nil) {
+            [self.discMan startDiscovery];
+            return;
+        }
+
+        // Pairing succeeded. Persist cert + paired state immediately to avoid
+        // transient discovery responses reverting UI to Unpaired.
         self.selectedHost.serverCert = serverCert;
+        self.selectedHost.pairState = PairStatePaired;
+        self.selectedHost.state = StateOnline;
+
+        NSString *selectedUuid = self.selectedHost.uuid;
+        if (selectedUuid.length > 0) {
+            @synchronized (self.hosts) {
+                for (TemporaryHost *host in self.hosts) {
+                    if ([host.uuid isEqualToString:selectedUuid]) {
+                        host.serverCert = serverCert;
+                        host.pairState = PairStatePaired;
+                        host.state = StateOnline;
+                    }
+                }
+            }
+        }
+
+        DataManager *dataManager = [[DataManager alloc] init];
+        [dataManager updateHost:self.selectedHost];
+        Log(LOG_I, @"Pairing persisted for %@ (%@): pairState=%d certLen=%lu",
+            self.selectedHost.name ?: @"",
+            self.selectedHost.uuid ?: @"",
+            self.selectedHost.pairState,
+            (unsigned long)serverCert.length);
         
         [self.view.window endSheet:self.pairAlert.window];
+        self.pairAlert = nil;
         [self.discMan startDiscovery];
+        [self updateHosts];
         [self alreadyPaired];
     });
 }
 
 - (void)pairFailed:(NSString*)message {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (!self.pairingFallbackAttempted &&
+            self.pairingFallbackAddress.length > 0 &&
+            [self isTransientNetworkPairFailureMessage:message]) {
+            self.pairingFallbackAttempted = YES;
+            NSString *retryAddress = self.pairingFallbackAddress;
+            Log(LOG_W, @"Pairing failed at %@ with transient error (%@). Retrying once at %@",
+                self.pairingAddressInFlight ?: @"",
+                message ?: @"",
+                retryAddress);
+
+            if (self.pairAlert != nil) {
+                [self.view.window endSheet:self.pairAlert.window];
+                self.pairAlert = nil;
+            }
+
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                [self.discMan stopDiscoveryBlocking];
+                if (self.selectedHost != nil) {
+                    [self startPairingForHost:self.selectedHost atAddress:retryAddress];
+                }
+            });
+            return;
+        }
+
+        self.pairingAddressInFlight = nil;
+        self.pairingFallbackAddress = nil;
+        self.pairingFallbackAttempted = NO;
+
         if (self.pairAlert != nil) {
             [self.view.window endSheet:self.pairAlert.window];
             self.pairAlert = nil;

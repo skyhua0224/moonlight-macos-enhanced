@@ -59,7 +59,19 @@
 - (void) finishPairing:(OSBackgroundTaskIdentifier)bgId
            forResponse:(HttpResponse*)resp
      withFallbackError:(NSString*)errorMsg {
-    [_httpManager executeRequestSynchronously:[HttpRequest requestWithUrlRequest:[_httpManager newUnpairRequest]]];
+    BOOL shouldAttemptUnpair = YES;
+    if (resp != nil && ![resp isStatusOk] && resp.statusCode < 0) {
+        // Network-level failures can happen after host already accepted pairing.
+        // Avoid force-unpair in that case to prevent reverting a successful pair.
+        shouldAttemptUnpair = NO;
+        Log(LOG_W, @"Skipping unpair due to transient network error during pairing: %ld (%@)",
+            (long)resp.statusCode,
+            resp.statusMessage ?: @"Unknown error");
+    }
+
+    if (shouldAttemptUnpair) {
+        [_httpManager executeRequestSynchronously:[HttpRequest requestWithUrlRequest:[_httpManager newUnpairRequest]]];
+    }
     
     
 #if TARGET_OS_IPHONE

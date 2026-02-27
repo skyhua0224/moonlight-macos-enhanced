@@ -11,12 +11,117 @@
 #import "LogBuffer.h"
 
 static const NSTimeInterval kWarnRepeatSuppressWindowSec = 1.0;
+static const unsigned long long kFileLogMaxBytes = 2 * 1024 * 1024;
 static NSMutableDictionary<NSString*, NSMutableDictionary*> *gWarnRepeatTracker = nil;
 static NSObject *gWarnRepeatLock = nil;
+static NSObject *gFileLogLock = nil;
+static NSString *gFileLogPath = nil;
 
 static LogLevel LoggerLogLevel = LOG_I;
 
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args);
+
+static NSString *LoggerTimestampString(void) {
+    static NSDateFormatter *formatter = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        formatter = [[NSDateFormatter alloc] init];
+        formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+        formatter.dateFormat = @"yyyy-MM-dd HH:mm:ss.SSS";
+    });
+    return [formatter stringFromDate:[NSDate date]];
+}
+
+static NSString *EnsureFileLogPath(void) {
+    if (gFileLogPath != nil) {
+        return gFileLogPath;
+    }
+
+    if (gFileLogLock == nil) {
+        gFileLogLock = [[NSObject alloc] init];
+    }
+
+    @synchronized (gFileLogLock) {
+        if (gFileLogPath != nil) {
+            return gFileLogPath;
+        }
+
+        NSString *libraryPath = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject;
+        if (libraryPath.length == 0) {
+            return nil;
+        }
+
+        NSString *logDir = [libraryPath stringByAppendingPathComponent:@"Logs/Moonlight"];
+        NSError *dirError = nil;
+        [[NSFileManager defaultManager] createDirectoryAtPath:logDir withIntermediateDirectories:YES attributes:nil error:&dirError];
+        if (dirError != nil) {
+            NSLog(@"<WARN> Failed to create Moonlight log directory: %@", dirError.localizedDescription);
+        }
+
+        gFileLogPath = [logDir stringByAppendingPathComponent:@"moonlight-debug.log"];
+        return gFileLogPath;
+    }
+}
+
+static void RotateFileLogIfNeeded(NSString *logPath) {
+    if (logPath.length == 0) {
+        return;
+    }
+
+    NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:logPath error:nil];
+    unsigned long long size = [attrs fileSize];
+    if (size < kFileLogMaxBytes) {
+        return;
+    }
+
+    NSString *rotatedPath = [logPath stringByAppendingString:@".1"];
+    [[NSFileManager defaultManager] removeItemAtPath:rotatedPath error:nil];
+    NSError *moveError = nil;
+    [[NSFileManager defaultManager] moveItemAtPath:logPath toPath:rotatedPath error:&moveError];
+    if (moveError != nil) {
+        NSLog(@"<WARN> Failed rotating log file: %@", moveError.localizedDescription);
+    }
+}
+
+static void AppendFileLogLine(NSString *line) {
+    if (line.length == 0) {
+        return;
+    }
+
+    NSString *logPath = EnsureFileLogPath();
+    if (logPath.length == 0) {
+        return;
+    }
+
+    if (gFileLogLock == nil) {
+        gFileLogLock = [[NSObject alloc] init];
+    }
+
+    @synchronized (gFileLogLock) {
+        RotateFileLogIfNeeded(logPath);
+
+        if (![[NSFileManager defaultManager] fileExistsAtPath:logPath]) {
+            NSString *header = [NSString stringWithFormat:@"===== Moonlight debug log started %@ =====\n", LoggerTimestampString()];
+            [header writeToFile:logPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        }
+
+        NSFileHandle *file = [NSFileHandle fileHandleForWritingAtPath:logPath];
+        if (file == nil) {
+            return;
+        }
+
+        @try {
+            [file seekToEndOfFile];
+            NSString *entry = [NSString stringWithFormat:@"[%@] %@\n", LoggerTimestampString(), line];
+            NSData *data = [entry dataUsingEncoding:NSUTF8StringEncoding];
+            [file writeData:data];
+        } @catch (NSException *exception) {
+            NSLog(@"<WARN> Failed writing log file: %@", exception.reason);
+        } @finally {
+            [file closeFile];
+        }
+    }
+}
 
 void Log(LogLevel level, NSString* fmt, ...) {
     va_list args;
@@ -117,6 +222,7 @@ void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
     }
 
     [[LogBuffer shared] appendLine:formattedLine level:level];
+    AppendFileLogLine(formattedLine);
 
     NSLogv(prefixedString, args);
 }

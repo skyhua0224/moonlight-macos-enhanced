@@ -21,6 +21,39 @@ static NSData* key = nil;
 static NSData* cert = nil;
 static NSData* p12 = nil;
 
++ (void)invalidateCachedKeyPair {
+    key = nil;
+    cert = nil;
+    p12 = nil;
+}
+
++ (void)generateAndPersistKeyPairForce:(BOOL)force {
+    @synchronized(self) {
+        if (!force && [CryptoManager keyPairExists]) {
+            return;
+        }
+
+        Log(LOG_I, @"Generating Certificate... ");
+        CertKeyPair certKeyPair = generateCertKeyPair();
+
+        NSData* certData = [CryptoManager getCertFromCertKeyPair:&certKeyPair];
+        NSData* p12Data = [CryptoManager getP12FromCertKeyPair:&certKeyPair];
+        NSData* keyData = [CryptoManager getKeyFromCertKeyPair:&certKeyPair];
+
+        freeCertKeyPair(certKeyPair);
+
+        [CryptoManager writeCryptoObject:@"client.crt" data:certData];
+        [CryptoManager writeCryptoObject:@"client.p12" data:p12Data];
+        [CryptoManager writeCryptoObject:@"client.key" data:keyData];
+
+        cert = certData;
+        p12 = p12Data;
+        key = keyData;
+
+        Log(LOG_I, @"Certificate created");
+    }
+}
+
 - (NSData*) createAESKeyFromSaltSHA1:(NSData*)saltedPIN {
     return [[self SHA1HashData:saltedPIN] subdataWithRange:NSMakeRange(0, 16)];
 }
@@ -187,7 +220,7 @@ static NSData* p12 = nil;
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *documentsDirectory = [paths objectAtIndex:0];
     NSString *file = [documentsDirectory stringByAppendingPathComponent:item];
-    [data writeToFile:file atomically:NO];
+    [data writeToFile:file atomically:YES];
 #endif
 }
 
@@ -284,25 +317,12 @@ static NSData* p12 = nil;
 }
 
 + (void) generateKeyPairUsingSSL {
-    static dispatch_once_t pred;
-    dispatch_once(&pred, ^{
-        if (![CryptoManager keyPairExists]) {
-            Log(LOG_I, @"Generating Certificate... ");
-            CertKeyPair certKeyPair = generateCertKeyPair();
-            
-            NSData* certData = [CryptoManager getCertFromCertKeyPair:&certKeyPair];
-            NSData* p12Data = [CryptoManager getP12FromCertKeyPair:&certKeyPair];
-            NSData* keyData = [CryptoManager getKeyFromCertKeyPair:&certKeyPair];
-            
-            freeCertKeyPair(certKeyPair);
-            
-            [CryptoManager writeCryptoObject:@"client.crt" data:certData];
-            [CryptoManager writeCryptoObject:@"client.p12" data:p12Data];
-            [CryptoManager writeCryptoObject:@"client.key" data:keyData];
-            
-            Log(LOG_I, @"Certificate created");
-        }
-    });
+    [CryptoManager generateAndPersistKeyPairForce:NO];
+}
+
++ (void)regenerateKeyPairUsingSSL {
+    [CryptoManager invalidateCachedKeyPair];
+    [CryptoManager generateAndPersistKeyPairForce:YES];
 }
 
 @end

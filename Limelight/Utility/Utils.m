@@ -12,6 +12,22 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+static BOOL isDecimalPort(NSString *port) {
+    if (port.length == 0 || port.length > 5) {
+        return NO;
+    }
+    NSCharacterSet *digits = [NSCharacterSet decimalDigitCharacterSet];
+    return [port rangeOfCharacterFromSet:[digits invertedSet]].location == NSNotFound;
+}
+
+static BOOL isValidIPv6Literal(NSString *addr) {
+    if (addr.length == 0) {
+        return NO;
+    }
+    struct in6_addr sa6;
+    return inet_pton(AF_INET6, addr.UTF8String, &sa6) == 1;
+}
+
 @implementation Utils
 NSString *const deviceName = @"roth";
 
@@ -54,7 +70,7 @@ NSString *const deviceName = @"roth";
     NSString* hostStr = address;
     NSString* portStr = nil;
     
-    if ([address containsString:@"]"]) {
+    if ([address hasPrefix:@"["] && [address containsString:@"]"]) {
         // IPv6 enclosed in brackets
         NSRange closingBracket = [address rangeOfString:@"]"];
         if (closingBracket.location != NSNotFound && closingBracket.location < address.length - 1) {
@@ -69,12 +85,24 @@ NSString *const deviceName = @"roth";
              hostStr = [address substringWithRange:NSMakeRange(1, closingBracket.location - 1)];
         }
     } else if ([address containsString:@":"]) {
-         // Determine if this is IPv6 literal or Host/IPv4 + port
-         NSArray* components = [address componentsSeparatedByString:@":"];
-         if (components.count == 2) {
-             hostStr = components[0];
-             portStr = components[1];
-         }
+        // Determine if this is IPv6 literal or Host/IPv4 + port.
+        // For bare IPv6 with a custom port (legacy stored format like "2001:db8::1:57989"),
+        // parse the final segment as the port only if the full address is NOT valid IPv6.
+        NSArray* components = [address componentsSeparatedByString:@":"];
+        if (components.count == 2) {
+            hostStr = components[0];
+            portStr = components[1];
+        } else if (!isValidIPv6Literal(address)) {
+            NSRange lastColon = [address rangeOfString:@":" options:NSBackwardsSearch];
+            if (lastColon.location != NSNotFound && lastColon.location < address.length - 1) {
+                NSString *candidateHost = [address substringToIndex:lastColon.location];
+                NSString *candidatePort = [address substringFromIndex:lastColon.location + 1];
+                if (isDecimalPort(candidatePort) && isValidIPv6Literal(candidateHost)) {
+                    hostStr = candidateHost;
+                    portStr = candidatePort;
+                }
+            }
+        }
     }
     
     if (host) *host = hostStr;

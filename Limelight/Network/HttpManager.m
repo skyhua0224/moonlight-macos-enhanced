@@ -14,6 +14,7 @@
 
 #include <libxml2/libxml/xmlreader.h>
 #include <string.h>
+#include <CommonCrypto/CommonDigest.h>
 
 #include <Limelight.h>
 
@@ -458,31 +459,180 @@ static const NSString* HTTPS_PORT = @"47984";
     return [[NSArray alloc] initWithObjects:CFBridgingRelease(certificate), nil];
 }
 
-// Returns the identity
-- (SecIdentityRef)getClientCertificate {
-    SecIdentityRef identityApp = nil;
-    CFDataRef p12Data = (__bridge CFDataRef)[CryptoManager readP12FromFile];
+// Fallback: import PKCS12 into a temporary file-based keychain.
+// This bypasses the default Data Protection keychain which may require
+// entitlements not available to the app (-34018 errSecMissingEntitlement).
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+- (SecIdentityRef)importP12ViaTemporaryKeychain:(NSData *)p12Obj {
+    // Keep the keychain alive as a static - the SecIdentityRef references it
+    static SecKeychainRef persistentKeychain = NULL;
 
-    CFStringRef password = CFSTR("limelight");
-    const void *keys[] = { kSecImportExportPassphrase };
-    const void *values[] = { password };
-    CFDictionaryRef options = CFDictionaryCreate(NULL, keys, values, 1, NULL, NULL);
-    CFArrayRef items;
-    OSStatus securityError = SecPKCS12Import(p12Data, options, &items);
+    NSArray *docPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *keychainPath = [[docPaths objectAtIndex:0] stringByAppendingPathComponent:@"moonlight.keychain"];
+    const char *cPath = keychainPath.UTF8String;
 
-    if (securityError == errSecSuccess && CFArrayGetCount(items) > 0) {
-        //Log(LOG_D, @"Success opening p12 certificate. Items: %ld", CFArrayGetCount(items));
-        CFDictionaryRef identityDict = CFArrayGetValueAtIndex(items, 0);
-        identityApp = (SecIdentityRef)CFDictionaryGetValue(identityDict, kSecImportItemIdentity);
-        CFRetain(identityApp);
-    } else {
-        Log(LOG_E, @"Error opening Certificate.");
+    // Clean up previous keychain to avoid stale key material
+    if (persistentKeychain) {
+        SecKeychainDelete(persistentKeychain);
+        CFRelease(persistentKeychain);
+        persistentKeychain = NULL;
     }
-    
-    CFRelease(items);
+    [[NSFileManager defaultManager] removeItemAtPath:keychainPath error:nil];
+
+    OSStatus status = SecKeychainCreate(cPath, 9, "limelight", FALSE, NULL, &persistentKeychain);
+    if (status != errSecSuccess) {
+        Log(LOG_E, @"Temp keychain fallback: creation failed (%d)", (int)status);
+        persistentKeychain = NULL;
+        return nil;
+    }
+
+    const void *optKeys[] = { kSecImportExportPassphrase, kSecImportExportKeychain };
+    const void *optValues[] = { CFSTR("limelight"), persistentKeychain };
+    CFDictionaryRef options = CFDictionaryCreate(NULL, optKeys, optValues, 2, NULL, NULL);
+
+    CFArrayRef items = NULL;
+    OSStatus importStatus = SecPKCS12Import((__bridge CFDataRef)p12Obj, options, &items);
     CFRelease(options);
-    CFRelease(password);
-    
+
+    SecIdentityRef identity = nil;
+    if (importStatus == errSecSuccess && items != NULL) {
+        for (CFIndex i = 0; i < CFArrayGetCount(items); i++) {
+            CFDictionaryRef dict = CFArrayGetValueAtIndex(items, i);
+            SecIdentityRef candidate = (SecIdentityRef)CFDictionaryGetValue(dict, kSecImportItemIdentity);
+            if (candidate != NULL) {
+                identity = candidate;
+                CFRetain(identity);
+                break;
+            }
+        }
+    }
+    if (items != NULL) {
+        CFRelease(items);
+    }
+
+    if (identity != nil) {
+        Log(LOG_I, @"Temp keychain fallback: successfully created identity");
+    } else {
+        Log(LOG_E, @"Temp keychain fallback: import failed (%d) or no identity returned", (int)importStatus);
+    }
+    return identity;
+}
+#pragma clang diagnostic pop
+
+// Returns the identity, with caching to avoid recreating the keychain on every TLS challenge
+- (SecIdentityRef)getClientCertificate {
+    // Serialize certificate import + regeneration across all concurrent TLS challenges
+    static NSObject *certLock = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        certLock = [[NSObject alloc] init];
+    });
+
+    // Cache: reuse identity if the P12 file hasn't changed
+    static SecIdentityRef cachedIdentity = NULL;
+    static NSData *cachedP12Hash = nil;
+
+    SecIdentityRef identityApp = nil;
+
+    @synchronized(certLock) {
+        NSData *p12Obj = [CryptoManager readP12FromFile];
+
+        // Quick hash to detect P12 changes (regeneration or first launch)
+        NSData *currentHash = nil;
+        if (p12Obj != nil && [p12Obj length] > 0) {
+            unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+            CC_SHA256(p12Obj.bytes, (CC_LONG)p12Obj.length, digest);
+            currentHash = [NSData dataWithBytes:digest length:sizeof(digest)];
+        }
+
+        // Return cached identity if P12 unchanged
+        if (cachedIdentity != NULL && cachedP12Hash != nil &&
+            currentHash != nil && [currentHash isEqualToData:cachedP12Hash]) {
+            CFRetain(cachedIdentity);
+            return cachedIdentity;
+        }
+
+        // P12 changed or no cache — clear old cache
+        if (cachedIdentity != NULL) {
+            CFRelease(cachedIdentity);
+            cachedIdentity = NULL;
+        }
+        cachedP12Hash = nil;
+
+        for (int attempt = 0; attempt < 2 && identityApp == nil; attempt++) {
+            if (attempt > 0) {
+                // Re-read after regeneration
+                p12Obj = [CryptoManager readP12FromFile];
+                if (p12Obj != nil && [p12Obj length] > 0) {
+                    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+                    CC_SHA256(p12Obj.bytes, (CC_LONG)p12Obj.length, digest);
+                    currentHash = [NSData dataWithBytes:digest length:sizeof(digest)];
+                }
+            }
+
+            if (p12Obj == nil || [p12Obj length] == 0) {
+                Log(LOG_E, @"Error opening Certificate: client.p12 is missing or empty");
+                if (attempt == 0) {
+                    [CryptoManager regenerateKeyPairUsingSSL];
+                    continue;
+                }
+                break;
+            }
+
+            CFDataRef p12Data = (__bridge CFDataRef)p12Obj;
+
+            const void *keys[] = { kSecImportExportPassphrase };
+            const void *values[] = { CFSTR("limelight") };
+            CFDictionaryRef options = CFDictionaryCreate(NULL, keys, values, 1, NULL, NULL);
+
+            CFArrayRef items = NULL;
+            OSStatus securityError = SecPKCS12Import(p12Data, options, &items);
+
+            if (securityError == errSecSuccess && items != NULL) {
+                CFIndex count = CFArrayGetCount(items);
+                for (CFIndex i = 0; i < count; i++) {
+                    CFDictionaryRef identityDict = CFArrayGetValueAtIndex(items, i);
+                    SecIdentityRef candidateIdentity = (SecIdentityRef)CFDictionaryGetValue(identityDict, kSecImportItemIdentity);
+                    if (candidateIdentity != NULL) {
+                        identityApp = candidateIdentity;
+                        CFRetain(identityApp);
+                        break;
+                    }
+                }
+            }
+
+            if (items != NULL) {
+                CFRelease(items);
+            }
+            CFRelease(options);
+
+            // Fallback: if default keychain import failed or returned no identity,
+            // try importing into a temporary file-based keychain we fully control.
+            if (identityApp == nil) {
+                if (securityError == errSecSuccess) {
+                    Log(LOG_W, @"PKCS12 import succeeded (status=0) but no identity returned, trying temp keychain fallback");
+                } else {
+                    Log(LOG_E, @"PKCS12 import failed (status=%d), trying temp keychain fallback", (int)securityError);
+                }
+
+                identityApp = [self importP12ViaTemporaryKeychain:p12Obj];
+
+                if (identityApp == nil && attempt == 0) {
+                    Log(LOG_W, @"Temp keychain fallback also failed, regenerating certificates");
+                    [CryptoManager regenerateKeyPairUsingSSL];
+                }
+            }
+        }
+
+        // Update cache
+        if (identityApp != NULL && currentHash != nil) {
+            cachedIdentity = identityApp;
+            CFRetain(cachedIdentity);
+            cachedP12Hash = currentHash;
+        }
+    }
+
     return identityApp;
 }
 
@@ -542,10 +692,17 @@ static const NSString* HTTPS_PORT = @"47984";
     else if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodClientCertificate])
     {
         SecIdentityRef identity = [self getClientCertificate];
+        if (identity == nil) {
+            Log(LOG_E, @"No client certificate identity available for TLS client auth challenge");
+            completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, NULL);
+            return;
+        }
         NSArray* certArray = [self getCertificate:identity];
         NSURLCredential* newCredential = [NSURLCredential credentialWithIdentity:identity certificates:certArray persistence:NSURLCredentialPersistencePermanent];
         completionHandler(NSURLSessionAuthChallengeUseCredential, newCredential);
-        CFRelease(identity);
+        if (identity != nil) {
+            CFRelease(identity);
+        }
     }
     else
     {

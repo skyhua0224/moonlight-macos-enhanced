@@ -229,6 +229,9 @@ static const NSString* HTTPS_PORT = @"47984";
         if ([port isEqualToString:(NSString *)HTTP_PORT] || [port isEqualToString:(NSString *)HTTPS_PORT]) {
             return host;
         }
+        if ([host containsString:@":"] && ![host hasPrefix:@"["]) {
+            return [NSString stringWithFormat:@"[%@]:%@", host, port];
+        }
         return [NSString stringWithFormat:@"%@:%@", host, port];
     }
 

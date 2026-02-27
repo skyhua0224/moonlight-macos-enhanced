@@ -1061,6 +1061,127 @@ private struct MoonlightDisclosureGroupStyleCompat: ViewModifier {
 struct AppView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
+  @SwiftUI.State private var showLiveLogViewer = false
+  @SwiftUI.State private var showHostResetConfirm = false
+  @SwiftUI.State private var showFullResetConfirm = false
+  @SwiftUI.State private var showResetDone = false
+  @SwiftUI.State private var resetDoneMessageKey = ""
+
+  private func debugLogFileURL() -> URL? {
+    guard let libraryDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
+    else {
+      return nil
+    }
+    return libraryDir
+      .appendingPathComponent("Logs", isDirectory: true)
+      .appendingPathComponent("Moonlight", isDirectory: true)
+      .appendingPathComponent("moonlight-debug.log", isDirectory: false)
+  }
+
+  @MainActor
+  private func openDebugLogFolder() {
+    guard let logURL = debugLogFileURL() else { return }
+    let dirURL = logURL.deletingLastPathComponent()
+    try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+    NSWorkspace.shared.activateFileViewerSelecting([dirURL])
+  }
+
+  @MainActor
+  private func viewDebugLog() {
+    showLiveLogViewer = true
+  }
+
+  @MainActor
+  private func exportDebugLog() {
+    guard let logURL = debugLogFileURL() else { return }
+    let dirURL = logURL.deletingLastPathComponent()
+    try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+
+    if !FileManager.default.fileExists(atPath: logURL.path) {
+      try? "".write(to: logURL, atomically: true, encoding: .utf8)
+    }
+
+    let panel = NSSavePanel()
+    panel.canCreateDirectories = true
+    panel.nameFieldStringValue = "moonlight-debug.log"
+    if #available(macOS 11.0, *) {
+      panel.allowedContentTypes = [.plainText]
+    } else {
+      panel.allowedFileTypes = ["log", "txt"]
+    }
+
+    let saveAction: (URL) -> Void = { destinationURL in
+      do {
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+          try FileManager.default.removeItem(at: destinationURL)
+        }
+        try FileManager.default.copyItem(at: logURL, to: destinationURL)
+      } catch {
+        NSApp.presentError(error)
+      }
+    }
+
+    let response = panel.runModal()
+    if response == .OK, let destinationURL = panel.url {
+      saveAction(destinationURL)
+    }
+  }
+
+  @MainActor
+  private func openDebugLogInExternalEditor() {
+    guard let logURL = debugLogFileURL() else { return }
+    let dirURL = logURL.deletingLastPathComponent()
+    try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+
+    if !FileManager.default.fileExists(atPath: logURL.path) {
+      try? "".write(to: logURL, atomically: true, encoding: .utf8)
+    }
+
+    NSWorkspace.shared.open(logURL)
+  }
+
+  private func clearPairingAndCacheFiles() {
+    let fileManager = FileManager.default
+    var targets: [URL] = []
+
+    if let documentsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first {
+      targets.append(documentsDir.appendingPathComponent("client.crt", isDirectory: false))
+      targets.append(documentsDir.appendingPathComponent("client.key", isDirectory: false))
+      targets.append(documentsDir.appendingPathComponent("client.p12", isDirectory: false))
+    }
+
+    if let appSupportDir = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+      let moonlightDir = appSupportDir.appendingPathComponent("Moonlight", isDirectory: true)
+      targets.append(moonlightDir.appendingPathComponent("Moonlight_macOS.sqlite", isDirectory: false))
+      targets.append(moonlightDir.appendingPathComponent("Moonlight_macOS.sqlite-shm", isDirectory: false))
+      targets.append(moonlightDir.appendingPathComponent("Moonlight_macOS.sqlite-wal", isDirectory: false))
+    }
+
+    for fileURL in targets where fileManager.fileExists(atPath: fileURL.path) {
+      try? fileManager.removeItem(at: fileURL)
+    }
+  }
+
+  private func clearAllHosts() {
+    let dataManager = DataManager()
+    guard let hosts = dataManager.getHosts() as? [TemporaryHost] else { return }
+
+    for host in hosts {
+      dataManager.remove(host)
+    }
+  }
+
+  @MainActor
+  private func restartApplication() {
+    let appURL = Bundle.main.bundleURL
+    let configuration = NSWorkspace.OpenConfiguration()
+
+    NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, _ in
+      DispatchQueue.main.async {
+        NSApp.terminate(nil)
+      }
+    }
+  }
 
   var body: some View {
     ScrollView {
@@ -1089,8 +1210,240 @@ struct AppView: View {
                 placeholderDimensions: CGSize(width: 300, height: 400))
             })
         }
+
+        Spacer()
+          .frame(height: 32)
+
+        FormSection(title: "Misc") {
+          FormCell(title: "Debug Log", contentWidth: 0) {
+            HStack(spacing: 8) {
+              Button(languageManager.localize("View Log")) {
+                Task { @MainActor in
+                  viewDebugLog()
+                }
+              }
+              Button(languageManager.localize("Open Folder")) {
+                Task { @MainActor in
+                  openDebugLogFolder()
+                }
+              }
+              Button(languageManager.localize("Open in Editor")) {
+                Task { @MainActor in
+                  openDebugLogInExternalEditor()
+                }
+              }
+              Button(languageManager.localize("Export Log…")) {
+                exportDebugLog()
+              }
+            }
+          }
+
+          FormCell(title: "Pairing Cache", contentWidth: 0) {
+            VStack(alignment: .trailing, spacing: 14) {
+              Button(role: .destructive) {
+                showHostResetConfirm = true
+              } label: {
+                Text(languageManager.localize("Reset Hosts (Recommended)"))
+              }
+              .buttonStyle(.borderedProminent)
+              .tint(.red)
+
+              Text(languageManager.localize("Advanced Reset Separator"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+              Button(role: .destructive) {
+                showFullResetConfirm = true
+              } label: {
+                Text(languageManager.localize("Full Reset (Pairing + Cache)"))
+              }
+              .buttonStyle(.bordered)
+              .tint(.red)
+              .padding(.top, 2)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+          }
+        }
       }
       .padding()
+    }
+    .sheet(isPresented: $showLiveLogViewer) {
+      DebugLogLiveView(logURL: debugLogFileURL())
+    }
+    .alert(languageManager.localize("Dangerous Operation"), isPresented: $showHostResetConfirm) {
+      Button(languageManager.localize("Cancel"), role: .cancel) {}
+      Button(languageManager.localize("I Understand, Continue"), role: .destructive) {
+        clearAllHosts()
+        resetDoneMessageKey = "Hosts reset completed message"
+        showResetDone = true
+      }
+    } message: {
+      Text(languageManager.localize("Reset Hosts Confirm Message"))
+    }
+    .alert(languageManager.localize("Dangerous Operation"), isPresented: $showFullResetConfirm) {
+      Button(languageManager.localize("Cancel"), role: .cancel) {}
+      Button(languageManager.localize("I Understand, Continue"), role: .destructive) {
+        clearAllHosts()
+        clearPairingAndCacheFiles()
+        resetDoneMessageKey = "Full reset completed message"
+        showResetDone = true
+      }
+    } message: {
+      Text(languageManager.localize("Full Reset Confirm Message"))
+    }
+    .alert(languageManager.localize("Reset Completed"), isPresented: $showResetDone) {
+      Button(languageManager.localize("Restart App")) {
+        restartApplication()
+      }
+    } message: {
+      Text(languageManager.localize(resetDoneMessageKey))
+    }
+  }
+}
+
+private final class DebugLogTailModel: ObservableObject {
+  @Published var logText: String = ""
+
+  private let logURL: URL
+  private var timer: Timer?
+  private var lastOffset: UInt64 = 0
+
+  init(logURL: URL) {
+    self.logURL = logURL
+  }
+
+  func start() {
+    ensureLogFileExists()
+    reloadEntireFile()
+
+    timer?.invalidate()
+    timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+      self?.pollForUpdates()
+    }
+    RunLoop.main.add(timer!, forMode: .common)
+  }
+
+  func stop() {
+    timer?.invalidate()
+    timer = nil
+  }
+
+  func copyAll() {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(logText, forType: .string)
+  }
+
+  private func ensureLogFileExists() {
+    let dirURL = logURL.deletingLastPathComponent()
+    try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+    if !FileManager.default.fileExists(atPath: logURL.path) {
+      try? "".write(to: logURL, atomically: true, encoding: .utf8)
+    }
+  }
+
+  private func reloadEntireFile() {
+    guard let data = try? Data(contentsOf: logURL) else {
+      logText = ""
+      lastOffset = 0
+      return
+    }
+
+    logText = String(data: data, encoding: .utf8) ?? ""
+    lastOffset = UInt64(data.count)
+  }
+
+  private func pollForUpdates() {
+    let attrs = try? FileManager.default.attributesOfItem(atPath: logURL.path)
+    let fileSize = (attrs?[.size] as? NSNumber)?.uint64Value ?? 0
+
+    if fileSize < lastOffset {
+      // File rotated/truncated
+      reloadEntireFile()
+      return
+    }
+
+    guard fileSize > lastOffset else {
+      return
+    }
+
+    guard let file = try? FileHandle(forReadingFrom: logURL) else {
+      return
+    }
+
+    defer {
+      try? file.close()
+    }
+
+    do {
+      try file.seek(toOffset: lastOffset)
+      let newData = try file.readToEnd() ?? Data()
+      if !newData.isEmpty {
+        let delta = String(data: newData, encoding: .utf8) ?? ""
+        logText += delta
+      }
+      lastOffset = fileSize
+    } catch {
+      // Ignore transient read failures; next poll will retry.
+    }
+  }
+}
+
+private struct DebugLogLiveView: View {
+  @Environment(\.dismiss) private var dismiss
+  @StateObject private var model: DebugLogTailModel
+  @ObservedObject var languageManager = LanguageManager.shared
+
+  init(logURL: URL?) {
+    let fallbackURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
+      .appendingPathComponent("Logs", isDirectory: true)
+      .appendingPathComponent("Moonlight", isDirectory: true)
+      .appendingPathComponent("moonlight-debug.log", isDirectory: false)
+      ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("moonlight-debug.log")
+    _model = StateObject(wrappedValue: DebugLogTailModel(logURL: logURL ?? fallbackURL))
+  }
+
+  var body: some View {
+    VStack(spacing: 12) {
+      HStack {
+        Text(languageManager.localize("Live Debug Log"))
+          .font(.headline)
+        Spacer()
+        Button(languageManager.localize("Copy All")) {
+          model.copyAll()
+        }
+        Button(languageManager.localize("Close")) {
+          dismiss()
+        }
+      }
+
+      ScrollViewReader { proxy in
+        ScrollView {
+          Text(model.logText.isEmpty ? languageManager.localize("(No logs yet)") : model.logText)
+            .font(.system(.caption, design: .monospaced))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+            .id("log-end")
+            .padding(8)
+        }
+        .background(Color(NSColor.textBackgroundColor))
+        .overlay(
+          RoundedRectangle(cornerRadius: 6)
+            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
+        .onChange(of: model.logText) { _ in
+          withAnimation(.easeOut(duration: 0.15)) {
+            proxy.scrollTo("log-end", anchor: .bottom)
+          }
+        }
+      }
+    }
+    .padding(16)
+    .frame(minWidth: 760, minHeight: 460)
+    .onAppear {
+      model.start()
+    }
+    .onDisappear {
+      model.stop()
     }
   }
 }

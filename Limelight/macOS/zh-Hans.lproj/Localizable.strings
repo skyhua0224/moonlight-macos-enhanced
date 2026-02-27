@@ -77,6 +77,27 @@
 
 /* Misc */
 "Not supported" = "不支持";
+"Misc" = "杂项";
+"Debug Log" = "调试日志";
+"View Log" = "查看日志";
+"Open Folder" = "打开文件夹";
+"Open in Editor" = "在编辑器中打开";
+"Export Log…" = "导出日志…";
+"Live Debug Log" = "实时调试日志";
+"Copy All" = "复制全部";
+"(No logs yet)" = "（暂无日志）";
+"Pairing Cache" = "配对缓存";
+"Reset Hosts (Recommended)" = "清空主机列表（推荐）";
+"Full Reset (Pairing + Cache)" = "完全重置（配对+缓存）";
+"Dangerous Operation" = "危险操作";
+"I Understand, Continue" = "我已知晓，继续";
+"Reset Hosts Confirm Message" = "请确认你知道正在操作什么。此操作会清空本机 Moonlight 中保存的主机列表。在线主机可能在重新发现后再次出现，但已保存的配对状态会被清空。";
+"Full Reset Confirm Message" = "请确认你知道正在操作什么。此操作会清空主机列表，并删除本机配对凭据（客户端证书），之后需要重新配对。";
+"Reset Completed" = "清理完成";
+"Hosts reset completed message" = "主机列表已清空。请重启应用后重新添加主机。";
+"Full reset completed message" = "主机列表和本地配对缓存已清空。请重启应用后重新配对。";
+"Restart App" = "重启应用";
+"Advanced Reset Separator" = "高级选项（会删除配对证书）";
 
 /* General UI */
 "Search Apps" = "搜索应用";
