@@ -257,7 +257,9 @@ static const NSString* HTTPS_PORT = @"47984";
 }
 
 - (NSURLRequest *)newHttpServerInfoRequest:(bool)fastFail {
-    NSString* urlString = [NSString stringWithFormat:@"%@/serverinfo", _baseHTTPURL];
+    // Keep uniqueid on HTTP fallback too; some legacy hosts report PairStatus
+    // against the supplied client ID and may otherwise default to unpaired.
+    NSString* urlString = [NSString stringWithFormat:@"%@/serverinfo?uniqueid=%@", _baseHTTPURL, _uniqueId];
     return [self createRequestFromString:urlString timeout:(fastFail ? SHORT_TIMEOUT_SEC : NORMAL_TIMEOUT_SEC)];
 }
 
