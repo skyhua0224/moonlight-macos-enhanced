@@ -246,9 +246,13 @@ static NSData* p12 = nil;
 }
 
 + (bool) keyPairExists {
-    bool keyFileExists = [CryptoManager readCryptoObject:@"client.key"] != nil;
-    bool p12FileExists = [CryptoManager readCryptoObject:@"client.p12"] != nil;
-    bool certFileExists = [CryptoManager readCryptoObject:@"client.crt"] != nil;
+    NSData *keyData = [CryptoManager readCryptoObject:@"client.key"];
+    NSData *p12Data = [CryptoManager readCryptoObject:@"client.p12"];
+    NSData *certData = [CryptoManager readCryptoObject:@"client.crt"];
+
+    bool keyFileExists = (keyData != nil && keyData.length > 0);
+    bool p12FileExists = (p12Data != nil && p12Data.length > 0);
+    bool certFileExists = (certData != nil && certData.length > 0);
     
     return keyFileExists && p12FileExists && certFileExists;
 }

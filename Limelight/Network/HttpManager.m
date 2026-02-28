@@ -668,14 +668,15 @@ static const NSString* HTTPS_PORT = @"47984";
                 identityApp = [self importP12ViaTemporaryKeychain:p12Obj];
 
                 if (identityApp == nil && attempt == 0) {
-                    // Only regenerate if the P12 file is missing or corrupt.
-                    // If import keeps failing with a valid file, regenerating
-                    // would destroy the existing pairing for no benefit.
-                    if (![CryptoManager keyPairExists]) {
-                        Log(LOG_W, @"Temp keychain fallback failed and cert files missing, regenerating certificates");
+                    // If files are missing OR PKCS12 is unreadable (bad password/corrupt),
+                    // regenerate to recover from a stuck cert state.
+                    BOOL missingFiles = ![CryptoManager keyPairExists];
+                    BOOL unreadableP12 = (securityError == errSecAuthFailed || securityError == errSecDecode);
+                    if (missingFiles || unreadableP12) {
+                        Log(LOG_W, @"Temp keychain fallback failed (status=%d), regenerating certificates", (int)securityError);
                         [CryptoManager regenerateKeyPairUsingSSL];
                     } else {
-                        Log(LOG_E, @"Temp keychain fallback failed but cert files exist on disk; skipping regeneration to preserve pairing");
+                        Log(LOG_E, @"Temp keychain fallback failed but existing cert set appears intact; skipping regeneration to preserve pairing");
                     }
                 }
             }
