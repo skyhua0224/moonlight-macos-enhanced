@@ -15,6 +15,7 @@
 #include <libxml2/libxml/xmlreader.h>
 #include <string.h>
 #include <CommonCrypto/CommonDigest.h>
+#include <dlfcn.h>
 
 #include <Limelight.h>
 
@@ -36,6 +37,22 @@
 static uint64_t gLastServerInfoErrorLogMs = 0;
 static int gSuppressedServerInfoErrorLogs = 0;
 static const char *kTempKeychainPassword = "limelight";
+// Not always exposed as a named constant in older SDKs.
+static const OSStatus kErrSecPkcs12VerifyFailure = -25264;
+static SecKeychainRef gTempClientKeychain = NULL;
+static NSString *gTempClientKeychainPath = nil;
+
+static CFStringRef GetImportToMemoryOnlyKey(void) {
+    static CFStringRef key = NULL;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        void *sym = dlsym(RTLD_DEFAULT, "kSecImportToMemoryOnly");
+        if (sym != NULL) {
+            key = *(CFStringRef *)sym;
+        }
+    });
+    return key;
+}
 
 static BOOL IsServerInfoRequest(NSURL *url) {
     if (!url) {
@@ -462,6 +479,8 @@ static const NSString* HTTPS_PORT = @"47984";
     return [[NSArray alloc] initWithObjects:CFBridgingRelease(certificate), nil];
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 - (void)ensureKeychainUnlocked:(SecKeychainRef)keychain context:(NSString *)context {
     if (keychain == NULL) {
         return;
@@ -477,6 +496,10 @@ static const NSString* HTTPS_PORT = @"47984";
 }
 
 - (void)ensureIdentityKeychainUnlocked:(SecIdentityRef)identity context:(NSString *)context {
+    // Prefer unlocking our known temporary keychain first to avoid
+    // triggering an implicit keychain lookup prompt via identity APIs.
+    [self ensureKeychainUnlocked:gTempClientKeychain context:context];
+
     if (identity == NULL) {
         return;
     }
@@ -489,67 +512,185 @@ static const NSString* HTTPS_PORT = @"47984";
     SecKeychainRef keychain = NULL;
     OSStatus keychainStatus = SecKeychainItemCopyKeychain((SecKeychainItemRef)privateKey, &keychain);
     if (keychainStatus == errSecSuccess && keychain != NULL) {
-        [self ensureKeychainUnlocked:keychain context:context];
+        BOOL shouldUnlock = NO;
+        if (gTempClientKeychain != NULL && CFEqual(keychain, gTempClientKeychain)) {
+            shouldUnlock = YES;
+        } else {
+            char kcPath[1024];
+            UInt32 kcPathLen = sizeof(kcPath);
+            if (SecKeychainGetPath(keychain, &kcPathLen, kcPath) == errSecSuccess) {
+                NSString *kcPathStr = [[NSString alloc] initWithBytes:kcPath length:kcPathLen encoding:NSUTF8StringEncoding];
+                shouldUnlock = [self isMoonlightManagedKeychainPath:kcPathStr];
+            }
+        }
+
+        // Never unlock unknown/system keychains. That can trigger password prompts.
+        if (shouldUnlock) {
+            [self ensureKeychainUnlocked:keychain context:context];
+        } else {
+            Log(LOG_W, @"Skipping unlock for unmanaged identity keychain to avoid password prompt");
+        }
         CFRelease(keychain);
     }
     CFRelease(privateKey);
 }
+
+- (BOOL)isMoonlightManagedKeychainPath:(NSString *)path {
+    if (path.length == 0) {
+        return NO;
+    }
+
+    NSString *name = path.lastPathComponent.lowercaseString;
+    if ([name isEqualToString:@"moonlight"]) {
+        return YES;
+    }
+    if ([name isEqualToString:@"moonlight.keychain"] ||
+        [name isEqualToString:@"moonlight.keychain-db"]) {
+        return YES;
+    }
+    if ([name hasPrefix:@"moonlight-client-"] &&
+        ([name hasSuffix:@".keychain"] || [name hasSuffix:@".keychain-db"])) {
+        return YES;
+    }
+    if ([name hasPrefix:@"moonlight"] && [name containsString:@"keychain"]) {
+        return YES;
+    }
+    return NO;
+}
+
+- (void)removeKeychainFileIfExists:(NSString *)path {
+    if (path.length == 0) {
+        return;
+    }
+    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+}
+
+- (void)cleanupLegacyMoonlightKeychainFiles {
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    // Legacy fixed paths used by previous versions.
+    NSArray *docPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    if (docPaths.count > 0) {
+        NSString *documentsDir = [docPaths objectAtIndex:0];
+        [self removeKeychainFileIfExists:[documentsDir stringByAppendingPathComponent:@"moonlight.keychain"]];
+        [self removeKeychainFileIfExists:[documentsDir stringByAppendingPathComponent:@"moonlight.keychain-db"]];
+    }
+
+    // Best-effort cleanup for prior randomized temp keychains from older runs.
+    NSString *tmpDir = NSTemporaryDirectory();
+    NSArray<NSString *> *files = [fm contentsOfDirectoryAtPath:tmpDir error:nil] ?: @[];
+    for (NSString *name in files) {
+        if ([self isMoonlightManagedKeychainPath:name]) {
+            NSString *fullPath = [tmpDir stringByAppendingPathComponent:name];
+            [self removeKeychainFileIfExists:fullPath];
+        }
+    }
+
+    // Older builds may have created moonlight keychains under ~/Library/Keychains.
+    NSArray *libraryPaths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
+    if (libraryPaths.count > 0) {
+        NSString *libraryDir = [libraryPaths objectAtIndex:0];
+        NSString *keychainsDir = [libraryDir stringByAppendingPathComponent:@"Keychains"];
+        [self removeKeychainFileIfExists:[keychainsDir stringByAppendingPathComponent:@"moonlight.keychain"]];
+        [self removeKeychainFileIfExists:[keychainsDir stringByAppendingPathComponent:@"moonlight.keychain-db"]];
+
+        NSArray<NSString *> *keychainFiles = [fm contentsOfDirectoryAtPath:keychainsDir error:nil] ?: @[];
+        for (NSString *name in keychainFiles) {
+            if ([self isMoonlightManagedKeychainPath:name]) {
+                NSString *fullPath = [keychainsDir stringByAppendingPathComponent:name];
+                [self removeKeychainFileIfExists:fullPath];
+            }
+        }
+    }
+}
+
+- (NSString *)newEphemeralMoonlightKeychainPath {
+    NSString *uuid = [[NSUUID UUID] UUIDString].lowercaseString;
+    NSString *fileName = [NSString stringWithFormat:@"moonlight-client-%@.keychain-db", uuid];
+    return [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+}
+
+- (void)removeLegacyMoonlightKeychainFromSearchList {
+    CFArrayRef currentSearchList = NULL;
+    SecKeychainCopySearchList(&currentSearchList);
+    if (!currentSearchList) {
+        return;
+    }
+
+    NSMutableArray *cleanedList = [NSMutableArray array];
+    BOOL dirty = NO;
+    for (CFIndex i = 0; i < CFArrayGetCount(currentSearchList); i++) {
+        SecKeychainRef kc = (SecKeychainRef)CFArrayGetValueAtIndex(currentSearchList, i);
+        char kcPath[1024];
+        UInt32 kcPathLen = sizeof(kcPath);
+        if (SecKeychainGetPath(kc, &kcPathLen, kcPath) == errSecSuccess) {
+            NSString *kcPathStr = [[NSString alloc] initWithBytes:kcPath length:kcPathLen encoding:NSUTF8StringEncoding];
+            if ([self isMoonlightManagedKeychainPath:kcPathStr]) {
+                dirty = YES;
+                continue;
+            }
+        }
+        [cleanedList addObject:(__bridge id)kc];
+    }
+
+    if (dirty) {
+        SecKeychainSetSearchList((__bridge CFArrayRef)cleanedList);
+        Log(LOG_I, @"Removed leftover moonlight keychain entries from system search list");
+    }
+
+    CFRelease(currentSearchList);
+}
+#pragma clang diagnostic pop
 
 // Fallback: import PKCS12 into a temporary file-based keychain.
 // This bypasses the default Data Protection keychain which may require
 // entitlements not available to the app (-34018 errSecMissingEntitlement).
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-- (SecIdentityRef)importP12ViaTemporaryKeychain:(NSData *)p12Obj {
-    // Keep the keychain alive as a static - the SecIdentityRef references it
-    static SecKeychainRef persistentKeychain = NULL;
-
-    NSArray *docPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-    NSString *keychainPath = [[docPaths objectAtIndex:0] stringByAppendingPathComponent:@"moonlight.keychain"];
+- (SecIdentityRef)importP12ViaTemporaryKeychain:(NSData *)p12Obj status:(OSStatus *)statusOut {
+    if (statusOut != NULL) {
+        *statusOut = errSecSuccess;
+    }
+    [self cleanupLegacyMoonlightKeychainFiles];
+    NSString *keychainPath = [self newEphemeralMoonlightKeychainPath];
     const char *cPath = keychainPath.UTF8String;
 
     // Clean up previous keychain to avoid stale key material
-    if (persistentKeychain) {
-        SecKeychainDelete(persistentKeychain);
-        CFRelease(persistentKeychain);
-        persistentKeychain = NULL;
+    if (gTempClientKeychain) {
+        char oldPath[1024];
+        UInt32 oldPathLen = sizeof(oldPath);
+        NSString *oldPathStr = nil;
+        if (SecKeychainGetPath(gTempClientKeychain, &oldPathLen, oldPath) == errSecSuccess) {
+            oldPathStr = [[NSString alloc] initWithBytes:oldPath length:oldPathLen encoding:NSUTF8StringEncoding];
+        }
+        SecKeychainDelete(gTempClientKeychain);
+        CFRelease(gTempClientKeychain);
+        gTempClientKeychain = NULL;
+        if (oldPathStr.length > 0) {
+            [self removeKeychainFileIfExists:oldPathStr];
+        }
     }
-    [[NSFileManager defaultManager] removeItemAtPath:keychainPath error:nil];
+    if (gTempClientKeychainPath.length > 0) {
+        [self removeKeychainFileIfExists:gTempClientKeychainPath];
+        gTempClientKeychainPath = nil;
+    }
+    [self removeKeychainFileIfExists:keychainPath];
 
     // Remove any leftover moonlight.keychain from the system search list.
     // Previous versions (or previous runs) may have added it, causing macOS
     // to prompt "wants to use moonlight's keychain" when the keychain is locked.
-    CFArrayRef currentSearchList = NULL;
-    SecKeychainCopySearchList(&currentSearchList);
-    if (currentSearchList) {
-        NSMutableArray *cleanedList = [NSMutableArray array];
-        BOOL dirty = NO;
-        for (CFIndex i = 0; i < CFArrayGetCount(currentSearchList); i++) {
-            SecKeychainRef kc = (SecKeychainRef)CFArrayGetValueAtIndex(currentSearchList, i);
-            char kcPath[1024];
-            UInt32 kcPathLen = sizeof(kcPath);
-            if (SecKeychainGetPath(kc, &kcPathLen, kcPath) == errSecSuccess) {
-                NSString *kcPathStr = [[NSString alloc] initWithBytes:kcPath length:kcPathLen encoding:NSUTF8StringEncoding];
-                if ([kcPathStr hasSuffix:@"moonlight.keychain"]) {
-                    dirty = YES;
-                    continue; // skip — remove from search list
-                }
-            }
-            [cleanedList addObject:(__bridge id)kc];
-        }
-        if (dirty) {
-            SecKeychainSetSearchList((__bridge CFArrayRef)cleanedList);
-            Log(LOG_I, @"Removed leftover moonlight.keychain from system search list");
-        }
-        CFRelease(currentSearchList);
-    }
+    [self removeLegacyMoonlightKeychainFromSearchList];
 
-    OSStatus status = SecKeychainCreate(cPath, (UInt32)strlen(kTempKeychainPassword), kTempKeychainPassword, FALSE, NULL, &persistentKeychain);
+    OSStatus status = SecKeychainCreate(cPath, (UInt32)strlen(kTempKeychainPassword), kTempKeychainPassword, FALSE, NULL, &gTempClientKeychain);
     if (status != errSecSuccess) {
         Log(LOG_E, @"Temp keychain fallback: creation failed (%d)", (int)status);
-        persistentKeychain = NULL;
+        gTempClientKeychain = NULL;
+        if (statusOut != NULL) {
+            *statusOut = status;
+        }
         return nil;
     }
+    gTempClientKeychainPath = keychainPath;
 
     // Keep this keychain unlocked so TLS private-key operations don't trigger UI prompts.
     SecKeychainSettings settings;
@@ -557,11 +698,11 @@ static const NSString* HTTPS_PORT = @"47984";
     settings.version = SEC_KEYCHAIN_SETTINGS_VERS1;
     settings.lockOnSleep = FALSE;
     settings.useLockInterval = FALSE;
-    OSStatus settingsStatus = SecKeychainSetSettings(persistentKeychain, &settings);
+    OSStatus settingsStatus = SecKeychainSetSettings(gTempClientKeychain, &settings);
     if (settingsStatus != errSecSuccess) {
         Log(LOG_W, @"Temp keychain fallback: failed to set keychain settings (%d)", (int)settingsStatus);
     }
-    [self ensureKeychainUnlocked:persistentKeychain context:@"temp-keychain-create"];
+    [self ensureKeychainUnlocked:gTempClientKeychain context:@"temp-keychain-create"];
 
     // SecKeychainCreate auto-appends to the search list; remove it immediately
     CFArrayRef postCreateList = NULL;
@@ -574,7 +715,7 @@ static const NSString* HTTPS_PORT = @"47984";
             UInt32 kcPathLen = sizeof(kcPath);
             if (SecKeychainGetPath(kc, &kcPathLen, kcPath) == errSecSuccess) {
                 NSString *kcPathStr = [[NSString alloc] initWithBytes:kcPath length:kcPathLen encoding:NSUTF8StringEncoding];
-                if ([kcPathStr hasSuffix:@"moonlight.keychain"]) {
+                if ([self isMoonlightManagedKeychainPath:kcPathStr]) {
                     continue;
                 }
             }
@@ -585,11 +726,14 @@ static const NSString* HTTPS_PORT = @"47984";
     }
 
     const void *optKeys[] = { kSecImportExportPassphrase, kSecImportExportKeychain };
-    const void *optValues[] = { CFSTR("limelight"), persistentKeychain };
+    const void *optValues[] = { CFSTR("limelight"), gTempClientKeychain };
     CFDictionaryRef options = CFDictionaryCreate(NULL, optKeys, optValues, 2, NULL, NULL);
 
     CFArrayRef items = NULL;
     OSStatus importStatus = SecPKCS12Import((__bridge CFDataRef)p12Obj, options, &items);
+    if (statusOut != NULL) {
+        *statusOut = importStatus;
+    }
     CFRelease(options);
 
     SecIdentityRef identity = nil;
@@ -634,6 +778,10 @@ static const NSString* HTTPS_PORT = @"47984";
     SecIdentityRef identityApp = nil;
 
     @synchronized(certLock) {
+        // Clean legacy search list entries before any PKCS12 import attempt.
+        // This prevents old locked moonlight keychains from triggering UI prompts.
+        [self removeLegacyMoonlightKeychainFromSearchList];
+
         NSData *p12Obj = [CryptoManager readP12FromFile];
 
         // Quick hash to detect P12 changes (regeneration or first launch)
@@ -679,54 +827,79 @@ static const NSString* HTTPS_PORT = @"47984";
                 break;
             }
 
+            OSStatus importStatus = errSecSuccess;
             CFDataRef p12Data = (__bridge CFDataRef)p12Obj;
 
-            const void *keys[] = { kSecImportExportPassphrase };
-            const void *values[] = { CFSTR("limelight") };
-            CFDictionaryRef options = CFDictionaryCreate(NULL, keys, values, 1, NULL, NULL);
+            // 1) Prefer memory-only import to avoid any keychain access/prompt.
+            CFStringRef memOnlyKey = GetImportToMemoryOnlyKey();
+            if (memOnlyKey != NULL) {
+                const void *memKeys[] = { kSecImportExportPassphrase, memOnlyKey };
+                const void *memValues[] = { CFSTR("limelight"), kCFBooleanTrue };
+                CFDictionaryRef memOptions = CFDictionaryCreate(NULL, memKeys, memValues, 2, NULL, NULL);
+                CFArrayRef memItems = NULL;
+                importStatus = SecPKCS12Import(p12Data, memOptions, &memItems);
+                CFRelease(memOptions);
 
-            CFArrayRef items = NULL;
-            OSStatus securityError = SecPKCS12Import(p12Data, options, &items);
-
-            if (securityError == errSecSuccess && items != NULL) {
-                CFIndex count = CFArrayGetCount(items);
-                for (CFIndex i = 0; i < count; i++) {
-                    CFDictionaryRef identityDict = CFArrayGetValueAtIndex(items, i);
-                    SecIdentityRef candidateIdentity = (SecIdentityRef)CFDictionaryGetValue(identityDict, kSecImportItemIdentity);
-                    if (candidateIdentity != NULL) {
-                        identityApp = candidateIdentity;
-                        CFRetain(identityApp);
-                        break;
+                if (importStatus == errSecSuccess && memItems != NULL) {
+                    for (CFIndex i = 0; i < CFArrayGetCount(memItems); i++) {
+                        CFDictionaryRef dict = CFArrayGetValueAtIndex(memItems, i);
+                        SecIdentityRef candidate = (SecIdentityRef)CFDictionaryGetValue(dict, kSecImportItemIdentity);
+                        if (candidate != NULL) {
+                            identityApp = candidate;
+                            CFRetain(identityApp);
+                            Log(LOG_I, @"Client certificate imported in memory without keychain access");
+                            break;
+                        }
                     }
                 }
-            }
-
-            if (items != NULL) {
-                CFRelease(items);
-            }
-            CFRelease(options);
-
-            // Fallback: if default keychain import failed or returned no identity,
-            // try importing into a temporary file-based keychain we fully control.
-            if (identityApp == nil) {
-                if (securityError == errSecSuccess) {
-                    Log(LOG_W, @"PKCS12 import succeeded (status=0) but no identity returned, trying temp keychain fallback");
-                } else {
-                    Log(LOG_E, @"PKCS12 import failed (status=%d), trying temp keychain fallback", (int)securityError);
+                if (memItems != NULL) {
+                    CFRelease(memItems);
                 }
+            }
 
-                identityApp = [self importP12ViaTemporaryKeychain:p12Obj];
+            // 2) If memory-only import is unavailable/failed, try default import semantics.
+            if (identityApp == nil) {
+                const void *keys[] = { kSecImportExportPassphrase };
+                const void *values[] = { CFSTR("limelight") };
+                CFDictionaryRef options = CFDictionaryCreate(NULL, keys, values, 1, NULL, NULL);
+                CFArrayRef items = NULL;
+                importStatus = SecPKCS12Import(p12Data, options, &items);
+                CFRelease(options);
 
-                if (identityApp == nil && attempt == 0) {
+                if (importStatus == errSecSuccess && items != NULL) {
+                    for (CFIndex i = 0; i < CFArrayGetCount(items); i++) {
+                        CFDictionaryRef dict = CFArrayGetValueAtIndex(items, i);
+                        SecIdentityRef candidate = (SecIdentityRef)CFDictionaryGetValue(dict, kSecImportItemIdentity);
+                        if (candidate != NULL) {
+                            identityApp = candidate;
+                            CFRetain(identityApp);
+                            Log(LOG_I, @"Client certificate imported with default PKCS12 import path");
+                            break;
+                        }
+                    }
+                }
+                if (items != NULL) {
+                    CFRelease(items);
+                }
+            }
+
+            // 3) Last resort: controlled temporary keychain import.
+            if (identityApp == nil) {
+                identityApp = [self importP12ViaTemporaryKeychain:p12Obj status:&importStatus];
+            }
+            if (identityApp == nil) {
+                if (attempt == 0) {
                     // If files are missing OR PKCS12 is unreadable (bad password/corrupt),
                     // regenerate to recover from a stuck cert state.
                     BOOL missingFiles = ![CryptoManager keyPairExists];
-                    BOOL unreadableP12 = (securityError == errSecAuthFailed || securityError == errSecDecode);
+                    BOOL unreadableP12 = (importStatus == errSecAuthFailed ||
+                                          importStatus == errSecDecode ||
+                                          importStatus == kErrSecPkcs12VerifyFailure);
                     if (missingFiles || unreadableP12) {
-                        Log(LOG_W, @"Temp keychain fallback failed (status=%d), regenerating certificates", (int)securityError);
+                        Log(LOG_W, @"Client certificate import failed (status=%d), regenerating certificates", (int)importStatus);
                         [CryptoManager regenerateKeyPairUsingSSL];
                     } else {
-                        Log(LOG_E, @"Temp keychain fallback failed but existing cert set appears intact; skipping regeneration to preserve pairing");
+                        Log(LOG_E, @"Client certificate import failed (status=%d) with existing cert files intact; skipping regeneration", (int)importStatus);
                     }
                 }
             }
@@ -798,9 +971,19 @@ static const NSString* HTTPS_PORT = @"47984";
     // Respond to client certificate challenge with our certificate
     else if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodClientCertificate])
     {
+        // Never allow Security.framework to show keychain UI here.
+        // Any unexpected keychain access should fail fast instead of prompting.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        SecKeychainSetUserInteractionAllowed(FALSE);
+#pragma clang diagnostic pop
         SecIdentityRef identity = [self getClientCertificate];
         if (identity == nil) {
             Log(LOG_E, @"No client certificate identity available for TLS client auth challenge");
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            SecKeychainSetUserInteractionAllowed(TRUE);
+#pragma clang diagnostic pop
             completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, NULL);
             return;
         }
@@ -813,6 +996,10 @@ static const NSString* HTTPS_PORT = @"47984";
         if (identity != nil) {
             CFRelease(identity);
         }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        SecKeychainSetUserInteractionAllowed(TRUE);
+#pragma clang diagnostic pop
     }
     else
     {

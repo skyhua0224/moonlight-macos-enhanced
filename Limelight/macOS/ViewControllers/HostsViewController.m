@@ -51,6 +51,7 @@
 @property (nonatomic, copy) NSString *pairingAddressInFlight;
 @property (nonatomic, copy) NSString *pairingFallbackAddress;
 @property (nonatomic, assign) BOOL pairingFallbackAttempted;
+@property (nonatomic, assign) BOOL pairingInProgress;
 
 @end
 
@@ -689,6 +690,12 @@
 }
 
 - (void)setupPairing:(TemporaryHost *)host {
+    if (self.pairingInProgress) {
+        Log(LOG_W, @"Ignoring duplicate pairing request for %@ while pairing is already in progress", host.name ?: @"");
+        return;
+    }
+    self.pairingInProgress = YES;
+
     // Run setup asynchronously to avoid blocking the main thread while waiting for discovery to stop
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         // Polling the server while pairing causes the server to screw up
@@ -761,6 +768,7 @@
 
 - (void)pairSuccessful:(NSData *)serverCert {
     dispatch_async(dispatch_get_main_queue(), ^{
+        self.pairingInProgress = NO;
         self.pairingAddressInFlight = nil;
         self.pairingFallbackAddress = nil;
         self.pairingFallbackAttempted = NO;
@@ -831,6 +839,7 @@
             return;
         }
 
+        self.pairingInProgress = NO;
         self.pairingAddressInFlight = nil;
         self.pairingFallbackAddress = nil;
         self.pairingFallbackAttempted = NO;
@@ -845,6 +854,10 @@
 }
 
 - (void)alreadyPaired {
+    self.pairingInProgress = NO;
+    self.pairingAddressInFlight = nil;
+    self.pairingFallbackAddress = nil;
+    self.pairingFallbackAttempted = NO;
     [self transitionToAppsVCWithHost:self.selectedHost];
 }
 
