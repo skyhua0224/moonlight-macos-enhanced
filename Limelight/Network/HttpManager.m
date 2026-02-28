@@ -35,6 +35,7 @@
 
 static uint64_t gLastServerInfoErrorLogMs = 0;
 static int gSuppressedServerInfoErrorLogs = 0;
+static const char *kTempKeychainPassword = "limelight";
 
 static BOOL IsServerInfoRequest(NSURL *url) {
     if (!url) {
@@ -461,6 +462,39 @@ static const NSString* HTTPS_PORT = @"47984";
     return [[NSArray alloc] initWithObjects:CFBridgingRelease(certificate), nil];
 }
 
+- (void)ensureKeychainUnlocked:(SecKeychainRef)keychain context:(NSString *)context {
+    if (keychain == NULL) {
+        return;
+    }
+
+    OSStatus unlockStatus = SecKeychainUnlock(keychain,
+                                              (UInt32)strlen(kTempKeychainPassword),
+                                              kTempKeychainPassword,
+                                              TRUE);
+    if (unlockStatus != errSecSuccess) {
+        Log(LOG_W, @"Failed to unlock keychain (%@): %d", context ?: @"", (int)unlockStatus);
+    }
+}
+
+- (void)ensureIdentityKeychainUnlocked:(SecIdentityRef)identity context:(NSString *)context {
+    if (identity == NULL) {
+        return;
+    }
+
+    SecKeyRef privateKey = NULL;
+    if (SecIdentityCopyPrivateKey(identity, &privateKey) != errSecSuccess || privateKey == NULL) {
+        return;
+    }
+
+    SecKeychainRef keychain = NULL;
+    OSStatus keychainStatus = SecKeychainItemCopyKeychain((SecKeychainItemRef)privateKey, &keychain);
+    if (keychainStatus == errSecSuccess && keychain != NULL) {
+        [self ensureKeychainUnlocked:keychain context:context];
+        CFRelease(keychain);
+    }
+    CFRelease(privateKey);
+}
+
 // Fallback: import PKCS12 into a temporary file-based keychain.
 // This bypasses the default Data Protection keychain which may require
 // entitlements not available to the app (-34018 errSecMissingEntitlement).
@@ -510,12 +544,24 @@ static const NSString* HTTPS_PORT = @"47984";
         CFRelease(currentSearchList);
     }
 
-    OSStatus status = SecKeychainCreate(cPath, 9, "limelight", FALSE, NULL, &persistentKeychain);
+    OSStatus status = SecKeychainCreate(cPath, (UInt32)strlen(kTempKeychainPassword), kTempKeychainPassword, FALSE, NULL, &persistentKeychain);
     if (status != errSecSuccess) {
         Log(LOG_E, @"Temp keychain fallback: creation failed (%d)", (int)status);
         persistentKeychain = NULL;
         return nil;
     }
+
+    // Keep this keychain unlocked so TLS private-key operations don't trigger UI prompts.
+    SecKeychainSettings settings;
+    memset(&settings, 0, sizeof(settings));
+    settings.version = SEC_KEYCHAIN_SETTINGS_VERS1;
+    settings.lockOnSleep = FALSE;
+    settings.useLockInterval = FALSE;
+    OSStatus settingsStatus = SecKeychainSetSettings(persistentKeychain, &settings);
+    if (settingsStatus != errSecSuccess) {
+        Log(LOG_W, @"Temp keychain fallback: failed to set keychain settings (%d)", (int)settingsStatus);
+    }
+    [self ensureKeychainUnlocked:persistentKeychain context:@"temp-keychain-create"];
 
     // SecKeychainCreate auto-appends to the search list; remove it immediately
     CFArrayRef postCreateList = NULL;
@@ -563,6 +609,7 @@ static const NSString* HTTPS_PORT = @"47984";
     }
 
     if (identity != nil) {
+        [self ensureIdentityKeychainUnlocked:identity context:@"temp-keychain-import"];
         Log(LOG_I, @"Temp keychain fallback: successfully created identity");
     } else {
         Log(LOG_E, @"Temp keychain fallback: import failed (%d) or no identity returned", (int)importStatus);
@@ -600,6 +647,7 @@ static const NSString* HTTPS_PORT = @"47984";
         // Return cached identity if P12 unchanged
         if (cachedIdentity != NULL && cachedP12Hash != nil &&
             currentHash != nil && [currentHash isEqualToData:cachedP12Hash]) {
+            [self ensureIdentityKeychainUnlocked:cachedIdentity context:@"cached-identity"];
             CFRetain(cachedIdentity);
             return cachedIdentity;
         }
@@ -756,6 +804,7 @@ static const NSString* HTTPS_PORT = @"47984";
             completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, NULL);
             return;
         }
+        [self ensureIdentityKeychainUnlocked:identity context:@"client-cert-challenge"];
         NSArray* certArray = [self getCertificate:identity];
         // Use ForSession persistence to avoid macOS prompting for keychain password.
         // We manage identity caching ourselves in getClientCertificate.
