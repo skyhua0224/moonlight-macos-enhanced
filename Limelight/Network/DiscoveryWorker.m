@@ -196,6 +196,8 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     __block double minLatency = DBL_MAX;
     __block NSString *bestAddress = nil;
     __block ServerInfoResponse *bestResp = nil;
+    __block BOOL sawExplicitPairedStatus = NO;
+    __block BOOL sawExplicitUnpairedStatus = NO;
 
     __weak typeof(self) weakSelf = self;
     for (NSString *address in filteredAddresses) {
@@ -223,6 +225,14 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             [lock lock];
             if (success) {
                 receivedResponse = YES;
+                NSInteger rawPairStatus = 0;
+                if ([serverInfoResp getIntTag:TAG_PAIR_STATUS value:&rawPairStatus]) {
+                    if (rawPairStatus == 0) {
+                        sawExplicitUnpairedStatus = YES;
+                    } else {
+                        sawExplicitPairedStatus = YES;
+                    }
+                }
                 NSNumber *pingMs = [LatencyProbe icmpPingMsForAddress:address];
                 if (pingMs != nil) {
                     [latencies setObject:pingMs forKey:address];
@@ -292,20 +302,29 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     if (receivedResponse && bestResp) {
         PairState previousPairState = _host.pairState;
         BOOL hadPinnedCert = (_host.serverCert != nil);
-        NSInteger rawPairStatus = 0;
-        BOOL hasRawPairStatus = [bestResp getIntTag:TAG_PAIR_STATUS value:&rawPairStatus];
 
         [bestResp populateHost:_host];
 
         // Guard against transient discovery responses falsely downgrading a paired host.
-        // We only accept Paired->Unpaired after several consecutive explicit observations.
+        // Evaluate pair status across all successful responses in this poll cycle,
+        // not only the lowest-latency one, to avoid single-endpoint false downgrades.
         if (hadPinnedCert && previousPairState == PairStatePaired) {
-            if (!hasRawPairStatus) {
+            if (sawExplicitPairedStatus) {
+                _host.pairState = PairStatePaired;
+                dispatch_once(&gUnpairedObservationOnceToken, ^{
+                    gUnpairedObservationLock = [[NSObject alloc] init];
+                    gUnpairedObservationCountByHost = [NSMutableDictionary dictionary];
+                });
+                NSString *hostUUID = _host.uuid ?: @"";
+                @synchronized (gUnpairedObservationLock) {
+                    [gUnpairedObservationCountByHost removeObjectForKey:hostUUID];
+                }
+            } else if (!sawExplicitUnpairedStatus) {
                 if (_host.pairState != PairStatePaired) {
                     Log(LOG_W, @"Ignoring pairState downgrade for %@ (missing PairStatus; keeping Paired)", _host.name);
                 }
                 _host.pairState = PairStatePaired;
-            } else if (rawPairStatus == 0) {
+            } else {
                 dispatch_once(&gUnpairedObservationOnceToken, ^{
                     gUnpairedObservationLock = [[NSObject alloc] init];
                     gUnpairedObservationCountByHost = [NSMutableDictionary dictionary];
@@ -329,15 +348,6 @@ static dispatch_once_t gUnpairedObservationOnceToken;
                     Log(LOG_I, @"Accepting Paired->Unpaired for %@ after %ld confirmations",
                         _host.name,
                         (long)observationCount);
-                }
-            } else {
-                dispatch_once(&gUnpairedObservationOnceToken, ^{
-                    gUnpairedObservationLock = [[NSObject alloc] init];
-                    gUnpairedObservationCountByHost = [NSMutableDictionary dictionary];
-                });
-                NSString *hostUUID = _host.uuid ?: @"";
-                @synchronized (gUnpairedObservationLock) {
-                    [gUnpairedObservationCountByHost removeObjectForKey:hostUUID];
                 }
             }
         }
