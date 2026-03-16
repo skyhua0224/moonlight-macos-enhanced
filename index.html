@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Moonlight macOS Enhanced</title>
+    <meta
+      name="description"
+      content="Moonlight macOS Enhanced 的主要入口、源码与问题追踪均以 GitHub 仓库为准。此页面仅保留为导航入口。">
+    <meta name="robots" content="noindex,follow">
+    <link rel="canonical" href="https://github.com/skyhua0224/moonlight-macos-enhanced">
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b1020;
+        --panel: rgba(11, 16, 32, 0.82);
+        --text: #f5f7fb;
+        --muted: #b7c2d8;
+        --accent: #8cc9ff;
+        --accent-strong: #4fa4ff;
+        --border: rgba(255, 255, 255, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        font-family: "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+        background:
+          radial-gradient(circle at top, rgba(79, 164, 255, 0.32), transparent 48%),
+          linear-gradient(160deg, #050914 0%, #10192f 55%, #09101d 100%);
+        color: var(--text);
+      }
+
+      main {
+        width: min(720px, 100%);
+        padding: 40px;
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        background: var(--panel);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(18px);
+      }
+
+      .eyebrow {
+        margin-bottom: 12px;
+        color: var(--accent);
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 18px;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 1.1;
+      }
+
+      p {
+        margin: 0 0 16px;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 20px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+        color: #07101f;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .button.secondary {
+        border-color: var(--border);
+        background: transparent;
+        color: var(--text);
+      }
+
+      .note {
+        margin-top: 28px;
+        font-size: 0.95rem;
+      }
+
+      code {
+        padding: 0.12rem 0.38rem;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+      }
+
+      @media (max-width: 640px) {
+        main {
+          padding: 28px 22px;
+          border-radius: 20px;
+        }
+
+        .actions {
+          flex-direction: column;
+        }
+
+        .button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Repository First</div>
+      <h1>Moonlight macOS Enhanced</h1>
+      <p>
+        这个 GitHub Pages 页面只保留为简短导航页。项目的主要入口、源码、问题追踪和最新说明都以 GitHub
+        仓库为准。
+      </p>
+      <p>
+        如果你是从搜索结果进入这里，建议直接访问仓库主页；最新发布版本可以从 Releases 页面下载。
+      </p>
+      <div class="actions">
+        <a class="button" href="https://github.com/skyhua0224/moonlight-macos-enhanced">Open GitHub Repository</a>
+        <a class="button secondary" href="https://github.com/skyhua0224/moonlight-macos-enhanced/releases">View Releases</a>
+      </div>
+      <p class="note">
+        本页通过 <code>canonical</code> 指向仓库主页，并设置为 <code>noindex,follow</code>，
+        用来减少和仓库首页的重复竞争。
+      </p>
+    </main>
+  </body>
+</html>
