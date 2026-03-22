@@ -32,6 +32,7 @@
     self.ipv6Address = host.ipv6Address;
     self.mac = host.mac;
     self.name = host.name;
+    self.customName = [host valueForKey:@"customName"];
     self.uuid = host.uuid;
     self.serverCodecModeSupport = host.serverCodecModeSupport;
     self.serverCert = host.serverCert;
@@ -74,13 +75,22 @@
         parentHost.serverCert = self.serverCert;
     }
     parentHost.name = self.name;
+    [parentHost setValue:self.customName forKey:@"customName"];
     parentHost.uuid = self.uuid;
     parentHost.serverCodecModeSupport = self.serverCodecModeSupport;
     parentHost.pairState = [NSNumber numberWithInt:self.pairState];
 }
 
+- (NSString *)displayName {
+    NSString *trimmedCustomName = [self.customName stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (trimmedCustomName.length > 0) {
+        return trimmedCustomName;
+    }
+    return self.name ?: @"";
+}
+
 - (NSComparisonResult)compareName:(TemporaryHost *)other {
-    return [self.name caseInsensitiveCompare:other.name];
+    return [self.displayName caseInsensitiveCompare:other.displayName];
 }
 
 - (NSUInteger)hash {

@@ -34,8 +34,10 @@ NS_ASSUME_NONNULL_BEGIN
     *_Nullable addressStates; // 1 = Online, 0 = Offline
 
 @property(atomic, retain) NSString *name;
+@property(atomic, nullable, retain) NSString *customName;
 @property(atomic, retain) NSString *uuid;
 @property(atomic, retain) NSSet *appList;
+@property(nonatomic, readonly) NSString *displayName;
 
 - (instancetype)initFromHost:(Host *)host;
 

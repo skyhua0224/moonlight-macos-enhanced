@@ -170,20 +170,12 @@
 
 ## 🙏 致谢
 
-本项目基于以下优秀的开源项目构建：
+完整的分层致谢、上游来源与生态参考请见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
 
-### 核心项目
-- **[moonlight-macos](https://github.com/MichaelMKenny/moonlight-macos)** by MichaelMKenny - 原生 macOS 客户端基础
-- **[moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c)** by Moonlight Team - 核心串流协议
-
-### 功能参考
-- **[Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine)** by qiin2333 - 支持麦克风的增强主机端
-- **[moonlight-qt](https://github.com/moonlight-stream/moonlight-qt)** by Moonlight Team - 官方跨平台客户端
-
-### 依赖库
-- [SDL2](https://www.libsdl.org/) - 输入处理
-- [OpenSSL](https://www.openssl.org/) - 加密
-- [MASPreferences](https://github.com/shpakovski/MASPreferences) - 设置界面
+- 直接代码基础：`moonlight-macos`、`moonlight-ios`、`moonlight-common-c`
+- 功能与行为参考：`moonlight-qt`、`qiin2333/moonlight-qt`
+- 主机端生态参考：`Sunshine`、`foundation-sunshine`
+- 第三方依赖：`SDL2`、`OpenSSL`、`MASPreferences`
 
 ---
 

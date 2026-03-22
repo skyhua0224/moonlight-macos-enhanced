@@ -44,8 +44,13 @@ class SettingsModel: ObservableObject {
     let dataMan = DataManager()
     dataMan.removeHostsWithEmptyUuid()
     if let tempHosts = dataMan.getHosts() as? [TemporaryHost] {
-      let hosts = tempHosts.filter { !$0.uuid.isEmpty }.map { host in
-        Host(id: host.uuid, name: host.name)
+      let hosts = tempHosts
+        .filter { !$0.uuid.isEmpty }
+        .sorted { lhs, rhs in
+          lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+        .map { host in
+          Host(id: host.uuid, name: host.displayName)
       }
 
       return [global] + hosts

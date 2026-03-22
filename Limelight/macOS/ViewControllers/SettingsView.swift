@@ -73,6 +73,25 @@ enum SettingsPaneType: Int, CaseIterable {
   }
 }
 
+private enum AppAppearanceOption: Int, CaseIterable, Identifiable {
+  case system = 0
+  case light = 1
+  case dark = 2
+
+  var id: Int { rawValue }
+
+  var titleKey: String {
+    switch self {
+    case .system:
+      return "Match System"
+    case .light:
+      return "Light"
+    case .dark:
+      return "Dark"
+    }
+  }
+}
+
 // From: https://medium.com/@jakir/use-hex-color-in-swiftui-c19e6ab79220
 extension Color {
   init(hex: Int, opacity: Double = 1) {
@@ -430,7 +449,6 @@ struct StreamView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .onChange(of: languageManager.currentLanguage) { _ in
               languageManager.applyAppLanguage()
-              NotificationCenter.default.post(name: .init("LanguageChanged"), object: nil)
             }
           }
 
@@ -1274,11 +1292,23 @@ private struct MoonlightDisclosureGroupStyleCompat: ViewModifier {
 struct AppView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
+  @AppStorage("theme") private var appAppearanceRawValue = AppAppearanceOption.system.rawValue
   @SwiftUI.State private var showLiveLogViewer = false
   @SwiftUI.State private var showHostResetConfirm = false
   @SwiftUI.State private var showFullResetConfirm = false
   @SwiftUI.State private var showResetDone = false
   @SwiftUI.State private var resetDoneMessageKey = ""
+
+  private var appAppearanceBinding: Binding<AppAppearanceOption> {
+    Binding(
+      get: {
+        AppAppearanceOption(rawValue: appAppearanceRawValue) ?? .system
+      },
+      set: { newValue in
+        appAppearanceRawValue = newValue.rawValue
+        (NSApp.delegate as? AppDelegateForAppKit)?.applyThemePreference(newValue.rawValue)
+      })
+  }
 
   private func debugLogFileURL(fileName: String) -> URL? {
     guard let libraryDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
@@ -1409,6 +1439,18 @@ struct AppView: View {
     ScrollView {
       VStack {
         FormSection(title: "Behaviour") {
+          FormCell(title: "Appearance", contentWidth: 170) {
+            Picker("", selection: appAppearanceBinding) {
+              ForEach(AppAppearanceOption.allCases) { option in
+                Text(languageManager.localize(option.titleKey)).tag(option)
+              }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .trailing)
+          }
+
+          Divider()
+
           ToggleCell(
             title: "Quit App After Stream",
             boolBinding: $settingsModel.quitAppAfterStream)

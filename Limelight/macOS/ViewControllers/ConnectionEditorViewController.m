@@ -53,7 +53,7 @@
     rootStack.translatesAutoresizingMaskIntoConstraints = NO;
     [view addSubview:rootStack];
 
-    NSTextField *title = [NSTextField labelWithString:[NSString stringWithFormat:@"连接方式 - %@", self.host.name ?: @"-"]];
+    NSTextField *title = [NSTextField labelWithString:[NSString stringWithFormat:@"连接方式 - %@", self.host.displayName ?: @"-"]];
     title.font = [NSFont systemFontOfSize:16 weight:NSFontWeightSemibold];
     [rootStack addArrangedSubview:title];
 

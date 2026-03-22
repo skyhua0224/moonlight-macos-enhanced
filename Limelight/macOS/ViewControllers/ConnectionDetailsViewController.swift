@@ -89,7 +89,7 @@ import Cocoa
         
         // Basic Info
         let basicGrid = createGrid()
-        addRow(label: "Host Name", value: host.name, to: basicGrid)
+        addRow(label: "Host Name", value: host.displayName, to: basicGrid)
         
         let statusString: String
         switch host.state {

@@ -16,7 +16,7 @@
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <menu key="submenu" title="Moonlight" systemMenu="apple" id="uQy-DD-JDr">
                                     <items>
-                                        <menuItem title="About Moonlight" id="5kV-Vb-QxS">
+                                        <menuItem title="About Moonlight macOS Enhanced" id="5kV-Vb-QxS">
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
                                                 <action selector="showAbout:" target="Voe-Tx-rLC" id="2Dn-GM-qfF"/>

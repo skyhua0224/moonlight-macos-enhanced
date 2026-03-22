@@ -11,5 +11,7 @@
 @interface AppDelegateForAppKit : NSObject
 
 - (void)showPreferencesForHost:(NSString *)hostId;
+- (void)applyThemePreference:(NSInteger)theme;
+- (NSInteger)currentThemePreference;
 
 @end

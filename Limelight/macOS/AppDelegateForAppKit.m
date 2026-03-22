@@ -20,6 +20,7 @@
 #import "AppsWorkspaceViewController.h"
 #import "TemporaryHost.h"
 #import "Moonlight-Swift.h"
+#import <objc/runtime.h>
 
 typedef enum : NSUInteger {
     SystemTheme,
@@ -35,6 +36,16 @@ typedef enum : NSUInteger {
 @end
 
 @implementation AppDelegateForAppKit
+
+static const void *MoonlightOriginalMenuItemTitleKey = &MoonlightOriginalMenuItemTitleKey;
+static const void *MoonlightOriginalMenuTitleKey = &MoonlightOriginalMenuTitleKey;
+static const void *MoonlightOriginalToolbarLabelKey = &MoonlightOriginalToolbarLabelKey;
+static const void *MoonlightOriginalToolbarPaletteLabelKey = &MoonlightOriginalToolbarPaletteLabelKey;
+static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolbarToolTipKey;
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
 
 - (NSString *)hostUUIDFromViewControllerTree:(NSViewController *)viewController {
     if (viewController == nil) {
@@ -74,13 +85,14 @@ typedef enum : NSUInteger {
     [self createMainWindow];
     
     self.controllerNavigation = [[ControllerNavigation alloc] init];
+    [self refreshLocalizedChrome];
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
     [[LanguageManager shared] applyAppLanguage];
 
-    Theme theme = [[NSUserDefaults standardUserDefaults] integerForKey:@"theme"];
-    [self changeTheme:theme withMenuItem:[self menuItemForTheme:theme forMenu:self.themeMenuItem.submenu]];
+    [self applyThemePreference:[self currentThemePreference]];
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
@@ -104,6 +116,7 @@ typedef enum : NSUInteger {
     
     [mainWC showWindow:self];
     [mainWC.window makeKeyAndOrderFront:nil];
+    [self localizeToolbarForWindow:mainWC.window];
 }
 
 - (NSWindowController *)preferencesWCWithHostId:(NSString *)hostId {
@@ -170,15 +183,30 @@ typedef enum : NSUInteger {
     [self changeTheme:DarkTheme withMenuItem:((NSMenuItem *)sender)];
 }
 
+- (NSInteger)currentThemePreference {
+    return [[NSUserDefaults standardUserDefaults] integerForKey:@"theme"];
+}
+
+- (void)applyThemePreference:(NSInteger)theme {
+    Theme resolvedTheme = (theme >= SystemTheme && theme <= DarkTheme) ? (Theme)theme : SystemTheme;
+    [self changeTheme:resolvedTheme withMenuItem:[self menuItemForTheme:resolvedTheme forMenu:self.themeMenuItem.submenu]];
+}
+
 - (NSMenuItem *)menuItemForTheme:(Theme)theme forMenu:(NSMenu *)menu {
     static NSUInteger menuIndexes[] = {0, 2, 3};
+    if (menu == nil || theme > DarkTheme) {
+        return nil;
+    }
     return menu.itemArray[menuIndexes[theme]];
 }
 
 - (void)changeTheme:(Theme)theme withMenuItem:(NSMenuItem *)menuItem {
-    menuItem.state = NSControlStateValueOn;
-    for (NSMenuItem *item in menuItem.menu.itemArray) {
-        if (menuItem != item) {
+    NSMenu *menu = menuItem.menu ?: self.themeMenuItem.submenu;
+    NSMenuItem *resolvedMenuItem = menuItem ?: [self menuItemForTheme:theme forMenu:menu];
+
+    resolvedMenuItem.state = NSControlStateValueOn;
+    for (NSMenuItem *item in menu.itemArray) {
+        if (resolvedMenuItem != item) {
             item.state = NSControlStateValueOff;
         }
     }
@@ -196,6 +224,102 @@ typedef enum : NSUInteger {
         case DarkTheme:
             app.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
             break;
+    }
+}
+
+- (void)languageChanged:(NSNotification *)notification {
+    [self refreshLocalizedChrome];
+}
+
+- (void)refreshLocalizedChrome {
+    [self localizeMenu:[NSApplication sharedApplication].mainMenu];
+
+    for (NSWindow *window in NSApplication.sharedApplication.windows) {
+        [self localizeToolbarForWindow:window];
+    }
+}
+
+- (NSString *)localizedChromeString:(NSString *)key {
+    if (key.length == 0) {
+        return key;
+    }
+    return [[LanguageManager shared] localize:key];
+}
+
+- (NSString *)storedStringForObject:(id)object associationKey:(const void *)associationKey currentValue:(NSString *)currentValue {
+    NSString *storedValue = objc_getAssociatedObject(object, associationKey);
+    if (storedValue == nil && currentValue.length > 0) {
+        storedValue = [currentValue copy];
+        objc_setAssociatedObject(object, associationKey, storedValue, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    }
+    return storedValue ?: currentValue ?: @"";
+}
+
+- (void)localizeMenu:(NSMenu *)menu {
+    if (menu == nil) {
+        return;
+    }
+
+    NSString *originalMenuTitle = [self storedStringForObject:menu associationKey:MoonlightOriginalMenuTitleKey currentValue:menu.title];
+    if (originalMenuTitle.length > 0) {
+        menu.title = [self localizedChromeString:originalMenuTitle];
+    }
+
+    for (NSMenuItem *item in menu.itemArray) {
+        NSString *originalItemTitle = [self storedStringForObject:item associationKey:MoonlightOriginalMenuItemTitleKey currentValue:item.title];
+        if (originalItemTitle.length > 0) {
+            item.title = [self localizedChromeString:originalItemTitle];
+        }
+
+        if (item.submenu != nil) {
+            NSString *submenuOriginalTitle = [self storedStringForObject:item.submenu associationKey:MoonlightOriginalMenuTitleKey currentValue:item.submenu.title];
+            NSString *submenuKey = submenuOriginalTitle.length > 0 ? submenuOriginalTitle : originalItemTitle;
+            if (submenuKey.length > 0) {
+                item.submenu.title = [self localizedChromeString:submenuKey];
+            }
+            [self localizeMenu:item.submenu];
+        }
+    }
+}
+
+- (NSString *)toolbarLocalizationKeyForItem:(NSToolbarItem *)item originalValue:(NSString *)originalValue {
+    if ([item.itemIdentifier isEqualToString:@"PreferencesToolbarItem"]) {
+        if (@available(macOS 13.0, *)) {
+            return @"Settings";
+        }
+        return @"Preferences";
+    }
+    return originalValue;
+}
+
+- (void)localizeToolbarForWindow:(NSWindow *)window {
+    NSToolbar *toolbar = window.toolbar;
+    if (toolbar == nil) {
+        return;
+    }
+
+    for (NSToolbarItem *item in toolbar.items) {
+        NSString *originalLabel = [self storedStringForObject:item associationKey:MoonlightOriginalToolbarLabelKey currentValue:item.label];
+        NSString *originalPaletteLabel = [self storedStringForObject:item associationKey:MoonlightOriginalToolbarPaletteLabelKey currentValue:item.paletteLabel];
+        NSString *originalToolTip = [self storedStringForObject:item associationKey:MoonlightOriginalToolbarToolTipKey currentValue:item.toolTip];
+
+        NSString *labelKey = [self toolbarLocalizationKeyForItem:item originalValue:originalLabel];
+        NSString *paletteLabelKey = [self toolbarLocalizationKeyForItem:item originalValue:(originalPaletteLabel.length > 0 ? originalPaletteLabel : originalLabel)];
+        NSString *toolTipKey = [self toolbarLocalizationKeyForItem:item originalValue:(originalToolTip.length > 0 ? originalToolTip : originalLabel)];
+
+        if (labelKey.length > 0) {
+            item.label = [self localizedChromeString:labelKey];
+        }
+        if (paletteLabelKey.length > 0) {
+            item.paletteLabel = [self localizedChromeString:paletteLabelKey];
+        }
+        if (toolTipKey.length > 0) {
+            item.toolTip = [self localizedChromeString:toolTipKey];
+        }
+
+        if ([item.view isKindOfClass:[NSButton class]] && item.toolTip.length > 0) {
+            ((NSButton *)item.view).toolTip = item.toolTip;
+        }
     }
 }
 

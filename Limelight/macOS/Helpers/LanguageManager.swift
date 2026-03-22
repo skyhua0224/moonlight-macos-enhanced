@@ -24,10 +24,14 @@ public class LanguageManager: NSObject, ObservableObject {
 
   public override init() {
     super.init()
-    applyAppLanguage()
+    updateAppLanguage(postNotification: false)
   }
 
   @objc(applyAppLanguage) public func applyAppLanguage() {
+    updateAppLanguage(postNotification: true)
+  }
+
+  private func updateAppLanguage(postNotification: Bool) {
     switch currentLanguage {
     case .system:
       UserDefaults.standard.removeObject(forKey: "AppleLanguages")
@@ -37,6 +41,7 @@ public class LanguageManager: NSObject, ObservableObject {
       UserDefaults.standard.set(["zh-Hans"], forKey: "AppleLanguages")
     }
 
+    guard postNotification else { return }
     NotificationCenter.default.post(name: .init("LanguageChanged"), object: nil)
   }
 

@@ -31,7 +31,7 @@ struct HostDisplayModel: Identifiable {
 
     init(from tempHost: TemporaryHost) {
         self.uuid = tempHost.uuid
-        self.name = tempHost.name
+        self.name = tempHost.displayName
         self.state = HostState(rawValue: Int(tempHost.state.rawValue)) ?? .unknown
         self.pairState = HostPairState(rawValue: Int(tempHost.pairState.rawValue)) ?? .unknown
         self.isStreaming = false
@@ -77,7 +77,7 @@ class HostSidebarViewModel: ObservableObject {
             // Sort hosts: Online first, then by name
             let sortedHosts = dedupedHosts.sorted { (h1, h2) -> Bool in
                 if h1.state == h2.state {
-                    return h1.name < h2.name
+                    return h1.displayName.localizedCaseInsensitiveCompare(h2.displayName) == .orderedAscending
                 }
                 return h1.state == .online
             }

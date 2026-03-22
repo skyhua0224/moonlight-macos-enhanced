@@ -116,6 +116,8 @@
 				macOS/ViewControllers/ConnectionDetailsViewController.swift,
 				macOS/ViewControllers/ConnectionEditorViewController.m,
 				macOS/ViewControllers/ContainerViewController.m,
+				macOS/ViewControllers/DebugLogNoiseClassifier.swift,
+				macOS/ViewControllers/DebugLogParser.swift,
 				macOS/ViewControllers/GeneralPrefsPaneVC.m,
 				macOS/ViewControllers/GeneralPrefsPaneView.xib,
 				macOS/ViewControllers/HostCell.m,
@@ -124,8 +126,6 @@
 				macOS/ViewControllers/HostsViewController.m,
 				macOS/ViewControllers/Settings.swift,
 				macOS/ViewControllers/SettingsHostingController.swift,
-				macOS/ViewControllers/DebugLogNoiseClassifier.swift,
-				macOS/ViewControllers/DebugLogParser.swift,
 				macOS/ViewControllers/SettingsModel.swift,
 				macOS/ViewControllers/SettingsView.swift,
 				macOS/ViewControllers/StreamRiskAssessment.swift,
@@ -397,7 +397,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
-					MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.1.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -456,7 +456,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
-					MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_LDFLAGS = (
 					"$(inherited)",

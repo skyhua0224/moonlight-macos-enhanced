@@ -160,20 +160,12 @@ PRs are welcome! Please:
 
 ## 🙏 Acknowledgements
 
-This project is built upon these excellent open-source projects:
+For a full layered acknowledgement list covering upstream code lineage, feature references, and ecosystem projects, see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
 
-### Core Projects
-- **[moonlight-macos](https://github.com/MichaelMKenny/moonlight-macos)** by MichaelMKenny - Native macOS client foundation
-- **[moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c)** by Moonlight Team - Core streaming protocol
-
-### Feature References
-- **[Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine)** by qiin2333 - Enhanced host with microphone support
-- **[moonlight-qt](https://github.com/moonlight-stream/moonlight-qt)** by Moonlight Team - Official cross-platform client
-
-### Dependencies
-- [SDL2](https://www.libsdl.org/) - Input handling
-- [OpenSSL](https://www.openssl.org/) - Encryption
-- [MASPreferences](https://github.com/shpakovski/MASPreferences) - Settings UI
+- Direct code foundations: `moonlight-macos`, `moonlight-ios`, `moonlight-common-c`
+- Feature and behavior references: `moonlight-qt`, `qiin2333/moonlight-qt`
+- Host ecosystem references: `Sunshine`, `foundation-sunshine`
+- Third-party dependencies: `SDL2`, `OpenSSL`, `MASPreferences`
 
 ---
 

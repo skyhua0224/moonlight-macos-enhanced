@@ -9,6 +9,7 @@
 #import "ContainerViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "Helpers.h"
+#import "Moonlight-Swift.h"
 
 @interface CustomSearchField : NSSearchField
 @end
@@ -88,10 +89,14 @@
     NSToolbarItem *preferencesToolbarItem = [window moonlight_toolbarItemForIdentifier:@"PreferencesToolbarItem"];
     NSButton *preferencesButton = (NSButton *)preferencesToolbarItem.view;
     
-    if (@available(macOS 13.0, *)) {
-        preferencesButton.toolTip = @"Settings";
-    } else {
-        preferencesButton.toolTip = @"Preferences";
+    if (preferencesButton != nil) {
+        NSString *toolTipKey;
+        if (@available(macOS 13.0, *)) {
+            toolTipKey = @"Settings";
+        } else {
+            toolTipKey = @"Preferences";
+        }
+        preferencesButton.toolTip = [[LanguageManager shared] localize:toolTipKey];
     }
 }
 

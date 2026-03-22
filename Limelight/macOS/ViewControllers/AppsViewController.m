@@ -122,7 +122,7 @@ const CGFloat scaleBase = 1.125;
 - (void)viewWillAppear {
     [super viewWillAppear];
     
-    self.parentViewController.title = self.host.name;
+    self.parentViewController.title = self.host.displayName;
     [self updateWindowSubtitle];
     
     [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
@@ -239,7 +239,7 @@ const CGFloat scaleBase = 1.125;
     NSString *title = NSLocalizedString(@"Auto Address Switched Title", @"Auto address switched alert title");
     NSString *format = NSLocalizedString(@"Auto Address Switched Message", @"Auto address switched alert message");
     NSString *message = [NSString stringWithFormat:format,
-                         self.host.name ?: @"",
+                         self.host.displayName ?: @"",
                          oldAddress,
                          newAddress,
                          oldLatency.doubleValue,
@@ -283,7 +283,7 @@ const CGFloat scaleBase = 1.125;
 
     StreamingSessionManager *manager = [StreamingSessionManager shared];
 
-    NSString *hostName = self.host.name ?: @"Unknown Host";
+    NSString *hostName = self.host.displayName.length > 0 ? self.host.displayName : NSLocalizedString(@"Unknown", @"Unknown");
     NSString *appName = (self.host.uuid != nil ? [manager appNameForHost:self.host.uuid] : nil) ?: @"Unknown App";
 
     __weak typeof(self) weakSelf = self;
@@ -360,7 +360,7 @@ const CGFloat scaleBase = 1.125;
     // Ensure we don't have the lock overlay on top (though unlikely to be streaming if offline)
     [self hideLockOverlay];
 
-    NSString *hostName = self.host.name ?: @"Unknown Host";
+    NSString *hostName = self.host.displayName.length > 0 ? self.host.displayName : NSLocalizedString(@"Unknown", @"Unknown");
     self.offlineOverlayHostUUID = self.host.uuid;
 
     __weak typeof(self) weakSelf = self;
@@ -439,7 +439,7 @@ const CGFloat scaleBase = 1.125;
     [self.boxArtCache removeAllObjects];
 
     // Update window title/subtitle
-    self.parentViewController.title = newHost.name;
+    self.parentViewController.title = newHost.displayName;
     [self updateWindowSubtitle];
 
     // Load settings

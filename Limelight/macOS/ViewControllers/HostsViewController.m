@@ -145,7 +145,7 @@
     NSString *title = NSLocalizedString(@"Auto Address Switched Title", @"Auto address switched alert title");
     NSString *format = NSLocalizedString(@"Auto Address Switched Message", @"Auto address switched alert message");
     NSString *message = [NSString stringWithFormat:format,
-                         targetHost.name ?: @"",
+                         targetHost.displayName ?: @"",
                          oldAddress,
                          newAddress,
                          oldLatency.doubleValue,
@@ -321,7 +321,7 @@
     HostCell *item = [collectionView makeItemWithIdentifier:@"HostCell" forIndexPath:indexPath];
     
     TemporaryHost *host = self.hosts[indexPath.item];
-    item.hostName.stringValue = host.name;
+    item.hostName.stringValue = host.displayName;
     item.host = host;
     item.delegate = self;
     
@@ -372,38 +372,86 @@
 - (void)didOpenContextMenu:(NSMenu *)menu forHost:(TemporaryHost *)host {
     NSMenuItem *wakeMenuItem = [HostsViewController getMenuItemForIdentifier:@"wakeMenuItem" inMenu:menu];
     NSMenuItem *showHiddenAppsMenuItem = [HostsViewController getMenuItemForIdentifier:@"showHiddenAppsMenuItem" inMenu:menu];
+    NSMenuItem *removeHostMenuItem = [HostsViewController getMenuItemForIdentifier:@"removeHostMenuItem" inMenu:menu];
+    wakeMenuItem.title = NSLocalizedString(@"Wake PC", @"Wake PC");
+    showHiddenAppsMenuItem.title = NSLocalizedString(@"Show Hidden Apps", @"Show Hidden Apps");
+    removeHostMenuItem.title = NSLocalizedString(@"Remove Host", @"Remove Host");
+
     if (wakeMenuItem != nil) {
-        if (host.state == StateOnline) {
-            wakeMenuItem.enabled = NO;
-        }
+        wakeMenuItem.enabled = (host.state != StateOnline);
     }
     showHiddenAppsMenuItem.state = host.showHiddenApps ? NSControlStateValueOn : NSControlStateValueOff;
 
-    [menu addItem:[NSMenuItem separatorItem]];
-
-    NSMenuItem *settingsItem = [HostsViewController getMenuItemForIdentifier:@"settingsItem" inMenu:menu];
-    if (settingsItem == nil) {
-        settingsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Settings", @"Settings") action:@selector(openHostSettings:) keyEquivalent:@""];
-        [settingsItem setTarget:self];
-        settingsItem.identifier = @"settingsItem";
-        [menu addItem:settingsItem];
+    for (NSString *identifier in @[ @"renameItem", @"advancedSeparator", @"settingsItem", @"detailsItem", @"connectionsItem" ]) {
+        NSMenuItem *existingItem = [HostsViewController getMenuItemForIdentifier:identifier inMenu:menu];
+        if (existingItem != nil) {
+            [menu removeItem:existingItem];
+        }
     }
 
-    NSMenuItem *detailsItem = [HostsViewController getMenuItemForIdentifier:@"detailsItem" inMenu:menu];
-    if (detailsItem == nil) {
-        detailsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Connection Details", @"Connection Details") action:@selector(showConnectionDetails:) keyEquivalent:@""];
-        [detailsItem setTarget:self];
-        detailsItem.identifier = @"detailsItem";
-        [menu addItem:detailsItem];
+    NSInteger removeHostIndex = removeHostMenuItem ? [menu indexOfItem:removeHostMenuItem] : menu.numberOfItems;
+
+    NSMenuItem *renameItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Rename Host…", @"Rename Host…")
+                                                        action:@selector(renameHostMenuItemClicked:)
+                                                 keyEquivalent:@""];
+    renameItem.target = self;
+    renameItem.identifier = @"renameItem";
+    [menu insertItem:renameItem atIndex:removeHostIndex];
+
+    NSInteger insertionIndex = removeHostMenuItem ? [menu indexOfItem:removeHostMenuItem] + 1 : menu.numberOfItems;
+    NSMenuItem *advancedSeparator = [NSMenuItem separatorItem];
+    advancedSeparator.identifier = @"advancedSeparator";
+    [menu insertItem:advancedSeparator atIndex:insertionIndex++];
+
+    NSMenuItem *settingsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Settings", @"Settings") action:@selector(openHostSettings:) keyEquivalent:@""];
+    [settingsItem setTarget:self];
+    settingsItem.identifier = @"settingsItem";
+    [menu insertItem:settingsItem atIndex:insertionIndex++];
+
+    NSMenuItem *detailsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Connection Details", @"Connection Details") action:@selector(showConnectionDetails:) keyEquivalent:@""];
+    [detailsItem setTarget:self];
+    detailsItem.identifier = @"detailsItem";
+    [menu insertItem:detailsItem atIndex:insertionIndex++];
+
+    NSMenuItem *connectionsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Edit Connections", @"Edit Connections") action:@selector(showConnectionEditor:) keyEquivalent:@""];
+    [connectionsItem setTarget:self];
+    connectionsItem.identifier = @"connectionsItem";
+    [menu insertItem:connectionsItem atIndex:insertionIndex];
+}
+
+- (void)renameHostMenuItemClicked:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host == nil) {
+        return;
     }
 
-    NSMenuItem *connectionsItem = [HostsViewController getMenuItemForIdentifier:@"connectionsItem" inMenu:menu];
-    if (connectionsItem == nil) {
-        connectionsItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Edit Connections", @"Edit Connections") action:@selector(showConnectionEditor:) keyEquivalent:@""];
-        [connectionsItem setTarget:self];
-        connectionsItem.identifier = @"connectionsItem";
-        [menu addItem:connectionsItem];
-    }
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleInformational;
+    alert.messageText = NSLocalizedString(@"Rename Host", @"Rename Host");
+    alert.informativeText = NSLocalizedString(@"Rename Host Info", @"Rename Host Info");
+
+    NSTextField *inputField = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 320, 24)];
+    inputField.placeholderString = NSLocalizedString(@"Custom Host Name", @"Custom Host Name");
+    inputField.stringValue = host.customName.length > 0 ? host.customName : host.displayName;
+    alert.accessoryView = inputField;
+    [alert addButtonWithTitle:NSLocalizedString(@"Save", @"Save")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
+
+    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode == NSAlertFirstButtonReturn) {
+            NSString *trimmedName = [inputField.stringValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            host.customName = trimmedName.length > 0 ? trimmedName : nil;
+
+            DataManager *dataManager = [[DataManager alloc] init];
+            [dataManager updateHost:host];
+            [self updateHosts];
+        }
+    }];
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [alert.window makeFirstResponder:inputField];
+        [inputField selectText:nil];
+    });
 }
 
 - (void)openHostSettings:(NSMenuItem *)sender {
@@ -506,7 +554,10 @@
 - (void)filterHostsByString:(NSString *)filterString {
     NSPredicate *predicate;
     if (filterString.length != 0) {
-        predicate = [NSPredicate predicateWithFormat:@"name CONTAINS[cd] %@", filterString];
+        predicate = [NSPredicate predicateWithBlock:^BOOL(TemporaryHost *evaluatedHost, NSDictionary<NSString *,id> * _Nullable bindings) {
+            return [evaluatedHost.displayName rangeOfString:filterString options:NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch].location != NSNotFound ||
+                   [evaluatedHost.name rangeOfString:filterString options:NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch].location != NSNotFound;
+        }];
     } else {
         predicate = [NSPredicate predicateWithValue:YES];
     }
@@ -713,7 +764,7 @@
     NSAlert *alert = [[NSAlert alloc] init];
 
     alert.alertStyle = NSAlertStyleInformational;
-    alert.messageText = [NSString stringWithFormat:NSLocalizedString(@"Host Offline Alert", @"Host Offline Alert"), host.name];
+    alert.messageText = [NSString stringWithFormat:NSLocalizedString(@"Host Offline Alert", @"Host Offline Alert"), host.displayName];
     [alert addButtonWithTitle:NSLocalizedString(@"Wake", @"Wake")];
     [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
 
@@ -762,7 +813,7 @@
 
 - (void)startPairing:(NSString *)PIN {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational title:[NSString stringWithFormat:NSLocalizedString(@"Enter PIN", @"Enter PIN"), self.selectedHost.name, PIN] message:nil window:self.view.window completionHandler:nil];
+        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational title:[NSString stringWithFormat:NSLocalizedString(@"Enter PIN", @"Enter PIN"), self.selectedHost.displayName, PIN] message:nil window:self.view.window completionHandler:nil];
     });
 }
 
@@ -800,7 +851,7 @@
         DataManager *dataManager = [[DataManager alloc] init];
         [dataManager updateHost:self.selectedHost];
         Log(LOG_I, @"Pairing persisted for %@ (%@): pairState=%d certLen=%lu",
-            self.selectedHost.name ?: @"",
+            self.selectedHost.displayName ?: @"",
             self.selectedHost.uuid ?: @"",
             self.selectedHost.pairState,
             (unsigned long)serverCert.length);

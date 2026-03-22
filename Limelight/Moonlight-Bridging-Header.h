@@ -14,4 +14,5 @@
 #import "StreamingSessionManager.h"
 #import "AppsWorkspaceViewController.h"
 #import "AppsViewController.h"
+#import "AppDelegateForAppKit.h"
 #import "Logger.h"
