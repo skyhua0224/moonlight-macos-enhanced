@@ -100,6 +100,11 @@ jobs:
       contents: write
 
     steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
     - name: Download Artifact
       uses: actions/download-artifact@v4
       with:
@@ -110,6 +115,13 @@ jobs:
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+    - name: Build Release Body
+      env:
+        VERSION: ${{ steps.version.outputs.VERSION }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+      run: |
+        python3 .github/scripts/build_release_body.py
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
@@ -117,47 +129,4 @@ jobs:
         draft: false
         prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
         files: dist/Moonlight-macOS-Universal.dmg
-        generate_release_notes: true
-        body: |
-          ## Moonlight for macOS Enhanced ${{ steps.version.outputs.VERSION }}
-
-          ### Download | 下载
-          - **Moonlight-macOS-Universal.dmg** - Universal Binary (Apple Silicon + Intel)
-
-          ### First Launch | 首次启动
-          1. Download `Moonlight-macOS-Universal.dmg`
-          2. Open the DMG and drag Moonlight to `Applications`
-          3. Try opening the app normally
-          4. If macOS blocks it, right-click the app and choose `Open`, or go to `System Settings → Privacy & Security → Open Anyway`
-
-          ### If macOS says the app is damaged | 如果 macOS 提示“应用已损坏”
-          This usually means Gatekeeper blocked a non-notarized build. It does **not** necessarily mean the download is corrupted.
-
-          Run in Terminal:
-          ```bash
-          xattr -dr com.apple.quarantine /Applications/Moonlight.app
-          ```
-
-          Then launch the app again.
-
-          How to open Terminal:
-          - Press `⌘ Space`, type `Terminal`, and press `Enter`
-
-          ---
-
-          1. 下载 `Moonlight-macOS-Universal.dmg`
-          2. 打开 DMG 并将 Moonlight 拖到 `应用程序`
-          3. 先正常打开一次
-          4. 如果 macOS 阻止打开，先右键应用选择“打开”，或者前往 `系统设置 → 隐私与安全性 → 仍要打开`
-
-          如果 macOS 提示“Moonlight.app 已损坏”，通常是 Gatekeeper 拦截了**未公证**应用，并不一定代表下载文件真的损坏。
-
-          可在终端运行：
-          ```bash
-          xattr -dr com.apple.quarantine /Applications/Moonlight.app
-          ```
-
-          然后重新打开应用。
-
-          不知道怎么打开终端？
-          - 按 `⌘ Space`，输入 `Terminal`，回车即可
+        body_path: release_body.md
