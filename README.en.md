@@ -1,12 +1,12 @@
-# Moonlight macOS Enhanced
+# Moonlight for macOS Enhanced
 
 <div align="center">
 
 [![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)]() [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
-**Native macOS Game Streaming Client**
+**Enhanced Native Moonlight for macOS Client**
 
-A native macOS client for game streaming, built with AppKit/SwiftUI. Combines the smooth experience of a native Mac app with powerful community-enhanced features.
+An enhanced native Moonlight for macOS client built with AppKit/SwiftUI. It combines the smooth feel of a real Mac app with community-driven improvements for Sunshine and Foundation Sunshine users.
 
 [简体中文](README.md) | English
 
@@ -74,22 +74,37 @@ A native macOS client for game streaming, built with AppKit/SwiftUI. Combines th
 
 ### ⌨️ Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl` + `Option` | Release mouse cursor |
-| `Ctrl` + `Option` + `S` | Toggle performance overlay |
-| `Ctrl` + `Option` + `W` | Disconnect stream |
-| `Ctrl` + `Shift` + `W` | Quit application |
+These Moonlight-specific stream shortcuts can now be adjusted in `Settings → Input → Keyboard`.
+
+| Shortcut | Action | Notes |
+|----------|--------|-------|
+| `Ctrl` + `Option` | Release mouse capture | While streaming |
+| `Ctrl` + `Option` + `S` | Toggle performance overlay | While streaming |
+| `Ctrl` + `Option` + `M` | Toggle mouse mode | While streaming |
+| `Ctrl` + `Option` + `G` | Toggle fullscreen control ball | Fullscreen only |
+| `Ctrl` + `Option` + `W` | Disconnect stream | While streaming |
+| `Ctrl` + `Shift` + `W` | Disconnect and quit app | While streaming |
+| `Ctrl` + `Option` + `C` | Open control center | Fullscreen / borderless only |
+| `Ctrl` + `Option` + `Command` + `B` | Toggle borderless / windowed | Advanced fallback shortcut |
+
+> 💡 This table lists Moonlight-specific stream shortcuts only. Standard macOS shortcuts like `⌘W` and `⌃⌘F` are not shown here and still follow the current stream-window behavior.
 
 ### 🛠️ Installation
 
 #### Download Release
 Download the latest `.dmg` from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases).
 
-> ⚠️ **This app is not notarized.** On first launch:
-> - Right-click the app and select "Open", or
-> - Go to System Settings → Privacy & Security → Open Anyway, or
-> - Run in Terminal: `xattr -cr /Applications/Moonlight.app`
+> ⚠️ **This app is currently not notarized by Apple.**
+> If macOS says `Moonlight.app` is damaged or blocks the app from opening, that is usually Gatekeeper stopping a non-notarized build — **it does not necessarily mean the download is actually corrupted**.
+>
+> On first launch, try these in order:
+> 1. Right-click the app and choose `Open`
+> 2. Go to **System Settings → Privacy & Security** and click `Open Anyway`
+> 3. If it is still blocked, run this in Terminal:
+>    `xattr -dr com.apple.quarantine /Applications/Moonlight.app`
+>
+> Not sure how to open Terminal?
+> - Press `⌘ Space`, type `Terminal`, then press `Enter`
 
 #### Build from Source
 ```bash

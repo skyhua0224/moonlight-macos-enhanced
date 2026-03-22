@@ -43,6 +43,19 @@ typedef NS_ENUM(NSInteger, PendingWindowMode) {
     PendingWindowModeBorderless
 };
 
+static NSString * const MLShortcutActionReleaseMouseCapture = @"releaseMouseCapture";
+static NSString * const MLShortcutActionTogglePerformanceOverlay = @"togglePerformanceOverlay";
+static NSString * const MLShortcutActionToggleMouseMode = @"toggleMouseMode";
+static NSString * const MLShortcutActionToggleFullscreenControlBall = @"toggleFullscreenControlBall";
+static NSString * const MLShortcutActionDisconnectStream = @"disconnectStream";
+static NSString * const MLShortcutActionCloseAndQuitApp = @"closeAndQuitApp";
+static NSString * const MLShortcutActionOpenControlCenter = @"openControlCenter";
+static NSString * const MLShortcutActionToggleBorderlessWindowed = @"toggleBorderlessWindowed";
+
+static NSEventModifierFlags MLRelevantShortcutModifiers(NSEventModifierFlags flags) {
+    return flags & (NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand | NSEventModifierFlagFunction);
+}
+
 static BOOL MLIsPrivateOrLocalIPv4String(NSString *ip) {
     struct in_addr addr;
     if (inet_pton(AF_INET, ip.UTF8String, &addr) != 1) {
@@ -439,6 +452,66 @@ highFreqMotor:(unsigned short)highFreqMotor {
 @end
 
 @implementation StreamViewController
+
+- (StreamShortcut *)streamShortcutForAction:(NSString *)action {
+    NSDictionary *shortcuts = [SettingsClass streamShortcutsFor:self.app.host.uuid];
+    StreamShortcut *shortcut = shortcuts[action];
+    return shortcut ?: [StreamShortcutProfile defaultShortcutFor:action];
+}
+
+- (BOOL)event:(NSEvent *)event matchesShortcut:(StreamShortcut *)shortcut {
+    if (!shortcut || shortcut.modifierOnly || shortcut.keyCode == StreamShortcut.noKeyCode) {
+        return NO;
+    }
+
+    return event.keyCode == shortcut.keyCode
+        && MLRelevantShortcutModifiers(event.modifierFlags) == shortcut.modifierFlags;
+}
+
+- (NSArray<NSMenuItem *> *)menuItemsWithAction:(SEL)action inMenu:(NSMenu *)menu {
+    if (!menu) {
+        return @[];
+    }
+
+    NSMutableArray<NSMenuItem *> *items = [NSMutableArray array];
+    for (NSMenuItem *item in menu.itemArray) {
+        if (item.action == action) {
+            [items addObject:item];
+        }
+        if (item.submenu) {
+            [items addObjectsFromArray:[self menuItemsWithAction:action inMenu:item.submenu]];
+        }
+    }
+    return items;
+}
+
+- (void)applyShortcut:(StreamShortcut *)shortcut toMenuItem:(NSMenuItem *)item {
+    if (!item) {
+        return;
+    }
+
+    item.keyEquivalent = [StreamShortcutProfile menuKeyEquivalentFor:shortcut];
+    item.keyEquivalentModifierMask = [StreamShortcutProfile menuModifierMaskFor:shortcut];
+}
+
+- (void)updateConfiguredShortcutMenus {
+    NSMenu *mainMenu = NSApp.mainMenu;
+    if (mainMenu) {
+        StreamShortcut *disconnectShortcut = [self streamShortcutForAction:MLShortcutActionDisconnectStream];
+        for (NSMenuItem *item in [self menuItemsWithAction:@selector(performCloseStreamWindow:) inMenu:mainMenu]) {
+            [self applyShortcut:disconnectShortcut toMenuItem:item];
+        }
+
+        StreamShortcut *quitShortcut = [self streamShortcutForAction:MLShortcutActionCloseAndQuitApp];
+        for (NSMenuItem *item in [self menuItemsWithAction:@selector(performCloseAndQuitApp:) inMenu:mainMenu]) {
+            [self applyShortcut:quitShortcut toMenuItem:item];
+        }
+    }
+
+    if (self.streamMenu) {
+        [self rebuildStreamMenu];
+    }
+}
 
 - (BOOL)windowSupportsTitlebarAccessoryControllers:(NSWindow *)window {
     // Some NSWindow subclasses (and older macOS) don't implement the setter even if the getter exists.
@@ -1354,6 +1427,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
 
     [self updateWindowSubtitle];
+    [self updateConfiguredShortcutMenus];
 
     [self updateStreamMenuEntrypointsVisibility];
 
@@ -1365,6 +1439,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     __weak typeof(self) weakSelf = self;
     self.settingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateWindowSubtitle];
+        [weakSelf updateConfiguredShortcutMenus];
     }];
     self.hostLatencyUpdatedObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"HostLatencyUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateWindowSubtitle];
@@ -1495,11 +1570,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
             return event;
         }
 
-        const NSEventModifierFlags allowed = (NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand | NSEventModifierFlagFunction);
-        const NSEventModifierFlags mods = event.modifierFlags & allowed;
-
-        // Escape hatch: Ctrl+Alt+Cmd+B toggles borderless <-> windowed.
-        if (event.keyCode == kVK_ANSI_B && mods == (NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand)) {
+        StreamShortcut *borderlessShortcut = [strongSelf streamShortcutForAction:MLShortcutActionToggleBorderlessWindowed];
+        if ([strongSelf event:event matchesShortcut:borderlessShortcut]) {
             strongSelf.pendingOptionUncaptureToken += 1;
             if ([strongSelf isWindowBorderlessMode]) {
                 [strongSelf switchToWindowedMode:nil];
@@ -1509,8 +1581,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
             return nil;
         }
 
-        // Ctrl+Option+C opens the control center in borderless/fullscreen mode
-        if (event.keyCode == kVK_ANSI_C && mods == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
+        StreamShortcut *controlCenterShortcut = [strongSelf streamShortcutForAction:MLShortcutActionOpenControlCenter];
+        if ([strongSelf event:event matchesShortcut:controlCenterShortcut]) {
             if ([strongSelf isWindowBorderlessMode] || [strongSelf isWindowFullscreen]) {
                 strongSelf.pendingOptionUncaptureToken += 1;
                 [strongSelf presentStreamMenuFromView:strongSelf.view];
@@ -1563,42 +1635,30 @@ highFreqMotor:(unsigned short)highFreqMotor {
 - (void)flagsChanged:(NSEvent *)event {
     [self.hidSupport flagsChanged:event];
 
-    if ((event.keyCode == kVK_Option || event.keyCode == kVK_RightOption) &&
-        (event.modifierFlags & NSEventModifierFlagOption)) {
-        NSEventModifierFlags relevantMods = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
-        BOOL hasControl = (relevantMods & NSEventModifierFlagControl) != 0;
+    StreamShortcut *releaseShortcut = [self streamShortcutForAction:MLShortcutActionReleaseMouseCapture];
+    NSEventModifierFlags relevantMods = MLRelevantShortcutModifiers(event.modifierFlags);
 
-        if (hasControl) {
-            NSUInteger token = ++self.pendingOptionUncaptureToken;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                if (token != self.pendingOptionUncaptureToken) {
-                    return;
-                }
+    if (releaseShortcut.modifierOnly && relevantMods == releaseShortcut.modifierFlags) {
+        NSUInteger token = ++self.pendingOptionUncaptureToken;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (token != self.pendingOptionUncaptureToken) {
+                return;
+            }
 
-                NSEventModifierFlags currentMods = [NSEvent modifierFlags] & NSEventModifierFlagDeviceIndependentFlagsMask;
-                BOOL optionStillHeld = (currentMods & NSEventModifierFlagOption) != 0;
-                BOOL controlStillHeld = (currentMods & NSEventModifierFlagControl) != 0;
-                if (!optionStillHeld || !controlStillHeld) {
-                    return;
-                }
+            NSEventModifierFlags currentMods = MLRelevantShortcutModifiers([NSEvent modifierFlags]);
+            if (currentMods != releaseShortcut.modifierFlags) {
+                return;
+            }
 
-                self.lastOptionUncaptureAtMs = [self nowMs];
-                [self.hidSupport releaseAllModifierKeys];
-                [self suppressConnectionWarningsForSeconds:2.0 reason:@"option-uncapture"];
-                [self uncaptureMouse];
-            });
-            return;
-        }
-
-        self.pendingOptionUncaptureToken += 1;
-        self.lastOptionUncaptureAtMs = [self nowMs];
-        [self.hidSupport releaseAllModifierKeys];
-        // User is intentionally detaching local input/cursor; suppress transient connection warnings.
-        [self suppressConnectionWarningsForSeconds:2.0 reason:@"option-uncapture"];
-        [self uncaptureMouse];
-    } else if (!(event.modifierFlags & NSEventModifierFlagOption)) {
-        self.pendingOptionUncaptureToken += 1;
+            self.lastOptionUncaptureAtMs = [self nowMs];
+            [self.hidSupport releaseAllModifierKeys];
+            [self suppressConnectionWarningsForSeconds:2.0 reason:@"shortcut-uncapture"];
+            [self uncaptureMouse];
+        });
+        return;
     }
+
+    self.pendingOptionUncaptureToken += 1;
 }
 
 - (void)keyDown:(NSEvent *)event {
@@ -1695,8 +1755,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 #pragma mark - KeyboardNotifiable
 
 - (BOOL)onKeyboardEquivalent:(NSEvent *)event {
-    const NSEventModifierFlags modifierFlags = NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand | NSEventModifierFlagFunction;
-    const NSEventModifierFlags eventModifierFlags = event.modifierFlags & modifierFlags;
+    const NSEventModifierFlags eventModifierFlags = MLRelevantShortcutModifiers(event.modifierFlags);
     
     if (event.keyCode == kVK_ANSI_1 && eventModifierFlags == NSEventModifierFlagCommand) {
         [self.hidSupport releaseAllModifierKeys];
@@ -1720,27 +1779,33 @@ highFreqMotor:(unsigned short)highFreqMotor {
         return NO;
     }
 
-    if (event.keyCode == kVK_ANSI_W && eventModifierFlags == (NSEventModifierFlagOption | NSEventModifierFlagControl)) {
+    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionDisconnectStream]]) {
         self.pendingOptionUncaptureToken += 1;
         [self.hidSupport releaseAllModifierKeys];
-        [self requestStreamCloseWithSource:@"keyboard-ctrl-option-w"];
+        [self requestStreamCloseWithSource:@"keyboard-custom-disconnect"];
         return YES;
     }
-    
-    if (event.keyCode == kVK_ANSI_S && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
+
+    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionCloseAndQuitApp]]) {
+        self.pendingOptionUncaptureToken += 1;
+        [self.hidSupport releaseAllModifierKeys];
+        [self performCloseAndQuitApp:nil];
+        return YES;
+    }
+
+    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionTogglePerformanceOverlay]]) {
         self.pendingOptionUncaptureToken += 1;
         [self toggleOverlay];
         return YES;
     }
 
-    if (event.keyCode == kVK_ANSI_M && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
+    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionToggleMouseMode]]) {
         self.pendingOptionUncaptureToken += 1;
         [self toggleMouseMode];
         return YES;
     }
 
-    // Ctrl+Alt+G: toggle fullscreen floating control ball
-    if (event.keyCode == kVK_ANSI_G && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagOption)) {
+    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionToggleFullscreenControlBall]]) {
         self.pendingOptionUncaptureToken += 1;
         [self toggleFullscreenControlBallVisibility];
         return YES;
@@ -2508,8 +2573,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     NSMenuItem *mouseModeItem = [[NSMenuItem alloc] initWithTitle:isRemoteMode ? @"远控模式" : @"游戏模式"
                                                            action:@selector(toggleMouseModeFromMenu:)
-                                                    keyEquivalent:@"m"];
-    mouseModeItem.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagOption;
+                                                    keyEquivalent:@""];
+    [self applyShortcut:[self streamShortcutForAction:MLShortcutActionToggleMouseMode] toMenuItem:mouseModeItem];
     mouseModeItem.target = self;
     setSymbol(mouseModeItem, isRemoteMode ? @"desktopcomputer" : @"gamecontroller");
     [self.streamMenu addItem:mouseModeItem];
@@ -2555,6 +2620,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [windowMenu addItem:[NSMenuItem separatorItem]];
 
     NSMenuItem *toggleBallItem = [[NSMenuItem alloc] initWithTitle:@"全屏显示悬浮球" action:@selector(toggleFullscreenControlBallFromMenu:) keyEquivalent:@""];
+    [self applyShortcut:[self streamShortcutForAction:MLShortcutActionToggleFullscreenControlBall] toMenuItem:toggleBallItem];
     toggleBallItem.target = self;
     toggleBallItem.state = self.hideFullscreenControlBall ? NSControlStateValueOff : NSControlStateValueOn;
     setSymbol(toggleBallItem, @"dot.circle.and.hand.point.up.left.fill");
@@ -2562,8 +2628,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     [windowMenu addItem:[NSMenuItem separatorItem]];
 
-    NSMenuItem *detailsItem = [[NSMenuItem alloc] initWithTitle:@"连接详情" action:@selector(toggleOverlay) keyEquivalent:@"s"];
-    detailsItem.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagOption;
+    NSMenuItem *detailsItem = [[NSMenuItem alloc] initWithTitle:@"连接详情" action:@selector(toggleOverlay) keyEquivalent:@""];
+    [self applyShortcut:[self streamShortcutForAction:MLShortcutActionTogglePerformanceOverlay] toMenuItem:detailsItem];
     detailsItem.target = self;
     detailsItem.state = self.overlayContainer ? NSControlStateValueOn : NSControlStateValueOff;
     setSymbol(detailsItem, @"gauge.with.dots.needle.33percent");
@@ -2935,6 +3001,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSMenu *moreMenu = [[NSMenu alloc] initWithTitle:@"更多"]; 
 
     NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"关闭并退出应用" action:@selector(performCloseAndQuitApp:) keyEquivalent:@""];
+    [self applyShortcut:[self streamShortcutForAction:MLShortcutActionCloseAndQuitApp] toMenuItem:quitItem];
     quitItem.target = self;
     setSymbol(quitItem, @"power");
     [moreMenu addItem:quitItem];

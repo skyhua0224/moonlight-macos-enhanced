@@ -1,12 +1,12 @@
-# Moonlight macOS Enhanced
+# Moonlight for macOS Enhanced
 
 <div align="center">
 
 [![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)]() [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
-**原生 macOS 游戏串流客户端**
+**Moonlight for macOS 原生增强版客户端**
 
-一款原生 macOS 游戏串流客户端，使用 AppKit/SwiftUI 构建。结合原生 Mac 应用的流畅体验与社区增强版的强大功能。
+一款面向 macOS 的 Moonlight 原生增强版客户端，使用 AppKit/SwiftUI 构建。结合原生 Mac 应用的流畅体验与社区增强功能，针对 Sunshine / Foundation Sunshine 做了更多优化。
 
 简体中文 | [English](README.en.md)
 
@@ -74,22 +74,37 @@
 
 ### ⌨️ 快捷键
 
-| 快捷键 | 功能 |
-|--------|------|
-| `Ctrl` + `Option` | 释放鼠标 |
-| `Ctrl` + `Option` + `S` | 切换性能浮窗 |
-| `Ctrl` + `Option` + `W` | 断开连接 |
-| `Ctrl` + `Shift` + `W` | 退出应用 |
+以下 Moonlight 自定义串流快捷键现已支持在 `设置 → 输入 → 键盘` 中调整。
+
+| 快捷键 | 功能 | 说明 |
+|--------|------|------|
+| `Ctrl` + `Option` | 释放鼠标捕获 | 串流窗口中 |
+| `Ctrl` + `Option` + `S` | 切换性能浮窗 | 串流窗口中 |
+| `Ctrl` + `Option` + `M` | 切换鼠标模式 | 串流窗口中 |
+| `Ctrl` + `Option` + `G` | 切换全屏悬浮球 | 全屏模式 |
+| `Ctrl` + `Option` + `W` | 断开串流 | 串流窗口中 |
+| `Ctrl` + `Shift` + `W` | 断开并退出应用 | 串流窗口中 |
+| `Ctrl` + `Option` + `C` | 打开控制中心 | 仅全屏 / 无边框 |
+| `Ctrl` + `Option` + `Command` + `B` | 无边框 / 窗口切换 | 高级排障快捷键 |
+
+> 💡 这里列的是 Moonlight 自定义串流快捷键；标准 macOS 快捷键如 `⌘W`、`⌃⌘F` 不在此表内，仍按当前串流窗口行为处理。
 
 ### 🛠️ 安装
 
 #### 下载发布版
 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载最新的 `.dmg` 文件。
 
-> ⚠️ **此应用未经公证签名。** 首次启动时：
-> - 右键点击应用，选择"打开"，或
-> - 前往 系统设置 → 隐私与安全性 → 仍要打开，或
-> - 在终端运行：`xattr -cr /Applications/Moonlight.app`
+> ⚠️ **此应用当前未做 Apple 公证。**
+> 如果 macOS 提示“Moonlight.app 已损坏”或阻止打开，通常是 Gatekeeper 拦截了未公证应用，**不一定代表下载文件真的损坏**。
+>
+> 首次启动建议按这个顺序尝试：
+> 1. 右键点击应用，选择“打开”
+> 2. 前往 **系统设置 → 隐私与安全性**，选择“仍要打开”
+> 3. 如果仍被拦截，打开终端执行：
+>    `xattr -dr com.apple.quarantine /Applications/Moonlight.app`
+>
+> 不知道怎么打开终端？
+> - 按 `⌘ Space`，输入 `Terminal`，回车即可
 
 #### 从源码构建
 

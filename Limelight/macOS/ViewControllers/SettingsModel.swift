@@ -476,6 +476,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var streamShortcuts: [String: StreamShortcut] {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var selectedTouchscreenMode: String {
     didSet {
       guard !isLoading else { return }
@@ -1068,6 +1074,7 @@ class SettingsModel: ObservableObject {
     swapMouseButtons = Self.defaultSwapMouseButtons
     reverseScrollDirection = Self.defaultReverseScrollDirection
     pointerSensitivity = Self.defaultPointerSensitivity
+    streamShortcuts = StreamShortcutProfile.defaultShortcuts()
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
 
@@ -1197,6 +1204,7 @@ class SettingsModel: ObservableObject {
     swapMouseButtons = Self.defaultSwapMouseButtons
     reverseScrollDirection = Self.defaultReverseScrollDirection
     pointerSensitivity = Self.defaultPointerSensitivity
+    streamShortcuts = StreamShortcutProfile.defaultShortcuts()
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
     selectedMouseDriver = Self.defaultMouseDriver
@@ -1316,6 +1324,7 @@ class SettingsModel: ObservableObject {
       reverseScrollDirection =
         settings.reverseScrollDirection ?? Self.defaultReverseScrollDirection
       pointerSensitivity = settings.pointerSensitivity ?? Self.defaultPointerSensitivity
+      streamShortcuts = StreamShortcutProfile.normalizedShortcuts(settings.streamShortcuts)
       selectedTouchscreenMode = Self.getString(
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
@@ -1530,6 +1539,7 @@ class SettingsModel: ObservableObject {
       gamepadMouseMode: gamepadMouseMode,
       mouseMode: mouseModeVal,
       pointerSensitivity: pointerSensitivity,
+      streamShortcuts: StreamShortcutProfile.normalizedShortcuts(streamShortcuts),
       upscalingMode: upscalingMode,
       connectionMethod: selectedConnectionMethod
     )
@@ -1537,6 +1547,29 @@ class SettingsModel: ObservableObject {
     if let data = try? PropertyListEncoder().encode(settings) {
       UserDefaults.standard.set(data, forKey: SettingsClass.profileKey(for: hostId))
     }
+  }
+
+  func shortcut(for action: String) -> StreamShortcut {
+    streamShortcuts[action] ?? StreamShortcutProfile.defaultShortcut(for: action)
+  }
+
+  func setShortcut(_ shortcut: StreamShortcut, for action: String) {
+    var updated = StreamShortcutProfile.normalizedShortcuts(streamShortcuts)
+    updated[action] = StreamShortcut(
+      keyCode: shortcut.keyCode,
+      modifierFlags: shortcut.modifierFlags,
+      modifierOnly: shortcut.modifierOnly)
+    streamShortcuts = StreamShortcutProfile.normalizedShortcuts(updated)
+  }
+
+  func resetShortcut(for action: String) {
+    var updated = StreamShortcutProfile.normalizedShortcuts(streamShortcuts)
+    updated[action] = StreamShortcutProfile.defaultShortcut(for: action)
+    streamShortcuts = updated
+  }
+
+  func isDefaultShortcut(for action: String) -> Bool {
+    shortcut(for: action).isEqual(StreamShortcutProfile.defaultShortcut(for: action))
   }
 
   static func getInt(from selectedSetting: String, in settingsArray: [String]) -> Int {
