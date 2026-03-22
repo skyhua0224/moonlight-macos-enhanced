@@ -43,4 +43,20 @@ class SettingsHostingController<RootView: View>: NSWindowController {
     let settingsView = SettingsView(hostId: hostId)
     return SettingsHostingController(rootView: settingsView)
   }
+
+  @objc class func syncSelectedProfile(hostId: String?) {
+    let resolvedHostId: String
+    if let hostId, !hostId.isEmpty {
+      resolvedHostId = hostId
+    } else {
+      resolvedHostId = SettingsModel.globalHostId
+    }
+
+    UserDefaults.standard.set(resolvedHostId, forKey: "selectedSettingsProfile")
+    NotificationCenter.default.post(
+      name: Notification.Name("MoonlightSelectedSettingsProfileChanged"),
+      object: nil,
+      userInfo: ["hostId": resolvedHostId]
+    )
+  }
 }

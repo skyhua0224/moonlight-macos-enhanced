@@ -172,6 +172,13 @@
 /* Connection Method */
 "Connection Method" = "Connection Method";
 "Auto (Recommended)" = "Auto (Recommended)";
+"Default Profile" = "Default Profile";
+"Default Profile Scope" = "Applies to all hosts unless a host overrides it.";
+"Host Profile Scope (%@)" = "Overrides apply only to %@.";
+"Connection Method Default Profile Hint" = "Connection Method is always per host. Select a specific host to edit addresses and routing.";
+"Automatically Discover New Hosts" = "Automatically Discover New Hosts";
+"Automatically Discover New Hosts hint" = "When off, Moonlight still refreshes hosts you have already saved, but it will not automatically add newly discovered Sunshine hosts from the local network.";
+"Toggle Sidebar" = "Toggle Sidebar";
 "Offline" = "Offline";
 "Settings" = "Settings";
 "Connection Details" = "Connection Details";

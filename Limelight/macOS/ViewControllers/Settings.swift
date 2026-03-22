@@ -331,6 +331,63 @@ struct Settings: Encodable, Decodable {
     SettingsClass.profileKey(for: SettingsModel.globalHostId)
   }
 
+  private func inheritedSettingsForHostProfile() -> Self {
+    Settings(
+      resolution: resolution,
+      matchDisplayResolution: matchDisplayResolution,
+      customResolution: customResolution,
+      fps: fps,
+      customFps: customFps,
+      autoAdjustBitrate: autoAdjustBitrate,
+      enableYUV444: enableYUV444,
+      ignoreAspectRatio: ignoreAspectRatio,
+      showLocalCursor: showLocalCursor,
+      enableMicrophone: enableMicrophone,
+      streamResolutionScale: streamResolutionScale,
+      streamResolutionScaleRatio: streamResolutionScaleRatio,
+      remoteResolution: remoteResolution,
+      remoteResolutionWidth: remoteResolutionWidth,
+      remoteResolutionHeight: remoteResolutionHeight,
+      remoteFps: remoteFps,
+      remoteFpsRate: remoteFpsRate,
+      bitrate: bitrate,
+      customBitrate: customBitrate,
+      unlockMaxBitrate: unlockMaxBitrate,
+      codec: codec,
+      hdr: hdr,
+      framePacing: framePacing,
+      audioOnPC: audioOnPC,
+      audioConfiguration: audioConfiguration,
+      enableVsync: enableVsync,
+      showPerformanceOverlay: showPerformanceOverlay,
+      showConnectionWarnings: showConnectionWarnings,
+      captureSystemShortcuts: captureSystemShortcuts,
+      volumeLevel: volumeLevel,
+      multiController: multiController,
+      swapABXYButtons: swapABXYButtons,
+      optimize: optimize,
+      autoFullscreen: autoFullscreen,
+      displayMode: displayMode,
+      rumble: rumble,
+      controllerDriver: controllerDriver,
+      mouseDriver: mouseDriver,
+      emulateGuide: emulateGuide,
+      appArtworkDimensions: appArtworkDimensions,
+      dimNonHoveredArtwork: dimNonHoveredArtwork,
+      quitAppAfterStream: quitAppAfterStream,
+      absoluteMouseMode: absoluteMouseMode,
+      swapMouseButtons: swapMouseButtons,
+      reverseScrollDirection: reverseScrollDirection,
+      touchscreenMode: touchscreenMode,
+      gamepadMouseMode: gamepadMouseMode,
+      mouseMode: mouseMode,
+      pointerSensitivity: pointerSensitivity,
+      streamShortcuts: streamShortcuts,
+      upscalingMode: upscalingMode,
+      connectionMethod: nil
+    )
+  }
+
   static func getSettings(for key: String) -> Self? {
     if let data = UserDefaults.standard.data(forKey: SettingsClass.profileKey(for: key)) {
       if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
@@ -341,7 +398,10 @@ struct Settings: Encodable, Decodable {
     // Fallback to global settings when no host-specific settings exist
     if let data = UserDefaults.standard.data(forKey: globalProfileKey()) {
       if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
-        return settings
+        if key == SettingsModel.globalHostId {
+          return settings
+        }
+        return settings.inheritedSettingsForHostProfile()
       }
     }
 

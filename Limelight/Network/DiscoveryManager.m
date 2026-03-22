@@ -20,6 +20,17 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+static NSString * const MoonlightAutoDiscoverNewHostsDefaultsKey = @"autoDiscoverNewHosts";
+
+static BOOL MoonlightShouldAutoDiscoverNewHosts(void) {
+    id value = [[NSUserDefaults standardUserDefaults] objectForKey:MoonlightAutoDiscoverNewHostsDefaultsKey];
+    if (value == nil) {
+        return YES;
+    }
+
+    return [[NSUserDefaults standardUserDefaults] boolForKey:MoonlightAutoDiscoverNewHostsDefaultsKey];
+}
+
 @implementation DiscoveryManager {
     NSMutableArray* _hostQueue;
     NSMutableSet* _pausedHosts;
@@ -384,6 +395,11 @@
     // Since this is on a background thread, we do not need to use the opQueue
     DiscoveryWorker* worker = (DiscoveryWorker*)[self createWorkerForHost:host];
     [worker discoverHost];
+    TemporaryHost *knownHost = [self getHostInDiscovery:host.uuid];
+    if (knownHost == nil && !MoonlightShouldAutoDiscoverNewHosts()) {
+        Log(LOG_I, @"Ignoring newly discovered host because automatic discovery is disabled: %@", host.name ?: @"");
+        return;
+    }
     if ([self addHostToDiscovery:host]) {
         Log(LOG_I, @"Found new host through MDNS: %@:", host.name);
         @synchronized (_hostQueue) {

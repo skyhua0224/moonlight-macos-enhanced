@@ -15,6 +15,7 @@
 
 @property (nonatomic, strong) AppsViewController *appsViewController;
 @property (nonatomic, strong) NSArray<TemporaryHost *> *initialHostsSnapshot;
+@property (nonatomic, strong) NSSplitViewItem *hostSidebarItem;
 
 @end
 
@@ -57,6 +58,7 @@
     sidebarItem.minimumThickness = 200;
     sidebarItem.maximumThickness = 300;
     sidebarItem.canCollapse = YES;
+    self.hostSidebarItem = sidebarItem;
 
     // 2. Create Right Content (AppsViewController)
     // We instantiate from the Main storyboard as before to keep all existing connections valid
@@ -175,6 +177,14 @@
 - (IBAction)backButtonClicked:(id)sender {
     // Handle back button from Toolbar when Sidebar or other view is focused
     [self appsViewControllerDidRequestBack:self.appsViewController];
+}
+
+- (IBAction)toggleSidebar:(id)sender {
+    if (self.hostSidebarItem == nil || !self.hostSidebarItem.canCollapse) {
+        return;
+    }
+
+    self.hostSidebarItem.animator.collapsed = !self.hostSidebarItem.isCollapsed;
 }
 
 // Forward title changes to the window, as ContainerViewController expects

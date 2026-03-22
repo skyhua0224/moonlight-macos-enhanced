@@ -72,6 +72,7 @@
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refreshHostDiscovery:) name:@"MoonlightRequestHostDiscovery" object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleDiscoveryPreferencesChanged:) name:@"MoonlightDiscoveryPreferencesChanged" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleHostAutoAddressSwitched:) name:@"HostAutoAddressSwitched" object:nil];
 }
 
@@ -105,6 +106,26 @@
             [self.discMan startDiscovery];
         }
     }
+}
+
+- (void)handleDiscoveryPreferencesChanged:(NSNotification *)note {
+    if (self.pairingInProgress) {
+        return;
+    }
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self.discMan stopDiscoveryBlocking];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self retrieveSavedHosts];
+            self.discMan = [[DiscoveryManager alloc] initWithHosts:self.hosts andCallback:self];
+            [self updateHosts];
+
+            if (self.view.window != nil && self.view.window.isVisible) {
+                [self.discMan startDiscovery];
+            }
+        });
+    });
 }
 
 - (void)handleHostAutoAddressSwitched:(NSNotification *)note {
@@ -156,6 +177,8 @@
 
 - (void)viewWillAppear {
     [super viewWillAppear];
+
+    [SettingsWindowObjCBridge syncSelectedProfileWithHostId:nil];
     
     self.parentViewController.title = @"Moonlight";
     self.parentViewController.view.window.subtitle = [Helpers versionNumberString];
@@ -165,6 +188,7 @@
 #pragma clang diagnostic ignored "-Wundeclared-selector"
     [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
 #pragma clang diagnostic pop
+    [self.parentViewController.view.window moonlight_toolbarItemForIdentifier:@"SidebarToggleToolbarItem"].enabled = NO;
     
     self.getSearchField.delegate = self;
     self.getSearchField.placeholderString = NSLocalizedString(@"Search Hosts", @"Search Hosts");
@@ -188,6 +212,8 @@
 }
 
 - (void)transitionToAppsVCWithHost:(TemporaryHost *)host {
+    [SettingsWindowObjCBridge syncSelectedProfileWithHostId:host.uuid];
+
     // Create AppsWorkspaceViewController instead of direct AppsViewController
     NSArray<TemporaryHost *> *hostsSnapshot = self.hosts ?: @[];
     AppsWorkspaceViewController *workspaceVC = [[AppsWorkspaceViewController alloc] initWithHost:host hostsSnapshot:hostsSnapshot];

@@ -130,6 +130,7 @@ const CGFloat scaleBase = 1.125;
 #pragma clang diagnostic ignored "-Wundeclared-selector"
     [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(addHostButtonClicked:)].enabled = NO;
 #pragma clang diagnostic pop
+    [self.parentViewController.view.window moonlight_toolbarItemForIdentifier:@"SidebarToggleToolbarItem"].enabled = YES;
 
 
     self.getSearchField.delegate = self;
@@ -424,6 +425,8 @@ const CGFloat scaleBase = 1.125;
     if ([self.host.uuid isEqualToString:newHost.uuid]) {
         return;
     }
+
+    [SettingsWindowObjCBridge syncSelectedProfileWithHostId:newHost.uuid];
 
     self.host = newHost;
     self.currentHostUUID = newHost.uuid;

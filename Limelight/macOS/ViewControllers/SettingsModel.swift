@@ -31,6 +31,7 @@ class SettingsModel: ObservableObject {
   static let debugLogTimeScopeKey = "debugLog.timeScope"
 
   private var latencyCache: [String: [String: Any]] = [:]
+  private var selectedProfileObserver: NSObjectProtocol?
 
   // Remote host display mode override (affects /launch mode parameter)
   static var remoteResolutions: [CGSize] = [
@@ -67,7 +68,6 @@ class SettingsModel: ObservableObject {
     }
   }
 
-  @Published var isProfileLocked = false
   @Published var debugLogMode: String {
     didSet {
       UserDefaults.standard.set(debugLogMode, forKey: Self.debugLogModeKey)
@@ -100,12 +100,10 @@ class SettingsModel: ObservableObject {
     if let id {
       if let host = Self.hosts?.compactMap({ $0 }).first(where: { $0.id == id }) {
         selectedHost = host
-        isProfileLocked = true
       }
     } else {
       if let host = Self.hosts?.compactMap({ $0 }).first(where: { $0.id == Self.globalHostId }) {
         selectedHost = host
-        isProfileLocked = true
       }
     }
   }
@@ -1106,6 +1104,21 @@ class SettingsModel: ObservableObject {
 
     LoggerSetCuratedModeEnabled(debugLogMode != "raw")
     LoggerSetMinimumLevel(Self.loggerLevel(from: debugLogMinLevel))
+
+    selectedProfileObserver = NotificationCenter.default.addObserver(
+      forName: Notification.Name("MoonlightSelectedSettingsProfileChanged"),
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard let hostId = notification.userInfo?["hostId"] as? String else { return }
+      self?.selectHost(id: hostId)
+    }
+  }
+
+  deinit {
+    if let selectedProfileObserver {
+      NotificationCenter.default.removeObserver(selectedProfileObserver)
+    }
   }
 
   @objc func handleHostLatencyUpdate(_ notification: Notification) {

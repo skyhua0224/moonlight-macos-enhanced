@@ -7,6 +7,7 @@
 //
 
 #import "ContainerViewController.h"
+#import "AppsWorkspaceViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "Helpers.h"
 #import "Moonlight-Swift.h"
@@ -43,6 +44,9 @@
 
 @implementation ContainerViewController
 
+static NSString * const MoonlightSidebarToggleToolbarItemIdentifier = @"SidebarToggleToolbarItem";
+static NSString * const MoonlightSearchToolbarItemIdentifier = @"NewSearchToolbarItem";
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     
@@ -66,13 +70,21 @@
 - (void)viewWillAppear {
     [super viewWillAppear];
     
-    NSToolbar *toolbar = [Helpers getMainWindow].toolbar;
+    NSWindow *window = [Helpers getMainWindow];
+    NSToolbar *toolbar = window.toolbar;
     toolbar.delegate = self;
-    
-    NSString *searchToolbarItemIdentifier = @"NewSearchToolbarItem";
-    
-    if (![toolbar.items.lastObject.itemIdentifier isEqualToString:searchToolbarItemIdentifier]) {
-        [toolbar insertItemWithItemIdentifier:searchToolbarItemIdentifier atIndex:toolbar.items.count];
+
+    if ([window moonlight_toolbarItemForIdentifier:MoonlightSidebarToggleToolbarItemIdentifier] == nil) {
+        [toolbar insertItemWithItemIdentifier:MoonlightSidebarToggleToolbarItemIdentifier atIndex:1];
+    }
+
+    if (![toolbar.items.lastObject.itemIdentifier isEqualToString:MoonlightSearchToolbarItemIdentifier]) {
+        [toolbar insertItemWithItemIdentifier:MoonlightSearchToolbarItemIdentifier atIndex:toolbar.items.count];
+    }
+
+    NSToolbarItem *sidebarItem = [window moonlight_toolbarItemForIdentifier:MoonlightSidebarToggleToolbarItemIdentifier];
+    if (sidebarItem != nil) {
+        sidebarItem.enabled = NO;
     }
 }
 
@@ -106,12 +118,62 @@
 
 
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar itemForItemIdentifier:(NSToolbarItemIdentifier)itemIdentifier willBeInsertedIntoToolbar:(BOOL)flag {
-    if ([itemIdentifier isEqualToString:@"NewSearchToolbarItem"]) {
+    if ([itemIdentifier isEqualToString:MoonlightSidebarToggleToolbarItemIdentifier]) {
+        NSToolbarItem *sidebarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+        sidebarItem.label = @"Toggle Sidebar";
+        sidebarItem.paletteLabel = @"Toggle Sidebar";
+        sidebarItem.toolTip = @"Toggle Sidebar";
+        sidebarItem.target = self;
+        sidebarItem.action = @selector(toggleSidebar:);
+        sidebarItem.enabled = NO;
+        if (@available(macOS 11.0, *)) {
+            sidebarItem.navigational = YES;
+        }
+
+        NSImage *sidebarImage = [NSImage imageWithSystemSymbolName:@"sidebar.leading" accessibilityDescription:nil];
+        if (sidebarImage == nil) {
+            sidebarImage = [NSImage imageWithSystemSymbolName:@"sidebar.left" accessibilityDescription:nil];
+        }
+
+        NSButton *button = [NSButton buttonWithImage:sidebarImage target:self action:@selector(toggleSidebar:)];
+        button.bezelStyle = NSBezelStyleTexturedRounded;
+        button.imagePosition = NSImageOnly;
+        button.toolTip = [[LanguageManager shared] localize:@"Toggle Sidebar"];
+        sidebarItem.view = button;
+
+        return sidebarItem;
+    } else if ([itemIdentifier isEqualToString:MoonlightSearchToolbarItemIdentifier]) {
         NSSearchToolbarItem *newSearchItem = [[NSSearchToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
         newSearchItem.searchField = [[CustomSearchField alloc] init];
         return newSearchItem;
     } else {
         return nil;
+    }
+}
+
+- (AppsWorkspaceViewController *)activeAppsWorkspaceViewControllerFrom:(NSViewController *)viewController {
+    if (viewController == nil) {
+        return nil;
+    }
+
+    if ([viewController isKindOfClass:[AppsWorkspaceViewController class]]) {
+        return (AppsWorkspaceViewController *)viewController;
+    }
+
+    for (NSViewController *child in viewController.childViewControllers.reverseObjectEnumerator) {
+        AppsWorkspaceViewController *workspace = [self activeAppsWorkspaceViewControllerFrom:child];
+        if (workspace != nil) {
+            return workspace;
+        }
+    }
+
+    return nil;
+}
+
+- (IBAction)toggleSidebar:(id)sender {
+    AppsWorkspaceViewController *workspace = [self activeAppsWorkspaceViewControllerFrom:self];
+    if (workspace != nil) {
+        [workspace toggleSidebar:sender];
     }
 }
 

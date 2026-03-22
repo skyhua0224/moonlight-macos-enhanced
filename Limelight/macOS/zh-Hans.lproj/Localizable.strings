@@ -171,6 +171,13 @@
 /* Connection Method */
 "Connection Method" = "连接方式";
 "Auto (Recommended)" = "自动 (推荐)";
+"Default Profile" = "默认配置";
+"Default Profile Scope" = "作为默认配置应用到所有主机，除非某台主机单独覆盖。";
+"Host Profile Scope (%@)" = "仅对 %@ 应用覆盖设置。";
+"Connection Method Default Profile Hint" = "连接方式始终按主机单独管理。请选择具体主机后再编辑地址与路由。";
+"Automatically Discover New Hosts" = "自动发现新主机";
+"Automatically Discover New Hosts hint" = "关闭后，Moonlight 仍会刷新你已保存的主机状态，但不会再自动把局域网中新发现的 Sunshine 主机加入列表。";
+"Toggle Sidebar" = "折叠侧栏";
 "Offline" = "离线";
 "Settings" = "设置";
 "Connection Details" = "连接详情";

@@ -12,6 +12,8 @@ import Carbon.HIToolbox
 import CoreGraphics
 import SwiftUI
 
+private let discoveryPreferencesChangedNotification = Notification.Name("MoonlightDiscoveryPreferencesChanged")
+
 enum SettingsPaneType: Int, CaseIterable {
   // NOTE: Raw values are pinned to keep backward compatibility with persisted selection.
   case stream = 0
@@ -331,96 +333,99 @@ struct StreamView: View {
       VStack {
         FormSection(title: "General") {
           if let hosts = SettingsModel.hosts {
-            if !settingsModel.isProfileLocked {
-              FormCell(title: "Profile:", contentWidth: 150) {
-                Picker("", selection: $settingsModel.selectedHost) {
-                  ForEach(hosts, id: \.self) { host in
-                    if let host {
-                      let name =
-                        host.id == SettingsModel.globalHostId
-                        ? languageManager.localize("Global (Default)") : host.name
-                      Text(name).tag(Optional(host))
-                    }
+            FormCell(title: "Profile:", contentWidth: 150) {
+              Picker("", selection: $settingsModel.selectedHost) {
+                ForEach(hosts, id: \.self) { host in
+                  if let host {
+                    let name =
+                      host.id == SettingsModel.globalHostId
+                      ? languageManager.localize("Default Profile") : host.name
+                    Text(name).tag(Optional(host))
                   }
                 }
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .trailing)
               }
-            } else {
-              HStack {
-                Text(languageManager.localize("Profile:"))
-                Spacer()
-                let name =
-                  settingsModel.selectedHost?.id == SettingsModel.globalHostId
-                  ? languageManager.localize("Global (Default)")
-                  : (settingsModel.selectedHost?.name ?? "")
-                Text(name)
-                  .foregroundColor(.secondary)
-              }
+              .labelsHidden()
+              .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             HStack {
               Spacer()
               Text(
                 settingsModel.selectedHost?.id == SettingsModel.globalHostId
-                  ? languageManager.localize("Scope: Global")
+                  ? languageManager.localize("Default Profile Scope")
                   : String(
-                    format: languageManager.localize("Scope: Profile (%@)"),
+                    format: languageManager.localize("Host Profile Scope (%@)"),
                     settingsModel.selectedHost?.name ?? "")
               )
               .font(.footnote)
               .foregroundColor(.secondary)
+              .multilineTextAlignment(.trailing)
             }
 
             Divider()
           }
 
-          FormCell(title: "Connection Method", contentWidth: 250) {
-            HStack {
-              Picker("", selection: $settingsModel.selectedConnectionMethod) {
-                ForEach(settingsModel.connectionCandidates) { candidate in
-                  HStack {
-                    if candidate.id != "Auto" {
-                      statusDotImage(state: candidate.state)
-                        .padding(.trailing, 4)
-                    }
-                    Text(candidate.label)
-                  }
-                  .tag(candidate.id)
-                }
-              }
-              .labelsHidden()
-
-              Button(action: {
-                guard let uuid = settingsModel.selectedHost?.id,
-                  uuid != SettingsModel.globalHostId,
-                  let hosts = DataManager().getHosts() as? [TemporaryHost],
-                  let host = hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == uuid })
-                else { return }
-
-                let editor = ConnectionEditorViewController(host: host)
-                NSApp.keyWindow?.contentViewController?.presentAsSheet(editor)
-              }) {
-                Image(systemName: "gearshape")
-              }
-              .buttonStyle(.plain)
-
-              Button(action: {
-                if let uuid = settingsModel.selectedHost?.id, uuid != SettingsModel.globalHostId {
-                  settingsModel.refreshConnectionCandidates()
-                  NotificationCenter.default.post(
-                    name: NSNotification.Name("MoonlightRequestHostDiscovery"), object: nil,
-                    userInfo: ["uuid": uuid])
-                }
-              }) {
-                Image(systemName: "arrow.clockwise")
-              }
-              .buttonStyle(.plain)
+          if settingsModel.selectedHost?.id == SettingsModel.globalHostId {
+            FormCell(title: "Connection Method", contentWidth: 0) {
+              Text(languageManager.localize("Connection Method Default Profile Hint"))
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-          }
-          .onAppear {
-            settingsModel.refreshConnectionCandidates()
+          } else {
+            FormCell(title: "Connection Method", contentWidth: 250) {
+              HStack {
+                Picker("", selection: $settingsModel.selectedConnectionMethod) {
+                  ForEach(settingsModel.connectionCandidates) { candidate in
+                    HStack {
+                      if candidate.id != "Auto" {
+                        statusDotImage(state: candidate.state)
+                          .padding(.trailing, 4)
+                      }
+                      Text(candidate.label)
+                    }
+                    .tag(candidate.id)
+                  }
+                }
+                .labelsHidden()
+
+                Button(action: {
+                  guard let uuid = settingsModel.selectedHost?.id,
+                    uuid != SettingsModel.globalHostId,
+                    let hosts = DataManager().getHosts() as? [TemporaryHost],
+                    let host = hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == uuid })
+                  else { return }
+
+                  let editor = ConnectionEditorViewController(host: host)
+                  NSApp.keyWindow?.contentViewController?.presentAsSheet(editor)
+                }) {
+                  Image(systemName: "gearshape")
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                  if let uuid = settingsModel.selectedHost?.id, uuid != SettingsModel.globalHostId {
+                    settingsModel.refreshConnectionCandidates()
+                    NotificationCenter.default.post(
+                      name: NSNotification.Name("MoonlightRequestHostDiscovery"), object: nil,
+                      userInfo: ["uuid": uuid])
+                  }
+                }) {
+                  Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+              }
+              .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .onAppear {
+              settingsModel.refreshConnectionCandidates()
+            }
+            .onChange(of: settingsModel.selectedHost?.id) { newValue in
+              if let newValue, newValue != SettingsModel.globalHostId {
+                settingsModel.refreshConnectionCandidates()
+              }
+            }
           }
 
           Divider()
@@ -1293,6 +1298,7 @@ struct AppView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
   @AppStorage("theme") private var appAppearanceRawValue = AppAppearanceOption.system.rawValue
+  @AppStorage("autoDiscoverNewHosts") private var autoDiscoverNewHosts = true
   @SwiftUI.State private var showLiveLogViewer = false
   @SwiftUI.State private var showHostResetConfirm = false
   @SwiftUI.State private var showFullResetConfirm = false
@@ -1307,6 +1313,19 @@ struct AppView: View {
       set: { newValue in
         appAppearanceRawValue = newValue.rawValue
         (NSApp.delegate as? AppDelegateForAppKit)?.applyThemePreference(newValue.rawValue)
+      })
+  }
+
+  private var autoDiscoverNewHostsBinding: Binding<Bool> {
+    Binding(
+      get: {
+        autoDiscoverNewHosts
+      },
+      set: { newValue in
+        guard autoDiscoverNewHosts != newValue else { return }
+        autoDiscoverNewHosts = newValue
+        NotificationCenter.default.post(
+          name: discoveryPreferencesChangedNotification, object: nil)
       })
   }
 
@@ -1448,6 +1467,13 @@ struct AppView: View {
             .labelsHidden()
             .frame(maxWidth: .infinity, alignment: .trailing)
           }
+
+          Divider()
+
+          ToggleCell(
+            title: "Automatically Discover New Hosts",
+            hintKey: "Automatically Discover New Hosts hint",
+            boolBinding: autoDiscoverNewHostsBinding)
 
           Divider()
 
