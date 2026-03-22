@@ -60,6 +60,7 @@
     ML_CONNECTION_CONTEXT _connectionContext;
     NSLock *_initLock;
 
+    VideoDecoderRenderer *_renderer;
     id<ConnectionCallbacks> _callbacks;
 
     OpusMSDecoder *_opusDecoder;
@@ -74,9 +75,11 @@
     float _audioVolumeMultiplier;
     NSString *_hostAddress;
     int _currentUpscalingMode;
+    os_unfair_lock _stateLock;
 
     AudioQueueRef _audioQueue;
     AudioQueueBufferRef _audioBuffers[AUDIO_QUEUE_BUFFERS];
+    void *_audioQueueContext;
 
 #if defined(LI_MIC_CONTROL_START)
     dispatch_queue_t _micQueue;
@@ -88,8 +91,6 @@
     uint32_t _micPingCount;
 #endif
 }
-
-@synthesize renderer = _renderer;
 
 static NSMutableDictionary<NSValue*, Connection*>* gConnectionMap;
 static dispatch_queue_t gConnectionMapQueue;
@@ -155,8 +156,65 @@ static Connection* CurrentConnection(void) {
     return ConnectionForContext(LiGetThreadConnectionContext());
 }
 
+static VideoDecoderRenderer* ConnectionGetRendererSnapshot(Connection *conn) {
+    if (conn == nil) {
+        return nil;
+    }
+
+    os_unfair_lock_lock(&conn->_stateLock);
+    VideoDecoderRenderer *renderer = conn->_renderer;
+    os_unfair_lock_unlock(&conn->_stateLock);
+    return renderer;
+}
+
+static id<ConnectionCallbacks> ConnectionGetCallbacksSnapshot(Connection *conn) {
+    if (conn == nil) {
+        return nil;
+    }
+
+    os_unfair_lock_lock(&conn->_stateLock);
+    id<ConnectionCallbacks> callbacks = conn->_callbacks;
+    os_unfair_lock_unlock(&conn->_stateLock);
+    return callbacks;
+}
+
+static void ConnectionSetRenderer(Connection *conn, VideoDecoderRenderer *renderer) {
+    if (conn == nil) {
+        return;
+    }
+
+    os_unfair_lock_lock(&conn->_stateLock);
+    conn->_renderer = renderer;
+    os_unfair_lock_unlock(&conn->_stateLock);
+}
+
+static void ConnectionSetCallbacks(Connection *conn, id<ConnectionCallbacks> callbacks) {
+    if (conn == nil) {
+        return;
+    }
+
+    os_unfair_lock_lock(&conn->_stateLock);
+    conn->_callbacks = callbacks;
+    os_unfair_lock_unlock(&conn->_stateLock);
+}
+
+static void ConnectionClearRuntimeTargets(Connection *conn) {
+    if (conn == nil) {
+        return;
+    }
+
+    os_unfair_lock_lock(&conn->_stateLock);
+    conn->_callbacks = nil;
+    conn->_renderer = nil;
+    os_unfair_lock_unlock(&conn->_stateLock);
+}
+
 + (Connection *)currentConnection {
     return CurrentConnection();
+}
+
+- (VideoDecoderRenderer *)renderer {
+    return ConnectionGetRendererSnapshot(self);
 }
 
 static void FillOutputBuffer(void *aqData,
@@ -177,7 +235,11 @@ int DrDecoderSetup(int videoFormat, int width, int height, int redrawRate, void*
     if (conn == nil) {
         return -1;
     }
-    [conn->_renderer setupWithVideoFormat:videoFormat frameRate:redrawRate upscalingMode:conn->_currentUpscalingMode];
+    VideoDecoderRenderer *renderer = ConnectionGetRendererSnapshot(conn);
+    if (renderer == nil) {
+        return -1;
+    }
+    [renderer setupWithVideoFormat:videoFormat frameRate:redrawRate upscalingMode:conn->_currentUpscalingMode];
     return 0;
 }
 
@@ -185,7 +247,8 @@ void DrStart(void)
 {
     Connection *conn = CurrentConnection();
     if (conn != nil) {
-        [conn->_renderer start];
+        VideoDecoderRenderer *renderer = ConnectionGetRendererSnapshot(conn);
+        [renderer start];
     }
 }
 
@@ -193,9 +256,9 @@ void DrStop(void)
 {
     Connection *conn = CurrentConnection();
     if (conn != nil) {
-        [conn->_renderer stop];
-        conn->_callbacks = nil;
-        conn->_renderer = nil;
+        VideoDecoderRenderer *renderer = ConnectionGetRendererSnapshot(conn);
+        [renderer stop];
+        ConnectionClearRuntimeTargets(conn);
     }
 }
 
@@ -203,10 +266,11 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit)
 {
     // Use the optimized renderer path which includes buffer pooling
     Connection *conn = CurrentConnection();
-    if (conn == nil || conn->_renderer == nil) {
+    VideoDecoderRenderer *renderer = ConnectionGetRendererSnapshot(conn);
+    if (conn == nil || renderer == nil) {
         return DR_OK;
     }
-    return [conn->_renderer submitDecodeUnit:decodeUnit];
+    return [renderer submitDecodeUnit:decodeUnit];
 }
 
 int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusConfig, void* context, int flags)
@@ -296,9 +360,17 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     audioFormat.mFramesPerPacket = audioFormat.mBytesPerPacket / audioFormat.mBytesPerFrame;
     audioFormat.mReserved = 0;
 
-    status = AudioQueueNewOutput(&audioFormat, FillOutputBuffer, (__bridge void *)conn, nil, nil, 0, &conn->_audioQueue);
+    if (conn->_audioQueueContext == NULL) {
+        conn->_audioQueueContext = (__bridge_retained void *)conn;
+    }
+
+    status = AudioQueueNewOutput(&audioFormat, FillOutputBuffer, conn->_audioQueueContext, nil, nil, 0, &conn->_audioQueue);
     if (status != noErr) {
         Log(LOG_E, @"Error allocating output queue: %d\n", status);
+        if (conn->_audioQueueContext != NULL) {
+            CFBridgingRelease(conn->_audioQueueContext);
+            conn->_audioQueueContext = NULL;
+        }
         return status;
     }
     
@@ -306,6 +378,12 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     status = AudioQueueSetProperty(conn->_audioQueue, kAudioQueueProperty_ChannelLayout, &channelLayout, sizeof(channelLayout));
     if (status != noErr) {
         Log(LOG_E, @"Error configuring surround channel layout: %d\n", status);
+        AudioQueueDispose(conn->_audioQueue, true);
+        conn->_audioQueue = NULL;
+        if (conn->_audioQueueContext != NULL) {
+            CFBridgingRelease(conn->_audioQueueContext);
+            conn->_audioQueueContext = NULL;
+        }
         return status;
     }
     
@@ -313,15 +391,27 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
         status = AudioQueueAllocateBuffer(conn->_audioQueue, audioFormat.mBytesPerFrame * opusConfig.samplesPerFrame, &conn->_audioBuffers[i]);
         if (status != noErr) {
             Log(LOG_E, @"Error allocating output buffer: %d\n", status);
+            AudioQueueDispose(conn->_audioQueue, true);
+            conn->_audioQueue = NULL;
+            if (conn->_audioQueueContext != NULL) {
+                CFBridgingRelease(conn->_audioQueueContext);
+                conn->_audioQueueContext = NULL;
+            }
             return status;
         }
-        
-        FillOutputBuffer((__bridge void *)conn, conn->_audioQueue, conn->_audioBuffers[i]);
+
+        FillOutputBuffer(conn->_audioQueueContext, conn->_audioQueue, conn->_audioBuffers[i]);
     }
     
     status = AudioQueueStart(conn->_audioQueue, nil);
     if (status != noErr) {
         Log(LOG_E, @"Error starting queue: %d\n", status);
+        AudioQueueDispose(conn->_audioQueue, true);
+        conn->_audioQueue = NULL;
+        if (conn->_audioQueueContext != NULL) {
+            CFBridgingRelease(conn->_audioQueueContext);
+            conn->_audioQueueContext = NULL;
+        }
         return status;
     }
     
@@ -342,15 +432,23 @@ void ArCleanup(void)
     
     // Stop before disposing to avoid massive delay inside
     // AudioQueueDispose() (iOS bug?)
-    AudioQueueStop(conn->_audioQueue, true);
-    
-    // Also frees buffers
-    AudioQueueDispose(conn->_audioQueue, true);
+    if (conn->_audioQueue != NULL) {
+        AudioQueueStop(conn->_audioQueue, true);
+
+        // Also frees buffers
+        AudioQueueDispose(conn->_audioQueue, true);
+        conn->_audioQueue = NULL;
+    }
     
     // Must be freed after the queue is stopped
     if (conn->_audioCircularBuffer != NULL) {
         free(conn->_audioCircularBuffer);
         conn->_audioCircularBuffer = NULL;
+    }
+
+    if (conn->_audioQueueContext != NULL) {
+        CFBridgingRelease(conn->_audioQueueContext);
+        conn->_audioQueueContext = NULL;
     }
     
 #if TARGET_OS_IPHONE
@@ -403,32 +501,36 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 void ClStageStarting(int stage)
 {
     Connection *conn = CurrentConnection();
-    if (conn && conn->_callbacks) {
-        [conn->_callbacks stageStarting:LiGetStageName(stage)];
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks) {
+        [callbacks stageStarting:LiGetStageName(stage)];
     }
 }
 
 void ClStageComplete(int stage)
 {
     Connection *conn = CurrentConnection();
-    if (conn && conn->_callbacks) {
-        [conn->_callbacks stageComplete:LiGetStageName(stage)];
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks) {
+        [callbacks stageComplete:LiGetStageName(stage)];
     }
 }
 
 void ClStageFailed(int stage, int errorCode)
 {
     Connection *conn = CurrentConnection();
-    if (conn && conn->_callbacks) {
-        [conn->_callbacks stageFailed:LiGetStageName(stage) withError:errorCode];
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks) {
+        [callbacks stageFailed:LiGetStageName(stage) withError:errorCode];
     }
 }
 
 void ClConnectionStarted(void)
 {
     Connection *conn = CurrentConnection();
-    if (conn && conn->_callbacks) {
-        [conn->_callbacks connectionStarted];
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks) {
+        [callbacks connectionStarted];
     }
 
 #if defined(LI_MIC_CONTROL_START)
@@ -459,8 +561,9 @@ void ClConnectionTerminated(int errorCode)
     });
 #endif
     Connection *conn = CurrentConnection();
-    if (conn && conn->_callbacks) {
-        [conn->_callbacks connectionTerminated: errorCode];
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks) {
+        [callbacks connectionTerminated: errorCode];
     }
 }
 
@@ -495,16 +598,18 @@ void ClLogMessage(const char* format, ...)
 void ClRumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor)
 {
     Connection *conn = CurrentConnection();
-    if (conn && conn->_callbacks) {
-        [conn->_callbacks rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks) {
+        [callbacks rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
     }
 }
 
 void ClConnectionStatusUpdate(int status)
 {
     Connection *conn = CurrentConnection();
-    if (conn && conn->_callbacks) {
-        [conn->_callbacks connectionStatusUpdate:status];
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks) {
+        [callbacks connectionStatusUpdate:status];
     }
 }
 
@@ -563,6 +668,7 @@ void ClConnectionStatusUpdate(int status)
     
     _hostAddress = config.host;
     _audioVolumeMultiplier = 1.0f;
+    _stateLock = OS_UNFAIR_LOCK_INIT;
     [self updateVolume];
     
     NSString* cleanHost;
@@ -596,8 +702,8 @@ void ClConnectionStatusUpdate(int status)
         _serverInfo.rtspSessionUrl = _rtspSessionUrl;
     }
 
-    _renderer = myRenderer;
-    _callbacks = callbacks;
+    ConnectionSetRenderer(self, myRenderer);
+    ConnectionSetCallbacks(self, callbacks);
     _currentUpscalingMode = config.upscalingMode;
 
     memset(&_connectionContext, 0, sizeof(_connectionContext));
@@ -612,8 +718,9 @@ void ClConnectionStatusUpdate(int status)
     _connectionContext.inputContext.inputSock = INVALID_SOCKET;
     _connectionContext.micContext.micSocket = INVALID_SOCKET;
     RegisterConnection(&_connectionContext, self);
-    if (_renderer) {
-        _renderer.depacketizerContext = &_connectionContext.videoContext.depacketizerContext;
+    VideoDecoderRenderer *renderer = ConnectionGetRendererSnapshot(self);
+    if (renderer) {
+        renderer.depacketizerContext = &_connectionContext.videoContext.depacketizerContext;
     }
 
     LiInitializeStreamConfiguration(&_streamConfig);
@@ -709,17 +816,19 @@ void ClConnectionStatusUpdate(int status)
     if (useRemotePacketConfig) {
         _streamConfig.streamingRemotely = STREAM_CFG_REMOTE;
         // For tunnel paths (utun/wg), prioritize MTU safety over lower PPS.
-        // This avoids burst loss/blackholing that can happen with larger UDP payloads
-        // on encapsulated routes, especially at very high frame rates.
+        // Empirically, larger payloads such as 1024 bytes can behave worse than
+        // 896 bytes on encapsulated/overlay routes even at lower frame rates,
+        // likely due to effective PMTU headroom and loss amplification.
         if (routeThroughTunnel) {
-            if (_streamConfig.fps >= 120) {
-                _streamConfig.packetSize = 896;
-            } else if (_streamConfig.fps >= 90) {
-                _streamConfig.packetSize = 960;
-            } else {
-                _streamConfig.packetSize = 1024;
-            }
-            Log(LOG_I, @"[diag] Tunnel conservative packet mode: fps=%d bitrate=%d packet=%d",
+            _streamConfig.packetSize = 896;
+            Log(LOG_I, @"[diag] Tunnel MTU-first packet mode: fps=%d bitrate=%d packet=%d",
+                _streamConfig.fps,
+                _streamConfig.bitrate,
+                _streamConfig.packetSize);
+        }
+        else if (_streamConfig.fps >= 120) {
+            _streamConfig.packetSize = 896;
+            Log(LOG_I, @"[diag] Public remote MTU-first packet mode: fps=%d bitrate=%d packet=%d",
                 _streamConfig.fps,
                 _streamConfig.bitrate,
                 _streamConfig.packetSize);
@@ -843,6 +952,33 @@ void ClConnectionStatusUpdate(int status)
 
 - (void *)controlStreamContext {
     return &_connectionContext.controlContext;
+}
+
+- (BOOL)getVideoDiagnosticSnapshot:(MLVideoDiagnosticSnapshot *)snapshot {
+    if (snapshot == NULL) {
+        return NO;
+    }
+
+    memset(snapshot, 0, sizeof(*snapshot));
+
+    snapshot->appVersionMajor = _connectionContext.AppVersionQuad[0];
+    snapshot->appVersionMinor = _connectionContext.AppVersionQuad[1];
+    snapshot->appVersionPatch = _connectionContext.AppVersionQuad[2];
+    snapshot->videoReceivedDataFromPeer = _connectionContext.videoContext.receivedDataFromPeer ? YES : NO;
+    snapshot->videoReceivedFullFrame = _connectionContext.videoContext.receivedFullFrame ? YES : NO;
+    snapshot->videoRtpSocketValid = _connectionContext.videoContext.rtpSocket != INVALID_SOCKET ? 1 : 0;
+    snapshot->videoCurrentFrameNumber = _connectionContext.videoContext.rtpQueue.currentFrameNumber;
+    snapshot->videoMissingPackets = _connectionContext.videoContext.rtpQueue.missingPackets;
+    snapshot->videoPendingFecBlocks = _connectionContext.videoContext.rtpQueue.pendingFecBlockList.count;
+    snapshot->videoCompletedFecBlocks = _connectionContext.videoContext.rtpQueue.completedFecBlockList.count;
+    snapshot->videoBufferDataPackets = _connectionContext.videoContext.rtpQueue.bufferDataPackets;
+    snapshot->videoBufferParityPackets = _connectionContext.videoContext.rtpQueue.bufferParityPackets;
+    snapshot->videoReceivedDataPackets = _connectionContext.videoContext.rtpQueue.receivedDataPackets;
+    snapshot->videoReceivedParityPackets = _connectionContext.videoContext.rtpQueue.receivedParityPackets;
+    snapshot->videoReceivedHighestSequenceNumber = _connectionContext.videoContext.rtpQueue.receivedHighestSequenceNumber;
+    snapshot->videoNextContiguousSequenceNumber = _connectionContext.videoContext.rtpQueue.nextContiguousSequenceNumber;
+
+    return YES;
 }
 
 #if defined(LI_MIC_CONTROL_START)

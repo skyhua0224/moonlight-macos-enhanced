@@ -70,6 +70,7 @@ struct Settings: Encodable, Decodable {
   let touchscreenMode: Int?
   let gamepadMouseMode: Bool?
   let mouseMode: Int?
+  let pointerSensitivity: CGFloat?
   let upscalingMode: Int?
   let connectionMethod: String?
 
@@ -188,6 +189,7 @@ class SettingsClass: NSObject {
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
       mouseMode: mouseMode ?? settings.mouseMode,
+      pointerSensitivity: settings.pointerSensitivity,
       upscalingMode: settings.upscalingMode,
       connectionMethod: connectionMethod ?? settings.connectionMethod
     )
@@ -244,6 +246,7 @@ class SettingsClass: NSObject {
         "gamepadMouseMode": settings.gamepadMouseMode,
         "mouseMode": settings.mouseMode,
         "touchscreenMode": settings.touchscreenMode,
+        "pointerSensitivity": settings.pointerSensitivity ?? SettingsModel.defaultPointerSensitivity,
         "upscalingMode": settings.upscalingMode,
         // Single source of truth: Settings.connectionMethod (persisted by SettingsModel)
         "connectionMethod": settings.connectionMethod ?? "Auto",
@@ -354,6 +357,7 @@ class SettingsClass: NSObject {
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
       mouseMode: settings.mouseMode,
+      pointerSensitivity: settings.pointerSensitivity,
       upscalingMode: settings.upscalingMode,
       connectionMethod: settings.connectionMethod
     )
@@ -415,6 +419,7 @@ class SettingsClass: NSObject {
         touchscreenMode: updated.touchscreenMode,
         gamepadMouseMode: updated.gamepadMouseMode,
         mouseMode: updated.mouseMode,
+        pointerSensitivity: updated.pointerSensitivity,
         upscalingMode: updated.upscalingMode,
         connectionMethod: updated.connectionMethod
       )
@@ -484,6 +489,7 @@ class SettingsClass: NSObject {
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
       mouseMode: settings.mouseMode,
+      pointerSensitivity: settings.pointerSensitivity,
       upscalingMode: settings.upscalingMode,
       connectionMethod: settings.connectionMethod
     )
@@ -551,10 +557,35 @@ class SettingsClass: NSObject {
     if let settings = Settings.getSettings(for: key) {
       let dataMan = DataManager()
 
-      func displayPixelSize() -> CGSize? {
+      func even(_ v: CGFloat) -> CGFloat {
+        let i = Int(v.rounded(.down))
+        return CGFloat(i - (i % 2))
+      }
+
+      func pixelSize(for rect: NSRect, screen: NSScreen) -> CGSize {
+        let scale = max(1.0, screen.backingScaleFactor)
+        return CGSize(width: even(rect.width * scale), height: even(rect.height * scale))
+      }
+
+      func displayPixelSize(fullscreenSafe: Bool) -> CGSize? {
         guard let screen = NSScreen.main else { return nil }
         // Use the display's native pixel size. This matches the panel's physical resolution
         // (e.g. 3840x2160) even when macOS is running in HiDPI scaled mode.
+
+        if fullscreenSafe {
+          if #available(macOS 12.0, *) {
+            let insets = screen.safeAreaInsets
+            let safeFrame = NSRect(
+              x: screen.frame.origin.x + insets.left,
+              y: screen.frame.origin.y + insets.bottom,
+              width: max(0.0, screen.frame.size.width - insets.left - insets.right),
+              height: max(0.0, screen.frame.size.height - insets.top - insets.bottom)
+            )
+            if safeFrame.size.width > 0.0 && safeFrame.size.height > 0.0 {
+              return pixelSize(for: safeFrame, screen: screen)
+            }
+          }
+        }
 
         let displayID: CGDirectDisplayID?
         if let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
@@ -568,29 +599,39 @@ class SettingsClass: NSObject {
         guard let displayID, let mode = CGDisplayCopyDisplayMode(displayID) else { return nil }
 
         let size = CGSize(width: mode.pixelWidth, height: mode.pixelHeight)
-
-        func even(_ v: CGFloat) -> CGFloat {
-          let i = Int(v)
-          return CGFloat(i - (i % 2))
-        }
-
         return CGSize(width: even(size.width), height: even(size.height))
       }
 
       let usingMatchDisplayResolution = settings.matchDisplayResolution ?? false
+      let displayMode = settings.displayMode ?? (settings.autoFullscreen ? 1 : 0)
+      let fullscreenSafeSize = displayMode == 1 ? displayPixelSize(fullscreenSafe: true) : nil
+      let nativeDisplaySize = displayPixelSize(fullscreenSafe: false)
 
       let dataResolutionWidth: CGFloat
       let dataResolutionHeight: CGFloat
-      if usingMatchDisplayResolution, let size = displayPixelSize() {
+      if usingMatchDisplayResolution, let size = fullscreenSafeSize ?? nativeDisplaySize {
         dataResolutionWidth = size.width
         dataResolutionHeight = size.height
       } else {
-        dataResolutionWidth =
+        var explicitWidth =
           settings.resolution == .zero
           ? (settings.customResolution?.width ?? 1280) : settings.resolution.width
-        dataResolutionHeight =
+        var explicitHeight =
           settings.resolution == .zero
           ? (settings.customResolution?.height ?? 720) : settings.resolution.height
+
+        if displayMode == 1,
+          let nativeDisplaySize,
+          let fullscreenSafeSize,
+          Int(explicitWidth) == Int(nativeDisplaySize.width),
+          Int(explicitHeight) == Int(nativeDisplaySize.height)
+        {
+          explicitWidth = fullscreenSafeSize.width
+          explicitHeight = fullscreenSafeSize.height
+        }
+
+        dataResolutionWidth = explicitWidth
+        dataResolutionHeight = explicitHeight
       }
       let dataFps = settings.fps == .zero ? Int(settings.customFps ?? 60.0) : settings.fps
       let dataBitrate = settings.bitrate
@@ -829,6 +870,13 @@ class SettingsClass: NSObject {
       return settings.gamepadMouseMode ?? SettingsModel.defaultGamepadMouseMode
     }
     return SettingsModel.defaultGamepadMouseMode
+  }
+
+  @objc static func pointerSensitivity(for key: String) -> CGFloat {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.pointerSensitivity ?? SettingsModel.defaultPointerSensitivity
+    }
+    return SettingsModel.defaultPointerSensitivity
   }
 
   @objc static func upscalingMode(for key: String) -> Int {

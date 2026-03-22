@@ -470,6 +470,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var pointerSensitivity: CGFloat {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var selectedTouchscreenMode: String {
     didSet {
       guard !isLoading else { return }
@@ -797,6 +803,7 @@ class SettingsModel: ObservableObject {
   static let defaultAbsoluteMouseMode = false
   static let defaultSwapMouseButtons = false
   static let defaultReverseScrollDirection = false
+  static let defaultPointerSensitivity: CGFloat = 1.0
   static let defaultTouchscreenMode = 0  // Trackpad
   static let defaultGamepadMouseMode = false
   static let defaultMouseMode = "game"
@@ -1060,6 +1067,7 @@ class SettingsModel: ObservableObject {
     absoluteMouseMode = Self.defaultAbsoluteMouseMode
     swapMouseButtons = Self.defaultSwapMouseButtons
     reverseScrollDirection = Self.defaultReverseScrollDirection
+    pointerSensitivity = Self.defaultPointerSensitivity
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
 
@@ -1188,6 +1196,7 @@ class SettingsModel: ObservableObject {
     absoluteMouseMode = Self.defaultAbsoluteMouseMode
     swapMouseButtons = Self.defaultSwapMouseButtons
     reverseScrollDirection = Self.defaultReverseScrollDirection
+    pointerSensitivity = Self.defaultPointerSensitivity
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
     selectedMouseDriver = Self.defaultMouseDriver
@@ -1306,6 +1315,7 @@ class SettingsModel: ObservableObject {
       swapMouseButtons = settings.swapMouseButtons ?? Self.defaultSwapMouseButtons
       reverseScrollDirection =
         settings.reverseScrollDirection ?? Self.defaultReverseScrollDirection
+      pointerSensitivity = settings.pointerSensitivity ?? Self.defaultPointerSensitivity
       selectedTouchscreenMode = Self.getString(
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
@@ -1519,6 +1529,7 @@ class SettingsModel: ObservableObject {
       touchscreenMode: touchscreenMode,
       gamepadMouseMode: gamepadMouseMode,
       mouseMode: mouseModeVal,
+      pointerSensitivity: pointerSensitivity,
       upscalingMode: upscalingMode,
       connectionMethod: selectedConnectionMethod
     )

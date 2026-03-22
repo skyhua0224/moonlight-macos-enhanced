@@ -129,6 +129,32 @@ static NSString *MLDisconnectEventSummary(NSEvent *event) {
             (long)event.window.windowNumber];
 }
 
+static CGFloat MLMeasureMultilineTextHeight(NSString *text, NSFont *font, CGFloat width) {
+    if (text.length == 0 || font == nil || width <= 0.0) {
+        return 0.0;
+    }
+
+    NSDictionary<NSAttributedStringKey, id> *attributes = @{ NSFontAttributeName: font };
+    NSRect rect = [text boundingRectWithSize:NSMakeSize(width, CGFLOAT_MAX)
+                                     options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+                                  attributes:attributes];
+    return ceil(NSHeight(rect));
+}
+
+static CGFloat MLOverlayButtonWidth(NSButton *button, CGFloat minWidth, CGFloat maxWidth) {
+    if (button == nil) {
+        return minWidth;
+    }
+
+    NSDictionary<NSAttributedStringKey, id> *attributes = @{
+        NSFontAttributeName: button.font ?: [NSFont systemFontOfSize:[NSFont systemFontSize]]
+    };
+    CGFloat titleWidth = ceil([button.title sizeWithAttributes:attributes].width);
+    CGFloat imageWidth = button.image != nil ? MAX(14.0, button.image.size.width) + 8.0 : 0.0;
+    CGFloat width = titleWidth + imageWidth + 24.0;
+    return MIN(maxWidth, MAX(minWidth, width));
+}
+
 static BOOL MLGetUsableRttInfo(PML_CONTROL_STREAM_CONTEXT controlCtx, uint32_t *rtt, uint32_t *rttVar) {
     uint32_t currentRtt = 0;
     uint32_t currentRttVar = 0;
@@ -572,11 +598,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.windowDidBecomeKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
-                if ([weakSelf isWindowFullscreen]) {
-                    if ([weakSelf.view.window isKeyWindow]) {
-                        [weakSelf uncaptureMouse];
-                        [weakSelf captureMouse];
-                    }
+                if ([weakSelf.view.window isKeyWindow]) {
+                    Log(LOG_I, @"[diag] Window became key; rearming input capture (fullscreen=%d style=%llu level=%ld)",
+                        [weakSelf isWindowFullscreen] ? 1 : 0,
+                        (unsigned long long)weakSelf.view.window.styleMask,
+                        (long)weakSelf.view.window.level);
+                    [weakSelf uncaptureMouse];
+                    [weakSelf captureMouse];
                 }
             }
         } else {
@@ -612,7 +640,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
             if (strongSelf.stopStreamInProgress || strongSelf.reconnectInProgress) {
                 return;
             }
-            if ([strongSelf isWindowInCurrentSpace] && [strongSelf isWindowFullscreen] && strongSelf.view.window.isKeyWindow) {
+            if ([strongSelf isWindowInCurrentSpace] && strongSelf.view.window.isKeyWindow) {
                 [strongSelf captureMouse];
             }
         });
@@ -756,7 +784,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
         NSString *timeoutMessage = [strongSelf isAutomaticRecoveryModeEnabled]
             ? @"已持续 15 秒未接收到视频数据。\n请检查网络连接或尝试以下操作。"
-            : @"已持续 15 秒未接收到视频数据。\n手动档不会静默改你的参数，可继续等待、手动重连，或套用推荐档位。";
+            : [NSString stringWithFormat:@"%@\n%@\n%@",
+                MLString(@"No new video frame has arrived for 15 seconds.", @"Manual timeout lead message"),
+                MLString(@"Manual mode won't change your resolution, frame rate, codec, or chroma automatically.", @"Manual timeout manual mode explanation"),
+                MLString(@"You can keep waiting, reconnect manually, or apply a recommended profile.", @"Manual timeout actions")];
         [strongSelf showErrorOverlayWithTitle:@"连接不稳定或无画面"
                                       message:timeoutMessage
                                       canWait:YES];
@@ -820,6 +851,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
         label.alignment = NSTextAlignmentCenter;
         label.font = [NSFont systemFontOfSize:14 weight:NSFontWeightMedium];
         label.textColor = [NSColor colorWithWhite:0.9 alpha:1.0];
+        if ([label.cell isKindOfClass:[NSTextFieldCell class]]) {
+            NSTextFieldCell *cell = (NSTextFieldCell *)label.cell;
+            cell.wraps = YES;
+            cell.scrollable = NO;
+            cell.usesSingleLineMode = NO;
+            cell.lineBreakMode = NSLineBreakByWordWrapping;
+            cell.truncatesLastVisibleLine = NO;
+        }
 
         // --- Core Actions ---
         
@@ -856,6 +895,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
             
             btn.title = title;
             btn.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
+            if ([btn.cell isKindOfClass:[NSButtonCell class]]) {
+                ((NSButtonCell *)btn.cell).lineBreakMode = NSLineBreakByTruncatingTail;
+            }
             if (@available(macOS 11.0, *)) {
                 btn.image = [NSImage imageWithSystemSymbolName:iconName accessibilityDescription:nil];
                 btn.imagePosition = NSImageLeading;
@@ -894,6 +936,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
             
             btn.title = title;
             btn.font = [NSFont systemFontOfSize:11 weight:NSFontWeightMedium];
+            if ([btn.cell isKindOfClass:[NSButtonCell class]]) {
+                ((NSButtonCell *)btn.cell).lineBreakMode = NSLineBreakByTruncatingTail;
+            }
             if (@available(macOS 11.0, *)) {
                 btn.image = [NSImage imageWithSystemSymbolName:iconName accessibilityDescription:nil];
                 btn.imagePosition = NSImageLeading;
@@ -1144,18 +1189,20 @@ highFreqMotor:(unsigned short)highFreqMotor {
         return;
     }
 
-    NSMutableString *message = [NSMutableString stringWithString:@"手动档不会静默改你的分辨率/FPS/444/codec。"];
-    if (self.currentStreamRiskAssessment.summaryLine.length > 0) {
-        [message appendFormat:@"\n当前评估：%@", self.currentStreamRiskAssessment.summaryLine];
-    }
-    if (self.currentStreamRiskAssessment.recommendedFallbacks.count > 0) {
-        [message appendString:@"\n可直接套用推荐档位，或继续等待 / 手动重连。"];
+    StreamRiskAssessment *assessment = self.currentStreamRiskAssessment;
+    NSMutableArray<NSString *> *lines = [NSMutableArray array];
+    [lines addObject:MLString(@"No new frame has arrived for a while.", @"Manual risk overlay lead message")];
+    [lines addObject:MLString(@"Manual mode won't change your resolution, frame rate, codec, or chroma automatically.", @"Manual risk overlay manual mode explanation")];
+    if (assessment.recommendedFallbacks.count > 0) {
+        [lines addObject:MLString(@"You can keep waiting, reconnect manually, or apply a recommended profile.", @"Manual risk overlay actions with recommendations")];
     } else {
-        [message appendString:@"\n可继续等待或手动重连。"];
+        [lines addObject:MLString(@"You can keep waiting or reconnect manually.", @"Manual risk overlay actions without recommendations")];
     }
 
     Log(LOG_W, @"[diag] Manual expert mode holds parameters on %@", reason ?: @"(unknown)");
-    [self showErrorOverlayWithTitle:@"检测到持续卡顿" message:message canWait:YES];
+    [self showErrorOverlayWithTitle:MLString(@"Frame updates paused", @"Manual risk overlay title")
+                            message:[lines componentsJoinedByString:@"\n"]
+                            canWait:YES];
 }
 
 - (void)handleTimeoutViewLogs:(id)sender {
@@ -1714,6 +1761,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
         sender ? NSStringFromClass([sender class]) : @"(null)",
         MLDisconnectEventSummary(NSApp.currentEvent));
     [self uncaptureMouse];
+    if (self.reconnectInProgress || self.stopStreamInProgress) {
+        self.pendingDisconnectSource = self.reconnectInProgress ? @"disconnect-while-reconnecting" : @"disconnect-while-stopping";
+        [self performCloseStreamWindow:nil];
+        return;
+    }
     
     NSAlert *alert = [[NSAlert alloc] init];
     
@@ -1745,6 +1797,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 - (IBAction)performCloseStreamWindow:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
     NSString *disconnectSource = [self resolvedDisconnectSourceFromSender:sender];
+    BOOL shouldCloseWindowImmediately = self.reconnectInProgress || self.stopStreamInProgress;
     Log(LOG_W, @"[diag] Disconnect requested: source=%@ sender=%@ captured=%d reconnect=%d stopInProgress=%d",
         disconnectSource,
         sender ? NSStringFromClass([sender class]) : @"(null)",
@@ -1752,6 +1805,37 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.reconnectInProgress ? 1 : 0,
         self.stopStreamInProgress ? 1 : 0);
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"disconnect-request:%@", disconnectSource]];
+    [self cancelPendingReconnectForUserExitWithReason:disconnectSource];
+
+    if (shouldCloseWindowImmediately) {
+        [self beginStopStreamIfNeededWithReason:@"disconnect-from-stream"];
+
+        NSWindow *w = self.view.window;
+        if (!w) {
+            return;
+        }
+
+        Log(LOG_I, @"performCloseStreamWindow: immediate close while reconnecting/stopping (style=%llu level=%ld)",
+            (unsigned long long)w.styleMask,
+            (long)w.level);
+
+        [self restorePresentationOptionsIfNeeded];
+
+        if ((w.styleMask & NSWindowStyleMaskTitled) == 0) {
+            NSWindowStyleMask mask = w.styleMask;
+            mask &= ~NSWindowStyleMaskBorderless;
+            mask |= (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable);
+            @try {
+                [w setStyleMask:mask];
+                [w setLevel:NSNormalWindowLevel];
+            } @catch (NSException *exception) {
+                // ignore
+            }
+        }
+
+        [w close];
+        return;
+    }
 
     // In borderless/floating mode, relying on the responder chain can fail to close the window,
     // leaving the last frame stuck. Restore a normal window style and close explicitly.
@@ -1791,6 +1875,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 - (IBAction)performCloseAndQuitApp:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
     [self markUserInitiatedDisconnectAndSuppressWarningsForSeconds:5.0 reason:@"close-and-quit"];
+    [self cancelPendingReconnectForUserExitWithReason:@"close-and-quit"];
 
     // First stop the stream, then quit app, then close window and terminate
     __weak typeof(self) weakSelf = self;
@@ -3256,18 +3341,22 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     }
 
     if (self.spaceTransitionInProgress) {
+        Log(LOG_I, @"[diag] captureMouse skipped: space transition in progress");
         return;
     }
 
     NSWindow *window = self.view.window;
     if (!window) {
+        Log(LOG_I, @"[diag] captureMouse skipped: window is nil");
         return;
     }
     if (![self isWindowInCurrentSpace]) {
+        Log(LOG_I, @"[diag] captureMouse skipped: window not in current space");
         return;
     }
     NSScreen *screen = window.screen;
     if (!screen) {
+        Log(LOG_I, @"[diag] captureMouse skipped: screen is nil");
         return;
     }
 
@@ -3293,6 +3382,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
             }
             CGPoint cursorPoint = CGPointMake(CGRectGetMidX(rectInScreen), screenHeight - CGRectGetMidY(rectInScreen));
             CGWarpMouseCursorPosition(cursorPoint);
+            [self.hidSupport suppressRelativeMouseMotionForMilliseconds:120];
         }
     }
 
@@ -3306,6 +3396,11 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     self.view.window.acceptsMouseMovedEvents = YES;
 
     self.isMouseCaptured = YES;
+    Log(LOG_I, @"[diag] captureMouse armed: key=%d fullscreen=%d remoteDesktop=%d inputCtx=%p",
+        window.isKeyWindow ? 1 : 0,
+        [self isWindowFullscreen] ? 1 : 0,
+        self.isRemoteDesktopMode ? 1 : 0,
+        self.hidSupport.inputContext);
 }
 
 - (void)uncaptureMouse {
@@ -3470,14 +3565,23 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
         self.streamHealthSawPayload = YES;
     }
 
-    if (self.streamHealthSawPayload && !hasProgressSinceLast) {
+    BOOL shouldTreatAsPayloadStall = NO;
+    if (self.streamHealthSawPayload) {
+        if (statsTimestampValid) {
+            shouldTreatAsPayloadStall = !statsFresh;
+        } else {
+            shouldTreatAsPayloadStall = !hasProgressSinceLast;
+        }
+    }
+
+    if (shouldTreatAsPayloadStall) {
         self.streamHealthNoPayloadStreak += 1;
     } else {
         self.streamHealthNoPayloadStreak = 0;
     }
 
     BOOL staleByTimestamp = statsTimestampValid && !statsFresh;
-    BOOL staleByNoProgress = self.streamHealthSawPayload && !hasProgressSinceLast;
+    BOOL staleByNoProgress = !statsTimestampValid && self.streamHealthSawPayload && !hasProgressSinceLast;
     if (staleByTimestamp || staleByNoProgress) {
         self.streamHealthFrozenStatsStreak += 1;
     } else {
@@ -3523,6 +3627,29 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
             statsFresh ? 1 : 0,
             self.isMouseCaptured ? 1 : 0,
             self.hidSupport.shouldSendInputEvents ? 1 : 0);
+
+        if (self.streamMan.connection) {
+            MLVideoDiagnosticSnapshot snapshot;
+            if ([self.streamMan.connection getVideoDiagnosticSnapshot:&snapshot]) {
+                Log(LOG_W, @"[diag] Low-level video snapshot: app=%d.%d.%d vPeer=%d vFull=%d vSock=%d vFrame=%u vData=%u/%u vParity=%u/%u vMissing=%u vSeq=%u->%u vPend=%u vDone=%u",
+                    snapshot.appVersionMajor,
+                    snapshot.appVersionMinor,
+                    snapshot.appVersionPatch,
+                    snapshot.videoReceivedDataFromPeer ? 1 : 0,
+                    snapshot.videoReceivedFullFrame ? 1 : 0,
+                    snapshot.videoRtpSocketValid,
+                    snapshot.videoCurrentFrameNumber,
+                    snapshot.videoReceivedDataPackets,
+                    snapshot.videoBufferDataPackets,
+                    snapshot.videoReceivedParityPackets,
+                    snapshot.videoBufferParityPackets,
+                    snapshot.videoMissingPackets,
+                    snapshot.videoNextContiguousSequenceNumber,
+                    snapshot.videoReceivedHighestSequenceNumber,
+                    snapshot.videoPendingFecBlocks,
+                    snapshot.videoCompletedFecBlocks);
+            }
+        }
     }
 
     static const NSUInteger kPayloadStallIdrThreshold = 2;
@@ -3833,6 +3960,24 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     [self suppressConnectionWarningsForSeconds:seconds reason:reason];
 }
 
+- (void)cancelPendingReconnectForUserExitWithReason:(NSString *)reason {
+    BOOL hadReconnect = self.reconnectInProgress;
+    BOOL hadStopInProgress = self.stopStreamInProgress;
+
+    self.shouldAttemptReconnect = NO;
+    self.reconnectInProgress = NO;
+    self.connectWatchdogToken += 1;
+    self.activeStreamGeneration += 1;
+
+    Log(LOG_I, @"[diag] Cancel pending reconnect for user exit: reason=%@ reconnect=%d stopInProgress=%d gen=%lu",
+        reason ?: @"unknown",
+        hadReconnect ? 1 : 0,
+        hadStopInProgress ? 1 : 0,
+        (unsigned long)self.activeStreamGeneration);
+
+    [self hideReconnectOverlay];
+}
+
 - (BOOL)isWindowInCurrentSpace {
     if (!self.view.window) {
         return NO;
@@ -3937,12 +4082,21 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     streamConfig.hostUUID = self.app.host.uuid;
     
     NSDictionary* prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    NSString *selectedConnectionMethod = nil;
     if (prefs) {
-        NSString *connectionMethod = prefs[@"connectionMethod"];
-        if (connectionMethod && ![connectionMethod isEqualToString:@"Auto"]) {
-            streamConfig.host = connectionMethod;
+        selectedConnectionMethod = prefs[@"connectionMethod"];
+        if (selectedConnectionMethod && ![selectedConnectionMethod isEqualToString:@"Auto"]) {
+            streamConfig.host = selectedConnectionMethod;
         }
     }
+    Log(LOG_I, @"[diag] Stream target selection: method=%@ active=%@ local=%@ address=%@ external=%@ ipv6=%@",
+        selectedConnectionMethod ?: @"Auto",
+        self.app.host.activeAddress ?: @"",
+        self.app.host.localAddress ?: @"",
+        self.app.host.address ?: @"",
+        self.app.host.externalAddress ?: @"",
+        self.app.host.ipv6Address ?: @"");
+
     BOOL vpnActive = [Utils isActiveNetworkVPN];
     BOOL remoteByAddress = [self isRemoteStreamTargetAddress:streamConfig.host];
     NSString *egressSource = nil;
@@ -4109,10 +4263,9 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     streamConfig.enableHdr = streamSettings.useHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) ? streamSettings.enableHdr : NO;
 
     NSString *codecName = streamConfig.allowHevc ? @"H.265" : @"H.264";
-    NSString *connectionMethod = prefs[@"connectionMethod"];
     self.currentStreamRiskAssessment = [StreamRiskAssessor assessWithHost:self.app.host
                                                             targetAddress:streamConfig.host
-                                                         connectionMethod:connectionMethod
+                                                         connectionMethod:selectedConnectionMethod
                                                                     width:modeWidth
                                                                    height:modeHeight
                                                                       fps:modeFps
@@ -4834,6 +4987,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
         self.reconnectPreservedWindowMode = 0;
     }
 
+    NSUInteger reconnectGeneration = 0;
     @synchronized (self) {
         if (self.stopStreamInProgress || self.reconnectInProgress) {
             Log(LOG_W, @"[diag] Reconnect request ignored by guard: reconnectInProgress=%d stopInProgress=%d reason=%@",
@@ -4845,6 +4999,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
         self.stopStreamInProgress = YES;
         self.reconnectInProgress = YES;
         self.activeStreamGeneration += 1;
+        reconnectGeneration = self.activeStreamGeneration;
     }
 
     Log(LOG_I, @"[diag] Reconnect requested: reason=%@", reason ?: @"unknown");
@@ -4869,6 +5024,21 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 
             @synchronized (strongSelf) {
                 strongSelf.stopStreamInProgress = NO;
+            }
+
+            if (![strongSelf isActiveStreamGeneration:reconnectGeneration] ||
+                !strongSelf.reconnectInProgress ||
+                !strongSelf.shouldAttemptReconnect ||
+                strongSelf.disconnectWasUserInitiated) {
+                Log(LOG_I, @"[diag] Reconnect aborted after stop: reason=%@ gen=%lu activeGen=%lu reconnect=%d shouldAttempt=%d userDisconnect=%d",
+                    reason ?: @"unknown",
+                    (unsigned long)reconnectGeneration,
+                    (unsigned long)strongSelf.activeStreamGeneration,
+                    strongSelf.reconnectInProgress ? 1 : 0,
+                    strongSelf.shouldAttemptReconnect ? 1 : 0,
+                    strongSelf.disconnectWasUserInitiated ? 1 : 0);
+                [strongSelf hideReconnectOverlay];
+                return;
             }
 
             if (strongSelf.useSystemControllerDriver) {
@@ -4961,6 +5131,25 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 
     struct Resolution res = [self.class getResolution];
     int configuredFps = streamSettings.framerate != nil ? [streamSettings.framerate intValue] : 0;
+    uint64_t nowStatsMs = LiGetMillis();
+    uint64_t measurementElapsedMs = 0;
+    if (stats.measurementStartTimestamp > 0 && nowStatsMs >= stats.measurementStartTimestamp) {
+        measurementElapsedMs = MAX(1ULL, nowStatsMs - stats.measurementStartTimestamp);
+    }
+
+    float (^displayedFps)(float, uint32_t) = ^float(float completedFps, uint32_t frameCount) {
+        if (completedFps > 0.05f) {
+            return completedFps;
+        }
+        if (measurementElapsedMs == 0 || frameCount == 0) {
+            return 0.0f;
+        }
+        double elapsedSeconds = MAX(0.001, (double)measurementElapsedMs / 1000.0);
+        return (float)((double)frameCount / elapsedSeconds);
+    };
+    float receivedFps = displayedFps(stats.receivedFps, stats.receivedFrames);
+    float decodedFps = displayedFps(stats.decodedFps, stats.decodedFrames);
+    float renderedFps = displayedFps(stats.renderedFps, stats.renderedFrames);
     
     uint32_t rtt = 0;
     BOOL rttAvailable = NO;
@@ -5024,11 +5213,11 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     append(@"  ", labelAttrs);
     append(chromaString, valueAttrs);
     append(@"  FPS ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", stats.receivedFps], valueAttrs);
+    append([NSString stringWithFormat:@"%.1f", receivedFps], valueAttrs);
     append(@" Rx · ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", stats.decodedFps], valueAttrs);
+    append([NSString stringWithFormat:@"%.1f", decodedFps], valueAttrs);
     append(@" De · ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", stats.renderedFps], valueAttrs);
+    append([NSString stringWithFormat:@"%.1f", renderedFps], valueAttrs);
     append(@" Rd", labelAttrs);
     append(@"  ", labelAttrs);
     append(MLString(@"1% Low", nil), labelAttrs);
@@ -5262,7 +5451,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 }
 
 - (void)connectionTerminated:(int)errorCode {
-    Log(LOG_I, @"Connection terminated: %ld", (long)errorCode);
+    Log(LOG_I, @"Connection terminated: %ld (0x%08x)", (long)errorCode, (unsigned int)errorCode);
     [self stopStreamHealthDiagnostics];
     self.streamHealthConnectionStartedMs = 0;
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
@@ -5540,9 +5729,85 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     }
 
     if (self.timeoutOverlayContainer) {
-        CGFloat width = 480.0;  // 增加宽度
-        CGFloat height = 460.0;  // 增加高度以容纳更好的间距
         NSRect bounds = self.view.bounds;
+        CGFloat maxOverlayWidth = MAX(320.0, NSWidth(bounds) - 24.0);
+        CGFloat width = MIN(620.0, MAX(360.0, NSWidth(bounds) - 64.0));
+        width = MIN(width, maxOverlayWidth);
+
+        CGFloat paddingTop = 30.0;
+        CGFloat paddingBottom = 26.0;
+        CGFloat paddingSide = 28.0;
+        CGFloat iconHeight = 60.0;
+        CGFloat titleHeight = 28.0;
+        CGFloat messageWidth = width - paddingSide * 2.0;
+        CGFloat messageHeight = MAX(44.0, MLMeasureMultilineTextHeight(self.timeoutLabel.stringValue, self.timeoutLabel.font, messageWidth));
+
+        CGFloat largeBtnWidth = 148.0;
+        CGFloat largeBtnHeight = 34.0;
+        CGFloat primaryButtonsGap = 16.0;
+
+        CGFloat settingBtnHeight = 30.0;
+        CGFloat settingBtnGap = 10.0;
+        CGFloat settingsSectionTopGap = 24.0;
+        CGFloat settingsRowGap = 10.0;
+        CGFloat maxSettingsRowWidth = width - paddingSide * 2.0;
+
+        NSArray<NSButton *> *settingsButtons = @[
+            self.timeoutResolutionButton,
+            self.timeoutBitrateButton,
+            self.timeoutDisplayModeButton,
+            self.timeoutConnectionButton,
+            self.timeoutRecommendedProfileButton,
+        ];
+        NSMutableArray<NSArray<NSButton *> *> *settingsRows = [NSMutableArray array];
+        NSMutableArray<NSArray<NSNumber *> *> *settingsWidthRows = [NSMutableArray array];
+        NSMutableArray<NSButton *> *currentSettingsRow = [NSMutableArray array];
+        NSMutableArray<NSNumber *> *currentSettingsWidthRow = [NSMutableArray array];
+        CGFloat currentSettingsRowWidth = 0.0;
+
+        for (NSButton *button in settingsButtons) {
+            if (button == nil || button.hidden) {
+                continue;
+            }
+
+            CGFloat buttonWidth = MLOverlayButtonWidth(button, 100.0, 132.0);
+            CGFloat proposedRowWidth = currentSettingsRow.count == 0 ? buttonWidth : currentSettingsRowWidth + settingBtnGap + buttonWidth;
+            if (currentSettingsRow.count > 0 && proposedRowWidth > maxSettingsRowWidth) {
+                [settingsRows addObject:[currentSettingsRow copy]];
+                [settingsWidthRows addObject:[currentSettingsWidthRow copy]];
+                [currentSettingsRow removeAllObjects];
+                [currentSettingsWidthRow removeAllObjects];
+                currentSettingsRowWidth = 0.0;
+            }
+
+            [currentSettingsRow addObject:button];
+            [currentSettingsWidthRow addObject:@(buttonWidth)];
+            currentSettingsRowWidth = currentSettingsRow.count == 1 ? buttonWidth : currentSettingsRowWidth + settingBtnGap + buttonWidth;
+        }
+
+        if (currentSettingsRow.count > 0) {
+            [settingsRows addObject:[currentSettingsRow copy]];
+            [settingsWidthRows addObject:[currentSettingsWidthRow copy]];
+        }
+
+        CGFloat settingsRowsHeight = settingsRows.count > 0
+            ? settingsRows.count * settingBtnHeight + (settingsRows.count - 1) * settingsRowGap
+            : 0.0;
+
+        CGFloat logsBtnHeight = 28.0;
+        CGFloat logsGap = 12.0;
+        CGFloat viewLogsWidth = MLOverlayButtonWidth(self.timeoutViewLogsButton, 98.0, 128.0);
+        CGFloat copyLogsWidth = MLOverlayButtonWidth(self.timeoutCopyLogsButton, 98.0, 128.0);
+        CGFloat logsRowWidth = viewLogsWidth + logsGap + copyLogsWidth;
+
+        CGFloat height = paddingTop + iconHeight + 12.0 + titleHeight + 14.0 + messageHeight +
+                         24.0 + largeBtnHeight + 12.0 + largeBtnHeight +
+                         (settingsRows.count > 0 ? settingsSectionTopGap + settingsRowsHeight : 0.0) +
+                         18.0 + logsBtnHeight + paddingBottom;
+        CGFloat maxOverlayHeight = MAX(360.0, NSHeight(bounds) - 24.0);
+        height = MAX(460.0, height);
+        height = MIN(height, maxOverlayHeight);
+
         self.timeoutOverlayContainer.frame = NSMakeRect((NSWidth(bounds) - width) / 2.0,
                                                        (NSHeight(bounds) - height) / 2.0,
                                                        width,
@@ -5559,71 +5824,59 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
         self.timeoutOverlayContainer.layer.mask = maskLayer;
 
         CGFloat centerX = width / 2.0;
-        CGFloat paddingTop = 30.0;  // 顶部内边距
-        CGFloat paddingSide = 30.0; // 左右内边距
+        CGFloat currentY = height - paddingTop;
 
-        // 图标和文本 - 从顶部开始布局
-        self.timeoutIconLabel.frame = NSMakeRect(0, height - paddingTop - 60, width, 60);
-        self.timeoutTitleLabel.frame = NSMakeRect(0, height - paddingTop - 96, width, 26);
-        self.timeoutLabel.frame = NSMakeRect(paddingSide, height - paddingTop - 150, width - paddingSide * 2, 44);
+        self.timeoutIconLabel.frame = NSMakeRect(0, currentY - iconHeight, width, iconHeight);
+        currentY -= iconHeight + 12.0;
+        self.timeoutTitleLabel.frame = NSMakeRect(paddingSide, currentY - titleHeight, width - paddingSide * 2.0, titleHeight);
+        currentY -= titleHeight + 14.0;
+        self.timeoutLabel.frame = NSMakeRect(paddingSide, currentY - messageHeight, width - paddingSide * 2.0, messageHeight);
+        currentY -= messageHeight + 24.0;
 
-        CGFloat largeBtnWidth = 140;
-        CGFloat largeBtnHeight = 32;
-        CGFloat mainBtnY = 220;  // 主按钮Y位置
+        CGFloat mainBtnY = currentY - largeBtnHeight;
         
         // Primary Action: Reconnect and Wait
         if (self.timeoutWaitButton.hidden) {
             // Reconnect centered
-            self.timeoutReconnectButton.frame = NSMakeRect(centerX - largeBtnWidth/2, mainBtnY, largeBtnWidth, largeBtnHeight);
+            self.timeoutReconnectButton.frame = NSMakeRect(centerX - largeBtnWidth / 2.0, mainBtnY, largeBtnWidth, largeBtnHeight);
+            self.timeoutWaitButton.frame = NSZeroRect;
         } else {
             // Reconnect | Wait
-            CGFloat gap = 16;
-            self.timeoutReconnectButton.frame = NSMakeRect(centerX - largeBtnWidth - gap/2, mainBtnY, largeBtnWidth, largeBtnHeight);
-            self.timeoutWaitButton.frame = NSMakeRect(centerX + gap/2, mainBtnY, largeBtnWidth, largeBtnHeight);
+            self.timeoutReconnectButton.frame = NSMakeRect(centerX - largeBtnWidth - primaryButtonsGap / 2.0, mainBtnY, largeBtnWidth, largeBtnHeight);
+            self.timeoutWaitButton.frame = NSMakeRect(centerX + primaryButtonsGap / 2.0, mainBtnY, largeBtnWidth, largeBtnHeight);
         }
         
         // Exit Action
-        self.timeoutExitButton.frame = NSMakeRect(centerX - largeBtnWidth/2, mainBtnY - largeBtnHeight - 14, largeBtnWidth, largeBtnHeight);
-        
-        // Settings Row - 增加间距
-        CGFloat settingsY = 130;
-        CGFloat settingBtnWidth = 96;
-        CGFloat settingBtnHeight = 30;
-        CGFloat gap = 10;
+        CGFloat exitBtnY = mainBtnY - largeBtnHeight - 12.0;
+        self.timeoutExitButton.frame = NSMakeRect(centerX - largeBtnWidth / 2.0, exitBtnY, largeBtnWidth, largeBtnHeight);
 
-        NSArray<NSButton *> *settingsButtons = @[
-            self.timeoutResolutionButton,
-            self.timeoutBitrateButton,
-            self.timeoutDisplayModeButton,
-            self.timeoutConnectionButton,
-            self.timeoutRecommendedProfileButton,
-        ];
-        NSMutableArray<NSButton *> *visibleSettingsButtons = [NSMutableArray array];
-        for (NSButton *button in settingsButtons) {
-            if (button != nil && !button.hidden) {
-                [visibleSettingsButtons addObject:button];
+        CGFloat nextSectionTop = exitBtnY - settingsSectionTopGap;
+        for (NSUInteger rowIndex = 0; rowIndex < settingsRows.count; rowIndex++) {
+            NSArray<NSButton *> *rowButtons = settingsRows[rowIndex];
+            NSArray<NSNumber *> *rowWidths = settingsWidthRows[rowIndex];
+            CGFloat rowWidth = 0.0;
+            for (NSNumber *widthNumber in rowWidths) {
+                rowWidth += widthNumber.doubleValue;
+            }
+            if (rowButtons.count > 1) {
+                rowWidth += settingBtnGap * (rowButtons.count - 1);
+            }
+
+            CGFloat rowY = nextSectionTop - settingBtnHeight - rowIndex * (settingBtnHeight + settingsRowGap);
+            CGFloat rowX = (width - rowWidth) / 2.0;
+            CGFloat xCursor = rowX;
+            for (NSUInteger buttonIndex = 0; buttonIndex < rowButtons.count; buttonIndex++) {
+                NSButton *button = rowButtons[buttonIndex];
+                CGFloat buttonWidth = rowWidths[buttonIndex].doubleValue;
+                button.frame = NSMakeRect(xCursor, rowY, buttonWidth, settingBtnHeight);
+                xCursor += buttonWidth + settingBtnGap;
             }
         }
 
-        NSUInteger count = visibleSettingsButtons.count;
-        CGFloat totalSettingsW = count > 0 ? settingBtnWidth * count + gap * (count - 1) : 0;
-        CGFloat startX = (width - totalSettingsW) / 2.0;
-
-        for (NSUInteger i = 0; i < count; i++) {
-            NSButton *button = visibleSettingsButtons[i];
-            button.frame = NSMakeRect(startX + (settingBtnWidth + gap) * i, settingsY, settingBtnWidth, settingBtnHeight);
-        }
-        
-        // Logs Row - 改进样式，调整位置和尺寸
-        CGFloat logsY = 80;  // 稍微往上移一点，给底部更多空间
-        CGFloat logsBtnWidth = 90;  // 使用新的宽度
-        CGFloat logsBtnHeight = 28; // 新的高度
-        CGFloat logsGap = 12;  // 缩小间距，更紧凑
-        CGFloat totalLogsW = logsBtnWidth * 2 + logsGap;
-        CGFloat logsStartX = (width - totalLogsW) / 2.0;
-        
-        self.timeoutViewLogsButton.frame = NSMakeRect(logsStartX, logsY, logsBtnWidth, logsBtnHeight);
-        self.timeoutCopyLogsButton.frame = NSMakeRect(logsStartX + logsBtnWidth + logsGap, logsY, logsBtnWidth, logsBtnHeight);
+        CGFloat logsY = (settingsRows.count > 0 ? nextSectionTop - settingsRowsHeight - 18.0 : exitBtnY - 18.0) - logsBtnHeight;
+        CGFloat logsStartX = (width - logsRowWidth) / 2.0;
+        self.timeoutViewLogsButton.frame = NSMakeRect(logsStartX, logsY, viewLogsWidth, logsBtnHeight);
+        self.timeoutCopyLogsButton.frame = NSMakeRect(logsStartX + viewLogsWidth + logsGap, logsY, copyLogsWidth, logsBtnHeight);
     }
 
     [self bringStreamControlsToFront];

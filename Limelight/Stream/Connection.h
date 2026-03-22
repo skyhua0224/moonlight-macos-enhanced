@@ -24,6 +24,25 @@
 
 @end
 
+typedef struct {
+    int appVersionMajor;
+    int appVersionMinor;
+    int appVersionPatch;
+    BOOL videoReceivedDataFromPeer;
+    BOOL videoReceivedFullFrame;
+    int videoRtpSocketValid;
+    uint32_t videoCurrentFrameNumber;
+    uint32_t videoMissingPackets;
+    uint32_t videoPendingFecBlocks;
+    uint32_t videoCompletedFecBlocks;
+    uint32_t videoBufferDataPackets;
+    uint32_t videoBufferParityPackets;
+    uint32_t videoReceivedDataPackets;
+    uint32_t videoReceivedParityPackets;
+    uint32_t videoReceivedHighestSequenceNumber;
+    uint32_t videoNextContiguousSequenceNumber;
+} MLVideoDiagnosticSnapshot;
+
 @interface Connection : NSOperation <NSStreamDelegate>
 
 // Returns the connection bound to the current thread context, if any.
@@ -36,6 +55,7 @@
     connectionCallbacks:(id<ConnectionCallbacks>)callbacks;
 - (void *)inputStreamContext;
 - (void *)controlStreamContext;
+- (BOOL)getVideoDiagnosticSnapshot:(MLVideoDiagnosticSnapshot *)snapshot;
 - (void)terminate;
 - (void)main;
 

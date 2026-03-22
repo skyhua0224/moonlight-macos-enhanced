@@ -241,10 +241,57 @@ struct StreamView: View {
     return CGSize(width: mode.pixelWidth, height: mode.pixelHeight)
   }
 
+  private func safeDisplayPixelSize() -> CGSize? {
+    guard let screen = NSScreen.main else { return nil }
+    guard #available(macOS 12.0, *) else { return nil }
+
+    let insets = screen.safeAreaInsets
+    let safeFrame = NSRect(
+      x: screen.frame.origin.x + insets.left,
+      y: screen.frame.origin.y + insets.bottom,
+      width: max(0.0, screen.frame.size.width - insets.left - insets.right),
+      height: max(0.0, screen.frame.size.height - insets.top - insets.bottom)
+    )
+    guard safeFrame.size.width > 0.0, safeFrame.size.height > 0.0 else { return nil }
+
+    let scale = max(1.0, screen.backingScaleFactor)
+    func even(_ v: CGFloat) -> CGFloat {
+      let i = Int(v.rounded(.down))
+      return CGFloat(i - (i % 2))
+    }
+
+    return CGSize(width: even(safeFrame.width * scale), height: even(safeFrame.height * scale))
+  }
+
   private func matchDisplayLabel() -> String {
     let base = languageManager.localize("Match Display")
-    guard let size = nativeDisplayPixelSize() else { return base }
-    return "\(base) (\(Int(size.width))×\(Int(size.height)))"
+    let displayMode = settingsModel.selectedDisplayMode
+    let native = nativeDisplayPixelSize()
+    let safe = safeDisplayPixelSize()
+
+    if displayMode == "Fullscreen", let safe {
+      return "\(base) (\(languageManager.localize("Fullscreen Safe Area")) \(Int(safe.width))×\(Int(safe.height)))"
+    }
+
+    if let native {
+      let prefix =
+        (displayMode == "Borderless Windowed")
+        ? languageManager.localize("Full Panel")
+        : ((safe != nil && safe != native) ? languageManager.localize("Full Panel") : "")
+      if prefix.isEmpty {
+        return "\(base) (\(Int(native.width))×\(Int(native.height)))"
+      }
+      return "\(base) (\(prefix) \(Int(native.width))×\(Int(native.height)))"
+    }
+
+    return base
+  }
+
+  private func displayResolutionModeHint() -> String {
+    if settingsModel.selectedDisplayMode == "Fullscreen" {
+      return languageManager.localize("Fullscreen Safe Resolution hint")
+    }
+    return languageManager.localize("Full Panel Resolution hint")
   }
 
   private func statusDotImage(state: Int) -> Image {
@@ -416,6 +463,11 @@ struct StreamView: View {
               .labelsHidden()
               .frame(maxWidth: .infinity, alignment: .trailing)
             })
+
+          Text(displayResolutionModeHint())
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
           if showCustomResolutionGroup {
             Divider()
@@ -1051,7 +1103,39 @@ struct InputView: View {
         FormSection(title: "Mouse") {
           ToggleCell(
             title: "Optimize mouse for remote desktop",
+            hintKey: "Absolute Mouse Mode hint",
             boolBinding: $settingsModel.absoluteMouseMode)
+
+          Divider()
+
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text(languageManager.localize("Pointer Speed"))
+              Spacer()
+              Text("\(Int((settingsModel.pointerSensitivity * 100).rounded()))%")
+                .availableMonospacedDigit()
+                .foregroundColor(.secondary)
+            }
+
+            Slider(value: $settingsModel.pointerSensitivity, in: 0.5...2.0, step: 0.05) {
+              EmptyView()
+            } minimumValueLabel: {
+              Text("50%")
+                .font(.caption)
+                .availableMonospacedDigit()
+            } maximumValueLabel: {
+              Text("200%")
+                .font(.caption)
+                .availableMonospacedDigit()
+            } onEditingChanged: { _ in
+
+            }
+
+            Text(languageManager.localize("Pointer Speed hint"))
+              .font(.footnote)
+              .foregroundColor(.secondary)
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
 
           Divider()
 

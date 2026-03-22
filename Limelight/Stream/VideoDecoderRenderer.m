@@ -155,6 +155,9 @@ static NSString *const kMetalShaderSource = @"#include <metal_stdlib>\n"
     NSUInteger _renderIntervalSampleCount;
     NSUInteger _renderIntervalSampleIndex;
     uint64_t _lastRenderedSampleTimeMs;
+    uint64_t _lastDequeuedFrameMs;
+    uint64_t _lastIdleLogMs;
+    NSUInteger _remainingDequeuedFrameLogCount;
 }
 
 @synthesize videoFormat;
@@ -229,6 +232,9 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _renderIntervalSampleCount = 0;
     _renderIntervalSampleIndex = 0;
     _lastRenderedSampleTimeMs = 0;
+    _lastDequeuedFrameMs = 0;
+    _lastIdleLogMs = 0;
+    _remainingDequeuedFrameLogCount = 8;
     memset(_renderIntervalSamples, 0, sizeof(_renderIntervalSamples));
     
     if (_currentFrame) {
@@ -580,16 +586,31 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     
     VIDEO_FRAME_HANDLE handle;
     PDECODE_UNIT du;
+    BOOL dequeuedAny = NO;
     
     while (LiPollNextVideoFrameCtx(depacketizerCtx, &handle, &du)) {
+        dequeuedAny = YES;
+
         // Cache fields before LiCompleteVideoFrame() frees the decode unit.
         const uint64_t enqueueTimeMs = du->enqueueTimeMs;
         const uint64_t receiveTimeMs = du->receiveTimeMs;
         const unsigned int presentationTimeMs = du->presentationTimeMs;
         const int fullLengthBytes = du->fullLength;
+        const uint64_t nowMs = LiGetMillis();
+
+        if (self->_remainingDequeuedFrameLogCount > 0) {
+            Log(LOG_I, @"[diag] Pull renderer dequeued frame=%d len=%d pending=%d enqueueAge=%llums",
+                du->frameNumber,
+                fullLengthBytes,
+                LiGetPendingVideoFramesCtx(depacketizerCtx),
+                (unsigned long long)(enqueueTimeMs != 0 && nowMs >= enqueueTimeMs ? nowMs - enqueueTimeMs : 0));
+            self->_remainingDequeuedFrameLogCount -= 1;
+        }
+        self->_lastDequeuedFrameMs = nowMs;
+        self->_lastIdleLogMs = 0;
 
         if (!self->_lastFrameNumber) {
-            self->_activeWndVideoStats.measurementStartTimestamp = LiGetMillis();
+            self->_activeWndVideoStats.measurementStartTimestamp = nowMs;
             self->_lastFrameNumber = du->frameNumber;
         } else {
             self->_activeWndVideoStats.networkDroppedFrames += du->frameNumber - (self->_lastFrameNumber + 1);
@@ -597,7 +618,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             self->_lastFrameNumber = du->frameNumber;
         }
         
-        uint64_t now = LiGetMillis();
+        uint64_t now = nowMs;
         if (now - self->_activeWndVideoStats.measurementStartTimestamp >= 1000) {
             self->_activeWndVideoStats.totalFps = (float)self->_activeWndVideoStats.totalFrames;
             self->_activeWndVideoStats.receivedFps = (float)self->_activeWndVideoStats.receivedFrames;
@@ -666,6 +687,13 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                 self->_activeWndVideoStats.totalRenderTime += LiGetMillis() - enqueueTimeMs;
             }
         }
+
+        VideoStats snapshotStats = self->_activeWndVideoStats;
+        snapshotStats.jitterMs = self->_jitterMsEstimate;
+        snapshotStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(self->_renderIntervalSamples,
+                                                                                   self->_renderIntervalSampleCount);
+        snapshotStats.lastUpdatedTimestamp = LiGetMillis();
+        self->_videoStats = snapshotStats;
         
         // Calculate the actual display refresh rate
         double displayRefreshRate = 1 / CVDisplayLinkGetActualOutputVideoRefreshPeriod(self->_displayLink);
@@ -679,6 +707,17 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             if (LiGetPendingVideoFramesCtx(depacketizerCtx) == 1) {
                 break;
             }
+        }
+    }
+
+    if (!dequeuedAny && self->_lastDequeuedFrameMs != 0) {
+        uint64_t idleMs = LiGetMillis() - self->_lastDequeuedFrameMs;
+        if (idleMs >= 2000 &&
+            (self->_lastIdleLogMs == 0 || LiGetMillis() - self->_lastIdleLogMs >= 5000)) {
+            self->_lastIdleLogMs = LiGetMillis();
+            Log(LOG_W, @"[diag] Pull renderer idle for %llums pending=%d",
+                (unsigned long long)idleMs,
+                LiGetPendingVideoFramesCtx(depacketizerCtx));
         }
     }
 

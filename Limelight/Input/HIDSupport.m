@@ -11,6 +11,8 @@
 #import "Ticks.h"
 
 #import "Moonlight-Swift.h"
+#include <limits.h>
+#include <math.h>
 
 #include "Limelight.h"
 #include "Limelight-internal.h"
@@ -443,6 +445,7 @@ typedef enum {
 
 @property (nonatomic) BOOL useGCMouse;
 @property (nonatomic) dispatch_queue_t inputQueue;
+@property (atomic) uint64_t suppressRelativeMouseUntilMs;
 
 - (int)switchActuallyRumbleJoystick:(IOHIDDeviceRef)device low_frequency_rumble:(UInt16)low_frequency_rumble high_frequency_rumble:(UInt16)high_frequency_rumble;
 @end
@@ -486,6 +489,48 @@ static inline void HIDDispatchInput(HIDSupport *support, PML_INPUT_STREAM_CONTEX
         }
         block();
     });
+}
+
+static inline CGFloat HIDPointerSensitivityForHost(TemporaryHost *host) {
+    CGFloat sensitivity = [SettingsClass pointerSensitivityFor:host.uuid];
+    if (!isfinite(sensitivity) || sensitivity <= 0.0) {
+        return 1.0;
+    }
+    return MIN(MAX(sensitivity, 0.25), 3.0);
+}
+
+static inline short HIDScaledRelativeDelta(CGFloat delta, CGFloat sensitivity) {
+    if (delta == 0.0) {
+        return 0;
+    }
+
+    CGFloat scaled = delta * sensitivity;
+    if (scaled > SHRT_MAX) {
+        scaled = SHRT_MAX;
+    } else if (scaled < SHRT_MIN) {
+        scaled = SHRT_MIN;
+    } else if (fabs(scaled) < 1.0) {
+        scaled = scaled > 0.0 ? 1.0 : -1.0;
+    }
+
+    return (short)lrint(scaled);
+}
+
+static inline BOOL HIDShouldUseAbsolutePointerPath(HIDSupport *support, NSInteger touchscreenMode) {
+    NSString *mouseMode = [SettingsClass mouseModeFor:support.host.uuid];
+    BOOL remoteDesktopMode = [mouseMode isEqualToString:@"remote"];
+    BOOL absoluteMouseRequested = [SettingsClass absoluteMouseModeFor:support.host.uuid] && remoteDesktopMode;
+
+    if (support.useGCMouse) {
+        return NO;
+    }
+
+    return absoluteMouseRequested || touchscreenMode == 1;
+}
+
+static inline BOOL HIDShouldSuppressRelativeMouse(HIDSupport *support) {
+    uint64_t untilMs = support.suppressRelativeMouseUntilMs;
+    return untilMs > 0 && LiGetMillis() < untilMs;
 }
 
 @implementation HIDSupport
@@ -535,6 +580,14 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 
 - (void)dealloc {
     NSLog(@"HIDSupport dealloc");
+}
+
+- (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs {
+    if (durationMs == 0) {
+        self.suppressRelativeMouseUntilMs = 0;
+        return;
+    }
+    self.suppressRelativeMouseUntilMs = LiGetMillis() + durationMs;
 }
 
 -(void)registerMouseCallbacks:(GCMouse *)mouse API_AVAILABLE(macos(11.0)) {
@@ -657,7 +710,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         return kCVReturnError;
     }
 
-    int32_t deltaX, deltaY;
+    CGFloat deltaX, deltaY;
     deltaX = me.mouseDeltaX;
     deltaY = me.mouseDeltaY;
     if (deltaX != 0 || deltaY != 0) {
@@ -668,11 +721,17 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             if (!inputCtx) {
                 return kCVReturnSuccess;
             }
-            BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:me.host.uuid];
             NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:me.host.uuid];
-            if (!absoluteMouse && touchscreenMode != 1) {
+            BOOL useAbsolutePointerPath = HIDShouldUseAbsolutePointerPath(me, touchscreenMode);
+            if (!useAbsolutePointerPath) {
+                if (HIDShouldSuppressRelativeMouse(me)) {
+                    return kCVReturnSuccess;
+                }
+                CGFloat sensitivity = HIDPointerSensitivityForHost(me.host);
+                short moveX = HIDScaledRelativeDelta(deltaX, sensitivity);
+                short moveY = HIDScaledRelativeDelta(deltaY, sensitivity);
                 HIDDispatchInput(me, inputCtx, ^{
-                    LiSendMouseMoveEventCtx(inputCtx, deltaX, deltaY);
+                    LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
                 });
             }
         }
@@ -903,17 +962,30 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         if (!HIDValidateInputContext(inputCtx, "mouseMoved")) {
             return;
         }
-        BOOL absoluteMouse = [SettingsClass absoluteMouseModeFor:self.host.uuid];
         NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
+        BOOL useAbsolutePointerPath = HIDShouldUseAbsolutePointerPath(self, touchscreenMode);
         
-        if (absoluteMouse || touchscreenMode == 1) {
+        if (useAbsolutePointerPath) {
             NSPoint loc = [event locationInWindow];
             NSSize size = event.window.contentView.frame.size;
-            // Invert Y for top-left origin
-            LiSendMousePositionEventCtx(inputCtx, (short)loc.x, (short)(size.height - loc.y), (short)size.width, (short)size.height);
+            short x = (short)loc.x;
+            short y = (short)(size.height - loc.y);
+            short width = (short)size.width;
+            short height = (short)size.height;
+            HIDDispatchInput(self, inputCtx, ^{
+                LiSendMousePositionEventCtx(inputCtx, x, y, width, height);
+            });
         } else {
-            if (event.deltaX != 0 || event.deltaY != 0) {
-                LiSendMouseMoveEventCtx(inputCtx, event.deltaX, event.deltaY);
+            if (HIDShouldSuppressRelativeMouse(self)) {
+                return;
+            }
+            CGFloat sensitivity = HIDPointerSensitivityForHost(self.host);
+            short deltaX = HIDScaledRelativeDelta(event.deltaX, sensitivity);
+            short deltaY = HIDScaledRelativeDelta(event.deltaY, sensitivity);
+            if (deltaX != 0 || deltaY != 0) {
+                HIDDispatchInput(self, inputCtx, ^{
+                    LiSendMouseMoveEventCtx(inputCtx, deltaX, deltaY);
+                });
             }
         }
     }

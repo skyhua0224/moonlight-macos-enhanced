@@ -117,6 +117,7 @@
 "Add" = "添加";
 "Wake" = "唤醒";
 "Close and Quit App" = "关闭并退出应用";
+"Quit App" = "退出应用";
 "Disconnect from Stream" = "断开串流";
 
 /* Alerts */

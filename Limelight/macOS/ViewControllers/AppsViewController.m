@@ -581,7 +581,14 @@ const CGFloat scaleBase = 1.125;
 }
 
 - (IBAction)quitAppMenuItemClicked:(id)sender {
-    [self quitApp:self.runningApp completion:nil];
+    TemporaryApp *app = [sender representedObject];
+    if (![app isKindOfClass:[TemporaryApp class]]) {
+        app = self.runningApp;
+    }
+    if (app == nil) {
+        return;
+    }
+    [self quitApp:app completion:nil];
 }
 
 - (IBAction)open:(id)sender {
@@ -640,8 +647,9 @@ const CGFloat scaleBase = 1.125;
     item.appName.stringValue = app.name;
     item.app = app;
     
-    item.runningIconContainer.alphaValue = app != self.runningApp ? 0.0 : 1.0;
-    item.runningIconContainer.hidden = app != self.runningApp;
+    BOOL isRunning = [self isAppRunning:app];
+    item.runningIconContainer.alphaValue = isRunning ? 1.0 : 0.0;
+    item.runningIconContainer.hidden = !isRunning;
     
     CGSize appArtworkDimensions = [SettingsClass appArtworkDimensionsFor:app.host.uuid];
     CGFloat aspectRatio = appArtworkDimensions.width / appArtworkDimensions.height;
@@ -739,7 +747,7 @@ const CGFloat scaleBase = 1.125;
         return;
     }
 
-    if (self.runningApp != nil && app != self.runningApp) {
+    if (self.runningApp != nil && ![self isSameApp:app asApp:self.runningApp]) {
         if ([self askWhetherToStopRunningApp:self.runningApp andStartNewApp:app]) {
             [self quitApp:self.runningApp completion:^(BOOL success) {
                 if (success) {
@@ -816,10 +824,11 @@ const CGFloat scaleBase = 1.125;
         hideAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"eye.slash" accessibilityDescription:nil];
     }
 
+    quitAppMenuItem.title = NSLocalizedString(@"Quit App", @"Quit App");
     quitAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"xmark.circle" accessibilityDescription:nil];
-    if (self.runningApp == nil || app != self.runningApp) {
-        quitAppMenuItem.hidden = YES;
-    }
+    quitAppMenuItem.representedObject = app;
+    quitAppMenuItem.hidden = ![self isAppRunning:app];
+    quitAppMenuItem.enabled = [self isAppRunning:app];
 }
 
 - (void)didHover:(BOOL)hovered forApp:(TemporaryApp *)app {
@@ -927,6 +936,29 @@ static const CGFloat runningAnimationDuration = 1.0;
     }];
     NSOperationQueue *queue = [[NSOperationQueue alloc] init];
     [queue addOperation:operation];
+}
+
+- (BOOL)isSameApp:(TemporaryApp *)lhs asApp:(TemporaryApp *)rhs {
+    if (lhs == rhs) {
+        return YES;
+    }
+    if (lhs == nil || rhs == nil) {
+        return NO;
+    }
+    if (lhs.id.length == 0 || rhs.id.length == 0) {
+        return NO;
+    }
+    return [lhs.id isEqualToString:rhs.id];
+}
+
+- (BOOL)isAppRunning:(TemporaryApp *)app {
+    if (app == nil || app.id.length == 0) {
+        return NO;
+    }
+    if ([self isSameApp:app asApp:self.runningApp]) {
+        return YES;
+    }
+    return self.host.currentGame.length > 0 && [app.id isEqualToString:self.host.currentGame];
 }
 
 
