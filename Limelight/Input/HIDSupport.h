@@ -29,6 +29,9 @@ extern NSString *const HIDGamepadQuitNotification;
 - (void)mouseUp:(NSEvent *)event withButton:(int)button;
 - (void)mouseMoved:(NSEvent *)event;
 - (void)scrollWheel:(NSEvent *)event;
+- (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint
+                                referenceSize:(NSSize)referenceSize
+                                clampToBounds:(BOOL)clampToBounds;
 - (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs;
 
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor

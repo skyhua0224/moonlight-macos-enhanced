@@ -519,13 +519,12 @@ static inline short HIDScaledRelativeDelta(CGFloat delta, CGFloat sensitivity) {
 static inline BOOL HIDShouldUseAbsolutePointerPath(HIDSupport *support, NSInteger touchscreenMode) {
     NSString *mouseMode = [SettingsClass mouseModeFor:support.host.uuid];
     BOOL remoteDesktopMode = [mouseMode isEqualToString:@"remote"];
-    BOOL absoluteMouseRequested = [SettingsClass absoluteMouseModeFor:support.host.uuid] && remoteDesktopMode;
 
     if (support.useGCMouse) {
         return NO;
     }
 
-    return absoluteMouseRequested || touchscreenMode == 1;
+    return remoteDesktopMode || touchscreenMode == 1;
 }
 
 static inline BOOL HIDShouldSuppressRelativeMouse(HIDSupport *support) {
@@ -989,6 +988,34 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             }
         }
     }
+}
+
+- (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint
+                                referenceSize:(NSSize)referenceSize
+                                clampToBounds:(BOOL)clampToBounds {
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!HIDValidateInputContext(inputCtx, "sendAbsoluteMousePosition")) {
+        return;
+    }
+
+    CGFloat width = MAX(referenceSize.width, 1.0);
+    CGFloat height = MAX(referenceSize.height, 1.0);
+
+    CGFloat x = viewPoint.x;
+    CGFloat y = viewPoint.y;
+    if (clampToBounds) {
+        x = MIN(MAX(x, 0.0), width - 1.0);
+        y = MIN(MAX(y, 0.0), height - 1.0);
+    }
+
+    short hostX = (short)lrint(x);
+    short hostY = (short)lrint(height - y);
+    short referenceWidth = (short)lrint(width);
+    short referenceHeight = (short)lrint(height);
+
+    HIDDispatchInput(self, inputCtx, ^{
+        LiSendMousePositionEventCtx(inputCtx, hostX, hostY, referenceWidth, referenceHeight);
+    });
 }
 
 - (void)scrollWheel:(NSEvent *)event {
