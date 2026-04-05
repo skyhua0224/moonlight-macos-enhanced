@@ -14,8 +14,9 @@ helper_info_plist="${TARGET_TEMP_DIR}/AwdlPrivilegedHelper-Info.plist"
 helper_launchd_plist="${TARGET_TEMP_DIR}/AwdlPrivilegedHelper-Launchd.plist"
 
 if [[ -z "${EXPANDED_CODE_SIGN_IDENTITY_NAME:-}" || -z "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]]; then
-  echo "error: Missing code signing identity for AWDL privileged helper build"
-  exit 1
+  echo "warning: Skipping AWDL privileged helper build because no code signing identity is available"
+  rm -f "${helper_output_dir}/${helper_label}" >/dev/null 2>&1 || true
+  exit 0
 fi
 
 app_requirement="identifier \"${PRODUCT_BUNDLE_IDENTIFIER}\" and anchor apple generic and certificate leaf[subject.CN] = \"${EXPANDED_CODE_SIGN_IDENTITY_NAME}\" and certificate 1[field.1.2.840.113635.100.6.2.1] exists"
