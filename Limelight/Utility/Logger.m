@@ -12,7 +12,8 @@
 
 static const NSTimeInterval kWarnRepeatSuppressWindowSec = 1.0;
 static const NSTimeInterval kNoiseAggregationWindowSec = 5.0;
-static const unsigned long long kFileLogMaxBytes = 2 * 1024 * 1024;
+static const unsigned long long kRawFileLogMaxBytes = 8 * 1024 * 1024;
+static const unsigned long long kCuratedFileLogMaxBytes = 2 * 1024 * 1024;
 static NSMutableDictionary<NSString*, NSMutableDictionary*> *gRuntimeWarnRepeatTracker = nil;
 static NSObject *gRuntimeWarnRepeatLock = nil;
 static NSMutableDictionary<NSString*, NSMutableDictionary*> *gCuratedWarnRepeatTracker = nil;
@@ -34,6 +35,7 @@ typedef NS_ENUM(NSInteger, LoggerNoiseCategory) {
     LoggerNoiseCategoryNetworkStackNoise,
     LoggerNoiseCategorySystemTransportFallback,
     LoggerNoiseCategoryDiscoveryChatter,
+    LoggerNoiseCategoryHostIdentityMismatch,
 };
 
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args);
@@ -150,6 +152,31 @@ static NSString *ExtractErrorCode(NSString *line) {
     return @"错误码未知";
 }
 
+static BOOL IsServerCertificateMismatchLine(NSString *line) {
+    return [line rangeOfString:@"Server certificate mismatch" options:NSCaseInsensitiveSearch].location != NSNotFound;
+}
+
+static BOOL IsIncorrectHostLine(NSString *line) {
+    return [line rangeOfString:@"Received response from incorrect host:" options:NSCaseInsensitiveSearch].location != NSNotFound;
+}
+
+static NSString *ExtractIncorrectHostIdentifier(NSString *line) {
+    NSString *identifier = ExtractFirstMatch(line, @"incorrect host:\\s*([^\\s]+)");
+    return identifier.length > 0 ? identifier : nil;
+}
+
+static NSString *ExtractExpectedHostIdentifier(NSString *line) {
+    NSString *identifier = ExtractFirstMatch(line, @"expected:\\s*([^\\s]+)");
+    return identifier.length > 0 ? identifier : nil;
+}
+
+static NSString *ShortHostIdentifier(NSString *identifier) {
+    if (identifier.length <= 8) {
+        return identifier;
+    }
+    return [[identifier substringToIndex:8] stringByAppendingString:@"…"];
+}
+
 static NSString *ExtractDiscoveryHost(NSString *line) {
     NSString *host = ExtractFirstMatch(line, @"Discovery summary for\\s+([^:]+):");
     if (host.length > 0) {
@@ -194,6 +221,9 @@ static LoggerNoiseCategory DetectNoiseCategory(NSString *line) {
         [line rangeOfString:@"Resolved address:" options:NSCaseInsensitiveSearch].location != NSNotFound) {
         return LoggerNoiseCategoryDiscoveryChatter;
     }
+    if (IsServerCertificateMismatchLine(line) || IsIncorrectHostLine(line)) {
+        return LoggerNoiseCategoryHostIdentityMismatch;
+    }
     if ([line rangeOfString:@"Internal inconsistency in menus" options:NSCaseInsensitiveSearch].location != NSNotFound) {
         return LoggerNoiseCategoryAppKitMenuInconsistency;
     }
@@ -225,9 +255,40 @@ static NSString *NoiseCategoryDisplayName(LoggerNoiseCategory category) {
             return @"系统传输回退噪音 / System Transport Fallback";
         case LoggerNoiseCategoryDiscoveryChatter:
             return @"发现服务噪音 / Discovery Chatter";
+        case LoggerNoiseCategoryHostIdentityMismatch:
+            return @"主机身份不匹配 / Host Identity Mismatch";
         default:
             return @"系统噪音 / System Noise";
     }
+}
+
+static BOOL IsGeneratedCuratedNoiseSummaryLine(NSString *line) {
+    if (line.length == 0) {
+        return NO;
+    }
+
+    for (NSInteger category = LoggerNoiseCategoryAppKitMenuInconsistency;
+         category <= LoggerNoiseCategoryHostIdentityMismatch;
+         category++) {
+        NSString *prefix = [NSString stringWithFormat:@"%@ %@：", PRFX_WARN, NoiseCategoryDisplayName((LoggerNoiseCategory)category)];
+        if ([line hasPrefix:prefix]) {
+            return YES;
+        }
+    }
+
+    return NO;
+}
+
+static BOOL ShouldBypassCuratedWarnSuppression(NSString *line) {
+    if (line.length == 0) {
+        return NO;
+    }
+
+    if ([line hasPrefix:[NSString stringWithFormat:@"%@ [curated]", PRFX_WARN]]) {
+        return YES;
+    }
+
+    return IsGeneratedCuratedNoiseSummaryLine(line);
 }
 
 static NSString *NoiseAggregationKey(NSString *line, LoggerNoiseCategory category) {
@@ -244,6 +305,9 @@ static NSString *NoiseAggregationKey(NSString *line, LoggerNoiseCategory categor
         if ([line rangeOfString:@"Resolved address:" options:NSCaseInsensitiveSearch].location != NSNotFound) {
             return [NSString stringWithFormat:@"resolved-address:%@", host ?: @"unknown"];
         }
+    }
+    if (category == LoggerNoiseCategoryHostIdentityMismatch) {
+        return @"host-identity-mismatch";
     }
 
     NSString *errorCode = ExtractErrorCode(line);
@@ -266,14 +330,14 @@ static NSString *NoiseAggregationKey(NSString *line, LoggerNoiseCategory categor
     return [NSString stringWithFormat:@"noise:%ld:%@", (long)category, line];
 }
 
-static void RotateFileLogIfNeeded(NSString *logPath) {
+static void RotateFileLogIfNeeded(NSString *logPath, unsigned long long maxBytes) {
     if (logPath.length == 0) {
         return;
     }
 
     NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:logPath error:nil];
     unsigned long long size = [attrs fileSize];
-    if (size < kFileLogMaxBytes) {
+    if (size < maxBytes) {
         return;
     }
 
@@ -286,7 +350,7 @@ static void RotateFileLogIfNeeded(NSString *logPath) {
     }
 }
 
-static void AppendFileLogLineToPath(NSString *logPath, NSString *line, NSString *title) {
+static void AppendFileLogLineToPath(NSString *logPath, NSString *line, NSString *title, unsigned long long maxBytes) {
     if (line.length == 0) {
         return;
     }
@@ -300,7 +364,7 @@ static void AppendFileLogLineToPath(NSString *logPath, NSString *line, NSString 
     }
 
     @synchronized (gFileLogLock) {
-        RotateFileLogIfNeeded(logPath);
+        RotateFileLogIfNeeded(logPath, maxBytes);
 
         if (![[NSFileManager defaultManager] fileExistsAtPath:logPath]) {
             NSString *header = [NSString stringWithFormat:@"===== %@ started %@ =====\n", title, LoggerTimestampString()];
@@ -326,15 +390,19 @@ static void AppendFileLogLineToPath(NSString *logPath, NSString *line, NSString 
 }
 
 static void AppendRawFileLogLine(NSString *line) {
-    AppendFileLogLineToPath(EnsureRawFileLogPath(), line, @"Moonlight raw debug log");
+    AppendFileLogLineToPath(EnsureRawFileLogPath(), line, @"Moonlight raw debug log", kRawFileLogMaxBytes);
 }
 
 static void AppendCuratedFileLogLine(NSString *line) {
-    AppendFileLogLineToPath(EnsureCuratedFileLogPath(), line, @"Moonlight curated debug log");
+    AppendFileLogLineToPath(EnsureCuratedFileLogPath(), line, @"Moonlight curated debug log", kCuratedFileLogMaxBytes);
 }
 
 static void AppendCuratedLineWithWarnSuppression(NSString *line, LogLevel level) {
     if (line.length == 0) {
+        return;
+    }
+    if (ShouldBypassCuratedWarnSuppression(line)) {
+        AppendCuratedFileLogLine(line);
         return;
     }
     if (level != LOG_W) {
@@ -398,6 +466,10 @@ static BOOL FlushOneCuratedNoiseBucketLocked(NSString *bucketKey, NSMutableDicti
     NSString *sampleLine = bucket[@"sampleLine"];
     NSString *discoveryHost = bucket[@"discoveryHost"];
     NSString *discoveryState = bucket[@"discoveryState"];
+    NSInteger certificateMismatchCount = [bucket[@"certificateMismatchCount"] integerValue];
+    NSInteger incorrectHostCount = [bucket[@"incorrectHostCount"] integerValue];
+    NSString *incorrectHost = bucket[@"incorrectHost"];
+    NSString *expectedHost = bucket[@"expectedHost"];
 
     if (category == LoggerNoiseCategoryNone || count <= 0) {
         return YES;
@@ -424,6 +496,28 @@ static BOOL FlushOneCuratedNoiseBucketLocked(NSString *bucketKey, NSMutableDicti
                            discoveryState.length > 0 ? discoveryState : @"state changed"];
             }
             break;
+        case LoggerNoiseCategoryHostIdentityMismatch: {
+            NSMutableArray<NSString *> *parts = [NSMutableArray array];
+            if (certificateMismatchCount > 0) {
+                [parts addObject:[NSString stringWithFormat:@"证书不匹配 %ld 次", (long)certificateMismatchCount]];
+            }
+            if (incorrectHostCount > 0) {
+                [parts addObject:[NSString stringWithFormat:@"错误主机 %ld 次", (long)incorrectHostCount]];
+            }
+            if (expectedHost.length > 0) {
+                [parts addObject:[NSString stringWithFormat:@"期望 %@", ShortHostIdentifier(expectedHost)]];
+            }
+            if (incorrectHost.length > 0) {
+                [parts addObject:[NSString stringWithFormat:@"收到 %@", ShortHostIdentifier(incorrectHost)]];
+            }
+            NSString *detail = parts.count > 0 ? [parts componentsJoinedByString:@"，"] : @"主机身份校验失败";
+            summary = [NSString stringWithFormat:@"%@：%.0f秒内 %ld 次（%@）",
+                       NoiseCategoryDisplayName(category),
+                       kNoiseAggregationWindowSec,
+                       (long)count,
+                       detail];
+            break;
+        }
         default:
             summary = [NSString stringWithFormat:@"%@：%.0f秒内 %ld 条（主因：%@，目标 %@）",
                        NoiseCategoryDisplayName(category),
@@ -505,6 +599,26 @@ static void ProcessCuratedLogLine(NSString *line, LogLevel level) {
                 bucket[@"discoveryState"] = discoveryState;
             } else {
                 [bucket removeObjectForKey:@"discoveryState"];
+            }
+            if (category == LoggerNoiseCategoryHostIdentityMismatch) {
+                if (IsServerCertificateMismatchLine(line)) {
+                    NSInteger certificateMismatchCount = [bucket[@"certificateMismatchCount"] integerValue];
+                    bucket[@"certificateMismatchCount"] = @(certificateMismatchCount + 1);
+                }
+                if (IsIncorrectHostLine(line)) {
+                    NSInteger incorrectHostCount = [bucket[@"incorrectHostCount"] integerValue];
+                    bucket[@"incorrectHostCount"] = @(incorrectHostCount + 1);
+                }
+
+                NSString *incorrectHost = ExtractIncorrectHostIdentifier(line);
+                if (incorrectHost.length > 0) {
+                    bucket[@"incorrectHost"] = incorrectHost;
+                }
+
+                NSString *expectedHost = ExtractExpectedHostIdentifier(line);
+                if (expectedHost.length > 0) {
+                    bucket[@"expectedHost"] = expectedHost;
+                }
             }
             return;
         }

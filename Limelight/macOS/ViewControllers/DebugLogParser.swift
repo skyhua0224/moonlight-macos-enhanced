@@ -80,7 +80,37 @@ enum DebugLogParser {
       if !force, let now, now.timeIntervalSince(current.startTime) < aggregationWindowSeconds {
         return
       }
-      let summaryLine = "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(current.reason), target \(current.target))"
+      let summaryLine: String
+      switch current.category {
+      case .discoveryChatter:
+        if current.target == "resolved-address" {
+          summaryLine =
+            "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(current.reason) address repeats)"
+        } else {
+          summaryLine =
+            "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(current.reason), \(current.target))"
+        }
+      case .hostIdentityMismatch:
+        var details: [String] = []
+        if current.certificateMismatchCount > 0 {
+          details.append("证书不匹配 \(current.certificateMismatchCount) 次")
+        }
+        if current.incorrectHostCount > 0 {
+          details.append("错误主机 \(current.incorrectHostCount) 次")
+        }
+        if let expected = DebugLogNoiseClassifier.shortHostIdentity(current.expectedHostIdentity) {
+          details.append("期望 \(expected)")
+        }
+        if let actual = DebugLogNoiseClassifier.shortHostIdentity(current.actualHostIdentity) {
+          details.append("收到 \(actual)")
+        }
+        let detailText = details.isEmpty ? "主机身份校验失败" : details.joined(separator: ", ")
+        summaryLine =
+          "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(detailText))"
+      default:
+        summaryLine =
+          "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(current.reason), target \(current.target))"
+      }
       let summary = DebugLogEntry(
         timestamp: current.lastTimestamp ?? current.startTime,
         timestampText: current.timestampText,
@@ -128,8 +158,31 @@ enum DebugLogParser {
           current.count += 1
           current.lastTimestamp = entry.timestamp ?? current.lastTimestamp
           current.timestampText = entry.timestampText ?? current.timestampText
-          current.reason = DebugLogNoiseClassifier.extractErrorCodeDescription(from: entry.rawLine)
-          current.target = DebugLogNoiseClassifier.extractTarget(from: entry.rawLine)
+          if category == .discoveryChatter {
+            current.reason = DebugLogNoiseClassifier.extractDiscoveryHost(from: entry.rawLine)
+            current.target =
+              DebugLogNoiseClassifier.extractDiscoveryState(from: entry.rawLine)
+              ?? (entry.rawLine.localizedCaseInsensitiveContains("Resolved address:")
+                ? "resolved-address" : "state changed")
+          } else if category == .hostIdentityMismatch {
+            if DebugLogNoiseClassifier.isServerCertificateMismatchLine(entry.rawLine) {
+              current.certificateMismatchCount += 1
+            }
+            if DebugLogNoiseClassifier.isIncorrectHostLine(entry.rawLine) {
+              current.incorrectHostCount += 1
+            }
+            if let actual = DebugLogNoiseClassifier.extractIncorrectHost(from: entry.rawLine) {
+              current.actualHostIdentity = actual
+            }
+            if let expected = DebugLogNoiseClassifier.extractExpectedHost(from: entry.rawLine) {
+              current.expectedHostIdentity = expected
+            }
+            current.reason = "主机身份校验"
+            current.target = "cert-or-host-mismatch"
+          } else {
+            current.reason = DebugLogNoiseClassifier.extractErrorCodeDescription(from: entry.rawLine)
+            current.target = DebugLogNoiseClassifier.extractTarget(from: entry.rawLine)
+          }
           pending = current
           continue
         }
@@ -143,8 +196,23 @@ enum DebugLogParser {
         startTime: startTime,
         lastTimestamp: entry.timestamp,
         timestampText: entry.timestampText,
-        reason: DebugLogNoiseClassifier.extractErrorCodeDescription(from: entry.rawLine),
-        target: DebugLogNoiseClassifier.extractTarget(from: entry.rawLine)
+        reason: category == .discoveryChatter
+          ? DebugLogNoiseClassifier.extractDiscoveryHost(from: entry.rawLine)
+          : category == .hostIdentityMismatch
+            ? "主机身份校验"
+          : DebugLogNoiseClassifier.extractErrorCodeDescription(from: entry.rawLine),
+        target: category == .discoveryChatter
+          ? (DebugLogNoiseClassifier.extractDiscoveryState(from: entry.rawLine)
+            ?? (entry.rawLine.localizedCaseInsensitiveContains("Resolved address:")
+              ? "resolved-address" : "state changed"))
+          : category == .hostIdentityMismatch
+            ? "cert-or-host-mismatch"
+          : DebugLogNoiseClassifier.extractTarget(from: entry.rawLine)
+        ,
+        certificateMismatchCount: DebugLogNoiseClassifier.isServerCertificateMismatchLine(entry.rawLine) ? 1 : 0,
+        incorrectHostCount: DebugLogNoiseClassifier.isIncorrectHostLine(entry.rawLine) ? 1 : 0,
+        actualHostIdentity: DebugLogNoiseClassifier.extractIncorrectHost(from: entry.rawLine),
+        expectedHostIdentity: DebugLogNoiseClassifier.extractExpectedHost(from: entry.rawLine)
       )
 
       let startLine =
@@ -277,4 +345,8 @@ private struct PendingNoiseAggregation {
   var timestampText: String?
   var reason: String
   var target: String
+  var certificateMismatchCount: Int
+  var incorrectHostCount: Int
+  var actualHostIdentity: String?
+  var expectedHostIdentity: String?
 }

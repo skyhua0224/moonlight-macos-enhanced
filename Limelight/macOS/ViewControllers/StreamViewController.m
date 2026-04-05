@@ -638,6 +638,28 @@ highFreqMotor:(unsigned short)highFreqMotor {
 @property (nonatomic, strong) NSTextField *overlayLabel;
 @property (nonatomic, strong) NSTimer *statsTimer;
 @property (nonatomic, strong) NSTimer *streamHealthTimer;
+@property (nonatomic, strong) NSTimer *inputDiagnosticsTimer;
+@property (nonatomic) BOOL inputDiagnosticsFinalized;
+@property (nonatomic) BOOL inputDiagnosticsDetailActiveForStream;
+@property (nonatomic) NSUInteger inputDiagnosticsMouseMoveEvents;
+@property (nonatomic) NSUInteger inputDiagnosticsNonZeroRelativeEvents;
+@property (nonatomic) NSUInteger inputDiagnosticsRelativeDispatches;
+@property (nonatomic) NSUInteger inputDiagnosticsAbsoluteDispatches;
+@property (nonatomic) NSUInteger inputDiagnosticsSuppressedRelativeEvents;
+@property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaX;
+@property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaY;
+@property (nonatomic) NSInteger inputDiagnosticsSentRelativeDeltaX;
+@property (nonatomic) NSInteger inputDiagnosticsSentRelativeDeltaY;
+@property (nonatomic) NSUInteger inputDiagnosticsCaptureArmedCount;
+@property (nonatomic) NSUInteger inputDiagnosticsCaptureSkipCount;
+@property (nonatomic) NSUInteger inputDiagnosticsRearmCount;
+@property (nonatomic) NSUInteger inputDiagnosticsRearmSkippedCount;
+@property (nonatomic) NSUInteger inputDiagnosticsRearmDeferredCount;
+@property (nonatomic) NSUInteger inputDiagnosticsUncaptureCount;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *inputDiagnosticsCaptureSkipReasons;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *inputDiagnosticsRearmReasons;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *inputDiagnosticsRearmSkipReasons;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *inputDiagnosticsRearmDeferredReasons;
 @property (nonatomic) BOOL streamHealthSawPayload;
 @property (nonatomic) NSUInteger streamHealthNoPayloadStreak;
 @property (nonatomic) NSUInteger streamHealthNoDecodeStreak;
@@ -793,6 +815,16 @@ highFreqMotor:(unsigned short)highFreqMotor {
 @property (nonatomic) NSUInteger pendingMouseCaptureRetryToken;
 - (void)resetEdgeMenuPlacementForNewStreamSession;
 - (void)hideEdgeMenuForInactiveSpaceIfNeeded;
+- (void)stopInputDiagnosticsTimer;
+- (void)refreshInputDiagnosticsPreference;
+- (void)resetInputDiagnosticsState;
+- (void)noteInputDiagnosticsCaptureArmed;
+- (void)noteInputDiagnosticsCaptureSkipped:(NSString *)reason;
+- (void)noteInputDiagnosticsRearmRequested:(NSString *)reason;
+- (void)noteInputDiagnosticsRearmSkippedWithBlocker:(NSString *)blocker;
+- (void)noteInputDiagnosticsRearmDeferred:(NSString *)reason;
+- (void)noteInputDiagnosticsUncapture;
+- (void)finalizeInputDiagnosticsWithReason:(NSString *)reason;
 
 @end
 
@@ -1211,22 +1243,26 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 
     if (![self canCaptureMouseNow]) {
-        Log(LOG_I, @"[diag] Rearm skipped: reason=%@ blocker=%@",
+        NSString *blocker = [self mouseCaptureBlockerReason];
+        [self noteInputDiagnosticsRearmSkippedWithBlocker:blocker];
+        Log(LOG_D, @"[diag] Rearm skipped: reason=%@ blocker=%@",
             reason ?: @"unknown",
-            [self mouseCaptureBlockerReason]);
+            blocker);
         return;
     }
 
     if (self.isRemoteDesktopMode &&
         [self remoteDesktopCaptureReasonRequiresPointerInside:reason] &&
         ![self isCurrentPointerInsideStreamView]) {
-        Log(LOG_I, @"[diag] Rearm deferred until pointer re-enters stream view: reason=%@",
+        [self noteInputDiagnosticsRearmDeferred:reason];
+        Log(LOG_D, @"[diag] Rearm deferred until pointer re-enters stream view: reason=%@",
             reason ?: @"unknown");
         return;
     }
 
     self.pendingMouseCaptureRetryToken += 1;
-    Log(LOG_I, @"[diag] Rearming mouse capture: reason=%@", reason ?: @"unknown");
+    [self noteInputDiagnosticsRearmRequested:reason];
+    Log(LOG_D, @"[diag] Rearming mouse capture: reason=%@", reason ?: @"unknown");
     uint64_t suppressionMs = [self freeMouseEdgeUncaptureSuppressionDurationMsForReason:reason];
     if (suppressionMs > 0) {
         self.suppressFreeMouseEdgeUncaptureUntilMs = [self nowMs] + suppressionMs;
@@ -1647,7 +1683,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf.view.window isKeyWindow]) {
-                    Log(LOG_I, @"[diag] Window became key; rearming input capture (fullscreen=%d style=%llu level=%ld)",
+                    Log(LOG_D, @"[diag] Window became key; rearming input capture (fullscreen=%d style=%llu level=%ld)",
                         [weakSelf isWindowFullscreen] ? 1 : 0,
                         (unsigned long long)weakSelf.view.window.styleMask,
                         (long)weakSelf.view.window.level);
@@ -2304,6 +2340,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     [self stopStreamHealthDiagnostics];
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"begin-stop:%@", reason ?: @"unknown"]];
+    [self finalizeInputDiagnosticsWithReason:reason];
     [[AwdlHelperManager sharedManager] endStreamSessionWithReason:reason ?: @"begin-stop"];
 
     self.hidSupport.shouldSendInputEvents = NO;
@@ -2447,6 +2484,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.settingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateWindowSubtitle];
         [weakSelf updateConfiguredShortcutMenus];
+        [weakSelf refreshInputDiagnosticsPreference];
     }];
     self.hostLatencyUpdatedObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"HostLatencyUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateWindowSubtitle];
@@ -2581,6 +2619,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self.edgeMenuPanel close];
     self.edgeMenuPanel = nil;
 
+    [self stopInputDiagnosticsTimer];
     [self.hidSupport tearDownHidManager];
     self.hidSupport = nil;
 }
@@ -4117,7 +4156,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSWindow *window = self.view.window;
     NSString *screenFrame = window.screen ? NSStringFromRect(window.screen.frame) : @"(nil)";
     NSString *windowFrame = window ? NSStringFromRect(window.frame) : @"(nil)";
-    Log(LOG_I, @"[diag] %@: window=%p key=%d main=%d visible=%d occlusion=%lu fullscreen=%d borderless=%d style=%llu level=%ld pending=%ld screenFrame=%@ windowFrame=%@",
+    Log(LOG_D, @"[diag] %@: window=%p key=%d main=%d visible=%d occlusion=%lu fullscreen=%d borderless=%d style=%llu level=%ld pending=%ld screenFrame=%@ windowFrame=%@",
         context ?: @"window-state",
         window,
         window.isKeyWindow ? 1 : 0,
@@ -5274,26 +5313,31 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     }
 
     if (self.spaceTransitionInProgress) {
-        Log(LOG_I, @"[diag] captureMouse skipped: space transition in progress");
+        [self noteInputDiagnosticsCaptureSkipped:@"space-transition"];
+        Log(LOG_D, @"[diag] captureMouse skipped: space transition in progress");
         return;
     }
     if (![NSApp isActive]) {
-        Log(LOG_I, @"[diag] captureMouse skipped: app inactive");
+        [self noteInputDiagnosticsCaptureSkipped:@"app-inactive"];
+        Log(LOG_D, @"[diag] captureMouse skipped: app inactive");
         return;
     }
 
     NSWindow *window = self.view.window;
     if (!window) {
-        Log(LOG_I, @"[diag] captureMouse skipped: window is nil");
+        [self noteInputDiagnosticsCaptureSkipped:@"window-nil"];
+        Log(LOG_D, @"[diag] captureMouse skipped: window is nil");
         return;
     }
     if (![self isWindowInCurrentSpace]) {
-        Log(LOG_I, @"[diag] captureMouse skipped: window not in current space");
+        [self noteInputDiagnosticsCaptureSkipped:@"window-not-current-space"];
+        Log(LOG_D, @"[diag] captureMouse skipped: window not in current space");
         return;
     }
     NSScreen *screen = window.screen;
     if (!screen) {
-        Log(LOG_I, @"[diag] captureMouse skipped: screen is nil");
+        [self noteInputDiagnosticsCaptureSkipped:@"screen-nil"];
+        Log(LOG_D, @"[diag] captureMouse skipped: screen is nil");
         return;
     }
 
@@ -5302,7 +5346,8 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     NSString *mouseMode = [SettingsClass mouseModeFor:self.app.host.uuid];
     self.isRemoteDesktopMode = [mouseMode isEqualToString:@"remote"];
     if (![self hasReadyInputContext]) {
-        Log(LOG_I, @"[diag] captureMouse skipped: input context unavailable");
+        [self noteInputDiagnosticsCaptureSkipped:@"input-context-unavailable"];
+        Log(LOG_D, @"[diag] captureMouse skipped: input context unavailable");
         return;
     }
 
@@ -5340,7 +5385,8 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     self.isMouseCaptured = YES;
     [self refreshMouseMovedAcceptanceState];
     [self updateControlCenterEntrypointHints];
-    Log(LOG_I, @"[diag] captureMouse armed: key=%d fullscreen=%d remoteDesktop=%d inputCtx=%p",
+    [self noteInputDiagnosticsCaptureArmed];
+    Log(LOG_D, @"[diag] captureMouse armed: key=%d fullscreen=%d remoteDesktop=%d inputCtx=%p",
         window.isKeyWindow ? 1 : 0,
         [self isWindowFullscreen] ? 1 : 0,
         self.isRemoteDesktopMode ? 1 : 0,
@@ -5384,10 +5430,212 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     self.isMouseCaptured = NO;
     [self refreshMouseMovedAcceptanceState];
     [self updateControlCenterEntrypointHints];
+    [self noteInputDiagnosticsUncapture];
 }
 
 - (uint64_t)nowMs {
     return (uint64_t)(CACurrentMediaTime() * 1000.0);
+}
+
+- (void)resetInputDiagnosticsState {
+    self.inputDiagnosticsFinalized = NO;
+    self.inputDiagnosticsDetailActiveForStream = [SettingsClass inputDiagnosticsEnabled];
+    self.inputDiagnosticsMouseMoveEvents = 0;
+    self.inputDiagnosticsNonZeroRelativeEvents = 0;
+    self.inputDiagnosticsRelativeDispatches = 0;
+    self.inputDiagnosticsAbsoluteDispatches = 0;
+    self.inputDiagnosticsSuppressedRelativeEvents = 0;
+    self.inputDiagnosticsRawRelativeDeltaX = 0;
+    self.inputDiagnosticsRawRelativeDeltaY = 0;
+    self.inputDiagnosticsSentRelativeDeltaX = 0;
+    self.inputDiagnosticsSentRelativeDeltaY = 0;
+    self.inputDiagnosticsCaptureArmedCount = 0;
+    self.inputDiagnosticsCaptureSkipCount = 0;
+    self.inputDiagnosticsRearmCount = 0;
+    self.inputDiagnosticsRearmSkippedCount = 0;
+    self.inputDiagnosticsRearmDeferredCount = 0;
+    self.inputDiagnosticsUncaptureCount = 0;
+    self.inputDiagnosticsCaptureSkipReasons = [NSMutableDictionary dictionary];
+    self.inputDiagnosticsRearmReasons = [NSMutableDictionary dictionary];
+    self.inputDiagnosticsRearmSkipReasons = [NSMutableDictionary dictionary];
+    self.inputDiagnosticsRearmDeferredReasons = [NSMutableDictionary dictionary];
+    [self stopInputDiagnosticsTimer];
+    [self.hidSupport resetInputDiagnostics];
+}
+
+- (void)stopInputDiagnosticsTimer {
+    if (self.inputDiagnosticsTimer) {
+        [self.inputDiagnosticsTimer invalidate];
+        self.inputDiagnosticsTimer = nil;
+    }
+}
+
+- (void)refreshInputDiagnosticsPreference {
+    [self.hidSupport refreshInputDiagnosticsPreference];
+
+    BOOL enabled = [SettingsClass inputDiagnosticsEnabled];
+    if (enabled) {
+        self.inputDiagnosticsDetailActiveForStream = YES;
+    }
+
+    if (!enabled) {
+        [self stopInputDiagnosticsTimer];
+        return;
+    }
+
+    if (!self.inputDiagnosticsTimer && !self.inputDiagnosticsFinalized && self.streamHealthConnectionStartedMs > 0) {
+        self.inputDiagnosticsTimer = [NSTimer timerWithTimeInterval:1.0
+                                                             target:self
+                                                           selector:@selector(pollInputDiagnostics:)
+                                                           userInfo:nil
+                                                            repeats:YES];
+        [[NSRunLoop mainRunLoop] addTimer:self.inputDiagnosticsTimer forMode:NSRunLoopCommonModes];
+    }
+}
+
+- (void)accumulateInputDiagnosticsSnapshot:(HIDInputDiagnosticsSnapshot *)snapshot {
+    if (snapshot == nil) {
+        return;
+    }
+
+    self.inputDiagnosticsMouseMoveEvents += snapshot.mouseMoveEvents;
+    self.inputDiagnosticsNonZeroRelativeEvents += snapshot.nonZeroRelativeEvents;
+    self.inputDiagnosticsRelativeDispatches += snapshot.relativeDispatches;
+    self.inputDiagnosticsAbsoluteDispatches += snapshot.absoluteDispatches;
+    self.inputDiagnosticsSuppressedRelativeEvents += snapshot.suppressedRelativeEvents;
+    self.inputDiagnosticsRawRelativeDeltaX += snapshot.rawRelativeDeltaX;
+    self.inputDiagnosticsRawRelativeDeltaY += snapshot.rawRelativeDeltaY;
+    self.inputDiagnosticsSentRelativeDeltaX += snapshot.sentRelativeDeltaX;
+    self.inputDiagnosticsSentRelativeDeltaY += snapshot.sentRelativeDeltaY;
+}
+
+- (void)incrementInputDiagnosticsBucket:(NSMutableDictionary<NSString *, NSNumber *> *)bucket key:(NSString *)key {
+    NSString *normalizedKey = key.length > 0 ? key : @"unknown";
+    NSInteger count = [bucket[normalizedKey] integerValue];
+    bucket[normalizedKey] = @(count + 1);
+}
+
+- (NSString *)inputDiagnosticsTopReasonsFrom:(NSDictionary<NSString *, NSNumber *> *)bucket limit:(NSUInteger)limit {
+    if (bucket.count == 0 || limit == 0) {
+        return nil;
+    }
+
+    NSArray<NSString *> *sortedKeys = [bucket keysSortedByValueUsingComparator:^NSComparisonResult(NSNumber *lhs, NSNumber *rhs) {
+        return [rhs compare:lhs];
+    }];
+
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    for (NSString *key in sortedKeys) {
+        if (parts.count >= limit) {
+            break;
+        }
+        [parts addObject:[NSString stringWithFormat:@"%@×%@", key, bucket[key]]];
+    }
+
+    return parts.count > 0 ? [parts componentsJoinedByString:@","] : nil;
+}
+
+- (void)noteInputDiagnosticsCaptureArmed {
+    self.inputDiagnosticsCaptureArmedCount += 1;
+}
+
+- (void)noteInputDiagnosticsCaptureSkipped:(NSString *)reason {
+    self.inputDiagnosticsCaptureSkipCount += 1;
+    [self incrementInputDiagnosticsBucket:self.inputDiagnosticsCaptureSkipReasons key:reason];
+}
+
+- (void)noteInputDiagnosticsRearmRequested:(NSString *)reason {
+    self.inputDiagnosticsRearmCount += 1;
+    [self incrementInputDiagnosticsBucket:self.inputDiagnosticsRearmReasons key:reason];
+}
+
+- (void)noteInputDiagnosticsRearmSkippedWithBlocker:(NSString *)blocker {
+    self.inputDiagnosticsRearmSkippedCount += 1;
+    [self incrementInputDiagnosticsBucket:self.inputDiagnosticsRearmSkipReasons key:blocker];
+}
+
+- (void)noteInputDiagnosticsRearmDeferred:(NSString *)reason {
+    self.inputDiagnosticsRearmDeferredCount += 1;
+    [self incrementInputDiagnosticsBucket:self.inputDiagnosticsRearmDeferredReasons key:reason];
+}
+
+- (void)noteInputDiagnosticsUncapture {
+    self.inputDiagnosticsUncaptureCount += 1;
+}
+
+- (void)pollInputDiagnostics:(NSTimer *)timer {
+    (void)timer;
+
+    HIDInputDiagnosticsSnapshot *snapshot = [self.hidSupport consumeInputDiagnosticsSnapshot];
+    [self accumulateInputDiagnosticsSnapshot:snapshot];
+
+    if (snapshot.mouseMoveEvents == 0 &&
+        snapshot.relativeDispatches == 0 &&
+        snapshot.absoluteDispatches == 0 &&
+        snapshot.suppressedRelativeEvents == 0) {
+        return;
+    }
+
+    Log(LOG_D, @"[inputdiag] 1s sample: moves=%lu rel=%lu abs=%lu suppressed=%lu rawΔ=(%ld,%ld) sentΔ=(%ld,%ld) capture=%lu uncapture=%lu rearm=%lu rearmSkip=%lu",
+        (unsigned long)snapshot.mouseMoveEvents,
+        (unsigned long)snapshot.relativeDispatches,
+        (unsigned long)snapshot.absoluteDispatches,
+        (unsigned long)snapshot.suppressedRelativeEvents,
+        (long)snapshot.rawRelativeDeltaX,
+        (long)snapshot.rawRelativeDeltaY,
+        (long)snapshot.sentRelativeDeltaX,
+        (long)snapshot.sentRelativeDeltaY,
+        (unsigned long)self.inputDiagnosticsCaptureArmedCount,
+        (unsigned long)self.inputDiagnosticsUncaptureCount,
+        (unsigned long)self.inputDiagnosticsRearmCount,
+        (unsigned long)self.inputDiagnosticsRearmSkippedCount);
+}
+
+- (void)finalizeInputDiagnosticsWithReason:(NSString *)reason {
+    if (self.inputDiagnosticsFinalized) {
+        return;
+    }
+    self.inputDiagnosticsFinalized = YES;
+
+    [self stopInputDiagnosticsTimer];
+    [self.hidSupport refreshInputDiagnosticsPreference];
+    [self accumulateInputDiagnosticsSnapshot:[self.hidSupport consumeInputDiagnosticsSnapshot]];
+
+    NSString *captureSkipTop = [self inputDiagnosticsTopReasonsFrom:self.inputDiagnosticsCaptureSkipReasons limit:2];
+    NSString *rearmTop = [self inputDiagnosticsTopReasonsFrom:self.inputDiagnosticsRearmReasons limit:2];
+    NSString *rearmSkipTop = [self inputDiagnosticsTopReasonsFrom:self.inputDiagnosticsRearmSkipReasons limit:2];
+    NSString *rearmDeferredTop = [self inputDiagnosticsTopReasonsFrom:self.inputDiagnosticsRearmDeferredReasons limit:2];
+
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    [parts addObject:[NSString stringWithFormat:@"detail=%@", self.inputDiagnosticsDetailActiveForStream ? @"on" : @"off"]];
+    [parts addObject:[NSString stringWithFormat:@"moves=%lu", (unsigned long)self.inputDiagnosticsMouseMoveEvents]];
+    [parts addObject:[NSString stringWithFormat:@"rel=%lu", (unsigned long)self.inputDiagnosticsRelativeDispatches]];
+    [parts addObject:[NSString stringWithFormat:@"abs=%lu", (unsigned long)self.inputDiagnosticsAbsoluteDispatches]];
+    [parts addObject:[NSString stringWithFormat:@"suppressed=%lu", (unsigned long)self.inputDiagnosticsSuppressedRelativeEvents]];
+    [parts addObject:[NSString stringWithFormat:@"rawΔ=(%ld,%ld)", (long)self.inputDiagnosticsRawRelativeDeltaX, (long)self.inputDiagnosticsRawRelativeDeltaY]];
+    [parts addObject:[NSString stringWithFormat:@"sentΔ=(%ld,%ld)", (long)self.inputDiagnosticsSentRelativeDeltaX, (long)self.inputDiagnosticsSentRelativeDeltaY]];
+    [parts addObject:[NSString stringWithFormat:@"capture=%lu", (unsigned long)self.inputDiagnosticsCaptureArmedCount]];
+    [parts addObject:[NSString stringWithFormat:@"captureSkip=%lu", (unsigned long)self.inputDiagnosticsCaptureSkipCount]];
+    [parts addObject:[NSString stringWithFormat:@"uncapture=%lu", (unsigned long)self.inputDiagnosticsUncaptureCount]];
+    [parts addObject:[NSString stringWithFormat:@"rearm=%lu", (unsigned long)self.inputDiagnosticsRearmCount]];
+    [parts addObject:[NSString stringWithFormat:@"rearmSkip=%lu", (unsigned long)self.inputDiagnosticsRearmSkippedCount]];
+    [parts addObject:[NSString stringWithFormat:@"rearmDeferred=%lu", (unsigned long)self.inputDiagnosticsRearmDeferredCount]];
+    if (captureSkipTop.length > 0) {
+        [parts addObject:[NSString stringWithFormat:@"captureSkipTop=%@", captureSkipTop]];
+    }
+    if (rearmTop.length > 0) {
+        [parts addObject:[NSString stringWithFormat:@"rearmTop=%@", rearmTop]];
+    }
+    if (rearmSkipTop.length > 0) {
+        [parts addObject:[NSString stringWithFormat:@"rearmSkipTop=%@", rearmSkipTop]];
+    }
+    if (rearmDeferredTop.length > 0) {
+        [parts addObject:[NSString stringWithFormat:@"rearmDeferredTop=%@", rearmDeferredTop]];
+    }
+
+    Log(LOG_I, @"[diag] Input summary (%@): %@",
+        reason.length > 0 ? reason : @"unknown",
+        [parts componentsJoinedByString:@" · "]);
 }
 
 - (void)resetStreamHealthDiagnostics {
@@ -6366,6 +6614,8 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
         }
     }
     self.hidSupport = [[HIDSupport alloc] init:self.app.host];
+    [self resetInputDiagnosticsState];
+    [self refreshInputDiagnosticsPreference];
     
     id<ConnectionCallbacks> scopedCallbacks = [[MLStreamScopedConnectionCallbacks alloc] initWithOwner:self generation:streamGeneration];
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:scopedCallbacks];
@@ -7472,6 +7722,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
         self.pendingDisconnectSource = nil;
         [self startStreamHealthDiagnostics];
         self.streamHealthConnectionStartedMs = [self nowMs];
+        [self refreshInputDiagnosticsPreference];
 
         Log(LOG_I, @"connectionStarted (t=%.0fms) window style=%llu level=%ld", CACurrentMediaTime() * 1000.0, (unsigned long long)self.view.window.styleMask, (long)self.view.window.level);
 
@@ -7530,7 +7781,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
                 stats = self.streamMan.connection.renderer.videoStats;
             }
             [self logCurrentWindowStateWithContext:@"post-start-checkpoint-1s"];
-            Log(LOG_I, @"[diag] Post-start checkpoint: rf=%u df=%u ren=%u total=%u bytes=%llu captured=%d input=%d",
+            Log(LOG_D, @"[diag] Post-start checkpoint: rf=%u df=%u ren=%u total=%u bytes=%llu captured=%d input=%d",
                 stats.receivedFrames,
                 stats.decodedFrames,
                 stats.renderedFrames,
@@ -7564,6 +7815,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 - (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld (0x%08x)", (long)errorCode, (unsigned int)errorCode);
     [self stopStreamHealthDiagnostics];
+    [self finalizeInputDiagnosticsWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
     self.streamHealthConnectionStartedMs = 0;
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
     [[AwdlHelperManager sharedManager] endStreamSessionWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
@@ -7629,6 +7881,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     Log(LOG_I, @"Stage %s failed: %ld", stageName, errorCode);
     self.connectWatchdogToken += 1;
     [self stopStreamHealthDiagnostics];
+    [self finalizeInputDiagnosticsWithReason:[NSString stringWithFormat:@"stage-failed:%s", stageName ?: "unknown"]];
     self.streamHealthConnectionStartedMs = 0;
     [[AwdlHelperManager sharedManager] endStreamSessionWithReason:[NSString stringWithFormat:@"stage-failed:%s", stageName ?: "unknown"]];
     if (self.streamMan) {
@@ -7643,6 +7896,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 - (void)launchFailed:(NSString *)message {
     self.connectWatchdogToken += 1;
     [self stopStreamHealthDiagnostics];
+    [self finalizeInputDiagnosticsWithReason:@"launch-failed"];
     self.streamHealthConnectionStartedMs = 0;
     [[AwdlHelperManager sharedManager] endStreamSessionWithReason:@"launch-failed"];
     if (self.streamMan) {

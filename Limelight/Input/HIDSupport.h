@@ -12,6 +12,18 @@
 extern NSString *const HIDMouseModeToggledNotification;
 extern NSString *const HIDGamepadQuitNotification;
 
+@interface HIDInputDiagnosticsSnapshot : NSObject
+@property(nonatomic) NSUInteger mouseMoveEvents;
+@property(nonatomic) NSUInteger nonZeroRelativeEvents;
+@property(nonatomic) NSUInteger relativeDispatches;
+@property(nonatomic) NSUInteger absoluteDispatches;
+@property(nonatomic) NSUInteger suppressedRelativeEvents;
+@property(nonatomic) NSInteger rawRelativeDeltaX;
+@property(nonatomic) NSInteger rawRelativeDeltaY;
+@property(nonatomic) NSInteger sentRelativeDeltaX;
+@property(nonatomic) NSInteger sentRelativeDeltaY;
+@end
+
 @interface HIDSupport : NSObject
 @property(atomic) BOOL shouldSendInputEvents;
 @property(atomic) TemporaryHost *host;
@@ -33,6 +45,9 @@ extern NSString *const HIDGamepadQuitNotification;
                                 referenceSize:(NSSize)referenceSize
                                 clampToBounds:(BOOL)clampToBounds;
 - (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs;
+- (void)refreshInputDiagnosticsPreference;
+- (void)resetInputDiagnostics;
+- (HIDInputDiagnosticsSnapshot *)consumeInputDiagnosticsSnapshot;
 
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor
              highFreqMotor:(unsigned short)highFreqMotor;

@@ -4,6 +4,8 @@ enum DebugNoiseCategory: String, CaseIterable {
   case appKitMenuInconsistency
   case networkStackNoise
   case systemTransportFallback
+  case discoveryChatter
+  case hostIdentityMismatch
 
   var displayName: String {
     switch self {
@@ -13,12 +15,26 @@ enum DebugNoiseCategory: String, CaseIterable {
       return "系统网络噪音 / Network Stack Noise"
     case .systemTransportFallback:
       return "系统传输回退噪音 / System Transport Fallback"
+    case .discoveryChatter:
+      return "发现服务噪音 / Discovery Chatter"
+    case .hostIdentityMismatch:
+      return "主机身份不匹配 / Host Identity Mismatch"
     }
   }
 }
 
 enum DebugLogNoiseClassifier {
   static func category(for line: String) -> DebugNoiseCategory? {
+    if line.localizedCaseInsensitiveContains("Discovery summary for ")
+      || line.localizedCaseInsensitiveContains("Resolved address:")
+    {
+      return .discoveryChatter
+    }
+
+    if isServerCertificateMismatchLine(line) || isIncorrectHostLine(line) {
+      return .hostIdentityMismatch
+    }
+
     if line.localizedCaseInsensitiveContains("Internal inconsistency in menus") {
       return .appKitMenuInconsistency
     }
@@ -43,6 +59,14 @@ enum DebugLogNoiseClassifier {
     return nil
   }
 
+  static func isServerCertificateMismatchLine(_ line: String) -> Bool {
+    line.localizedCaseInsensitiveContains("Server certificate mismatch")
+  }
+
+  static func isIncorrectHostLine(_ line: String) -> Bool {
+    line.localizedCaseInsensitiveContains("Received response from incorrect host:")
+  }
+
   static func extractErrorCodeDescription(from line: String) -> String {
     if let code = firstMatch(in: line, pattern: #"Code=(-?\d+)"#) {
       return "error \(code)"
@@ -64,6 +88,34 @@ enum DebugLogNoiseClassifier {
       return host
     }
     return "unknown target"
+  }
+
+  static func extractDiscoveryHost(from line: String) -> String {
+    if let host = firstMatch(in: line, pattern: #"Discovery summary for\s+([^:]+):"#) {
+      return host
+    }
+    if let host = firstMatch(in: line, pattern: #"Resolved address:\s+([^\s]+)\s+->"#) {
+      return host
+    }
+    return "unknown"
+  }
+
+  static func extractDiscoveryState(from line: String) -> String? {
+    firstMatch(in: line, pattern: #":\s*(\d+\s+online,\s*\d+\s+offline)"#)
+  }
+
+  static func extractIncorrectHost(from line: String) -> String? {
+    firstMatch(in: line, pattern: #"incorrect host:\s*([^\s]+)"#)
+  }
+
+  static func extractExpectedHost(from line: String) -> String? {
+    firstMatch(in: line, pattern: #"expected:\s*([^\s]+)"#)
+  }
+
+  static func shortHostIdentity(_ identity: String?) -> String? {
+    guard let identity, !identity.isEmpty else { return nil }
+    guard identity.count > 8 else { return identity }
+    return String(identity.prefix(8)) + "…"
   }
 
   private static func firstMatch(in text: String, pattern: String) -> String? {

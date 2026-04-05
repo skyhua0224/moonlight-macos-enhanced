@@ -2334,6 +2334,10 @@ private struct DebugLogLiveView: View {
           .toggleStyle(.checkbox)
           .frame(width: 180, alignment: .leading)
 
+        Toggle(languageManager.localize("Input Diagnostics"), isOn: $settingsModel.debugLogInputDiagnostics)
+          .toggleStyle(.checkbox)
+          .frame(width: 180, alignment: .leading)
+
         Toggle(languageManager.localize("Auto Scroll"), isOn: $settingsModel.debugLogAutoScroll)
           .toggleStyle(.checkbox)
           .frame(width: 130, alignment: .leading)

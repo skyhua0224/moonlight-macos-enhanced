@@ -708,7 +708,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         const uint64_t nowMs = LiGetMillis();
 
         if (self->_remainingDequeuedFrameLogCount > 0) {
-            Log(LOG_I, @"[diag] Pull renderer dequeued frame=%d len=%d pending=%d enqueueAge=%llums",
+            Log(LOG_D, @"[diag] Pull renderer dequeued frame=%d len=%d pending=%d enqueueAge=%llums",
                 du->frameNumber,
                 fullLengthBytes,
                 LiGetPendingVideoFramesCtx(depacketizerCtx),
@@ -1128,7 +1128,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
     if (bufferType != BUFFER_TYPE_PICDATA) {
         if (bufferType == BUFFER_TYPE_VPS) {
-            Log(LOG_I, @"Got VPS");
+            Log(LOG_D, @"Got VPS");
             vpsData = [NSData dataWithBytes:&data[FRAME_START_PREFIX_SIZE] length:length - FRAME_START_PREFIX_SIZE];
             waitingForVps = false;
             
@@ -1136,14 +1136,14 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             waitingForSps = true;
         }
         else if (bufferType == BUFFER_TYPE_SPS) {
-            Log(LOG_I, @"Got SPS");
+            Log(LOG_D, @"Got SPS");
             spsData = [NSData dataWithBytes:&data[FRAME_START_PREFIX_SIZE] length:length - FRAME_START_PREFIX_SIZE];
             waitingForSps = false;
             
             // We got a new SPS so wait for a new PPS to match it
             waitingForPps = true;
         } else if (bufferType == BUFFER_TYPE_PPS) {
-            Log(LOG_I, @"Got PPS");
+            Log(LOG_D, @"Got PPS");
             ppsData = [NSData dataWithBytes:&data[FRAME_START_PREFIX_SIZE] length:length - FRAME_START_PREFIX_SIZE];
             waitingForPps = false;
         }
@@ -1160,7 +1160,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                 const uint8_t* const parameterSetPointers[] = { [spsData bytes], [ppsData bytes] };
                 const size_t parameterSetSizes[] = { [spsData length], [ppsData length] };
                 
-                Log(LOG_I, @"Constructing new H264 format description");
+                Log(LOG_D, @"Constructing new H264 format description");
                 status = CMVideoFormatDescriptionCreateFromH264ParameterSets(kCFAllocatorDefault,
                                                                              2, /* count of parameter sets */
                                                                              parameterSetPointers,

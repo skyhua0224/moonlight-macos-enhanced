@@ -1250,6 +1250,13 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultAwdlStabilityHelperEnabled
   }
 
+  @objc static func inputDiagnosticsEnabled() -> Bool {
+    if UserDefaults.standard.object(forKey: SettingsModel.debugLogInputDiagnosticsKey) != nil {
+      return UserDefaults.standard.bool(forKey: SettingsModel.debugLogInputDiagnosticsKey)
+    }
+    return SettingsModel.defaultDebugLogInputDiagnostics
+  }
+
   @objc static func awdlStabilityHelperAcknowledged() -> Bool {
     if UserDefaults.standard.object(forKey: SettingsModel.awdlStabilityHelperAcknowledgedKey) != nil {
       return UserDefaults.standard.bool(forKey: SettingsModel.awdlStabilityHelperAcknowledgedKey)

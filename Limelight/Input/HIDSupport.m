@@ -446,8 +446,33 @@ typedef enum {
 @property (nonatomic) BOOL useGCMouse;
 @property (nonatomic) dispatch_queue_t inputQueue;
 @property (atomic) uint64_t suppressRelativeMouseUntilMs;
+@property (nonatomic, strong) NSObject *inputDiagnosticsLock;
+@property (atomic) BOOL inputDiagnosticsEnabled;
+@property (nonatomic) NSUInteger inputDiagnosticsDetailedLogSequence;
+@property (nonatomic) NSUInteger inputDiagnosticsRemainingDetailedLogs;
+@property (nonatomic) NSUInteger inputDiagnosticsMouseMoveEvents;
+@property (nonatomic) NSUInteger inputDiagnosticsNonZeroRelativeEvents;
+@property (nonatomic) NSUInteger inputDiagnosticsRelativeDispatches;
+@property (nonatomic) NSUInteger inputDiagnosticsAbsoluteDispatches;
+@property (nonatomic) NSUInteger inputDiagnosticsSuppressedRelativeEvents;
+@property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaX;
+@property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaY;
+@property (nonatomic) NSInteger inputDiagnosticsSentRelativeDeltaX;
+@property (nonatomic) NSInteger inputDiagnosticsSentRelativeDeltaY;
 
 - (int)switchActuallyRumbleJoystick:(IOHIDDeviceRef)device low_frequency_rumble:(UInt16)low_frequency_rumble high_frequency_rumble:(UInt16)high_frequency_rumble;
+- (BOOL)reserveDetailedInputDiagnosticsLogSequence:(NSUInteger *)sequence;
+- (void)recordRelativeInputDiagnosticsFrom:(NSString *)source
+                                 rawDeltaX:(CGFloat)rawDeltaX
+                                 rawDeltaY:(CGFloat)rawDeltaY
+                                sentDeltaX:(short)sentDeltaX
+                                sentDeltaY:(short)sentDeltaY
+                                suppressed:(BOOL)suppressed;
+- (void)recordAbsoluteInputDiagnosticsFrom:(NSString *)source
+                                         x:(short)x
+                                         y:(short)y
+                                     width:(short)width
+                                    height:(short)height;
 @end
 
 static inline PML_INPUT_STREAM_CONTEXT HIDInputContext(HIDSupport *support) {
@@ -532,15 +557,158 @@ static inline BOOL HIDShouldSuppressRelativeMouse(HIDSupport *support) {
     return untilMs > 0 && LiGetMillis() < untilMs;
 }
 
+@implementation HIDInputDiagnosticsSnapshot
+@end
+
 @implementation HIDSupport
 
 SwitchCommonOutputPacket_t switchRumblePacket;
+
+- (void)refreshInputDiagnosticsPreference {
+    self.inputDiagnosticsEnabled = [SettingsClass inputDiagnosticsEnabled];
+}
+
+- (void)resetInputDiagnostics {
+    [self refreshInputDiagnosticsPreference];
+
+    @synchronized (self.inputDiagnosticsLock) {
+        self.inputDiagnosticsDetailedLogSequence = 0;
+        self.inputDiagnosticsRemainingDetailedLogs = self.inputDiagnosticsEnabled ? 24 : 0;
+        self.inputDiagnosticsMouseMoveEvents = 0;
+        self.inputDiagnosticsNonZeroRelativeEvents = 0;
+        self.inputDiagnosticsRelativeDispatches = 0;
+        self.inputDiagnosticsAbsoluteDispatches = 0;
+        self.inputDiagnosticsSuppressedRelativeEvents = 0;
+        self.inputDiagnosticsRawRelativeDeltaX = 0;
+        self.inputDiagnosticsRawRelativeDeltaY = 0;
+        self.inputDiagnosticsSentRelativeDeltaX = 0;
+        self.inputDiagnosticsSentRelativeDeltaY = 0;
+    }
+}
+
+- (HIDInputDiagnosticsSnapshot *)consumeInputDiagnosticsSnapshot {
+    HIDInputDiagnosticsSnapshot *snapshot = [[HIDInputDiagnosticsSnapshot alloc] init];
+
+    @synchronized (self.inputDiagnosticsLock) {
+        snapshot.mouseMoveEvents = self.inputDiagnosticsMouseMoveEvents;
+        snapshot.nonZeroRelativeEvents = self.inputDiagnosticsNonZeroRelativeEvents;
+        snapshot.relativeDispatches = self.inputDiagnosticsRelativeDispatches;
+        snapshot.absoluteDispatches = self.inputDiagnosticsAbsoluteDispatches;
+        snapshot.suppressedRelativeEvents = self.inputDiagnosticsSuppressedRelativeEvents;
+        snapshot.rawRelativeDeltaX = self.inputDiagnosticsRawRelativeDeltaX;
+        snapshot.rawRelativeDeltaY = self.inputDiagnosticsRawRelativeDeltaY;
+        snapshot.sentRelativeDeltaX = self.inputDiagnosticsSentRelativeDeltaX;
+        snapshot.sentRelativeDeltaY = self.inputDiagnosticsSentRelativeDeltaY;
+
+        self.inputDiagnosticsMouseMoveEvents = 0;
+        self.inputDiagnosticsNonZeroRelativeEvents = 0;
+        self.inputDiagnosticsRelativeDispatches = 0;
+        self.inputDiagnosticsAbsoluteDispatches = 0;
+        self.inputDiagnosticsSuppressedRelativeEvents = 0;
+        self.inputDiagnosticsRawRelativeDeltaX = 0;
+        self.inputDiagnosticsRawRelativeDeltaY = 0;
+        self.inputDiagnosticsSentRelativeDeltaX = 0;
+        self.inputDiagnosticsSentRelativeDeltaY = 0;
+    }
+
+    return snapshot;
+}
+
+- (BOOL)reserveDetailedInputDiagnosticsLogSequence:(NSUInteger *)sequence {
+    BOOL shouldLog = NO;
+
+    @synchronized (self.inputDiagnosticsLock) {
+        if (!self.inputDiagnosticsEnabled || self.inputDiagnosticsRemainingDetailedLogs == 0) {
+            return NO;
+        }
+
+        self.inputDiagnosticsDetailedLogSequence += 1;
+        self.inputDiagnosticsRemainingDetailedLogs -= 1;
+        shouldLog = YES;
+        if (sequence != NULL) {
+            *sequence = self.inputDiagnosticsDetailedLogSequence;
+        }
+    }
+
+    return shouldLog;
+}
+
+- (void)recordRelativeInputDiagnosticsFrom:(NSString *)source
+                                 rawDeltaX:(CGFloat)rawDeltaX
+                                 rawDeltaY:(CGFloat)rawDeltaY
+                                sentDeltaX:(short)sentDeltaX
+                                sentDeltaY:(short)sentDeltaY
+                                suppressed:(BOOL)suppressed {
+    if (!self.inputDiagnosticsEnabled) {
+        return;
+    }
+
+    BOOL rawNonZero = (rawDeltaX != 0.0 || rawDeltaY != 0.0);
+    NSUInteger sequence = 0;
+
+    @synchronized (self.inputDiagnosticsLock) {
+        self.inputDiagnosticsMouseMoveEvents += 1;
+        if (rawNonZero) {
+            self.inputDiagnosticsNonZeroRelativeEvents += 1;
+            self.inputDiagnosticsRawRelativeDeltaX += (NSInteger)llround(rawDeltaX);
+            self.inputDiagnosticsRawRelativeDeltaY += (NSInteger)llround(rawDeltaY);
+        }
+        if (suppressed) {
+            self.inputDiagnosticsSuppressedRelativeEvents += 1;
+        } else if (sentDeltaX != 0 || sentDeltaY != 0) {
+            self.inputDiagnosticsRelativeDispatches += 1;
+            self.inputDiagnosticsSentRelativeDeltaX += sentDeltaX;
+            self.inputDiagnosticsSentRelativeDeltaY += sentDeltaY;
+        }
+    }
+
+    if ([self reserveDetailedInputDiagnosticsLogSequence:&sequence]) {
+        Log(LOG_D, @"[inputdiag] #%lu %@ relative raw=(%.3f,%.3f) sent=(%d,%d) suppressed=%d ctx=%p",
+            (unsigned long)sequence,
+            source ?: @"unknown",
+            rawDeltaX,
+            rawDeltaY,
+            sentDeltaX,
+            sentDeltaY,
+            suppressed ? 1 : 0,
+            self.inputContext);
+    }
+}
+
+- (void)recordAbsoluteInputDiagnosticsFrom:(NSString *)source
+                                         x:(short)x
+                                         y:(short)y
+                                     width:(short)width
+                                    height:(short)height {
+    if (!self.inputDiagnosticsEnabled) {
+        return;
+    }
+
+    NSUInteger sequence = 0;
+    @synchronized (self.inputDiagnosticsLock) {
+        self.inputDiagnosticsMouseMoveEvents += 1;
+        self.inputDiagnosticsAbsoluteDispatches += 1;
+    }
+
+    if ([self reserveDetailedInputDiagnosticsLogSequence:&sequence]) {
+        Log(LOG_D, @"[inputdiag] #%lu %@ absolute pos=(%d,%d) ref=%dx%d ctx=%p",
+            (unsigned long)sequence,
+            source ?: @"unknown",
+            x,
+            y,
+            width,
+            height,
+            self.inputContext);
+    }
+}
 
 - (instancetype)init:(TemporaryHost *)host {
     self = [super init];
     if (self) {
         self.host = host;
         self.inputQueue = dispatch_queue_create("com.moonlight.input", DISPATCH_QUEUE_SERIAL);
+        self.inputDiagnosticsLock = [[NSObject alloc] init];
+        [self resetInputDiagnostics];
         
         [self setupHidManager];
         
@@ -723,12 +891,25 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:me.host.uuid];
             BOOL useAbsolutePointerPath = HIDShouldUseAbsolutePointerPath(me, touchscreenMode);
             if (!useAbsolutePointerPath) {
-                if (HIDShouldSuppressRelativeMouse(me)) {
+                BOOL suppressed = HIDShouldSuppressRelativeMouse(me);
+                if (suppressed) {
+                    [me recordRelativeInputDiagnosticsFrom:@"gcMouse"
+                                                 rawDeltaX:deltaX
+                                                 rawDeltaY:deltaY
+                                                sentDeltaX:0
+                                                sentDeltaY:0
+                                                suppressed:YES];
                     return kCVReturnSuccess;
                 }
                 CGFloat sensitivity = HIDPointerSensitivityForHost(me.host);
                 short moveX = HIDScaledRelativeDelta(deltaX, sensitivity);
                 short moveY = HIDScaledRelativeDelta(deltaY, sensitivity);
+                [me recordRelativeInputDiagnosticsFrom:@"gcMouse"
+                                             rawDeltaX:deltaX
+                                             rawDeltaY:deltaY
+                                            sentDeltaX:moveX
+                                            sentDeltaY:moveY
+                                            suppressed:NO];
                 HIDDispatchInput(me, inputCtx, ^{
                     LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
                 });
@@ -772,6 +953,12 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             
             moveY = (short)(-dy);
             
+            [me recordRelativeInputDiagnosticsFrom:@"controllerMouse"
+                                         rawDeltaX:dx
+                                         rawDeltaY:-dy
+                                        sentDeltaX:moveX
+                                        sentDeltaY:moveY
+                                        suppressed:NO];
             if (moveX != 0 || moveY != 0) {
                 HIDDispatchInput(me, inputCtx, ^{
                     LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
@@ -971,16 +1158,26 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             short y = (short)(size.height - loc.y);
             short width = (short)size.width;
             short height = (short)size.height;
+            [self recordAbsoluteInputDiagnosticsFrom:@"mouseMoved" x:x y:y width:width height:height];
             HIDDispatchInput(self, inputCtx, ^{
                 LiSendMousePositionEventCtx(inputCtx, x, y, width, height);
             });
         } else {
-            if (HIDShouldSuppressRelativeMouse(self)) {
+            CGFloat rawDeltaX = event.deltaX;
+            CGFloat rawDeltaY = event.deltaY;
+            BOOL suppressed = HIDShouldSuppressRelativeMouse(self);
+            CGFloat sensitivity = HIDPointerSensitivityForHost(self.host);
+            short deltaX = HIDScaledRelativeDelta(rawDeltaX, sensitivity);
+            short deltaY = HIDScaledRelativeDelta(rawDeltaY, sensitivity);
+            [self recordRelativeInputDiagnosticsFrom:@"mouseMoved"
+                                           rawDeltaX:rawDeltaX
+                                           rawDeltaY:rawDeltaY
+                                          sentDeltaX:(suppressed ? 0 : deltaX)
+                                          sentDeltaY:(suppressed ? 0 : deltaY)
+                                          suppressed:suppressed];
+            if (suppressed) {
                 return;
             }
-            CGFloat sensitivity = HIDPointerSensitivityForHost(self.host);
-            short deltaX = HIDScaledRelativeDelta(event.deltaX, sensitivity);
-            short deltaY = HIDScaledRelativeDelta(event.deltaY, sensitivity);
             if (deltaX != 0 || deltaY != 0) {
                 HIDDispatchInput(self, inputCtx, ^{
                     LiSendMouseMoveEventCtx(inputCtx, deltaX, deltaY);
@@ -1013,6 +1210,11 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     short referenceWidth = (short)lrint(width);
     short referenceHeight = (short)lrint(height);
 
+    [self recordAbsoluteInputDiagnosticsFrom:@"sendAbsoluteMousePosition"
+                                           x:hostX
+                                           y:hostY
+                                       width:referenceWidth
+                                      height:referenceHeight];
     HIDDispatchInput(self, inputCtx, ^{
         LiSendMousePositionEventCtx(inputCtx, hostX, hostY, referenceWidth, referenceHeight);
     });

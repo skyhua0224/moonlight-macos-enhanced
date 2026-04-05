@@ -98,6 +98,7 @@
 "Raw Log" = "原始日志";
 "Log Mode" = "日志模式";
 "Show System Noise" = "显示系统噪音";
+"Input Diagnostics" = "输入诊断";
 "Export Raw Log…" = "导出原始日志…";
 "Export Filtered Log…" = "导出当前筛选结果…";
 "Auto Scroll" = "自动滚动";

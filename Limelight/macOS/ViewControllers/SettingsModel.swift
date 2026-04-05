@@ -30,6 +30,7 @@ class SettingsModel: ObservableObject {
   static let debugLogShowSystemNoiseKey = "debugLog.showSystemNoise"
   static let debugLogAutoScrollKey = "debugLog.autoScroll"
   static let debugLogTimeScopeKey = "debugLog.timeScope"
+  static let debugLogInputDiagnosticsKey = "debugLog.inputDiagnostics"
   static let awdlStabilityHelperEnabledKey = "networkCompatibility.awdlHelperEnabled"
   static let awdlStabilityHelperAcknowledgedKey = "networkCompatibility.awdlHelperAcknowledged"
 
@@ -96,6 +97,11 @@ class SettingsModel: ObservableObject {
   @Published var debugLogTimeScope: String {
     didSet {
       UserDefaults.standard.set(debugLogTimeScope, forKey: Self.debugLogTimeScopeKey)
+    }
+  }
+  @Published var debugLogInputDiagnostics: Bool {
+    didSet {
+      UserDefaults.standard.set(debugLogInputDiagnostics, forKey: Self.debugLogInputDiagnosticsKey)
     }
   }
   @Published var awdlStabilityHelperEnabled: Bool {
@@ -930,6 +936,7 @@ class SettingsModel: ObservableObject {
   static let defaultDebugLogShowSystemNoise = false
   static let defaultDebugLogAutoScroll = true
   static let defaultDebugLogTimeScope = "launch"
+  static let defaultDebugLogInputDiagnostics = false
   static let defaultAwdlStabilityHelperEnabled = false
   static let defaultAwdlStabilityHelperAcknowledged = false
 
@@ -1224,6 +1231,11 @@ class SettingsModel: ObservableObject {
     }
     debugLogTimeScope = Self.normalizedDebugLogTimeScope(
       UserDefaults.standard.string(forKey: Self.debugLogTimeScopeKey))
+    if UserDefaults.standard.object(forKey: Self.debugLogInputDiagnosticsKey) != nil {
+      debugLogInputDiagnostics = UserDefaults.standard.bool(forKey: Self.debugLogInputDiagnosticsKey)
+    } else {
+      debugLogInputDiagnostics = Self.defaultDebugLogInputDiagnostics
+    }
     if UserDefaults.standard.object(forKey: Self.awdlStabilityHelperEnabledKey) != nil {
       awdlStabilityHelperEnabled = UserDefaults.standard.bool(
         forKey: Self.awdlStabilityHelperEnabledKey)

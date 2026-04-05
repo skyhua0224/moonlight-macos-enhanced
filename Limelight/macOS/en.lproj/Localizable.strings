@@ -100,6 +100,7 @@
 "Raw Log" = "Raw Log";
 "Log Mode" = "Log Mode";
 "Show System Noise" = "Show System Noise";
+"Input Diagnostics" = "Input Diagnostics";
 "Export Raw Log…" = "Export Raw Log…";
 "Export Filtered Log…" = "Export Filtered Log…";
 "Auto Scroll" = "Auto Scroll";
