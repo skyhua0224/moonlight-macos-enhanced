@@ -196,11 +196,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 #define EMULATING_SELECT     0x1
 #define EMULATING_SPECIAL    0x2
     
-    bool _oscEnabled;
+    BOOL _oscEnabled;
     char _controllerNumbers;
-    bool _multiController;
-    bool _gamepadMouseModeEnabled;
-    bool _isMouseModeActive;
+    BOOL _multiController;
+    BOOL _gamepadMouseModeEnabled;
+    BOOL _isMouseModeActive;
     NSDate *_startPressTime;
     float _accumulatedMouseX;
     float _accumulatedMouseY;
@@ -752,7 +752,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 }
 #endif
 
-+(bool) isSupportedGamepad:(GCController*) controller {
++(BOOL) isSupportedGamepad:(GCController*) controller {
     return controller.extendedGamepad != nil || controller.gamepad != nil;
 }
 

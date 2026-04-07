@@ -37,6 +37,7 @@
 		98AB2E561CAD427A0089BB98 /* protocol.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E151CAD422B0089BB98 /* protocol.c */; settings = {COMPILER_FLAGS = "-w"; }; };
 		98AB2E571CAD427A0089BB98 /* unix.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E171CAD422B0089BB98 /* unix.c */; settings = {COMPILER_FLAGS = "-w"; }; };
 		98AB2E581CAD427A0089BB98 /* win32.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E181CAD422B0089BB98 /* win32.c */; };
+		BB41618E2F84DDB6008F1683 /* OpenSSL in Frameworks */ = {isa = PBXBuildFile; productRef = BB41618D2F84DDB6008F1683 /* OpenSSL */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -120,6 +121,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB41618E2F84DDB6008F1683 /* OpenSSL in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -309,6 +311,9 @@
 				Base,
 			);
 			mainGroup = FB290E2519B37A4E004C83CF;
+			packageReferences = (
+				BB41618C2F84DDB6008F1683 /* XCRemoteSwiftPackageReference "OpenSSL-Package" */,
+			);
 			productRefGroup = FB290E2F19B37A4E004C83CF /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -550,6 +555,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BB41618C2F84DDB6008F1683 /* XCRemoteSwiftPackageReference "OpenSSL-Package" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/krzyzanowskim/OpenSSL-Package";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.3.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BB41618D2F84DDB6008F1683 /* OpenSSL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BB41618C2F84DDB6008F1683 /* XCRemoteSwiftPackageReference "OpenSSL-Package" */;
+			productName = OpenSSL;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FB290E2619B37A4E004C83CF /* Project object */;
 }

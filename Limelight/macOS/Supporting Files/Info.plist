@@ -31,16 +31,16 @@
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 SkyHua and contributors</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Used to capture microphone audio for streaming to the host.</string>
 	<key>NSMainStoryboardFile</key>
 	<string>Main</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Used to capture microphone audio for streaming to the host.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SMPrivilegedExecutables</key>
 	<dict>
 		<key>std.skyhua.MoonlightMac.AwdlPrivilegedHelper</key>
-		<string>identifier &quot;$(PRODUCT_BUNDLE_IDENTIFIER).AwdlPrivilegedHelper&quot; and anchor apple generic and certificate leaf[subject.CN] = &quot;$(EXPANDED_CODE_SIGN_IDENTITY_NAME)&quot; and certificate 1[field.1.2.840.113635.100.6.2.1] exists</string>
+		<string>identifier "$(PRODUCT_BUNDLE_IDENTIFIER).AwdlPrivilegedHelper" and anchor apple generic and certificate leaf[subject.CN] = "$(EXPANDED_CODE_SIGN_IDENTITY_NAME)" and certificate 1[field.1.2.840.113635.100.6.2.1] exists</string>
 	</dict>
 </dict>
 </plist>

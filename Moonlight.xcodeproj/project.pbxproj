@@ -404,6 +404,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 6W2WXQR6M2;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -431,7 +432,7 @@
 					"-weak_framework",
 					MetalFX,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMac;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bakabaka.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
@@ -463,6 +464,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 6W2WXQR6M2;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
@@ -490,7 +492,7 @@
 					"-weak_framework",
 					MetalFX,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMac;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bakabaka.MoonlightMac;
 				PRODUCT_NAME = Moonlight;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";

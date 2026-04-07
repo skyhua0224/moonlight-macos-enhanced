@@ -67,7 +67,14 @@ clang_args=(
   -I"${helper_include_dir}"
 )
 
-for arch in ${ARCHS}; do
+arch_values="${ARCHS:-${CURRENT_ARCH:-}}"
+
+if [[ -z "${arch_values}" ]]; then
+  echo "error: No architectures were provided for AWDL privileged helper build" >&2
+  exit 1
+fi
+
+for arch in ${=arch_values}; do
   clang_args+=(-arch "$arch")
 done
 
