@@ -307,6 +307,7 @@ struct Settings: Encodable, Decodable {
   let rumble: Bool
   let controllerDriver: Int
   let mouseDriver: Int
+  let coreHIDMaxMouseReportRate: Int?
 
   let emulateGuide: Bool
   let appArtworkDimensions: CGSize?
@@ -376,6 +377,7 @@ struct Settings: Encodable, Decodable {
       rumble: rumble,
       controllerDriver: controllerDriver,
       mouseDriver: mouseDriver,
+      coreHIDMaxMouseReportRate: coreHIDMaxMouseReportRate,
       emulateGuide: emulateGuide,
       appArtworkDimensions: appArtworkDimensions,
       dimNonHoveredArtwork: dimNonHoveredArtwork,
@@ -500,6 +502,7 @@ class SettingsClass: NSObject {
       rumble: settings.rumble,
       controllerDriver: settings.controllerDriver,
       mouseDriver: settings.mouseDriver,
+      coreHIDMaxMouseReportRate: settings.coreHIDMaxMouseReportRate,
 
       emulateGuide: settings.emulateGuide,
       appArtworkDimensions: settings.appArtworkDimensions,
@@ -566,6 +569,8 @@ class SettingsClass: NSObject {
         "rumble": settings.rumble,
         "controllerDriver": settings.controllerDriver,
         "mouseDriver": settings.mouseDriver,
+        "coreHIDMaxMouseReportRate":
+          settings.coreHIDMaxMouseReportRate ?? SettingsModel.defaultCoreHIDMaxMouseReportRate,
         "emulateGuide": settings.emulateGuide,
         "appArtworkDimensions": settings.appArtworkDimensions,
         "dimNonHoveredArtwork": settings.dimNonHoveredArtwork,
@@ -680,6 +685,7 @@ class SettingsClass: NSObject {
       rumble: settings.rumble,
       controllerDriver: settings.controllerDriver,
       mouseDriver: settings.mouseDriver,
+      coreHIDMaxMouseReportRate: settings.coreHIDMaxMouseReportRate,
 
       emulateGuide: settings.emulateGuide,
       appArtworkDimensions: settings.appArtworkDimensions,
@@ -751,6 +757,7 @@ class SettingsClass: NSObject {
         rumble: updated.rumble,
         controllerDriver: updated.controllerDriver,
         mouseDriver: updated.mouseDriver,
+        coreHIDMaxMouseReportRate: updated.coreHIDMaxMouseReportRate,
         emulateGuide: updated.emulateGuide,
         appArtworkDimensions: updated.appArtworkDimensions,
         dimNonHoveredArtwork: updated.dimNonHoveredArtwork,
@@ -824,6 +831,7 @@ class SettingsClass: NSObject {
       rumble: settings.rumble,
       controllerDriver: settings.controllerDriver,
       mouseDriver: settings.mouseDriver,
+      coreHIDMaxMouseReportRate: settings.coreHIDMaxMouseReportRate,
 
       emulateGuide: settings.emulateGuide,
       appArtworkDimensions: settings.appArtworkDimensions,
@@ -1318,6 +1326,15 @@ class SettingsClass: NSObject {
       return settings.pointerSensitivity ?? SettingsModel.defaultPointerSensitivity
     }
     return SettingsModel.defaultPointerSensitivity
+  }
+
+  @objc static func coreHIDMaxMouseReportRate(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return SettingsModel.normalizedCoreHIDMaxMouseReportRate(
+        settings.coreHIDMaxMouseReportRate ?? SettingsModel.defaultCoreHIDMaxMouseReportRate
+      )
+    }
+    return SettingsModel.defaultCoreHIDMaxMouseReportRate
   }
 
   @objc static func streamShortcuts(for key: String) -> [String: StreamShortcut] {

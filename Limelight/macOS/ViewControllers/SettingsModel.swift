@@ -559,6 +559,17 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var coreHIDMaxMouseReportRate: Int {
+    didSet {
+      let normalized = Self.normalizedCoreHIDMaxMouseReportRate(coreHIDMaxMouseReportRate)
+      if coreHIDMaxMouseReportRate != normalized {
+        coreHIDMaxMouseReportRate = normalized
+        return
+      }
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var streamShortcuts: [String: StreamShortcut] {
     didSet {
       guard !isLoading else { return }
@@ -806,6 +817,21 @@ class SettingsModel: ObservableObject {
     // Extended steps up to 1000 Mbps (avoid too many slider ticks)
     return lockedBitrateSteps + [200, 250, 300, 350, 400, 500, 600, 800, 1000]
   }
+
+  static let coreHIDMaxMouseReportRateLimit = 8000
+  static let coreHIDMaxMouseReportRateStep = 100
+
+  static func normalizedCoreHIDMaxMouseReportRate(_ value: Int) -> Int {
+    let clamped = max(0, min(value, coreHIDMaxMouseReportRateLimit))
+    if clamped == 0 {
+      return 0
+    }
+    let roundedStep = Int(
+      (Double(clamped) / Double(coreHIDMaxMouseReportRateStep)).rounded()
+    ) * coreHIDMaxMouseReportRateStep
+    return max(coreHIDMaxMouseReportRateStep, min(roundedStep, coreHIDMaxMouseReportRateLimit))
+  }
+
   static var videoCodecs: [String] = ["H.264", "H.265", "AV1"]
   static var pacingOptions: [String] = ["Lowest Latency", "Smoothest Video"]
   static var audioConfigurations: [String] = ["Stereo", "5.1 surround sound", "7.1 surround sound"]
@@ -916,6 +942,7 @@ class SettingsModel: ObservableObject {
   static let defaultSwapMouseButtons = false
   static let defaultReverseScrollDirection = false
   static let defaultPointerSensitivity: CGFloat = 1.0
+  static let defaultCoreHIDMaxMouseReportRate = 0
   static let defaultTouchscreenMode = 0  // Trackpad
   static let defaultGamepadMouseMode = false
   static let defaultMouseMode = "remote"
@@ -1310,6 +1337,7 @@ class SettingsModel: ObservableObject {
     swapMouseButtons = Self.defaultSwapMouseButtons
     reverseScrollDirection = Self.defaultReverseScrollDirection
     pointerSensitivity = Self.defaultPointerSensitivity
+    coreHIDMaxMouseReportRate = Self.defaultCoreHIDMaxMouseReportRate
     streamShortcuts = StreamShortcutProfile.defaultShortcuts()
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
@@ -1460,6 +1488,7 @@ class SettingsModel: ObservableObject {
     swapMouseButtons = Self.defaultSwapMouseButtons
     reverseScrollDirection = Self.defaultReverseScrollDirection
     pointerSensitivity = Self.defaultPointerSensitivity
+    coreHIDMaxMouseReportRate = Self.defaultCoreHIDMaxMouseReportRate
     streamShortcuts = StreamShortcutProfile.defaultShortcuts()
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
@@ -1600,6 +1629,9 @@ class SettingsModel: ObservableObject {
       reverseScrollDirection =
         settings.reverseScrollDirection ?? Self.defaultReverseScrollDirection
       pointerSensitivity = settings.pointerSensitivity ?? Self.defaultPointerSensitivity
+      coreHIDMaxMouseReportRate = Self.normalizedCoreHIDMaxMouseReportRate(
+        settings.coreHIDMaxMouseReportRate ?? Self.defaultCoreHIDMaxMouseReportRate
+      )
       streamShortcuts = StreamShortcutProfile.normalizedShortcuts(settings.streamShortcuts)
       selectedTouchscreenMode = Self.getString(
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
@@ -1756,6 +1788,9 @@ class SettingsModel: ObservableObject {
     let displayMode = Self.getInt(from: selectedDisplayMode, in: Self.displayModes)
     let controllerDriver = Self.getInt(from: selectedControllerDriver, in: Self.controllerDrivers)
     let mouseDriver = Self.getInt(from: selectedMouseDriver, in: Self.mouseDrivers)
+    let normalizedCoreHIDMaxMouseReportRate = Self.normalizedCoreHIDMaxMouseReportRate(
+      self.coreHIDMaxMouseReportRate
+    )
 
     var appArtworkDimensions: CGSize? = nil
     if let appArtworkWidth, let appArtworkHeight {
@@ -1808,6 +1843,7 @@ class SettingsModel: ObservableObject {
       rumble: rumble,
       controllerDriver: controllerDriver,
       mouseDriver: mouseDriver,
+      coreHIDMaxMouseReportRate: normalizedCoreHIDMaxMouseReportRate,
       emulateGuide: emulateGuide,
       appArtworkDimensions: appArtworkDimensions,
       dimNonHoveredArtwork: dimNonHoveredArtwork,

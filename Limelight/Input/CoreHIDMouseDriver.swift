@@ -26,10 +26,33 @@ final class CoreHIDMouseDriver: NSObject {
     static let runtimeErrorMessageKey = "CoreHID Mouse input failed."
   }
 
+  private enum ReportRate {
+    static let unlimited = 0
+    static let maxRate = 8000
+    static let step = 100
+  }
+
   weak var delegate: CoreHIDMouseDriverDelegate?
+
+  var maximumReportRate: Int = ReportRate.unlimited {
+    didSet {
+      let normalized = Self.normalizedMaximumReportRate(maximumReportRate)
+      if maximumReportRate != normalized {
+        maximumReportRate = normalized
+        return
+      }
+      if normalized == ReportRate.unlimited {
+        flushPendingDeltaIfNeeded()
+      }
+    }
+  }
 
   private let stateLock = NSLock()
   private var managerTask: Task<Void, Never>?
+  private var flushTask: Task<Void, Never>?
+  private var pendingDeltaX = 0.0
+  private var pendingDeltaY = 0.0
+  private var lastDispatchTimestamp: TimeInterval = 0
   private var hasPostedFailure = false
 
   func start() {
@@ -61,6 +84,11 @@ final class CoreHIDMouseDriver: NSObject {
     stateLock.lock()
     managerTask?.cancel()
     managerTask = nil
+    flushTask?.cancel()
+    flushTask = nil
+    pendingDeltaX = 0
+    pendingDeltaY = 0
+    lastDispatchTimestamp = 0
     hasPostedFailure = false
     stateLock.unlock()
   }
@@ -172,7 +200,7 @@ final class CoreHIDMouseDriver: NSObject {
           }
 
           if deltaX != 0 || deltaY != 0 {
-            delegate?.coreHIDMouseDriver(self, didReceiveDeltaX: deltaX, deltaY: deltaY)
+            reportDelta(deltaX: deltaX, deltaY: deltaY)
           }
 
         case .deviceRemoved:
@@ -212,6 +240,94 @@ final class CoreHIDMouseDriver: NSObject {
       return true
     }
     return false
+  }
+
+  private func reportDelta(deltaX: Double, deltaY: Double) {
+    let maxRate = Self.normalizedMaximumReportRate(maximumReportRate)
+    if maxRate == ReportRate.unlimited {
+      delegate?.coreHIDMouseDriver(self, didReceiveDeltaX: deltaX, deltaY: deltaY)
+      return
+    }
+
+    var deltaToDispatch: (x: Double, y: Double)?
+    var flushDelaySeconds: TimeInterval?
+
+    stateLock.lock()
+    pendingDeltaX += deltaX
+    pendingDeltaY += deltaY
+
+    let now = ProcessInfo.processInfo.systemUptime
+    let minimumInterval = 1.0 / Double(maxRate)
+    let elapsed =
+      lastDispatchTimestamp == 0
+      ? TimeInterval.greatestFiniteMagnitude
+      : (now - lastDispatchTimestamp)
+
+    if elapsed >= minimumInterval {
+      deltaToDispatch = (pendingDeltaX, pendingDeltaY)
+      pendingDeltaX = 0
+      pendingDeltaY = 0
+      lastDispatchTimestamp = now
+      flushTask?.cancel()
+      flushTask = nil
+    } else if flushTask == nil {
+      flushDelaySeconds = max(0, minimumInterval - elapsed)
+    }
+    stateLock.unlock()
+
+    if let deltaToDispatch {
+      delegate?.coreHIDMouseDriver(self, didReceiveDeltaX: deltaToDispatch.x, deltaY: deltaToDispatch.y)
+    }
+
+    if let flushDelaySeconds {
+      schedulePendingFlush(after: flushDelaySeconds)
+    }
+  }
+
+  private func schedulePendingFlush(after delaySeconds: TimeInterval) {
+    let clampedDelay = max(0, delaySeconds)
+    let delayNanoseconds = UInt64(clampedDelay * 1_000_000_000.0)
+    let task = Task { [weak self] in
+      if delayNanoseconds > 0 {
+        try? await Task.sleep(nanoseconds: delayNanoseconds)
+      }
+      self?.flushPendingDeltaIfNeeded()
+    }
+
+    stateLock.lock()
+    if flushTask == nil {
+      flushTask = task
+      stateLock.unlock()
+      return
+    }
+    stateLock.unlock()
+    task.cancel()
+  }
+
+  private func flushPendingDeltaIfNeeded() {
+    var deltaToDispatch: (x: Double, y: Double)?
+    stateLock.lock()
+    flushTask = nil
+    if pendingDeltaX != 0 || pendingDeltaY != 0 {
+      deltaToDispatch = (pendingDeltaX, pendingDeltaY)
+      pendingDeltaX = 0
+      pendingDeltaY = 0
+      lastDispatchTimestamp = ProcessInfo.processInfo.systemUptime
+    }
+    stateLock.unlock()
+
+    if let deltaToDispatch {
+      delegate?.coreHIDMouseDriver(self, didReceiveDeltaX: deltaToDispatch.x, deltaY: deltaToDispatch.y)
+    }
+  }
+
+  private static func normalizedMaximumReportRate(_ value: Int) -> Int {
+    let clamped = max(ReportRate.unlimited, min(value, ReportRate.maxRate))
+    if clamped == ReportRate.unlimited {
+      return ReportRate.unlimited
+    }
+    let roundedStep = Int((Double(clamped) / Double(ReportRate.step)).rounded()) * ReportRate.step
+    return max(ReportRate.step, min(roundedStep, ReportRate.maxRate))
   }
 
   private func postFailureIfNeeded(reason: String, messageKey: String) {

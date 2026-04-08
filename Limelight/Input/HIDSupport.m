@@ -798,6 +798,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     }
 
     self.coreHIDMouseDriver = [[CoreHIDMouseDriver alloc] init];
+    self.coreHIDMouseDriver.maximumReportRate = [SettingsClass coreHIDMaxMouseReportRateFor:self.host.uuid];
     self.coreHIDMouseDriver.delegate = self;
     [self.coreHIDMouseDriver start];
 }

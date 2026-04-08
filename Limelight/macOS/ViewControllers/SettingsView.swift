@@ -1246,6 +1246,15 @@ struct InputView: View {
   @ObservedObject var languageManager = LanguageManager.shared
   @AppStorage("settings.input.showAdvancedInput") private var showAdvancedInput = false
 
+  private var coreHIDMaxMouseReportRateBinding: Binding<Double> {
+    Binding(
+      get: { Double(settingsModel.coreHIDMaxMouseReportRate) },
+      set: { newValue in
+        settingsModel.coreHIDMaxMouseReportRate = Int(newValue.rounded())
+      }
+    )
+  }
+
   var body: some View {
     ScrollView {
       VStack {
@@ -1394,6 +1403,47 @@ struct InputView: View {
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .trailing)
                   })
+
+                if settingsModel.selectedMouseDriver == "CoreHID" {
+                  Divider()
+
+                  VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                      Text(languageManager.localize("CoreHID Max Mouse Report Rate"))
+                      Spacer()
+                      if settingsModel.coreHIDMaxMouseReportRate == 0 {
+                        Text(languageManager.localize("Unlimited"))
+                          .availableMonospacedDigit()
+                          .foregroundColor(.secondary)
+                      } else {
+                        Text("\(settingsModel.coreHIDMaxMouseReportRate) Hz")
+                          .availableMonospacedDigit()
+                          .foregroundColor(.secondary)
+                      }
+                    }
+
+                    Slider(
+                      value: coreHIDMaxMouseReportRateBinding,
+                      in: 0...Double(SettingsModel.coreHIDMaxMouseReportRateLimit),
+                      step: Double(SettingsModel.coreHIDMaxMouseReportRateStep)
+                    ) {
+                      EmptyView()
+                    } minimumValueLabel: {
+                      Text(languageManager.localize("Unlimited"))
+                        .font(.caption)
+                    } maximumValueLabel: {
+                      Text("\(SettingsModel.coreHIDMaxMouseReportRateLimit) Hz")
+                        .font(.caption)
+                    } onEditingChanged: { _ in
+
+                    }
+
+                    Text(languageManager.localize("CoreHID Max Mouse Report Rate hint"))
+                      .font(.footnote)
+                      .foregroundColor(.secondary)
+                      .frame(maxWidth: .infinity, alignment: .leading)
+                  }
+                }
               }
             },
             label: {
