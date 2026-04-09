@@ -1245,7 +1245,13 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)mouseMoved:(NSEvent *)event {
-    if (self.useGCMouse || self.useCoreHIDMouse) {
+    if (self.useGCMouse) {
+        return;
+    }
+
+    // Keep NSEvent fallback active unless CoreHID has delivered movement very recently.
+    // This avoids false positives where CoreHID reports monitorable sources but never emits deltas.
+    if (self.useCoreHIDMouse && self.coreHIDMouseDriver.secondsSinceLastMovementEvent < 0.25) {
         return;
     }
     
@@ -1291,6 +1297,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
             }
         }
     }
+}
+
+- (BOOL)needsMouseMovedEventsForCoreHIDFallback {
+    return self.useCoreHIDMouse && self.shouldSendInputEvents;
 }
 
 - (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint

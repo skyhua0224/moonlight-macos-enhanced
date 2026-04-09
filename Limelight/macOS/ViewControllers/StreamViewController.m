@@ -1225,7 +1225,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
     BOOL shouldAccept = self.isMouseCaptured ||
                         self.edgeMenuTemporaryReleaseActive ||
                         self.edgeMenuDragging ||
-                        self.edgeMenuMenuVisible;
+                        self.edgeMenuMenuVisible ||
+                        [self.hidSupport needsMouseMovedEventsForCoreHIDFallback];
     window.acceptsMouseMovedEvents = shouldAccept;
 }
 

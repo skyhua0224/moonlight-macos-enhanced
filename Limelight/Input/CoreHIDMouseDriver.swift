@@ -54,6 +54,17 @@ final class CoreHIDMouseDriver: NSObject {
   private var pendingDeltaY = 0.0
   private var lastDispatchTimestamp: TimeInterval = 0
   private var hasPostedFailure = false
+  private var lastMovementEventTimestamp: TimeInterval = 0
+
+  var secondsSinceLastMovementEvent: TimeInterval {
+    stateLock.lock()
+    let lastEventTimestamp = lastMovementEventTimestamp
+    stateLock.unlock()
+    guard lastEventTimestamp > 0 else {
+      return TimeInterval.greatestFiniteMagnitude
+    }
+    return max(0, ProcessInfo.processInfo.systemUptime - lastEventTimestamp)
+  }
 
   func start() {
     stop()
@@ -90,6 +101,7 @@ final class CoreHIDMouseDriver: NSObject {
     pendingDeltaY = 0
     lastDispatchTimestamp = 0
     hasPostedFailure = false
+    lastMovementEventTimestamp = 0
     stateLock.unlock()
   }
 
@@ -245,6 +257,7 @@ final class CoreHIDMouseDriver: NSObject {
   private func reportDelta(deltaX: Double, deltaY: Double) {
     let maxRate = Self.normalizedMaximumReportRate(maximumReportRate)
     if maxRate == ReportRate.unlimited {
+      markMovementEventDelivered()
       delegate?.coreHIDMouseDriver(self, didReceiveDeltaX: deltaX, deltaY: deltaY)
       return
     }
@@ -276,6 +289,7 @@ final class CoreHIDMouseDriver: NSObject {
     stateLock.unlock()
 
     if let deltaToDispatch {
+      markMovementEventDelivered()
       delegate?.coreHIDMouseDriver(self, didReceiveDeltaX: deltaToDispatch.x, deltaY: deltaToDispatch.y)
     }
 
@@ -317,8 +331,15 @@ final class CoreHIDMouseDriver: NSObject {
     stateLock.unlock()
 
     if let deltaToDispatch {
+      markMovementEventDelivered()
       delegate?.coreHIDMouseDriver(self, didReceiveDeltaX: deltaToDispatch.x, deltaY: deltaToDispatch.y)
     }
+  }
+
+  private func markMovementEventDelivered() {
+    stateLock.lock()
+    lastMovementEventTimestamp = ProcessInfo.processInfo.systemUptime
+    stateLock.unlock()
   }
 
   private static func normalizedMaximumReportRate(_ value: Int) -> Int {

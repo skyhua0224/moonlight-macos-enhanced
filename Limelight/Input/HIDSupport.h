@@ -44,6 +44,7 @@ extern NSString *const HIDCoreHIDFailureMessageKeyUserInfoKey;
 - (void)mouseUp:(NSEvent *)event withButton:(int)button;
 - (void)mouseMoved:(NSEvent *)event;
 - (void)scrollWheel:(NSEvent *)event;
+- (BOOL)needsMouseMovedEventsForCoreHIDFallback;
 - (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint
                                 referenceSize:(NSSize)referenceSize
                                 clampToBounds:(BOOL)clampToBounds;
