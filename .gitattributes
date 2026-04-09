@@ -1,0 +1,2 @@
+# Shell scripts must use LF so shebangs work in Xcode build phases.
+*.sh text eol=lf

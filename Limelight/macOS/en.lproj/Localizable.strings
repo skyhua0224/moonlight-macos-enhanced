@@ -271,6 +271,8 @@
 "Denied" = "Denied";
 "Not Determined" = "Not Determined";
 "Open Settings" = "Open Settings";
+"CoreHID Mouse Permission Required" = "CoreHID mouse permission required";
+"CoreHID Mouse Permission Alert Detail" = "Streaming is still running, but mouse input is currently using a fallback path. This can hide CoreHID-related mouse issues.\n\nEnable Input Monitoring for Moonlight to continue CoreHID mouse troubleshooting.";
 "Request" = "Request";
 "Retry" = "Retry";
 "Test Microphone" = "Test Microphone";

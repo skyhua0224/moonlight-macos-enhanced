@@ -270,6 +270,8 @@
 "Denied" = "已拒绝";
 "Not Determined" = "未确定";
 "Open Settings" = "打开设置";
+"CoreHID Mouse Permission Required" = "CoreHID 鼠标需要权限";
+"CoreHID Mouse Permission Alert Detail" = "串流仍会继续，但当前鼠标输入正在使用回退路径，这可能掩盖 CoreHID 相关鼠标问题。\n\n请为 Moonlight 开启“输入监控”，再继续排查 CoreHID 鼠标问题。";
 "Request" = "请求授权";
 "Retry" = "重试";
 "Test Microphone" = "测试麦克风";

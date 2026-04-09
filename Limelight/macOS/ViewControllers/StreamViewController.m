@@ -690,6 +690,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 @property (nonatomic, strong) NSVisualEffectView *notificationContainer;
 @property (nonatomic, strong) NSTextField *notificationLabel;
 @property (nonatomic, strong) NSTimer *notificationTimer;
+@property (nonatomic) BOOL coreHIDPermissionAlertPresented;
 
 @property (nonatomic, strong) NSVisualEffectView *mouseModeContainer;
 @property (nonatomic, strong) NSTextField *mouseModeLabel;
@@ -1157,6 +1158,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
     if (!window || !window.isKeyWindow) {
         return NO;
     }
+    if (self.coreHIDPermissionAlertPresented || window.attachedSheet) {
+        return NO;
+    }
     if (![NSApp isActive]) {
         return NO;
     }
@@ -1173,6 +1177,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSWindow *window = self.view.window;
     if (!window) {
         return @"window-nil";
+    }
+    if (self.coreHIDPermissionAlertPresented) {
+        return @"corehid-permission-alert";
+    }
+    if (window.attachedSheet) {
+        return @"modal-sheet-active";
     }
     if (!window.isKeyWindow) {
         return @"window-not-key";
@@ -5317,6 +5327,12 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
         return;
     }
 
+    if (self.coreHIDPermissionAlertPresented) {
+        [self noteInputDiagnosticsCaptureSkipped:@"corehid-permission-alert"];
+        Log(LOG_D, @"[diag] captureMouse skipped: CoreHID permission alert is presented");
+        return;
+    }
+
     if (self.stopStreamInProgress || self.reconnectInProgress) {
         return;
     }
@@ -5422,7 +5438,7 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
 
     if (!showLocalCursor) {
         CGAssociateMouseAndMouseCursorPosition(YES);
-        if (self.cursorHiddenCounter != 0) {
+        while (self.cursorHiddenCounter > 0) {
             [NSCursor unhide];
             self.cursorHiddenCounter --;
         }
@@ -8411,8 +8427,64 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     }
 
     NSString *toast = [NSString stringWithFormat:@"🖱️ %@", localizedMessage];
-    [self showNotification:toast forSeconds:3.0];
+    BOOL permissionDenied = [reason isEqualToString:@"permission-denied"];
+    [self showNotification:toast forSeconds:(permissionDenied ? 10.0 : 6.0)];
+    if (permissionDenied) {
+        [self presentCoreHIDPermissionDeniedAlertWithMessage:localizedMessage];
+    }
     Log(LOG_W, @"CoreHID mouse unavailable: reason=%@ messageKey=%@", reason, messageKey);
+}
+
+- (void)presentCoreHIDPermissionDeniedAlertWithMessage:(NSString *)localizedMessage {
+    if (self.coreHIDPermissionAlertPresented) {
+        return;
+    }
+
+    NSWindow *window = self.view.window;
+    if (!window || window.attachedSheet) {
+        Log(LOG_W, @"Skipping CoreHID permission sheet because stream window is unavailable or already presenting a sheet");
+        return;
+    }
+
+    self.coreHIDPermissionAlertPresented = YES;
+    BOOL hadActiveInput = self.hidSupport.shouldSendInputEvents || self.controllerSupport.shouldSendInputEvents;
+    [self uncaptureMouse];
+    if (hadActiveInput && !self.stopStreamInProgress && !self.reconnectInProgress) {
+        // Keep NSEvent fallback alive while the alert is shown, but stay uncaptured for local cursor interaction.
+        self.hidSupport.shouldSendInputEvents = YES;
+        self.controllerSupport.shouldSendInputEvents = YES;
+        [self refreshMouseMovedAcceptanceState];
+    }
+
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleWarning;
+    alert.messageText = MLString(@"CoreHID Mouse Permission Required", nil);
+    alert.informativeText = [NSString stringWithFormat:@"%@\n\n%@",
+                             localizedMessage,
+                             MLString(@"CoreHID Mouse Permission Alert Detail", nil)];
+    [alert addButtonWithTitle:MLString(@"Open Settings", nil)];
+    [alert addButtonWithTitle:MLString(@"Close", nil)];
+
+    [alert beginSheetModalForWindow:window completionHandler:^(NSModalResponse returnCode) {
+        self.coreHIDPermissionAlertPresented = NO;
+        if (returnCode == NSAlertFirstButtonReturn) {
+            [self openCoreHIDInputMonitoringSettings];
+        }
+        [self rearmMouseCaptureIfPossibleWithReason:@"corehid-permission-alert-dismissed"];
+    }];
+}
+
+- (void)openCoreHIDInputMonitoringSettings {
+    NSURL *inputMonitoringURL =
+        [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"];
+    if (inputMonitoringURL && [[NSWorkspace sharedWorkspace] openURL:inputMonitoringURL]) {
+        return;
+    }
+
+    NSURL *privacyRootURL = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security"];
+    if (privacyRootURL) {
+        [[NSWorkspace sharedWorkspace] openURL:privacyRootURL];
+    }
 }
 
 - (void)showNotification:(NSString *)message {
