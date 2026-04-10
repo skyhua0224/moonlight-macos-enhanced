@@ -6,9 +6,7 @@
 
 **Native Moonlight macOS / Moonlight for macOS Client**
 
-`Moonlight macOS Enhanced` is a native Moonlight for macOS client for Sunshine and Foundation Sunshine, built with AppKit/SwiftUI and optimized for both Apple Silicon and Intel Macs.
-
-This repository is the main GitHub home for releases, source code, installation guidance, and release notes.
+`Moonlight macOS Enhanced` is a native macOS streaming client for Sunshine, Foundation Sunshine, and compatible GameStream hosts. It is built with AppKit / SwiftUI and continuously tuned for both Apple Silicon and Intel Macs.
 
 [简体中文](README.md) | English
 
@@ -16,47 +14,68 @@ This repository is the main GitHub home for releases, source code, installation 
 
 ---
 
-## ✨ Features
+## ✨ Highlights
 
 ### 🍎 Native macOS Experience
-- **Apple Silicon Optimized** - Native support for Apple Silicon chips
-- **Native UI** - Built with AppKit/SwiftUI, not a Qt port
-- **Dark Mode** - Full system dark mode support
-- **Localization** - English and Simplified Chinese
+- **Native AppKit / SwiftUI interface**, not a Qt port
+- **Apple Silicon and Intel support**
+- **Full dark mode and bilingual UI**
+- **Minimum supported version: macOS 12**
 
-#### 🎮 Streaming Performance
-- **Custom Resolution & FPS** - Configurable resolution and frame rate
-- **HEVC/H.264** - Hardware accelerated video decoding
-- **HDR** - High Dynamic Range support
-- **YUV 4:4:4** - Enhanced color sampling (requires Foundation Sunshine)
-- **V-Sync** - Vertical synchronization support
-- **Surround Sound** - 5.1/7.1 audio support
+### 🎮 Streaming Features
+- **Custom resolution, FPS, remote resolution, and remote FPS**
+- **HEVC / H.264 hardware decoding**
+- **HDR, YUV 4:4:4, and surround audio**
+- **Auto bitrate, MetalFX upscaling, and stream tuning**
+- **Fullscreen / borderless / windowed display modes**
 
-#### 🚀 Enhanced Features (What's New)
-| Feature | Description |
-|---------|-------------|
-| 🎤 **Microphone Passthrough** | Stream your mic to the host (requires Foundation Sunshine) |
-| 📊 **Performance Overlay** | Real-time stats: latency, FPS, bitrate (⌃⌥S to toggle) |
-| 🖥️ **Multi-Host Streaming** | Connect to multiple hosts simultaneously |
-| 🎨 **MetalFX Upscaling** | Apple's AI-powered image enhancement |
-| 🌐 **Custom Ports/IPv6/Domain** | Flexible connection options |
-| 🔧 **Connection Manager** | Manage multiple connection methods per host |
-| 🎮 **Gamepad Mouse Mode** | Use controller as mouse |
-| ⚡ **Auto Bitrate** | Adaptive bitrate based on network |
-| 🖼️ **Display Modes** | Fullscreen / Borderless / Windowed |
-| 🔄 **Smart Reconnection** | Auto reconnect with timeout handling |
+### 🖱️ Input and Control Enhancements
+- **Reworked input settings page** with dedicated Mouse, Keyboard, and Controller sections
+- **Free Mouse / Locked Mouse** modes, with Free Mouse as the better remote-control default
+- **Automatic mouse driver strategy**: `CoreHID → HID → MFI`
+- **CoreHID mouse path** on supported macOS versions for lower-latency mouse input
+- **Separate tuning for physical wheel, rewritten/smoothed wheel, and trackpad**
+- **More mouse controls**: pointer speed, wheel speed, local cursor, reverse scroll, button swap, CoreHID report-rate cap
+- **Custom stream shortcuts** for mouse release, mouse mode toggle, performance overlay, control center, and more
+- **Controller extras**: multi-controller support, rumble, Guide emulation, and controller mouse mode
 
-### 🖥️ Host Compatibility
+### 🔧 Connectivity, Diagnostics, and Stability
+- **Per-host connection method management**
+- **Custom ports / IPv6 / domains**
+- **Performance overlay and connection warnings**
+- **Input diagnostics with raw + curated logs**
+- **AWDL stability helper**
+- **Reconnect and timeout recovery improvements**
+
+## 🖥️ Host Compatibility
 
 | Host Software | Compatibility | Notes |
 |---------------|---------------|-------|
-| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ Recommended | Full feature support (Mic, YUV444, etc.) |
-| [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ Supported | Some advanced features unavailable |
-| GeForce Experience | ⚠️ Basic | Deprecated, no microphone support |
+| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ Recommended | Full support for mic, YUV 4:4:4, and other enhanced features |
+| [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ Supported | Most features work; some advanced paths are limited |
+| GeForce Experience | ⚠️ Basic | Deprecated and missing newer features such as microphone passthrough |
 
-> 💡 **Microphone, YUV 4:4:4** and other advanced features require [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine)
+> 💡 Microphone passthrough, YUV 4:4:4, and some enhanced behaviors work best with [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine).
 
-### 📸 Screenshots
+## 🖱️ Input System Overview
+
+### Defaults
+- **Default mouse mode: Free Mouse**
+- **Default mouse driver: Automatic**
+- **Automatic order: CoreHID → HID → MFI**
+
+### Mouse Modes
+- **Locked Mouse**: better for games and sustained relative motion
+- **Free Mouse**: better for remote control, multi-display use, and desktop apps
+
+### Scroll Paths
+- **Physical wheel**: tuned for native, low-latency, stable notch behavior
+- **Rewritten / smoothed wheel**: intended for wheels already rewritten by third-party tools
+- **Trackpad**: keeps native continuous high-precision scrolling semantics
+
+> 💡 On systems that support `CoreHID`, macOS may ask for Input Monitoring permission the first time this path activates. If it is unavailable, Moonlight falls back automatically.
+
+## 📸 Screenshots
 
 | Host List | App List |
 |:---------:|:--------:|
@@ -74,9 +93,9 @@ This repository is the main GitHub home for releases, source code, installation 
 |:--------------:|:------------------:|
 | <img src="readme-assets/images/settings-video.png" width="400" alt="Video settings"> | <img src="readme-assets/images/settings-streaming.png" width="400" alt="Streaming settings"> |
 
-### ⌨️ Keyboard Shortcuts
+## ⌨️ Stream Shortcuts
 
-These Moonlight-specific stream shortcuts can now be adjusted in `Settings → Input → Keyboard`.
+These Moonlight-specific stream shortcuts can be adjusted in `Settings → Input → Keyboard`:
 
 | Shortcut | Action | Notes |
 |----------|--------|-------|
@@ -89,63 +108,58 @@ These Moonlight-specific stream shortcuts can now be adjusted in `Settings → I
 | `Ctrl` + `Option` + `C` | Open control center | Fullscreen / borderless only |
 | `Ctrl` + `Option` + `Command` + `B` | Toggle borderless / windowed | Advanced fallback shortcut |
 
-> 💡 This table lists Moonlight-specific stream shortcuts only. Standard macOS shortcuts like `⌘W` and `⌃⌘F` are not shown here and still follow the current stream-window behavior.
+> 💡 This list covers Moonlight-specific shortcuts only. Standard macOS shortcuts such as `⌘W` and `⌃⌘F` are not listed here.
 
-### 🛠️ Installation
+## 🛠️ Installation
 
-#### Download Release
+### Download Release
 Download the latest `.dmg` from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases).
 
-> ⚠️ **This app is currently not notarized by Apple.**
-> If macOS says `Moonlight.app` is damaged or blocks the app from opening, that is usually Gatekeeper stopping a non-notarized build — **it does not necessarily mean the download is actually corrupted**.
+> ⚠️ This app is currently not notarized by Apple. If macOS says `Moonlight.app` is damaged or blocks it from launching, that is usually Gatekeeper stopping a non-notarized app, not proof that the file is actually broken.
 >
-> On first launch, try these in order:
+> Recommended first-launch steps:
 > 1. Right-click the app and choose `Open`
 > 2. Go to **System Settings → Privacy & Security** and click `Open Anyway`
-> 3. If it is still blocked, run this in Terminal:
+> 3. If needed, run:
 >    `xattr -dr com.apple.quarantine /Applications/Moonlight.app`
->
-> Not sure how to open Terminal?
-> - Press `⌘ Space`, type `Terminal`, then press `Enter`
 
-#### Build from Source
+### Build from Source
+
 ```bash
 git clone --recursive https://github.com/skyhua0224/moonlight-macos-enhanced.git
 cd moonlight-macos-enhanced
 
-# Download XCFrameworks (FFmpeg, Opus, SDL2)
 curl -L -o xcframeworks.zip "https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip"
 unzip -o xcframeworks.zip -d xcframeworks/
-
-# Open Moonlight.xcodeproj in Xcode and build
 ```
 
-### 📅 Update Policy
+Then:
+1. Open `Moonlight.xcodeproj` in Xcode
+2. Set your own Team in **Signing & Capabilities**
+3. Adjust the Bundle Identifier if needed
+4. Run the **Moonlight for macOS** scheme
 
-This is a personal project maintained in my spare time:
-- 🐛 Critical bugs and crashes are prioritized
-- 💡 New features added when time permits or when good suggestions come in
-- 📥 Issues and PRs are welcome, but response time may vary
+## 🐛 Reporting Issues
 
-> I use this app daily myself, so I'm motivated to keep it working well!
+Please include:
+- macOS version
+- Mac model / chip
+- Host software and version
+- Whether third-party mouse tools such as Mos, BetterMouse, or SteerMouse are active
+- Reproduction steps
+- Logs or screenshots
 
-### 🐛 Issue Guidelines
+For input / wheel / mouse bugs, it is especially helpful to include:
+- The log exported from `Settings → App → Debug Log`
+- Whether you used **Free Mouse** or **Locked Mouse**
+- Whether the active path was **Automatic / CoreHID / HID / MFI**
 
-When reporting bugs, please include:
-- macOS version (e.g., macOS 14.2)
-- Chip type (Intel / M1 / M2 / M3 / M4)
-- Host software and version (Sunshine / Foundation Sunshine / GFE)
-- Steps to reproduce
-- Relevant logs or screenshots
+## 🤝 Contributing
 
-### 🤝 Contributing
-
-PRs are welcome! Please:
-- Follow existing code style
-- Test your changes
-- Provide clear descriptions
-
----
+PRs are welcome. Please try to:
+- Keep Chinese and English user-facing copy in sync
+- Test the core streaming and input paths before submitting
+- Write PR descriptions in user-facing language instead of just pasting commit titles
 
 ## 📬 Contact
 
@@ -154,20 +168,14 @@ PRs are welcome! Please:
 - 🐧 QQ: 2110591491
 - 🔗 GitHub Issues: [Submit Issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
-> 💡 Prefer GitHub Issues for bug reports and feature requests
-
----
-
 ## 🙏 Acknowledgements
 
-For a full layered acknowledgement list covering upstream code lineage, feature references, and ecosystem projects, see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
+For the full upstream, ecosystem, and reference list, see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
 
 - Direct code foundations: `moonlight-macos`, `moonlight-ios`, `moonlight-common-c`
 - Feature and behavior references: `moonlight-qt`, `qiin2333/moonlight-qt`
 - Host ecosystem references: `Sunshine`, `foundation-sunshine`
-- Third-party dependencies: `SDL2`, `OpenSSL`, `MASPreferences`
-
----
+- Input and wheel experience references: `Mos`, `Mouser`
 
 ## 📄 License
 
