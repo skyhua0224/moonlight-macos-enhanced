@@ -25,9 +25,11 @@ static NSString *gLogDirectoryPath = nil;
 static NSString *gRawFileLogPath = nil;
 static NSString *gCuratedFileLogPath = nil;
 static NSMutableDictionary *gCuratedNoiseAggregation = nil;
+static NSString * const kLoggerInputDiagnosticsDefaultsKey = @"debugLog.inputDiagnostics";
 
 static LogLevel gLoggerMinimumLevel = LOG_I;
 static BOOL gCuratedModeEnabled = YES;
+static BOOL gInputDiagnosticsEnabled = NO;
 
 typedef NS_ENUM(NSInteger, LoggerNoiseCategory) {
     LoggerNoiseCategoryNone = 0,
@@ -39,6 +41,8 @@ typedef NS_ENUM(NSInteger, LoggerNoiseCategory) {
 };
 
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args);
+static void AppendRawFileLogLine(NSString *line);
+static void ProcessCuratedLogLine(NSString *line, LogLevel level);
 
 static NSString *LoggerTimestampString(void) {
     static NSDateFormatter *formatter = nil;
@@ -63,6 +67,55 @@ static NSString *LogPrefixForLevel(LogLevel level) {
 
 static NSString *FormatLogLine(LogLevel level, NSString *message) {
     return [NSString stringWithFormat:@"%@ %@", LogPrefixForLevel(level), message ?: @""];
+}
+
+static BOOL IsHighFrequencyDiagnosticLine(NSString *line) {
+    if (line.length == 0) {
+        return NO;
+    }
+
+    return [line rangeOfString:@"[inputdiag]" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [line rangeOfString:@"[clickdiag]" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [line rangeOfString:@"[diag] Pull renderer dequeued frame=" options:NSCaseInsensitiveSearch].location != NSNotFound;
+}
+
+static BOOL IsPersistableInputDiagnosticLine(NSString *line) {
+    if (line.length == 0) {
+        return NO;
+    }
+
+    if ([line rangeOfString:@"[clickdiag]" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+        return YES;
+    }
+
+    if ([line rangeOfString:@"[inputdiag]" options:NSCaseInsensitiveSearch].location == NSNotFound) {
+        return NO;
+    }
+
+    return [line rangeOfString:@"scroll" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [line rangeOfString:@"mouse-button" options:NSCaseInsensitiveSearch].location != NSNotFound;
+}
+
+static BOOL ShouldForcePersistDiagnosticLine(LogLevel level, NSString *line) {
+    return level == LOG_D && LoggerIsInputDiagnosticsEnabled() && IsPersistableInputDiagnosticLine(line);
+}
+
+static BOOL ShouldAllowFormattedLine(LogLevel level, NSString *formattedLine) {
+    return level >= LoggerGetMinimumLevel() || ShouldForcePersistDiagnosticLine(level, formattedLine);
+}
+
+static void PersistFormattedLine(NSString *formattedLine, LogLevel level) {
+    if (formattedLine.length == 0) {
+        return;
+    }
+
+    BOOL highFrequencyDiagnostic = IsHighFrequencyDiagnosticLine(formattedLine);
+    if (highFrequencyDiagnostic && !ShouldForcePersistDiagnosticLine(level, formattedLine)) {
+        return;
+    }
+
+    AppendRawFileLogLine(formattedLine);
+    ProcessCuratedLogLine(formattedLine, level);
 }
 
 static NSString *EnsureLogDirectoryPath(void) {
@@ -555,7 +608,7 @@ static void ProcessCuratedLogLine(NSString *line, LogLevel level) {
     if (line.length == 0 || !LoggerIsCuratedModeEnabled()) {
         return;
     }
-    if (level < LoggerGetMinimumLevel()) {
+    if (!ShouldAllowFormattedLine(level, line)) {
         return;
     }
 
@@ -667,6 +720,35 @@ BOOL LoggerIsCuratedModeEnabled(void) {
     }
 }
 
+void LoggerSetInputDiagnosticsEnabled(BOOL enabled) {
+    if (gLoggerStateLock == nil) {
+        gLoggerStateLock = [[NSObject alloc] init];
+    }
+    @synchronized (gLoggerStateLock) {
+        gInputDiagnosticsEnabled = enabled;
+    }
+}
+
+BOOL LoggerIsInputDiagnosticsEnabled(void) {
+    if (gLoggerStateLock == nil) {
+        gLoggerStateLock = [[NSObject alloc] init];
+    }
+    @synchronized (gLoggerStateLock) {
+        if ([[NSUserDefaults standardUserDefaults] objectForKey:kLoggerInputDiagnosticsDefaultsKey] != nil) {
+            gInputDiagnosticsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:kLoggerInputDiagnosticsDefaultsKey];
+        }
+        return gInputDiagnosticsEnabled;
+    }
+}
+
+void LoggerPersistMessage(LogLevel level, NSString *message) {
+    NSString *formattedLine = FormatLogLine(level, message ?: @"");
+    if (!ShouldAllowFormattedLine(level, formattedLine)) {
+        return;
+    }
+    PersistFormattedLine(formattedLine, level);
+}
+
 void Log(LogLevel level, NSString* fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -683,16 +765,21 @@ void LogTag(LogLevel level, NSString* tag, NSString* fmt, ...) {
 
 void LogMessage(LogLevel level, NSString *message) {
     NSString *line = FormatLogLine(level, message ?: @"");
-    AppendRawFileLogLine(line);
-    ProcessCuratedLogLine(line, level);
+    if (!ShouldAllowFormattedLine(level, line)) {
+        return;
+    }
+    PersistFormattedLine(line, level);
 }
 
 void LogTaggedMessage(LogLevel level, NSString *tag, NSString *message) {
     NSString *line = tag.length > 0
         ? [NSString stringWithFormat:@"(%@) %@", tag, message ?: @""]
         : (message ?: @"");
-    AppendRawFileLogLine(FormatLogLine(level, line));
-    ProcessCuratedLogLine(FormatLogLine(level, line), level);
+    NSString *formattedLine = FormatLogLine(level, line);
+    if (!ShouldAllowFormattedLine(level, formattedLine)) {
+        return;
+    }
+    PersistFormattedLine(formattedLine, level);
 }
 
 void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
@@ -714,12 +801,12 @@ void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
     NSString *formattedLine = [[NSString alloc] initWithFormat:prefixedString arguments:argsCopy];
     va_end(argsCopy);
 
-    AppendRawFileLogLine(formattedLine);
-    ProcessCuratedLogLine(formattedLine, level);
-
-    if (level < LoggerGetMinimumLevel()) {
+    if (!ShouldAllowFormattedLine(level, formattedLine)) {
         return;
     }
+
+    BOOL highFrequencyDiagnostic = IsHighFrequencyDiagnosticLine(formattedLine);
+    PersistFormattedLine(formattedLine, level);
 
     // Suppress repeated warning lines within a short window to avoid log spam.
     if (level == LOG_W) {
@@ -768,5 +855,7 @@ void LogTagv(LogLevel level, NSString* tag, NSString* fmt, va_list args) {
     }
 
     [[LogBuffer shared] appendLine:formattedLine level:level];
-    NSLogv(prefixedString, args);
+    if (!highFrequencyDiagnostic) {
+        NSLogv(prefixedString, args);
+    }
 }

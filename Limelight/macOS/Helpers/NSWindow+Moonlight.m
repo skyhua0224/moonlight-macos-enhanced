@@ -21,9 +21,17 @@
 }
 
 - (void)moonlight_centerWindow {
-    CGFloat xPos = NSWidth(self.screen.frame) / 2 - NSWidth(self.frame) / 2;
-    CGFloat yPos = NSHeight(self.screen.frame) / 2 - NSHeight(self.frame) / 2;
-    [self setFrame:NSMakeRect(xPos, yPos, NSWidth(self.frame), NSHeight(self.frame)) display:YES];
+    [self moonlight_centerWindowOnScreen:self.screen];
+}
+
+- (void)moonlight_centerWindowOnScreen:(NSScreen *)screen {
+    NSScreen *targetScreen = screen ?: self.screen ?: [NSScreen mainScreen];
+    NSRect visibleFrame = targetScreen ? targetScreen.visibleFrame : self.frame;
+    CGFloat width = MIN(NSWidth(self.frame), NSWidth(visibleFrame));
+    CGFloat height = MIN(NSHeight(self.frame), NSHeight(visibleFrame));
+    CGFloat xPos = NSMidX(visibleFrame) - width / 2.0;
+    CGFloat yPos = NSMidY(visibleFrame) - height / 2.0;
+    [self setFrame:NSMakeRect(xPos, yPos, width, height) display:YES];
 }
 
 - (NSToolbarItem *)moonlight_toolbarItemForAction:(SEL)action {

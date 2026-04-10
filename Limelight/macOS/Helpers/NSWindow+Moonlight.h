@@ -11,6 +11,7 @@
 @interface NSWindow (Moonlight)
 
 - (void)moonlight_centerWindowOnFirstRunWithSize:(CGSize)size;
+- (void)moonlight_centerWindowOnScreen:(NSScreen *)screen;
 - (NSToolbarItem *)moonlight_toolbarItemForAction:(SEL)action;
 - (NSToolbarItem *)moonlight_toolbarItemForIdentifier:(NSToolbarItemIdentifier)identifier;
 - (NSSearchField *)moonlight_searchFieldInToolbar;

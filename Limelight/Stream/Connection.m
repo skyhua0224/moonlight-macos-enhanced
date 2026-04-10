@@ -593,6 +593,7 @@ void ClLogMessage(const char* format, ...)
     
     // Simple heuristic to detect dropped frame logs from common-c
     bool isDropLog = (strstr(format, "Network dropped") != NULL);
+    bool isHighFrequencyDiagnostic = (strstr(format, "[inputdiag]") != NULL);
 
     if (isDropLog) {
         accumulatedDropCount++;
@@ -606,10 +607,12 @@ void ClLogMessage(const char* format, ...)
     va_list va;
     va_start(va, format);
 
-    va_list stderrArgs;
-    va_copy(stderrArgs, va);
-    vfprintf(stderr, format, stderrArgs);
-    va_end(stderrArgs);
+    if (!isHighFrequencyDiagnostic) {
+        va_list stderrArgs;
+        va_copy(stderrArgs, va);
+        vfprintf(stderr, format, stderrArgs);
+        va_end(stderrArgs);
+    }
 
     va_list formatArgs;
     va_copy(formatArgs, va);
@@ -638,7 +641,11 @@ void ClLogMessage(const char* format, ...)
     if (formattedLine.length > 0) {
         NSString *trimmedLine = [formattedLine stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
         if (trimmedLine.length > 0) {
-            [[LogBuffer shared] appendLine:trimmedLine level:isDropLog ? LOG_W : LOG_I];
+            LogLevel derivedLevel = isDropLog ? LOG_W : (isHighFrequencyDiagnostic ? LOG_D : LOG_I);
+            [[LogBuffer shared] appendLine:trimmedLine level:derivedLevel];
+            if (isHighFrequencyDiagnostic && LoggerIsInputDiagnosticsEnabled()) {
+                LoggerPersistMessage(derivedLevel, trimmedLine);
+            }
         }
     }
 

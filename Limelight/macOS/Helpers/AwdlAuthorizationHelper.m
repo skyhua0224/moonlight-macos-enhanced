@@ -138,6 +138,8 @@ static NSString * const MLAwdlIfconfigToolPath = @"/sbin/ifconfig";
     };
 
     FILE *pipe = NULL;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     OSStatus status = AuthorizationExecuteWithPrivileges(
         MLAwdlAuthorizationRef,
         MLAwdlIfconfigToolPath.UTF8String,
@@ -145,6 +147,7 @@ static NSString * const MLAwdlIfconfigToolPath = @"/sbin/ifconfig";
         args,
         &pipe
     );
+#pragma clang diagnostic pop
     if (status != errAuthorizationSuccess) {
         if (errorMessage != NULL) {
             *errorMessage = [self messageForStatus:status fallback:[NSString stringWithFormat:@"Authorization failed (%d).", (int)status]];

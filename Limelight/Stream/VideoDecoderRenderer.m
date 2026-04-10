@@ -13,11 +13,14 @@
 #include "Limelight.h"
 #include <math.h>
 #include <pthread.h>
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdocumentation"
 #include <libavcodec/avcodec.h>
 #include <libavcodec/cbs.h>
 #include <libavcodec/cbs_av1.h>
 #include <libavformat/avio.h>
 #include <libavutil/mem.h>
+#pragma clang diagnostic pop
 #import "Moonlight-Swift.h"
 
 @import VideoToolbox;
@@ -794,6 +797,38 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             // Queue delay (assemble->now). Not actual GPU present time.
             if (enqueueTimeMs != 0) {
                 self->_activeWndVideoStats.totalRenderTime += LiGetMillis() - enqueueTimeMs;
+            }
+
+            if (depacketizerCtx->connectionContext != NULL) {
+                PML_INPUT_STREAM_CONTEXT inputCtx = &depacketizerCtx->connectionContext->inputContext;
+                if (LiIsScrollTraceDiagnosticsEnabledCtx(inputCtx) &&
+                    LiIsScrollTraceAwaitingRenderCtx(inputCtx) &&
+                    LiGetScrollTraceIdCtx(inputCtx) != 0) {
+                    uint64_t traceId = LiGetScrollTraceIdCtx(inputCtx);
+                    uint64_t startMs = LiGetScrollTraceStartMsCtx(inputCtx);
+                    uint64_t localDispatchMs = LiGetScrollTraceLocalDispatchMsCtx(inputCtx);
+                    uint64_t sendMs = LiGetScrollTraceSentMsCtx(inputCtx);
+                    short amount = LiGetScrollTraceLastDispatchAmountCtx(inputCtx);
+                    BOOL horizontal = LiGetScrollTraceLastDispatchHorizontalCtx(inputCtx) ? YES : NO;
+                    BOOL highRes = LiGetScrollTraceLastDispatchHighResCtx(inputCtx) ? YES : NO;
+                    unsigned long long startAgeMs = startMs != 0 && renderSampleNowMs >= startMs ? renderSampleNowMs - startMs : 0;
+                    unsigned long long localAgeMs = localDispatchMs != 0 && renderSampleNowMs >= localDispatchMs ? renderSampleNowMs - localDispatchMs : 0;
+                    unsigned long long sendAgeMs = sendMs != 0 && renderSampleNowMs >= sendMs ? renderSampleNowMs - sendMs : 0;
+
+                    if (amount != 0 && localDispatchMs != 0 && sendMs != 0) {
+                        Log(LOG_D, @"[inputdiag] scroll-trace render trace=%llu axis=%@ amount=%d highRes=%d frame=%d startAge=%llums localAge=%llums sendAge=%llums pending=%d",
+                            (unsigned long long)traceId,
+                            horizontal ? @"H" : @"V",
+                            (int)amount,
+                            highRes ? 1 : 0,
+                            du->frameNumber,
+                            startAgeMs,
+                            localAgeMs,
+                            sendAgeMs,
+                            LiGetPendingVideoFramesCtx(depacketizerCtx));
+                    }
+                    LiCompleteScrollTraceRenderCtx(inputCtx);
+                }
             }
         }
 

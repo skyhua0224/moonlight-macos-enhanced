@@ -32,5 +32,8 @@ void LoggerSetMinimumLevel(LogLevel level);
 LogLevel LoggerGetMinimumLevel(void);
 void LoggerSetCuratedModeEnabled(BOOL enabled);
 BOOL LoggerIsCuratedModeEnabled(void);
+void LoggerSetInputDiagnosticsEnabled(BOOL enabled);
+BOOL LoggerIsInputDiagnosticsEnabled(void);
+void LoggerPersistMessage(LogLevel level, NSString *message);
 
 #endif
