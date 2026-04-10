@@ -6,9 +6,7 @@
 
 **Moonlight macOS / Moonlight for macOS 原生增强版客户端**
 
-`Moonlight macOS Enhanced` 是一个面向 Sunshine 与 Foundation Sunshine 的原生 macOS 串流客户端（Moonlight for macOS client），使用 AppKit/SwiftUI 构建，并针对 Apple Silicon 与 Intel Mac 做了优化。
-
-这是本项目的主 GitHub 仓库，集中提供源码、Release、安装说明与更新日志。
+`Moonlight macOS Enhanced` 是一个面向 Sunshine、Foundation Sunshine 与兼容 GameStream 主机的原生 macOS 串流客户端，使用 AppKit / SwiftUI 构建，并针对 Apple Silicon 与 Intel Mac 做了持续优化。
 
 简体中文 | [English](README.en.md)
 
@@ -16,47 +14,68 @@
 
 ---
 
-## ✨ 核心特性
+## ✨ 项目亮点
 
 ### 🍎 原生 macOS 体验
-- **Apple Silicon 优化** - 原生支持 Apple Silicon 芯片
-- **原生界面** - 使用 AppKit/SwiftUI 构建，非 Qt 移植
-- **深色模式** - 完整支持系统深色模式
-- **多语言** - 支持简体中文和英文
+- **原生 AppKit / SwiftUI 界面**，不是 Qt 移植
+- **Apple Silicon / Intel 双支持**
+- **完整深色模式与双语界面**
+- **最低支持 macOS 12**，并针对较新系统持续增强
 
-### 🎮 串流性能
-- **自定义分辨率和帧率** - 可配置分辨率和刷新率
-- **HEVC/H.264** - 硬件加速视频解码
-- **HDR** - 高动态范围支持
-- **YUV 4:4:4** - 增强色彩采样（需要 Foundation Sunshine）
-- **垂直同步** - V-Sync 支持
-- **环绕声** - 5.1/7.1 音频支持
+### 🎮 串流能力
+- **自定义分辨率、帧率、远端分辨率、远端帧率**
+- **HEVC / H.264 硬件解码**
+- **HDR、YUV 4:4:4、环绕声**
+- **自动码率、MetalFX 超分、串流调优**
+- **全屏 / 无边框 / 窗口化显示模式**
 
-### 🚀 增强功能（新增特性）
-| 功能 | 说明 |
-|------|------|
-| 🎤 **麦克风直通** | 将麦克风音频传输到主机（需要 Foundation Sunshine） |
-| 📊 **性能浮窗** | 实时显示延迟、帧率、码率等信息（⌃⌥S 切换） |
-| 🖥️ **多主机同时串流** | 同时连接多台主机 |
-| 🎨 **MetalFX 画质增强** | Apple AI 超分辨率技术 |
-| 🌐 **自定义端口/IPv6/域名** | 灵活的连接选项 |
-| 🔧 **连接方式管理** | 为每台主机管理多个连接方式 |
-| 🎮 **手柄鼠标模式** | 用手柄模拟鼠标操作 |
-| ⚡ **自动码率** | 根据网络状况自适应调整 |
-| 🖼️ **显示模式** | 全屏 / 无边框 / 窗口化 |
-| 🔄 **智能重连** | 自动重连并处理超时 |
+### 🖱️ 输入与控制增强
+- **全新的鼠标设置页**：鼠标、键盘、手柄分区整理
+- **自由鼠标 / 锁定鼠标** 两种模式，默认更适合远控的自由鼠标
+- **鼠标驱动自动策略**：默认 `Automatic`，按 `CoreHID → HID → MFI` 自动选择
+- **CoreHID 鼠标增强路径**：在支持的 macOS 版本上优先提供更低延迟的鼠标输入
+- **滚轮三类独立调节**：物理滚轮、改写/平滑滚轮、触控板分别调速
+- **更多鼠标参数**：指针速度、滚轮速度、本地光标、反转滚动、左右键交换、CoreHID 报告率上限
+- **串流快捷键可自定义**：释放鼠标、切换鼠标模式、性能浮窗、控制中心等
+- **手柄侧增强**：多手柄、震动、Guide 模拟、手柄模拟鼠标
 
-### 🖥️ 主机端兼容性
+### 🔧 连接、诊断与稳定性
+- **每台主机独立连接方式管理**
+- **自定义端口 / IPv6 / 域名**
+- **性能浮窗与连接警告**
+- **输入诊断、原始日志 + 浓缩日志**
+- **AWDL 稳定性辅助项**
+- **自动重连与超时恢复**
+
+## 🖥️ 主机端兼容性
 
 | 主机软件 | 兼容性 | 备注 |
 |----------|--------|------|
-| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ 推荐 | 支持全部功能（麦克风、YUV444 等） |
-| [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ 支持 | 部分高级功能不可用 |
-| GeForce Experience | ⚠️ 基础支持 | 已停止更新，不支持麦克风 |
+| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ 推荐 | 支持麦克风、YUV 4:4:4 等完整增强能力 |
+| [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ 支持 | 大部分功能可用，部分增强能力受限 |
+| GeForce Experience | ⚠️ 基础支持 | 已停止维护，不支持麦克风等新能力 |
 
-> 💡 **麦克风、YUV 4:4:4** 等高级功能需要配合 [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) 使用
+> 💡 麦克风、YUV 4:4:4、部分输入与增强能力更适合配合 [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) 使用。
 
-### 📸 截图
+## 🖱️ 输入系统说明
+
+### 默认行为
+- **鼠标模式默认：自由鼠标**
+- **鼠标驱动默认：Automatic**
+- **Automatic 顺序：CoreHID → HID → MFI**
+
+### 鼠标模式
+- **锁定鼠标**：更适合游戏、FPS、需要持续相对移动的场景
+- **自由鼠标**：更适合远控、多屏切换、桌面应用操作
+
+### 滚轮策略
+- **物理滚轮**：强调原生、低延迟、稳定的 notch 语义
+- **改写/平滑滚轮**：适合已经被第三方工具改写过的滚轮输入
+- **触控板**：保留连续、高精度的原生滚动语义
+
+> 💡 在支持 `CoreHID` 的系统上，首次启用时可能需要允许输入监控权限；不可用时会自动回退到兼容路径。
+
+## 📸 截图
 
 | 主机列表 | 应用列表 |
 |:--------:|:--------:|
@@ -74,9 +93,9 @@
 |:--------:|:--------:|
 | <img src="readme-assets/images/settings-video.png" width="400" alt="视频设置"> | <img src="readme-assets/images/settings-streaming.png" width="400" alt="串流设置"> |
 
-### ⌨️ 快捷键
+## ⌨️ 串流快捷键
 
-以下 Moonlight 自定义串流快捷键现已支持在 `设置 → 输入 → 键盘` 中调整。
+以下 Moonlight 自定义串流快捷键支持在 `设置 → 输入 → 键盘` 中调整：
 
 | 快捷键 | 功能 | 说明 |
 |--------|------|------|
@@ -89,95 +108,74 @@
 | `Ctrl` + `Option` + `C` | 打开控制中心 | 仅全屏 / 无边框 |
 | `Ctrl` + `Option` + `Command` + `B` | 无边框 / 窗口切换 | 高级排障快捷键 |
 
-> 💡 这里列的是 Moonlight 自定义串流快捷键；标准 macOS 快捷键如 `⌘W`、`⌃⌘F` 不在此表内，仍按当前串流窗口行为处理。
+> 💡 这里列的是 Moonlight 自定义串流快捷键；标准 macOS 快捷键如 `⌘W`、`⌃⌘F` 不在此表内。
 
-### 🛠️ 安装
+## 🛠️ 安装
 
-#### 下载发布版
-从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载最新的 `.dmg` 文件。
+### 下载发布版
+从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载最新 `.dmg`。
 
-> ⚠️ **此应用当前未做 Apple 公证。**
-> 如果 macOS 提示“Moonlight.app 已损坏”或阻止打开，通常是 Gatekeeper 拦截了未公证应用，**不一定代表下载文件真的损坏**。
+> ⚠️ 此应用当前未做 Apple 公证。若 macOS 提示“Moonlight.app 已损坏”或阻止打开，通常是 Gatekeeper 拦截未公证应用，并不一定代表文件真的损坏。
 >
 > 首次启动建议按这个顺序尝试：
-> 1. 右键点击应用，选择“打开”
+> 1. 右键应用，选择“打开”
 > 2. 前往 **系统设置 → 隐私与安全性**，选择“仍要打开”
-> 3. 如果仍被拦截，打开终端执行：
+> 3. 若仍被拦截，执行：
 >    `xattr -dr com.apple.quarantine /Applications/Moonlight.app`
->
-> 不知道怎么打开终端？
-> - 按 `⌘ Space`，输入 `Terminal`，回车即可
 
-#### 从源码构建
+### 从源码构建
 
-1. 克隆仓库：
-   ```bash
-   git clone --recursive https://github.com/skyhua0224/moonlight-macos-enhanced.git
-   cd moonlight-macos-enhanced
-   ```
+```bash
+git clone --recursive https://github.com/skyhua0224/moonlight-macos-enhanced.git
+cd moonlight-macos-enhanced
 
-2. 下载 XCFramework 依赖：
-   ```bash
-   curl -L -o xcframeworks.zip "https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip"
-   unzip -o xcframeworks.zip -d xcframeworks/
-   ```
+curl -L -o xcframeworks.zip "https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip"
+unzip -o xcframeworks.zip -d xcframeworks/
+```
 
-3. 在 Xcode 中打开 `Moonlight.xcodeproj`
+然后：
+1. 用 Xcode 打开 `Moonlight.xcodeproj`
+2. 在 **Signing & Capabilities** 中改成你自己的 Team
+3. 按需修改 Bundle Identifier
+4. 选择 **Moonlight for macOS** scheme 后运行
 
-4. 前往 **Signing & Capabilities** 标签页，将 **Team** 改为你自己的开发者账号
+## 🐛 问题反馈
 
-5. 将 **Bundle Identifier** 改为你自己的标识符（如 `com.yourname.MoonlightMac`）
-
-6. 选择 **Moonlight for macOS** scheme，目标选择 **My Mac**，按 ⌘R 构建运行
-
-### 📅 更新策略
-
-本项目为个人业余时间维护：
-- 🐛 严重 Bug 和闪退问题优先修复
-- 💡 有空闲时间或看到好建议时会添加新功能
-- 📥 欢迎提交 Issue 和 PR，但响应时间不固定
-
-> 我自己每天都在使用这个应用，所以会持续保持它的正常运行！
-
-### 🐛 问题反馈
-
-提交 Bug 时请包含：
-- macOS 版本（如 macOS 14.2）
-- 芯片类型（Intel / M1 / M2 / M3 / M4）
-- 主机端软件及版本（Sunshine / Foundation Sunshine / GFE）
+提交 Bug 时建议包含：
+- macOS 版本
+- 机型 / 芯片类型
+- 主机端软件及版本
+- 是否使用了 Mos、BetterMouse、SteerMouse 等第三方鼠标工具
 - 复现步骤
-- 相关日志或截图
+- 日志或截图
 
-### 🤝 贡献代码
+若是输入 / 滚轮 / 鼠标问题，建议附带：
+- `设置 → App → Debug Log` 导出的日志
+- 你使用的是 **自由鼠标** 还是 **锁定鼠标**
+- 你使用的是 **Automatic / CoreHID / HID / MFI** 中哪条路径
 
-欢迎提交 PR！请：
-- 遵循现有代码风格
-- 测试你的更改
-- 提供清晰的描述
+## 🤝 贡献
 
----
+欢迎提交 Issue 和 PR。建议：
+- 保持中英文用户文案同步
+- 提交前至少验证核心串流与输入路径
+- PR 描述优先写用户可感知变化，而不是只贴 commit 标题
 
 ## 📬 联系方式
 
 - 📧 Email: [dev@sky-hua.xyz](mailto:dev@sky-hua.xyz)
 - 💬 Telegram: [@skyhua](https://t.me/skyhua)
 - 🐧 QQ: 2110591491
-- 🔗 GitHub Issues: [提交 Issue](https://github.com/skyhua0224/moonlight-macos/issues)
-
-> 💡 建议使用 GitHub Issues 提交问题和建议
-
----
+- 🔗 GitHub Issues: [提交 Issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
 ## 🙏 致谢
 
-完整的分层致谢、上游来源与生态参考请见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
+完整致谢、上游来源与生态参考请见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
 
 - 直接代码基础：`moonlight-macos`、`moonlight-ios`、`moonlight-common-c`
 - 功能与行为参考：`moonlight-qt`、`qiin2333/moonlight-qt`
 - 主机端生态参考：`Sunshine`、`foundation-sunshine`
-- 第三方依赖：`SDL2`、`OpenSSL`、`MASPreferences`
-
----
+- 输入与滚轮体验参考：`Mos`、`Mouser`
 
 ## 📄 许可证
 
