@@ -5,25 +5,10 @@
 //  Created by Michael Kenny on 26/12/17.
 //  Copyright © 2017 Moonlight Stream. All rights reserved.
 //
+#import "HIDSupport_Internal.h"
 
-#import "HIDSupport.h"
-#import "Controller.h"
-#import "Ticks.h"
-
-#import "Moonlight-Swift.h"
-#include <limits.h>
-#include <math.h>
-
-#include "Limelight.h"
-#include "Limelight-internal.h"
-
-#import <Carbon/Carbon.h>
-
-#import <IOKit/hid/IOHIDManager.h>
-#import <IOKit/hid/IOHIDKeys.h>
 #import <IOKit/hid/IOHIDElement.h>
 
-@import GameController;
 
 NSString *const HIDMouseModeToggledNotification = @"HIDMouseModeToggledNotification";
 NSString *const HIDGamepadQuitNotification = @"HIDGamepadQuitNotification";
@@ -153,419 +138,19 @@ static struct KeyMapping keys[] = {
     {kVK_F20, 0x83},
 };
 
-typedef enum {
-    k_EPS4ReportIdUsbState = 1,
-    k_EPS4ReportIdUsbEffects = 5,
-    k_EPS4ReportIdBluetoothState1 = 17,
-    k_EPS4ReportIdBluetoothState2 = 18,
-    k_EPS4ReportIdBluetoothState3 = 19,
-    k_EPS4ReportIdBluetoothState4 = 20,
-    k_EPS4ReportIdBluetoothState5 = 21,
-    k_EPS4ReportIdBluetoothState6 = 22,
-    k_EPS4ReportIdBluetoothState7 = 23,
-    k_EPS4ReportIdBluetoothState8 = 24,
-    k_EPS4ReportIdBluetoothState9 = 25,
-    k_EPS4ReportIdBluetoothEffects = 17,
-    k_EPS4ReportIdDisconnectMessage = 226,
-} EPS4ReportId;
-
-typedef enum {
-    k_ePS4FeatureReportIdGyroCalibration_USB = 0x02,
-    k_ePS4FeatureReportIdGyroCalibration_BT = 0x05,
-    k_ePS4FeatureReportIdSerialNumber = 0x12,
-} EPS4FeatureReportID;
-
-typedef struct {
-    UInt8 ucLeftJoystickX;
-    UInt8 ucLeftJoystickY;
-    UInt8 ucRightJoystickX;
-    UInt8 ucRightJoystickY;
-    UInt8 rgucButtonsHatAndCounter[3];
-    UInt8 ucTriggerLeft;
-    UInt8 ucTriggerRight;
-    UInt8 _rgucPad0[3];
-    UInt8 rgucGyroX[2];
-    UInt8 rgucGyroY[2];
-    UInt8 rgucGyroZ[2];
-    UInt8 rgucAccelX[2];
-    UInt8 rgucAccelY[2];
-    UInt8 rgucAccelZ[2];
-    UInt8 _rgucPad1[5];
-    UInt8 ucBatteryLevel;
-    UInt8 _rgucPad2[4];
-    UInt8 ucTouchpadCounter1;
-    UInt8 rgucTouchpadData1[3];
-    UInt8 ucTouchpadCounter2;
-    UInt8 rgucTouchpadData2[3];
-} PS4StatePacket_t;
-
-typedef enum {
-    k_EPS5ReportIdState = 0x01,
-    k_EPS5ReportIdUsbEffects = 0x02,
-    k_EPS5ReportIdBluetoothEffects = 0x31,
-    k_EPS5ReportIdBluetoothState = 0x31,
-} EPS5ReportId;
-
-typedef struct {
-    UInt8 ucLeftJoystickX;              /* 0 */
-    UInt8 ucLeftJoystickY;              /* 1 */
-    UInt8 ucRightJoystickX;             /* 2 */
-    UInt8 ucRightJoystickY;             /* 3 */
-    UInt8 ucTriggerLeft;                /* 4 */
-    UInt8 ucTriggerRight;               /* 5 */
-    UInt8 ucCounter;                    /* 6 */
-    UInt8 rgucButtonsAndHat[3];         /* 7 */
-    UInt8 ucZero;                       /* 10 */
-    UInt8 rgucPacketSequence[4];        /* 11 - 32 bit little endian */
-    UInt8 rgucGyroX[2];                 /* 15 */
-    UInt8 rgucGyroY[2];                 /* 17 */
-    UInt8 rgucGyroZ[2];                 /* 19 */
-    UInt8 rgucAccelX[2];                /* 21 */
-    UInt8 rgucAccelY[2];                /* 23 */
-    UInt8 rgucAccelZ[2];                /* 25 */
-    UInt8 rgucTimer1[4];                /* 27 - 32 bit little endian */
-    UInt8 ucBatteryTemp;                /* 31 */
-    UInt8 ucTouchpadCounter1;           /* 32 - high bit clear + counter */
-    UInt8 rgucTouchpadData1[3];         /* 33 - X/Y, 12 bits per axis */
-    UInt8 ucTouchpadCounter2;           /* 36 - high bit clear + counter */
-    UInt8 rgucTouchpadData2[3];         /* 37 - X/Y, 12 bits per axis */
-    UInt8 rgucUnknown1[8];              /* 40 */
-    UInt8 rgucTimer2[4];                /* 48 - 32 bit little endian */
-    UInt8 ucBatteryLevel;               /* 52 */
-    UInt8 ucConnectState;               /* 53 - 0x08 = USB, 0x01 = headphone */
-
-    /* There's more unknown data at the end, and a 32-bit CRC on Bluetooth */
-} PS5StatePacket_t;
-
-typedef struct {
-    UInt8 ucEnableBits1;                /* 0 */
-    UInt8 ucEnableBits2;                /* 1 */
-    UInt8 ucRumbleRight;                /* 2 */
-    UInt8 ucRumbleLeft;                 /* 3 */
-    UInt8 ucHeadphoneVolume;            /* 4 */
-    UInt8 ucSpeakerVolume;              /* 5 */
-    UInt8 ucMicrophoneVolume;           /* 6 */
-    UInt8 ucAudioEnableBits;            /* 7 */
-    UInt8 ucMicLightMode;               /* 8 */
-    UInt8 ucAudioMuteBits;              /* 9 */
-    UInt8 rgucRightTriggerEffect[11];   /* 10 */
-    UInt8 rgucLeftTriggerEffect[11];    /* 21 */
-    UInt8 rgucUnknown1[6];              /* 32 */
-    UInt8 ucLedFlags;                   /* 38 */
-    UInt8 rgucUnknown2[2];              /* 39 */
-    UInt8 ucLedAnim;                    /* 41 */
-    UInt8 ucLedBrightness;              /* 42 */
-    UInt8 ucPadLights;                  /* 43 */
-    UInt8 ucLedRed;                     /* 44 */
-    UInt8 ucLedGreen;                   /* 45 */
-    UInt8 ucLedBlue;                    /* 46 */
-} DS5EffectsState_t;
-
-static UInt32 crc32_for_byte(UInt32 r) {
-    int i;
-    for(i = 0; i < 8; ++i) {
-        r = (r & 1? 0: (UInt32)0xEDB88320L) ^ r >> 1;
-    }
-    return r ^ (UInt32)0xFF000000L;
-}
-
-UInt32 SDL_crc32(UInt32 crc, const void *data, size_t len) {
-    // As an optimization we can precalculate a 256 entry table for each byte.
-    size_t i;
-    for(i = 0; i < len; ++i) {
-        crc = crc32_for_byte((UInt8)crc ^ ((const UInt8*)data)[i]) ^ crc >> 8;
-    }
-    return crc;
-}
-
-typedef enum {
-    k_eSwitchSubcommandIDs_BluetoothManualPair = 0x01,
-    k_eSwitchSubcommandIDs_RequestDeviceInfo   = 0x02,
-    k_eSwitchSubcommandIDs_SetInputReportMode  = 0x03,
-    k_eSwitchSubcommandIDs_SetHCIState         = 0x06,
-    k_eSwitchSubcommandIDs_SPIFlashRead        = 0x10,
-    k_eSwitchSubcommandIDs_SetPlayerLights     = 0x30,
-    k_eSwitchSubcommandIDs_SetHomeLight        = 0x38,
-    k_eSwitchSubcommandIDs_EnableIMU           = 0x40,
-    k_eSwitchSubcommandIDs_SetIMUSensitivity   = 0x41,
-    k_eSwitchSubcommandIDs_EnableVibration     = 0x48,
-} ESwitchSubcommandIDs;
-
-typedef enum {
-    k_eSwitchInputReportIDs_SubcommandReply       = 0x21,
-    k_eSwitchInputReportIDs_FullControllerState   = 0x30,
-    k_eSwitchInputReportIDs_SimpleControllerState = 0x3F,
-    k_eSwitchInputReportIDs_CommandAck            = 0x81,
-} ESwitchInputReportIDs;
-
-typedef struct {
-    UInt32 unAddress;
-    UInt8 ucLength;
-} SwitchSPIOpData_t;
-
-typedef struct {
-    UInt8 ucCounter;
-    UInt8 ucBatteryAndConnection;
-    UInt8 rgucButtons[3];
-    UInt8 rgucJoystickLeft[3];
-    UInt8 rgucJoystickRight[3];
-    UInt8 ucVibrationCode;
-} SwitchControllerStatePacket_t;
-
-typedef struct {
-    SwitchControllerStatePacket_t m_controllerState;
-
-    UInt8 ucSubcommandAck;
-    UInt8 ucSubcommandID;
-
-    #define k_unSubcommandDataBytes 35
-    union {
-        UInt8 rgucSubcommandData[k_unSubcommandDataBytes];
-
-        struct {
-            SwitchSPIOpData_t opData;
-            UInt8 rgucReadData[k_unSubcommandDataBytes - sizeof(SwitchSPIOpData_t)];
-        } spiReadData;
-
-        struct {
-            UInt8 rgucFirmwareVersion[2];
-            UInt8 ucDeviceType;
-            UInt8 ucFiller1;
-            UInt8 rgucMACAddress[6];
-            UInt8 ucFiller2;
-            UInt8 ucColorLocation;
-        } deviceInfo;
-    };
-} SwitchSubcommandInputPacket_t;
-
-typedef struct {
-    UInt8 rgucData[4];
-} SwitchRumbleData_t;
-
-typedef struct {
-    UInt8 ucPacketType;
-    UInt8 ucPacketNumber;
-    SwitchRumbleData_t rumbleData[2];
-} SwitchCommonOutputPacket_t;
-
-#define k_unSwitchOutputPacketDataLength 49
-#define k_unSwitchMaxOutputPacketLength 64
-
-typedef struct {
-    SwitchCommonOutputPacket_t commonData;
-
-    UInt8 ucSubcommandID;
-    UInt8 rgucSubcommandData[k_unSwitchOutputPacketDataLength - sizeof(SwitchCommonOutputPacket_t) - 1];
-} SwitchSubcommandOutputPacket_t;
-
-typedef struct {
-    UInt8 rgucButtons[2];
-    UInt8 ucStickHat;
-    UInt8 rgucJoystickLeft[2];
-    UInt8 rgucJoystickRight[2];
-} SwitchInputOnlyControllerStatePacket_t;
-
-typedef struct {
-    UInt8 rgucButtons[2];
-    UInt8 ucStickHat;
-    int16_t sJoystickLeft[2];
-    int16_t sJoystickRight[2];
-} SwitchSimpleStatePacket_t;
-
-typedef struct {
-    SwitchControllerStatePacket_t controllerState;
-
-    struct {
-        int16_t sAccelX;
-        int16_t sAccelY;
-        int16_t sAccelZ;
-
-        int16_t sGyroX;
-        int16_t sGyroY;
-        int16_t sGyroZ;
-    } imuState[3];
-} SwitchStatePacket_t;
-
-#define RUMBLE_WRITE_FREQUENCY_MS 25
-#define RUMBLE_REFRESH_FREQUENCY_MS 40
-
-typedef enum {
-    k_eSwitchOutputReportIDs_RumbleAndSubcommand = 0x01,
-    k_eSwitchOutputReportIDs_Rumble              = 0x10,
-    k_eSwitchOutputReportIDs_Proprietary         = 0x80,
-} ESwitchOutputReportIDs;
-
-#define k_unSwitchOutputPacketDataLength 49
-#define k_unSwitchMaxOutputPacketLength 64
-#define k_unSwitchBluetoothPacketLength k_unSwitchOutputPacketDataLength
-#define k_unSwitchUSBPacketLength k_unSwitchMaxOutputPacketLength
-
-
-@interface HIDSupport ()
-@property (nonatomic) dispatch_queue_t rumbleQueue;
-@property (nonatomic, strong) NSDictionary *mappings;
-@property (nonatomic) IOHIDManagerRef hidManager;
-@property (nonatomic, strong) Controller *controller;
-@property (nonatomic) CVDisplayLinkRef displayLink;
-@property (atomic) CGFloat mouseDeltaX;
-@property (atomic) CGFloat mouseDeltaY;
-@property (nonatomic) UInt8 previousLowFreqMotor;
-@property (nonatomic) UInt8 previousHighFreqMotor;
-@property (atomic) UInt16 nextLowFreqMotor;
-@property (atomic) UInt16 nextHighFreqMotor;
-@property (atomic) dispatch_semaphore_t rumbleSemaphore;
-@property (atomic) BOOL closeRumble;
-@property (atomic) BOOL isRumbleTimer;
-@property (nonatomic) PS4StatePacket_t lastPS4State;
-@property (nonatomic) PS5StatePacket_t lastPS5State;
-@property (nonatomic) NSInteger controllerDriver;
-@property (nonatomic) BOOL isPS5Bluetooth;
-
-@property (nonatomic) SwitchSimpleStatePacket_t lastSimpleSwitchState;
-@property (nonatomic) SwitchStatePacket_t lastSwitchState;
-
-@property (atomic) dispatch_semaphore_t hidReadSemaphore;
-@property (atomic) BOOL vibrationEnableResponded;
-@property (atomic) BOOL waitingForVibrationEnable;
-@property (atomic) UInt32 startedWaitingForVibrationEnable;
-@property (nonatomic) dispatch_queue_t enableVibrationQueue;
-
-@property (nonatomic) BOOL switchUsingBluetooth;
-@property (nonatomic) UInt8 switchCommandNumber;
-@property (nonatomic) BOOL switchRumbleActive;
-@property (nonatomic) UInt32 switchUnRumbleSent;
-@property (nonatomic) BOOL switchRumblePending;
-@property (nonatomic) BOOL switchRumbleZeroPending;
-@property (nonatomic) UInt32 switchUnRumblePending;
-
-@property (nonatomic, strong) Ticks *ticks;
-
-@property (nonatomic) id mouseConnectObserver;
-@property (nonatomic) id mouseDisconnectObserver;
-
-@property (nonatomic) BOOL useGCMouse;
-@property (nonatomic) dispatch_queue_t inputQueue;
-@property (atomic) uint64_t suppressRelativeMouseUntilMs;
-@property (nonatomic, strong) NSObject *inputDiagnosticsLock;
-@property (atomic) BOOL inputDiagnosticsEnabled;
-@property (nonatomic) NSUInteger inputDiagnosticsDetailedLogSequence;
-@property (nonatomic) NSUInteger inputDiagnosticsRemainingDetailedLogs;
-@property (nonatomic) NSUInteger inputDiagnosticsMouseMoveEvents;
-@property (nonatomic) NSUInteger inputDiagnosticsNonZeroRelativeEvents;
-@property (nonatomic) NSUInteger inputDiagnosticsRelativeDispatches;
-@property (nonatomic) NSUInteger inputDiagnosticsAbsoluteDispatches;
-@property (nonatomic) NSUInteger inputDiagnosticsSuppressedRelativeEvents;
-@property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaX;
-@property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaY;
-@property (nonatomic) NSInteger inputDiagnosticsSentRelativeDeltaX;
-@property (nonatomic) NSInteger inputDiagnosticsSentRelativeDeltaY;
-
-- (int)switchActuallyRumbleJoystick:(IOHIDDeviceRef)device low_frequency_rumble:(UInt16)low_frequency_rumble high_frequency_rumble:(UInt16)high_frequency_rumble;
-- (BOOL)reserveDetailedInputDiagnosticsLogSequence:(NSUInteger *)sequence;
-- (void)recordRelativeInputDiagnosticsFrom:(NSString *)source
-                                 rawDeltaX:(CGFloat)rawDeltaX
-                                 rawDeltaY:(CGFloat)rawDeltaY
-                                sentDeltaX:(short)sentDeltaX
-                                sentDeltaY:(short)sentDeltaY
-                                suppressed:(BOOL)suppressed;
-- (void)recordAbsoluteInputDiagnosticsFrom:(NSString *)source
-                                         x:(short)x
-                                         y:(short)y
-                                     width:(short)width
-                                    height:(short)height;
-@end
-
-static inline PML_INPUT_STREAM_CONTEXT HIDInputContext(HIDSupport *support) {
-    PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)support.inputContext;
-    if (ctx != NULL && ctx->connectionContext != NULL) {
-        LiSetThreadConnectionContext(ctx->connectionContext);
-    }
-    return ctx;
-}
-
-static inline bool HIDValidateInputContext(PML_INPUT_STREAM_CONTEXT ctx, const char *op) {
-    static CFAbsoluteTime lastLogTime = 0;
-    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
-    if (ctx == NULL) {
-        if (now - lastLogTime > 1.0) {
-            Log(LOG_W, @"Input dropped (%s): inputContext is NULL", op);
-            lastLogTime = now;
-        }
-        return false;
-    }
-    if (!LiInputContextIsInitialized(ctx)) {
-        if (now - lastLogTime > 1.0) {
-            Log(LOG_W, @"Input dropped (%s): inputContext not initialized (ctx=%p conn=%p)", op, ctx, LiInputContextGetConnectionCtx(ctx));
-            lastLogTime = now;
-        }
-        return false;
-    }
-    return true;
-}
-
-static inline void HIDDispatchInput(HIDSupport *support, PML_INPUT_STREAM_CONTEXT inputCtx, dispatch_block_t block) {
-    if (inputCtx == NULL) {
-        return;
-    }
-    PML_CONNECTION_CONTEXT connCtx = inputCtx->connectionContext;
-    dispatch_async(support.inputQueue, ^{
-        if (connCtx != NULL) {
-            LiSetThreadConnectionContext(connCtx);
-        }
-        block();
-    });
-}
-
-static inline CGFloat HIDPointerSensitivityForHost(TemporaryHost *host) {
-    CGFloat sensitivity = [SettingsClass pointerSensitivityFor:host.uuid];
-    if (!isfinite(sensitivity) || sensitivity <= 0.0) {
-        return 1.0;
-    }
-    return MIN(MAX(sensitivity, 0.25), 3.0);
-}
-
-static inline short HIDScaledRelativeDelta(CGFloat delta, CGFloat sensitivity) {
-    if (delta == 0.0) {
-        return 0;
-    }
-
-    CGFloat scaled = delta * sensitivity;
-    if (scaled > SHRT_MAX) {
-        scaled = SHRT_MAX;
-    } else if (scaled < SHRT_MIN) {
-        scaled = SHRT_MIN;
-    } else if (fabs(scaled) < 1.0) {
-        scaled = scaled > 0.0 ? 1.0 : -1.0;
-    }
-
-    return (short)lrint(scaled);
-}
-
-static inline BOOL HIDShouldUseAbsolutePointerPath(HIDSupport *support, NSInteger touchscreenMode) {
-    NSString *mouseMode = [SettingsClass mouseModeFor:support.host.uuid];
-    BOOL remoteDesktopMode = [mouseMode isEqualToString:@"remote"];
-
-    if (support.useGCMouse) {
-        return NO;
-    }
-
-    return remoteDesktopMode || touchscreenMode == 1;
-}
-
-static inline BOOL HIDShouldSuppressRelativeMouse(HIDSupport *support) {
-    uint64_t untilMs = support.suppressRelativeMouseUntilMs;
-    return untilMs > 0 && LiGetMillis() < untilMs;
-}
-
 @implementation HIDInputDiagnosticsSnapshot
 @end
 
 @implementation HIDSupport
 
-SwitchCommonOutputPacket_t switchRumblePacket;
+- (void)setInputContext:(void *)inputContext {
+    _inputContext = inputContext;
+    [self syncScrollTraceDiagnosticsPreferenceToInputContext];
+}
 
 - (void)refreshInputDiagnosticsPreference {
     self.inputDiagnosticsEnabled = [SettingsClass inputDiagnosticsEnabled];
+    [self syncScrollTraceDiagnosticsPreferenceToInputContext];
 }
 
 - (void)resetInputDiagnostics {
@@ -574,6 +159,13 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     @synchronized (self.inputDiagnosticsLock) {
         self.inputDiagnosticsDetailedLogSequence = 0;
         self.inputDiagnosticsRemainingDetailedLogs = self.inputDiagnosticsEnabled ? 24 : 0;
+        self.inputDiagnosticsRemainingScrollDetailedLogs = self.inputDiagnosticsEnabled ? 256 : 0;
+        self.scrollTraceSequence = 0;
+        self.activeScrollTraceId = 0;
+        self.activeScrollTraceStartedMs = 0;
+        self.activeScrollTraceLastEventMs = 0;
+        self.activeScrollTraceLockedToPrecise = NO;
+        self.activeScrollTraceSource = nil;
         self.inputDiagnosticsMouseMoveEvents = 0;
         self.inputDiagnosticsNonZeroRelativeEvents = 0;
         self.inputDiagnosticsRelativeDispatches = 0;
@@ -633,6 +225,69 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     return shouldLog;
 }
 
+- (void)syncScrollTraceDiagnosticsPreferenceToInputContext {
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    LiSetScrollTraceDiagnosticsEnabledCtx(inputCtx, self.inputDiagnosticsEnabled ? true : false);
+}
+
+- (uint64_t)prepareScrollTraceFromSource:(NSString *)source
+                               rawDeltaX:(CGFloat)rawDeltaX
+                               rawDeltaY:(CGFloat)rawDeltaY
+                                   phase:(NSEventPhase)phase
+                           momentumPhase:(NSEventPhase)momentumPhase
+                        hasPreciseDeltas:(BOOL)hasPreciseDeltas {
+    [self syncScrollTraceDiagnosticsPreferenceToInputContext];
+    if (!self.inputDiagnosticsEnabled) {
+        return 0;
+    }
+
+    uint64_t nowMs = LiGetMillis();
+    __block BOOL startsNewTrace = NO;
+    __block uint64_t traceId = 0;
+
+    @synchronized (self.inputDiagnosticsLock) {
+        BOOL idleExpired = self.activeScrollTraceLastEventMs == 0 ||
+                           nowMs < self.activeScrollTraceLastEventMs ||
+                           nowMs - self.activeScrollTraceLastEventMs > 180;
+        BOOL explicitBegin = phase == NSEventPhaseBegan || momentumPhase == NSEventPhaseBegan;
+        BOOL sourceChanged = (self.activeScrollTraceSource == nil && source != nil) ||
+                             (self.activeScrollTraceSource != nil && source == nil) ||
+                             (self.activeScrollTraceSource != nil && source != nil &&
+                              ![self.activeScrollTraceSource isEqualToString:source]);
+        if (self.activeScrollTraceId == 0 || explicitBegin || idleExpired || sourceChanged) {
+            self.scrollTraceSequence += 1;
+            if (self.scrollTraceSequence == 0) {
+                self.scrollTraceSequence = 1;
+            }
+            self.activeScrollTraceId = self.scrollTraceSequence;
+            self.activeScrollTraceStartedMs = nowMs;
+            self.activeScrollTraceLockedToPrecise = NO;
+            self.activeScrollTraceSource = [source copy];
+            startsNewTrace = YES;
+        } else if (source != nil) {
+            self.activeScrollTraceSource = [source copy];
+        }
+
+        self.activeScrollTraceLastEventMs = nowMs;
+        traceId = self.activeScrollTraceId;
+    }
+
+    if (startsNewTrace) {
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        LiStartScrollTraceCtx(inputCtx, traceId, nowMs);
+        Log(LOG_D, @"[inputdiag] scroll-trace start trace=%llu source=%@ raw=(%.3f,%.3f) phase=%lu momentum=%lu precise=%d",
+            (unsigned long long)traceId,
+            source ?: @"unknown",
+            rawDeltaX,
+            rawDeltaY,
+            (unsigned long)phase,
+            (unsigned long)momentumPhase,
+            hasPreciseDeltas ? 1 : 0);
+    }
+
+    return traceId;
+}
+
 - (void)recordRelativeInputDiagnosticsFrom:(NSString *)source
                                  rawDeltaX:(CGFloat)rawDeltaX
                                  rawDeltaY:(CGFloat)rawDeltaY
@@ -688,6 +343,12 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     @synchronized (self.inputDiagnosticsLock) {
         self.inputDiagnosticsMouseMoveEvents += 1;
         self.inputDiagnosticsAbsoluteDispatches += 1;
+        self.lastAbsolutePointerHostX = x;
+        self.lastAbsolutePointerHostY = y;
+        self.lastAbsolutePointerReferenceWidth = width;
+        self.lastAbsolutePointerReferenceHeight = height;
+        self.lastAbsolutePointerAtMs = LiGetMillis();
+        self.lastAbsolutePointerSource = [source copy];
     }
 
     if ([self reserveDetailedInputDiagnosticsLogSequence:&sequence]) {
@@ -702,12 +363,138 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     }
 }
 
+- (BOOL)getLastAbsolutePointerHostX:(short *)hostX
+                              hostY:(short *)hostY
+                     referenceWidth:(short *)referenceWidth
+                    referenceHeight:(short *)referenceHeight
+                              ageMs:(uint64_t *)ageMs
+                             source:(NSString * __autoreleasing *)source {
+    @synchronized (self.inputDiagnosticsLock) {
+        if (self.lastAbsolutePointerAtMs == 0) {
+            return NO;
+        }
+
+        if (hostX != NULL) {
+            *hostX = self.lastAbsolutePointerHostX;
+        }
+        if (hostY != NULL) {
+            *hostY = self.lastAbsolutePointerHostY;
+        }
+        if (referenceWidth != NULL) {
+            *referenceWidth = self.lastAbsolutePointerReferenceWidth;
+        }
+        if (referenceHeight != NULL) {
+            *referenceHeight = self.lastAbsolutePointerReferenceHeight;
+        }
+        if (ageMs != NULL) {
+            uint64_t nowMs = LiGetMillis();
+            *ageMs = nowMs >= self.lastAbsolutePointerAtMs ? (nowMs - self.lastAbsolutePointerAtMs) : 0;
+        }
+        if (source != NULL) {
+            *source = [self.lastAbsolutePointerSource copy];
+        }
+        return YES;
+    }
+}
+
+- (void)recordMouseButtonDiagnosticsAction:(NSString *)action
+                                    button:(int)button
+                                      mask:(uint32_t)mask
+                                 synthetic:(BOOL)synthetic {
+    if (!self.inputDiagnosticsEnabled) {
+        return;
+    }
+
+    NSUInteger sequence = 0;
+    if ([self reserveDetailedInputDiagnosticsLogSequence:&sequence]) {
+        Log(LOG_D, @"[inputdiag] #%lu mouse-button action=%@ button=%d mask=0x%02X synthetic=%d ctx=%p",
+            (unsigned long)sequence,
+            action ?: @"unknown",
+            button,
+            (unsigned int)mask,
+            synthetic ? 1 : 0,
+            self.inputContext);
+    }
+}
+
+- (void)recordScrollInputDiagnosticsMode:(NSString *)mode
+                                 traceId:(uint64_t)traceId
+                               rawDeltaX:(CGFloat)rawDeltaX
+                               rawDeltaY:(CGFloat)rawDeltaY
+                            rawWheelDeltaX:(NSInteger)rawWheelDeltaX
+                            rawWheelDeltaY:(NSInteger)rawWheelDeltaY
+                        normalizedDeltaX:(CGFloat)normalizedDeltaX
+                        normalizedDeltaY:(CGFloat)normalizedDeltaY
+                              continuous:(BOOL)continuous
+                        hasPreciseDeltas:(BOOL)hasPreciseDeltas
+                             lineDeltaX:(NSInteger)lineDeltaX
+                             lineDeltaY:(NSInteger)lineDeltaY
+                            pointDeltaX:(NSInteger)pointDeltaX
+                            pointDeltaY:(NSInteger)pointDeltaY
+                          fixedDeltaXRaw:(NSInteger)fixedDeltaXRaw
+                          fixedDeltaYRaw:(NSInteger)fixedDeltaYRaw
+                                   phase:(NSEventPhase)phase
+                           momentumPhase:(NSEventPhase)momentumPhase
+                              dispatchedX:(short)dispatchedX
+                              dispatchedY:(short)dispatchedY {
+    if (!self.inputDiagnosticsEnabled) {
+        return;
+    }
+
+    uint64_t nowMs = LiGetMillis();
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+
+    NSUInteger sequence = 0;
+    BOOL shouldLog = NO;
+    @synchronized (self.inputDiagnosticsLock) {
+        if (self.inputDiagnosticsRemainingScrollDetailedLogs > 0) {
+            self.inputDiagnosticsDetailedLogSequence += 1;
+            self.inputDiagnosticsRemainingScrollDetailedLogs -= 1;
+            sequence = self.inputDiagnosticsDetailedLogSequence;
+            shouldLog = YES;
+        }
+    }
+
+    if (shouldLog) {
+        uint64_t traceStartMs = LiGetScrollTraceStartMsCtx(inputCtx);
+        uint64_t traceAgeMs = traceStartMs != 0 && nowMs >= traceStartMs ? nowMs - traceStartMs : 0;
+        Log(LOG_D, @"[inputdiag] #%lu scroll trace=%llu ageMs=%llu mode=%@ raw=(%.3f,%.3f) rawWheel=(%ld,%ld) normalized=(%.3f,%.3f) dispatched=(%d,%d) continuous=%d precise=%d line=(%ld,%ld) point=(%ld,%ld) fixedRaw=(%ld,%ld) phase=%lu momentum=%lu ctx=%p",
+            (unsigned long)sequence,
+            (unsigned long long)traceId,
+            (unsigned long long)traceAgeMs,
+            mode ?: @"unknown",
+            rawDeltaX,
+            rawDeltaY,
+            (long)rawWheelDeltaX,
+            (long)rawWheelDeltaY,
+            normalizedDeltaX,
+            normalizedDeltaY,
+            dispatchedX,
+            dispatchedY,
+            continuous ? 1 : 0,
+            hasPreciseDeltas ? 1 : 0,
+            (long)lineDeltaX,
+            (long)lineDeltaY,
+            (long)pointDeltaX,
+            (long)pointDeltaY,
+            (long)fixedDeltaXRaw,
+            (long)fixedDeltaYRaw,
+            (unsigned long)phase,
+            (unsigned long)momentumPhase,
+            self.inputContext);
+    }
+}
+
 - (instancetype)init:(TemporaryHost *)host {
     self = [super init];
     if (self) {
         self.host = host;
         self.inputQueue = dispatch_queue_create("com.moonlight.input", DISPATCH_QUEUE_SERIAL);
+        self.freeMouseVirtualCursorLock = [[NSObject alloc] init];
+        self.freeMouseVirtualCursorGainX = 1.0;
+        self.freeMouseVirtualCursorGainY = 1.0;
         self.inputDiagnosticsLock = [[NSObject alloc] init];
+        self.pressedMouseButtonsMask = 0;
         [self resetInputDiagnostics];
         
         [self setupHidManager];
@@ -741,95 +528,16 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         _mappings = [NSDictionary dictionaryWithDictionary:d];
         
         [self initializeDisplayLink];
+        [self setupCoreHIDMouseDriverIfNeeded];
     }
     return self;
 }
 
 - (void)dealloc {
+    [self tearDownCoreHIDMouseDriver];
     NSLog(@"HIDSupport dealloc");
 }
 
-- (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs {
-    if (durationMs == 0) {
-        self.suppressRelativeMouseUntilMs = 0;
-        return;
-    }
-    self.suppressRelativeMouseUntilMs = LiGetMillis() + durationMs;
-}
-
--(void)registerMouseCallbacks:(GCMouse *)mouse API_AVAILABLE(macos(11.0)) {
-    if (!self.useGCMouse) {
-        return;
-    }
-    
-    mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput * _Nonnull mouse, float deltaX, float deltaY) {
-        self.mouseDeltaX += deltaX;
-        self.mouseDeltaY -= deltaY;
-    };
-    
-    mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
-            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-            if (!inputCtx) {
-                return;
-            }
-            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
-        }
-    };
-    mouse.mouseInput.middleButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
-            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-            if (!inputCtx) {
-                return;
-            }
-            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
-        }
-    };
-    mouse.mouseInput.rightButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
-            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-            if (!inputCtx) {
-                return;
-            }
-            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
-        }
-    };
-    
-    mouse.mouseInput.auxiliaryButtons[0].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
-            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-            if (!inputCtx) {
-                return;
-            }
-            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
-        }
-    };
-    mouse.mouseInput.auxiliaryButtons[1].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
-            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-            if (!inputCtx) {
-                return;
-            }
-            LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
-        }
-    };
-}
-
--(void)unregisterMouseCallbacks:(GCMouse*)mouse API_AVAILABLE(macos(11.0)) {
-    if (!self.useGCMouse) {
-        return;
-    }
-    
-    mouse.mouseInput.mouseMovedHandler = nil;
-    
-    mouse.mouseInput.leftButton.pressedChangedHandler = nil;
-    mouse.mouseInput.middleButton.pressedChangedHandler = nil;
-    mouse.mouseInput.rightButton.pressedChangedHandler = nil;
-    
-    for (GCControllerButtonInput* auxButton in mouse.mouseInput.auxiliaryButtons) {
-        auxButton.pressedChangedHandler = nil;
-    }
-}
 
 - (void)sendControllerEvent {
     if (self.shouldSendInputEvents) {
@@ -863,140 +571,6 @@ SwitchCommonOutputPacket_t switchRumblePacket;
             LiSendMultiControllerEventCtx(inputCtx, playerIndex, 1, lastButtonFlags, lastLeftTrigger, lastRightTrigger, lastLeftStickX, lastLeftStickY, lastRightStickX, lastRightStickY);
         });
     }
-}
-
-static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
-                                          const CVTimeStamp *now,
-                                          const CVTimeStamp *vsyncTime,
-                                          CVOptionFlags flagsIn,
-                                          CVOptionFlags *flagsOut,
-                                          void *displayLinkContext)
-{
-    HIDSupport *me = (__bridge HIDSupport *)displayLinkContext;
-    if (me == nil) {
-        return kCVReturnError;
-    }
-
-    CGFloat deltaX, deltaY;
-    deltaX = me.mouseDeltaX;
-    deltaY = me.mouseDeltaY;
-    if (deltaX != 0 || deltaY != 0) {
-        me.mouseDeltaX = 0;
-        me.mouseDeltaY = 0;
-        if (me.shouldSendInputEvents) {
-            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(me);
-            if (!inputCtx) {
-                return kCVReturnSuccess;
-            }
-            NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:me.host.uuid];
-            BOOL useAbsolutePointerPath = HIDShouldUseAbsolutePointerPath(me, touchscreenMode);
-            if (!useAbsolutePointerPath) {
-                BOOL suppressed = HIDShouldSuppressRelativeMouse(me);
-                if (suppressed) {
-                    [me recordRelativeInputDiagnosticsFrom:@"gcMouse"
-                                                 rawDeltaX:deltaX
-                                                 rawDeltaY:deltaY
-                                                sentDeltaX:0
-                                                sentDeltaY:0
-                                                suppressed:YES];
-                    return kCVReturnSuccess;
-                }
-                CGFloat sensitivity = HIDPointerSensitivityForHost(me.host);
-                short moveX = HIDScaledRelativeDelta(deltaX, sensitivity);
-                short moveY = HIDScaledRelativeDelta(deltaY, sensitivity);
-                [me recordRelativeInputDiagnosticsFrom:@"gcMouse"
-                                             rawDeltaX:deltaX
-                                             rawDeltaY:deltaY
-                                            sentDeltaX:moveX
-                                            sentDeltaY:moveY
-                                            suppressed:NO];
-                HIDDispatchInput(me, inputCtx, ^{
-                    LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
-                });
-            }
-        }
-    }
-    
-    // Mouse Emulation Movement
-    if (me.controller.isMouseMode && me.shouldSendInputEvents) {
-        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(me);
-        if (!inputCtx) {
-            return kCVReturnSuccess;
-        }
-        short rx = me.controller.lastRightStickX;
-        short ry = me.controller.lastRightStickY;
-        short deadzone = 4000;
-        float sensitivity = 15.0f; // Approx match to Qt/ControllerSupport
-        
-        if (abs(rx) > deadzone || abs(ry) > deadzone) {
-            float dx = (float)(abs(rx) > deadzone ? rx : 0) / 32767.0f * sensitivity;
-            float dy = (float)(abs(ry) > deadzone ? ry : 0) / 32767.0f * sensitivity;
-            
-            // Invert Y? Usually stick Y is up=negative or positive depending on driver.
-            // HID usage: Y min is top (-32768), max is bottom (32767).
-            // Mouse move: +Y is down.
-            // So +StickY should be +MouseY.
-            // ControllerSupport uses -dy. Let's try direct map first.
-            // ControllerSupport: dy = -dy * sens.
-            // Let's use -dy for now.
-            
-            short moveX = (short)dx;
-            short moveY = (short)dy; // Try positive first based on HID mapping logic above (MIN(-(val), ...)) inverted already?
-            
-            // Wait, updateButtonFlags logic:
-            // kHIDUsage_GD_Y: self.controller.lastLeftStickY = MIN(-(intValue - 32768), 32767);
-            // It inverts it. So Up is Positive?
-            // Standard XInput: Up is Positive.
-            // Mouse Move: +Y is Down.
-            // So Up (+Stick) -> Up (-Mouse).
-            // So we need to invert Y.
-            
-            moveY = (short)(-dy);
-            
-            [me recordRelativeInputDiagnosticsFrom:@"controllerMouse"
-                                         rawDeltaX:dx
-                                         rawDeltaY:-dy
-                                        sentDeltaX:moveX
-                                        sentDeltaY:moveY
-                                        suppressed:NO];
-            if (moveX != 0 || moveY != 0) {
-                HIDDispatchInput(me, inputCtx, ^{
-                    LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
-                });
-            }
-        }
-    }
-
-    return kCVReturnSuccess;
-}
-
-- (BOOL)initializeDisplayLink
-{
-    NSNumber *screenNumber = [[NSScreen mainScreen] deviceDescription][@"NSScreenNumber"];
-
-    CGDirectDisplayID displayId = [screenNumber unsignedIntValue];
-    CVDisplayLinkRef displayLink;
-    CVReturn status = CVDisplayLinkCreateWithCGDisplay(displayId, &displayLink);
-    if (status != kCVReturnSuccess) {
-        Log(LOG_E, @"Failed to create CVDisplayLink: %d", status);
-        return NO;
-    }
-    self.displayLink = displayLink;
-    
-    __weak typeof(self) weakSelf = self;
-    status = CVDisplayLinkSetOutputCallback(self.displayLink, displayLinkOutputCallback, (__bridge void * _Nullable)(weakSelf));
-    if (status != kCVReturnSuccess) {
-        Log(LOG_E, @"CVDisplayLinkSetOutputCallback() failed: %d", status);
-        return NO;
-    }
-    
-    status = CVDisplayLinkStart(self.displayLink);
-    if (status != kCVReturnSuccess) {
-        Log(LOG_E, @"CVDisplayLinkStart() failed: %d", status);
-        return NO;
-    }
-    
-    return YES;
 }
 
 - (void)sendKeyboardModifierEvent:(NSEvent *)event withKeyCode:(unsigned short)keyCode andModifierFlag:(NSEventModifierFlags)modifierFlag {
@@ -1094,559 +668,6 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     });
 }
 
-- (void)mouseDown:(NSEvent *)event withButton:(int)button {
-    if (self.useGCMouse) {
-        return;
-    }
-    
-    if ([SettingsClass swapMouseButtonsFor:self.host.uuid]) {
-        if (button == BUTTON_LEFT) {
-            button = BUTTON_RIGHT;
-        } else if (button == BUTTON_RIGHT) {
-            button = BUTTON_LEFT;
-        }
-    }
-    
-    if (self.shouldSendInputEvents) {
-        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-        if (!HIDValidateInputContext(inputCtx, "mouseDown")) {
-            return;
-        }
-        LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_PRESS, button);
-    }
-}
-
-- (void)mouseUp:(NSEvent *)event withButton:(int)button {
-    if (self.useGCMouse) {
-        return;
-    }
-    
-    if ([SettingsClass swapMouseButtonsFor:self.host.uuid]) {
-        if (button == BUTTON_LEFT) {
-            button = BUTTON_RIGHT;
-        } else if (button == BUTTON_RIGHT) {
-            button = BUTTON_LEFT;
-        }
-    }
-    
-    if (self.shouldSendInputEvents) {
-        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-        if (!HIDValidateInputContext(inputCtx, "mouseUp")) {
-            return;
-        }
-        LiSendMouseButtonEventCtx(inputCtx, BUTTON_ACTION_RELEASE, button);
-    }
-}
-
-- (void)mouseMoved:(NSEvent *)event {
-    if (self.useGCMouse) {
-        return;
-    }
-    
-    if (self.shouldSendInputEvents) {
-        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-        if (!HIDValidateInputContext(inputCtx, "mouseMoved")) {
-            return;
-        }
-        NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
-        BOOL useAbsolutePointerPath = HIDShouldUseAbsolutePointerPath(self, touchscreenMode);
-        
-        if (useAbsolutePointerPath) {
-            NSPoint loc = [event locationInWindow];
-            NSSize size = event.window.contentView.frame.size;
-            short x = (short)loc.x;
-            short y = (short)(size.height - loc.y);
-            short width = (short)size.width;
-            short height = (short)size.height;
-            [self recordAbsoluteInputDiagnosticsFrom:@"mouseMoved" x:x y:y width:width height:height];
-            HIDDispatchInput(self, inputCtx, ^{
-                LiSendMousePositionEventCtx(inputCtx, x, y, width, height);
-            });
-        } else {
-            CGFloat rawDeltaX = event.deltaX;
-            CGFloat rawDeltaY = event.deltaY;
-            BOOL suppressed = HIDShouldSuppressRelativeMouse(self);
-            CGFloat sensitivity = HIDPointerSensitivityForHost(self.host);
-            short deltaX = HIDScaledRelativeDelta(rawDeltaX, sensitivity);
-            short deltaY = HIDScaledRelativeDelta(rawDeltaY, sensitivity);
-            [self recordRelativeInputDiagnosticsFrom:@"mouseMoved"
-                                           rawDeltaX:rawDeltaX
-                                           rawDeltaY:rawDeltaY
-                                          sentDeltaX:(suppressed ? 0 : deltaX)
-                                          sentDeltaY:(suppressed ? 0 : deltaY)
-                                          suppressed:suppressed];
-            if (suppressed) {
-                return;
-            }
-            if (deltaX != 0 || deltaY != 0) {
-                HIDDispatchInput(self, inputCtx, ^{
-                    LiSendMouseMoveEventCtx(inputCtx, deltaX, deltaY);
-                });
-            }
-        }
-    }
-}
-
-- (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint
-                                referenceSize:(NSSize)referenceSize
-                                clampToBounds:(BOOL)clampToBounds {
-    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-    if (!HIDValidateInputContext(inputCtx, "sendAbsoluteMousePosition")) {
-        return;
-    }
-
-    CGFloat width = MAX(referenceSize.width, 1.0);
-    CGFloat height = MAX(referenceSize.height, 1.0);
-
-    CGFloat x = viewPoint.x;
-    CGFloat y = viewPoint.y;
-    if (clampToBounds) {
-        x = MIN(MAX(x, 0.0), width - 1.0);
-        y = MIN(MAX(y, 0.0), height - 1.0);
-    }
-
-    short hostX = (short)lrint(x);
-    short hostY = (short)lrint(height - y);
-    short referenceWidth = (short)lrint(width);
-    short referenceHeight = (short)lrint(height);
-
-    [self recordAbsoluteInputDiagnosticsFrom:@"sendAbsoluteMousePosition"
-                                           x:hostX
-                                           y:hostY
-                                       width:referenceWidth
-                                      height:referenceHeight];
-    HIDDispatchInput(self, inputCtx, ^{
-        LiSendMousePositionEventCtx(inputCtx, hostX, hostY, referenceWidth, referenceHeight);
-    });
-}
-
-- (void)scrollWheel:(NSEvent *)event {
-    CGFloat absDeltaX = fabs(event.scrollingDeltaX);
-    CGFloat absDeltaY = fabs(event.scrollingDeltaY);
-    
-    CGFloat deltaX = event.scrollingDeltaX;
-    CGFloat deltaY = event.scrollingDeltaY;
-    
-    if ([SettingsClass reverseScrollDirectionFor:self.host.uuid]) {
-        deltaX = -deltaX;
-        deltaY = -deltaY;
-    }
-
-    if (self.shouldSendInputEvents) {
-        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-        if (!HIDValidateInputContext(inputCtx, "scrollWheel")) {
-            return;
-        }
-        if (event.hasPreciseScrollingDeltas) {
-            if (absDeltaX > absDeltaY) {
-                LiSendHighResHScrollEventCtx(inputCtx, -deltaX);
-            } else {
-                LiSendHighResScrollEventCtx(inputCtx, deltaY);
-            }
-        } else {
-            if (absDeltaX > absDeltaY) {
-                LiSendHScrollEventCtx(inputCtx, -deltaX);
-            } else {
-                LiSendScrollEventCtx(inputCtx, deltaY);
-            }
-        }
-    }
-}
-
-- (int)hidGetFeatureReport:(IOHIDDeviceRef)device data:(unsigned char *)data length:(size_t)length {
-    CFIndex len = length;
-    IOReturn res;
-        
-    int skipped_report_id = 0;
-    int report_number = data[0];
-    if (report_number == 0x0) {
-//      Offset the return buffer by 1, so that the report ID
-//      will remain in byte 0.
-        data++;
-        len--;
-        skipped_report_id = 1;
-    }
-    
-    res = IOHIDDeviceGetReport(device,
-                               kIOHIDReportTypeFeature,
-                               report_number, /* Report ID */
-                               data, &len);
-    if (res != kIOReturnSuccess) {
-        return -1;
-    }
-
-    if (skipped_report_id) {
-        len++;
-    }
-
-    return (int)len;
-}
-
-- (void)rumbleSync {
-    if (self.controllerDriver == 0) {
-        [self rumbleLowFreqMotor:0 highFreqMotor:0];
-    }
-}
-
-- (void)runRumbleLoop {
-    while (YES) {
-        // wait for signal
-        dispatch_semaphore_wait(self.rumbleSemaphore, DISPATCH_TIME_FOREVER);
-        
-        if (self.closeRumble) {
-            break;
-        }
-        
-        IOHIDDeviceRef device = [self getFirstDevice];
-        if (device == nil) {
-            continue;
-        }
-        
-        // get next value
-        UInt16 lowFreqMotor = self.nextLowFreqMotor;
-        UInt16 highFreqMotor = self.nextHighFreqMotor;
-        
-        if (isXbox(device) || isKingKong(device)) {
-            UInt8 rumble_packet[] = { 0x03, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xEB };
-            
-            UInt8 convertedLowFreqMotor = lowFreqMotor / 655;
-            UInt8 convertedHighFreqMotor = highFreqMotor / 655;
-            if (convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) {
-                
-                self.previousLowFreqMotor = convertedLowFreqMotor;
-                self.previousHighFreqMotor = convertedHighFreqMotor;
-
-                rumble_packet[4] = convertedLowFreqMotor;
-                rumble_packet[5] = convertedHighFreqMotor;
-                
-                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, rumble_packet[0], rumble_packet, sizeof(rumble_packet));
-                usleep(30000);
-            }
-        } else if (isPS4(device)) {
-            UInt8 reportData[64];
-            int size;
-
-            // This will fail if we're on Bluetooth.
-            reportData[0] = k_ePS4FeatureReportIdSerialNumber;
-            size = [self hidGetFeatureReport:device data:reportData length:sizeof(reportData)];
-            BOOL isBluetooth = !(size >= 7);
-            
-            UInt8 data[78] = {};
-            if (isBluetooth) {
-                data[0] = k_EPS4ReportIdBluetoothEffects;
-                data[1] = 0xC0 | 0x04; // Magic value HID + CRC, also sets interval to 4ms for samples.
-                data[3] = 0x03; // 0x1 is rumble, 0x2 is lightbar, 0x4 is the blink interval.
-            } else {
-                data[0] = k_EPS4ReportIdUsbEffects;
-                data[1] = 0x07; // Magic value
-            }
-            UInt8 convertedLowFreqMotor = lowFreqMotor / 256;
-            UInt8 convertedHighFreqMotor = highFreqMotor / 256;
-            if ((convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) || (convertedLowFreqMotor == 0 && convertedHighFreqMotor == 0)) {
-                
-                self.previousLowFreqMotor = convertedLowFreqMotor;
-                self.previousHighFreqMotor = convertedHighFreqMotor;
-                
-                int i = isBluetooth ? 6 : 4;
-                data[i++] = convertedHighFreqMotor;
-                data[i++] = convertedLowFreqMotor;
-                data[i++] = 0; // red
-                data[i++] = 0; // green
-                data[i++] = 12; // blue
-                
-                if (isBluetooth) {
-                    // Bluetooth reports need a CRC at the end of the packet (at least on Linux).
-                    UInt8 ubHdr = 0xA2; // hidp header is part of the CRC calculation.
-                    UInt32 unCRC;
-                    unCRC = SDL_crc32(0, &ubHdr, 1);
-                    unCRC = SDL_crc32(unCRC, data, (size_t)(sizeof(data) - sizeof(unCRC)));
-                    memcpy(&data[sizeof(data) - sizeof(unCRC)], &unCRC, sizeof(unCRC));
-                }
-
-                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, sizeof(data));
-                usleep(30000);
-            }
-        } else if (isPS5(device)) {
-            int dataSize, offset;
-
-            UInt8 data[78] = {};
-            if (self.isPS5Bluetooth) {
-                data[0] = k_EPS5ReportIdBluetoothEffects;
-                data[1] = 0x02; // Magic value
-
-                dataSize = 78;
-                offset = 2;
-            } else {
-                data[0] = k_EPS5ReportIdBluetoothEffects;
-
-                dataSize = 48;
-                offset = 1;
-            }
-            DS5EffectsState_t *effects = (DS5EffectsState_t *)&data[offset];
-
-            UInt8 convertedLowFreqMotor = lowFreqMotor / 256;
-            UInt8 convertedHighFreqMotor = highFreqMotor / 256;
-            if ((convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) || (convertedLowFreqMotor == 0 && convertedHighFreqMotor == 0)) {
-
-                self.previousLowFreqMotor = convertedLowFreqMotor;
-                self.previousHighFreqMotor = convertedHighFreqMotor;
-
-                effects->ucEnableBits1 |= 0x01; /* Enable rumble emulation */
-                effects->ucEnableBits1 |= 0x02; /* Disable audio haptics */
-
-                effects->ucRumbleLeft = convertedLowFreqMotor;
-                effects->ucRumbleRight = convertedHighFreqMotor;
-
-                if (self.isPS5Bluetooth) {
-                    // Bluetooth reports need a CRC at the end of the packet (at least on Linux).
-                    UInt8 ubHdr = 0xA2; // hidp header is part of the CRC calculation.
-                    UInt32 unCRC;
-                    unCRC = SDL_crc32(0, &ubHdr, 1);
-                    unCRC = SDL_crc32(unCRC, data, (size_t)(dataSize - sizeof(unCRC)));
-                    memcpy(&data[dataSize - sizeof(unCRC)], &unCRC, sizeof(unCRC));
-                }
-
-                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, dataSize);
-                usleep(30000);
-            }
-        } else if (isNintendo(device)) {
-            if (self.isRumbleTimer) {
-                if (self.switchRumblePending || self.switchRumbleZeroPending) {
-                    [self switchSendPendingRumble:device];
-                } else if (self.switchRumbleActive && TICKS_PASSED([self.ticks getTicks], self.switchUnRumbleSent + RUMBLE_REFRESH_FREQUENCY_MS)) {
-                    NSLog(@"Sent continuing rumble");
-                    [self writeRumble:device];
-                }
-                
-                if (self.switchRumblePending) {
-                    usleep(RUMBLE_REFRESH_FREQUENCY_MS * 1000);
-                    self.isRumbleTimer = YES;
-                    dispatch_semaphore_signal(self.rumbleSemaphore);
-                } else {
-                    self.isRumbleTimer = NO;
-                }
-            } else {
-                self.switchUnRumbleSent = [self.ticks getTicks];
-                [self switch_RumbleJoystick:device lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
-                
-                usleep(RUMBLE_REFRESH_FREQUENCY_MS * 1000);
-                self.isRumbleTimer = YES;
-                dispatch_semaphore_signal(self.rumbleSemaphore);
-            }
-        }
-    }
-}
-
-- (IOHIDDeviceRef)getFirstDevice {
-    NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
-    if (devices.count == 0) {
-        return nil;
-    }
-    for (NSObject *device in devices) {
-        IOHIDDeviceRef hidDevice = (__bridge IOHIDDeviceRef)device;
-        UInt16 productId = usbIdFromDevice(hidDevice, @kIOHIDProductIDKey);
-        if (productId != 0x028E) {
-            return hidDevice;
-        }
-    }
-    
-    return nil;
-}
-
-
-#pragma mark - Switch rumble stuff
-
-- (int)switch_RumbleJoystick:(IOHIDDeviceRef)device lowFreqMotor:(UInt16)lowFreqMotor highFreqMotor:(UInt16)highFreqMotor {
-    if (self.switchRumblePending) {
-        if ([self switchSendPendingRumble:device] < 0) {
-            return -1;
-        }
-    }
-
-    if (self.switchUsingBluetooth && ([self.ticks getTicks] - self.switchUnRumbleSent) < RUMBLE_WRITE_FREQUENCY_MS) {
-        if (lowFreqMotor || highFreqMotor) {
-            UInt32 unRumblePending = lowFreqMotor << 16 | highFreqMotor;
-
-            /* Keep the highest rumble intensity in the given interval */
-            if (unRumblePending > self.switchUnRumblePending) {
-                self.switchUnRumblePending = unRumblePending;
-            }
-            self.switchRumblePending = YES;
-            self.switchRumbleZeroPending = NO;
-        } else {
-            /* When rumble is complete, turn it off */
-            self.switchRumbleZeroPending = YES;
-        }
-        return 0;
-    }
-
-    NSLog(@"Sent rumble %d/%d", lowFreqMotor, highFreqMotor);
-
-    return [self switchActuallyRumbleJoystick:device low_frequency_rumble:lowFreqMotor high_frequency_rumble:highFreqMotor];
-}
-
-- (BOOL)setVibrationEnabled:(UInt8)enabled {
-    return [self writeSubcommand:k_eSwitchSubcommandIDs_EnableVibration pBuf:&enabled ucLen:sizeof(enabled) ppReply:nil];
-}
-
-- (BOOL)writeSubcommand:(ESwitchSubcommandIDs)ucCommandID pBuf:(UInt8 *)pBuf ucLen:(UInt8)ucLen ppReply:(SwitchSubcommandInputPacket_t **)ppReply {
-    int nRetries = 5;
-    BOOL success = NO;
-
-    while (!success && nRetries--) {
-        SwitchSubcommandOutputPacket_t commandPacket;
-        [self constructSubcommand:ucCommandID pBuf:pBuf ucLen:ucLen outPacket:&commandPacket];
-
-        IOHIDDeviceRef device = [self getFirstDevice];
-        
-        self.waitingForVibrationEnable = YES;
-        self.startedWaitingForVibrationEnable = [self.ticks getTicks];
-        if (![self writePacket:device pBuf:&commandPacket ucLen:sizeof(commandPacket)]) {
-            continue;
-        }
-
-        dispatch_semaphore_wait(self.hidReadSemaphore, DISPATCH_TIME_FOREVER);
-        success = self.vibrationEnableResponded;
-    }
-
-    return success;
-}
-
-- (void)constructSubcommand:(ESwitchSubcommandIDs)ucCommandID pBuf:(UInt8 *)pBuf ucLen:(UInt8)ucLen outPacket:(SwitchSubcommandOutputPacket_t *)outPacket {
-    memset(outPacket, 0, sizeof(*outPacket));
-
-    outPacket->commonData.ucPacketType = k_eSwitchOutputReportIDs_RumbleAndSubcommand;
-    outPacket->commonData.ucPacketNumber = self.switchCommandNumber;
-
-    memcpy(&outPacket->commonData.rumbleData, &switchRumblePacket.rumbleData, sizeof(switchRumblePacket.rumbleData));
-
-    outPacket->ucSubcommandID = ucCommandID;
-    memcpy(outPacket->rgucSubcommandData, pBuf, ucLen);
-
-    self.switchCommandNumber = (self.switchCommandNumber + 1) & 0xF;
-}
-
-- (int)switchSendPendingRumble:(IOHIDDeviceRef)device {
-    if (([self.ticks getTicks] - self.switchUnRumbleSent) < RUMBLE_WRITE_FREQUENCY_MS) {
-        return 0;
-    }
-    
-    if (self.switchRumblePending) {
-        UInt16 low_frequency_rumble = (UInt16)(self.switchUnRumblePending >> 16);
-        UInt16 high_frequency_rumble = (UInt16)self.switchUnRumblePending;
-
-        NSLog(@"Sent pending rumble %d/%d", low_frequency_rumble, high_frequency_rumble);
-
-        self.switchRumblePending = NO;
-        self.switchUnRumblePending = 0;
-
-        return [self switchActuallyRumbleJoystick:device low_frequency_rumble:low_frequency_rumble high_frequency_rumble:high_frequency_rumble];
-    }
-
-    if (self.switchRumbleZeroPending) {
-        self.switchRumbleZeroPending = NO;
-
-        NSLog(@"Sent pending zero rumble");
-
-        return [self switchActuallyRumbleJoystick:device low_frequency_rumble:0 high_frequency_rumble:0];
-    }
-
-    return 0;
-}
-
-- (int)switchActuallyRumbleJoystick:(IOHIDDeviceRef)device low_frequency_rumble:(UInt16)low_frequency_rumble high_frequency_rumble:(UInt16)high_frequency_rumble {
-    const UInt16 k_usHighFreq = 0x0074;
-    const UInt8 k_ucHighFreqAmp = 0xBE;
-    const UInt8 k_ucLowFreq = 0x3D;
-    const UInt16 k_usLowFreqAmp = 0x806F;
-
-    if (low_frequency_rumble) {
-        [self switchEncodeRumble:&switchRumblePacket.rumbleData[0] usHighFreq:k_usHighFreq ucHighFreqAmp:k_ucHighFreqAmp ucLowFreq:k_ucLowFreq usLowFreqAmp:k_usLowFreqAmp];
-    } else {
-        [self setNeutralRumble:&switchRumblePacket.rumbleData[0]];
-    }
-
-    if (high_frequency_rumble) {
-        [self switchEncodeRumble:&switchRumblePacket.rumbleData[1] usHighFreq:k_usHighFreq ucHighFreqAmp:k_ucHighFreqAmp ucLowFreq:k_ucLowFreq usLowFreqAmp:k_usLowFreqAmp];
-    } else {
-        [self setNeutralRumble:&switchRumblePacket.rumbleData[1]];
-    }
-
-    self.switchRumbleActive = (low_frequency_rumble || high_frequency_rumble) ? YES : NO;
-
-    if (![self writeRumble:device]) {
-        NSLog(@"Couldn't send rumble packet");
-        return -1;
-    }
-    return 0;
-}
-
-- (void)setNeutralRumble:(SwitchRumbleData_t *)pRumble {
-    pRumble->rgucData[0] = 0x00;
-    pRumble->rgucData[1] = 0x01;
-    pRumble->rgucData[2] = 0x40;
-    pRumble->rgucData[3] = 0x40;
-}
-
-- (void)switchEncodeRumble:(SwitchRumbleData_t *)pRumble usHighFreq:(UInt16)usHighFreq ucHighFreqAmp:(UInt8)ucHighFreqAmp ucLowFreq:(UInt8)ucLowFreq usLowFreqAmp:(UInt16)usLowFreqAmp {
-    if (ucHighFreqAmp > 0 || usLowFreqAmp > 0) {
-        // High-band frequency and low-band amplitude are actually nine-bits each so they
-        // take a bit from the high-band amplitude and low-band frequency bytes respectively
-        pRumble->rgucData[0] = usHighFreq & 0xFF;
-        pRumble->rgucData[1] = ucHighFreqAmp | ((usHighFreq >> 8) & 0x01);
-
-        pRumble->rgucData[2]  = ucLowFreq | ((usLowFreqAmp >> 8) & 0x80);
-        pRumble->rgucData[3]  = usLowFreqAmp & 0xFF;
-
-        NSLog(@"Freq: %.2X %.2X  %.2X, Amp: %.2X  %.2X %.2X\n", usHighFreq & 0xFF, ((usHighFreq >> 8) & 0x01), ucLowFreq, ucHighFreqAmp, ((usLowFreqAmp >> 8) & 0x80), usLowFreqAmp & 0xFF);
-    } else {
-        [self setNeutralRumble:pRumble];
-    }
-}
-
-- (BOOL)writeRumble:(IOHIDDeviceRef)device {
-    // Write into m_RumblePacket rather than a temporary buffer to allow the current rumble state
-    // to be retained for subsequent rumble or subcommand packets sent to the controller
-    
-    switchRumblePacket.ucPacketType = k_eSwitchOutputReportIDs_Rumble;
-    switchRumblePacket.ucPacketNumber = self.switchCommandNumber;
-    self.switchCommandNumber = (self.switchCommandNumber + 1) & 0xF;
-
-    // Refresh the rumble state periodically
-    self.switchUnRumbleSent = [self.ticks getTicks];
-
-    return [self writePacket:device pBuf:(UInt8 *)&switchRumblePacket ucLen:sizeof(switchRumblePacket)];
-}
-
-- (BOOL)writePacket:(IOHIDDeviceRef)device pBuf:(void *)pBuf ucLen:(UInt8)ucLen {
-    UInt8 rgucBuf[k_unSwitchMaxOutputPacketLength];
-    const size_t unWriteSize = self.switchUsingBluetooth ? k_unSwitchBluetoothPacketLength : k_unSwitchUSBPacketLength;
-
-    if (ucLen > k_unSwitchOutputPacketDataLength) {
-        return NO;
-    }
-
-    if (ucLen < unWriteSize) {
-        memcpy(rgucBuf, pBuf, ucLen);
-        memset(rgucBuf+ucLen, 0, unWriteSize-ucLen);
-        pBuf = rgucBuf;
-        ucLen = (UInt8)unWriteSize;
-    }
-    
-    UInt8 *data = (UInt8 *)pBuf;
-    IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, ucLen);
-    return YES;
-}
-
-
-- (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
-    self.nextLowFreqMotor = lowFreqMotor;
-    self.nextHighFreqMotor = highFreqMotor;
-
-    self.isRumbleTimer = NO;
-    dispatch_semaphore_signal(self.rumbleSemaphore);
-}
-
 - (short)translateKeyCodeWithEvent:(NSEvent *)event {
     if (![self.mappings objectForKey:@(event.keyCode)]) {
         return 0;
@@ -1672,52 +693,193 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (BOOL)useGCMouse {
-    return [SettingsClass mouseDriverFor:self.host.uuid];
+    return [SettingsClass shouldUseGameControllerMouseFor:self.host.uuid];
+}
+
+- (BOOL)useCoreHIDMouse {
+    return [SettingsClass shouldAllowCoreHIDMouseFor:self.host.uuid];
+}
+
+- (BOOL)shouldUseAbsolutePointerPathForCurrentConfiguration {
+    NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
+    return HIDShouldUseAbsolutePointerPath(self, touchscreenMode);
 }
 
 - (NSInteger)controllerDriver {
     return [SettingsClass controllerDriverFor:self.host.uuid];
 }
 
-UInt16 usbIdFromDevice(IOHIDDeviceRef device, NSString *key) {
-    CFNumberRef vendor = (CFNumberRef)(IOHIDDeviceGetProperty(device, (CFStringRef)key));
-    return [(NSNumber *)CFBridgingRelease(vendor) unsignedShortValue];
+- (void)refreshMouseInputConfiguration {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self refreshMouseInputConfiguration];
+        });
+        return;
+    }
+
+    for (GCMouse *mouse in GCMouse.mice) {
+        [self unregisterMouseCallbacks:mouse];
+        [self registerMouseCallbacks:mouse];
+    }
+
+    [self tearDownCoreHIDMouseDriver];
+    [self setupCoreHIDMouseDriverIfNeeded];
 }
 
-BOOL isNintendo(IOHIDDeviceRef device) {
-    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
-    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
-    return vendorId == 0x057E && (productId == 0x2009);
+- (void)setupCoreHIDMouseDriverIfNeeded {
+    if (!self.useCoreHIDMouse) {
+        return;
+    }
+
+    NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
+    BOOL useAbsolutePointerPath = HIDShouldUseAbsolutePointerPath(self, touchscreenMode);
+    if (useAbsolutePointerPath) {
+        Log(LOG_I, @"CoreHID mouse skipped: absolute pointer path active (mouseMode=%@ touchscreenMode=%ld strategy=%ld)",
+            [SettingsClass mouseModeFor:self.host.uuid],
+            (long)touchscreenMode,
+            (long)[SettingsClass mouseDriverFor:self.host.uuid]);
+        return;
+    }
+
+    if (self.coreHIDMouseDriver != nil) {
+        return;
+    }
+
+    self.coreHIDMouseRuntimeFailed = NO;
+    self.coreHIDMouseDidDeliverMovement = NO;
+    self.coreHIDMouseDriver = [[CoreHIDMouseDriver alloc] init];
+    self.coreHIDMouseDriver.delegate = self;
+    self.coreHIDMouseDriver.maximumReportRate = [SettingsClass coreHIDMaxMouseReportRateFor:self.host.uuid];
+    self.coreHIDMouseDriver.requestsListenAccessIfNeeded = self.useCoreHIDMouse;
+    [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
+                                        summaryKey:@"Mouse Runtime Path CoreHID Pending"
+                                         detailKey:@"Mouse Runtime Detail CoreHID Pending"];
+    Log(LOG_I, @"CoreHID mouse setup: strategy=%ld maxRate=%d requestAccess=%d",
+        (long)[SettingsClass mouseDriverFor:self.host.uuid],
+        self.coreHIDMouseDriver.maximumReportRate,
+        self.coreHIDMouseDriver.requestsListenAccessIfNeeded ? 1 : 0);
+    [self.coreHIDMouseDriver start];
 }
 
-BOOL isXbox(IOHIDDeviceRef device) {
-    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
-    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
-    return vendorId == 0x045E && (productId == 0x02FD || productId == 0x0B13);
+- (void)tearDownCoreHIDMouseDriver {
+    if (self.coreHIDMouseDriver == nil) {
+        return;
+    }
+
+    [self.coreHIDMouseDriver stop];
+    self.coreHIDMouseDriver.delegate = nil;
+    self.coreHIDMouseDriver = nil;
+    self.coreHIDMouseDidDeliverMovement = NO;
+    HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
 }
 
-BOOL isKingKong(IOHIDDeviceRef device) {
-    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
-    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
-    return vendorId == 0x045E && productId == 0x02e0;
+- (void)dispatchRelativeMouseDeltaX:(CGFloat)deltaX
+                             deltaY:(CGFloat)deltaY
+                          sourceTag:(NSString *)sourceTag {
+    if (deltaX == 0.0 && deltaY == 0.0) {
+        return;
+    }
+
+    if (!self.shouldSendInputEvents) {
+        return;
+    }
+
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!HIDValidateInputContext(inputCtx, "dispatchRelativeMouseDelta")) {
+        return;
+    }
+
+    NSInteger touchscreenMode = [SettingsClass touchscreenModeFor:self.host.uuid];
+    if (HIDShouldUseAbsolutePointerPath(self, touchscreenMode)) {
+        return;
+    }
+
+    BOOL suppressed = HIDShouldSuppressRelativeMouse(self);
+    CGFloat sensitivity = HIDPointerSensitivityForHost(self.host);
+    short moveX = HIDScaledRelativeDelta(deltaX, sensitivity);
+    short moveY = HIDScaledRelativeDelta(deltaY, sensitivity);
+    [self recordRelativeInputDiagnosticsFrom:sourceTag
+                                   rawDeltaX:deltaX
+                                   rawDeltaY:deltaY
+                                  sentDeltaX:(suppressed ? 0 : moveX)
+                                  sentDeltaY:(suppressed ? 0 : moveY)
+                                  suppressed:suppressed];
+    if (suppressed || (moveX == 0 && moveY == 0)) {
+        return;
+    }
+
+    HIDDispatchInput(self, inputCtx, ^{
+        LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
+    });
 }
 
-BOOL isPlayStation(IOHIDDeviceRef device) {
-    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
-    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
-    return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05C4 || productId == 0x0CE6);
+- (void)coreHIDMouseDriver:(CoreHIDMouseDriver *)driver
+             didReceiveDeltaX:(double)deltaX
+                       deltaY:(double)deltaY {
+    (void)driver;
+    if (!self.useCoreHIDMouse) {
+        return;
+    }
+
+    if (!self.coreHIDMouseDidDeliverMovement) {
+        self.coreHIDMouseDidDeliverMovement = YES;
+        Log(LOG_I, @"CoreHID mouse active: first movement received");
+    }
+    self.coreHIDMouseRuntimeFailed = NO;
+    [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
+                                        summaryKey:@"Mouse Runtime Path CoreHID Active"
+                                         detailKey:@"Mouse Runtime Detail CoreHID Active"];
+    if ([self dispatchVirtualFreeMouseDeltaX:deltaX
+                                      deltaY:deltaY
+                                   sourceTag:@"coreHIDVirtualFreeMouse"]) {
+        HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
+        return;
+    }
+    if (HIDShouldUseCoreHIDFreeMouseAbsoluteSync(self) && self.freeMouseAbsoluteSyncHandler != nil) {
+        if (self.coreHIDFreeMouseAbsoluteSyncScheduled) {
+            return;
+        }
+        self.coreHIDFreeMouseAbsoluteSyncScheduled = YES;
+        uint64_t scheduleToken = ++self.coreHIDFreeMouseAbsoluteSyncToken;
+        HIDFreeMouseAbsoluteSyncHandler handler = self.freeMouseAbsoluteSyncHandler;
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (strongSelf == nil ||
+                !strongSelf.coreHIDFreeMouseAbsoluteSyncScheduled ||
+                strongSelf.coreHIDFreeMouseAbsoluteSyncToken != scheduleToken) {
+                return;
+            }
+            strongSelf.coreHIDFreeMouseAbsoluteSyncScheduled = NO;
+            handler();
+        });
+        return;
+    }
+    HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
+    [self dispatchRelativeMouseDeltaX:(CGFloat)deltaX
+                               deltaY:(CGFloat)deltaY
+                            sourceTag:@"coreHIDMouse"];
 }
 
-BOOL isPS4(IOHIDDeviceRef device) {
-    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
-    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
-    return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4);
-}
-
-BOOL isPS5(IOHIDDeviceRef device) {
-    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
-    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
-    return vendorId == 0x054C && (productId == 0x0ce6);
+- (void)coreHIDMouseDriver:(CoreHIDMouseDriver *)driver
+         didFailWithReason:(NSString *)reason
+                messageKey:(NSString *)messageKey {
+    (void)driver;
+    NSString *safeReason = reason.length > 0 ? reason : @"unknown";
+    NSString *safeMessage = messageKey.length > 0 ? messageKey : @"CoreHID Mouse input failed.";
+    NSInteger configuredStrategy = [SettingsClass mouseDriverFor:self.host.uuid];
+    self.coreHIDMouseRuntimeFailed = YES;
+    LogLevel level = (configuredStrategy == 3 && [safeReason isEqualToString:@"permission-denied"]) ? LOG_I : LOG_W;
+    Log(level, @"CoreHID mouse fallback: reason=%@ message=%@", safeReason, safeMessage);
+    NSString *detailKey = @"Mouse Runtime Detail AppKit Fallback Runtime";
+    if ([safeReason isEqualToString:@"permission-denied"]) {
+        detailKey = @"Mouse Runtime Detail AppKit Fallback Permission";
+    } else if ([safeReason isEqualToString:@"unsupported-os"]) {
+        detailKey = @"Mouse Runtime Detail AppKit Fallback UnsupportedOS";
+    }
+    [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
+                                        summaryKey:@"Mouse Runtime Path AppKit Fallback"
+                                         detailKey:detailKey];
 }
 
 - (void)handleDpad:(NSInteger)intValue {
@@ -2441,6 +1603,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 }
 
 - (void)tearDownHidManagerOnMainThread {
+    [self tearDownCoreHIDMouseDriver];
+
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseConnectObserver];
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseDisconnectObserver];
     self.mouseConnectObserver = nil;

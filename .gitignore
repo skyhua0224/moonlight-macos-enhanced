@@ -2,6 +2,10 @@
 **/Moonlight.xcscmblueprint
 Build
 DerivedData
+build/
+build-*/
+.spm-cache/
+tmp/
 Limelight/Version.xcconfig
 .reference/
 .DS_Store

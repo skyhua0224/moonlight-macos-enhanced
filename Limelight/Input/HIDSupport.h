@@ -11,6 +11,7 @@
 
 extern NSString *const HIDMouseModeToggledNotification;
 extern NSString *const HIDGamepadQuitNotification;
+typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 
 @interface HIDInputDiagnosticsSnapshot : NSObject
 @property(nonatomic) NSUInteger mouseMoveEvents;
@@ -28,6 +29,7 @@ extern NSString *const HIDGamepadQuitNotification;
 @property(atomic) BOOL shouldSendInputEvents;
 @property(atomic) TemporaryHost *host;
 @property(nonatomic, assign) void *inputContext;
+@property(nonatomic, copy) HIDFreeMouseAbsoluteSyncHandler freeMouseAbsoluteSyncHandler;
 
 - (instancetype)init:(TemporaryHost *)host;
 
@@ -36,22 +38,49 @@ extern NSString *const HIDGamepadQuitNotification;
 - (void)keyUp:(NSEvent *)event;
 
 - (void)releaseAllModifierKeys;
-
-- (void)mouseDown:(NSEvent *)event withButton:(int)button;
-- (void)mouseUp:(NSEvent *)event withButton:(int)button;
-- (void)mouseMoved:(NSEvent *)event;
-- (void)scrollWheel:(NSEvent *)event;
-- (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint
-                                referenceSize:(NSSize)referenceSize
-                                clampToBounds:(BOOL)clampToBounds;
-- (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs;
+- (BOOL)getLastAbsolutePointerHostX:(short *)hostX
+                              hostY:(short *)hostY
+                     referenceWidth:(short *)referenceWidth
+                    referenceHeight:(short *)referenceHeight
+                              ageMs:(uint64_t *)ageMs
+                             source:(NSString * __autoreleasing *)source;
 - (void)refreshInputDiagnosticsPreference;
 - (void)resetInputDiagnostics;
 - (HIDInputDiagnosticsSnapshot *)consumeInputDiagnosticsSnapshot;
+- (void)refreshMouseInputConfiguration;
+- (void)tearDownHidManager;
+- (BOOL)shouldUseAbsolutePointerPathForCurrentConfiguration;
 
+@end
+
+@interface HIDSupport (PointerInput)
+- (BOOL)hasPressedMouseButtons;
+- (void)releaseAllPressedMouseButtons;
+- (void)mouseDown:(NSEvent *)event withButton:(int)button;
+- (void)mouseUp:(NSEvent *)event withButton:(int)button;
+- (void)mouseMoved:(NSEvent *)event;
+- (void)setFreeMouseVirtualCursorActive:(BOOL)active;
+- (void)resetFreeMouseVirtualCursorState;
+- (void)updateFreeMouseVirtualCursorAnchorWithViewPoint:(NSPoint)viewPoint
+                                          referenceSize:(NSSize)referenceSize;
+- (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint
+                                referenceSize:(NSSize)referenceSize
+                                clampToBounds:(BOOL)clampToBounds;
+- (BOOL)absoluteMousePayloadForViewPoint:(NSPoint)viewPoint
+                           referenceSize:(NSSize)referenceSize
+                           clampToBounds:(BOOL)clampToBounds
+                                   hostX:(short *)hostX
+                                   hostY:(short *)hostY
+                          referenceWidth:(short *)referenceWidth
+                         referenceHeight:(short *)referenceHeight;
+- (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs;
+@end
+
+@interface HIDSupport (ScrollInput)
+- (void)scrollWheel:(NSEvent *)event;
+@end
+
+@interface HIDSupport (RumbleOutput)
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor
              highFreqMotor:(unsigned short)highFreqMotor;
-
-- (void)tearDownHidManager;
-
 @end

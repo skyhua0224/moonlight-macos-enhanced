@@ -15,6 +15,25 @@
 
 @implementation StreamViewMac
 
+- (NSCursor *)preferredLocalCursor {
+    if (!self.prefersHiddenLocalCursor) {
+        return [NSCursor arrowCursor];
+    }
+
+    static NSCursor *hiddenCursor;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSImage *cursorImage = [[NSImage alloc] initWithSize:NSMakeSize(16, 16)];
+        [cursorImage lockFocus];
+        [[NSColor clearColor] setFill];
+        NSRectFill(NSMakeRect(0, 0, cursorImage.size.width, cursorImage.size.height));
+        [cursorImage unlockFocus];
+        hiddenCursor = [[NSCursor alloc] initWithImage:cursorImage hotSpot:NSZeroPoint];
+    });
+
+    return hiddenCursor;
+}
+
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super initWithCoder:coder];
     if (self) {
@@ -29,6 +48,28 @@
         [self.spinner.heightAnchor constraintEqualToConstant:32].active = YES;
     }
     return self;
+}
+
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    [self refreshPreferredLocalCursor];
+}
+
+- (void)setPrefersHiddenLocalCursor:(BOOL)prefersHiddenLocalCursor {
+    if (_prefersHiddenLocalCursor == prefersHiddenLocalCursor) {
+        return;
+    }
+
+    _prefersHiddenLocalCursor = prefersHiddenLocalCursor;
+    [self refreshPreferredLocalCursor];
+}
+
+- (void)refreshPreferredLocalCursor {
+    if (self.window != nil) {
+        [self.window invalidateCursorRectsForView:self];
+    }
+
+    [[self preferredLocalCursor] set];
 }
 
 - (void)setStatusText:(NSString *)statusText {
@@ -46,6 +87,20 @@
     
     [[NSColor blackColor] setFill];
     NSRectFill(dirtyRect);
+}
+
+- (void)resetCursorRects {
+    [super resetCursorRects];
+    [self addCursorRect:self.bounds cursor:[self preferredLocalCursor]];
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+    (void)event;
+    return YES;
+}
+
+- (BOOL)mouseDownCanMoveWindow {
+    return NO;
 }
 
 - (BOOL)performKeyEquivalent:(NSEvent *)event {
