@@ -58,6 +58,12 @@ jobs:
         echo "Checking architecture..."
         lipo -info "build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
         file "build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
+        helper_path="build/Build/Products/Release/Moonlight.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMac.AwdlPrivilegedHelper"
+        if [ ! -f "$helper_path" ]; then
+          echo "Expected AWDL helper at $helper_path"
+          exit 1
+        fi
+        ls -l "$helper_path"
 
     - name: Create App Bundle
       run: |

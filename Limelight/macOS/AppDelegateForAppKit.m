@@ -31,6 +31,7 @@ typedef enum : NSUInteger {
 @interface AppDelegateForAppKit () <NSApplicationDelegate, NSWindowDelegate>
 @property (nonatomic, strong) NSWindowController *preferencesWC;
 @property (nonatomic, strong) NSWindowController *aboutWC;
+@property (nonatomic, strong) NSWindowController *welcomePermissionsWC;
 @property (nonatomic, strong) ControllerNavigation *controllerNavigation;
 @property (weak) IBOutlet NSMenuItem *themeMenuItem;
 @end
@@ -86,6 +87,7 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     
     self.controllerNavigation = [[ControllerNavigation alloc] init];
     [self refreshLocalizedChrome];
+    [self showWelcomePermissionsIfNeeded];
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
@@ -117,6 +119,34 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     [mainWC showWindow:self];
     [mainWC.window makeKeyAndOrderFront:nil];
     [self localizeToolbarForWindow:mainWC.window];
+}
+
+- (void)showWelcomePermissionsIfNeeded {
+    if (![WelcomePermissionsWindowObjCBridge shouldShowWelcomeWindow]) {
+        return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.welcomePermissionsWC != nil) {
+            return;
+        }
+
+        NSWindow *parentWindow = NSApplication.sharedApplication.mainWindow;
+        if (parentWindow == nil) {
+            parentWindow = NSApplication.sharedApplication.windows.firstObject;
+        }
+        if (parentWindow == nil) {
+            return;
+        }
+
+        self.welcomePermissionsWC = [WelcomePermissionsWindowObjCBridge makeWelcomeWindow];
+        self.welcomePermissionsWC.window.delegate = self;
+        self.welcomePermissionsWC.window.frameAutosaveName = @"Welcome Permissions Window";
+        [parentWindow beginSheet:self.welcomePermissionsWC.window completionHandler:^(__unused NSModalResponse returnCode) {
+            [WelcomePermissionsWindowObjCBridge markWelcomeWindowShown];
+            self.welcomePermissionsWC = nil;
+        }];
+    });
 }
 
 - (NSWindowController *)preferencesWCWithHostId:(NSString *)hostId {
@@ -329,6 +359,11 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 - (void)windowWillClose:(NSNotification *)notification {
     if (notification.object == self.preferencesWC.window) {
         self.preferencesWC = nil;
+    } else if (notification.object == self.aboutWC.window) {
+        self.aboutWC = nil;
+    } else if (notification.object == self.welcomePermissionsWC.window && self.welcomePermissionsWC.window.sheetParent == nil) {
+        [WelcomePermissionsWindowObjCBridge markWelcomeWindowShown];
+        self.welcomePermissionsWC = nil;
     }
 }
 

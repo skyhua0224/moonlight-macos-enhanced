@@ -1,2 +1,4 @@
 /* Permission prompt shown by macOS when microphone access is requested */
 "NSMicrophoneUsageDescription" = "Used to capture microphone audio for streaming to the host.";
+/* Permission prompt shown by macOS when Input Monitoring access is requested */
+"NSInputMonitoringUsageDescription" = "Used to capture high-rate mouse input for low-latency streaming controls.";

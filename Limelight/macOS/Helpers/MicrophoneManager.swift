@@ -9,6 +9,8 @@ import AppKit
 import AVFoundation
 import Combine
 import CoreAudio
+import CoreGraphics
+import IOKit.hidsystem
 import Security
 import SwiftUI
 
@@ -256,11 +258,283 @@ class MicrophoneManager: ObservableObject {
     }
 }
 
+@objc enum InputMonitoringAuthorizationState: Int {
+    case unsupported = 0
+    case notDetermined = 1
+    case denied = 2
+    case granted = 3
+    case grantedNeedsReentry = 4
+}
+
+@objcMembers
+final class InputMonitoringPermissionManager: NSObject, ObservableObject {
+    @objc(sharedManager) static let sharedManager = InputMonitoringPermissionManager()
+
+    @Published var authorizationState: InputMonitoringAuthorizationState = .notDetermined
+    @Published var isRequestingAuthorization: Bool = false
+    @Published var lastFailureMessage: String = ""
+
+    private var didBecomeActiveObserver: NSObjectProtocol?
+    private var hasShownRuntimeAlert = false
+    private var observedSystemState: InputMonitoringAuthorizationState = .notDetermined
+    private var needsStreamReentry = false
+
+    override init() {
+        super.init()
+        let initialState = Self.currentSystemAuthorizationState()
+        observedSystemState = initialState
+        authorizationState = initialState
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshAuthorizationStatus()
+        }
+    }
+
+    deinit {
+        if let didBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+        }
+    }
+
+    @objc var isGranted: Bool {
+        authorizationState == .granted || authorizationState == .grantedNeedsReentry
+    }
+
+    @objc var statusLabelKey: String {
+        switch authorizationState {
+        case .unsupported:
+            return "Unavailable"
+        case .notDetermined:
+            return "Not Granted"
+        case .denied:
+            return "Denied"
+        case .granted:
+            return "Granted"
+        case .grantedNeedsReentry:
+            return "Granted Pending Reentry"
+        }
+    }
+
+    @objc(refreshAuthorizationStatus)
+    func refreshAuthorizationStatus() {
+        let state = Self.currentSystemAuthorizationState()
+        DispatchQueue.main.async {
+            self.applySystemAuthorizationState(state)
+        }
+    }
+
+    @discardableResult
+    @objc(requestAuthorizationIfNeededInteractive:)
+    func requestAuthorizationIfNeeded(interactive: Bool) -> Bool {
+        let currentState = Self.currentSystemAuthorizationState()
+        if currentState == .granted {
+            DispatchQueue.main.async {
+                self.applySystemAuthorizationState(.granted)
+            }
+            return true
+        }
+
+        guard interactive, #available(macOS 15.0, *) else {
+            DispatchQueue.main.async {
+                self.authorizationState = currentState
+            }
+            return false
+        }
+
+        if Thread.isMainThread {
+            return performInteractiveAuthorizationRequest()
+        }
+
+        var granted = false
+        DispatchQueue.main.sync {
+            granted = performInteractiveAuthorizationRequest()
+        }
+        return granted
+    }
+
+    @objc(requestAuthorizationWithCompletion:)
+    func requestAuthorization(_ completion: ((Bool) -> Void)? = nil) {
+        let granted = requestAuthorizationIfNeeded(interactive: true)
+        scheduleAuthorizationRefreshes()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            self.refreshAuthorizationStatus()
+            completion?(granted || self.isGranted)
+        }
+    }
+
+    @objc(openSystemPreferences)
+    func openSystemPreferences() {
+        let candidateURLs = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+            "x-apple.systempreferences:com.apple.preference.security",
+        ]
+
+        for candidate in candidateURLs {
+            guard let url = URL(string: candidate) else { continue }
+            if NSWorkspace.shared.open(url) {
+                return
+            }
+        }
+
+        if let fallbackURL = URL(fileURLWithPath: "/System/Applications/System Settings.app", isDirectory: true) as URL? {
+            NSWorkspace.shared.openApplication(
+                at: fallbackURL,
+                configuration: NSWorkspace.OpenConfiguration(),
+                completionHandler: nil
+            )
+        }
+    }
+
+    @objc(noteCoreHIDPermissionFailureWithMessage:)
+    func noteCoreHIDPermissionFailure(withMessage message: String) {
+        DispatchQueue.main.async {
+            let state = Self.currentSystemAuthorizationState()
+            self.applySystemAuthorizationState(state)
+            if state == .granted {
+                self.lastFailureMessage = ""
+            } else {
+                self.lastFailureMessage = message
+                self.presentRuntimeAlertIfNeeded()
+            }
+        }
+    }
+
+    @objc(noteCoreHIDDidBecomeActive)
+    func noteCoreHIDDidBecomeActive() {
+        DispatchQueue.main.async {
+            self.needsStreamReentry = false
+            self.applySystemAuthorizationState(Self.currentSystemAuthorizationState())
+        }
+    }
+
+    private static func currentSystemAuthorizationState() -> InputMonitoringAuthorizationState {
+        guard #available(macOS 15.0, *) else {
+            return .unsupported
+        }
+
+        let cgGranted = CGPreflightListenEventAccess()
+        let ioState = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+        if ioState == kIOHIDAccessTypeGranted || cgGranted {
+            return .granted
+        }
+        if ioState == kIOHIDAccessTypeUnknown {
+            return .notDetermined
+        }
+        return .denied
+    }
+
+    @available(macOS 15.0, *)
+    private func performInteractiveAuthorizationRequest() -> Bool {
+        isRequestingAuthorization = true
+        NSApp.activate(ignoringOtherApps: true)
+        let initialState = Self.currentSystemAuthorizationState()
+        var grantedByRequest = false
+
+        if !CGPreflightListenEventAccess() {
+            grantedByRequest = CGRequestListenEventAccess() || grantedByRequest
+        }
+
+        let ioState = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+        if ioState != kIOHIDAccessTypeGranted {
+            grantedByRequest = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) || grantedByRequest
+        }
+
+        isRequestingAuthorization = false
+        let finalState = Self.currentSystemAuthorizationState()
+        if finalState == .granted || grantedByRequest {
+            if initialState != .granted || grantedByRequest {
+                needsStreamReentry = true
+            }
+            observedSystemState = .granted
+            authorizationState = .grantedNeedsReentry
+            lastFailureMessage = ""
+            hasShownRuntimeAlert = false
+            return true
+        }
+
+        applySystemAuthorizationState(finalState)
+        return finalState == .granted
+    }
+
+    private func presentRuntimeAlertIfNeeded() {
+        guard authorizationState != .granted,
+              authorizationState != .grantedNeedsReentry,
+              !hasShownRuntimeAlert
+        else { return }
+        hasShownRuntimeAlert = true
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = localized("CoreHID Permission Required", fallback: "CoreHID Permission Required")
+        alert.informativeText = localized(
+            "CoreHID Permission Alert Message",
+            fallback: "CoreHID needs Input Monitoring to deliver high-polling mouse input. Moonlight is currently using the compatibility path. Grant access in System Settings, then re-enter the stream."
+        )
+        alert.addButton(withTitle: localized("Open Input Monitoring", fallback: "Open Input Monitoring"))
+        alert.addButton(withTitle: localized("Later", fallback: "Later"))
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            openSystemPreferences()
+        }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        let value = LanguageManager.shared.localize(key)
+        return value == key ? fallback : value
+    }
+
+    private func applySystemAuthorizationState(_ state: InputMonitoringAuthorizationState) {
+        let transitionedToGranted = observedSystemState != .granted && state == .granted
+        observedSystemState = state
+
+        if state == .granted {
+            if transitionedToGranted {
+                needsStreamReentry = true
+            }
+            authorizationState = needsStreamReentry ? .grantedNeedsReentry : .granted
+            if !needsStreamReentry {
+                lastFailureMessage = ""
+                hasShownRuntimeAlert = false
+            }
+            return
+        }
+
+        needsStreamReentry = false
+        authorizationState = state
+    }
+
+    private func scheduleAuthorizationRefreshes() {
+        let delays: [TimeInterval] = [0.35, 1.0, 2.0]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.refreshAuthorizationStatus()
+            }
+        }
+    }
+}
+
 @objc enum AwdlHelperAuthorizationState: Int {
     case notDetermined = 0
     case ready = 1
     case failed = 2
     case unavailable = 3
+}
+
+@objc enum AwdlHelperInstallState: Int {
+    case unknown = 0
+    case installed = 1
+    case notReady = 2
+    case adminPromptOnly = 3
+    case unavailable = 4
+}
+
+@objc enum AwdlHelperExecutionPath: Int {
+    case unknown = 0
+    case privilegedHelper = 1
+    case administratorPrompt = 2
 }
 
 private struct AwdlInterfaceState {
@@ -283,11 +557,16 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             UserDefaults.standard.set(lastErrorMessage, forKey: Self.lastErrorMessageKey)
         }
     }
+    @Published var helperInstallState: AwdlHelperInstallState = .unknown
+    @Published var lastExecutionPath: AwdlHelperExecutionPath = .unknown
+    @Published var supportsPersistentHelperInstallation: Bool = false
     @Published var isRequestingAuthorization: Bool = false
 
     private static let authorizationStateKey = "networkCompatibility.awdlHelperAuthorizationState"
     private static let lastErrorMessageKey = "networkCompatibility.awdlHelperLastErrorMessage"
     private static let pendingRestoreKey = "networkCompatibility.awdlHelperPendingRestore"
+    private static let helperSuffix = ".AwdlPrivilegedHelper"
+    private static let helperFallbackLabel = "std.skyhua.MoonlightMac.AwdlPrivilegedHelper"
 
     private let sessionQueue = DispatchQueue(label: "moonlight.awdl.helper")
     private let isSandboxedBuild = AwdlHelperManager.detectSandboxedBuild()
@@ -334,6 +613,40 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         LogMessage(LOG_W, message)
     }
 
+    private func publishHelperInstallState(_ state: AwdlHelperInstallState) {
+        DispatchQueue.main.async {
+            self.helperInstallState = state
+        }
+    }
+
+    private func publishExecutionPath(_ path: AwdlHelperExecutionPath) {
+        DispatchQueue.main.async {
+            self.lastExecutionPath = path
+        }
+    }
+
+    private func publishPersistentHelperSupport(_ supported: Bool) {
+        DispatchQueue.main.async {
+            self.supportsPersistentHelperInstallation = supported
+        }
+    }
+
+    private func currentHelperInstallStateLocked(interfacePresent: Bool) -> AwdlHelperInstallState {
+        guard interfacePresent else {
+            return .unavailable
+        }
+
+        guard !isSandboxedBuild else {
+            return .adminPromptOnly
+        }
+
+        guard MLAwdlAuthorizationHelper.bundledPrivilegedHelperAvailable() else {
+            return .adminPromptOnly
+        }
+
+        return MLAwdlAuthorizationHelper.privilegedHelperInstalled() ? .installed : .notReady
+    }
+
     private var pendingRestoreRequired: Bool {
         get { UserDefaults.standard.bool(forKey: Self.pendingRestoreKey) }
         set { UserDefaults.standard.set(newValue, forKey: Self.pendingRestoreKey) }
@@ -353,13 +666,37 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         return (value as? Bool) ?? false
     }
 
+    private static func helperLabel() -> String {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier, !bundleIdentifier.isEmpty else {
+            return helperFallbackLabel
+        }
+
+        return bundleIdentifier + helperSuffix
+    }
+
+    private static func bundledHelperPath() -> String {
+        Bundle.main.bundlePath + "/Contents/Library/LaunchServices/\(helperLabel())"
+    }
+
+    private static func installedHelperPath() -> String {
+        "/Library/PrivilegedHelperTools/\(helperLabel())"
+    }
+
+    private static func installedLaunchdPlistPath() -> String {
+        "/Library/LaunchDaemons/\(helperLabel()).plist"
+    }
+
     func refreshAuthorizationStatus() {
         sessionQueue.async {
             let state = self.queryAwdlInterfaceState()
+            let canInstallPersistentHelper = !self.isSandboxedBuild && MLAwdlAuthorizationHelper.bundledPrivilegedHelperAvailable()
+            let installState = self.currentHelperInstallStateLocked(interfacePresent: state.present)
             if state.present && state.up && self.pendingRestoreRequired {
                 self.pendingRestoreRequired = false
             }
             DispatchQueue.main.async {
+                self.supportsPersistentHelperInstallation = canInstallPersistentHelper
+                self.helperInstallState = installState
                 if !state.present {
                     self.logInfo("[diag] AWDL helper status: awdl0 unavailable")
                     self.authorizationState = .unavailable
@@ -397,6 +734,26 @@ final class AwdlHelperManager: NSObject, ObservableObject {
                 case .notDetermined:
                     self.logInfo("[diag] AWDL helper authorization request ended without state change")
                 }
+                completion?(result.state == .ready)
+            }
+        }
+    }
+
+    func installPersistentHelper(_ completion: ((Bool) -> Void)? = nil) {
+        DispatchQueue.main.async {
+            self.isRequestingAuthorization = true
+            NSApp.activate(ignoringOtherApps: true)
+        }
+
+        sessionQueue.async {
+            let result = self.performPersistentHelperInstall()
+            DispatchQueue.main.async {
+                self.isRequestingAuthorization = false
+                self.updateAuthorizationState(result.state, message: result.message)
+                if result.state == .ready {
+                    self.lastErrorMessage = ""
+                }
+                self.refreshAuthorizationStatus()
                 completion?(result.state == .ready)
             }
         }
@@ -479,6 +836,8 @@ final class AwdlHelperManager: NSObject, ObservableObject {
 
     private func performAuthorizationProbe() -> (state: AwdlHelperAuthorizationState, message: String) {
         let state = queryAwdlInterfaceState()
+        publishPersistentHelperSupport(!isSandboxedBuild && MLAwdlAuthorizationHelper.bundledPrivilegedHelperAvailable())
+        publishHelperInstallState(currentHelperInstallStateLocked(interfacePresent: state.present))
         guard state.present else {
             return (.unavailable, "")
         }
@@ -498,6 +857,70 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
 
         return (.ready, "")
+    }
+
+    private func performPersistentHelperInstall() -> (state: AwdlHelperAuthorizationState, message: String) {
+        let interfaceState = queryAwdlInterfaceState()
+        publishPersistentHelperSupport(!isSandboxedBuild && MLAwdlAuthorizationHelper.bundledPrivilegedHelperAvailable())
+        guard interfaceState.present else {
+            publishHelperInstallState(.unavailable)
+            return (.unavailable, "")
+        }
+
+        guard !isSandboxedBuild else {
+            publishHelperInstallState(.adminPromptOnly)
+            return (.failed, "Persistent helper installation is unavailable in this sandboxed build.")
+        }
+
+        let bundledHelperPath = Self.bundledHelperPath()
+        guard FileManager.default.isExecutableFile(atPath: bundledHelperPath) else {
+            publishHelperInstallState(.adminPromptOnly)
+            return (.failed, "The bundled AWDL helper is missing from this build.")
+        }
+
+        let label = Self.helperLabel()
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let tempPlistURL = tempDirectory.appendingPathComponent("\(label).plist")
+        let tempScriptURL = tempDirectory.appendingPathComponent("install-awdl-helper.sh")
+
+        do {
+            try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+            try makeLaunchdPlist(label: label).write(to: tempPlistURL, options: .atomic)
+            try makeInstallScript().write(to: tempScriptURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tempScriptURL.path)
+        } catch {
+            publishHelperInstallState(.notReady)
+            return (.failed, error.localizedDescription)
+        }
+
+        defer {
+            try? FileManager.default.removeItem(at: tempDirectory)
+        }
+
+        let command = [
+            "/bin/sh",
+            shellQuote(tempScriptURL.path),
+            shellQuote(bundledHelperPath),
+            shellQuote(Self.installedHelperPath()),
+            shellQuote(tempPlistURL.path),
+            shellQuote(Self.installedLaunchdPlistPath()),
+            shellQuote(label),
+        ].joined(separator: " ")
+
+        if let error = runAdministratorShellCommand(command) {
+            publishHelperInstallState(.notReady)
+            return (.failed, normalizedAuthorizationError(error))
+        }
+
+        MLAwdlAuthorizationHelper.invalidateSession()
+        if MLAwdlAuthorizationHelper.privilegedHelperInstalled() {
+            publishHelperInstallState(.installed)
+            publishExecutionPath(.privilegedHelper)
+            return (.ready, "")
+        }
+
+        publishHelperInstallState(.notReady)
+        return (.failed, "The persistent helper was installed but did not start correctly.")
     }
 
     private func updateAuthorizationState(_ state: AwdlHelperAuthorizationState, message: String) {
@@ -553,6 +976,120 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
 
         return "Moonlight needs administrator permission to manage the AWDL interface while streaming."
+    }
+
+    private func awdlInstallPrompt() -> String {
+        let preferredLanguage = Locale.preferredLanguages.first ?? "en"
+        let languageCode = preferredLanguage.hasPrefix("zh") ? "zh-Hans" : "en"
+        let key = "AWDL Helper Install Prompt"
+
+        if let path = Bundle.main.path(forResource: languageCode, ofType: "lproj"),
+           let bundle = Bundle(path: path) {
+            let localized = NSLocalizedString(
+                key,
+                tableName: nil,
+                bundle: bundle,
+                value: "___MISSING___",
+                comment: ""
+            )
+            if localized != "___MISSING___" {
+                return localized
+            }
+        }
+
+        return "Moonlight needs administrator permission to install the AWDL helper."
+    }
+
+    private func makeLaunchdPlist(label: String) -> Data {
+        let plist: [String: Any] = [
+            "Label": label,
+            "ProgramArguments": [Self.installedHelperPath()],
+            "MachServices": [label: true],
+            "RunAtLoad": true,
+        ]
+
+        return try! PropertyListSerialization.data(
+            fromPropertyList: plist,
+            format: .xml,
+            options: 0
+        )
+    }
+
+    private func makeInstallScript() -> String {
+        """
+        set -euo pipefail
+        helper_src="$1"
+        helper_dst="$2"
+        plist_src="$3"
+        plist_dst="$4"
+        label="$5"
+
+        /bin/mkdir -p /Library/PrivilegedHelperTools
+        /bin/mkdir -p /Library/LaunchDaemons
+
+        /bin/launchctl bootout system "$plist_dst" >/dev/null 2>&1 || true
+        /bin/rm -f "$helper_dst" "$plist_dst"
+
+        /usr/bin/install -m 755 "$helper_src" "$helper_dst"
+        /usr/sbin/chown root:wheel "$helper_dst"
+        /bin/chmod 755 "$helper_dst"
+        /usr/bin/xattr -d com.apple.quarantine "$helper_dst" >/dev/null 2>&1 || true
+
+        /usr/bin/install -m 644 "$plist_src" "$plist_dst"
+        /usr/sbin/chown root:wheel "$plist_dst"
+        /bin/chmod 644 "$plist_dst"
+
+        /bin/launchctl bootstrap system "$plist_dst"
+        /bin/launchctl enable "system/$label" >/dev/null 2>&1 || true
+        /bin/launchctl kickstart -k "system/$label" >/dev/null 2>&1 || true
+        """
+    }
+
+    private func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private func runAdministratorShellCommand(_ command: String) -> String? {
+        let prompt = awdlInstallPrompt()
+        let appleScript = "do shell script \"\(Self.escapeForAppleScript(command))\" with administrator privileges"
+
+        let executeAppleScript: () -> String? = {
+            NSApp.activate(ignoringOtherApps: true)
+            var error: NSDictionary?
+            let script = NSAppleScript(source: appleScript)
+            _ = script?.executeAndReturnError(&error)
+            guard let error else { return nil }
+
+            if let message = error[NSAppleScript.errorMessage] as? String, !message.isEmpty {
+                return message
+            }
+            return error.description
+        }
+
+        let mainThreadError: String?
+        if Thread.isMainThread {
+            mainThreadError = executeAppleScript()
+        } else {
+            var result: String?
+            DispatchQueue.main.sync {
+                result = executeAppleScript()
+            }
+            mainThreadError = result
+        }
+
+        if mainThreadError == nil {
+            return nil
+        }
+
+        let promptPrefix = "with prompt \"\(Self.escapeForAppleScript(prompt))\""
+        let fallbackAppleScript = "do shell script \"\(Self.escapeForAppleScript(command))\" \(promptPrefix) with administrator privileges"
+        let osascriptResult = runTask(launchPath: "/usr/bin/osascript", arguments: ["-e", fallbackAppleScript])
+        if osascriptResult.terminationStatus == 0 {
+            return nil
+        }
+
+        let taskError = !osascriptResult.stderr.isEmpty ? osascriptResult.stderr : osascriptResult.stdout
+        return !taskError.isEmpty ? taskError : mainThreadError
     }
 
     private func waitForInterfaceState(up expectedUp: Bool, attempts: Int = 20) -> Bool {
@@ -694,20 +1231,29 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             let hasBundledHelper = MLAwdlAuthorizationHelper.bundledPrivilegedHelperAvailable()
             if let helperError = runPrivilegedIfconfigViaAuthorizationHelper(argument) {
                 logWarning("[diag] AWDL privileged helper request failed: \(helperError)")
+                publishHelperInstallState(hasBundledHelper ? .notReady : .adminPromptOnly)
                 if hasBundledHelper {
                     logInfo("[diag] AWDL helper falling back to administrator command prompt")
                     if let fallbackError = runPrivilegedIfconfigViaAppleScript(argument) {
+                        publishExecutionPath(.administratorPrompt)
                         return fallbackError
                     }
+                    publishExecutionPath(.administratorPrompt)
                     return nil
                 }
+                publishExecutionPath(.administratorPrompt)
                 return helperError
             }
             logInfo("[diag] AWDL privileged helper request succeeded")
+            publishHelperInstallState(.installed)
+            publishExecutionPath(.privilegedHelper)
             return nil
         }
 
-        return runPrivilegedIfconfigViaAppleScript(argument)
+        let result = runPrivilegedIfconfigViaAppleScript(argument)
+        publishHelperInstallState(.adminPromptOnly)
+        publishExecutionPath(.administratorPrompt)
+        return result
     }
 
     private static func escapeForAppleScript(_ command: String) -> String {
