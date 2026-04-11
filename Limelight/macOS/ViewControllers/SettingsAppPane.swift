@@ -396,6 +396,17 @@ private struct AwdlNetworkCompatibilitySettingsSection: View {
             return
           }
 
+          if awdlManager.supportsPersistentHelperInstallation,
+             awdlManager.helperInstallState != .installed
+          {
+            awdlManager.installPersistentHelper { granted in
+              if granted {
+                settingsModel.awdlStabilityHelperEnabled = true
+              }
+            }
+            return
+          }
+
           switch awdlManager.authorizationState {
           case .ready:
             settingsModel.awdlStabilityHelperEnabled = true
@@ -423,6 +434,9 @@ private struct AwdlNetworkCompatibilitySettingsSection: View {
 
       AwdlPermissionRow(
         awdlManager: awdlManager,
+        installPersistentHelper: {
+          awdlManager.installPersistentHelper()
+        },
         requestAuthorization: {
           if settingsModel.awdlStabilityHelperAcknowledged {
             requestAuthorization(false)
@@ -454,6 +468,7 @@ private struct AwdlNetworkCompatibilitySettingsSection: View {
 
 private struct AwdlPermissionRow: View {
   @ObservedObject var awdlManager: AwdlHelperManager
+  let installPersistentHelper: () -> Void
   let requestAuthorization: () -> Void
   @ObservedObject var languageManager = LanguageManager.shared
 
@@ -468,14 +483,28 @@ private struct AwdlPermissionRow: View {
       } else {
         switch awdlManager.authorizationState {
         case .ready:
-          Label(languageManager.localize("AWDL Helper Ready"), systemImage: "checkmark.circle.fill")
-            .foregroundColor(.green)
-            .font(.callout)
+          HStack(spacing: 8) {
+            Label(readyLabel, systemImage: readySystemImage)
+              .foregroundColor(readyForegroundColor)
+              .font(.callout)
+            if showPersistentInstallButton {
+              Button(languageManager.localize("Install Persistent Helper")) {
+                installPersistentHelper()
+              }
+              .controlSize(.small)
+            }
+          }
         case .failed:
           HStack(spacing: 8) {
             Label(languageManager.localize("AWDL Helper Failed"), systemImage: "xmark.circle.fill")
               .foregroundColor(.red)
               .font(.callout)
+            if showPersistentInstallButton {
+              Button(languageManager.localize("Install Persistent Helper")) {
+                installPersistentHelper()
+              }
+              .controlSize(.small)
+            }
             Button(languageManager.localize("Retry")) {
               requestAuthorization()
             }
@@ -486,6 +515,12 @@ private struct AwdlPermissionRow: View {
             Text(languageManager.localize("Not Determined"))
               .foregroundColor(.secondary)
               .font(.callout)
+            if showPersistentInstallButton {
+              Button(languageManager.localize("Install Persistent Helper")) {
+                installPersistentHelper()
+              }
+              .controlSize(.small)
+            }
             Button(languageManager.localize("Request")) {
               requestAuthorization()
             }
@@ -502,6 +537,36 @@ private struct AwdlPermissionRow: View {
         }
       }
     }
+  }
+
+  private var showPersistentInstallButton: Bool {
+    awdlManager.supportsPersistentHelperInstallation &&
+      awdlManager.helperInstallState != .installed
+  }
+
+  private var readyLabel: String {
+    switch awdlManager.helperInstallState {
+    case .installed:
+      return languageManager.localize("AWDL Helper Installed")
+    case .adminPromptOnly:
+      return languageManager.localize("AWDL Helper Admin Prompt Only")
+    case .notReady:
+      return languageManager.localize("AWDL Helper Not Ready")
+    case .unavailable:
+      return languageManager.localize("Not Available")
+    case .unknown:
+      return languageManager.localize("Checking")
+    @unknown default:
+      return languageManager.localize("Checking")
+    }
+  }
+
+  private var readySystemImage: String {
+    awdlManager.helperInstallState == .installed ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+  }
+
+  private var readyForegroundColor: Color {
+    awdlManager.helperInstallState == .installed ? .green : .orange
   }
 }
 

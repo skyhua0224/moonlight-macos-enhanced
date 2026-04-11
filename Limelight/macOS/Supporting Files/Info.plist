@@ -33,6 +33,8 @@
 	<string>© 2026 SkyHua and contributors</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Used to capture microphone audio for streaming to the host.</string>
+	<key>NSInputMonitoringUsageDescription</key>
+	<string>Used to capture high-rate mouse input for low-latency streaming controls.</string>
 	<key>NSMainStoryboardFile</key>
 	<string>Main</string>
 	<key>NSPrincipalClass</key>

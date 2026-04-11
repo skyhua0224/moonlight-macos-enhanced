@@ -1,2 +1,4 @@
 /* macOS 在请求麦克风权限时展示 */
 "NSMicrophoneUsageDescription" = "用于采集麦克风音频并推流到主机端（需要主机端支持）。";
+/* macOS 在请求输入监控权限时展示 */
+"NSInputMonitoringUsageDescription" = "用于捕获高回报率鼠标输入，以提供更低延迟的串流操控体验。";

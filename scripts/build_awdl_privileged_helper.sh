@@ -12,15 +12,17 @@ helper_output_dir="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchSer
 helper_output_path="${helper_output_dir}/${helper_label}"
 helper_info_plist="${TARGET_TEMP_DIR}/AwdlPrivilegedHelper-Info.plist"
 helper_launchd_plist="${TARGET_TEMP_DIR}/AwdlPrivilegedHelper-Launchd.plist"
+has_signing_identity=1
 
 if [[ -z "${EXPANDED_CODE_SIGN_IDENTITY_NAME:-}" || -z "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]]; then
-  echo "warning: Skipping AWDL privileged helper build because no code signing identity is available"
-  rm -f "${helper_output_dir}/${helper_label}" >/dev/null 2>&1 || true
-  exit 0
+  has_signing_identity=0
+  echo "warning: Building unsigned AWDL helper because no code signing identity is available"
 fi
 
-app_requirement="identifier \"${PRODUCT_BUNDLE_IDENTIFIER}\" and anchor apple generic and certificate leaf[subject.CN] = \"${EXPANDED_CODE_SIGN_IDENTITY_NAME}\" and certificate 1[field.1.2.840.113635.100.6.2.1] exists"
-helper_requirement="identifier \"${helper_label}\" and anchor apple generic and certificate leaf[subject.CN] = \"${EXPANDED_CODE_SIGN_IDENTITY_NAME}\" and certificate 1[field.1.2.840.113635.100.6.2.1] exists"
+app_requirement=""
+if [[ "${has_signing_identity}" -eq 1 ]]; then
+  app_requirement="identifier \"${PRODUCT_BUNDLE_IDENTIFIER}\" and anchor apple generic and certificate leaf[subject.CN] = \"${EXPANDED_CODE_SIGN_IDENTITY_NAME}\" and certificate 1[field.1.2.840.113635.100.6.2.1] exists"
+fi
 
 python3 - \
   "$helper_info_plist" \
@@ -40,8 +42,10 @@ info = {
     "CFBundleName": helper_label,
     "CFBundleVersion": build_version or "1",
     "CFBundleShortVersionString": short_version or "1.0",
-    "SMAuthorizedClients": [app_requirement],
 }
+
+if app_requirement:
+    info["SMAuthorizedClients"] = [app_requirement]
 
 launchd = {
     "Label": helper_label,
@@ -79,4 +83,6 @@ xcrun clang \
   -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __launchd_plist -Xlinker "$helper_launchd_plist"
 
 /usr/bin/codesign --remove-signature "$helper_output_path" >/dev/null 2>&1 || true
-/usr/bin/codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" --timestamp=none "$helper_output_path"
+if [[ "${has_signing_identity}" -eq 1 ]]; then
+  /usr/bin/codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" --timestamp=none "$helper_output_path"
+fi
