@@ -484,6 +484,10 @@
         return NSZeroRect;
     }
 
+    if ([self isWindowFullscreen] || [self isWindowBorderlessMode]) {
+        return self.view.window.frame;
+    }
+
     NSRect rectInWindow = [self.view convertRect:self.view.bounds toView:nil];
     return [self.view.window convertRectToScreen:rectInWindow];
 }

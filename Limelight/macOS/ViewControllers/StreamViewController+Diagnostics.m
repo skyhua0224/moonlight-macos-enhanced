@@ -546,6 +546,9 @@
     self.inputDiagnosticsNonZeroRelativeEvents = 0;
     self.inputDiagnosticsRelativeDispatches = 0;
     self.inputDiagnosticsAbsoluteDispatches = 0;
+    self.inputDiagnosticsAbsoluteDuplicateSkips = 0;
+    self.inputDiagnosticsCoreHIDRawEvents = 0;
+    self.inputDiagnosticsCoreHIDDispatches = 0;
     self.inputDiagnosticsSuppressedRelativeEvents = 0;
     self.inputDiagnosticsRawRelativeDeltaX = 0;
     self.inputDiagnosticsRawRelativeDeltaY = 0;
@@ -604,6 +607,9 @@
     self.inputDiagnosticsNonZeroRelativeEvents += snapshot.nonZeroRelativeEvents;
     self.inputDiagnosticsRelativeDispatches += snapshot.relativeDispatches;
     self.inputDiagnosticsAbsoluteDispatches += snapshot.absoluteDispatches;
+    self.inputDiagnosticsAbsoluteDuplicateSkips += snapshot.absoluteDuplicateSkips;
+    self.inputDiagnosticsCoreHIDRawEvents += snapshot.coreHIDRawEvents;
+    self.inputDiagnosticsCoreHIDDispatches += snapshot.coreHIDDispatches;
     self.inputDiagnosticsSuppressedRelativeEvents += snapshot.suppressedRelativeEvents;
     self.inputDiagnosticsRawRelativeDeltaX += snapshot.rawRelativeDeltaX;
     self.inputDiagnosticsRawRelativeDeltaY += snapshot.rawRelativeDeltaY;
@@ -674,14 +680,20 @@
     if (snapshot.mouseMoveEvents == 0 &&
         snapshot.relativeDispatches == 0 &&
         snapshot.absoluteDispatches == 0 &&
+        snapshot.absoluteDuplicateSkips == 0 &&
+        snapshot.coreHIDRawEvents == 0 &&
+        snapshot.coreHIDDispatches == 0 &&
         snapshot.suppressedRelativeEvents == 0) {
         return;
     }
 
-    Log(LOG_D, @"[inputdiag] 1s sample: moves=%lu rel=%lu abs=%lu suppressed=%lu rawΔ=(%ld,%ld) sentΔ=(%ld,%ld) capture=%lu uncapture=%lu rearm=%lu rearmSkip=%lu",
+    Log(LOG_D, @"[inputdiag] 1s sample: moves=%lu rel=%lu abs=%lu absDup=%lu coreRaw=%lu coreOut=%lu suppressed=%lu rawΔ=(%ld,%ld) sentΔ=(%ld,%ld) capture=%lu uncapture=%lu rearm=%lu rearmSkip=%lu",
         (unsigned long)snapshot.mouseMoveEvents,
         (unsigned long)snapshot.relativeDispatches,
         (unsigned long)snapshot.absoluteDispatches,
+        (unsigned long)snapshot.absoluteDuplicateSkips,
+        (unsigned long)snapshot.coreHIDRawEvents,
+        (unsigned long)snapshot.coreHIDDispatches,
         (unsigned long)snapshot.suppressedRelativeEvents,
         (long)snapshot.rawRelativeDeltaX,
         (long)snapshot.rawRelativeDeltaY,
@@ -713,6 +725,9 @@
     [parts addObject:[NSString stringWithFormat:@"moves=%lu", (unsigned long)self.inputDiagnosticsMouseMoveEvents]];
     [parts addObject:[NSString stringWithFormat:@"rel=%lu", (unsigned long)self.inputDiagnosticsRelativeDispatches]];
     [parts addObject:[NSString stringWithFormat:@"abs=%lu", (unsigned long)self.inputDiagnosticsAbsoluteDispatches]];
+    [parts addObject:[NSString stringWithFormat:@"absDup=%lu", (unsigned long)self.inputDiagnosticsAbsoluteDuplicateSkips]];
+    [parts addObject:[NSString stringWithFormat:@"coreRaw=%lu", (unsigned long)self.inputDiagnosticsCoreHIDRawEvents]];
+    [parts addObject:[NSString stringWithFormat:@"coreOut=%lu", (unsigned long)self.inputDiagnosticsCoreHIDDispatches]];
     [parts addObject:[NSString stringWithFormat:@"suppressed=%lu", (unsigned long)self.inputDiagnosticsSuppressedRelativeEvents]];
     [parts addObject:[NSString stringWithFormat:@"rawΔ=(%ld,%ld)", (long)self.inputDiagnosticsRawRelativeDeltaX, (long)self.inputDiagnosticsRawRelativeDeltaY]];
     [parts addObject:[NSString stringWithFormat:@"sentΔ=(%ld,%ld)", (long)self.inputDiagnosticsSentRelativeDeltaX, (long)self.inputDiagnosticsSentRelativeDeltaY]];

@@ -18,6 +18,9 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 @property(nonatomic) NSUInteger nonZeroRelativeEvents;
 @property(nonatomic) NSUInteger relativeDispatches;
 @property(nonatomic) NSUInteger absoluteDispatches;
+@property(nonatomic) NSUInteger absoluteDuplicateSkips;
+@property(nonatomic) NSUInteger coreHIDRawEvents;
+@property(nonatomic) NSUInteger coreHIDDispatches;
 @property(nonatomic) NSUInteger suppressedRelativeEvents;
 @property(nonatomic) NSInteger rawRelativeDeltaX;
 @property(nonatomic) NSInteger rawRelativeDeltaY;
@@ -50,6 +53,8 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (void)refreshMouseInputConfiguration;
 - (void)tearDownHidManager;
 - (BOOL)shouldUseAbsolutePointerPathForCurrentConfiguration;
+- (BOOL)shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration;
+- (BOOL)hasRecentCoreHIDMouseMovement;
 
 @end
 
@@ -63,9 +68,19 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (void)resetFreeMouseVirtualCursorState;
 - (void)updateFreeMouseVirtualCursorAnchorWithViewPoint:(NSPoint)viewPoint
                                           referenceSize:(NSSize)referenceSize;
+- (BOOL)reconcileFreeMouseVirtualCursorToViewPoint:(NSPoint)viewPoint
+                                     referenceSize:(NSSize)referenceSize
+                               correctionThreshold:(CGFloat)correctionThreshold;
+- (BOOL)getFreeMouseVirtualCursorPoint:(NSPoint *)viewPoint
+                         referenceSize:(NSSize *)referenceSize;
 - (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint
                                 referenceSize:(NSSize)referenceSize
                                 clampToBounds:(BOOL)clampToBounds;
+- (void)sendMouseButton:(int)button
+                pressed:(BOOL)pressed
+      syncedToViewPoint:(NSPoint)viewPoint
+          referenceSize:(NSSize)referenceSize
+          clampToBounds:(BOOL)clampToBounds;
 - (BOOL)absoluteMousePayloadForViewPoint:(NSPoint)viewPoint
                            referenceSize:(NSSize)referenceSize
                            clampToBounds:(BOOL)clampToBounds

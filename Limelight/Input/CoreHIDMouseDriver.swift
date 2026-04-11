@@ -8,6 +8,8 @@ import Foundation
 import IOKit.hidsystem
 
 @objc protocol CoreHIDMouseDriverDelegate: AnyObject {
+  @objc optional func coreHIDMouseDriver(
+    _ driver: CoreHIDMouseDriver, didObserveRawDeltaX deltaX: Double, deltaY: Double)
   func coreHIDMouseDriver(
     _ driver: CoreHIDMouseDriver, didReceiveDeltaX deltaX: Double, deltaY: Double)
   func coreHIDMouseDriver(
@@ -70,7 +72,9 @@ final class CoreHIDMouseDriver: NSObject {
       return
     }
 
-    guard ensureListenAccessGranted() else {
+    guard InputMonitoringPermissionManager.sharedManager.requestAuthorizationIfNeeded(
+      interactive: requestsListenAccessIfNeeded
+    ) else {
       postFailureIfNeeded(
         reason: Failure.permissionDeniedReason,
         messageKey: Failure.permissionDeniedMessageKey
@@ -102,18 +106,6 @@ final class CoreHIDMouseDriver: NSObject {
     stop()
   }
 
-  private func ensureListenAccessGranted() -> Bool {
-    let access = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-    switch access {
-    case kIOHIDAccessTypeGranted:
-      return true
-    case kIOHIDAccessTypeUnknown:
-      return requestsListenAccessIfNeeded ? IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) : false
-    default:
-      return false
-    }
-  }
-
   @available(macOS 15.0, *)
   private func monitorManager() async {
     let manager = HIDDeviceManager()
@@ -139,6 +131,10 @@ final class CoreHIDMouseDriver: NSObject {
           guard clientTasks[deviceReference] == nil,
             let client = HIDDeviceClient(deviceReference: deviceReference)
           else {
+            continue
+          }
+
+          guard await shouldMonitorDevice(client) else {
             continue
           }
 
@@ -229,6 +225,21 @@ final class CoreHIDMouseDriver: NSObject {
   }
 
   @available(macOS 15.0, *)
+  private func shouldMonitorDevice(_ client: HIDDeviceClient) async -> Bool {
+    if await client.isBuiltIn {
+      return false
+    }
+
+    let product =
+      await client.product?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+    if product.contains("trackpad") {
+      return false
+    }
+
+    return true
+  }
+
+  @available(macOS 15.0, *)
   private func valueAsDelta(_ value: HIDElement.Value) -> Double {
     if let logicalValue = value.logicalValue(asTypeTruncatingIfNeeded: Int64.self) {
       return Double(logicalValue)
@@ -248,6 +259,8 @@ final class CoreHIDMouseDriver: NSObject {
   }
 
   private func reportDelta(deltaX: Double, deltaY: Double) {
+    delegate?.coreHIDMouseDriver?(self, didObserveRawDeltaX: deltaX, deltaY: deltaY)
+
     let maxRate = Self.normalizedMaximumReportRate(maximumReportRate)
     if maxRate == ReportRate.unlimited {
       markMovementEventDelivered()

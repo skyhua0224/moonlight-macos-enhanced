@@ -15,6 +15,7 @@ import SwiftUI
 struct InputView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
+  @ObservedObject private var inputMonitoringManager = InputMonitoringPermissionManager.sharedManager
   @AppStorage("settings.input.mouseAdvancedExpanded") private var mouseAdvancedExpanded = false
   @AppStorage("settings.input.controllerAdvancedExpanded") private var controllerAdvancedExpanded =
     false
@@ -86,6 +87,12 @@ struct InputView: View {
         })
 
       Divider()
+
+      if coreHIDTuningEnabled {
+        CoreHIDPermissionRow(permissionManager: inputMonitoringManager)
+
+        Divider()
+      }
 
       if showsFreeMouseOptions {
         PickerSettingRow(
@@ -266,6 +273,9 @@ struct InputView: View {
           SettingsDisclosureLabel(title: "Advanced Mouse Settings")
         }
       )
+    }
+    .onAppear {
+      inputMonitoringManager.refreshAuthorizationStatus()
     }
   }
 
@@ -472,6 +482,79 @@ private struct MouseTuningSliderRow: View {
       return valueFormatter(value)
     }
     return SettingsModel.percentageLabel(for: value)
+  }
+}
+
+private struct CoreHIDPermissionRow: View {
+  @ObservedObject var permissionManager: InputMonitoringPermissionManager
+  @ObservedObject var languageManager = LanguageManager.shared
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text(languageManager.localize("Input Monitoring"))
+        Spacer()
+        trailingContent
+      }
+
+      SettingDescriptionRow(textKey: "Input Monitoring detail")
+
+      if !permissionManager.lastFailureMessage.isEmpty &&
+          permissionManager.authorizationState != .granted &&
+          permissionManager.authorizationState != .grantedNeedsReentry {
+        Text(permissionManager.lastFailureMessage)
+          .font(.footnote)
+          .foregroundColor(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var trailingContent: some View {
+    if permissionManager.isRequestingAuthorization {
+      ProgressView()
+        .controlSize(.small)
+    } else {
+      switch permissionManager.authorizationState {
+      case .granted:
+        Label(languageManager.localize("Granted"), systemImage: "checkmark.circle.fill")
+          .foregroundColor(.green)
+          .font(.callout)
+      case .grantedNeedsReentry:
+        Label(languageManager.localize("Granted Pending Reentry"), systemImage: "arrow.triangle.2.circlepath.circle.fill")
+          .foregroundColor(.green)
+          .font(.callout)
+      case .denied:
+        HStack(spacing: 8) {
+          Text(languageManager.localize("Denied"))
+            .foregroundColor(.secondary)
+            .font(.callout)
+          Button(languageManager.localize("Open Settings")) {
+            permissionManager.openSystemPreferences()
+          }
+          .controlSize(.small)
+        }
+      case .notDetermined:
+        HStack(spacing: 8) {
+          Text(languageManager.localize("Not Granted"))
+            .foregroundColor(.secondary)
+            .font(.callout)
+          Button(languageManager.localize("Request")) {
+            permissionManager.requestAuthorization()
+          }
+          .controlSize(.small)
+        }
+      case .unsupported:
+        Text(languageManager.localize("Unavailable"))
+          .foregroundColor(.secondary)
+          .font(.callout)
+      @unknown default:
+        Text(languageManager.localize("Not Granted"))
+          .foregroundColor(.secondary)
+          .font(.callout)
+      }
+    }
   }
 }
 
