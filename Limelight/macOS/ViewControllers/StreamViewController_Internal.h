@@ -265,6 +265,9 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) NSUInteger inputDiagnosticsNonZeroRelativeEvents;
 @property (nonatomic) NSUInteger inputDiagnosticsRelativeDispatches;
 @property (nonatomic) NSUInteger inputDiagnosticsAbsoluteDispatches;
+@property (nonatomic) NSUInteger inputDiagnosticsAbsoluteDuplicateSkips;
+@property (nonatomic) NSUInteger inputDiagnosticsCoreHIDRawEvents;
+@property (nonatomic) NSUInteger inputDiagnosticsCoreHIDDispatches;
 @property (nonatomic) NSUInteger inputDiagnosticsSuppressedRelativeEvents;
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaX;
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaY;
@@ -451,7 +454,10 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL pendingCloseWindowAfterFullscreenExit;
 @property (nonatomic) NSUInteger pendingMouseCaptureRetryToken;
 @property (nonatomic) BOOL pendingMouseUncaptureAfterButtonsReleased;
+@property (nonatomic) BOOL pendingMouseUncaptureRecheckScheduled;
 @property (nonatomic) BOOL pendingHybridRemoteCursorSync;
+@property (nonatomic) BOOL hasCoreHIDFreeMouseLastTruthPoint;
+@property (nonatomic) NSPoint coreHIDFreeMouseLastTruthPoint;
 @property (nonatomic, copy) NSString *pendingMouseUncaptureDiagnosticCode;
 @property (nonatomic, copy) NSString *pendingMouseUncaptureDiagnosticReason;
 @property (nonatomic) uint64_t lastMouseClickDiagnosticsAtMs;
@@ -481,6 +487,10 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor;
 - (void)connectionStatusUpdate:(int)status;
 
+@end
+
+@interface StreamViewController (MouseCaptureInternal)
+- (void)prepareCoreHIDFreeMouseStateForFocusRegainWithReason:(NSString *)reason;
 @end
 @interface StreamViewController (MenuUI) <MLStreamScopedCallbackOwner>
 - (NSString *)mouseModeDisplayNameForMode:(NSString *)mode;
@@ -600,6 +610,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
                                                reason:(NSString *)reason;
 - (void)reassertHiddenLocalCursorIfNeededWithReason:(NSString *)reason;
 - (void)syncRemoteCursorToCurrentPointerClamped;
+- (void)reconcileHybridFreeMouseAnchorToCurrentPointer;
 - (void)syncRemoteCursorToMouseEvent:(NSEvent *)event clampToBounds:(BOOL)clampToBounds;
 - (MLFreeMouseExitEdge)freeMouseExitEdgeForEvent:(NSEvent *)event;
 - (BOOL)shouldUncaptureFreeMouseForEdgeEvent:(NSEvent *)event;

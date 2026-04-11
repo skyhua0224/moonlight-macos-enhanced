@@ -100,6 +100,9 @@
 @property (nonatomic) NSUInteger inputDiagnosticsNonZeroRelativeEvents;
 @property (nonatomic) NSUInteger inputDiagnosticsRelativeDispatches;
 @property (nonatomic) NSUInteger inputDiagnosticsAbsoluteDispatches;
+@property (nonatomic) NSUInteger inputDiagnosticsAbsoluteDuplicateSkips;
+@property (nonatomic) NSUInteger inputDiagnosticsCoreHIDRawEvents;
+@property (nonatomic) NSUInteger inputDiagnosticsCoreHIDDispatches;
 @property (nonatomic) NSUInteger inputDiagnosticsSuppressedRelativeEvents;
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaX;
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaY;
@@ -111,6 +114,13 @@
 @property (nonatomic) short lastAbsolutePointerReferenceHeight;
 @property (nonatomic) uint64_t lastAbsolutePointerAtMs;
 @property (nonatomic, copy) NSString *lastAbsolutePointerSource;
+@property (atomic) BOOL pendingCoalescedAbsolutePointerDispatch;
+@property (atomic) BOOL pendingCoalescedAbsolutePointerValid;
+@property (nonatomic) short pendingCoalescedAbsolutePointerHostX;
+@property (nonatomic) short pendingCoalescedAbsolutePointerHostY;
+@property (nonatomic) short pendingCoalescedAbsolutePointerReferenceWidth;
+@property (nonatomic) short pendingCoalescedAbsolutePointerReferenceHeight;
+@property (nonatomic, copy) NSString *pendingCoalescedAbsolutePointerSource;
 @property (nonatomic) uint32_t pressedMouseButtonsMask;
 @property (nonatomic) CGFloat accumulatedHighResScrollDeltaX;
 @property (nonatomic) CGFloat accumulatedHighResScrollDeltaY;
@@ -190,6 +200,8 @@
 - (BOOL)dispatchVirtualFreeMouseDeltaX:(double)deltaX
                                 deltaY:(double)deltaY
                              sourceTag:(NSString *)sourceTag;
+- (BOOL)getFreeMouseVirtualCursorPoint:(NSPoint *)viewPoint
+                         referenceSize:(NSSize *)referenceSize;
 @end
 
 @interface HIDSupport (RumbleInternal)
@@ -424,6 +436,22 @@ static inline short HIDScaledRelativeDelta(CGFloat delta, CGFloat sensitivity) {
     return (short)lrint(scaled);
 }
 
+static inline CGFloat HIDAbsoluteMouseReferencePrecisionScale(NSSize referenceSize) {
+    CGFloat width = MAX(referenceSize.width, 1.0);
+    CGFloat height = MAX(referenceSize.height, 1.0);
+    CGFloat maxDimension = ceil(MAX(width, height));
+    if (!isfinite(maxDimension) || maxDimension <= 0.0) {
+        return 1.0;
+    }
+
+    CGFloat maxSafeScale = floor((((CGFloat)SHRT_MAX) - 1.0) / maxDimension);
+    if (!isfinite(maxSafeScale) || maxSafeScale < 1.0) {
+        return 1.0;
+    }
+
+    return MIN(8.0, maxSafeScale);
+}
+
 static inline BOOL HIDAbsoluteMousePositionForViewPoint(NSPoint viewPoint,
                                                         NSSize referenceSize,
                                                         BOOL clampToBounds,
@@ -433,6 +461,9 @@ static inline BOOL HIDAbsoluteMousePositionForViewPoint(NSPoint viewPoint,
                                                         short *referenceHeight) {
     CGFloat width = MAX(referenceSize.width, 1.0);
     CGFloat height = MAX(referenceSize.height, 1.0);
+    CGFloat precisionScale = HIDAbsoluteMouseReferencePrecisionScale(referenceSize);
+    CGFloat scaledWidth = MAX(1.0, floor(width * precisionScale));
+    CGFloat scaledHeight = MAX(1.0, floor(height * precisionScale));
     CGFloat x = isfinite(viewPoint.x) ? viewPoint.x : 0.0;
     CGFloat y = isfinite(viewPoint.y) ? viewPoint.y : 0.0;
 
@@ -442,16 +473,16 @@ static inline BOOL HIDAbsoluteMousePositionForViewPoint(NSPoint viewPoint,
     }
 
     if (hostX != NULL) {
-        *hostX = (short)lrint(x);
+        *hostX = (short)lrint(MIN(MAX(x * precisionScale, 0.0), scaledWidth - 1.0));
     }
     if (hostY != NULL) {
-        *hostY = (short)lrint(height - y);
+        *hostY = (short)lrint(MIN(MAX((height - y) * precisionScale, 0.0), scaledHeight));
     }
     if (referenceWidth != NULL) {
-        *referenceWidth = (short)lrint(width);
+        *referenceWidth = (short)lrint(scaledWidth);
     }
     if (referenceHeight != NULL) {
-        *referenceHeight = (short)lrint(height);
+        *referenceHeight = (short)lrint(scaledHeight);
     }
 
     return YES;

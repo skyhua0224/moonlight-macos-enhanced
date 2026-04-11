@@ -230,6 +230,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
                         [weakSelf isWindowFullscreen] ? 1 : 0,
                         (unsigned long long)weakSelf.view.window.styleMask,
                         (long)weakSelf.view.window.level);
+                    [weakSelf prepareCoreHIDFreeMouseStateForFocusRegainWithReason:@"window-became-key"];
                     [weakSelf uncaptureMouseWithCode:@"MUC004" reason:@"window-became-key"];
                     [weakSelf rearmMouseCaptureIfPossibleWithReason:@"window-became-key"];
                     [weakSelf scheduleDeferredMouseCaptureRearmWithReason:@"window-became-key" delay:0.10];
@@ -264,6 +265,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         if ([weakSelf isWindowInCurrentSpace] && [weakSelf isCurrentPointerInsideStreamView]) {
             [weakSelf ensureStreamWindowKeyIfPossible];
         }
+        [weakSelf prepareCoreHIDFreeMouseStateForFocusRegainWithReason:@"app-became-active"];
         [weakSelf rearmMouseCaptureIfPossibleWithReason:@"app-became-active"];
         [weakSelf scheduleDeferredMouseCaptureRearmWithReason:@"app-became-active" delay:0.10];
         [weakSelf scheduleDeferredMouseCaptureRearmWithReason:@"app-became-active" delay:0.28];
@@ -1079,7 +1081,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
             return;
         }
         strongSelf.pendingHybridRemoteCursorSync = NO;
-        [strongSelf syncRemoteCursorToCurrentPointerClamped];
+        [strongSelf reconcileHybridFreeMouseAnchorToCurrentPointer];
     };
     [self resetInputDiagnosticsState];
     [self refreshInputDiagnosticsPreference];

@@ -170,6 +170,9 @@ static struct KeyMapping keys[] = {
         self.inputDiagnosticsNonZeroRelativeEvents = 0;
         self.inputDiagnosticsRelativeDispatches = 0;
         self.inputDiagnosticsAbsoluteDispatches = 0;
+        self.inputDiagnosticsAbsoluteDuplicateSkips = 0;
+        self.inputDiagnosticsCoreHIDRawEvents = 0;
+        self.inputDiagnosticsCoreHIDDispatches = 0;
         self.inputDiagnosticsSuppressedRelativeEvents = 0;
         self.inputDiagnosticsRawRelativeDeltaX = 0;
         self.inputDiagnosticsRawRelativeDeltaY = 0;
@@ -186,6 +189,9 @@ static struct KeyMapping keys[] = {
         snapshot.nonZeroRelativeEvents = self.inputDiagnosticsNonZeroRelativeEvents;
         snapshot.relativeDispatches = self.inputDiagnosticsRelativeDispatches;
         snapshot.absoluteDispatches = self.inputDiagnosticsAbsoluteDispatches;
+        snapshot.absoluteDuplicateSkips = self.inputDiagnosticsAbsoluteDuplicateSkips;
+        snapshot.coreHIDRawEvents = self.inputDiagnosticsCoreHIDRawEvents;
+        snapshot.coreHIDDispatches = self.inputDiagnosticsCoreHIDDispatches;
         snapshot.suppressedRelativeEvents = self.inputDiagnosticsSuppressedRelativeEvents;
         snapshot.rawRelativeDeltaX = self.inputDiagnosticsRawRelativeDeltaX;
         snapshot.rawRelativeDeltaY = self.inputDiagnosticsRawRelativeDeltaY;
@@ -196,6 +202,9 @@ static struct KeyMapping keys[] = {
         self.inputDiagnosticsNonZeroRelativeEvents = 0;
         self.inputDiagnosticsRelativeDispatches = 0;
         self.inputDiagnosticsAbsoluteDispatches = 0;
+        self.inputDiagnosticsAbsoluteDuplicateSkips = 0;
+        self.inputDiagnosticsCoreHIDRawEvents = 0;
+        self.inputDiagnosticsCoreHIDDispatches = 0;
         self.inputDiagnosticsSuppressedRelativeEvents = 0;
         self.inputDiagnosticsRawRelativeDeltaX = 0;
         self.inputDiagnosticsRawRelativeDeltaY = 0;
@@ -335,23 +344,22 @@ static struct KeyMapping keys[] = {
                                          y:(short)y
                                      width:(short)width
                                     height:(short)height {
-    if (!self.inputDiagnosticsEnabled) {
-        return;
-    }
-
     NSUInteger sequence = 0;
+    BOOL diagnosticsEnabled = self.inputDiagnosticsEnabled;
     @synchronized (self.inputDiagnosticsLock) {
-        self.inputDiagnosticsMouseMoveEvents += 1;
-        self.inputDiagnosticsAbsoluteDispatches += 1;
         self.lastAbsolutePointerHostX = x;
         self.lastAbsolutePointerHostY = y;
         self.lastAbsolutePointerReferenceWidth = width;
         self.lastAbsolutePointerReferenceHeight = height;
         self.lastAbsolutePointerAtMs = LiGetMillis();
         self.lastAbsolutePointerSource = [source copy];
+        if (diagnosticsEnabled) {
+            self.inputDiagnosticsMouseMoveEvents += 1;
+            self.inputDiagnosticsAbsoluteDispatches += 1;
+        }
     }
 
-    if ([self reserveDetailedInputDiagnosticsLogSequence:&sequence]) {
+    if (diagnosticsEnabled && [self reserveDetailedInputDiagnosticsLogSequence:&sequence]) {
         Log(LOG_D, @"[inputdiag] #%lu %@ absolute pos=(%d,%d) ref=%dx%d ctx=%p",
             (unsigned long)sequence,
             source ?: @"unknown",
@@ -705,6 +713,15 @@ static struct KeyMapping keys[] = {
     return HIDShouldUseAbsolutePointerPath(self, touchscreenMode);
 }
 
+- (BOOL)shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration {
+    return HIDShouldUseCoreHIDFreeMouseAbsoluteSync(self);
+}
+
+- (BOOL)hasRecentCoreHIDMouseMovement {
+    return self.coreHIDMouseDriver != nil &&
+           self.coreHIDMouseDriver.secondsSinceLastMovementEvent < 0.25;
+}
+
 - (NSInteger)controllerDriver {
     return [SettingsClass controllerDriverFor:self.host.uuid];
 }
@@ -814,6 +831,19 @@ static struct KeyMapping keys[] = {
 }
 
 - (void)coreHIDMouseDriver:(CoreHIDMouseDriver *)driver
+            didObserveRawDeltaX:(double)deltaX
+                      deltaY:(double)deltaY {
+    (void)driver;
+    if (!self.inputDiagnosticsEnabled || (!isfinite(deltaX) && !isfinite(deltaY))) {
+        return;
+    }
+
+    @synchronized (self.inputDiagnosticsLock) {
+        self.inputDiagnosticsCoreHIDRawEvents += 1;
+    }
+}
+
+- (void)coreHIDMouseDriver:(CoreHIDMouseDriver *)driver
              didReceiveDeltaX:(double)deltaX
                        deltaY:(double)deltaY {
     (void)driver;
@@ -825,34 +855,40 @@ static struct KeyMapping keys[] = {
         self.coreHIDMouseDidDeliverMovement = YES;
         Log(LOG_I, @"CoreHID mouse active: first movement received");
     }
+    if (self.inputDiagnosticsEnabled) {
+        @synchronized (self.inputDiagnosticsLock) {
+            self.inputDiagnosticsCoreHIDDispatches += 1;
+        }
+    }
     self.coreHIDMouseRuntimeFailed = NO;
+    [[InputMonitoringPermissionManager sharedManager] noteCoreHIDDidBecomeActive];
     [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
                                         summaryKey:@"Mouse Runtime Path CoreHID Active"
                                          detailKey:@"Mouse Runtime Detail CoreHID Active"];
-    if ([self dispatchVirtualFreeMouseDeltaX:deltaX
-                                      deltaY:deltaY
-                                   sourceTag:@"coreHIDVirtualFreeMouse"]) {
+    BOOL dispatchedVirtualFreeMouse = [self dispatchVirtualFreeMouseDeltaX:deltaX
+                                                                    deltaY:deltaY
+                                                                 sourceTag:@"coreHIDVirtualFreeMouse"];
+    if (dispatchedVirtualFreeMouse) {
         HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
         return;
     }
     if (HIDShouldUseCoreHIDFreeMouseAbsoluteSync(self) && self.freeMouseAbsoluteSyncHandler != nil) {
-        if (self.coreHIDFreeMouseAbsoluteSyncScheduled) {
-            return;
+        if (!self.coreHIDFreeMouseAbsoluteSyncScheduled) {
+            self.coreHIDFreeMouseAbsoluteSyncScheduled = YES;
+            uint64_t scheduleToken = ++self.coreHIDFreeMouseAbsoluteSyncToken;
+            HIDFreeMouseAbsoluteSyncHandler handler = self.freeMouseAbsoluteSyncHandler;
+            __weak typeof(self) weakSelf = self;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (strongSelf == nil ||
+                    !strongSelf.coreHIDFreeMouseAbsoluteSyncScheduled ||
+                    strongSelf.coreHIDFreeMouseAbsoluteSyncToken != scheduleToken) {
+                    return;
+                }
+                strongSelf.coreHIDFreeMouseAbsoluteSyncScheduled = NO;
+                handler();
+            });
         }
-        self.coreHIDFreeMouseAbsoluteSyncScheduled = YES;
-        uint64_t scheduleToken = ++self.coreHIDFreeMouseAbsoluteSyncToken;
-        HIDFreeMouseAbsoluteSyncHandler handler = self.freeMouseAbsoluteSyncHandler;
-        __weak typeof(self) weakSelf = self;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (strongSelf == nil ||
-                !strongSelf.coreHIDFreeMouseAbsoluteSyncScheduled ||
-                strongSelf.coreHIDFreeMouseAbsoluteSyncToken != scheduleToken) {
-                return;
-            }
-            strongSelf.coreHIDFreeMouseAbsoluteSyncScheduled = NO;
-            handler();
-        });
         return;
     }
     HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
@@ -869,6 +905,9 @@ static struct KeyMapping keys[] = {
     NSString *safeMessage = messageKey.length > 0 ? messageKey : @"CoreHID Mouse input failed.";
     NSInteger configuredStrategy = [SettingsClass mouseDriverFor:self.host.uuid];
     self.coreHIDMouseRuntimeFailed = YES;
+    if ([safeReason isEqualToString:@"permission-denied"]) {
+        [[InputMonitoringPermissionManager sharedManager] noteCoreHIDPermissionFailureWithMessage:safeMessage];
+    }
     LogLevel level = (configuredStrategy == 3 && [safeReason isEqualToString:@"permission-denied"]) ? LOG_I : LOG_W;
     Log(level, @"CoreHID mouse fallback: reason=%@ message=%@", safeReason, safeMessage);
     NSString *detailKey = @"Mouse Runtime Detail AppKit Fallback Runtime";
