@@ -71,6 +71,8 @@
 @property (nonatomic, strong) CoreHIDMouseDriver *coreHIDMouseDriver;
 @property (nonatomic) BOOL coreHIDMouseDidDeliverMovement;
 @property (nonatomic) BOOL coreHIDMouseRuntimeFailed;
+@property (nonatomic) NSUInteger keyboardPhysicalModifierSourceMask;
+@property (nonatomic) NSUInteger keyboardRemoteModifierMask;
 @property (atomic) BOOL coreHIDFreeMouseAbsoluteSyncScheduled;
 @property (atomic) uint64_t coreHIDFreeMouseAbsoluteSyncToken;
 @property (nonatomic) dispatch_queue_t inputQueue;
@@ -133,9 +135,15 @@
 @property (atomic) uint64_t suppressAppKitScrollUntilMsY;
 
 - (void)sendControllerEvent;
-- (void)sendKeyboardModifierEvent:(NSEvent *)event
-                      withKeyCode:(unsigned short)keyCode
-                  andModifierFlag:(NSEventModifierFlags)modifierFlag;
+- (KeyboardCompatibilityMode)keyboardCompatibilityMode;
+- (BOOL)usesKeyboardCommandToControlCompatibility;
+- (BOOL)usesKeyboardLeftControlWinSwapCompatibility;
+- (BOOL)usesKeyboardShortcutTranslationCompatibility;
+- (void)updateKeyboardPhysicalModifierStateFromEvent:(NSEvent *)event;
+- (BOOL)shouldApplyKeyboardShortcutTranslationForEvent:(NSEvent *)event;
+- (NSUInteger)desiredRemoteKeyboardModifierMaskForEvent:(NSEvent *)event;
+- (void)syncKeyboardModifierStateForEvent:(NSEvent *)event;
+- (char)translatedModifierFlagsForEvent:(NSEvent *)event;
 - (short)translateKeyCodeWithEvent:(NSEvent *)event;
 - (char)translateKeyModifierWithEvent:(NSEvent *)event;
 - (void)handleDpad:(NSInteger)intValue;

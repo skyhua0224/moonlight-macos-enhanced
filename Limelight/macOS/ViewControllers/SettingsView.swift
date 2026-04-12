@@ -201,7 +201,7 @@ struct SettingPaneLoader<Content: View>: View {
   var body: some View {
     content
       .onAppear {
-        settingsModel.loadSettings()
+        settingsModel.ensureSettingsLoadedIfNeeded()
       }
   }
 }
@@ -229,4 +229,3 @@ struct PaneCellView: View {
     }
   }
 }
-

@@ -56,8 +56,10 @@ final class StreamShortcutProfile: NSObject {
   static let togglePerformanceOverlayAction = "togglePerformanceOverlay"
   static let toggleMouseModeAction = "toggleMouseMode"
   static let toggleFullscreenControlBallAction = "toggleFullscreenControlBall"
+  static let showDisconnectOptionsAction = "showDisconnectOptions"
   static let disconnectStreamAction = "disconnectStream"
   static let closeAndQuitAppAction = "closeAndQuitApp"
+  static let reconnectStreamAction = "reconnectStream"
   static let openControlCenterAction = "openControlCenter"
   static let toggleBorderlessWindowedAction = "toggleBorderlessWindowed"
 
@@ -66,8 +68,10 @@ final class StreamShortcutProfile: NSObject {
     togglePerformanceOverlayAction,
     toggleMouseModeAction,
     toggleFullscreenControlBallAction,
+    showDisconnectOptionsAction,
     disconnectStreamAction,
     closeAndQuitAppAction,
+    reconnectStreamAction,
     openControlCenterAction,
     toggleBorderlessWindowedAction,
   ]
@@ -109,6 +113,51 @@ final class StreamShortcutProfile: NSObject {
     kVK_ANSI_7: "7",
     kVK_ANSI_8: "8",
     kVK_ANSI_9: "9",
+    kVK_ANSI_Minus: "-",
+    kVK_ANSI_Equal: "=",
+    kVK_ANSI_LeftBracket: "[",
+    kVK_ANSI_RightBracket: "]",
+    kVK_ANSI_Backslash: "\\",
+    kVK_ANSI_Semicolon: ";",
+    kVK_ANSI_Quote: "'",
+    kVK_ANSI_Comma: ",",
+    kVK_ANSI_Period: ".",
+    kVK_ANSI_Slash: "/",
+    kVK_ANSI_Grave: "`",
+    kVK_Space: "Space",
+    kVK_Tab: "Tab",
+    kVK_Return: "Return",
+    kVK_Delete: "Delete",
+    kVK_ForwardDelete: "Forward Delete",
+    kVK_Escape: "Esc",
+    kVK_Home: "Home",
+    kVK_End: "End",
+    kVK_PageUp: "Page Up",
+    kVK_PageDown: "Page Down",
+    kVK_LeftArrow: "←",
+    kVK_RightArrow: "→",
+    kVK_UpArrow: "↑",
+    kVK_DownArrow: "↓",
+    kVK_F1: "F1",
+    kVK_F2: "F2",
+    kVK_F3: "F3",
+    kVK_F4: "F4",
+    kVK_F5: "F5",
+    kVK_F6: "F6",
+    kVK_F7: "F7",
+    kVK_F8: "F8",
+    kVK_F9: "F9",
+    kVK_F10: "F10",
+    kVK_F11: "F11",
+    kVK_F12: "F12",
+    kVK_F13: "F13",
+    kVK_F14: "F14",
+    kVK_F15: "F15",
+    kVK_F16: "F16",
+    kVK_F17: "F17",
+    kVK_F18: "F18",
+    kVK_F19: "F19",
+    kVK_F20: "F20",
   ]
 
   private static let modifierDisplayOrder: [(NSEvent.ModifierFlags, String)] = [
@@ -133,11 +182,38 @@ final class StreamShortcutProfile: NSObject {
       togglePerformanceOverlayAction: StreamShortcut(keyCode: kVK_ANSI_S, modifierFlags: [.control, .option]),
       toggleMouseModeAction: StreamShortcut(keyCode: kVK_ANSI_M, modifierFlags: [.control, .option]),
       toggleFullscreenControlBallAction: StreamShortcut(keyCode: kVK_ANSI_G, modifierFlags: [.control, .option]),
+      showDisconnectOptionsAction: StreamShortcut(keyCode: kVK_ANSI_W, modifierFlags: [.command]),
       disconnectStreamAction: StreamShortcut(keyCode: kVK_ANSI_W, modifierFlags: [.control, .option]),
       closeAndQuitAppAction: StreamShortcut(keyCode: kVK_ANSI_W, modifierFlags: [.control, .shift]),
+      reconnectStreamAction: StreamShortcut(keyCode: kVK_ANSI_R, modifierFlags: [.control, .option]),
       openControlCenterAction: StreamShortcut(keyCode: kVK_ANSI_C, modifierFlags: [.control, .option]),
       toggleBorderlessWindowedAction: StreamShortcut(keyCode: kVK_ANSI_B, modifierFlags: [.control, .option, .command]),
     ]
+  }
+
+  static func migratedShortcuts(_ shortcuts: [String: StreamShortcut]?) -> ([String: StreamShortcut], Bool) {
+    var normalized = normalizedShortcuts(shortcuts)
+    guard let shortcuts else { return (normalized, false) }
+
+    var didMigrate = false
+
+    if shortcuts[showDisconnectOptionsAction] == nil {
+      normalized[showDisconnectOptionsAction] = defaultShortcut(for: showDisconnectOptionsAction)
+      didMigrate = true
+
+      if let disconnectShortcut = shortcuts[disconnectStreamAction],
+        disconnectShortcut.isEqual(StreamShortcut(keyCode: kVK_ANSI_W, modifierFlags: [.command]))
+      {
+        normalized[disconnectStreamAction] = defaultShortcut(for: disconnectStreamAction)
+      }
+    }
+
+    if shortcuts[reconnectStreamAction] == nil {
+      normalized[reconnectStreamAction] = defaultShortcut(for: reconnectStreamAction)
+      didMigrate = true
+    }
+
+    return (normalized, didMigrate)
   }
 
   @objc static func defaultShortcut(for action: String) -> StreamShortcut {
@@ -196,7 +272,8 @@ final class StreamShortcutProfile: NSObject {
   @objc static func validationErrorKey(
     for candidate: StreamShortcut,
     action: String,
-    shortcuts: [String: StreamShortcut]
+    shortcuts: [String: StreamShortcut],
+    keyboardTranslationRules: [KeyboardTranslationRule]
   ) -> String? {
     let modifiers = relevantModifierFlags(candidate.modifierFlags)
 
@@ -211,15 +288,16 @@ final class StreamShortcutProfile: NSObject {
       if candidate.modifierOnly || !candidate.hasKeyCode {
         return "Shortcut must include regular key"
       }
-      if modifierCount(modifiers) < 2 {
-        return "Shortcut requires two modifiers"
+      let minimumModifierCount = allowsSingleModifierShortcut(for: action) ? 1 : 2
+      if modifierCount(modifiers) < minimumModifierCount {
+        return minimumModifierCount == 1 ? "Shortcut requires modifier" : "Shortcut requires two modifiers"
       }
       if keySymbol(for: candidate.keyCode) == nil {
         return "Shortcut key unsupported"
       }
     }
 
-    if isReserved(candidate) {
+    if isReserved(candidate, action: action) {
       return "Shortcut reserved by system"
     }
 
@@ -230,10 +308,16 @@ final class StreamShortcutProfile: NSObject {
       }
     }
 
+    for rule in KeyboardTranslationProfile.normalizedRules(keyboardTranslationRules) {
+      if rule.trigger.isEqual(candidate) {
+        return "Shortcut already in use"
+      }
+    }
+
     return nil
   }
 
-  private static func modifierCount(_ flags: NSEvent.ModifierFlags) -> Int {
+  static func modifierCount(_ flags: NSEvent.ModifierFlags) -> Int {
     modifierDisplayOrder.reduce(into: 0) { count, item in
       if flags.contains(item.0) {
         count += 1
@@ -241,7 +325,11 @@ final class StreamShortcutProfile: NSObject {
     }
   }
 
-  private static func isReserved(_ shortcut: StreamShortcut) -> Bool {
+  private static func allowsSingleModifierShortcut(for action: String) -> Bool {
+    action == showDisconnectOptionsAction || action == closeAndQuitAppAction
+  }
+
+  private static func isReserved(_ shortcut: StreamShortcut, action: String) -> Bool {
     let modifiers = relevantModifierFlags(shortcut.modifierFlags)
     let keyCode = shortcut.keyCode
 
@@ -249,16 +337,285 @@ final class StreamShortcutProfile: NSObject {
       return false
     }
 
-    return (keyCode == kVK_ANSI_W && modifiers == [.command])
-      || (keyCode == kVK_ANSI_F && modifiers == [.control, .command])
+    if keyCode == kVK_ANSI_W && modifiers == [.command] {
+      return action != showDisconnectOptionsAction
+    }
+
+    return (keyCode == kVK_ANSI_F && modifiers == [.control, .command])
       || (keyCode == kVK_ANSI_F && modifiers == [.function])
       || (keyCode == kVK_ANSI_1 && modifiers == [.command])
       || (keyCode == kVK_ANSI_H && modifiers == [.command])
       || (keyCode == kVK_ANSI_Grave && modifiers == [.command])
   }
 
-  private static func keySymbol(for keyCode: Int) -> String? {
+  @objc static func keySymbol(for keyCode: Int) -> String? {
     supportedKeySymbols[keyCode]
+  }
+
+  @objc static func remoteDisplayTokens(for shortcut: StreamShortcut) -> [String] {
+    var tokens: [String] = []
+    let modifiers = relevantModifierFlags(shortcut.modifierFlags)
+
+    if modifiers.contains(.control) {
+      tokens.append("Ctrl")
+    }
+    if modifiers.contains(.option) {
+      tokens.append("Alt")
+    }
+    if modifiers.contains(.shift) {
+      tokens.append("Shift")
+    }
+    if modifiers.contains(.command) {
+      tokens.append("Win")
+    }
+    if modifiers.contains(.function) {
+      tokens.append("Fn")
+    }
+
+    if !shortcut.modifierOnly, let key = keySymbol(for: shortcut.keyCode) {
+      tokens.append(key)
+    }
+
+    return tokens
   }
 }
 
+@objc enum KeyboardTranslationOutputKind: Int, CaseIterable {
+  case remoteShortcut = 0
+  case localAction = 1
+
+  var displayKey: String {
+    switch self {
+    case .remoteShortcut:
+      return "Remote Shortcut"
+    case .localAction:
+      return "Moonlight Action"
+    }
+  }
+}
+
+@objcMembers
+final class KeyboardTranslationRule: NSObject, Codable, Identifiable {
+  let id: String
+  let trigger: StreamShortcut
+  let outputKindRaw: Int
+  let outputShortcut: StreamShortcut?
+  let localAction: String?
+
+  init(
+    id: String = UUID().uuidString,
+    trigger: StreamShortcut,
+    outputShortcut: StreamShortcut
+  ) {
+    self.id = id
+    self.trigger = StreamShortcut(
+      keyCode: trigger.keyCode,
+      modifierFlags: trigger.modifierFlags,
+      modifierOnly: trigger.modifierOnly)
+    self.outputKindRaw = KeyboardTranslationOutputKind.remoteShortcut.rawValue
+    self.outputShortcut = StreamShortcut(
+      keyCode: outputShortcut.keyCode,
+      modifierFlags: outputShortcut.modifierFlags,
+      modifierOnly: outputShortcut.modifierOnly)
+    self.localAction = nil
+    super.init()
+  }
+
+  init(
+    id: String = UUID().uuidString,
+    trigger: StreamShortcut,
+    localAction: String
+  ) {
+    self.id = id
+    self.trigger = StreamShortcut(
+      keyCode: trigger.keyCode,
+      modifierFlags: trigger.modifierFlags,
+      modifierOnly: trigger.modifierOnly)
+    self.outputKindRaw = KeyboardTranslationOutputKind.localAction.rawValue
+    self.outputShortcut = nil
+    self.localAction = localAction
+    super.init()
+  }
+
+  var outputKind: KeyboardTranslationOutputKind {
+    KeyboardTranslationOutputKind(rawValue: outputKindRaw) ?? .remoteShortcut
+  }
+
+  override func isEqual(_ object: Any?) -> Bool {
+    guard let other = object as? KeyboardTranslationRule else { return false }
+    let outputsEqual: Bool
+    if let outputShortcut, let otherOutputShortcut = other.outputShortcut {
+      outputsEqual = outputShortcut.isEqual(otherOutputShortcut)
+    } else {
+      outputsEqual = outputShortcut == nil && other.outputShortcut == nil
+    }
+
+    return id == other.id
+      && trigger.isEqual(other.trigger)
+      && outputKindRaw == other.outputKindRaw
+      && outputsEqual
+      && localAction == other.localAction
+  }
+
+  override var hash: Int {
+    var hasher = Hasher()
+    hasher.combine(id)
+    hasher.combine(trigger.hash)
+    hasher.combine(outputKindRaw)
+    hasher.combine(outputShortcut?.hash)
+    hasher.combine(localAction)
+    return hasher.finalize()
+  }
+}
+
+@objcMembers
+final class KeyboardTranslationProfile: NSObject {
+  static let localActionReleaseMouseCapture = StreamShortcutProfile.releaseMouseCaptureAction
+  static let localActionTogglePerformanceOverlay =
+    StreamShortcutProfile.togglePerformanceOverlayAction
+  static let localActionToggleMouseMode = StreamShortcutProfile.toggleMouseModeAction
+  static let localActionToggleFullscreenControlBall =
+    StreamShortcutProfile.toggleFullscreenControlBallAction
+  static let localActionShowDisconnectOptions = StreamShortcutProfile.showDisconnectOptionsAction
+  static let localActionDisconnectStream = StreamShortcutProfile.disconnectStreamAction
+  static let localActionCloseAndQuitApp = StreamShortcutProfile.closeAndQuitAppAction
+  static let localActionReconnectStream = StreamShortcutProfile.reconnectStreamAction
+  static let localActionOpenControlCenter = StreamShortcutProfile.openControlCenterAction
+  static let localActionToggleBorderlessWindowed =
+    StreamShortcutProfile.toggleBorderlessWindowedAction
+
+  private static let orderedLocalActions = [
+    localActionShowDisconnectOptions,
+    localActionDisconnectStream,
+    localActionCloseAndQuitApp,
+    localActionReconnectStream,
+    localActionOpenControlCenter,
+    localActionReleaseMouseCapture,
+    localActionToggleMouseMode,
+    localActionTogglePerformanceOverlay,
+    localActionToggleFullscreenControlBall,
+    localActionToggleBorderlessWindowed,
+  ]
+
+  @objc static func defaultRules() -> [KeyboardTranslationRule] {
+    []
+  }
+
+  @objc static func normalizedRules(_ rules: [KeyboardTranslationRule]?) -> [KeyboardTranslationRule] {
+    guard let rules else { return defaultRules() }
+
+    var normalized: [KeyboardTranslationRule] = []
+    var seenIds = Set<String>()
+
+    for rule in rules {
+      let ruleId = seenIds.contains(rule.id) ? UUID().uuidString : rule.id
+      seenIds.insert(ruleId)
+
+      switch rule.outputKind {
+      case .remoteShortcut:
+        guard let outputShortcut = rule.outputShortcut else { continue }
+        normalized.append(
+          KeyboardTranslationRule(
+            id: ruleId,
+            trigger: rule.trigger,
+            outputShortcut: outputShortcut))
+      case .localAction:
+        guard let localAction = rule.localAction else { continue }
+        normalized.append(
+          KeyboardTranslationRule(
+            id: ruleId,
+            trigger: rule.trigger,
+            localAction: localAction))
+      }
+    }
+
+    return normalized
+  }
+
+  @objc static func outputKinds() -> [String] {
+    KeyboardTranslationOutputKind.allCases.map(\.displayKey)
+  }
+
+  @objc static func localActionOrder() -> [String] {
+    orderedLocalActions
+  }
+
+  @objc static func localActionTitleKey(for action: String) -> String {
+    switch action {
+    case localActionReleaseMouseCapture:
+      return "Release mouse capture"
+    case localActionTogglePerformanceOverlay:
+      return "Toggle performance overlay"
+    case localActionToggleMouseMode:
+      return "Toggle mouse mode"
+    case localActionToggleFullscreenControlBall:
+      return "Toggle fullscreen control ball"
+    case localActionShowDisconnectOptions:
+      return "Show Disconnect Options"
+    case localActionDisconnectStream:
+      return "Disconnect from Stream"
+    case localActionCloseAndQuitApp:
+      return "Close and Quit App"
+    case localActionReconnectStream:
+      return "Reconnect Stream"
+    case localActionOpenControlCenter:
+      return "Open control center"
+    case localActionToggleBorderlessWindowed:
+      return "Toggle borderless / windowed (advanced)"
+    default:
+      return action
+    }
+  }
+
+  @objc static func displayTokens(forTrigger shortcut: StreamShortcut) -> [String] {
+    StreamShortcutProfile.displayTokens(for: shortcut)
+  }
+
+  @objc static func displayTokens(forRemoteOutput shortcut: StreamShortcut) -> [String] {
+    StreamShortcutProfile.remoteDisplayTokens(for: shortcut)
+  }
+
+  @objc static func validationErrorKey(
+    forTrigger shortcut: StreamShortcut,
+    editingRuleId: String?,
+    rules: [KeyboardTranslationRule],
+    streamShortcuts: [String: StreamShortcut]
+  ) -> String? {
+    let modifiers = StreamShortcutProfile.relevantModifierFlags(shortcut.modifierFlags)
+
+    if shortcut.modifierOnly || !shortcut.hasKeyCode {
+      return "Shortcut must include regular key"
+    }
+    if StreamShortcutProfile.modifierCount(modifiers) < 1 {
+      return "Shortcut requires modifier"
+    }
+    if StreamShortcutProfile.keySymbol(for: shortcut.keyCode) == nil {
+      return "Shortcut key unsupported"
+    }
+
+    for rule in normalizedRules(rules) where rule.id != editingRuleId {
+      if rule.trigger.isEqual(shortcut) {
+        return "Shortcut already in use"
+      }
+    }
+
+    let normalizedShortcuts = StreamShortcutProfile.normalizedShortcuts(streamShortcuts)
+    for (_, streamShortcut) in normalizedShortcuts {
+      if streamShortcut.isEqual(shortcut) {
+        return "Shortcut already in use"
+      }
+    }
+
+    return nil
+  }
+
+  @objc static func validationErrorKey(forRemoteOutput shortcut: StreamShortcut) -> String? {
+    if shortcut.modifierOnly || !shortcut.hasKeyCode {
+      return "Shortcut must include regular key"
+    }
+    if StreamShortcutProfile.keySymbol(for: shortcut.keyCode) == nil {
+      return "Shortcut key unsupported"
+    }
+    return nil
+  }
+}

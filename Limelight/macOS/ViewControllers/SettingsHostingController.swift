@@ -102,6 +102,7 @@ private struct WelcomePermissionsView: View {
               subtitle: "Input Monitoring detail",
               stateLabel: inputStatusText,
               isGranted: inputMonitoringManager.isGranted,
+              supplementalMessageKey: inputMonitoringManager.supplementalStatusMessageKey,
               actionTitle: inputActionTitle,
               action: inputAction
             )
@@ -155,6 +156,7 @@ private struct WelcomePermissionsView: View {
     subtitle: String,
     stateLabel: String,
     isGranted: Bool,
+    supplementalMessageKey: String? = nil,
     actionTitle: String?,
     action: (() -> Void)?
   ) -> some View {
@@ -184,49 +186,31 @@ private struct WelcomePermissionsView: View {
           .controlSize(.small)
         }
       }
+
+      if let supplementalMessageKey {
+        Text(languageManager.localize(supplementalMessageKey))
+          .font(.footnote)
+          .foregroundColor(.secondary)
+      }
     }
   }
 
   private var inputStatusText: String {
-    switch inputMonitoringManager.authorizationState {
-    case .granted:
-      return "Granted"
-    case .grantedNeedsReentry:
-      return "Granted Pending Reentry"
-    case .denied:
-      return "Denied"
-    case .notDetermined:
-      return "Not Granted"
-    case .unsupported:
-      return "Unavailable"
-    @unknown default:
-      return "Not Granted"
-    }
+    inputMonitoringManager.displayStatusLabelKey
   }
 
   private var inputActionTitle: String? {
-    switch inputMonitoringManager.authorizationState {
-    case .granted, .grantedNeedsReentry, .unsupported:
-      return nil
-    case .denied:
-      return "Open Settings"
-    case .notDetermined:
-      return "Request"
-    @unknown default:
-      return "Request"
-    }
+    inputMonitoringManager.primaryActionTitleKey
   }
 
   private func inputAction() {
-    switch inputMonitoringManager.authorizationState {
-    case .denied:
+    switch inputMonitoringManager.primaryActionTitleKey {
+    case "Request":
+      inputMonitoringManager.requestAuthorization()
+    case "Open Settings":
       inputMonitoringManager.openSystemPreferences()
-    case .notDetermined:
-      inputMonitoringManager.requestAuthorization()
-    case .granted, .grantedNeedsReentry, .unsupported:
+    default:
       break
-    @unknown default:
-      inputMonitoringManager.requestAuthorization()
     }
   }
 

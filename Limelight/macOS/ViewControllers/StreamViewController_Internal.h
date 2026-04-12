@@ -51,8 +51,10 @@ static NSString * const MLShortcutActionReleaseMouseCapture = @"releaseMouseCapt
 static NSString * const MLShortcutActionTogglePerformanceOverlay = @"togglePerformanceOverlay";
 static NSString * const MLShortcutActionToggleMouseMode = @"toggleMouseMode";
 static NSString * const MLShortcutActionToggleFullscreenControlBall = @"toggleFullscreenControlBall";
+static NSString * const MLShortcutActionShowDisconnectOptions = @"showDisconnectOptions";
 static NSString * const MLShortcutActionDisconnectStream = @"disconnectStream";
 static NSString * const MLShortcutActionCloseAndQuitApp = @"closeAndQuitApp";
+static NSString * const MLShortcutActionReconnectStream = @"reconnectStream";
 static NSString * const MLShortcutActionOpenControlCenter = @"openControlCenter";
 static NSString * const MLShortcutActionToggleBorderlessWindowed = @"toggleBorderlessWindowed";
 
@@ -420,6 +422,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL didAutoReconnectAfterTimeout;
 
 @property (nonatomic, strong) id settingsDidChangeObserver;
+@property (nonatomic, strong) id streamShortcutSettingsDidChangeObserver;
 @property (nonatomic, strong) id mouseSettingsDidChangeObserver;
 @property (nonatomic, strong) id hostLatencyUpdatedObserver;
 
@@ -609,7 +612,9 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
                                         clampToBounds:(BOOL)clampToBounds
                                                reason:(NSString *)reason;
 - (void)reassertHiddenLocalCursorIfNeededWithReason:(NSString *)reason;
+- (void)prepareCoreHIDVirtualCursorForSystemPointerSyncIfNeeded;
 - (void)syncRemoteCursorToCurrentPointerClamped;
+- (void)syncRemoteCursorToViewPoint:(NSPoint)viewPoint clampToBounds:(BOOL)clampToBounds;
 - (void)reconcileHybridFreeMouseAnchorToCurrentPointer;
 - (void)syncRemoteCursorToMouseEvent:(NSEvent *)event clampToBounds:(BOOL)clampToBounds;
 - (MLFreeMouseExitEdge)freeMouseExitEdgeForEvent:(NSEvent *)event;
@@ -783,4 +788,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)showNotification:(NSString *)message;
 - (void)showNotification:(NSString *)message forSeconds:(NSTimeInterval)seconds;
 - (CGPathRef)CGPathFromNSBezierPath:(NSBezierPath *)bezierPath;
+@end
+
+@interface StreamViewController (InternalTeardown)
+- (void)tearDownControllerSupportOnMainThreadIfNeeded;
 @end

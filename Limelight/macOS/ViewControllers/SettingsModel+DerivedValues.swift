@@ -167,6 +167,54 @@ import VideoToolbox
   }
 }
 
+@objc enum KeyboardCompatibilityMode: Int, CaseIterable {
+  case standard = 0
+  case commandToControl = 1
+  case swapLeftControlAndWin = 2
+  case shortcutTranslation = 3
+  case hybrid = 4
+
+  static let defaultMode: Self = .standard
+
+  init(persistedRawValue: Int?) {
+    switch persistedRawValue {
+    case KeyboardCompatibilityMode.commandToControl.rawValue:
+      self = .commandToControl
+    case KeyboardCompatibilityMode.swapLeftControlAndWin.rawValue:
+      self = .swapLeftControlAndWin
+    case KeyboardCompatibilityMode.shortcutTranslation.rawValue:
+      self = .shortcutTranslation
+    case KeyboardCompatibilityMode.hybrid.rawValue:
+      self = .hybrid
+    default:
+      self = .standard
+    }
+  }
+
+  init(selection: String) {
+    self = Self.allCases.first(where: { $0.displayKey == selection }) ?? Self.defaultMode
+  }
+
+  var displayKey: String {
+    switch self {
+    case .standard:
+      return "Keep Mac Shortcuts"
+    case .commandToControl:
+      return "⌘ Always as Ctrl"
+    case .swapLeftControlAndWin:
+      return "Left Ctrl ↔ Left Win"
+    case .shortcutTranslation:
+      return "Mac Shortcuts as Windows Shortcuts"
+    case .hybrid:
+      return "Windows Shortcuts + Left Ctrl ↔ Left Win"
+    }
+  }
+
+  static var displayKeys: [String] {
+    Self.allCases.map(\.displayKey)
+  }
+}
+
 extension SettingsModel {
   func refreshConnectionCandidates() {
     guard let hostId = selectedHost?.id, hostId != Self.globalHostId else { return }
@@ -331,6 +379,7 @@ extension SettingsModel {
   static var physicalWheelModes: [String] = PhysicalWheelScrollMode.displayKeys
   static var rewrittenScrollModes: [String] = RewrittenScrollMode.displayKeys
   static var freeMouseMotionModes: [String] = FreeMouseMotionMode.displayKeys
+  static var keyboardCompatibilityModes: [String] = KeyboardCompatibilityMode.displayKeys
   static var coreHIDMaxMouseReportRates: [Int] = [1000, 2000, 4000, 8000, 500, 250, 125, 0]
   static var mouseModes: [String] = ["game", "remote"]
   static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
@@ -406,6 +455,7 @@ extension SettingsModel {
   static let defaultShowPerformanceOverlay = false
   static let defaultShowConnectionWarnings = true
   static let defaultCaptureSystemShortcuts = false
+  static let defaultKeyboardCompatibilityMode = KeyboardCompatibilityMode.defaultMode.displayKey
   static let defaultVolumeLevel = 1.0
   static let defaultMultiControllerMode = "Auto"
   static let defaultSwapButtons = false

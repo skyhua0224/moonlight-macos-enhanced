@@ -57,7 +57,7 @@ struct VideoView: View {
 
   var body: some View {
     ScrollView {
-      VStack {
+      LazyVStack {
         FormSection(title: "Video") {
           FormCell(
             title: "Video Codec", contentWidth: 200,
@@ -213,4 +213,3 @@ struct VideoView: View {
     }
   }
 }
-

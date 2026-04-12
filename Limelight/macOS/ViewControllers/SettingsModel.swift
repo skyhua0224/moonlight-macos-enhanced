@@ -25,6 +25,7 @@ struct ConnectionCandidate: Identifiable {
 class SettingsModel: ObservableObject {
   static let globalHostId = "__global__"
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
+  static let streamShortcutsChangedNotification = Notification.Name("MoonlightStreamShortcutsDidChange")
   static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
   static let debugLogModeKey = "debugLog.mode"
   static let debugLogMinLevelKey = "debugLog.minLevel"
@@ -35,8 +36,13 @@ class SettingsModel: ObservableObject {
   static let awdlStabilityHelperEnabledKey = "networkCompatibility.awdlHelperEnabled"
   static let awdlStabilityHelperAcknowledgedKey = "networkCompatibility.awdlHelperAcknowledged"
 
+  static func keyboardTranslationRulesStorageKey(for hostId: String) -> String {
+    "\(hostId)-moonlightKeyboardTranslationRules"
+  }
+
   var latencyCache: [String: [String: Any]] = [:]
   var selectedProfileObserver: NSObjectProtocol?
+  var hasLoadedPersistedSettings = false
 
   private func postMouseSettingsChanged(_ setting: String) {
     let hostId = selectedHost?.id ?? Self.globalHostId
@@ -46,6 +52,16 @@ class SettingsModel: ObservableObject {
       userInfo: [
         "hostId": hostId,
         "setting": setting,
+      ])
+  }
+
+  private func postStreamShortcutsChanged() {
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    NotificationCenter.default.post(
+      name: Self.streamShortcutsChangedNotification,
+      object: nil,
+      userInfo: [
+        "hostId": hostId,
       ])
   }
 
@@ -131,11 +147,20 @@ class SettingsModel: ObservableObject {
   }
 
   func selectHost(id: String?) {
+    let currentHostId = selectedHost?.id
     if let id {
+      if currentHostId == id {
+        ensureSettingsLoadedIfNeeded()
+        return
+      }
       if let host = Self.hosts?.compactMap({ $0 }).first(where: { $0.id == id }) {
         selectedHost = host
       }
     } else {
+      if currentHostId == Self.globalHostId {
+        ensureSettingsLoadedIfNeeded()
+        return
+      }
       if let host = Self.hosts?.compactMap({ $0 }).first(where: { $0.id == Self.globalHostId }) {
         selectedHost = host
       }
@@ -457,6 +482,18 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var selectedKeyboardCompatibilityMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var keyboardTranslationRules: [KeyboardTranslationRule] {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var volumeLevel: CGFloat {
     didSet {
       guard !isLoading else { return }
@@ -633,6 +670,7 @@ class SettingsModel: ObservableObject {
     didSet {
       guard !isLoading else { return }
       saveSettings()
+      postStreamShortcutsChanged()
     }
   }
   @Published var selectedTouchscreenMode: String {
@@ -815,6 +853,8 @@ class SettingsModel: ObservableObject {
     showPerformanceOverlay = Self.defaultShowPerformanceOverlay
     showConnectionWarnings = Self.defaultShowConnectionWarnings
     captureSystemShortcuts = Self.defaultCaptureSystemShortcuts
+    selectedKeyboardCompatibilityMode = Self.defaultKeyboardCompatibilityMode
+    keyboardTranslationRules = KeyboardTranslationProfile.defaultRules()
     volumeLevel = Self.defaultVolumeLevel
 
     selectedMultiControllerMode = Self.defaultMultiControllerMode

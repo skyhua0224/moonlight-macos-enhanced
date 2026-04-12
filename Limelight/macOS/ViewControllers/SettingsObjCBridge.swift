@@ -67,6 +67,8 @@ class SettingsClass: NSObject {
         "showPerformanceOverlay": settings.showPerformanceOverlay,
         "showConnectionWarnings": settings.showConnectionWarnings,
         "captureSystemShortcuts": settings.captureSystemShortcuts,
+        "keyboardCompatibilityMode":
+          settings.keyboardCompatibilityMode ?? KeyboardCompatibilityMode.defaultMode.rawValue,
         "volumeLevel": settings.volumeLevel,
         "multiController": settings.multiController,
         "swapABXYButtons": settings.swapABXYButtons,
@@ -197,6 +199,7 @@ class SettingsClass: NSObject {
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
       captureSystemShortcuts: settings.captureSystemShortcuts,
+      keyboardCompatibilityMode: settings.keyboardCompatibilityMode,
       volumeLevel: settings.volumeLevel,
       multiController: settings.multiController,
       swapABXYButtons: settings.swapABXYButtons,
@@ -279,6 +282,7 @@ class SettingsClass: NSObject {
         showPerformanceOverlay: updated.showPerformanceOverlay,
         showConnectionWarnings: updated.showConnectionWarnings,
         captureSystemShortcuts: updated.captureSystemShortcuts,
+        keyboardCompatibilityMode: updated.keyboardCompatibilityMode,
         volumeLevel: updated.volumeLevel,
         multiController: updated.multiController,
         swapABXYButtons: updated.swapABXYButtons,
@@ -361,6 +365,7 @@ class SettingsClass: NSObject {
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
       captureSystemShortcuts: settings.captureSystemShortcuts,
+      keyboardCompatibilityMode: settings.keyboardCompatibilityMode,
       volumeLevel: settings.volumeLevel,
       multiController: settings.multiController,
       swapABXYButtons: settings.swapABXYButtons,
@@ -987,6 +992,13 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultCaptureSystemShortcuts
   }
 
+  @objc static func keyboardCompatibilityMode(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.keyboardCompatibilityMode ?? KeyboardCompatibilityMode.defaultMode.rawValue
+    }
+    return KeyboardCompatibilityMode.defaultMode.rawValue
+  }
+
   @objc static func quitAppAfterStream(for key: String) -> Bool {
     if let settings = Settings.getSettings(for: key) {
       return settings.quitAppAfterStream ?? SettingsModel.defaultQuitAppAfterStream
@@ -1041,6 +1053,10 @@ class SettingsClass: NSObject {
       return StreamShortcutProfile.normalizedShortcuts(settings.streamShortcuts)
     }
     return StreamShortcutProfile.defaultShortcuts()
+  }
+
+  @objc static func keyboardTranslationRules(for key: String) -> [KeyboardTranslationRule] {
+    SettingsModel.loadKeyboardTranslationRules(for: key)
   }
 
   @objc static func upscalingMode(for key: String) -> Int {

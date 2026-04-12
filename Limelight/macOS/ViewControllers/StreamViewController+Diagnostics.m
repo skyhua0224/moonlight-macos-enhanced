@@ -2412,11 +2412,10 @@
             }
 
             if (strongSelf.useSystemControllerDriver) {
-                [strongSelf.controllerSupport cleanup];
+                [strongSelf tearDownControllerSupportOnMainThreadIfNeeded];
             }
             [strongSelf.hidSupport tearDownHidManager];
             strongSelf.hidSupport = nil;
-            strongSelf.controllerSupport = nil;
 
             // Restart streaming without leaving the page.
             [strongSelf prepareForStreaming];
