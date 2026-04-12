@@ -85,4 +85,7 @@ xcrun clang \
 /usr/bin/codesign --remove-signature "$helper_output_path" >/dev/null 2>&1 || true
 if [[ "${has_signing_identity}" -eq 1 ]]; then
   /usr/bin/codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" --timestamp=none "$helper_output_path"
+else
+  echo "note: Applying ad-hoc signature to AWDL helper"
+  /usr/bin/codesign --force --sign - --timestamp=none "$helper_output_path"
 fi

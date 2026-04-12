@@ -33,14 +33,106 @@ static NSString * const MLAwdlIfconfigToolPath = @"/sbin/ifconfig";
     return [bundlePath stringByAppendingPathComponent:[NSString stringWithFormat:@"Contents/Library/LaunchServices/%@", [self helperLabel]]];
 }
 
-+ (BOOL)bundledPrivilegedHelperAvailable {
-    NSString *helperPath = [self bundledHelperPath];
++ (NSString *)installedHelperPath {
+    return [@"/Library/PrivilegedHelperTools" stringByAppendingPathComponent:[self helperLabel]];
+}
+
++ (BOOL)helperExistsAtPath:(NSString *)helperPath {
     if (helperPath.length == 0) {
         return NO;
     }
 
     BOOL isDirectory = NO;
     return [[NSFileManager defaultManager] fileExistsAtPath:helperPath isDirectory:&isDirectory] && !isDirectory;
+}
+
++ (BOOL)helperAtPathHasUsableSignature:(NSString *)helperPath {
+    if (![self helperExistsAtPath:helperPath]) {
+        return NO;
+    }
+
+    NSURL *helperURL = [NSURL fileURLWithPath:helperPath];
+    SecStaticCodeRef staticCode = NULL;
+    OSStatus createStatus = SecStaticCodeCreateWithPath((__bridge CFURLRef)helperURL, kSecCSDefaultFlags, &staticCode);
+    if (createStatus != errSecSuccess || staticCode == NULL) {
+        if (staticCode != NULL) {
+            CFRelease(staticCode);
+        }
+        return NO;
+    }
+
+    OSStatus validateStatus = SecStaticCodeCheckValidity(staticCode, kSecCSBasicValidateOnly, NULL);
+    CFRelease(staticCode);
+    return validateStatus == errSecSuccess;
+}
+
++ (BOOL)applicationAtPathSupportsPrivilegedHelperBlessing:(NSString *)applicationPath {
+    if (applicationPath.length == 0) {
+        return NO;
+    }
+
+    NSURL *applicationURL = [NSURL fileURLWithPath:applicationPath];
+    SecStaticCodeRef staticCode = NULL;
+    OSStatus createStatus = SecStaticCodeCreateWithPath((__bridge CFURLRef)applicationURL, kSecCSDefaultFlags, &staticCode);
+    if (createStatus != errSecSuccess || staticCode == NULL) {
+        if (staticCode != NULL) {
+            CFRelease(staticCode);
+        }
+        return NO;
+    }
+
+    if (SecStaticCodeCheckValidity(staticCode, kSecCSBasicValidateOnly, NULL) != errSecSuccess) {
+        CFRelease(staticCode);
+        return NO;
+    }
+
+    CFDictionaryRef signingInfoRef = NULL;
+    OSStatus infoStatus = SecCodeCopySigningInformation(staticCode, kSecCSSigningInformation, &signingInfoRef);
+    CFRelease(staticCode);
+    if (infoStatus != errSecSuccess || signingInfoRef == NULL) {
+        if (signingInfoRef != NULL) {
+            CFRelease(signingInfoRef);
+        }
+        return NO;
+    }
+
+    NSDictionary *signingInfo = CFBridgingRelease(signingInfoRef);
+    NSString *teamIdentifier = signingInfo[(__bridge NSString *)kSecCodeInfoTeamIdentifier];
+    return teamIdentifier.length > 0;
+}
+
++ (BOOL)bundledPrivilegedHelperAvailable {
+    NSString *helperPath = [self bundledHelperPath];
+    return [self helperAtPathHasUsableSignature:helperPath];
+}
+
++ (BOOL)bundledPrivilegedHelperHasUsableSignature {
+    return [self helperAtPathHasUsableSignature:[self bundledHelperPath]];
+}
+
++ (BOOL)installedPrivilegedHelperHasUsableSignature {
+    return [self helperAtPathHasUsableSignature:[self installedHelperPath]];
+}
+
++ (BOOL)mainApplicationSupportsPrivilegedHelperBlessing {
+    return [self applicationAtPathSupportsPrivilegedHelperBlessing:[[NSBundle mainBundle] bundlePath]];
+}
+
++ (BOOL)privilegedHelperLaunchdJobLoaded {
+    NSTask *task = [[NSTask alloc] init];
+    task.launchPath = @"/bin/launchctl";
+    task.arguments = @[@"print", [@"system/" stringByAppendingString:[self helperLabel]]];
+    task.standardOutput = [NSPipe pipe];
+    task.standardError = [NSPipe pipe];
+
+    @try {
+        [task launch];
+        [task waitUntilExit];
+    } @catch (NSException *exception) {
+        return NO;
+    }
+
+    return task.terminationStatus == 0;
 }
 
 + (NSString *)messageForStatus:(OSStatus)status fallback:(NSString *)fallback {
@@ -217,7 +309,7 @@ static NSString * const MLAwdlIfconfigToolPath = @"/sbin/ifconfig";
 
     NSXPCConnection *connection = [self helperConnection];
     id<MLAwdlPrivilegedHelperProtocol> proxy =
-        [connection synchronousRemoteObjectProxyWithErrorHandler:^(NSError *proxyError) {
+        [connection remoteObjectProxyWithErrorHandler:^(NSError *proxyError) {
             message = proxyError.localizedDescription ?: @"Unable to contact the AWDL privileged helper.";
             dispatch_semaphore_signal(semaphore);
         }];
@@ -288,6 +380,10 @@ static NSString * const MLAwdlIfconfigToolPath = @"/sbin/ifconfig";
     NSString *connectionError = nil;
     if ([self queryHelperInstalledWithErrorMessage:&connectionError]) {
         return YES;
+    }
+
+    if (![self mainApplicationSupportsPrivilegedHelperBlessing]) {
+        return [self prepareExecutionAuthorizationWithPrompt:prompt errorMessage:errorMessage];
     }
 
     if (MLAwdlAuthorizationPrepared) {
@@ -362,14 +458,18 @@ static NSString * const MLAwdlIfconfigToolPath = @"/sbin/ifconfig";
 + (BOOL)runIfconfigArgument:(NSString *)argument
                      prompt:(NSString *)prompt
                errorMessage:(NSString * _Nullable * _Nullable)errorMessage {
-    if (![self bundledPrivilegedHelperAvailable]) {
+    BOOL hasBundledHelper = [self bundledPrivilegedHelperAvailable];
+    BOOL canBlessHelper = [self mainApplicationSupportsPrivilegedHelperBlessing];
+    BOOL helperInstalled = hasBundledHelper ? [self queryHelperInstalledWithErrorMessage:nil] : NO;
+
+    if (!hasBundledHelper || (!helperInstalled && !canBlessHelper)) {
         if (![self prepareExecutionAuthorizationWithPrompt:prompt errorMessage:errorMessage]) {
             return NO;
         }
         return [self runIfconfigArgumentViaAuthorizationExecute:argument errorMessage:errorMessage];
     }
 
-    if (![self prepareSessionWithPrompt:prompt errorMessage:errorMessage]) {
+    if (!helperInstalled && ![self prepareSessionWithPrompt:prompt errorMessage:errorMessage]) {
         return NO;
     }
 
@@ -379,7 +479,7 @@ static NSString * const MLAwdlIfconfigToolPath = @"/sbin/ifconfig";
 
     NSXPCConnection *connection = [self helperConnection];
     id<MLAwdlPrivilegedHelperProtocol> proxy =
-        [connection synchronousRemoteObjectProxyWithErrorHandler:^(NSError *proxyError) {
+        [connection remoteObjectProxyWithErrorHandler:^(NSError *proxyError) {
             message = proxyError.localizedDescription ?: @"Unable to contact the AWDL privileged helper.";
             dispatch_semaphore_signal(semaphore);
         }];

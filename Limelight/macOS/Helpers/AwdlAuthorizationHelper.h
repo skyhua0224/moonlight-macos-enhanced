@@ -6,6 +6,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (BOOL)bundledPrivilegedHelperAvailable;
 
++ (BOOL)bundledPrivilegedHelperHasUsableSignature;
+
++ (BOOL)installedPrivilegedHelperHasUsableSignature;
+
++ (BOOL)mainApplicationSupportsPrivilegedHelperBlessing;
+
++ (BOOL)privilegedHelperLaunchdJobLoaded;
+
 + (BOOL)prepareSessionWithPrompt:(NSString *)prompt
                     errorMessage:(NSString * _Nullable * _Nullable)errorMessage;
 
