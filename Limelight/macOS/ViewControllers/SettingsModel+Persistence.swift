@@ -12,9 +12,41 @@ import SwiftUI
 import VideoToolbox
 
 extension SettingsModel {
+  private static func decodeKeyboardTranslationRules(from data: Data?) -> [KeyboardTranslationRule]? {
+    guard let data else { return nil }
+    return try? PropertyListDecoder().decode([KeyboardTranslationRule].self, from: data)
+  }
+
+  static func loadKeyboardTranslationRules(for hostId: String) -> [KeyboardTranslationRule] {
+    let userDefaults = UserDefaults.standard
+    let hostKey = keyboardTranslationRulesStorageKey(for: hostId)
+    if let rules = decodeKeyboardTranslationRules(from: userDefaults.data(forKey: hostKey)) {
+      return KeyboardTranslationProfile.normalizedRules(rules)
+    }
+
+    if hostId != globalHostId {
+      let globalKey = keyboardTranslationRulesStorageKey(for: globalHostId)
+      if let rules = decodeKeyboardTranslationRules(from: userDefaults.data(forKey: globalKey)) {
+        return KeyboardTranslationProfile.normalizedRules(rules)
+      }
+    }
+
+    return KeyboardTranslationProfile.defaultRules()
+  }
+
+  private func persistKeyboardTranslationRules(for hostId: String) {
+    let normalized = KeyboardTranslationProfile.normalizedRules(keyboardTranslationRules)
+    if let data = try? PropertyListEncoder().encode(normalized) {
+      UserDefaults.standard.set(data, forKey: Self.keyboardTranslationRulesStorageKey(for: hostId))
+    }
+  }
+
   func loadDefaultSettings() {
     isLoading = true
-    defer { isLoading = false }
+    defer {
+      isLoading = false
+      hasLoadedPersistedSettings = true
+    }
 
     selectedResolution = Self.defaultResolution
     customResWidth = Self.defaultCustomResWidth
@@ -59,6 +91,8 @@ extension SettingsModel {
     showPerformanceOverlay = Self.defaultShowPerformanceOverlay
     showConnectionWarnings = Self.defaultShowConnectionWarnings
     captureSystemShortcuts = Self.defaultCaptureSystemShortcuts
+    selectedKeyboardCompatibilityMode = Self.defaultKeyboardCompatibilityMode
+    keyboardTranslationRules = KeyboardTranslationProfile.defaultRules()
     volumeLevel = Self.defaultVolumeLevel
 
     selectedMultiControllerMode = Self.defaultMultiControllerMode
@@ -107,10 +141,12 @@ extension SettingsModel {
 
   func loadSettings() {
     var shouldPersistMigratedMouseSettings = false
+    var shouldPersistMigratedShortcutSettings = false
     isLoading = true
     defer {
       isLoading = false
-      if shouldPersistMigratedMouseSettings {
+      hasLoadedPersistedSettings = true
+      if shouldPersistMigratedMouseSettings || shouldPersistMigratedShortcutSettings {
         saveSettings()
       }
     }
@@ -200,6 +236,10 @@ extension SettingsModel {
         settings.showConnectionWarnings ?? SettingsModel.defaultShowConnectionWarnings
       captureSystemShortcuts =
         settings.captureSystemShortcuts ?? SettingsModel.defaultCaptureSystemShortcuts
+      selectedKeyboardCompatibilityMode = KeyboardCompatibilityMode(
+        persistedRawValue: settings.keyboardCompatibilityMode
+      ).displayKey
+      keyboardTranslationRules = Self.loadKeyboardTranslationRules(for: hostId)
       volumeLevel = settings.volumeLevel ?? SettingsModel.defaultVolumeLevel
 
       selectedMultiControllerMode = Self.getString(
@@ -261,7 +301,9 @@ extension SettingsModel {
       selectedRewrittenScrollMode = RewrittenScrollMode(
         persistedRawValue: settings.rewrittenScrollMode
       ).displayKey
-      streamShortcuts = StreamShortcutProfile.normalizedShortcuts(settings.streamShortcuts)
+      let migratedShortcuts = StreamShortcutProfile.migratedShortcuts(settings.streamShortcuts)
+      streamShortcuts = migratedShortcuts.0
+      shouldPersistMigratedShortcutSettings = migratedShortcuts.1
       selectedTouchscreenMode = Self.getString(
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
@@ -469,6 +511,9 @@ extension SettingsModel {
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,
       captureSystemShortcuts: captureSystemShortcuts,
+      keyboardCompatibilityMode: KeyboardCompatibilityMode(
+        selection: selectedKeyboardCompatibilityMode
+      ).rawValue,
       volumeLevel: volumeLevel,
       multiController: multiController,
       swapABXYButtons: swapButtons,
@@ -509,9 +554,12 @@ extension SettingsModel {
       timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround
     )
 
+    let profileKey = SettingsClass.profileKey(for: hostId)
     if let data = try? PropertyListEncoder().encode(settings) {
-      UserDefaults.standard.set(data, forKey: SettingsClass.profileKey(for: hostId))
+      UserDefaults.standard.set(data, forKey: profileKey)
+      Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
     }
+    persistKeyboardTranslationRules(for: hostId)
   }
 
   func shortcut(for action: String) -> StreamShortcut {
@@ -535,5 +583,25 @@ extension SettingsModel {
 
   func isDefaultShortcut(for action: String) -> Bool {
     shortcut(for: action).isEqual(StreamShortcutProfile.defaultShortcut(for: action))
+  }
+
+  func upsertKeyboardTranslationRule(_ rule: KeyboardTranslationRule) {
+    var updated = KeyboardTranslationProfile.normalizedRules(keyboardTranslationRules)
+    if let index = updated.firstIndex(where: { $0.id == rule.id }) {
+      updated[index] = rule
+    } else {
+      updated.append(rule)
+    }
+    keyboardTranslationRules = KeyboardTranslationProfile.normalizedRules(updated)
+  }
+
+  func removeKeyboardTranslationRule(id: String) {
+    keyboardTranslationRules = KeyboardTranslationProfile.normalizedRules(
+      keyboardTranslationRules.filter { $0.id != id })
+  }
+
+  func ensureSettingsLoadedIfNeeded() {
+    guard !hasLoadedPersistedSettings else { return }
+    loadSettings()
   }
 }

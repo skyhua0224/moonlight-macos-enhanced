@@ -17,6 +17,7 @@ struct InputView: View {
   @ObservedObject var languageManager = LanguageManager.shared
   @ObservedObject private var inputMonitoringManager = InputMonitoringPermissionManager.sharedManager
   @AppStorage("settings.input.mouseAdvancedExpanded") private var mouseAdvancedExpanded = false
+  @AppStorage("settings.input.mouseTuningExpanded") private var mouseTuningExpanded = false
   @AppStorage("settings.input.controllerAdvancedExpanded") private var controllerAdvancedExpanded =
     false
 
@@ -43,9 +44,24 @@ struct InputView: View {
       || settingsModel.smartWheelTailFilter > 0.0001
   }
 
+  private var selectedKeyboardTranslationDetailKey: String {
+    switch KeyboardCompatibilityMode(selection: settingsModel.selectedKeyboardCompatibilityMode) {
+    case .standard:
+      return "Shortcut Translation Mode Keep Mac detail"
+    case .commandToControl:
+      return "Shortcut Translation Mode CommandToControl detail"
+    case .swapLeftControlAndWin:
+      return "Shortcut Translation Mode SwapLeftControlAndWin detail"
+    case .shortcutTranslation:
+      return "Shortcut Translation Mode ShortcutTranslation detail"
+    case .hybrid:
+      return "Shortcut Translation Mode Hybrid detail"
+    }
+  }
+
   var body: some View {
     ScrollView {
-      VStack(spacing: 32) {
+      LazyVStack(spacing: 32) {
         mouseSection
         keyboardSection
         controllerSection
@@ -109,106 +125,117 @@ struct InputView: View {
         Divider()
       }
 
-      MouseTuningSliderRow(
-        title: "Pointer Speed",
-        value: $settingsModel.pointerSensitivity,
-        range: 0.25...3.0,
-        step: 0.05,
-        minLabel: "25%",
-        maxLabel: "300%"
-      )
-
-      Divider()
-
-      InlineSectionLabel(title: "Wheel")
-
-      PickerSettingRow(
-        title: "Physical Wheel Mode",
+      DisclosureGroup(
+        isExpanded: $mouseTuningExpanded,
         content: {
-          Picker("", selection: $settingsModel.selectedPhysicalWheelMode) {
-            ForEach(SettingsModel.physicalWheelModes, id: \.self) { mode in
-              Text(languageManager.localize(mode))
+          VStack(alignment: .leading, spacing: 16) {
+            MouseTuningSliderRow(
+              title: "Pointer Speed",
+              value: $settingsModel.pointerSensitivity,
+              range: 0.25...3.0,
+              step: 0.05,
+              minLabel: "25%",
+              maxLabel: "300%"
+            )
+
+            Divider()
+
+            InlineSectionLabel(title: "Wheel")
+
+            PickerSettingRow(
+              title: "Physical Wheel Mode",
+              content: {
+                Picker("", selection: $settingsModel.selectedPhysicalWheelMode) {
+                  ForEach(SettingsModel.physicalWheelModes, id: \.self) { mode in
+                    Text(languageManager.localize(mode))
+                  }
+                }
+                .labelsHidden()
+              })
+
+            Divider()
+
+            MouseTuningSliderRow(
+              title: "Physical Wheel Speed",
+              value: $settingsModel.wheelScrollSpeed,
+              range: 0.1...4.0,
+              step: 0.05,
+              minLabel: "10%",
+              maxLabel: "400%"
+            )
+
+            if showsHighPrecisionWheelTuning {
+              Divider()
+
+              MouseTuningSliderRow(
+                title: "High Precision Wheel Speed",
+                value: $settingsModel.physicalWheelHighPrecisionScale,
+                range: 1.0...12.0,
+                step: 0.25,
+                minLabel: "1×",
+                maxLabel: "12×",
+                valueFormatter: { value in
+                  String(format: "%.2fx", value)
+                }
+              )
             }
-          }
-          .labelsHidden()
-        })
 
-      Divider()
+            Divider()
 
-      MouseTuningSliderRow(
-        title: "Physical Wheel Speed",
-        value: $settingsModel.wheelScrollSpeed,
-        range: 0.1...4.0,
-        step: 0.05,
-        minLabel: "10%",
-        maxLabel: "400%"
-      )
+            PickerSettingRow(
+              title: "Smooth Wheel Mode",
+              content: {
+                Picker("", selection: $settingsModel.selectedRewrittenScrollMode) {
+                  ForEach(SettingsModel.rewrittenScrollModes, id: \.self) { mode in
+                    Text(languageManager.localize(mode))
+                  }
+                }
+                .labelsHidden()
+              })
 
-      if showsHighPrecisionWheelTuning {
-        Divider()
+            Divider()
 
-        MouseTuningSliderRow(
-          title: "High Precision Wheel Speed",
-          value: $settingsModel.physicalWheelHighPrecisionScale,
-          range: 1.0...12.0,
-          step: 0.25,
-          minLabel: "1×",
-          maxLabel: "12×",
-          valueFormatter: { value in
-            String(format: "%.2fx", value)
-          }
-        )
-      }
+            MouseTuningSliderRow(
+              title: "Smooth Wheel Speed",
+              value: $settingsModel.rewrittenScrollSpeed,
+              range: 0.1...4.0,
+              step: 0.05,
+              minLabel: "10%",
+              maxLabel: "400%"
+            )
 
-      Divider()
+            if showsSmoothWheelTailFilter {
+              Divider()
 
-      PickerSettingRow(
-        title: "Smooth Wheel Mode",
-        content: {
-          Picker("", selection: $settingsModel.selectedRewrittenScrollMode) {
-            ForEach(SettingsModel.rewrittenScrollModes, id: \.self) { mode in
-              Text(languageManager.localize(mode))
+              MouseTuningSliderRow(
+                title: "Smooth Wheel Tail Filter",
+                value: $settingsModel.smartWheelTailFilter,
+                range: 0.0...1.0,
+                step: 0.02,
+                minLabel: "Off",
+                maxLabel: "1.00",
+                valueFormatter: { value in
+                  value <= 0.0001 ? languageManager.localize("Off") : String(format: "%.2f", value)
+                }
+              )
             }
+
+            Divider()
+
+            MouseTuningSliderRow(
+              title: "Trackpad Speed",
+              value: $settingsModel.gestureScrollSpeed,
+              range: 0.1...4.0,
+              step: 0.05,
+              minLabel: "10%",
+              maxLabel: "400%"
+            )
           }
-          .labelsHidden()
-        })
-
-      Divider()
-
-      MouseTuningSliderRow(
-        title: "Smooth Wheel Speed",
-        value: $settingsModel.rewrittenScrollSpeed,
-        range: 0.1...4.0,
-        step: 0.05,
-        minLabel: "10%",
-        maxLabel: "400%"
-      )
-
-      if showsSmoothWheelTailFilter {
-        Divider()
-
-        MouseTuningSliderRow(
-          title: "Smooth Wheel Tail Filter",
-          value: $settingsModel.smartWheelTailFilter,
-          range: 0.0...1.0,
-          step: 0.02,
-          minLabel: "Off",
-          maxLabel: "1.00",
-          valueFormatter: { value in
-            value <= 0.0001 ? languageManager.localize("Off") : String(format: "%.2f", value)
-          }
-        )
-      }
-
-      Divider()
-
-      MouseTuningSliderRow(
-        title: "Trackpad Speed",
-        value: $settingsModel.gestureScrollSpeed,
-        range: 0.1...4.0,
-        step: 0.05,
-        minLabel: "10%",
-        maxLabel: "400%"
+          .padding(.top, 8)
+        },
+        label: {
+          SettingsDisclosureLabel(title: "Pointer & Scroll Tuning")
+        }
       )
 
       Divider()
@@ -275,16 +302,36 @@ struct InputView: View {
       )
     }
     .onAppear {
-      inputMonitoringManager.refreshAuthorizationStatus()
+      DispatchQueue.main.async {
+        inputMonitoringManager.refreshAuthorizationStatus()
+      }
     }
   }
 
   private var keyboardSection: some View {
     FormSection(title: "Keyboard") {
+      PickerSettingRow(
+        title: "Keyboard Compatibility",
+        detailKey: selectedKeyboardTranslationDetailKey,
+        content: {
+          Picker("", selection: $settingsModel.selectedKeyboardCompatibilityMode) {
+            ForEach(SettingsModel.keyboardCompatibilityModes, id: \.self) { mode in
+              Text(languageManager.localize(mode))
+            }
+          }
+          .labelsHidden()
+        })
+
+      Divider()
+
       ToggleCell(
         title: "Capture system keyboard shortcuts",
         boolBinding: $settingsModel.captureSystemShortcuts
       )
+
+      Divider()
+
+      KeyboardTranslationRulesView(settingsModel: settingsModel)
 
       Divider()
 
@@ -499,10 +546,13 @@ private struct CoreHIDPermissionRow: View {
 
       SettingDescriptionRow(textKey: "Input Monitoring detail")
 
-      if !permissionManager.lastFailureMessage.isEmpty &&
-          permissionManager.authorizationState != .granted &&
-          permissionManager.authorizationState != .grantedNeedsReentry {
-        Text(permissionManager.lastFailureMessage)
+      if let supplementalMessageKey = permissionManager.supplementalStatusMessageKey {
+        Text(languageManager.localize(supplementalMessageKey))
+          .font(.footnote)
+          .foregroundColor(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      } else if let failureMessage = permissionManager.rawFailureMessageForDisplay {
+        Text(failureMessage)
           .font(.footnote)
           .foregroundColor(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -516,18 +566,18 @@ private struct CoreHIDPermissionRow: View {
       ProgressView()
         .controlSize(.small)
     } else {
-      switch permissionManager.authorizationState {
-      case .granted:
+      switch permissionManager.displayStatusLabelKey {
+      case "Granted":
         Label(languageManager.localize("Granted"), systemImage: "checkmark.circle.fill")
           .foregroundColor(.green)
           .font(.callout)
-      case .grantedNeedsReentry:
+      case "Granted Pending Reentry":
         Label(languageManager.localize("Granted Pending Reentry"), systemImage: "arrow.triangle.2.circlepath.circle.fill")
           .foregroundColor(.green)
           .font(.callout)
-      case .denied:
+      case "Checking":
         HStack(spacing: 8) {
-          Text(languageManager.localize("Denied"))
+          Text(languageManager.localize("Checking"))
             .foregroundColor(.secondary)
             .font(.callout)
           Button(languageManager.localize("Open Settings")) {
@@ -535,7 +585,17 @@ private struct CoreHIDPermissionRow: View {
           }
           .controlSize(.small)
         }
-      case .notDetermined:
+      case "Check Settings", "Denied":
+        HStack(spacing: 8) {
+          Text(languageManager.localize(permissionManager.displayStatusLabelKey))
+            .foregroundColor(.secondary)
+            .font(.callout)
+          Button(languageManager.localize("Open Settings")) {
+            permissionManager.openSystemPreferences()
+          }
+          .controlSize(.small)
+        }
+      case "Not Granted":
         HStack(spacing: 8) {
           Text(languageManager.localize("Not Granted"))
             .foregroundColor(.secondary)
@@ -545,11 +605,11 @@ private struct CoreHIDPermissionRow: View {
           }
           .controlSize(.small)
         }
-      case .unsupported:
+      case "Unavailable":
         Text(languageManager.localize("Unavailable"))
           .foregroundColor(.secondary)
           .font(.callout)
-      @unknown default:
+      default:
         Text(languageManager.localize("Not Granted"))
           .foregroundColor(.secondary)
           .font(.callout)

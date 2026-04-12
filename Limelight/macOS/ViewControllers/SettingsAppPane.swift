@@ -208,7 +208,7 @@ struct AppView: View {
 
   var body: some View {
     ScrollView {
-      VStack {
+      LazyVStack {
         FormSection(title: "Behaviour") {
           FormCell(title: "Appearance", contentWidth: 170) {
             Picker("", selection: appAppearanceBinding) {
@@ -461,7 +461,9 @@ private struct AwdlNetworkCompatibilitySettingsSection: View {
       }
     }
     .onAppear {
-      awdlManager.refreshAuthorizationStatus()
+      DispatchQueue.main.async {
+        awdlManager.refreshAuthorizationStatus()
+      }
     }
   }
 }

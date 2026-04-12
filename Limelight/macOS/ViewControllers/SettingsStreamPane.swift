@@ -91,7 +91,7 @@ struct StreamView: View {
 
   var body: some View {
     ScrollView {
-      VStack {
+      LazyVStack {
         FormSection(title: "General") {
           if let hosts = SettingsModel.hosts {
             FormCell(title: "Profile:", contentWidth: 150) {

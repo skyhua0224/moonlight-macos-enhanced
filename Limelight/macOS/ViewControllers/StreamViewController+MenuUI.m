@@ -120,6 +120,11 @@
 - (void)updateConfiguredShortcutMenus {
     NSMenu *mainMenu = NSApp.mainMenu;
     if (mainMenu) {
+        StreamShortcut *disconnectOptionsShortcut = [self streamShortcutForAction:MLShortcutActionShowDisconnectOptions];
+        for (NSMenuItem *item in [self menuItemsWithAction:@selector(performClose:) inMenu:mainMenu]) {
+            [self applyShortcut:disconnectOptionsShortcut toMenuItem:item];
+        }
+
         StreamShortcut *disconnectShortcut = [self streamShortcutForAction:MLShortcutActionDisconnectStream];
         for (NSMenuItem *item in [self menuItemsWithAction:@selector(performCloseStreamWindow:) inMenu:mainMenu]) {
             [self applyShortcut:disconnectShortcut toMenuItem:item];
@@ -128,6 +133,11 @@
         StreamShortcut *quitShortcut = [self streamShortcutForAction:MLShortcutActionCloseAndQuitApp];
         for (NSMenuItem *item in [self menuItemsWithAction:@selector(performCloseAndQuitApp:) inMenu:mainMenu]) {
             [self applyShortcut:quitShortcut toMenuItem:item];
+        }
+
+        StreamShortcut *reconnectShortcut = [self streamShortcutForAction:MLShortcutActionReconnectStream];
+        for (NSMenuItem *item in [self menuItemsWithAction:@selector(reconnectFromMenu:) inMenu:mainMenu]) {
+            [self applyShortcut:reconnectShortcut toMenuItem:item];
         }
     }
 
@@ -646,6 +656,17 @@
     [self setEdgeMenuButtonExpanded:NO animated:YES];
 
     if (wasTemporary && shouldRecapture && [self canCaptureMouseNow]) {
+        if ([self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration] &&
+            self.isRemoteDesktopMode &&
+            self.view.window != nil) {
+            NSPoint currentPoint = [self currentMouseLocationInViewCoordinates];
+            NSPoint reseedPoint = NSMakePoint(
+                MIN(MAX(currentPoint.x, NSMinX(self.view.bounds)), NSMaxX(self.view.bounds)),
+                MIN(MAX(currentPoint.y, NSMinY(self.view.bounds)), NSMaxY(self.view.bounds))
+            );
+            [self prepareCoreHIDVirtualCursorForSystemPointerSyncIfNeeded];
+            [self syncRemoteCursorToViewPoint:reseedPoint clampToBounds:YES];
+        }
         [self captureMouse];
     } else {
         [self refreshMouseMovedAcceptanceState];
@@ -1322,6 +1343,7 @@
 
     // 一级顶部：重连
     NSMenuItem *reconnectItem = [[NSMenuItem alloc] initWithTitle:@"重连" action:@selector(reconnectFromMenu:) keyEquivalent:@""];
+    [self applyShortcut:[self streamShortcutForAction:MLShortcutActionReconnectStream] toMenuItem:reconnectItem];
     reconnectItem.target = self;
     setSymbol(reconnectItem, @"arrow.triangle.2.circlepath");
     [self.streamMenu addItem:reconnectItem];
@@ -1752,8 +1774,8 @@
 
     // 一级底部：退出
     [self.streamMenu addItem:[NSMenuItem separatorItem]];
-    NSMenuItem *disconnectItem = [[NSMenuItem alloc] initWithTitle:@"退出串流" action:@selector(performCloseStreamWindow:) keyEquivalent:@"w"];
-    disconnectItem.keyEquivalentModifierMask = NSEventModifierFlagCommand;
+    NSMenuItem *disconnectItem = [[NSMenuItem alloc] initWithTitle:@"退出串流" action:@selector(performCloseStreamWindow:) keyEquivalent:@""];
+    [self applyShortcut:[self streamShortcutForAction:MLShortcutActionDisconnectStream] toMenuItem:disconnectItem];
     disconnectItem.target = self;
     setSymbol(disconnectItem, @"xmark.circle");
     [self.streamMenu addItem:disconnectItem];

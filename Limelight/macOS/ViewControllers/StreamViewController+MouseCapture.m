@@ -14,9 +14,11 @@ static inline BOOL MLCGCursorIsVisibleCompat(void) {
 
 static NSTimeInterval const MLDeferredMouseUncaptureRecoveryDelay = 0.12;
 static CGFloat const MLCoreHIDFreeMouseCorrectionThreshold = 1.5;
-static CGFloat const MLCoreHIDFreeMouseExitHandoffNudge = 2.0;
-static CGFloat const MLCoreHIDFreeMouseReentryDelayMs = 24.0;
-static CGFloat const MLCoreHIDFreeMouseReentryInset = 8.0;
+static CGFloat const MLCoreHIDFreeMouseExitHandoffNudge = 1.5;
+static CGFloat const MLCoreHIDFreeMouseExitHandoffMaxProjectedOvershoot = 12.0;
+static CGFloat const MLCoreHIDFreeMouseExitThreshold = 1.0;
+static CGFloat const MLCoreHIDFreeMouseReentryDelayMs = 0.0;
+static CGFloat const MLCoreHIDFreeMouseReentryInset = 0.0;
 
 static inline CGFloat MLClampCGFloat(CGFloat value, CGFloat minValue, CGFloat maxValue) {
     return MIN(MAX(value, minValue), maxValue);
@@ -30,6 +32,34 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
     return (deltaX * deltaX) + (deltaY * deltaY);
 }
 
+static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
+                                                      NSRect bounds,
+                                                      MLFreeMouseExitEdge edge) {
+    NSPoint clampedPoint = point;
+    switch (edge) {
+        case MLFreeMouseExitEdgeLeft:
+            clampedPoint.x = NSMinX(bounds);
+            clampedPoint.y = MLClampCGFloat(point.y, NSMinY(bounds), NSMaxY(bounds));
+            break;
+        case MLFreeMouseExitEdgeRight:
+            clampedPoint.x = NSMaxX(bounds);
+            clampedPoint.y = MLClampCGFloat(point.y, NSMinY(bounds), NSMaxY(bounds));
+            break;
+        case MLFreeMouseExitEdgeTop:
+            clampedPoint.x = MLClampCGFloat(point.x, NSMinX(bounds), NSMaxX(bounds));
+            clampedPoint.y = NSMaxY(bounds);
+            break;
+        case MLFreeMouseExitEdgeBottom:
+            clampedPoint.x = MLClampCGFloat(point.x, NSMinX(bounds), NSMaxX(bounds));
+            clampedPoint.y = NSMinY(bounds);
+            break;
+        case MLFreeMouseExitEdgeNone:
+        default:
+            break;
+    }
+    return clampedPoint;
+}
+
 @implementation StreamViewController (MouseCapture)
 
 - (CGDirectDisplayID)cursorDisplayIDForCurrentWindow {
@@ -40,6 +70,11 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
 
 - (void)reassertHiddenLocalCursorIfNeededWithReason:(NSString *)reason {
     if (!self.isMouseCaptured || self.stopStreamInProgress || self.reconnectInProgress) {
+        return;
+    }
+
+    if ([self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration] &&
+        ![self shouldUseCoreHIDVirtualSemanticLocation]) {
         return;
     }
 
@@ -327,7 +362,7 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return NO;
     }
     if ([self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration]) {
-        return NO;
+        return ![self shouldUseCoreHIDVirtualSemanticLocation];
     }
     if ([self usesAbsoluteRemoteDesktopPointerSync]) {
         return NO;
@@ -481,23 +516,46 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         }
     }
 
+    CGFloat sensitivity = [SettingsClass pointerSensitivityFor:self.app.host.uuid];
+    if (!isfinite(sensitivity) || sensitivity <= 0.0) {
+        sensitivity = 1.0;
+    }
+    sensitivity = MIN(MAX(sensitivity, 0.25), 3.0);
+
+    CGFloat projectedOvershoot = MLCoreHIDFreeMouseExitHandoffNudge;
+    switch (exitEdge) {
+        case MLFreeMouseExitEdgeLeft:
+        case MLFreeMouseExitEdgeRight:
+            projectedOvershoot = fabs(event.deltaX) * sensitivity;
+            break;
+        case MLFreeMouseExitEdgeTop:
+        case MLFreeMouseExitEdgeBottom:
+            projectedOvershoot = fabs(event.deltaY) * sensitivity;
+            break;
+        case MLFreeMouseExitEdgeNone:
+        default:
+            break;
+    }
+    projectedOvershoot = MIN(MAX(projectedOvershoot, MLCoreHIDFreeMouseExitHandoffNudge),
+                             MLCoreHIDFreeMouseExitHandoffMaxProjectedOvershoot);
+
     NSPoint handoffPoint = semanticViewPoint;
     switch (exitEdge) {
         case MLFreeMouseExitEdgeLeft:
-            handoffPoint.x = MIN(basisPoint.x, NSMinX(bounds) - MLCoreHIDFreeMouseExitHandoffNudge);
+            handoffPoint.x = MIN(basisPoint.x, NSMinX(bounds) - projectedOvershoot);
             handoffPoint.y = MLClampCGFloat(basisPoint.y, NSMinY(bounds), NSMaxY(bounds));
             break;
         case MLFreeMouseExitEdgeRight:
-            handoffPoint.x = MAX(basisPoint.x, NSMaxX(bounds) + MLCoreHIDFreeMouseExitHandoffNudge);
+            handoffPoint.x = MAX(basisPoint.x, NSMaxX(bounds) + projectedOvershoot);
             handoffPoint.y = MLClampCGFloat(basisPoint.y, NSMinY(bounds), NSMaxY(bounds));
             break;
         case MLFreeMouseExitEdgeTop:
             handoffPoint.x = MLClampCGFloat(basisPoint.x, NSMinX(bounds), NSMaxX(bounds));
-            handoffPoint.y = MAX(basisPoint.y, NSMaxY(bounds) + MLCoreHIDFreeMouseExitHandoffNudge);
+            handoffPoint.y = MAX(basisPoint.y, NSMaxY(bounds) + projectedOvershoot);
             break;
         case MLFreeMouseExitEdgeBottom:
             handoffPoint.x = MLClampCGFloat(basisPoint.x, NSMinX(bounds), NSMaxX(bounds));
-            handoffPoint.y = MIN(basisPoint.y, NSMinY(bounds) - MLCoreHIDFreeMouseExitHandoffNudge);
+            handoffPoint.y = MIN(basisPoint.y, NSMinY(bounds) - projectedOvershoot);
             break;
         case MLFreeMouseExitEdgeNone:
         default:
@@ -626,11 +684,11 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
     }
 
     [self syncRemoteCursorToViewPoint:semanticViewPoint clampToBounds:YES];
-    [self uncaptureMouseWithCode:code reason:reason];
     [self applyCoreHIDReleasedWarpIfNeededForExitEdge:exitEdge
                                                 event:event
                                     semanticViewPoint:semanticViewPoint
                                                reason:reason];
+    [self uncaptureMouseWithCode:code reason:reason];
 
     if ([self edgeMenuMatchesExitEdge:exitEdge] &&
         [self edgeMenuShouldBeVisible] &&
@@ -647,7 +705,7 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
                                reason:(NSString *)reason {
     [self uncaptureFreeMouseForExitEdge:exitEdge
                                   event:event
-                          syncViewPoint:[self viewPointForMouseEvent:event]
+                          syncViewPoint:[self preferredFreeMouseExitSyncViewPointForEvent:event exitEdge:exitEdge]
                                    code:code
                                  reason:reason];
 }
@@ -1266,6 +1324,16 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return;
     }
 
+    if ([self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration] &&
+        ![self shouldUseCoreHIDVirtualSemanticLocation]) {
+        if (pressed) {
+            [self.hidSupport mouseDown:event withButton:button];
+        } else {
+            [self.hidSupport mouseUp:event withButton:button];
+        }
+        return;
+    }
+
     NSPoint point = [self viewPointForMouseEvent:event];
     if (!NSPointInRect(point, self.view.bounds)) {
         if (pressed) {
@@ -1297,6 +1365,11 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return NO;
     }
 
+    if ([self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration] &&
+        ![self shouldUseCoreHIDVirtualSemanticLocation]) {
+        return NO;
+    }
+
     [self reassertHiddenLocalCursorIfNeededWithReason:reason ?: @"hybrid-free-mouse-sync"];
     [self syncRemoteCursorToMouseEvent:event clampToBounds:YES];
     self.pendingHybridRemoteCursorSync = NO;
@@ -1313,7 +1386,7 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return MLFreeMouseExitEdgeNone;
     }
 
-    NSRect triggerRect = [self collapsedFrameForEdgeMenuButtonInBounds:self.view.bounds];
+    NSRect triggerRect = [self edgeMenuInteractionRectInBounds:self.view.bounds];
     if (!NSPointInRect(point, triggerRect)) {
         return MLFreeMouseExitEdgeNone;
     }
@@ -1382,22 +1455,49 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return MLFreeMouseExitEdgeNone;
     }
 
+    BOOL tightHandoff = [self shouldUseCoreHIDTightFreeMouseHandoff];
     NSPoint point = [self viewPointForMouseEvent:event];
-    const CGFloat threshold = 2.0;
+    NSPoint currentPoint = [self currentMouseLocationInViewCoordinates];
+    CGFloat threshold = tightHandoff ? MLCoreHIDFreeMouseExitThreshold : 2.0;
     MLFreeMouseExitEdge edgeMenuExitEdge = [self edgeMenuReleaseExitEdgeForEvent:event point:point];
     if (edgeMenuExitEdge != MLFreeMouseExitEdgeNone) {
         return edgeMenuExitEdge;
     }
 
-    MLFreeMouseExitEdge currentPointerExitEdge = [self freeMouseExitEdgeForOutsideViewPoint:[self currentMouseLocationInViewCoordinates]];
-    if (currentPointerExitEdge != MLFreeMouseExitEdgeNone) {
+    MLFreeMouseExitEdge currentPointerExitEdge = [self freeMouseExitEdgeForOutsideViewPoint:currentPoint];
+    if (!tightHandoff && currentPointerExitEdge != MLFreeMouseExitEdgeNone) {
         return currentPointerExitEdge;
+    }
+
+    MLFreeMouseExitEdge semanticExitEdge = [self freeMouseExitEdgeForOutsideViewPoint:point];
+    if (tightHandoff && semanticExitEdge != MLFreeMouseExitEdgeNone) {
+        return semanticExitEdge;
+    }
+    if (!tightHandoff && semanticExitEdge != MLFreeMouseExitEdgeNone) {
+        return semanticExitEdge;
     }
 
     BOOL pushingLeft = point.x <= NSMinX(bounds) + threshold && event.deltaX < 0.0;
     BOOL pushingRight = point.x >= NSMaxX(bounds) - threshold && event.deltaX > 0.0;
     BOOL pushingBottom = point.y <= NSMinY(bounds) + threshold && event.deltaY < 0.0;
     BOOL pushingTop = point.y >= NSMaxY(bounds) - threshold && event.deltaY > 0.0;
+
+    MLFreeMouseExitEdge candidateEdge = semanticExitEdge;
+    if (candidateEdge == MLFreeMouseExitEdgeNone) {
+        if (pushingLeft) {
+            candidateEdge = MLFreeMouseExitEdgeLeft;
+        } else if (pushingRight) {
+            candidateEdge = MLFreeMouseExitEdgeRight;
+        } else if (pushingBottom) {
+            candidateEdge = MLFreeMouseExitEdgeBottom;
+        } else if (pushingTop) {
+            candidateEdge = MLFreeMouseExitEdgeTop;
+        }
+    }
+
+    if (tightHandoff && candidateEdge != MLFreeMouseExitEdgeNone) {
+        return candidateEdge;
+    }
 
     if (pushingLeft) return MLFreeMouseExitEdgeLeft;
     if (pushingRight) return MLFreeMouseExitEdgeRight;
@@ -1406,7 +1506,11 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
     return MLFreeMouseExitEdgeNone;
 }
 
-- (BOOL)shouldUncaptureFreeMouseForEdgeEvent:(NSEvent *)event {
+- (BOOL)shouldUncaptureFreeMouseForComputedExitEdge:(MLFreeMouseExitEdge)exitEdge {
+    if (exitEdge == MLFreeMouseExitEdgeNone) {
+        return NO;
+    }
+
     uint64_t now = [self nowMs];
     if (self.suppressFreeMouseEdgeUncaptureUntilMs > now) {
         return NO;
@@ -1414,11 +1518,21 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
     if ([self hasPressedMouseButtonsForCaptureTransition]) {
         return NO;
     }
-    MLFreeMouseExitEdge exitEdge = [self freeMouseExitEdgeForEvent:event];
-    if (exitEdge == MLFreeMouseExitEdgeNone) {
-        return NO;
-    }
     return YES;
+}
+
+- (NSPoint)preferredFreeMouseExitSyncViewPointForEvent:(NSEvent *)event
+                                              exitEdge:(MLFreeMouseExitEdge)exitEdge {
+    NSPoint semanticPoint = [self viewPointForMouseEvent:event];
+    if (![self shouldUseCoreHIDTightFreeMouseHandoff] || exitEdge == MLFreeMouseExitEdgeNone) {
+        return semanticPoint;
+    }
+
+    return MLClampFreeMousePointToExitEdge(semanticPoint, self.view.bounds, exitEdge);
+}
+
+- (BOOL)shouldUncaptureFreeMouseForEdgeEvent:(NSEvent *)event {
+    return [self shouldUncaptureFreeMouseForComputedExitEdge:[self freeMouseExitEdgeForEvent:event]];
 }
 
 - (void)beginFreeMouseEdgeReentryForExitEdge:(MLFreeMouseExitEdge)exitEdge {
@@ -1447,7 +1561,9 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return NO;
     }
 
-    NSPoint point = [self viewPointForMouseEvent:event];
+    NSPoint point = [self shouldUseCoreHIDTightFreeMouseHandoff]
+        ? [self currentMouseLocationInViewCoordinates]
+        : [self viewPointForMouseEvent:event];
     CGFloat reentryInset = [self freeMouseReentryInsetForCurrentConfiguration];
     switch (self.pendingFreeMouseReentryEdge) {
         case MLFreeMouseExitEdgeLeft:
@@ -1473,8 +1589,11 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return NO;
     }
 
+    NSPoint syncPoint = [self shouldUseCoreHIDTightFreeMouseHandoff]
+        ? [self currentMouseLocationInViewCoordinates]
+        : [self viewPointForMouseEvent:event];
     [self prepareCoreHIDVirtualCursorForSystemPointerSyncIfNeeded];
-    [self syncRemoteCursorToMouseEvent:event clampToBounds:YES];
+    [self syncRemoteCursorToViewPoint:syncPoint clampToBounds:YES];
     [self rearmMouseCaptureIfPossibleWithReason:@"free-mouse-edge-return"];
     if (self.isMouseCaptured) {
         self.pendingFreeMouseReentryEdge = MLFreeMouseExitEdgeNone;
@@ -1527,6 +1646,14 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
 
     if (!self.isRemoteDesktopMode || self.isMouseCaptured) {
         return NO;
+    }
+
+    if ([self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration]) {
+        if (self.pendingFreeMouseReentryEdge != MLFreeMouseExitEdgeNone ||
+            self.pendingMouseExitedRecapture ||
+            ![self isCurrentPointerInsideStreamView]) {
+            return NO;
+        }
     }
 
     [self prepareCoreHIDVirtualCursorForSystemPointerSyncIfNeeded];
@@ -1826,6 +1953,10 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
             return event;
         }
 
+        if ([strongSelf handleKeyboardTranslationRuleForEvent:event]) {
+            return nil;
+        }
+
         StreamShortcut *borderlessShortcut = [strongSelf streamShortcutForAction:MLShortcutActionToggleBorderlessWindowed];
         if ([strongSelf event:event matchesShortcut:borderlessShortcut]) {
             strongSelf.pendingOptionUncaptureToken += 1;
@@ -2042,9 +2173,13 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
             ? [self actualAppKitViewPointForBoundaryOrGestureEvent:event]
             : [self viewPointForMouseEvent:event];
         NSPoint currentPoint = [self currentMouseLocationInViewCoordinates];
+        MLFreeMouseExitEdge currentExitEdge = [self freeMouseExitEdgeForOutsideViewPoint:currentPoint];
         BOOL eventInside = NSPointInRect(eventPoint, self.view.bounds);
         BOOL currentInside = NSPointInRect(currentPoint, self.view.bounds);
-        if (eventInside || currentInside) {
+        BOOL shouldHonorCurrentOutsideForCoreHID = [self shouldUseCoreHIDTightFreeMouseHandoff] &&
+            currentExitEdge != MLFreeMouseExitEdgeNone &&
+            !currentInside;
+        if ((eventInside || currentInside) && !shouldHonorCurrentOutsideForCoreHID) {
             self.isMouseInsideView = YES;
             self.globalInactivePointerInsideStreamView = YES;
             [self logMouseExitDiagnosticsForEvent:event stage:@"skip-still-inside"];
@@ -2065,11 +2200,10 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
             [self reassertHiddenLocalCursorIfNeededWithReason:@"mouse-exited-view-top-edge"];
             return;
         }
-        MLFreeMouseExitEdge exitEdge = [self freeMouseExitEdgeForOutsideViewPoint:currentPoint];
-        if (exitEdge != MLFreeMouseExitEdgeNone) {
-            [self uncaptureFreeMouseForExitEdge:exitEdge
+        if (currentExitEdge != MLFreeMouseExitEdgeNone) {
+            [self uncaptureFreeMouseForExitEdge:currentExitEdge
                                           event:event
-                                  syncViewPoint:currentPoint
+                                  syncViewPoint:[self preferredFreeMouseExitSyncViewPointForEvent:event exitEdge:currentExitEdge]
                                            code:@"MUC102"
                                          reason:@"mouse-exited-view"];
             return;
@@ -2128,7 +2262,9 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
     [self logMouseClickDiagnosticsForPhase:@"left-down" event:event];
     [self captureFreeMouseIfNeededForEvent:event];
     [self dispatchMouseButton:BUTTON_LEFT pressed:YES event:event];
-    [self captureMouse];
+    if (!self.isRemoteDesktopMode) {
+        [self captureMouse];
+    }
 }
 
 - (void)mouseUp:(NSEvent *)event {
@@ -2205,16 +2341,17 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return;
     }
 
+    if ([self consumePendingHybridRemoteCursorSyncForEvent:event reason:@"mouse-moved-hybrid-sync"]) {
+        return;
+    }
+
     MLFreeMouseExitEdge exitEdge = [self freeMouseExitEdgeForEvent:event];
-    if ([self shouldUncaptureFreeMouseForEdgeEvent:event]) {
+    if ([self shouldUncaptureFreeMouseForComputedExitEdge:exitEdge]) {
         Log(LOG_I, @"[diag] Free mouse uncaptured from fullscreen edge");
         [self uncaptureFreeMouseForExitEdge:exitEdge
                                       event:event
                                        code:@"MUC104"
                                      reason:@"free-mouse-edge-mouse-moved"];
-        return;
-    }
-    if ([self consumePendingHybridRemoteCursorSyncForEvent:event reason:@"mouse-moved-hybrid-sync"]) {
         return;
     }
     [self.hidSupport mouseMoved:event];
@@ -2234,15 +2371,16 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return;
     }
 
+    if ([self consumePendingHybridRemoteCursorSyncForEvent:event reason:@"mouse-dragged-hybrid-sync"]) {
+        return;
+    }
+
     MLFreeMouseExitEdge exitEdge = [self freeMouseExitEdgeForEvent:event];
-    if ([self shouldUncaptureFreeMouseForEdgeEvent:event]) {
+    if ([self shouldUncaptureFreeMouseForComputedExitEdge:exitEdge]) {
         [self uncaptureFreeMouseForExitEdge:exitEdge
                                       event:event
                                        code:@"MUC105"
                                      reason:@"free-mouse-edge-mouse-dragged"];
-        return;
-    }
-    if ([self consumePendingHybridRemoteCursorSyncForEvent:event reason:@"mouse-dragged-hybrid-sync"]) {
         return;
     }
     [self.hidSupport mouseMoved:event];
@@ -2262,15 +2400,16 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return;
     }
 
+    if ([self consumePendingHybridRemoteCursorSyncForEvent:event reason:@"right-dragged-hybrid-sync"]) {
+        return;
+    }
+
     MLFreeMouseExitEdge exitEdge = [self freeMouseExitEdgeForEvent:event];
-    if ([self shouldUncaptureFreeMouseForEdgeEvent:event]) {
+    if ([self shouldUncaptureFreeMouseForComputedExitEdge:exitEdge]) {
         [self uncaptureFreeMouseForExitEdge:exitEdge
                                       event:event
                                        code:@"MUC106"
                                      reason:@"free-mouse-edge-right-dragged"];
-        return;
-    }
-    if ([self consumePendingHybridRemoteCursorSyncForEvent:event reason:@"right-dragged-hybrid-sync"]) {
         return;
     }
     [self.hidSupport mouseMoved:event];
@@ -2290,15 +2429,16 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
         return;
     }
 
+    if ([self consumePendingHybridRemoteCursorSyncForEvent:event reason:@"other-dragged-hybrid-sync"]) {
+        return;
+    }
+
     MLFreeMouseExitEdge exitEdge = [self freeMouseExitEdgeForEvent:event];
-    if ([self shouldUncaptureFreeMouseForEdgeEvent:event]) {
+    if ([self shouldUncaptureFreeMouseForComputedExitEdge:exitEdge]) {
         [self uncaptureFreeMouseForExitEdge:exitEdge
                                       event:event
                                        code:@"MUC107"
                                      reason:@"free-mouse-edge-other-dragged"];
-        return;
-    }
-    if ([self consumePendingHybridRemoteCursorSyncForEvent:event reason:@"other-dragged-hybrid-sync"]) {
         return;
     }
     [self.hidSupport mouseMoved:event];
@@ -2342,11 +2482,154 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
     return button;
 }
 
+- (KeyboardTranslationRule *)keyboardTranslationRuleMatchingEvent:(NSEvent *)event {
+    if (event == nil || self.app.host.uuid.length == 0) {
+        return nil;
+    }
+
+    NSEventModifierFlags relevantModifiers = MLRelevantShortcutModifiers(event.modifierFlags);
+    NSArray<KeyboardTranslationRule *> *rules = [SettingsClass keyboardTranslationRulesFor:self.app.host.uuid];
+    for (KeyboardTranslationRule *rule in rules) {
+        StreamShortcut *trigger = rule.trigger;
+        if (trigger == nil || trigger.modifierOnly || !trigger.hasKeyCode) {
+            continue;
+        }
+
+        if (event.keyCode == trigger.keyCode && relevantModifiers == trigger.modifierFlags) {
+            return rule;
+        }
+    }
+
+    return nil;
+}
+
+- (BOOL)performKeyboardTranslationLocalAction:(NSString *)action {
+    if (action.length == 0) {
+        return NO;
+    }
+
+    BOOL recognizedAction =
+        [action isEqualToString:KeyboardTranslationProfile.localActionShowDisconnectOptions] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionDisconnectStream] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionCloseAndQuitApp] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionReconnectStream] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionTogglePerformanceOverlay] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionToggleMouseMode] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionToggleFullscreenControlBall] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionOpenControlCenter] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionReleaseMouseCapture] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionToggleBorderlessWindowed];
+    if (!recognizedAction) {
+        return NO;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    void (^performAction)(void) = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionDisconnectStream]) {
+            strongSelf.pendingOptionUncaptureToken += 1;
+            [strongSelf requestStreamCloseWithSource:@"keyboard-translation-disconnect"];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionShowDisconnectOptions]) {
+            strongSelf.pendingOptionUncaptureToken += 1;
+            [strongSelf performClose:nil];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionCloseAndQuitApp]) {
+            strongSelf.pendingOptionUncaptureToken += 1;
+            [strongSelf performCloseAndQuitApp:nil];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionReconnectStream]) {
+            [strongSelf reconnectFromMenu:nil];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionTogglePerformanceOverlay]) {
+            strongSelf.pendingOptionUncaptureToken += 1;
+            [strongSelf toggleOverlay];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionToggleMouseMode]) {
+            strongSelf.pendingOptionUncaptureToken += 1;
+            [strongSelf toggleMouseMode];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionToggleFullscreenControlBall]) {
+            strongSelf.pendingOptionUncaptureToken += 1;
+            [strongSelf toggleFullscreenControlBallVisibility];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionOpenControlCenter]) {
+            [strongSelf presentControlCenterFromShortcut];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionReleaseMouseCapture]) {
+            strongSelf.pendingOptionUncaptureToken += 1;
+            strongSelf.lastOptionUncaptureAtMs = [strongSelf nowMs];
+            [strongSelf suppressConnectionWarningsForSeconds:2.0 reason:@"keyboard-translation-release"];
+            [strongSelf uncaptureMouseWithCode:@"MUC104" reason:@"keyboard-translation-release-shortcut"];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionToggleBorderlessWindowed]) {
+            strongSelf.pendingOptionUncaptureToken += 1;
+            if ([strongSelf isWindowBorderlessMode]) {
+                [strongSelf switchToWindowedMode:nil];
+            } else {
+                [strongSelf switchToBorderlessMode:nil];
+            }
+        }
+    };
+
+    dispatch_async(dispatch_get_main_queue(), performAction);
+    return YES;
+}
+
+- (BOOL)handleKeyboardTranslationRuleForEvent:(NSEvent *)event {
+    KeyboardTranslationRule *rule = [self keyboardTranslationRuleMatchingEvent:event];
+    if (rule == nil) {
+        return NO;
+    }
+
+    [self.hidSupport releaseAllModifierKeys];
+
+    if (rule.outputKind == KeyboardTranslationOutputKindRemoteShortcut) {
+        if (rule.outputShortcut != nil) {
+            [self.hidSupport sendSyntheticRemoteShortcut:rule.outputShortcut];
+            return YES;
+        }
+        return NO;
+    }
+
+    return [self performKeyboardTranslationLocalAction:rule.localAction];
+}
+
 
 #pragma mark - KeyboardNotifiable
 
 - (BOOL)onKeyboardEquivalent:(NSEvent *)event {
+    StreamShortcut *disconnectOptionsShortcut = [self streamShortcutForAction:MLShortcutActionShowDisconnectOptions];
     const NSEventModifierFlags eventModifierFlags = MLRelevantShortcutModifiers(event.modifierFlags);
+    StreamShortcut *disconnectShortcut = [self streamShortcutForAction:MLShortcutActionDisconnectStream];
+    StreamShortcut *quitShortcut = [self streamShortcutForAction:MLShortcutActionCloseAndQuitApp];
+    StreamShortcut *reconnectShortcut = [self streamShortcutForAction:MLShortcutActionReconnectStream];
+
+    if ([self handleKeyboardTranslationRuleForEvent:event]) {
+        return YES;
+    }
     
     if (event.keyCode == kVK_ANSI_1 && eventModifierFlags == NSEventModifierFlagCommand) {
         [self.hidSupport releaseAllModifierKeys];
@@ -2363,24 +2646,40 @@ static inline CGFloat MLSquaredDistanceToRect(NSPoint point, NSRect rect) {
     }
     
     if ((event.keyCode == kVK_ANSI_F && eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagCommand))
-        || (event.keyCode == kVK_ANSI_F && eventModifierFlags == NSEventModifierFlagFunction)
-        || (event.keyCode == kVK_ANSI_W && eventModifierFlags == NSEventModifierFlagCommand)
-        ) {
+        || (event.keyCode == kVK_ANSI_F && eventModifierFlags == NSEventModifierFlagFunction)) {
         [self.hidSupport releaseAllModifierKeys];
         return NO;
     }
 
-    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionDisconnectStream]]) {
+    if ([self event:event matchesShortcut:disconnectOptionsShortcut]) {
+        self.pendingOptionUncaptureToken += 1;
+        [self.hidSupport releaseAllModifierKeys];
+        [self performClose:nil];
+        return YES;
+    }
+
+    if ([self event:event matchesShortcut:disconnectShortcut]) {
         self.pendingOptionUncaptureToken += 1;
         [self.hidSupport releaseAllModifierKeys];
         [self requestStreamCloseWithSource:@"keyboard-custom-disconnect"];
         return YES;
     }
 
-    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionCloseAndQuitApp]]) {
+    if ([self event:event matchesShortcut:quitShortcut]) {
         self.pendingOptionUncaptureToken += 1;
         [self.hidSupport releaseAllModifierKeys];
         [self performCloseAndQuitApp:nil];
+        return YES;
+    }
+
+    if ([self event:event matchesShortcut:reconnectShortcut]) {
+        [self.hidSupport releaseAllModifierKeys];
+        [self reconnectFromMenu:nil];
+        return YES;
+    }
+
+    if (event.keyCode == kVK_ANSI_W && eventModifierFlags == NSEventModifierFlagCommand) {
+        [self.hidSupport releaseAllModifierKeys];
         return YES;
     }
 

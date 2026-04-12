@@ -269,6 +269,8 @@ class MicrophoneManager: ObservableObject {
 @objcMembers
 final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     @objc(sharedManager) static let sharedManager = InputMonitoringPermissionManager()
+    private static let everGrantedKey = "inputMonitoring.everGranted"
+    private static let systemRefreshWindowSeconds: TimeInterval = 8.0
 
     @Published var authorizationState: InputMonitoringAuthorizationState = .notDetermined
     @Published var isRequestingAuthorization: Bool = false
@@ -278,9 +280,14 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     private var hasShownRuntimeAlert = false
     private var observedSystemState: InputMonitoringAuthorizationState = .notDetermined
     private var needsStreamReentry = false
+    private var hasPersistedGrantHistory = false
+    private var didAttemptAuthorizationThisSession = false
+    private var shouldSuggestSettingsRepair = false
+    private var expectedSystemRefreshUntilUptime: TimeInterval = 0
 
     override init() {
         super.init()
+        hasPersistedGrantHistory = UserDefaults.standard.bool(forKey: Self.everGrantedKey)
         let initialState = Self.currentSystemAuthorizationState()
         observedSystemState = initialState
         authorizationState = initialState
@@ -303,19 +310,68 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         authorizationState == .granted || authorizationState == .grantedNeedsReentry
     }
 
-    @objc var statusLabelKey: String {
-        switch authorizationState {
-        case .unsupported:
+    @objc var displayStatusLabelKey: String {
+        if authorizationState == .unsupported {
             return "Unavailable"
+        }
+        if authorizationState == .grantedNeedsReentry {
+            return "Granted Pending Reentry"
+        }
+        if authorizationState == .granted {
+            return "Granted"
+        }
+        if isAwaitingSystemRefresh {
+            return "Checking"
+        }
+        if shouldSuggestSettingsRepair {
+            return "Check Settings"
+        }
+        switch authorizationState {
         case .notDetermined:
             return "Not Granted"
         case .denied:
             return "Denied"
-        case .granted:
-            return "Granted"
-        case .grantedNeedsReentry:
-            return "Granted Pending Reentry"
+        case .unsupported, .granted, .grantedNeedsReentry:
+            return "Unavailable"
         }
+    }
+
+    @objc var statusLabelKey: String {
+        displayStatusLabelKey
+    }
+
+    @objc var primaryActionTitleKey: String? {
+        if authorizationState == .unsupported || authorizationState == .granted || authorizationState == .grantedNeedsReentry {
+            return nil
+        }
+        if isAwaitingSystemRefresh || shouldSuggestSettingsRepair || authorizationState == .denied {
+            return "Open Settings"
+        }
+        return "Request"
+    }
+
+    @objc var supplementalStatusMessageKey: String? {
+        if authorizationState == .grantedNeedsReentry {
+            return "Input Monitoring Reentry detail"
+        }
+        if isAwaitingSystemRefresh {
+            return "Input Monitoring Checking detail"
+        }
+        if shouldSuggestSettingsRepair {
+            return "Input Monitoring Repair detail"
+        }
+        return nil
+    }
+
+    @objc var rawFailureMessageForDisplay: String? {
+        guard supplementalStatusMessageKey == nil,
+              !lastFailureMessage.isEmpty,
+              authorizationState != .granted,
+              authorizationState != .grantedNeedsReentry
+        else {
+            return nil
+        }
+        return lastFailureMessage
     }
 
     @objc(refreshAuthorizationStatus)
@@ -339,7 +395,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
 
         guard interactive, #available(macOS 15.0, *) else {
             DispatchQueue.main.async {
-                self.authorizationState = currentState
+                self.applySystemAuthorizationState(currentState)
             }
             return false
         }
@@ -357,6 +413,8 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
 
     @objc(requestAuthorizationWithCompletion:)
     func requestAuthorization(_ completion: ((Bool) -> Void)? = nil) {
+        didAttemptAuthorizationThisSession = true
+        beginWaitingForSystemRefresh()
         let granted = requestAuthorizationIfNeeded(interactive: true)
         scheduleAuthorizationRefreshes()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -367,6 +425,8 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
 
     @objc(openSystemPreferences)
     func openSystemPreferences() {
+        didAttemptAuthorizationThisSession = true
+        beginWaitingForSystemRefresh()
         let candidateURLs = [
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
             "x-apple.systempreferences:com.apple.preference.security",
@@ -386,6 +446,8 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
                 completionHandler: nil
             )
         }
+
+        scheduleAuthorizationRefreshes()
     }
 
     @objc(noteCoreHIDPermissionFailureWithMessage:)
@@ -397,6 +459,8 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
                 self.lastFailureMessage = ""
             } else {
                 self.lastFailureMessage = message
+                self.shouldSuggestSettingsRepair =
+                    self.hasPersistedGrantHistory || self.didAttemptAuthorizationThisSession
                 self.presentRuntimeAlertIfNeeded()
             }
         }
@@ -406,6 +470,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     func noteCoreHIDDidBecomeActive() {
         DispatchQueue.main.async {
             self.needsStreamReentry = false
+            self.markGrantObserved()
             self.applySystemAuthorizationState(Self.currentSystemAuthorizationState())
         }
     }
@@ -424,6 +489,55 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
             return .notDetermined
         }
         return .denied
+    }
+
+    private var isAwaitingSystemRefresh: Bool {
+        authorizationState != .granted &&
+        authorizationState != .grantedNeedsReentry &&
+        ProcessInfo.processInfo.systemUptime < expectedSystemRefreshUntilUptime
+    }
+
+    private func beginWaitingForSystemRefresh() {
+        expectedSystemRefreshUntilUptime = max(
+            expectedSystemRefreshUntilUptime,
+            ProcessInfo.processInfo.systemUptime + Self.systemRefreshWindowSeconds
+        )
+        shouldSuggestSettingsRepair = false
+        objectWillChange.send()
+    }
+
+    private func endWaitingForSystemRefresh() {
+        if expectedSystemRefreshUntilUptime != 0 {
+            expectedSystemRefreshUntilUptime = 0
+            objectWillChange.send()
+        }
+    }
+
+    private func markGrantObserved() {
+        let alreadyPersisted = hasPersistedGrantHistory
+            || UserDefaults.standard.bool(forKey: Self.everGrantedKey)
+        hasPersistedGrantHistory = true
+        if !alreadyPersisted {
+            UserDefaults.standard.set(true, forKey: Self.everGrantedKey)
+        }
+        shouldSuggestSettingsRepair = false
+        endWaitingForSystemRefresh()
+    }
+
+    private func updateRepairSuggestionIfNeeded(for state: InputMonitoringAuthorizationState) {
+        guard state != .granted, state != .grantedNeedsReentry else {
+            shouldSuggestSettingsRepair = false
+            return
+        }
+
+        guard !isAwaitingSystemRefresh else {
+            shouldSuggestSettingsRepair = false
+            return
+        }
+
+        if hasPersistedGrantHistory || didAttemptAuthorizationThisSession {
+            shouldSuggestSettingsRepair = true
+        }
     }
 
     @available(macOS 15.0, *)
@@ -452,6 +566,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
             authorizationState = .grantedNeedsReentry
             lastFailureMessage = ""
             hasShownRuntimeAlert = false
+            markGrantObserved()
             return true
         }
 
@@ -494,6 +609,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
             if transitionedToGranted {
                 needsStreamReentry = true
             }
+            markGrantObserved()
             authorizationState = needsStreamReentry ? .grantedNeedsReentry : .granted
             if !needsStreamReentry {
                 lastFailureMessage = ""
@@ -504,10 +620,11 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
 
         needsStreamReentry = false
         authorizationState = state
+        updateRepairSuggestionIfNeeded(for: state)
     }
 
     private func scheduleAuthorizationRefreshes() {
-        let delays: [TimeInterval] = [0.35, 1.0, 2.0]
+        let delays: [TimeInterval] = [0.35, 1.0, 2.0, 4.0, 8.0]
         for delay in delays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.refreshAuthorizationStatus()

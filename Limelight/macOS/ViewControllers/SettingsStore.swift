@@ -10,6 +10,14 @@ import CoreGraphics
 import Foundation
 
 struct Settings: Encodable, Decodable {
+  private enum CachedPersistedSettings {
+    case missing
+    case decoded(Settings)
+  }
+
+  private static let cachedSettingsLock = NSLock()
+  private static var cachedPersistedSettingsByProfileKey: [String: CachedPersistedSettings] = [:]
+
   let resolution: CGSize
   let matchDisplayResolution: Bool?
   let customResolution: CGSize?
@@ -44,6 +52,7 @@ struct Settings: Encodable, Decodable {
   let showPerformanceOverlay: Bool?
   let showConnectionWarnings: Bool?
   let captureSystemShortcuts: Bool?
+  let keyboardCompatibilityMode: Int?
   let volumeLevel: CGFloat?
   let multiController: Bool
   let swapABXYButtons: Bool
@@ -93,6 +102,40 @@ struct Settings: Encodable, Decodable {
     SettingsClass.profileKey(for: SettingsModel.globalHostId)
   }
 
+  private static func cachedPersistedSettings(forProfileKey profileKey: String) -> Self? {
+    cachedSettingsLock.lock()
+    if let cached = cachedPersistedSettingsByProfileKey[profileKey] {
+      cachedSettingsLock.unlock()
+      switch cached {
+      case .missing:
+        return nil
+      case .decoded(let settings):
+        return settings
+      }
+    }
+    cachedSettingsLock.unlock()
+
+    let decoded: Self?
+    if let data = UserDefaults.standard.data(forKey: profileKey) {
+      decoded = try? PropertyListDecoder().decode(Settings.self, from: data)
+    } else {
+      decoded = nil
+    }
+
+    updateCachedPersistedSettings(decoded, forProfileKey: profileKey)
+    return decoded
+  }
+
+  static func updateCachedPersistedSettings(_ settings: Self?, forProfileKey profileKey: String) {
+    cachedSettingsLock.lock()
+    if let settings {
+      cachedPersistedSettingsByProfileKey[profileKey] = .decoded(settings)
+    } else {
+      cachedPersistedSettingsByProfileKey[profileKey] = .missing
+    }
+    cachedSettingsLock.unlock()
+  }
+
   private func inheritedSettingsForHostProfile() -> Self {
     Settings(
       resolution: resolution,
@@ -124,6 +167,7 @@ struct Settings: Encodable, Decodable {
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,
       captureSystemShortcuts: captureSystemShortcuts,
+      keyboardCompatibilityMode: keyboardCompatibilityMode,
       volumeLevel: volumeLevel,
       multiController: multiController,
       swapABXYButtons: swapABXYButtons,
@@ -166,20 +210,16 @@ struct Settings: Encodable, Decodable {
   }
 
   static func getSettings(for key: String) -> Self? {
-    if let data = UserDefaults.standard.data(forKey: SettingsClass.profileKey(for: key)) {
-      if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
-        return settings
-      }
+    if let settings = cachedPersistedSettings(forProfileKey: SettingsClass.profileKey(for: key)) {
+      return settings
     }
 
     // Fallback to global settings when no host-specific settings exist
-    if let data = UserDefaults.standard.data(forKey: globalProfileKey()) {
-      if let settings = (try? PropertyListDecoder().decode(Settings.self, from: data)) ?? nil {
-        if key == SettingsModel.globalHostId {
-          return settings
-        }
-        return settings.inheritedSettingsForHostProfile()
+    if let settings = cachedPersistedSettings(forProfileKey: globalProfileKey()) {
+      if key == SettingsModel.globalHostId {
+        return settings
       }
+      return settings.inheritedSettingsForHostProfile()
     }
 
     return nil
@@ -194,8 +234,10 @@ extension SettingsClass {
   }
 
   static func persist(_ settings: Settings, for key: String) {
+    let profileKey = SettingsClass.profileKey(for: key)
     if let data = try? PropertyListEncoder().encode(settings) {
-      UserDefaults.standard.set(data, forKey: SettingsClass.profileKey(for: key))
+      UserDefaults.standard.set(data, forKey: profileKey)
+      Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
     }
   }
 
@@ -222,6 +264,7 @@ extension SettingsClass {
     connectionMethod: String? = nil,
     mouseMode: Int? = nil,
     volumeLevel: CGFloat? = nil,
+    keyboardCompatibilityMode: Int? = nil,
     streamShortcuts: [String: StreamShortcut]? = nil
   ) -> Settings {
     Settings(
@@ -257,6 +300,7 @@ extension SettingsClass {
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
       captureSystemShortcuts: settings.captureSystemShortcuts,
+      keyboardCompatibilityMode: keyboardCompatibilityMode ?? settings.keyboardCompatibilityMode,
       volumeLevel: volumeLevel ?? settings.volumeLevel,
       multiController: settings.multiController,
       swapABXYButtons: settings.swapABXYButtons,

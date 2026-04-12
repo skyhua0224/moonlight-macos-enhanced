@@ -12,6 +12,7 @@
 extern NSString *const HIDMouseModeToggledNotification;
 extern NSString *const HIDGamepadQuitNotification;
 typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
+@class StreamShortcut;
 
 @interface HIDInputDiagnosticsSnapshot : NSObject
 @property(nonatomic) NSUInteger mouseMoveEvents;
@@ -41,6 +42,7 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (void)keyUp:(NSEvent *)event;
 
 - (void)releaseAllModifierKeys;
+- (void)sendSyntheticRemoteShortcut:(StreamShortcut *)shortcut;
 - (BOOL)getLastAbsolutePointerHostX:(short *)hostX
                               hostY:(short *)hostY
                      referenceWidth:(short *)referenceWidth

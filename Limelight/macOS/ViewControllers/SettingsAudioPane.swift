@@ -19,7 +19,7 @@ struct AudioView: View {
 
   var body: some View {
     ScrollView {
-      VStack {
+      LazyVStack {
         FormSection(title: "Audio") {
           FormCell(
             title: "Audio Configuration", contentWidth: 200,
@@ -215,4 +215,3 @@ private struct MicLevelBar: View {
     return .green
   }
 }
-

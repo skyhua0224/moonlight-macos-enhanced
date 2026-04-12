@@ -605,6 +605,7 @@
     [self.hidSupport releaseAllModifierKeys];
     
     dispatch_async(dispatch_get_main_queue(), ^{
+        [self tearDownControllerSupportOnMainThreadIfNeeded];
         [self uncaptureMouseWithCode:@"MUC303" reason:@"close-window-from-main-queue"];
 
         if (message != nil) {

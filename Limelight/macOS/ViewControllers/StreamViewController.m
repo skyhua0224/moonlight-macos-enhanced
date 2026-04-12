@@ -423,9 +423,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
     __strong typeof(self) strongSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         double start = CACurrentMediaTime();
-        if (strongSelf.useSystemControllerDriver) {
+        if (strongSelf.useSystemControllerDriver && strongSelf.controllerSupport != nil) {
             double cleanupStart = CACurrentMediaTime();
-            [strongSelf.controllerSupport cleanup];
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                [strongSelf tearDownControllerSupportOnMainThreadIfNeeded];
+            });
             Log(LOG_I, @"Controller cleanup took %.3fs", CACurrentMediaTime() - cleanupStart);
         }
 
@@ -527,21 +529,36 @@ highFreqMotor:(unsigned short)highFreqMotor {
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
 
-    [self updateWindowSubtitle];
-    [self updateConfiguredShortcutMenus];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateWindowSubtitle];
+        [self updateConfiguredShortcutMenus];
+        [self requestStreamMenuEntrypointsVisibilityUpdate];
 
-    [self requestStreamMenuEntrypointsVisibilityUpdate];
-
-    if (!self.streamStartDate) {
-        self.streamStartDate = [NSDate date];
-    }
-    [self startControlCenterTimerIfNeeded];
+        if (!self.streamStartDate) {
+            self.streamStartDate = [NSDate date];
+        }
+        [self startControlCenterTimerIfNeeded];
+    });
 
     __weak typeof(self) weakSelf = self;
     self.settingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateWindowSubtitle];
-        [weakSelf updateConfiguredShortcutMenus];
         [weakSelf refreshInputDiagnosticsPreference];
+    }];
+    self.streamShortcutSettingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"MoonlightStreamShortcutsDidChange" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+
+        NSString *hostId = note.userInfo[@"hostId"];
+        if (hostId.length > 0 &&
+            ![hostId isEqualToString:@"__global__"] &&
+            ![hostId isEqualToString:strongSelf.app.host.uuid]) {
+            return;
+        }
+
+        [strongSelf updateConfiguredShortcutMenus];
     }];
     self.mouseSettingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"MoonlightMouseSettingsDidChange" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -659,8 +676,25 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.edgeMenuPanel = nil;
 
     [self stopInputDiagnosticsTimer];
+    [self tearDownControllerSupportOnMainThreadIfNeeded];
     [self.hidSupport tearDownHidManager];
     self.hidSupport = nil;
+}
+
+- (void)tearDownControllerSupportOnMainThreadIfNeeded {
+    if (![NSThread isMainThread]) {
+        NSAssert(NO, @"tearDownControllerSupportOnMainThreadIfNeeded must run on the main thread");
+        return;
+    }
+
+    if (self.controllerSupport == nil) {
+        return;
+    }
+
+    self.controllerSupport.shouldSendInputEvents = NO;
+    self.controllerSupport.inputContext = NULL;
+    [self.controllerSupport cleanup];
+    self.controllerSupport = nil;
 }
 
 - (void)tearDownStreamLifecycleObserversAndTimers {
@@ -697,6 +731,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     if (self.settingsDidChangeObserver != nil) {
         [defaultCenter removeObserver:self.settingsDidChangeObserver];
         self.settingsDidChangeObserver = nil;
+    }
+    if (self.streamShortcutSettingsDidChangeObserver != nil) {
+        [defaultCenter removeObserver:self.streamShortcutSettingsDidChangeObserver];
+        self.streamShortcutSettingsDidChangeObserver = nil;
     }
     if (self.mouseSettingsDidChangeObserver != nil) {
         [defaultCenter removeObserver:self.mouseSettingsDidChangeObserver];

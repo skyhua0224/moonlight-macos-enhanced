@@ -8,6 +8,7 @@
 #import "HIDSupport_Internal.h"
 
 static CGFloat const HIDGCMouseRelativeSpeedDivisor = 2.5;
+static CGFloat const HIDCoreHIDFreeMouseBaselineScale = 0.75;
 
 static inline BOOL HIDAbsoluteMousePayloadForEvent(NSEvent *event,
                                                    BOOL clampToBounds,
@@ -385,8 +386,9 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
     }
 
     CGFloat sensitivity = HIDPointerSensitivityForHost(self.host);
-    double viewDeltaX = deltaX * sensitivity;
-    double viewDeltaY = -deltaY * sensitivity;
+    double calibratedSensitivity = sensitivity * HIDCoreHIDFreeMouseBaselineScale;
+    double viewDeltaX = deltaX * calibratedSensitivity;
+    double viewDeltaY = -deltaY * calibratedSensitivity;
 
     NSPoint predictedPoint = NSZeroPoint;
     NSSize referenceSize = NSZeroSize;
