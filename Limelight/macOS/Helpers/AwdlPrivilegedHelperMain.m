@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
+#import <libproc.h>
 
 #import "AwdlPrivilegedHelperProtocol.h"
 
@@ -8,6 +9,15 @@ static NSString * const MLAwdlPrivilegedHelperFallbackLabel = @"std.skyhua.Moonl
 static NSString *MLAwdlPrivilegedHelperServiceLabel(void) {
     NSString *bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
     return bundleIdentifier.length > 0 ? bundleIdentifier : MLAwdlPrivilegedHelperFallbackLabel;
+}
+
+static NSString *MLAwdlAuthorizedClientBundleIdentifier(void) {
+    NSString *helperLabel = MLAwdlPrivilegedHelperServiceLabel();
+    if ([helperLabel hasSuffix:@".AwdlPrivilegedHelper"]) {
+        return [helperLabel stringByReplacingOccurrencesOfString:@".AwdlPrivilegedHelper" withString:@""];
+    }
+
+    return @"std.skyhua.MoonlightMac";
 }
 
 @interface MLAwdlPrivilegedHelperService : NSObject <NSXPCListenerDelegate, MLAwdlPrivilegedHelperProtocol>
@@ -67,7 +77,7 @@ static NSString *MLAwdlPrivilegedHelperServiceLabel(void) {
 - (BOOL)isConnectionAuthorized:(NSXPCConnection *)connection {
     NSArray<NSString *> *requirements = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"SMAuthorizedClients"];
     if (requirements.count == 0) {
-        return NO;
+        return [self isConnectionAuthorizedForUnsignedBuild:connection];
     }
 
     NSDictionary *attributes = @{
@@ -108,6 +118,42 @@ static NSString *MLAwdlPrivilegedHelperServiceLabel(void) {
 
     CFRelease(guestCode);
     return authorized;
+}
+
+- (BOOL)isConnectionAuthorizedForUnsignedBuild:(NSXPCConnection *)connection {
+    pid_t processIdentifier = connection.processIdentifier;
+    if (processIdentifier <= 0) {
+        return NO;
+    }
+
+    char executablePathBuffer[PROC_PIDPATHINFO_MAXSIZE] = {0};
+    if (proc_pidpath(processIdentifier, executablePathBuffer, sizeof(executablePathBuffer)) <= 0) {
+        return NO;
+    }
+
+    NSString *executablePath = [NSString stringWithUTF8String:executablePathBuffer];
+    if (executablePath.length == 0) {
+        return NO;
+    }
+
+    NSArray<NSString *> *pathComponents = [executablePath pathComponents];
+    NSInteger appComponentIndex = NSNotFound;
+    for (NSInteger index = (NSInteger)pathComponents.count - 1; index >= 0; index--) {
+        if ([pathComponents[index] hasSuffix:@".app"]) {
+            appComponentIndex = index;
+            break;
+        }
+    }
+
+    if (appComponentIndex == NSNotFound) {
+        return NO;
+    }
+
+    NSString *applicationPath = [NSString pathWithComponents:[pathComponents subarrayWithRange:NSMakeRange(0, (NSUInteger)appComponentIndex + 1)]];
+    NSString *infoPlistPath = [applicationPath stringByAppendingPathComponent:@"Contents/Info.plist"];
+    NSDictionary *infoDictionary = [NSDictionary dictionaryWithContentsOfFile:infoPlistPath];
+    NSString *bundleIdentifier = infoDictionary[@"CFBundleIdentifier"];
+    return [bundleIdentifier isEqualToString:MLAwdlAuthorizedClientBundleIdentifier()];
 }
 
 - (int)runTask:(NSString *)launchPath

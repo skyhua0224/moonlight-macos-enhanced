@@ -644,6 +644,14 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             return .adminPromptOnly
         }
 
+        guard MLAwdlAuthorizationHelper.installedPrivilegedHelperHasUsableSignature() else {
+            return .notReady
+        }
+
+        if MLAwdlAuthorizationHelper.privilegedHelperLaunchdJobLoaded() {
+            return .installed
+        }
+
         return MLAwdlAuthorizationHelper.privilegedHelperInstalled() ? .installed : .notReady
     }
 
@@ -746,12 +754,16 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
 
         sessionQueue.async {
+            self.logInfo("[diag] AWDL persistent helper install started")
             let result = self.performPersistentHelperInstall()
             DispatchQueue.main.async {
                 self.isRequestingAuthorization = false
                 self.updateAuthorizationState(result.state, message: result.message)
                 if result.state == .ready {
                     self.lastErrorMessage = ""
+                    self.logInfo("[diag] AWDL persistent helper install succeeded")
+                } else if !result.message.isEmpty {
+                    self.logWarning("[diag] AWDL persistent helper install failed: \(result.message)")
                 }
                 self.refreshAuthorizationStatus()
                 completion?(result.state == .ready)
@@ -878,6 +890,11 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             return (.failed, "The bundled AWDL helper is missing from this build.")
         }
 
+        guard MLAwdlAuthorizationHelper.bundledPrivilegedHelperHasUsableSignature() else {
+            publishHelperInstallState(.adminPromptOnly)
+            return (.failed, "The bundled AWDL helper in this build is not signed in a way macOS accepts for persistent installation.")
+        }
+
         let label = Self.helperLabel()
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let tempPlistURL = tempDirectory.appendingPathComponent("\(label).plist")
@@ -907,6 +924,8 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             shellQuote(label),
         ].joined(separator: " ")
 
+        logInfo("[diag] AWDL persistent helper install requesting administrator command")
+
         if let error = runAdministratorShellCommand(command) {
             publishHelperInstallState(.notReady)
             return (.failed, normalizedAuthorizationError(error))
@@ -920,6 +939,10 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
 
         publishHelperInstallState(.notReady)
+        if !MLAwdlAuthorizationHelper.installedPrivilegedHelperHasUsableSignature() {
+            return (.failed, "The helper was copied into /Library, but macOS blocked it from starting because the installed helper signature is not acceptable.")
+        }
+
         return (.failed, "The persistent helper was installed but did not start correctly.")
     }
 
@@ -938,6 +961,10 @@ final class AwdlHelperManager: NSObject, ObservableObject {
 
         if trimmedMessage.contains("(-128)") {
             return "你已取消管理员授权。"
+        }
+
+        if trimmedMessage.localizedCaseInsensitiveContains("timed out") {
+            return "管理员授权超时，请重试。"
         }
 
         if trimmedMessage.contains("(-60005)") {
@@ -1051,45 +1078,33 @@ final class AwdlHelperManager: NSObject, ObservableObject {
 
     private func runAdministratorShellCommand(_ command: String) -> String? {
         let prompt = awdlInstallPrompt()
-        let appleScript = "do shell script \"\(Self.escapeForAppleScript(command))\" with administrator privileges"
-
-        let executeAppleScript: () -> String? = {
-            NSApp.activate(ignoringOtherApps: true)
-            var error: NSDictionary?
-            let script = NSAppleScript(source: appleScript)
-            _ = script?.executeAndReturnError(&error)
-            guard let error else { return nil }
-
-            if let message = error[NSAppleScript.errorMessage] as? String, !message.isEmpty {
-                return message
-            }
-            return error.description
-        }
-
-        let mainThreadError: String?
-        if Thread.isMainThread {
-            mainThreadError = executeAppleScript()
-        } else {
-            var result: String?
-            DispatchQueue.main.sync {
-                result = executeAppleScript()
-            }
-            mainThreadError = result
-        }
-
-        if mainThreadError == nil {
-            return nil
-        }
-
         let promptPrefix = "with prompt \"\(Self.escapeForAppleScript(prompt))\""
-        let fallbackAppleScript = "do shell script \"\(Self.escapeForAppleScript(command))\" \(promptPrefix) with administrator privileges"
-        let osascriptResult = runTask(launchPath: "/usr/bin/osascript", arguments: ["-e", fallbackAppleScript])
+        let appleScript =
+            "do shell script \"\(Self.escapeForAppleScript(command))\" \(promptPrefix) with administrator privileges"
+
+        if Thread.isMainThread {
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+
+        let osascriptResult = runTask(
+            launchPath: "/usr/bin/osascript",
+            arguments: ["-e", appleScript],
+            timeout: 120
+        )
         if osascriptResult.terminationStatus == 0 {
+            logInfo("[diag] AWDL persistent helper administrator command succeeded")
             return nil
         }
 
         let taskError = !osascriptResult.stderr.isEmpty ? osascriptResult.stderr : osascriptResult.stdout
-        return !taskError.isEmpty ? taskError : mainThreadError
+        if !taskError.isEmpty {
+            logWarning("[diag] AWDL persistent helper administrator command failed: \(taskError)")
+        }
+        return !taskError.isEmpty ? taskError : "Administrator authorization failed."
     }
 
     private func waitForInterfaceState(up expectedUp: Bool, attempts: Int = 20) -> Bool {
@@ -1179,7 +1194,11 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         return normalizedAuthorizationError(!taskError.isEmpty ? taskError : (mainThreadError ?? ""))
     }
 
-    private func runTask(launchPath: String, arguments: [String]) -> (terminationStatus: Int32, stdout: String, stderr: String) {
+    private func runTask(
+        launchPath: String,
+        arguments: [String],
+        timeout: TimeInterval? = nil
+    ) -> (terminationStatus: Int32, stdout: String, stderr: String) {
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         let task = Process()
@@ -1190,7 +1209,25 @@ final class AwdlHelperManager: NSObject, ObservableObject {
 
         do {
             try task.run()
-            task.waitUntilExit()
+            if let timeout, timeout > 0 {
+                let waitSemaphore = DispatchSemaphore(value: 0)
+                task.terminationHandler = { _ in
+                    waitSemaphore.signal()
+                }
+
+                if waitSemaphore.wait(timeout: .now() + timeout) == .timedOut {
+                    if task.isRunning {
+                        task.interrupt()
+                        usleep(150_000)
+                        if task.isRunning {
+                            task.terminate()
+                        }
+                    }
+                    return (-2, "", "Timed out after \(Int(timeout)) seconds")
+                }
+            } else {
+                task.waitUntilExit()
+            }
         } catch {
             return (-1, "", error.localizedDescription)
         }
