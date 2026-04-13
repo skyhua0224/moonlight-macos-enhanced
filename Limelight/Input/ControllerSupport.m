@@ -199,7 +199,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     bool _oscEnabled;
     char _controllerNumbers;
     bool _multiController;
-    bool _gamepadMouseModeEnabled;
+    BOOL _gamepadMouseModeEnabled;
     bool _isMouseModeActive;
     NSDate *_startPressTime;
     float _accumulatedMouseX;
