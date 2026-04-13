@@ -56,6 +56,7 @@ typedef struct {
 - (void *)inputStreamContext;
 - (void *)controlStreamContext;
 - (BOOL)getVideoDiagnosticSnapshot:(MLVideoDiagnosticSnapshot *)snapshot;
+- (void)notifyInputStreamReadyForMicrophoneControlIfNeeded;
 - (void)terminate;
 - (void)main;
 

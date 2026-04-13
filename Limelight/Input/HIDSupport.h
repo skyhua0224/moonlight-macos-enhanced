@@ -43,6 +43,11 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 
 - (void)releaseAllModifierKeys;
 - (void)sendSyntheticRemoteShortcut:(StreamShortcut *)shortcut;
+- (void)sendSyntheticRemoteModifierTapForFlags:(NSEventModifierFlags)modifierFlags;
+- (void)sendSyntheticRemoteModifierTapForKeyCode:(unsigned short)keyCode
+            preferShortcutTranslationCommandMapping:(BOOL)preferShortcutTranslationCommandMapping;
+- (void)beginDeferredShortcutTranslationCommandHoldForKeyCode:(unsigned short)keyCode;
+- (void)endDeferredShortcutTranslationCommandHoldForKeyCode:(unsigned short)keyCode;
 - (BOOL)getLastAbsolutePointerHostX:(short *)hostX
                               hostY:(short *)hostY
                      referenceWidth:(short *)referenceWidth
