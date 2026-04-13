@@ -1959,6 +1959,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
         StreamShortcut *borderlessShortcut = [strongSelf streamShortcutForAction:MLShortcutActionToggleBorderlessWindowed];
         if ([strongSelf event:event matchesShortcut:borderlessShortcut]) {
+            [strongSelf resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"local-monitor-borderless-shortcut" event:event];
             strongSelf.pendingOptionUncaptureToken += 1;
             if ([strongSelf isWindowBorderlessMode]) {
                 [strongSelf switchToWindowedMode:nil];
@@ -1970,6 +1971,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
         StreamShortcut *controlCenterShortcut = [strongSelf streamShortcutForAction:MLShortcutActionOpenControlCenter];
         if ([strongSelf event:event matchesShortcut:controlCenterShortcut]) {
+            [strongSelf resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"local-monitor-control-center-shortcut" event:event];
             [strongSelf presentControlCenterFromShortcut];
             return nil;
         }
@@ -2219,10 +2221,68 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 }
 
 - (void)flagsChanged:(NSEvent *)event {
+    NSEventModifierFlags relevantModifiers = MLRelevantShortcutModifiers(event.modifierFlags);
+    if ([self shouldDeferCommandModifierForShortcutHandlingWithEvent:event]) {
+        self.deferredCommandModifierPendingForShortcutTranslation = YES;
+        self.deferredCommandModifierForwardedAsHeld = NO;
+        NSUInteger dispatchToken = ++self.deferredCommandModifierDispatchToken;
+        Log(LOG_D, @"[diag] deferring command modifier for shortcut translation: %@",
+            MLDisconnectEventSummary(event));
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf ||
+                !strongSelf.deferredCommandModifierPendingForShortcutTranslation ||
+                strongSelf.deferredCommandModifierForwardedAsHeld ||
+                strongSelf.deferredCommandModifierDispatchToken != dispatchToken) {
+                return;
+            }
+
+            NSEventModifierFlags currentModifiers = MLRelevantShortcutModifiers([NSEvent modifierFlags]);
+            if (currentModifiers != NSEventModifierFlagCommand) {
+                return;
+            }
+
+            strongSelf.deferredCommandModifierForwardedAsHeld = YES;
+            Log(LOG_I, @"[diag] deferred command forwarded as held mapped modifier: %@",
+                MLDisconnectEventSummary(event));
+            [strongSelf.hidSupport beginDeferredShortcutTranslationCommandHoldForKeyCode:event.keyCode];
+        });
+        return;
+    }
+
+    if (self.deferredCommandModifierPendingForShortcutTranslation) {
+        if ((relevantModifiers & NSEventModifierFlagCommand) == 0) {
+            self.deferredCommandModifierDispatchToken += 1;
+            self.deferredCommandModifierPendingForShortcutTranslation = NO;
+
+            if (self.deferredCommandModifierForwardedAsHeld) {
+                self.deferredCommandModifierForwardedAsHeld = NO;
+                Log(LOG_I, @"[diag] deferred command released after held forwarding: %@",
+                    MLDisconnectEventSummary(event));
+                [self.hidSupport endDeferredShortcutTranslationCommandHoldForKeyCode:event.keyCode];
+            } else {
+                Log(LOG_I, @"[diag] deferred command resolved as standalone mapped tap: %@",
+                    MLDisconnectEventSummary(event));
+                [self.hidSupport sendSyntheticRemoteModifierTapForKeyCode:event.keyCode
+                            preferShortcutTranslationCommandMapping:YES];
+            }
+            return;
+        }
+
+        if (self.deferredCommandModifierForwardedAsHeld) {
+            [self.hidSupport flagsChanged:event];
+        } else {
+            Log(LOG_D, @"[diag] keeping command modifier deferred while awaiting shortcut resolution: %@",
+                MLDisconnectEventSummary(event));
+        }
+        return;
+    }
+
     [self.hidSupport flagsChanged:event];
 
     StreamShortcut *releaseShortcut = [self streamShortcutForAction:MLShortcutActionReleaseMouseCapture];
-    NSEventModifierFlags relevantMods = MLRelevantShortcutModifiers(event.modifierFlags);
+    NSEventModifierFlags relevantMods = relevantModifiers;
 
     if (releaseShortcut.modifierOnly && relevantMods == releaseShortcut.modifierFlags) {
         NSUInteger token = ++self.pendingOptionUncaptureToken;
@@ -2248,6 +2308,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 }
 
 - (void)keyDown:(NSEvent *)event {
+    [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"plain-keydown" event:event];
     [self.hidSupport keyDown:event];
 }
 
@@ -2496,11 +2557,79 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         }
 
         if (event.keyCode == trigger.keyCode && relevantModifiers == trigger.modifierFlags) {
+            Log(LOG_I, @"[diag] keyboard translation trigger matched: event=%@ outputKind=%ld",
+                MLDisconnectEventSummary(event),
+                (long)rule.outputKind);
             return rule;
         }
     }
 
+    if (event.keyCode == kVK_ANSI_W) {
+        Log(LOG_D, @"[diag] keyboard translation no match for W: event=%@ ruleCount=%lu",
+            MLDisconnectEventSummary(event),
+            (unsigned long)rules.count);
+    }
+
     return nil;
+}
+
+- (BOOL)shouldDeferCommandModifierForShortcutHandlingWithEvent:(NSEvent *)event {
+    if (event == nil || self.app.host.uuid.length == 0) {
+        return NO;
+    }
+
+    BOOL isCommandKeyEvent = (event.keyCode == kVK_Command || event.keyCode == kVK_RightCommand);
+    NSEventModifierFlags relevantModifiers = MLRelevantShortcutModifiers(event.modifierFlags);
+    if (!isCommandKeyEvent || relevantModifiers != NSEventModifierFlagCommand) {
+        return NO;
+    }
+
+    NSArray<KeyboardTranslationRule *> *rules = [SettingsClass keyboardTranslationRulesFor:self.app.host.uuid];
+    for (KeyboardTranslationRule *rule in rules) {
+        StreamShortcut *trigger = rule.trigger;
+        if (trigger != nil &&
+            !trigger.modifierOnly &&
+            trigger.hasKeyCode &&
+            (trigger.modifierFlags & NSEventModifierFlagCommand) != 0) {
+            return YES;
+        }
+    }
+
+    NSArray<NSString *> *actions = @[
+        MLShortcutActionShowDisconnectOptions,
+        MLShortcutActionDisconnectStream,
+        MLShortcutActionCloseAndQuitApp,
+        MLShortcutActionReconnectStream,
+        MLShortcutActionOpenControlCenter,
+        MLShortcutActionTogglePerformanceOverlay,
+        MLShortcutActionToggleMouseMode,
+        MLShortcutActionToggleFullscreenControlBall,
+        MLShortcutActionToggleBorderlessWindowed
+    ];
+    for (NSString *action in actions) {
+        StreamShortcut *shortcut = [self streamShortcutForAction:action];
+        if (shortcut != nil &&
+            !shortcut.modifierOnly &&
+            shortcut.hasKeyCode &&
+            (shortcut.modifierFlags & NSEventModifierFlagCommand) != 0) {
+            return YES;
+        }
+    }
+
+    return NO;
+}
+
+- (void)resolveDeferredCommandModifierWithoutRemoteTapWithReason:(NSString *)reason event:(NSEvent *)event {
+    if (!self.deferredCommandModifierPendingForShortcutTranslation) {
+        return;
+    }
+
+    self.deferredCommandModifierPendingForShortcutTranslation = NO;
+    self.deferredCommandModifierForwardedAsHeld = NO;
+    self.deferredCommandModifierDispatchToken += 1;
+    Log(LOG_D, @"[diag] deferred command consumed without standalone Win tap: reason=%@ event=%@",
+        reason ?: @"(nil)",
+        MLDisconnectEventSummary(event));
 }
 
 - (BOOL)performKeyboardTranslationLocalAction:(NSString *)action {
@@ -2604,10 +2733,15 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return NO;
     }
 
+    [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"keyboard-translation" event:event];
     [self.hidSupport releaseAllModifierKeys];
 
     if (rule.outputKind == KeyboardTranslationOutputKindRemoteShortcut) {
         if (rule.outputShortcut != nil) {
+            Log(LOG_I, @"[diag] keyboard translation dispatching remote shortcut: event=%@ remoteKey=%ld remoteMods=0x%llx",
+                MLDisconnectEventSummary(event),
+                (long)rule.outputShortcut.keyCode,
+                (unsigned long long)rule.outputShortcut.modifierFlagsRaw);
             [self.hidSupport sendSyntheticRemoteShortcut:rule.outputShortcut];
             return YES;
         }
@@ -2626,6 +2760,8 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     StreamShortcut *disconnectShortcut = [self streamShortcutForAction:MLShortcutActionDisconnectStream];
     StreamShortcut *quitShortcut = [self streamShortcutForAction:MLShortcutActionCloseAndQuitApp];
     StreamShortcut *reconnectShortcut = [self streamShortcutForAction:MLShortcutActionReconnectStream];
+
+    [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"keyboard-equivalent" event:event];
 
     if ([self handleKeyboardTranslationRuleForEvent:event]) {
         return YES;
@@ -2652,6 +2788,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     if ([self event:event matchesShortcut:disconnectOptionsShortcut]) {
+        [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"disconnect-options-shortcut" event:event];
         self.pendingOptionUncaptureToken += 1;
         [self.hidSupport releaseAllModifierKeys];
         [self performClose:nil];
@@ -2659,6 +2796,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     if ([self event:event matchesShortcut:disconnectShortcut]) {
+        [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"disconnect-shortcut" event:event];
         self.pendingOptionUncaptureToken += 1;
         [self.hidSupport releaseAllModifierKeys];
         [self requestStreamCloseWithSource:@"keyboard-custom-disconnect"];
@@ -2666,6 +2804,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     if ([self event:event matchesShortcut:quitShortcut]) {
+        [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"quit-shortcut" event:event];
         self.pendingOptionUncaptureToken += 1;
         [self.hidSupport releaseAllModifierKeys];
         [self performCloseAndQuitApp:nil];
@@ -2673,12 +2812,15 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     if ([self event:event matchesShortcut:reconnectShortcut]) {
+        [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"reconnect-shortcut" event:event];
         [self.hidSupport releaseAllModifierKeys];
         [self reconnectFromMenu:nil];
         return YES;
     }
 
     if (event.keyCode == kVK_ANSI_W && eventModifierFlags == NSEventModifierFlagCommand) {
+        [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"cmd-w-swallow" event:event];
+        Log(LOG_D, @"[diag] cmd+w swallowed after custom handlers: %@", MLDisconnectEventSummary(event));
         [self.hidSupport releaseAllModifierKeys];
         return YES;
     }
@@ -2706,6 +2848,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return YES;
     }
     
+    [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"keyboard-equivalent-pass-through" event:event];
     [self.hidSupport keyDown:event];
     [self.hidSupport keyUp:event];
     

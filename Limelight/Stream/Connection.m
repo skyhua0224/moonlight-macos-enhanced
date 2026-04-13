@@ -35,6 +35,7 @@
 #undef MicPingPayload
 #undef MicPortNumber
 #undef AudioEncryptionEnabled
+#undef EncryptionFeaturesEnabled
 
 #define AUDIO_QUEUE_BUFFERS 4
 
@@ -89,6 +90,8 @@
     NSMutableData* _micPcmQueue;
     int _micSendFailures;
     BOOL _micStopping;
+    BOOL _micControlStarted;
+    BOOL _micEncryptionStatusLogged;
     uint64_t _micLastPingTimeMs;
     uint32_t _micPingCount;
 #endif
@@ -816,6 +819,9 @@ void ClConnectionStatusUpdate(int status)
     }
 
     _streamConfig.enableMic = enableMic;
+    if (enableMic) {
+        _streamConfig.encryptionFlags |= ENCFLG_MICROPHONE;
+    }
 #endif
 
 #if !defined(VIDEO_FORMAT_H264_HIGH8_444)
@@ -1065,6 +1071,23 @@ void ClConnectionStatusUpdate(int status)
 }
 
 #if defined(LI_MIC_CONTROL_START)
+- (void)notifyInputStreamReadyForMicrophoneControlIfNeeded
+{
+    if (!_streamConfig.enableMic || _micStopping || _micControlStarted) {
+        return;
+    }
+
+    if (self.micAudioEngine == nil || !self.micAudioEngine.isRunning) {
+        return;
+    }
+
+    if (!_connectionContext.inputContext.initialized) {
+        return;
+    }
+
+    _micControlStarted = [self sendMicrophoneControlPacket:LI_MIC_CONTROL_START reason:@"start-input-ready"];
+}
+
 - (void)startMicrophoneIfNeeded
 {
     if (!_streamConfig.enableMic) {
@@ -1075,6 +1098,8 @@ void ClConnectionStatusUpdate(int status)
 
     _micSendFailures = 0;
     _micStopping = NO;
+    _micControlStarted = NO;
+    _micEncryptionStatusLogged = NO;
 
     // Create encoder/queue once
     if (_micQueue == nil) {
@@ -1136,6 +1161,32 @@ void ClConnectionStatusUpdate(int status)
     }
     free(devices);
     return result;
+}
+
+- (BOOL)sendMicrophoneControlPacket:(uint8_t)control reason:(NSString *)reason
+{
+    PML_INPUT_STREAM_CONTEXT inputCtx = &_connectionContext.inputContext;
+    if (!inputCtx->initialized) {
+        Log(LOG_W, @"Skipping microphone control %@: input stream not initialized", reason);
+        return NO;
+    }
+
+    int err = LiSendMicrophoneControlCtx(inputCtx,
+                                         control,
+                                         micSampleRate,
+                                         micChannels,
+                                         micBitrate);
+    if (err < 0) {
+        Log(LOG_W, @"Failed to send microphone control %@: %d", reason, err);
+        return NO;
+    }
+
+    Log(LOG_I, @"Sent microphone control %@ (rate=%d channels=%d bitrate=%d)",
+        reason,
+        micSampleRate,
+        micChannels,
+        micBitrate);
+    return YES;
 }
 
 - (void)startMicrophoneEngineLocked
@@ -1359,7 +1410,11 @@ void ClConnectionStatusUpdate(int status)
         [self.micAudioEngine stop];
         self.micAudioEngine = nil;
         self.micConverter = nil;
+        _micControlStarted = NO;
+        return;
     }
+
+    _micControlStarted = [self sendMicrophoneControlPacket:LI_MIC_CONTROL_START reason:@"start"];
 }
 
 - (void)drainMicPcmAndSend
@@ -1369,6 +1424,16 @@ void ClConnectionStatusUpdate(int status)
     }
 
     LiSetThreadConnectionContext(&_connectionContext);
+
+    if (!_micControlStarted && _connectionContext.inputContext.initialized) {
+        _micControlStarted = [self sendMicrophoneControlPacket:LI_MIC_CONTROL_START reason:@"start-deferred"];
+    }
+
+    if (!_micEncryptionStatusLogged) {
+        BOOL micEncryptionEnabled = (_connectionContext.EncryptionFeaturesEnabled & SS_ENC_MICROPHONE) != 0;
+        Log(LOG_I, @"Microphone uplink encryption negotiated: %@", micEncryptionEnabled ? @"enabled" : @"disabled");
+        _micEncryptionStatusLogged = YES;
+    }
 
     const NSUInteger bytesPerFrame = sizeof(int16_t) * micChannels;
     const NSUInteger packetPcmBytes = (NSUInteger)micFrameSize * bytesPerFrame;
@@ -1403,6 +1468,12 @@ void ClConnectionStatusUpdate(int status)
 - (void)stopMicrophoneIfNeeded
 {
     _micStopping = YES;
+    if (_micControlStarted) {
+        [self sendMicrophoneControlPacket:LI_MIC_CONTROL_STOP reason:@"stop"];
+        _micControlStarted = NO;
+    }
+    _micEncryptionStatusLogged = NO;
+
     if (self.micAudioEngine != nil) {
         [self.micAudioEngine.inputNode removeTapOnBus:0];
         [self.micAudioEngine stop];

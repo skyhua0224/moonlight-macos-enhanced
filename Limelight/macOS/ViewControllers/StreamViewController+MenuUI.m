@@ -91,23 +91,6 @@
         && MLRelevantShortcutModifiers(event.modifierFlags) == shortcut.modifierFlags;
 }
 
-- (NSArray<NSMenuItem *> *)menuItemsWithAction:(SEL)action inMenu:(NSMenu *)menu {
-    if (!menu) {
-        return @[];
-    }
-
-    NSMutableArray<NSMenuItem *> *items = [NSMutableArray array];
-    for (NSMenuItem *item in menu.itemArray) {
-        if (item.action == action) {
-            [items addObject:item];
-        }
-        if (item.submenu) {
-            [items addObjectsFromArray:[self menuItemsWithAction:action inMenu:item.submenu]];
-        }
-    }
-    return items;
-}
-
 - (void)applyShortcut:(StreamShortcut *)shortcut toMenuItem:(NSMenuItem *)item {
     if (!item) {
         return;
@@ -118,29 +101,6 @@
 }
 
 - (void)updateConfiguredShortcutMenus {
-    NSMenu *mainMenu = NSApp.mainMenu;
-    if (mainMenu) {
-        StreamShortcut *disconnectOptionsShortcut = [self streamShortcutForAction:MLShortcutActionShowDisconnectOptions];
-        for (NSMenuItem *item in [self menuItemsWithAction:@selector(performClose:) inMenu:mainMenu]) {
-            [self applyShortcut:disconnectOptionsShortcut toMenuItem:item];
-        }
-
-        StreamShortcut *disconnectShortcut = [self streamShortcutForAction:MLShortcutActionDisconnectStream];
-        for (NSMenuItem *item in [self menuItemsWithAction:@selector(performCloseStreamWindow:) inMenu:mainMenu]) {
-            [self applyShortcut:disconnectShortcut toMenuItem:item];
-        }
-
-        StreamShortcut *quitShortcut = [self streamShortcutForAction:MLShortcutActionCloseAndQuitApp];
-        for (NSMenuItem *item in [self menuItemsWithAction:@selector(performCloseAndQuitApp:) inMenu:mainMenu]) {
-            [self applyShortcut:quitShortcut toMenuItem:item];
-        }
-
-        StreamShortcut *reconnectShortcut = [self streamShortcutForAction:MLShortcutActionReconnectStream];
-        for (NSMenuItem *item in [self menuItemsWithAction:@selector(reconnectFromMenu:) inMenu:mainMenu]) {
-            [self applyShortcut:reconnectShortcut toMenuItem:item];
-        }
-    }
-
     if (self.streamMenu) {
         [self rebuildStreamMenu];
     }

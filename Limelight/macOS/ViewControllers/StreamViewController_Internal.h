@@ -433,6 +433,9 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) id localKeyDownMonitor;
 @property (nonatomic, strong) id localMouseClickMonitor;
 @property (nonatomic, strong) id globalMouseMovedMonitor;
+@property (nonatomic) BOOL deferredCommandModifierPendingForShortcutTranslation;
+@property (nonatomic) BOOL deferredCommandModifierForwardedAsHeld;
+@property (nonatomic) NSUInteger deferredCommandModifierDispatchToken;
 
 @property (nonatomic) BOOL savedPresentationOptionsValid;
 @property (nonatomic) NSApplicationPresentationOptions savedPresentationOptions;
@@ -494,6 +497,11 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 
 @interface StreamViewController (MouseCaptureInternal)
 - (void)prepareCoreHIDFreeMouseStateForFocusRegainWithReason:(NSString *)reason;
+- (KeyboardTranslationRule *)keyboardTranslationRuleMatchingEvent:(NSEvent *)event;
+- (BOOL)performKeyboardTranslationLocalAction:(NSString *)action;
+- (BOOL)handleKeyboardTranslationRuleForEvent:(NSEvent *)event;
+- (BOOL)shouldDeferCommandModifierForShortcutHandlingWithEvent:(NSEvent *)event;
+- (void)resolveDeferredCommandModifierWithoutRemoteTapWithReason:(NSString *)reason event:(NSEvent *)event;
 @end
 @interface StreamViewController (MenuUI) <MLStreamScopedCallbackOwner>
 - (NSString *)mouseModeDisplayNameForMode:(NSString *)mode;
@@ -506,7 +514,6 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)presentControlCenterFromShortcut;
 - (StreamShortcut *)streamShortcutForAction:(NSString *)action;
 - (BOOL)event:(NSEvent *)event matchesShortcut:(StreamShortcut *)shortcut;
-- (NSArray<NSMenuItem *> *)menuItemsWithAction:(SEL)action inMenu:(NSMenu *)menu;
 - (void)applyShortcut:(StreamShortcut *)shortcut toMenuItem:(NSMenuItem *)item;
 - (void)updateConfiguredShortcutMenus;
 - (BOOL)windowSupportsTitlebarAccessoryControllers:(NSWindow *)window;

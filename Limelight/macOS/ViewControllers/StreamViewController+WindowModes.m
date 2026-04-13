@@ -7,6 +7,40 @@
 
 @implementation StreamViewController (WindowModes)
 
+- (BOOL)handleKeyboardTranslationForCurrentCloseEventAllowingLocalAction:(NSString *)allowedLocalAction {
+    NSEvent *event = NSApp.currentEvent;
+    if (event == nil || event.type != NSEventTypeKeyDown) {
+        return NO;
+    }
+
+    if (allowedLocalAction.length > 0) {
+        StreamShortcut *localShortcut = [self streamShortcutForAction:allowedLocalAction];
+        if (localShortcut != nil && [self event:event matchesShortcut:localShortcut]) {
+            Log(LOG_D, @"[diag] performClose preserved local shortcut action=%@ event=%@",
+                allowedLocalAction,
+                MLDisconnectEventSummary(event));
+            return NO;
+        }
+    }
+
+    KeyboardTranslationRule *rule = [self keyboardTranslationRuleMatchingEvent:event];
+    if (rule == nil) {
+        if (event.keyCode == kVK_ANSI_W) {
+            Log(LOG_D, @"[diag] performClose saw W without translation match: %@", MLDisconnectEventSummary(event));
+        }
+        return NO;
+    }
+
+    if (rule.outputKind == KeyboardTranslationOutputKindLocalAction &&
+        allowedLocalAction.length > 0 &&
+        [rule.localAction isEqualToString:allowedLocalAction]) {
+        return NO;
+    }
+
+    Log(LOG_I, @"[diag] performClose rerouted to keyboard translation: %@", MLDisconnectEventSummary(event));
+    return [self handleKeyboardTranslationRuleForEvent:event];
+}
+
 - (void)prepareStreamWindowChromeForStreamingIfNeeded {
     if (![NSThread isMainThread]) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -64,6 +98,10 @@
 }
 
 - (IBAction)performClose:(id)sender {
+    if ([self handleKeyboardTranslationForCurrentCloseEventAllowingLocalAction:KeyboardTranslationProfile.localActionShowDisconnectOptions]) {
+        return;
+    }
+
     Log(LOG_I, @"[diag] performClose invoked: sender=%@ event=%@",
         sender ? NSStringFromClass([sender class]) : @"(null)",
         MLDisconnectEventSummary(NSApp.currentEvent));
