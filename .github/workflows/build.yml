@@ -31,7 +31,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         submodules: recursive
         fetch-depth: 0
@@ -125,14 +125,14 @@ jobs:
         hdiutil create -volname "Moonlight-${{ matrix.variant }}" -srcfolder "dist/app/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg"
 
     - name: Upload ${{ matrix.variant }} app artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: Moonlight-macOS-app-${{ matrix.variant }}
         path: dist/Moonlight-macOS-${{ matrix.variant }}.app.tar.gz
         if-no-files-found: error
 
     - name: Upload ${{ matrix.variant }} DMG artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: Moonlight-macOS-dmg-${{ matrix.variant }}
         path: dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg
@@ -145,13 +145,13 @@ jobs:
 
     steps:
     - name: Download arm64 app artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: Moonlight-macOS-app-arm64
         path: artifacts/arm64
 
     - name: Download x86_64 app artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: Moonlight-macOS-app-x86_64
         path: artifacts/x86_64
@@ -278,7 +278,7 @@ jobs:
         hdiutil create -volname "Moonlight-universal" -srcfolder "dist/universal/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-universal.dmg"
 
     - name: Upload universal DMG artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: Moonlight-macOS-dmg-universal
         path: dist/Moonlight-macOS-Enhanced-universal.dmg
@@ -318,24 +318,24 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
     - name: Download x86_64 DMG artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: Moonlight-macOS-dmg-x86_64
         path: dist
 
     - name: Download arm64 DMG artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: Moonlight-macOS-dmg-arm64
         path: dist
 
     - name: Download universal DMG artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: Moonlight-macOS-dmg-universal
         path: dist
@@ -352,7 +352,7 @@ jobs:
         python3 .github/scripts/build_release_body.py
 
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         name: ${{ steps.version.outputs.VERSION }}
         draft: false
