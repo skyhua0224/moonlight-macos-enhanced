@@ -284,8 +284,32 @@ jobs:
         path: dist/Moonlight-macOS-Enhanced-universal.dmg
         if-no-files-found: error
 
-  release:
+  build:
+    name: build
     needs: [build_arch, build_universal]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Verify required build jobs
+      run: |
+        echo "build_arch result: ${{ needs.build_arch.result }}"
+        echo "build_universal result: ${{ needs.build_universal.result }}"
+
+        if [ "${{ needs.build_arch.result }}" != "success" ]; then
+          echo "build_arch did not succeed"
+          exit 1
+        fi
+
+        if [ "${{ needs.build_universal.result }}" != "success" ]; then
+          echo "build_universal did not succeed"
+          exit 1
+        fi
+
+        echo "All required build jobs passed."
+
+  release:
+    needs: [build_arch, build_universal, build]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
