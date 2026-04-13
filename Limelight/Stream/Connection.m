@@ -1505,6 +1505,12 @@ void ClConnectionStatusUpdate(int status)
 }
 #endif
 
+#if !defined(LI_MIC_CONTROL_START)
+- (void)notifyInputStreamReadyForMicrophoneControlIfNeeded
+{
+}
+#endif
+
 static void FillOutputBuffer(void *aqData,
                              AudioQueueRef inAQ,
                              AudioQueueBufferRef inBuffer) {

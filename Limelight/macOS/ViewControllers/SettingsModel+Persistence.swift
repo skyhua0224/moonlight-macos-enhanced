@@ -12,32 +12,69 @@ import SwiftUI
 import VideoToolbox
 
 extension SettingsModel {
+  private static let keyboardTranslationRulesCacheLock = NSLock()
+  private static var cachedKeyboardTranslationRulesByHostId: [String: [KeyboardTranslationRule]] =
+    [:]
+
+  private static func cachedKeyboardTranslationRules(for hostId: String)
+    -> [KeyboardTranslationRule]?
+  {
+    keyboardTranslationRulesCacheLock.lock()
+    let cachedRules = cachedKeyboardTranslationRulesByHostId[hostId]
+    keyboardTranslationRulesCacheLock.unlock()
+    return cachedRules
+  }
+
+  private static func updateCachedKeyboardTranslationRules(
+    _ rules: [KeyboardTranslationRule],
+    for hostId: String
+  ) {
+    keyboardTranslationRulesCacheLock.lock()
+    cachedKeyboardTranslationRulesByHostId[hostId] = rules
+    keyboardTranslationRulesCacheLock.unlock()
+  }
+
+  private static func invalidateKeyboardTranslationRulesCache() {
+    keyboardTranslationRulesCacheLock.lock()
+    cachedKeyboardTranslationRulesByHostId.removeAll()
+    keyboardTranslationRulesCacheLock.unlock()
+  }
+
   private static func decodeKeyboardTranslationRules(from data: Data?) -> [KeyboardTranslationRule]? {
     guard let data else { return nil }
     return try? PropertyListDecoder().decode([KeyboardTranslationRule].self, from: data)
   }
 
   static func loadKeyboardTranslationRules(for hostId: String) -> [KeyboardTranslationRule] {
+    if let cachedRules = cachedKeyboardTranslationRules(for: hostId) {
+      return cachedRules
+    }
+
     let userDefaults = UserDefaults.standard
     let hostKey = keyboardTranslationRulesStorageKey(for: hostId)
+    let resolvedRules: [KeyboardTranslationRule]
     if let rules = decodeKeyboardTranslationRules(from: userDefaults.data(forKey: hostKey)) {
-      return KeyboardTranslationProfile.normalizedRules(rules)
-    }
-
-    if hostId != globalHostId {
+      resolvedRules = KeyboardTranslationProfile.normalizedRules(rules)
+    } else if hostId != globalHostId {
       let globalKey = keyboardTranslationRulesStorageKey(for: globalHostId)
       if let rules = decodeKeyboardTranslationRules(from: userDefaults.data(forKey: globalKey)) {
-        return KeyboardTranslationProfile.normalizedRules(rules)
+        resolvedRules = KeyboardTranslationProfile.normalizedRules(rules)
+      } else {
+        resolvedRules = KeyboardTranslationProfile.defaultRules()
       }
+    } else {
+      resolvedRules = KeyboardTranslationProfile.defaultRules()
     }
 
-    return KeyboardTranslationProfile.defaultRules()
+    updateCachedKeyboardTranslationRules(resolvedRules, for: hostId)
+    return resolvedRules
   }
 
   private func persistKeyboardTranslationRules(for hostId: String) {
     let normalized = KeyboardTranslationProfile.normalizedRules(keyboardTranslationRules)
     if let data = try? PropertyListEncoder().encode(normalized) {
       UserDefaults.standard.set(data, forKey: Self.keyboardTranslationRulesStorageKey(for: hostId))
+      Self.invalidateKeyboardTranslationRulesCache()
     }
   }
 
