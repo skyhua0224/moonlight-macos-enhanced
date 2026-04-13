@@ -7,11 +7,27 @@ on:
       - 'v*'
   pull_request:
     branches: [master, main]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: macos-26  # macOS 26 Tahoe (beta) - Apple Silicon runner
+  build_arch:
+    name: Build ${{ matrix.variant }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: arm64
+            runner: macos-26
+            destination: 'platform=macOS,arch=arm64'
+            archs: 'arm64'
+            display_name: Apple Silicon
+          - variant: x86_64
+            runner: macos-26-intel
+            destination: 'platform=macOS,arch=x86_64'
+            archs: 'x86_64'
+            display_name: Intel
 
     steps:
     - name: Checkout
@@ -29,6 +45,7 @@ jobs:
       run: |
         xcodebuild -version
         swift --version
+        uname -m
         echo "Available schemes:"
         xcodebuild -list -project Moonlight.xcodeproj || true
 
@@ -38,14 +55,14 @@ jobs:
         unzip -o xcframeworks.zip -d xcframeworks/
         ls -la xcframeworks/
 
-    - name: Build for Apple Silicon (arm64)
+    - name: Build ${{ matrix.display_name }} package
       run: |
         xcodebuild -project Moonlight.xcodeproj \
           -scheme "Moonlight for macOS" \
           -configuration Release \
           -derivedDataPath build \
-          -destination 'platform=macOS,arch=arm64' \
-          ARCHS="arm64" \
+          -destination "${{ matrix.destination }}" \
+          ARCHS="${{ matrix.archs }}" \
           ONLY_ACTIVE_ARCH=YES \
           CODE_SIGN_IDENTITY="-" \
           CODE_SIGNING_REQUIRED=NO \
@@ -53,52 +70,222 @@ jobs:
           BUILD_NUMBER=${{ github.run_number }} \
           build
 
-    - name: Verify Binary
+    - name: Verify ${{ matrix.variant }} binary slices
       run: |
-        echo "Checking architecture..."
-        lipo -info "build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
-        file "build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
-        helper_path="build/Build/Products/Release/Moonlight.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMac.AwdlPrivilegedHelper"
-        if [ ! -f "$helper_path" ]; then
-          echo "Expected AWDL helper at $helper_path"
+        main_binary="build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
+        helper_binary="build/Build/Products/Release/Moonlight.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMac.AwdlPrivilegedHelper"
+
+        lipo -info "$main_binary"
+        file "$main_binary"
+
+        if [ ! -f "$helper_binary" ]; then
+          echo "Expected AWDL helper at $helper_binary"
           exit 1
         fi
-        ls -l "$helper_path"
 
-    - name: Create App Bundle
-      run: |
-        mkdir -p dist
-        cp -R "build/Build/Products/Release/Moonlight.app" dist/
+        lipo -info "$helper_binary"
+        file "$helper_binary"
 
-    - name: Create DMG
+        main_archs="$(lipo -archs "$main_binary")"
+        helper_archs="$(lipo -archs "$helper_binary")"
+        echo "Main binary architectures: $main_archs"
+        echo "Helper binary architectures: $helper_archs"
+
+        if [[ "$main_archs" != *"${{ matrix.archs }}"* ]]; then
+          echo "Main binary missing expected architecture ${{ matrix.archs }}"
+          exit 1
+        fi
+
+        if [[ "$helper_archs" != *"${{ matrix.archs }}"* ]]; then
+          echo "Helper binary missing expected architecture ${{ matrix.archs }}"
+          exit 1
+        fi
+
+    - name: Package ${{ matrix.variant }} app bundle
       run: |
-        # 安装 create-dmg
+        mkdir -p dist/app
+        cp -R "build/Build/Products/Release/Moonlight.app" "dist/app/Moonlight.app"
+        tar -czf "dist/Moonlight-macOS-${{ matrix.variant }}.app.tar.gz" -C dist/app Moonlight.app
+
+    - name: Create ${{ matrix.variant }} DMG
+      run: |
         brew install create-dmg || true
 
-        # 创建 DMG
         create-dmg \
-          --volname "Moonlight macOS Enhanced" \
-          --volicon "dist/Moonlight.app/Contents/Resources/AppIcon.icns" \
+          --volname "Moonlight macOS Enhanced (${{ matrix.variant }})" \
+          --volicon "dist/app/Moonlight.app/Contents/Resources/AppIcon.icns" \
           --window-pos 200 120 \
           --window-size 600 400 \
           --icon-size 100 \
           --icon "Moonlight.app" 150 185 \
           --hide-extension "Moonlight.app" \
           --app-drop-link 450 185 \
-          "dist/Moonlight-macOS-Universal.dmg" \
-          "dist/Moonlight.app" || \
-        # 如果 create-dmg 失败，使用简单方式
-        hdiutil create -volname "Moonlight" -srcfolder "dist/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Universal.dmg"
+          "dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg" \
+          "dist/app/Moonlight.app" || \
+        hdiutil create -volname "Moonlight-${{ matrix.variant }}" -srcfolder "dist/app/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg"
 
-    - name: Upload Artifact
+    - name: Upload ${{ matrix.variant }} app artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Moonlight-macOS-Universal
-        path: dist/Moonlight-macOS-Universal.dmg
+        name: Moonlight-macOS-app-${{ matrix.variant }}
+        path: dist/Moonlight-macOS-${{ matrix.variant }}.app.tar.gz
+        if-no-files-found: error
+
+    - name: Upload ${{ matrix.variant }} DMG artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Moonlight-macOS-dmg-${{ matrix.variant }}
+        path: dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg
+        if-no-files-found: error
+
+  build_universal:
+    name: Build universal
+    needs: build_arch
+    runs-on: macos-26
+
+    steps:
+    - name: Download arm64 app artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: Moonlight-macOS-app-arm64
+        path: artifacts/arm64
+
+    - name: Download x86_64 app artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: Moonlight-macOS-app-x86_64
+        path: artifacts/x86_64
+
+    - name: Extract app bundles
+      run: |
+        mkdir -p work/arm64 work/x86_64 dist
+        tar -xzf "artifacts/arm64/Moonlight-macOS-arm64.app.tar.gz" -C work/arm64
+        tar -xzf "artifacts/x86_64/Moonlight-macOS-x86_64.app.tar.gz" -C work/x86_64
+
+    - name: Merge universal app bundle
+      run: |
+        mkdir -p dist/universal
+        rsync -a "work/arm64/Moonlight.app/" "dist/universal/Moonlight.app/"
+
+        export ARM_APP="$PWD/work/arm64/Moonlight.app"
+        export X86_APP="$PWD/work/x86_64/Moonlight.app"
+        export UNIVERSAL_APP="$PWD/dist/universal/Moonlight.app"
+
+        python3 <<'PY'
+        import os
+        import shutil
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        arm_app = Path(os.environ["ARM_APP"])
+        x86_app = Path(os.environ["X86_APP"])
+        universal_app = Path(os.environ["UNIVERSAL_APP"])
+        expected_archs = {"arm64", "x86_64"}
+
+        def file_description(path: Path) -> str:
+            return subprocess.check_output(["file", "-b", str(path)], text=True).strip()
+
+        def is_macho(path: Path) -> bool:
+            return "Mach-O" in file_description(path)
+
+        def archs(path: Path) -> set[str]:
+            return set(subprocess.check_output(["lipo", "-archs", str(path)], text=True).split())
+
+        relpaths: set[Path] = set()
+        for root in (arm_app, x86_app):
+            for path in root.rglob("*"):
+                if path.is_symlink() or not path.is_file():
+                    continue
+                relpaths.add(path.relative_to(root))
+
+        for relpath in sorted(relpaths):
+            arm_path = arm_app / relpath
+            x86_path = x86_app / relpath
+            dest_path = universal_app / relpath
+
+            existing_path = arm_path if arm_path.exists() else x86_path
+            if existing_path.is_symlink() or not existing_path.is_file():
+                continue
+
+            if not is_macho(existing_path):
+                if not dest_path.exists() and existing_path.exists():
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(existing_path, dest_path)
+                continue
+
+            if not arm_path.exists() or not x86_path.exists():
+                print(f"Missing counterpart while merging Mach-O file: {relpath}", file=sys.stderr)
+                sys.exit(1)
+
+            arm_archs = archs(arm_path)
+            x86_archs = archs(x86_path)
+
+            if arm_archs == expected_archs:
+                continue
+
+            if x86_archs == expected_archs:
+                shutil.copy2(x86_path, dest_path)
+                continue
+
+            if (arm_archs | x86_archs) != expected_archs:
+                print(
+                    f"Unexpected architecture union for {relpath}: arm={sorted(arm_archs)} x86={sorted(x86_archs)}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.check_call(["lipo", "-create", str(arm_path), str(x86_path), "-output", str(dest_path)])
+        PY
+
+    - name: Verify universal binary slices
+      run: |
+        main_binary="dist/universal/Moonlight.app/Contents/MacOS/Moonlight"
+        helper_binary="dist/universal/Moonlight.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMac.AwdlPrivilegedHelper"
+
+        lipo -info "$main_binary"
+        lipo -info "$helper_binary"
+
+        main_archs="$(lipo -archs "$main_binary")"
+        helper_archs="$(lipo -archs "$helper_binary")"
+
+        if [[ "$main_archs" != *"arm64"* || "$main_archs" != *"x86_64"* ]]; then
+          echo "Universal main binary missing expected slices"
+          exit 1
+        fi
+
+        if [[ "$helper_archs" != *"arm64"* || "$helper_archs" != *"x86_64"* ]]; then
+          echo "Universal helper binary missing expected slices"
+          exit 1
+        fi
+
+    - name: Create universal DMG
+      run: |
+        brew install create-dmg || true
+
+        create-dmg \
+          --volname "Moonlight macOS Enhanced (universal)" \
+          --volicon "dist/universal/Moonlight.app/Contents/Resources/AppIcon.icns" \
+          --window-pos 200 120 \
+          --window-size 600 400 \
+          --icon-size 100 \
+          --icon "Moonlight.app" 150 185 \
+          --hide-extension "Moonlight.app" \
+          --app-drop-link 450 185 \
+          "dist/Moonlight-macOS-Enhanced-universal.dmg" \
+          "dist/universal/Moonlight.app" || \
+        hdiutil create -volname "Moonlight-universal" -srcfolder "dist/universal/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-universal.dmg"
+
+    - name: Upload universal DMG artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Moonlight-macOS-dmg-universal
+        path: dist/Moonlight-macOS-Enhanced-universal.dmg
         if-no-files-found: error
 
   release:
-    needs: build
+    needs: [build_arch, build_universal]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -111,10 +298,22 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Download Artifact
+    - name: Download x86_64 DMG artifact
       uses: actions/download-artifact@v4
       with:
-        name: Moonlight-macOS-Universal
+        name: Moonlight-macOS-dmg-x86_64
+        path: dist
+
+    - name: Download arm64 DMG artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: Moonlight-macOS-dmg-arm64
+        path: dist
+
+    - name: Download universal DMG artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: Moonlight-macOS-dmg-universal
         path: dist
 
     - name: Get Version
@@ -134,5 +333,8 @@ jobs:
         name: ${{ steps.version.outputs.VERSION }}
         draft: false
         prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-        files: dist/Moonlight-macOS-Universal.dmg
+        files: |
+          dist/Moonlight-macOS-Enhanced-x86_64.dmg
+          dist/Moonlight-macOS-Enhanced-arm64.dmg
+          dist/Moonlight-macOS-Enhanced-universal.dmg
         body_path: release_body.md
