@@ -14,66 +14,29 @@
 
 ---
 
-## ✨ Highlights
+## ✨ Core Capabilities
 
-### 🍎 Native macOS Experience
-- **Native AppKit / SwiftUI interface**, not a Qt port
-- **Apple Silicon and Intel support**
-- **Full dark mode and bilingual UI**
-- **Minimum supported version: macOS 12**
-
-### 🎮 Streaming Features
-- **Custom resolution, FPS, remote resolution, and remote FPS**
-- **HEVC / H.264 hardware decoding**
-- **HDR, YUV 4:4:4, and surround audio**
-- **Auto bitrate, MetalFX upscaling, and stream tuning**
-- **Fullscreen / borderless / windowed display modes**
-
-### 🖱️ Input and Control Enhancements
-- **Reworked input settings page** with dedicated Mouse, Keyboard, and Controller sections
-- **Free Mouse / Locked Mouse** modes, with Free Mouse as the better remote-control default
-- **Automatic mouse driver strategy**: `CoreHID → HID → MFI`
-- **CoreHID mouse path** on supported macOS versions for lower-latency mouse input
-- **Separate tuning for physical wheel, rewritten/smoothed wheel, and trackpad**
-- **More mouse controls**: pointer speed, wheel speed, local cursor, reverse scroll, button swap, CoreHID report-rate cap
-- **Custom stream shortcuts** for mouse release, mouse mode toggle, performance overlay, control center, and more
-- **Controller extras**: multi-controller support, rumble, Guide emulation, and controller mouse mode
-
-### 🔧 Connectivity, Diagnostics, and Stability
-- **Per-host connection method management**
-- **Custom ports / IPv6 / domains**
-- **Performance overlay and connection warnings**
-- **Input diagnostics with raw + curated logs**
-- **AWDL stability helper**
-- **Reconnect and timeout recovery improvements**
+- **Native macOS client** — AppKit / SwiftUI interface, Apple Silicon and Intel support, dark mode, and bilingual UI
+- **Full streaming feature set** — custom resolution and FPS, HEVC / H.264 hardware decoding, HDR, YUV 4:4:4, MetalFX, and auto bitrate
+- **Input and control upgrades** — Free Mouse / Locked Mouse, Automatic driver routing, configurable stream shortcuts, and controller enhancements
+- **Audio and media improvements** — lower-latency local playback, multi-channel receive and playback, audio enhancement mode, and improved microphone path
+- **Connectivity and stability** — per-host connection methods, custom ports / IPv6 / domains, performance overlay, diagnostics, and AWDL stability helpers
 
 ## 🖥️ Host Compatibility
 
 | Host Software | Compatibility | Notes |
 |---------------|---------------|-------|
-| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ Recommended | Full support for mic, YUV 4:4:4, and other enhanced features |
+| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ Recommended | Best support for microphone, YUV 4:4:4, and multi-channel audio features |
 | [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ Supported | Most features work; some advanced paths are limited |
-| GeForce Experience | ⚠️ Basic | Deprecated and missing newer features such as microphone passthrough |
+| GeForce Experience | ⚠️ Basic | Deprecated and missing newer features such as microphone uplink |
 
-> 💡 Microphone passthrough, YUV 4:4:4, and some enhanced behaviors work best with [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine).
+> 💡 Microphone, YUV 4:4:4, and some enhanced input or audio behaviors work best with [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine).
 
-## 🖱️ Input System Overview
+## 📦 Downloads
 
-### Defaults
-- **Default mouse mode: Free Mouse**
-- **Default mouse driver: Automatic**
-- **Automatic order: CoreHID → HID → MFI**
-
-### Mouse Modes
-- **Locked Mouse**: better for games and sustained relative motion
-- **Free Mouse**: better for remote control, multi-display use, and desktop apps
-
-### Scroll Paths
-- **Physical wheel**: tuned for native, low-latency, stable notch behavior
-- **Rewritten / smoothed wheel**: intended for wheels already rewritten by third-party tools
-- **Trackpad**: keeps native continuous high-precision scrolling semantics
-
-> 💡 On systems that support `CoreHID`, macOS may ask for Input Monitoring permission the first time this path activates. If it is unavailable, Moonlight falls back automatically.
+- Get the latest build from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases)
+- Each release provides `universal`, `arm64`, and `x86_64` packages
+- If you are not sure which one to choose, start with `universal`
 
 ## 📸 Screenshots
 
@@ -93,8 +56,38 @@
 |:--------------:|:------------------:|
 | <img src="readme-assets/images/settings-video.png" width="400" alt="Video settings"> | <img src="readme-assets/images/settings-streaming.png" width="400" alt="Streaming settings"> |
 
-## ⌨️ Stream Shortcuts
+## 🔊 Audio and Video
 
+### Video
+- Custom resolution, FPS, remote resolution, and remote FPS
+- HEVC / H.264 hardware decoding
+- HDR, YUV 4:4:4, MetalFX upscaling, and auto bitrate tuning
+- Fullscreen, borderless, and windowed display modes
+
+### Audio
+- The default mode uses a newer low-latency local playback path with less extra buffering and copying
+- Supports `2ch / 5.1 / 7.1 / 7.1.4` receive and playback with better preservation of channel semantics
+- Includes an `Audio Enhancement` mode for headphones and `2.0 / 2.1` speakers with spatial feel, soundstage, reverb, and EQ controls
+- When paired with a compatible [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine), Moonlight can use the enhanced microphone path
+
+## 🖱️ Input and Control
+
+### Defaults
+- **Default mouse mode: Free Mouse**
+- **Default mouse driver: Automatic**
+- **Automatic order: CoreHID → HID → MFI**
+
+### Mouse Modes
+- **Locked Mouse**: better for games and sustained relative motion
+- **Free Mouse**: better for remote control, multi-display use, and desktop apps
+
+### Input Enhancements
+- Reworked Mouse, Keyboard, and Controller settings layout
+- Controls for local cursor, pointer speed, wheel speed, swapped buttons, reverse scroll, and CoreHID report-rate cap
+- Separate strategies for physical wheel, rewritten / smoothed wheel, and trackpad input
+- Multi-controller support, rumble, Guide emulation, and controller mouse mode
+
+### Stream Shortcuts
 These Moonlight-specific stream shortcuts can be adjusted in `Settings → Input → Keyboard`:
 
 | Shortcut | Action | Notes |
@@ -109,6 +102,14 @@ These Moonlight-specific stream shortcuts can be adjusted in `Settings → Input
 | `Ctrl` + `Option` + `Command` + `B` | Toggle borderless / windowed | Advanced fallback shortcut |
 
 > 💡 This list covers Moonlight-specific shortcuts only. Standard macOS shortcuts such as `⌘W` and `⌃⌘F` are not listed here.
+
+## 🔧 Connectivity, Diagnostics, and Stability
+
+- Per-host connection method management
+- Custom ports, IPv6, and domain-based connections
+- Performance overlay, connection warnings, and input diagnostics
+- Both raw logs and curated logs for troubleshooting
+- AWDL stability helper, reconnect behavior, and timeout recovery
 
 ## 🛠️ Installation
 
