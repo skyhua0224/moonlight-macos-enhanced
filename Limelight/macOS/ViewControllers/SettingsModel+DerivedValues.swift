@@ -371,7 +371,50 @@ extension SettingsModel {
   }
   static var videoCodecs: [String] = ["H.264", "H.265", "AV1"]
   static var pacingOptions: [String] = ["Lowest Latency", "Smoothest Video"]
-  static var audioConfigurations: [String] = ["Stereo", "5.1 surround sound", "7.1 surround sound"]
+  static var audioConfigurations: [String] = [
+    "Stereo",
+    "5.1 surround sound",
+    "7.1 surround sound",
+    "7.1.4 surround sound",
+  ]
+  static var audioOutputModes: [String] = [
+    "Default",
+    "Audio Enhancement",
+  ]
+  static var enhancedAudioOutputTargets: [String] = [
+    "Headphones",
+    "Speakers",
+    "Automatic",
+  ]
+  static var enhancedAudioOutputTargetDisplayOrder: [String] = [
+    "Automatic",
+    "Headphones",
+    "Speakers",
+  ]
+  static var enhancedAudioPresets: [String] = [
+    "Reference",
+    "Immersive Gaming",
+    "Dialogue Clarity",
+    "Bass Boost",
+    "Harman Inspired",
+    "Music Warmth",
+    "Vocal Presence",
+    "Air & Detail",
+  ]
+  static var enhancedAudioEQLayouts: [String] = [
+    "12-Band",
+    "24-Band",
+  ]
+  private static let legacyEnhancedAudioEQAnchorFrequencies: [Double] = [
+    32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
+  ]
+  private static let enhancedAudioEQFrequencies12Band: [Double] = [
+    32, 64, 125, 250, 500, 1000, 2000, 4000, 6000, 8000, 12000, 16000,
+  ]
+  private static let enhancedAudioEQFrequencies24Band: [Double] = [
+    20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250,
+    315, 400, 500, 630, 800, 1000, 1600, 2500, 4000, 6300, 10000, 16000,
+  ]
   static var multiControllerModes: [String] = ["Single", "Auto"]
 
   static var controllerDrivers: [String] = ["HID", "MFi"]
@@ -451,6 +494,16 @@ extension SettingsModel {
   static let defaultTimingSdrCompatibilityWorkaround = false
   static let defaultAudioOnPC = false
   static let defaultAudioConfiguration = "Stereo"
+  static let defaultAudioOutputMode = "Default"
+  static let defaultEnhancedAudioOutputTarget = "Automatic"
+  static let defaultEnhancedAudioPreset = "Reference"
+  static let defaultEnhancedAudioEQLayout = "12-Band"
+  static let defaultEnhancedAudioSpatialIntensity: CGFloat = 0.30
+  static let defaultEnhancedAudioSoundstageWidth: CGFloat = 0.34
+  static let defaultEnhancedAudioReverbAmount: CGFloat = 0.04
+  static let defaultEnhancedAudioEQGains: [Double] = [
+    0.0, -0.1, -0.2, -0.3, -0.1, 0.5, 1.4, 1.8, 1.6, 1.0, 0.6, 0.3,
+  ]
   static let defaultEnableVsync = false
   static let defaultShowPerformanceOverlay = false
   static let defaultShowConnectionWarnings = true
@@ -529,6 +582,125 @@ extension SettingsModel {
 
   static func percentageLabel(for value: CGFloat) -> String {
     "\(Int((value * 100).rounded()))%"
+  }
+
+  static func enhancedAudioEQFrequencies(for layout: String) -> [Double] {
+    switch layout {
+    case "24-Band":
+      return enhancedAudioEQFrequencies24Band
+    case "12-Band":
+      return enhancedAudioEQFrequencies12Band
+    default:
+      return enhancedAudioEQFrequencies12Band
+    }
+  }
+
+  static func normalizedEnhancedAudioEQLayout(_ value: String?) -> String {
+    guard let value, enhancedAudioEQLayouts.contains(value) else {
+      return defaultEnhancedAudioEQLayout
+    }
+    return value
+  }
+
+  static func sanitizedEnhancedAudioEQGains(_ gains: [Double]?, layout: String) -> [Double] {
+    let targetLayout = normalizedEnhancedAudioEQLayout(layout)
+    let targetFrequencies = enhancedAudioEQFrequencies(for: targetLayout)
+    guard let gains, !gains.isEmpty else {
+      return defaultEnhancedAudioEQGainsForLayout(targetLayout)
+    }
+
+    let sourceLayout: String
+    switch gains.count {
+    case enhancedAudioEQFrequencies24Band.count:
+      sourceLayout = "24-Band"
+    case enhancedAudioEQFrequencies12Band.count:
+      sourceLayout = "12-Band"
+    case legacyEnhancedAudioEQAnchorFrequencies.count:
+      sourceLayout = "Legacy"
+    default:
+      sourceLayout = targetLayout
+    }
+
+    let sourceFrequencies: [Double]
+    switch sourceLayout {
+    case "24-Band":
+      sourceFrequencies = enhancedAudioEQFrequencies24Band
+    case "12-Band":
+      sourceFrequencies = enhancedAudioEQFrequencies12Band
+    case "Legacy":
+      sourceFrequencies = legacyEnhancedAudioEQAnchorFrequencies
+    default:
+      sourceFrequencies = targetFrequencies
+    }
+
+    let clampedGains = gains.map { min(max($0, -12.0), 12.0) }
+    if sourceFrequencies.count == targetFrequencies.count && clampedGains.count == targetFrequencies.count {
+      return clampedGains
+    }
+
+    return interpolatedEQGains(
+      from: sourceFrequencies,
+      gains: clampedGains,
+      to: targetFrequencies)
+  }
+
+  static func remappedEnhancedAudioEQGains(
+    _ gains: [Double],
+    from sourceLayout: String,
+    to targetLayout: String
+  ) -> [Double] {
+    let sourceFrequencies = enhancedAudioEQFrequencies(for: normalizedEnhancedAudioEQLayout(sourceLayout))
+    let targetFrequencies = enhancedAudioEQFrequencies(for: normalizedEnhancedAudioEQLayout(targetLayout))
+    if sourceFrequencies.count == targetFrequencies.count, gains.count == targetFrequencies.count {
+      return gains
+    }
+    return interpolatedEQGains(from: sourceFrequencies, gains: gains, to: targetFrequencies)
+  }
+
+  private static func defaultEnhancedAudioEQGainsForLayout(_ layout: String) -> [Double] {
+    interpolatedEQGains(
+      from: enhancedAudioEQFrequencies12Band,
+      gains: defaultEnhancedAudioEQGains,
+      to: enhancedAudioEQFrequencies(for: layout))
+  }
+
+  private static func interpolatedEQGains(
+    from sourceFrequencies: [Double],
+    gains sourceGains: [Double],
+    to targetFrequencies: [Double]
+  ) -> [Double] {
+    guard !sourceFrequencies.isEmpty, sourceFrequencies.count == sourceGains.count else {
+      return Array(repeating: 0.0, count: targetFrequencies.count)
+    }
+
+    func logFrequency(_ frequency: Double) -> Double {
+      log(max(frequency, 1.0))
+    }
+
+    return targetFrequencies.map { target in
+      let targetLog = logFrequency(target)
+      if target <= sourceFrequencies.first ?? target {
+        return sourceGains.first ?? 0.0
+      }
+      if target >= sourceFrequencies.last ?? target {
+        return sourceGains.last ?? 0.0
+      }
+
+      for index in 1..<sourceFrequencies.count {
+        let lowerFrequency = sourceFrequencies[index - 1]
+        let upperFrequency = sourceFrequencies[index]
+        if target <= upperFrequency {
+          let lowerLog = logFrequency(lowerFrequency)
+          let upperLog = logFrequency(upperFrequency)
+          let progress = upperLog == lowerLog ? 0.0 : (targetLog - lowerLog) / (upperLog - lowerLog)
+          let lowerGain = sourceGains[index - 1]
+          let upperGain = sourceGains[index]
+          return lowerGain + ((upperGain - lowerGain) * progress)
+        }
+      }
+
+      return sourceGains.last ?? 0.0
+    }.map { min(max($0, -12.0), 12.0) }
   }
 
   private static func mainDisplayPixelSize() -> CGSize? {
@@ -848,6 +1020,100 @@ extension SettingsModel {
     }
 
     return settingString
+  }
+
+  static func enhancedAudioPresetValues(
+    for preset: String,
+    layout: String
+  ) -> (spatialIntensity: CGFloat, soundstageWidth: CGFloat, reverbAmount: CGFloat, eqGains: [Double]) {
+    let targetFrequencies = enhancedAudioEQFrequencies(for: normalizedEnhancedAudioEQLayout(layout))
+
+    func gains(_ legacyAnchors: [Double]) -> [Double] {
+      interpolatedEQGains(
+        from: legacyEnhancedAudioEQAnchorFrequencies,
+        gains: legacyAnchors,
+        to: targetFrequencies)
+    }
+
+    switch preset {
+    case "Immersive Gaming":
+      return (
+        0.64,
+        0.68,
+        0.12,
+        gains([1.2, 0.9, 0.5, 0.0, -0.1, 0.3, 1.2, 1.9, 1.5, 0.5])
+      )
+    case "Dialogue Clarity":
+      return (
+        0.22,
+        0.26,
+        0.02,
+        gains([-1.0, -0.7, -0.2, 0.2, 0.9, 2.0, 2.8, 2.6, 1.3, 0.2])
+      )
+    case "Bass Boost":
+      return (
+        0.32,
+        0.34,
+        0.05,
+        gains([2.4, 2.0, 1.2, 0.5, 0.0, -0.1, 0.2, 0.0, -0.2, -0.2])
+      )
+    case "Harman Inspired":
+      return (
+        0.18,
+        0.24,
+        0.01,
+        gains([2.8, 2.2, 1.5, 0.8, 0.1, 0.2, 0.8, 1.5, 1.1, 0.4])
+      )
+    case "Music Warmth":
+      return (
+        0.16,
+        0.20,
+        0.01,
+        gains([1.8, 1.4, 0.9, 0.5, 0.1, 0.0, 0.3, 0.6, 0.2, -0.2])
+      )
+    case "Vocal Presence":
+      return (
+        0.18,
+        0.24,
+        0.01,
+        gains([-1.2, -0.8, -0.2, 0.2, 0.9, 2.0, 2.4, 1.8, 0.9, 0.1])
+      )
+    case "Air & Detail":
+      return (
+        0.24,
+        0.30,
+        0.02,
+        gains([-0.8, -0.6, -0.2, 0.0, 0.2, 0.7, 1.5, 2.2, 2.0, 1.0])
+      )
+    default:
+      return (
+        defaultEnhancedAudioSpatialIntensity,
+        defaultEnhancedAudioSoundstageWidth,
+        defaultEnhancedAudioReverbAmount,
+        defaultEnhancedAudioEQGainsForLayout(layout)
+      )
+    }
+  }
+
+  static func enhancedAudioPresetDescription(for preset: String) -> String {
+    switch preset {
+    case "Immersive Gaming":
+      return "Wider positional cues with a little extra ambience for games."
+    case "Dialogue Clarity":
+      return "Pushes voices and lead detail forward while trimming boominess."
+    case "Bass Boost":
+      return "Adds fuller low end for music and cinematic impact without going too muddy."
+    case "Harman Inspired":
+      return "A tasteful bass shelf and upper-mid lift inspired by popular headphone targets."
+    case "Music Warmth":
+      return "Smoother low mids and gentler highs for relaxed long-session listening."
+    case "Vocal Presence":
+      return "Lifts vocals and lead instruments for clearer mids and cleaner focus."
+    case "Air & Detail":
+      return "Opens up treble sparkle and perceived detail with a lighter low end."
+    default:
+      return "Closest to the stream itself with only light tonal shaping."
+    }
   }
 
   static var av1HardwareDecodeSupported: Bool {

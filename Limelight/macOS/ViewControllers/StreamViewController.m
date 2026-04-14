@@ -1081,8 +1081,23 @@ highFreqMotor:(unsigned short)highFreqMotor {
         audioConfig = AUDIO_CONFIGURATION_51_SURROUND;
     } else if (audioConfigSelection == 2) {
         audioConfig = AUDIO_CONFIGURATION_71_SURROUND;
+    } else if (audioConfigSelection == 3) {
+        audioConfig = AUDIO_CONFIGURATION_714_SURROUND;
     }
+    int audioOutputMode = (int)[SettingsClass audioOutputModeFor:self.app.host.uuid];
+    streamConfig.audioOutputMode = audioOutputMode;
+    streamConfig.disableHighQualitySurround =
+        (audioOutputMode == 1 && audioConfig == AUDIO_CONFIGURATION_714_SURROUND);
     streamConfig.audioConfiguration = audioConfig;
+    streamConfig.enhancedAudioOutputTarget = (int)[SettingsClass enhancedAudioOutputTargetFor:self.app.host.uuid];
+    streamConfig.enhancedAudioPreset = (int)[SettingsClass enhancedAudioPresetFor:self.app.host.uuid];
+    streamConfig.enhancedAudioSpatialIntensity = [SettingsClass enhancedAudioSpatialIntensityFor:self.app.host.uuid];
+    streamConfig.enhancedAudioSoundstageWidth = [SettingsClass enhancedAudioSoundstageWidthFor:self.app.host.uuid];
+    streamConfig.enhancedAudioReverbAmount = [SettingsClass enhancedAudioReverbAmountFor:self.app.host.uuid];
+    streamConfig.enhancedAudioEQGains = [SettingsClass enhancedAudioEQGainsFor:self.app.host.uuid];
+    if (streamConfig.disableHighQualitySurround) {
+        Log(LOG_I, @"[diag] Using 7.1.4 compatibility audio topology for Enhanced mode");
+    }
     
     streamConfig.framePacingMode = (int)[SettingsClass framePacingFor:self.app.host.uuid];
     streamConfig.smoothnessLatencyMode = (int)[SettingsClass smoothnessLatencyModeFor:self.app.host.uuid];

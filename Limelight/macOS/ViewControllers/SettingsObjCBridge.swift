@@ -63,6 +63,23 @@ class SettingsClass: NSObject {
         "framePacing": settings.framePacing,
         "audioOnPC": settings.audioOnPC,
         "audioConfiguration": settings.audioConfiguration,
+        "audioOutputMode": settings.audioOutputMode ?? SettingsModel.getInt(
+          from: SettingsModel.defaultAudioOutputMode, in: SettingsModel.audioOutputModes),
+        "enhancedAudioOutputTarget": settings.enhancedAudioOutputTarget ?? SettingsModel.getInt(
+          from: SettingsModel.defaultEnhancedAudioOutputTarget,
+          in: SettingsModel.enhancedAudioOutputTargets),
+        "enhancedAudioPreset": settings.enhancedAudioPreset ?? SettingsModel.getInt(
+          from: SettingsModel.defaultEnhancedAudioPreset, in: SettingsModel.enhancedAudioPresets),
+        "enhancedAudioEQLayout": settings.enhancedAudioEQLayout ?? SettingsModel.getInt(
+          from: SettingsModel.defaultEnhancedAudioEQLayout, in: SettingsModel.enhancedAudioEQLayouts),
+        "enhancedAudioSpatialIntensity":
+          settings.enhancedAudioSpatialIntensity ?? SettingsModel.defaultEnhancedAudioSpatialIntensity,
+        "enhancedAudioSoundstageWidth":
+          settings.enhancedAudioSoundstageWidth ?? SettingsModel.defaultEnhancedAudioSoundstageWidth,
+        "enhancedAudioReverbAmount":
+          settings.enhancedAudioReverbAmount ?? SettingsModel.defaultEnhancedAudioReverbAmount,
+        "enhancedAudioEQGains":
+          settings.enhancedAudioEQGains ?? SettingsModel.defaultEnhancedAudioEQGains,
         "enableVsync": settings.enableVsync,
         "showPerformanceOverlay": settings.showPerformanceOverlay,
         "showConnectionWarnings": settings.showConnectionWarnings,
@@ -195,6 +212,14 @@ class SettingsClass: NSObject {
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
       audioConfiguration: settings.audioConfiguration,
+      audioOutputMode: settings.audioOutputMode,
+      enhancedAudioOutputTarget: settings.enhancedAudioOutputTarget,
+      enhancedAudioPreset: settings.enhancedAudioPreset,
+      enhancedAudioEQLayout: settings.enhancedAudioEQLayout,
+      enhancedAudioSpatialIntensity: settings.enhancedAudioSpatialIntensity,
+      enhancedAudioSoundstageWidth: settings.enhancedAudioSoundstageWidth,
+      enhancedAudioReverbAmount: settings.enhancedAudioReverbAmount,
+      enhancedAudioEQGains: settings.enhancedAudioEQGains,
       enableVsync: settings.enableVsync,
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
@@ -278,6 +303,14 @@ class SettingsClass: NSObject {
         framePacing: updated.framePacing,
         audioOnPC: updated.audioOnPC,
         audioConfiguration: updated.audioConfiguration,
+        audioOutputMode: updated.audioOutputMode,
+        enhancedAudioOutputTarget: updated.enhancedAudioOutputTarget,
+        enhancedAudioPreset: updated.enhancedAudioPreset,
+        enhancedAudioEQLayout: updated.enhancedAudioEQLayout,
+        enhancedAudioSpatialIntensity: updated.enhancedAudioSpatialIntensity,
+        enhancedAudioSoundstageWidth: updated.enhancedAudioSoundstageWidth,
+        enhancedAudioReverbAmount: updated.enhancedAudioReverbAmount,
+        enhancedAudioEQGains: updated.enhancedAudioEQGains,
         enableVsync: updated.enableVsync,
         showPerformanceOverlay: updated.showPerformanceOverlay,
         showConnectionWarnings: updated.showConnectionWarnings,
@@ -361,6 +394,14 @@ class SettingsClass: NSObject {
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
       audioConfiguration: settings.audioConfiguration,
+      audioOutputMode: settings.audioOutputMode,
+      enhancedAudioOutputTarget: settings.enhancedAudioOutputTarget,
+      enhancedAudioPreset: settings.enhancedAudioPreset,
+      enhancedAudioEQLayout: settings.enhancedAudioEQLayout,
+      enhancedAudioSpatialIntensity: settings.enhancedAudioSpatialIntensity,
+      enhancedAudioSoundstageWidth: settings.enhancedAudioSoundstageWidth,
+      enhancedAudioReverbAmount: settings.enhancedAudioReverbAmount,
+      enhancedAudioEQGains: settings.enhancedAudioEQGains,
       enableVsync: settings.enableVsync,
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
@@ -841,6 +882,69 @@ class SettingsClass: NSObject {
       return settings.audioConfiguration
     }
     return 0  // Stereo default
+  }
+
+  @objc static func audioOutputMode(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.audioOutputMode
+        ?? SettingsModel.getInt(
+          from: SettingsModel.defaultAudioOutputMode, in: SettingsModel.audioOutputModes)
+    }
+    return SettingsModel.getInt(
+      from: SettingsModel.defaultAudioOutputMode, in: SettingsModel.audioOutputModes)
+  }
+
+  @objc static func enhancedAudioOutputTarget(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.enhancedAudioOutputTarget
+        ?? SettingsModel.getInt(
+          from: SettingsModel.defaultEnhancedAudioOutputTarget,
+          in: SettingsModel.enhancedAudioOutputTargets)
+    }
+    return SettingsModel.getInt(
+      from: SettingsModel.defaultEnhancedAudioOutputTarget,
+      in: SettingsModel.enhancedAudioOutputTargets)
+  }
+
+  @objc static func enhancedAudioPreset(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.enhancedAudioPreset
+        ?? SettingsModel.getInt(
+          from: SettingsModel.defaultEnhancedAudioPreset, in: SettingsModel.enhancedAudioPresets)
+    }
+    return SettingsModel.getInt(
+      from: SettingsModel.defaultEnhancedAudioPreset, in: SettingsModel.enhancedAudioPresets)
+  }
+
+  @objc static func enhancedAudioSpatialIntensity(for key: String) -> CGFloat {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.enhancedAudioSpatialIntensity
+        ?? SettingsModel.defaultEnhancedAudioSpatialIntensity
+    }
+    return SettingsModel.defaultEnhancedAudioSpatialIntensity
+  }
+
+  @objc static func enhancedAudioSoundstageWidth(for key: String) -> CGFloat {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.enhancedAudioSoundstageWidth
+        ?? SettingsModel.defaultEnhancedAudioSoundstageWidth
+    }
+    return SettingsModel.defaultEnhancedAudioSoundstageWidth
+  }
+
+  @objc static func enhancedAudioReverbAmount(for key: String) -> CGFloat {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.enhancedAudioReverbAmount
+        ?? SettingsModel.defaultEnhancedAudioReverbAmount
+    }
+    return SettingsModel.defaultEnhancedAudioReverbAmount
+  }
+
+  @objc static func enhancedAudioEQGains(for key: String) -> [NSNumber] {
+    let gains =
+      Settings.getSettings(for: key)?.enhancedAudioEQGains
+      ?? SettingsModel.defaultEnhancedAudioEQGains
+    return gains.map { NSNumber(value: $0) }
   }
 
   @objc static func videoCodec(for key: String) -> Int {

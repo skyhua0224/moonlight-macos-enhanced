@@ -120,6 +120,14 @@ extension SettingsModel {
 
     audioOnPC = Self.defaultAudioOnPC
     selectedAudioConfiguration = Self.defaultAudioConfiguration
+    selectedAudioOutputMode = Self.defaultAudioOutputMode
+    selectedEnhancedAudioOutputTarget = Self.defaultEnhancedAudioOutputTarget
+    selectedEnhancedAudioPreset = Self.defaultEnhancedAudioPreset
+    selectedEnhancedAudioEQLayout = Self.defaultEnhancedAudioEQLayout
+    enhancedAudioSpatialIntensity = Self.defaultEnhancedAudioSpatialIntensity
+    enhancedAudioSoundstageWidth = Self.defaultEnhancedAudioSoundstageWidth
+    enhancedAudioReverbAmount = Self.defaultEnhancedAudioReverbAmount
+    enhancedAudioEQGains = Self.defaultEnhancedAudioEQGains
     enableVsync = Self.defaultEnableVsync
     selectedTimingBufferLevel = Self.defaultTimingBufferLevel
     timingPrioritizeResponsiveness = Self.defaultTimingPrioritizeResponsiveness
@@ -257,6 +265,37 @@ extension SettingsModel {
       audioOnPC = settings.audioOnPC
       selectedAudioConfiguration = Self.getString(
         from: settings.audioConfiguration, in: Self.audioConfigurations)
+      selectedAudioOutputMode = Self.getString(
+        from: settings.audioOutputMode ?? Self.getInt(from: Self.defaultAudioOutputMode, in: Self.audioOutputModes),
+        in: Self.audioOutputModes)
+      selectedEnhancedAudioOutputTarget = Self.getString(
+        from: settings.enhancedAudioOutputTarget
+          ?? Self.getInt(from: Self.defaultEnhancedAudioOutputTarget, in: Self.enhancedAudioOutputTargets),
+        in: Self.enhancedAudioOutputTargets)
+      selectedEnhancedAudioPreset = Self.getString(
+        from: settings.enhancedAudioPreset ?? Self.getInt(from: Self.defaultEnhancedAudioPreset, in: Self.enhancedAudioPresets),
+        in: Self.enhancedAudioPresets)
+      let inferredEQLayout: String
+      switch settings.enhancedAudioEQGains?.count {
+      case Self.enhancedAudioEQFrequencies(for: "24-Band").count:
+        inferredEQLayout = "24-Band"
+      case Self.enhancedAudioEQFrequencies(for: "12-Band").count:
+        inferredEQLayout = "12-Band"
+      default:
+        inferredEQLayout = Self.defaultEnhancedAudioEQLayout
+      }
+      selectedEnhancedAudioEQLayout = Self.getString(
+        from: settings.enhancedAudioEQLayout ?? Self.getInt(from: inferredEQLayout, in: Self.enhancedAudioEQLayouts),
+        in: Self.enhancedAudioEQLayouts)
+      enhancedAudioSpatialIntensity =
+        settings.enhancedAudioSpatialIntensity ?? Self.defaultEnhancedAudioSpatialIntensity
+      enhancedAudioSoundstageWidth =
+        settings.enhancedAudioSoundstageWidth ?? Self.defaultEnhancedAudioSoundstageWidth
+      enhancedAudioReverbAmount =
+        settings.enhancedAudioReverbAmount ?? Self.defaultEnhancedAudioReverbAmount
+      enhancedAudioEQGains = Self.sanitizedEnhancedAudioEQGains(
+        settings.enhancedAudioEQGains,
+        layout: selectedEnhancedAudioEQLayout)
       enableVsync = settings.enableVsync ?? SettingsModel.defaultEnableVsync
       selectedTimingBufferLevel = Self.getString(
         from: settings.timingBufferLevel ?? Self.getInt(from: Self.defaultTimingBufferLevel, in: Self.timingBufferLevels),
@@ -491,6 +530,13 @@ extension SettingsModel {
     let timingBufferLevel = Self.getInt(
       from: selectedTimingBufferLevel, in: Self.timingBufferLevels)
     let audioConfig = Self.getInt(from: selectedAudioConfiguration, in: Self.audioConfigurations)
+    let audioOutputMode = Self.getInt(from: selectedAudioOutputMode, in: Self.audioOutputModes)
+    let enhancedAudioOutputTarget = Self.getInt(
+      from: selectedEnhancedAudioOutputTarget, in: Self.enhancedAudioOutputTargets)
+    let enhancedAudioPreset = Self.getInt(
+      from: selectedEnhancedAudioPreset, in: Self.enhancedAudioPresets)
+    let enhancedAudioEQLayout = Self.getInt(
+      from: selectedEnhancedAudioEQLayout, in: Self.enhancedAudioEQLayouts)
     let multiController = Self.getBool(
       from: selectedMultiControllerMode, in: Self.multiControllerModes)
     let displayMode = Self.getInt(from: selectedDisplayMode, in: Self.displayModes)
@@ -544,6 +590,16 @@ extension SettingsModel {
       framePacing: framePacing,
       audioOnPC: audioOnPC,
       audioConfiguration: audioConfig,
+      audioOutputMode: audioOutputMode,
+      enhancedAudioOutputTarget: enhancedAudioOutputTarget,
+      enhancedAudioPreset: enhancedAudioPreset,
+      enhancedAudioEQLayout: enhancedAudioEQLayout,
+      enhancedAudioSpatialIntensity: enhancedAudioSpatialIntensity,
+      enhancedAudioSoundstageWidth: enhancedAudioSoundstageWidth,
+      enhancedAudioReverbAmount: enhancedAudioReverbAmount,
+      enhancedAudioEQGains: Self.sanitizedEnhancedAudioEQGains(
+        enhancedAudioEQGains,
+        layout: selectedEnhancedAudioEQLayout),
       enableVsync: enableVsync,
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,

@@ -160,6 +160,48 @@ public class LanguageManager: NSObject, ObservableObject {
     "Stereo": "Stereo",
     "5.1 surround sound": "5.1 surround sound",
     "7.1 surround sound": "7.1 surround sound",
+    "7.1.4 surround sound": "7.1.4 surround sound",
+    "Sound Mode": "Sound Mode",
+    "Default": "Default",
+    "Audio Enhancement": "Audio Enhancement",
+    "Listening Device": "Listening Device",
+    "Automatic": "Automatic",
+    "Headphones": "Headphones",
+    "Speakers": "Speakers",
+    "EQ Detail": "EQ Detail",
+    "12-Band": "12-Band",
+    "24-Band": "24-Band",
+    "EQ Preset": "EQ Preset",
+    "Reference": "Reference",
+    "Immersive Gaming": "Immersive Gaming",
+    "Dialogue Clarity": "Dialogue Clarity",
+    "Bass Boost": "Bass Boost",
+    "Reverb": "Reverb",
+    "Harman Inspired": "Harman Inspired",
+    "Music Warmth": "Music Warmth",
+    "Vocal Presence": "Vocal Presence",
+    "Air & Detail": "Air & Detail",
+    "Closest to the stream itself with only light tonal shaping.":
+      "Closest to the stream itself with only light tonal shaping.",
+    "Wider positional cues with a little extra ambience for games.":
+      "Wider positional cues with a little extra ambience for games.",
+    "Pushes voices and lead detail forward while trimming boominess.":
+      "Pushes voices and lead detail forward while trimming boominess.",
+    "Adds fuller low end for music and cinematic impact without going too muddy.":
+      "Adds fuller low end for music and cinematic impact without going too muddy.",
+    "A tasteful bass shelf and upper-mid lift inspired by popular headphone targets.":
+      "A tasteful bass shelf and upper-mid lift inspired by popular headphone targets.",
+    "Smoother low mids and gentler highs for relaxed long-session listening.":
+      "Smoother low mids and gentler highs for relaxed long-session listening.",
+    "Lifts vocals and lead instruments for clearer mids and cleaner focus.":
+      "Lifts vocals and lead instruments for clearer mids and cleaner focus.",
+    "Opens up treble sparkle and perceived detail with a lighter low end.":
+      "Opens up treble sparkle and perceived detail with a lighter low end.",
+    "Spatial Intensity": "Spatial Intensity",
+    "Soundstage Width": "Soundstage Width",
+    "EQ": "EQ",
+    "Multi-channel device detected. Use Default for true 5.1/7.1/7.1.4 playback, or Audio Enhancement for headphone/stereo virtualization.":
+      "Multi-channel device detected. Use Default for true 5.1/7.1/7.1.4 playback, or Audio Enhancement for headphone/stereo virtualization.",
     "Play Sound on Host": "Play Sound on Host",
     "V-Sync": "V-Sync",
     "Performance Overlay": "Performance Overlay",
@@ -380,6 +422,48 @@ public class LanguageManager: NSObject, ObservableObject {
     "Stereo": "立体声",
     "5.1 surround sound": "5.1 环绕声",
     "7.1 surround sound": "7.1 环绕声",
+    "7.1.4 surround sound": "7.1.4 环绕声",
+    "Sound Mode": "音效模式",
+    "Default": "默认",
+    "Audio Enhancement": "音效增强",
+    "Listening Device": "聆听设备",
+    "Automatic": "自动",
+    "Headphones": "耳机",
+    "Speakers": "音箱",
+    "EQ Detail": "均衡器精度",
+    "12-Band": "12 段",
+    "24-Band": "24 段",
+    "EQ Preset": "EQ 预设",
+    "Reference": "参考",
+    "Immersive Gaming": "游戏沉浸",
+    "Dialogue Clarity": "对白清晰",
+    "Bass Boost": "低频增强",
+    "Reverb": "混响",
+    "Harman Inspired": "哈曼灵感",
+    "Music Warmth": "音乐暖感",
+    "Vocal Presence": "人声临场",
+    "Air & Detail": "空气感与细节",
+    "Closest to the stream itself with only light tonal shaping.":
+      "最接近原始串流本身，只做很轻的音色修饰。",
+    "Wider positional cues with a little extra ambience for games.":
+      "为游戏拉开方位感，并加入少量环境氛围。",
+    "Pushes voices and lead detail forward while trimming boominess.":
+      "把人声和主体细节往前推，同时收掉一点浑浊低频。",
+    "Adds fuller low end for music and cinematic impact without going too muddy.":
+      "补足低频量感，更适合音乐和电影，同时尽量避免发闷。",
+    "A tasteful bass shelf and upper-mid lift inspired by popular headphone targets.":
+      "参考常见耳机目标曲线，加入克制的低频棚架和上中频提亮。",
+    "Smoother low mids and gentler highs for relaxed long-session listening.":
+      "让低中频更顺滑、高频更柔和，更适合长时间听音。",
+    "Lifts vocals and lead instruments for clearer mids and cleaner focus.":
+      "强化人声和主旋律存在感，让中频更清楚、结像更集中。",
+    "Opens up treble sparkle and perceived detail with a lighter low end.":
+      "提升高频空气感和细节感，同时把低频收得更轻一些。",
+    "Spatial Intensity": "空间强度",
+    "Soundstage Width": "音场宽度",
+    "EQ": "均衡器",
+    "Multi-channel device detected. Use Default for true 5.1/7.1/7.1.4 playback, or Audio Enhancement for headphone/stereo virtualization.":
+      "检测到多通道输出设备。想保留真实 5.1/7.1/7.1.4 请使用默认；想给耳机或立体声音箱做增强处理请使用音效增强。",
     "Play Sound on Host": "在主机上播放声音",
     "V-Sync": "垂直同步",
     "Performance Overlay": "显示性能统计",
