@@ -27,6 +27,14 @@
 @property(nonatomic) BOOL optimizeGameSettings;
 @property(nonatomic) BOOL playAudioOnPC;
 @property(nonatomic) int audioConfiguration;
+@property(nonatomic) BOOL disableHighQualitySurround;
+@property(nonatomic) int audioOutputMode;
+@property(nonatomic) int enhancedAudioOutputTarget;
+@property(nonatomic) int enhancedAudioPreset;
+@property(nonatomic) CGFloat enhancedAudioSpatialIntensity;
+@property(nonatomic) CGFloat enhancedAudioSoundstageWidth;
+@property(nonatomic) CGFloat enhancedAudioReverbAmount;
+@property(nonatomic, copy) NSArray<NSNumber *> *enhancedAudioEQGains;
 @property(nonatomic) BOOL enableHdr;
 @property(nonatomic) BOOL enableVsync;
 @property(nonatomic) int framePacingMode;

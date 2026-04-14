@@ -359,8 +359,8 @@ static const NSString* HTTPS_PORT = @"47984";
     if (modeFps > 60) {
         sops = NO;
     }
-    
-    NSString* urlString = [NSString stringWithFormat:@"%@/launch?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
+
+    NSString* urlString = [NSString stringWithFormat:@"%@/launch?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@%@&localAudioPlayMode=%d&surroundAudioInfo=%u",
                            _baseHTTPSURL, _sharedStreamUniqueId,
                            config.appID,
                            modeWidth, modeHeight, modeFps,
@@ -369,7 +369,7 @@ static const NSString* HTTPS_PORT = @"47984";
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
                            extraParams,
                            config.playAudioOnPC ? 1 : 0,
-                           SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
+                           (unsigned int)SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
     Log(LOG_I, @"Requesting: %@", urlString);
     // This blocks while the app is launching
     return [self createRequestFromString:urlString timeout:LONG_TIMEOUT_SEC];
@@ -440,8 +440,8 @@ static const NSString* HTTPS_PORT = @"47984";
     if (modeFps > 60) {
         sops = NO;
     }
-    
-    NSString* urlString = [NSString stringWithFormat:@"%@/resume?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@%@&localAudioPlayMode=%d&surroundAudioInfo=%d",
+
+    NSString* urlString = [NSString stringWithFormat:@"%@/resume?uniqueid=%@&appid=%@&mode=%dx%dx%d&additionalStates=1&sops=%d&rikey=%@&rikeyid=%d%@%@&localAudioPlayMode=%d&surroundAudioInfo=%u",
                            _baseHTTPSURL, _sharedStreamUniqueId,
                            config.appID,
                            modeWidth, modeHeight, modeFps,
@@ -450,7 +450,7 @@ static const NSString* HTTPS_PORT = @"47984";
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
                            extraParams,
                            config.playAudioOnPC ? 1 : 0,
-                           SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
+                           (unsigned int)SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
     Log(LOG_I, @"Requesting: %@", urlString);
     // This blocks while the app is resuming
     return [self createRequestFromString:urlString timeout:LONG_TIMEOUT_SEC];

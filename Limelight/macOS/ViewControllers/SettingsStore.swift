@@ -48,6 +48,14 @@ struct Settings: Encodable, Decodable {
   let framePacing: Int
   let audioOnPC: Bool
   let audioConfiguration: Int
+  let audioOutputMode: Int?
+  let enhancedAudioOutputTarget: Int?
+  let enhancedAudioPreset: Int?
+  let enhancedAudioEQLayout: Int?
+  let enhancedAudioSpatialIntensity: CGFloat?
+  let enhancedAudioSoundstageWidth: CGFloat?
+  let enhancedAudioReverbAmount: CGFloat?
+  let enhancedAudioEQGains: [Double]?
   let enableVsync: Bool?
   let showPerformanceOverlay: Bool?
   let showConnectionWarnings: Bool?
@@ -137,7 +145,7 @@ struct Settings: Encodable, Decodable {
   }
 
   private func inheritedSettingsForHostProfile() -> Self {
-    Settings(
+    return Settings(
       resolution: resolution,
       matchDisplayResolution: matchDisplayResolution,
       customResolution: customResolution,
@@ -163,6 +171,14 @@ struct Settings: Encodable, Decodable {
       framePacing: framePacing,
       audioOnPC: audioOnPC,
       audioConfiguration: audioConfiguration,
+      audioOutputMode: audioOutputMode,
+      enhancedAudioOutputTarget: enhancedAudioOutputTarget,
+      enhancedAudioPreset: enhancedAudioPreset,
+      enhancedAudioEQLayout: enhancedAudioEQLayout,
+      enhancedAudioSpatialIntensity: enhancedAudioSpatialIntensity,
+      enhancedAudioSoundstageWidth: enhancedAudioSoundstageWidth,
+      enhancedAudioReverbAmount: enhancedAudioReverbAmount,
+      enhancedAudioEQGains: enhancedAudioEQGains,
       enableVsync: enableVsync,
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,
@@ -267,41 +283,79 @@ extension SettingsClass {
     keyboardCompatibilityMode: Int? = nil,
     streamShortcuts: [String: StreamShortcut]? = nil
   ) -> Settings {
-    Settings(
-      resolution: resolution ?? settings.resolution,
-      matchDisplayResolution: matchDisplayResolution ?? settings.matchDisplayResolution,
-      customResolution: customResolution != nil ? customResolution! : settings.customResolution,
-      fps: fps ?? settings.fps,
-      customFps: customFps != nil ? customFps! : settings.customFps,
+    let resolvedResolution = resolution ?? settings.resolution
+    let resolvedMatchDisplayResolution = matchDisplayResolution ?? settings.matchDisplayResolution
+    let resolvedCustomResolution = customResolution != nil ? customResolution! : settings.customResolution
+    let resolvedFps = fps ?? settings.fps
+    let resolvedCustomFps = customFps != nil ? customFps! : settings.customFps
 
-      autoAdjustBitrate: autoAdjustBitrate ?? settings.autoAdjustBitrate,
-      enableYUV444: enableYUV444 ?? settings.enableYUV444,
+    let resolvedAutoAdjustBitrate = autoAdjustBitrate ?? settings.autoAdjustBitrate
+    let resolvedEnableYUV444 = enableYUV444 ?? settings.enableYUV444
+    let resolvedStreamResolutionScale = streamResolutionScale ?? settings.streamResolutionScale
+    let resolvedStreamResolutionScaleRatio = streamResolutionScaleRatio ?? settings.streamResolutionScaleRatio
+
+    let resolvedRemoteResolution = remoteResolution ?? settings.remoteResolution
+    let resolvedRemoteResolutionWidth =
+      remoteResolutionWidth != nil ? remoteResolutionWidth! : settings.remoteResolutionWidth
+    let resolvedRemoteResolutionHeight =
+      remoteResolutionHeight != nil ? remoteResolutionHeight! : settings.remoteResolutionHeight
+    let resolvedRemoteFps = remoteFps ?? settings.remoteFps
+    let resolvedRemoteFpsRate = remoteFpsRate != nil ? remoteFpsRate! : settings.remoteFpsRate
+
+    let resolvedBitrate = bitrate ?? settings.bitrate
+    let resolvedCustomBitrate = customBitrate != nil ? customBitrate! : settings.customBitrate
+    let resolvedCodec = codec ?? settings.codec
+    let resolvedHdr = hdr ?? settings.hdr
+    let resolvedKeyboardCompatibilityMode =
+      keyboardCompatibilityMode ?? settings.keyboardCompatibilityMode
+    let resolvedVolumeLevel = volumeLevel ?? settings.volumeLevel
+    let resolvedMouseMode = mouseMode ?? settings.mouseMode
+    let resolvedConnectionMethod = connectionMethod ?? settings.connectionMethod
+    let resolvedStreamShortcuts = streamShortcuts ?? settings.streamShortcuts
+
+    return Settings(
+      resolution: resolvedResolution,
+      matchDisplayResolution: resolvedMatchDisplayResolution,
+      customResolution: resolvedCustomResolution,
+      fps: resolvedFps,
+      customFps: resolvedCustomFps,
+
+      autoAdjustBitrate: resolvedAutoAdjustBitrate,
+      enableYUV444: resolvedEnableYUV444,
       ignoreAspectRatio: settings.ignoreAspectRatio,
       showLocalCursor: settings.showLocalCursor,
       enableMicrophone: settings.enableMicrophone,
-      streamResolutionScale: streamResolutionScale ?? settings.streamResolutionScale,
-      streamResolutionScaleRatio: streamResolutionScaleRatio ?? settings.streamResolutionScaleRatio,
+      streamResolutionScale: resolvedStreamResolutionScale,
+      streamResolutionScaleRatio: resolvedStreamResolutionScaleRatio,
 
-      remoteResolution: remoteResolution ?? settings.remoteResolution,
-      remoteResolutionWidth: remoteResolutionWidth != nil ? remoteResolutionWidth! : settings.remoteResolutionWidth,
-      remoteResolutionHeight: remoteResolutionHeight != nil ? remoteResolutionHeight! : settings.remoteResolutionHeight,
-      remoteFps: remoteFps ?? settings.remoteFps,
-      remoteFpsRate: remoteFpsRate != nil ? remoteFpsRate! : settings.remoteFpsRate,
+      remoteResolution: resolvedRemoteResolution,
+      remoteResolutionWidth: resolvedRemoteResolutionWidth,
+      remoteResolutionHeight: resolvedRemoteResolutionHeight,
+      remoteFps: resolvedRemoteFps,
+      remoteFpsRate: resolvedRemoteFpsRate,
 
-      bitrate: bitrate ?? settings.bitrate,
-      customBitrate: customBitrate != nil ? customBitrate! : settings.customBitrate,
+      bitrate: resolvedBitrate,
+      customBitrate: resolvedCustomBitrate,
       unlockMaxBitrate: settings.unlockMaxBitrate,
-      codec: codec ?? settings.codec,
-      hdr: hdr ?? settings.hdr,
+      codec: resolvedCodec,
+      hdr: resolvedHdr,
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
       audioConfiguration: settings.audioConfiguration,
+      audioOutputMode: settings.audioOutputMode,
+      enhancedAudioOutputTarget: settings.enhancedAudioOutputTarget,
+      enhancedAudioPreset: settings.enhancedAudioPreset,
+      enhancedAudioEQLayout: settings.enhancedAudioEQLayout,
+      enhancedAudioSpatialIntensity: settings.enhancedAudioSpatialIntensity,
+      enhancedAudioSoundstageWidth: settings.enhancedAudioSoundstageWidth,
+      enhancedAudioReverbAmount: settings.enhancedAudioReverbAmount,
+      enhancedAudioEQGains: settings.enhancedAudioEQGains,
       enableVsync: settings.enableVsync,
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
       captureSystemShortcuts: settings.captureSystemShortcuts,
-      keyboardCompatibilityMode: keyboardCompatibilityMode ?? settings.keyboardCompatibilityMode,
-      volumeLevel: volumeLevel ?? settings.volumeLevel,
+      keyboardCompatibilityMode: resolvedKeyboardCompatibilityMode,
+      volumeLevel: resolvedVolumeLevel,
       multiController: settings.multiController,
       swapABXYButtons: settings.swapABXYButtons,
       optimize: settings.optimize,
@@ -326,7 +380,7 @@ extension SettingsClass {
       reverseScrollDirection: settings.reverseScrollDirection,
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
-      mouseMode: mouseMode ?? settings.mouseMode,
+      mouseMode: resolvedMouseMode,
       pointerSensitivity: settings.pointerSensitivity,
       wheelScrollSpeed: settings.wheelScrollSpeed,
       rewrittenScrollSpeed: settings.rewrittenScrollSpeed,
@@ -335,9 +389,9 @@ extension SettingsClass {
       smartWheelTailFilter: settings.smartWheelTailFilter,
       physicalWheelMode: settings.physicalWheelMode,
       rewrittenScrollMode: settings.rewrittenScrollMode,
-      streamShortcuts: streamShortcuts ?? settings.streamShortcuts,
+      streamShortcuts: resolvedStreamShortcuts,
       upscalingMode: settings.upscalingMode,
-      connectionMethod: connectionMethod ?? settings.connectionMethod,
+      connectionMethod: resolvedConnectionMethod,
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,

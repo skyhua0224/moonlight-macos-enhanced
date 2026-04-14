@@ -171,6 +171,7 @@ class SettingsModel: ObservableObject {
   var isAdjustingBitrate = false
   var isApplyingSmoothnessLatencyPreset = false
   var isSyncingSmoothnessLatencyMode = false
+  var isApplyingEnhancedAudioPreset = false
 
   var resolutionChangedCallback: (() -> Void)?
   var fpsChangedCallback: (() -> Void)?
@@ -404,6 +405,68 @@ class SettingsModel: ObservableObject {
     }
   }
   @Published var selectedAudioConfiguration: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedAudioOutputMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedEnhancedAudioOutputTarget: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedEnhancedAudioPreset: String {
+    didSet {
+      guard !isLoading, !isApplyingEnhancedAudioPreset else { return }
+      applyEnhancedAudioPresetIfNeeded()
+      saveSettings()
+    }
+  }
+  @Published var selectedEnhancedAudioEQLayout: String {
+    didSet {
+      guard !isLoading else { return }
+      let normalizedLayout = Self.normalizedEnhancedAudioEQLayout(selectedEnhancedAudioEQLayout)
+      if selectedEnhancedAudioEQLayout != normalizedLayout {
+        selectedEnhancedAudioEQLayout = normalizedLayout
+        return
+      }
+
+      let remapped = Self.remappedEnhancedAudioEQGains(
+        enhancedAudioEQGains,
+        from: oldValue,
+        to: selectedEnhancedAudioEQLayout)
+      if remapped != enhancedAudioEQGains {
+        enhancedAudioEQGains = remapped
+      }
+      saveSettings()
+    }
+  }
+  @Published var enhancedAudioSpatialIntensity: CGFloat {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var enhancedAudioSoundstageWidth: CGFloat {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var enhancedAudioReverbAmount: CGFloat {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var enhancedAudioEQGains: [Double] {
     didSet {
       guard !isLoading else { return }
       saveSettings()
@@ -845,6 +908,14 @@ class SettingsModel: ObservableObject {
 
     audioOnPC = Self.defaultAudioOnPC
     selectedAudioConfiguration = Self.defaultAudioConfiguration
+    selectedAudioOutputMode = Self.defaultAudioOutputMode
+    selectedEnhancedAudioOutputTarget = Self.defaultEnhancedAudioOutputTarget
+    selectedEnhancedAudioPreset = Self.defaultEnhancedAudioPreset
+    selectedEnhancedAudioEQLayout = Self.defaultEnhancedAudioEQLayout
+    enhancedAudioSpatialIntensity = Self.defaultEnhancedAudioSpatialIntensity
+    enhancedAudioSoundstageWidth = Self.defaultEnhancedAudioSoundstageWidth
+    enhancedAudioReverbAmount = Self.defaultEnhancedAudioReverbAmount
+    enhancedAudioEQGains = Self.defaultEnhancedAudioEQGains
     enableVsync = Self.defaultEnableVsync
     selectedTimingBufferLevel = Self.defaultTimingBufferLevel
     timingPrioritizeResponsiveness = Self.defaultTimingPrioritizeResponsiveness
@@ -967,5 +1038,24 @@ class SettingsModel: ObservableObject {
         self.objectWillChange.send()
       }
     }
+  }
+
+  func applyEnhancedAudioPresetIfNeeded() {
+    let values = Self.enhancedAudioPresetValues(
+      for: selectedEnhancedAudioPreset,
+      layout: selectedEnhancedAudioEQLayout)
+    isApplyingEnhancedAudioPreset = true
+    enhancedAudioSpatialIntensity = values.spatialIntensity
+    enhancedAudioSoundstageWidth = values.soundstageWidth
+    enhancedAudioReverbAmount = values.reverbAmount
+    enhancedAudioEQGains = values.eqGains
+    isApplyingEnhancedAudioPreset = false
+  }
+
+  func setEnhancedAudioEQGain(_ value: Double, at index: Int) {
+    guard enhancedAudioEQGains.indices.contains(index) else { return }
+    var updated = enhancedAudioEQGains
+    updated[index] = value
+    enhancedAudioEQGains = updated
   }
 }
