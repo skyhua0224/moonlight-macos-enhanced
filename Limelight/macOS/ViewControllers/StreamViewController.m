@@ -196,6 +196,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
             weakSelf.fullscreenTransitionInProgress = NO;
             [weakSelf logCurrentWindowStateWithContext:@"window-did-enter-fullscreen"];
             [weakSelf requestStreamMenuEntrypointsVisibilityUpdate];
+            [weakSelf scheduleDeferredStreamMenuEntrypointsVisibilityRetries];
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf isWindowFullscreen]) {
                     if ([weakSelf.view.window isKeyWindow]) {
@@ -324,6 +325,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 return;
             }
             [strongSelf requestStreamMenuEntrypointsVisibilityUpdate];
+            [strongSelf scheduleDeferredStreamMenuEntrypointsVisibilityRetries];
             if ([strongSelf isWindowInCurrentSpace] && strongSelf.view.window.isKeyWindow) {
                     [strongSelf rearmMouseCaptureIfPossibleWithReason:@"space-transition-finished"];
                     [strongSelf scheduleDeferredMouseCaptureRearmWithReason:@"space-transition-finished" delay:0.12];
@@ -528,6 +530,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
+
+    NSInteger displayMode = [SettingsClass displayModeFor:self.app.host.uuid];
+    if (displayMode == 1 && ![self isWindowFullscreen] && !self.fullscreenTransitionInProgress) {
+        Log(LOG_I, @"[diag] Priming startup fullscreen before connection handshake");
+        [self applyStartupDisplayMode:displayMode];
+    }
 
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateWindowSubtitle];
@@ -932,6 +940,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.bitRate = [streamSettings.bitrate intValue];
 
     BOOL enableYuv444 = prefs ? [prefs[@"yuv444"] boolValue] : NO;
+    streamConfig.videoRendererMode = prefs[@"videoRendererMode"] != nil ? [prefs[@"videoRendererMode"] intValue] : 2;
     int modeWidth = streamConfig.width;
     int modeHeight = streamConfig.height;
     int modeFps = streamConfig.frameRate;
@@ -952,6 +961,37 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 modeFps = rfps;
             }
         }
+
+        NSNumber *hdrTransferFunction = prefs[@"hdrTransferFunction"];
+        streamConfig.hdrTransferFunction = hdrTransferFunction != nil ? [hdrTransferFunction intValue] : 0;
+        streamConfig.hdrMetadataSource = prefs[@"hdrMetadataSource"] != nil ? [prefs[@"hdrMetadataSource"] intValue] : 2;
+        streamConfig.hdrClientDisplayProfile = prefs[@"hdrClientDisplayProfile"] != nil ? [prefs[@"hdrClientDisplayProfile"] intValue] : 0;
+        streamConfig.hdrManualMaxBrightness = prefs[@"hdrManualMaxBrightness"] != nil ? [prefs[@"hdrManualMaxBrightness"] doubleValue] : 1000.0;
+        streamConfig.hdrManualMinBrightness = prefs[@"hdrManualMinBrightness"] != nil ? [prefs[@"hdrManualMinBrightness"] doubleValue] : 0.001;
+        streamConfig.hdrManualMaxAverageBrightness = prefs[@"hdrManualMaxAverageBrightness"] != nil ? [prefs[@"hdrManualMaxAverageBrightness"] doubleValue] : 1000.0;
+        streamConfig.hdrOpticalOutputScale = prefs[@"hdrOpticalOutputScale"] != nil ? [prefs[@"hdrOpticalOutputScale"] doubleValue] : 100.0;
+        streamConfig.hdrHlgViewingEnvironment = prefs[@"hdrHlgViewingEnvironment"] != nil ? [prefs[@"hdrHlgViewingEnvironment"] intValue] : 0;
+        streamConfig.hdrEdrStrategy = prefs[@"hdrEdrStrategy"] != nil ? [prefs[@"hdrEdrStrategy"] intValue] : 0;
+        streamConfig.hdrToneMappingPolicy = prefs[@"hdrToneMappingPolicy"] != nil ? [prefs[@"hdrToneMappingPolicy"] intValue] : 0;
+
+        if (self.hasSessionSunshineTargetDisplayOverride) {
+            streamConfig.sunshineTargetDisplayName = self.sessionSunshineTargetDisplayNameOverride ?: @"";
+        } else {
+            NSString *targetDisplayName = [prefs[@"sunshineTargetDisplayName"] isKindOfClass:[NSString class]]
+                ? prefs[@"sunshineTargetDisplayName"] : nil;
+            if (targetDisplayName.length > 0) {
+                streamConfig.sunshineTargetDisplayName = targetDisplayName;
+            }
+        }
+
+        streamConfig.sunshineUseVirtualDisplay = [prefs[@"sunshineUseVirtualDisplay"] boolValue];
+        streamConfig.sunshineScreenMode = self.sessionSunshineScreenModeOverride != nil
+            ? self.sessionSunshineScreenModeOverride.intValue
+            : (prefs[@"sunshineScreenMode"] != nil ? [prefs[@"sunshineScreenMode"] intValue] : -1);
+        streamConfig.sunshineHdrBrightnessOverride = [prefs[@"sunshineHdrBrightnessOverride"] boolValue];
+        streamConfig.sunshineMaxBrightness = prefs[@"sunshineMaxBrightness"] != nil ? [prefs[@"sunshineMaxBrightness"] doubleValue] : 1000.0;
+        streamConfig.sunshineMinBrightness = prefs[@"sunshineMinBrightness"] != nil ? [prefs[@"sunshineMinBrightness"] doubleValue] : 0.001;
+        streamConfig.sunshineMaxAverageBrightness = prefs[@"sunshineMaxAverageBrightness"] != nil ? [prefs[@"sunshineMaxAverageBrightness"] doubleValue] : 1000.0;
     }
 
     // Keep even dimensions
@@ -1101,14 +1141,19 @@ highFreqMotor:(unsigned short)highFreqMotor {
     
     streamConfig.framePacingMode = (int)[SettingsClass framePacingFor:self.app.host.uuid];
     streamConfig.smoothnessLatencyMode = (int)[SettingsClass smoothnessLatencyModeFor:self.app.host.uuid];
-    streamConfig.timingBufferLevel = (int)[SettingsClass timingBufferLevelFor:self.app.host.uuid];
-    streamConfig.timingPrioritizeResponsiveness = [SettingsClass timingPrioritizeResponsivenessFor:self.app.host.uuid];
-    streamConfig.timingCompatibilityMode = [SettingsClass timingCompatibilityModeFor:self.app.host.uuid];
-    streamConfig.timingSdrCompatibilityWorkaround = [SettingsClass timingSdrCompatibilityWorkaroundFor:self.app.host.uuid];
-    streamConfig.enableVsync = [SettingsClass enableVsyncFor:self.app.host.uuid];
+        streamConfig.timingBufferLevel = (int)[SettingsClass timingBufferLevelFor:self.app.host.uuid];
+        streamConfig.timingPrioritizeResponsiveness = [SettingsClass timingPrioritizeResponsivenessFor:self.app.host.uuid];
+        streamConfig.timingCompatibilityMode = [SettingsClass timingCompatibilityModeFor:self.app.host.uuid];
+        streamConfig.timingSdrCompatibilityWorkaround = [SettingsClass timingSdrCompatibilityWorkaroundFor:self.app.host.uuid];
+        streamConfig.enableVsync = [SettingsClass enableVsyncFor:self.app.host.uuid];
+        streamConfig.displaySyncMode = prefs[@"displaySyncMode"] != nil ? [prefs[@"displaySyncMode"] intValue] : 0;
+        streamConfig.frameQueueTarget = prefs[@"frameQueueTarget"] != nil ? [prefs[@"frameQueueTarget"] intValue] : -1;
+        streamConfig.timingResponsivenessBias = prefs[@"timingResponsivenessBias"] != nil ? [prefs[@"timingResponsivenessBias"] intValue] : (streamConfig.timingPrioritizeResponsiveness ? 1 : 0);
+        streamConfig.allowDrawableTimeoutMode = prefs[@"allowDrawableTimeoutMode"] != nil ? [prefs[@"allowDrawableTimeoutMode"] intValue] : 0;
     streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
     streamConfig.gamepadMouseMode = [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
     streamConfig.upscalingMode = (int)[SettingsClass upscalingModeFor:self.app.host.uuid];
+    streamConfig.frameInterpolationMode = prefs[@"frameInterpolationMode"] != nil ? [prefs[@"frameInterpolationMode"] intValue] : 0;
     Log(LOG_I, @"[diag] Stream timing config: preset=%d framePacing=%d buffer=%d responsiveness=%d compatibility=%d vsync=%d sdrCompat=%d",
         (int)streamConfig.smoothnessLatencyMode,
         (int)streamConfig.framePacingMode,
@@ -1203,6 +1248,37 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 }
 
+- (void)scheduleInitialRenderedFrameCheckForGeneration:(NSUInteger)generation remainingAttempts:(NSUInteger)remainingAttempts {
+    if (!self.waitingForFirstRenderedFrame || self.activeStreamGeneration != generation) {
+        return;
+    }
+
+    VideoDecoderRenderer *renderer = self.streamMan.connection.renderer;
+    if (renderer != nil) {
+        VideoStats stats = renderer.videoStats;
+        if (stats.renderedFrames > 0) {
+            self.waitingForFirstRenderedFrame = NO;
+            self.streamView.statusText = nil;
+            Log(LOG_I, @"[diag] First rendered frame observed via startup poll; clearing loading indicator");
+            return;
+        }
+    }
+
+    if (remainingAttempts == 0) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+
+        [strongSelf scheduleInitialRenderedFrameCheckForGeneration:generation remainingAttempts:remainingAttempts - 1];
+    });
+}
+
 - (void)connectionStarted {
     Log(LOG_I, @"[diag] StreamViewController connectionStarted received: main=%d activeGen=%lu",
         [NSThread isMainThread] ? 1 : 0,
@@ -1267,11 +1343,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
                     retryBind();
                 }
 
-        self.streamView.statusText = nil;
+        self.waitingForFirstRenderedFrame = YES;
         self.pendingDisconnectSource = nil;
         [self startStreamHealthDiagnostics];
         self.streamHealthConnectionStartedMs = [self nowMs];
         [self refreshInputDiagnosticsPreference];
+        [self scheduleInitialRenderedFrameCheckForGeneration:self.activeStreamGeneration remainingAttempts:80];
 
         Log(LOG_I, @"connectionStarted (t=%.0fms) window style=%llu level=%ld", CACurrentMediaTime() * 1000.0, (unsigned long long)self.view.window.styleMask, (long)self.view.window.level);
 
@@ -1309,7 +1386,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [self logCurrentWindowStateWithContext:@"connection-started-after-capture"];
 
         NSInteger startupDisplayMode = displayMode;
-        NSTimeInterval startupDisplayDelay = (startupDisplayMode == 0) ? 0.0 : 0.12;
+        BOOL startupModeAlreadyPrimed =
+            (startupDisplayMode == 1 && ([self isWindowFullscreen] || self.fullscreenTransitionInProgress));
+        NSTimeInterval startupDisplayDelay = (startupDisplayMode == 0 || startupModeAlreadyPrimed) ? 0.0 : 0.12;
         Log(LOG_I, @"[diag] Scheduling startup display mode apply: mode=%ld (%@) delay=%.2fs",
             (long)startupDisplayMode,
             displayModeName,
@@ -1349,6 +1428,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld (0x%08x)", (long)errorCode, (unsigned int)errorCode);
+    self.waitingForFirstRenderedFrame = NO;
     [self stopStreamHealthDiagnostics];
     [self finalizeInputDiagnosticsWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
     self.streamHealthConnectionStartedMs = 0;

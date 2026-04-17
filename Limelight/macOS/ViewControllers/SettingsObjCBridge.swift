@@ -15,6 +15,8 @@ extension Notification.Name {
     Notification.Name("MoonlightMouseSettingsDidChange")
   static let moonlightInputRuntimeStatusDidChange =
     Notification.Name("MoonlightInputRuntimeStatusDidChange")
+  static let moonlightVideoRuntimeStatusDidChange =
+    Notification.Name("MoonlightVideoRuntimeStatusDidChange")
 }
 
 class SettingsClass: NSObject {
@@ -26,6 +28,10 @@ class SettingsClass: NSObject {
   private static let inputRuntimeStatusLock = NSLock()
   private static var mouseRuntimeStatusByHost: [String: InputRuntimeStatusSnapshot] = [:]
   private static var scrollRuntimeStatusByHost: [String: InputRuntimeStatusSnapshot] = [:]
+  private static var videoRuntimeStatusByHost: [String: InputRuntimeStatusSnapshot] = [:]
+  private static var videoEnhancementRuntimeStatusByHost: [String: InputRuntimeStatusSnapshot] = [:]
+  private static var videoFrameInterpolationRuntimeStatusByHost: [String: InputRuntimeStatusSnapshot] =
+    [:]
 
   private static func mouseInputStrategy(for key: String) -> MouseInputDriverStrategy {
     if let settings = Settings.getSettings(for: key) {
@@ -55,10 +61,55 @@ class SettingsClass: NSObject {
         "remoteResolutionHeight": settings.remoteResolutionHeight ?? 0,
         "remoteFps": settings.remoteFps ?? false,
         "remoteFpsRate": settings.remoteFpsRate ?? 0,
+        "hdrTransferFunction": settings.hdrTransferFunction
+          ?? SettingsModel.hdrTransferFunctionRawValue(
+            for: SettingsModel.defaultHdrTransferFunction),
+        "hdrMetadataSource": settings.hdrMetadataSource
+          ?? SettingsModel.hdrMetadataSourceRawValue(
+            for: SettingsModel.defaultHdrMetadataSource),
+        "hdrClientDisplayProfile": settings.hdrClientDisplayProfile
+          ?? SettingsModel.hdrClientDisplayProfileRawValue(
+            for: SettingsModel.defaultHdrClientDisplayProfile),
+        "hdrManualMaxBrightness":
+          settings.hdrManualMaxBrightness ?? SettingsModel.defaultHdrManualMaxBrightness,
+        "hdrManualMinBrightness":
+          settings.hdrManualMinBrightness ?? SettingsModel.defaultHdrManualMinBrightness,
+        "hdrManualMaxAverageBrightness":
+          settings.hdrManualMaxAverageBrightness ?? SettingsModel.defaultHdrManualMaxAverageBrightness,
+        "hdrOpticalOutputScale":
+          settings.hdrOpticalOutputScale ?? SettingsModel.defaultHdrOpticalOutputScale,
+        "hdrHlgViewingEnvironment": settings.hdrHlgViewingEnvironment
+          ?? SettingsModel.hdrHlgViewingEnvironmentRawValue(
+            for: SettingsModel.defaultHdrHlgViewingEnvironment),
+        "hdrEdrStrategy": settings.hdrEdrStrategy
+          ?? SettingsModel.hdrEdrStrategyRawValue(
+            for: SettingsModel.defaultHdrEdrStrategy),
+        "hdrToneMappingPolicy": settings.hdrToneMappingPolicy
+          ?? SettingsModel.hdrToneMappingPolicyRawValue(
+            for: SettingsModel.defaultHdrToneMappingPolicy),
+        "sunshineTargetDisplayName":
+          settings.sunshineTargetDisplayName ?? SettingsModel.defaultSunshineTargetDisplayName,
+        "sunshineUseVirtualDisplay":
+          settings.sunshineUseVirtualDisplay ?? SettingsModel.defaultSunshineUseVirtualDisplay,
+        "sunshineScreenMode":
+          settings.sunshineScreenMode
+          ?? SettingsModel.sunshineScreenModeRawValue(for: SettingsModel.defaultSunshineScreenMode),
+        "sunshineHdrBrightnessOverride":
+          settings.sunshineHdrBrightnessOverride ?? SettingsModel.defaultSunshineHdrBrightnessOverride,
+        "sunshineMaxBrightness":
+          settings.sunshineMaxBrightness ?? SettingsModel.defaultSunshineMaxBrightness,
+        "sunshineMinBrightness":
+          settings.sunshineMinBrightness ?? SettingsModel.defaultSunshineMinBrightness,
+        "sunshineMaxAverageBrightness":
+          settings.sunshineMaxAverageBrightness ?? SettingsModel.defaultSunshineMaxAverageBrightness,
         "bitrate": settings.bitrate,
         "customBitrate": settings.customBitrate,
         "unlockMaxBitrate": settings.unlockMaxBitrate,
         "codec": settings.codec,
+        "videoRendererMode": SettingsModel.videoRendererModeRawValue(
+          for: SettingsModel.videoRendererModeSelection(
+            for: settings.videoRendererMode
+          )),
         "hdr": settings.hdr,
         "framePacing": settings.framePacing,
         "audioOnPC": settings.audioOnPC,
@@ -125,11 +176,25 @@ class SettingsClass: NSObject {
           settings.rewrittenScrollMode ?? RewrittenScrollMode.defaultMode.rawValue,
         "streamShortcuts": StreamShortcutProfile.normalizedShortcuts(settings.streamShortcuts),
         "upscalingMode": settings.upscalingMode,
+        "frameInterpolationMode": settings.frameInterpolationMode
+          ?? SettingsModel.defaultFrameInterpolationMode,
         // Single source of truth: Settings.connectionMethod (persisted by SettingsModel)
         "connectionMethod": settings.connectionMethod ?? "Auto",
         "smoothnessLatencyMode": settings.smoothnessLatencyMode,
         "timingBufferLevel": settings.timingBufferLevel,
         "timingPrioritizeResponsiveness": settings.timingPrioritizeResponsiveness,
+        "displaySyncMode": settings.displaySyncMode
+          ?? SettingsModel.displaySyncModeRawValue(
+            for: SettingsModel.defaultDisplaySyncMode),
+        "frameQueueTarget": settings.frameQueueTarget
+          ?? SettingsModel.frameQueueTargetRawValue(
+            for: SettingsModel.defaultFrameQueueTarget),
+        "timingResponsivenessBias": settings.timingResponsivenessBias
+          ?? SettingsModel.responsivenessBiasRawValue(
+            for: SettingsModel.defaultResponsivenessBias),
+        "allowDrawableTimeoutMode": settings.allowDrawableTimeoutMode
+          ?? SettingsModel.allowDrawableTimeoutRawValue(
+            for: SettingsModel.defaultAllowDrawableTimeoutMode),
         "timingCompatibilityMode": settings.timingCompatibilityMode,
         "timingSdrCompatibilityWorkaround": settings.timingSdrCompatibilityWorkaround,
       ]
@@ -203,11 +268,23 @@ class SettingsClass: NSObject {
       remoteResolutionHeight: settings.remoteResolutionHeight,
       remoteFps: settings.remoteFps,
       remoteFpsRate: settings.remoteFpsRate,
+      hdrTransferFunction: settings.hdrTransferFunction,
+      hdrManualMaxBrightness: settings.hdrManualMaxBrightness,
+      hdrManualMinBrightness: settings.hdrManualMinBrightness,
+      hdrManualMaxAverageBrightness: settings.hdrManualMaxAverageBrightness,
+      sunshineTargetDisplayName: settings.sunshineTargetDisplayName,
+      sunshineUseVirtualDisplay: settings.sunshineUseVirtualDisplay,
+      sunshineScreenMode: settings.sunshineScreenMode,
+      sunshineHdrBrightnessOverride: settings.sunshineHdrBrightnessOverride,
+      sunshineMaxBrightness: settings.sunshineMaxBrightness,
+      sunshineMinBrightness: settings.sunshineMinBrightness,
+      sunshineMaxAverageBrightness: settings.sunshineMaxAverageBrightness,
 
       bitrate: settings.bitrate,
       customBitrate: settings.customBitrate,
       unlockMaxBitrate: settings.unlockMaxBitrate,
       codec: settings.codec,
+      videoRendererMode: settings.videoRendererMode,
       hdr: settings.hdr,
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
@@ -261,6 +338,7 @@ class SettingsClass: NSObject {
       rewrittenScrollMode: settings.rewrittenScrollMode,
       streamShortcuts: settings.streamShortcuts,
       upscalingMode: settings.upscalingMode,
+      frameInterpolationMode: settings.frameInterpolationMode,
       connectionMethod: settings.connectionMethod,
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
@@ -295,10 +373,22 @@ class SettingsClass: NSObject {
         remoteResolutionHeight: updated.remoteResolutionHeight,
         remoteFps: updated.remoteFps,
         remoteFpsRate: updated.remoteFpsRate,
+        hdrTransferFunction: updated.hdrTransferFunction,
+        hdrManualMaxBrightness: updated.hdrManualMaxBrightness,
+        hdrManualMinBrightness: updated.hdrManualMinBrightness,
+        hdrManualMaxAverageBrightness: updated.hdrManualMaxAverageBrightness,
+        sunshineTargetDisplayName: updated.sunshineTargetDisplayName,
+        sunshineUseVirtualDisplay: updated.sunshineUseVirtualDisplay,
+        sunshineScreenMode: updated.sunshineScreenMode,
+        sunshineHdrBrightnessOverride: updated.sunshineHdrBrightnessOverride,
+        sunshineMaxBrightness: updated.sunshineMaxBrightness,
+        sunshineMinBrightness: updated.sunshineMinBrightness,
+        sunshineMaxAverageBrightness: updated.sunshineMaxAverageBrightness,
         bitrate: newBitrate,  // Update calculated bitrate
         customBitrate: nil,  // Clear custom since auto is on
         unlockMaxBitrate: updated.unlockMaxBitrate,
         codec: updated.codec,
+        videoRendererMode: updated.videoRendererMode,
         hdr: updated.hdr,
         framePacing: updated.framePacing,
         audioOnPC: updated.audioOnPC,
@@ -348,6 +438,7 @@ class SettingsClass: NSObject {
         rewrittenScrollMode: updated.rewrittenScrollMode,
         streamShortcuts: updated.streamShortcuts,
         upscalingMode: updated.upscalingMode,
+        frameInterpolationMode: updated.frameInterpolationMode,
         connectionMethod: updated.connectionMethod,
         smoothnessLatencyMode: updated.smoothnessLatencyMode,
         timingBufferLevel: updated.timingBufferLevel,
@@ -385,11 +476,23 @@ class SettingsClass: NSObject {
       remoteResolutionHeight: settings.remoteResolutionHeight,
       remoteFps: settings.remoteFps,
       remoteFpsRate: settings.remoteFpsRate,
+      hdrTransferFunction: settings.hdrTransferFunction,
+      hdrManualMaxBrightness: settings.hdrManualMaxBrightness,
+      hdrManualMinBrightness: settings.hdrManualMinBrightness,
+      hdrManualMaxAverageBrightness: settings.hdrManualMaxAverageBrightness,
+      sunshineTargetDisplayName: settings.sunshineTargetDisplayName,
+      sunshineUseVirtualDisplay: settings.sunshineUseVirtualDisplay,
+      sunshineScreenMode: settings.sunshineScreenMode,
+      sunshineHdrBrightnessOverride: settings.sunshineHdrBrightnessOverride,
+      sunshineMaxBrightness: settings.sunshineMaxBrightness,
+      sunshineMinBrightness: settings.sunshineMinBrightness,
+      sunshineMaxAverageBrightness: settings.sunshineMaxAverageBrightness,
 
       bitrate: settings.bitrate,
       customBitrate: settings.customBitrate,
       unlockMaxBitrate: settings.unlockMaxBitrate,
       codec: settings.codec,
+      videoRendererMode: settings.videoRendererMode,
       hdr: settings.hdr,
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
@@ -443,6 +546,7 @@ class SettingsClass: NSObject {
       rewrittenScrollMode: settings.rewrittenScrollMode,
       streamShortcuts: settings.streamShortcuts,
       upscalingMode: settings.upscalingMode,
+      frameInterpolationMode: settings.frameInterpolationMode,
       connectionMethod: settings.connectionMethod,
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
@@ -802,7 +906,8 @@ class SettingsClass: NSObject {
       store: &mouseRuntimeStatusByHost,
       hostKey: key,
       summaryKey: summaryKey,
-      detailKey: detailKey
+      detailKey: detailKey,
+      notificationName: .moonlightInputRuntimeStatusDidChange
     )
   }
 
@@ -814,7 +919,47 @@ class SettingsClass: NSObject {
       store: &scrollRuntimeStatusByHost,
       hostKey: key,
       summaryKey: summaryKey,
-      detailKey: detailKey
+      detailKey: detailKey,
+      notificationName: .moonlightInputRuntimeStatusDidChange
+    )
+  }
+
+  @objc(updateVideoRuntimeStatusFor:summaryKey:detailKey:)
+  static func updateVideoRuntimeStatus(
+    for key: String, summaryKey: String, detailKey: String?
+  ) {
+    updateRuntimeStatus(
+      store: &videoRuntimeStatusByHost,
+      hostKey: key,
+      summaryKey: summaryKey,
+      detailKey: detailKey,
+      notificationName: .moonlightVideoRuntimeStatusDidChange
+    )
+  }
+
+  @objc(updateVideoEnhancementRuntimeStatusFor:summaryKey:detailKey:)
+  static func updateVideoEnhancementRuntimeStatus(
+    for key: String, summaryKey: String, detailKey: String?
+  ) {
+    updateRuntimeStatus(
+      store: &videoEnhancementRuntimeStatusByHost,
+      hostKey: key,
+      summaryKey: summaryKey,
+      detailKey: detailKey,
+      notificationName: .moonlightVideoRuntimeStatusDidChange
+    )
+  }
+
+  @objc(updateVideoFrameInterpolationRuntimeStatusFor:summaryKey:detailKey:)
+  static func updateVideoFrameInterpolationRuntimeStatus(
+    for key: String, summaryKey: String, detailKey: String?
+  ) {
+    updateRuntimeStatus(
+      store: &videoFrameInterpolationRuntimeStatusByHost,
+      hostKey: key,
+      summaryKey: summaryKey,
+      detailKey: detailKey,
+      notificationName: .moonlightVideoRuntimeStatusDidChange
     )
   }
 
@@ -832,6 +977,32 @@ class SettingsClass: NSObject {
 
   @objc static func scrollInputRuntimeStatusDetailKey(for key: String) -> String {
     runtimeStatus(for: key, from: scrollRuntimeStatusByHost)?.detailKey ?? "Scroll Runtime Detail Idle"
+  }
+
+  @objc static func videoRuntimeStatusSummaryKey(for key: String) -> String {
+    runtimeStatus(for: key, from: videoRuntimeStatusByHost)?.summaryKey ?? "Video Runtime Path Idle"
+  }
+
+  @objc static func videoRuntimeStatusDetailKey(for key: String) -> String {
+    runtimeStatus(for: key, from: videoRuntimeStatusByHost)?.detailKey ?? "Video Runtime Detail Idle"
+  }
+
+  @objc static func videoEnhancementRuntimeStatusSummaryKey(for key: String) -> String {
+    runtimeStatus(for: key, from: videoEnhancementRuntimeStatusByHost)?.summaryKey ?? "Off"
+  }
+
+  @objc static func videoEnhancementRuntimeStatusDetailKey(for key: String) -> String {
+    runtimeStatus(for: key, from: videoEnhancementRuntimeStatusByHost)?.detailKey
+      ?? "Video Enhancement Runtime Detail Idle"
+  }
+
+  @objc static func videoFrameInterpolationRuntimeStatusSummaryKey(for key: String) -> String {
+    runtimeStatus(for: key, from: videoFrameInterpolationRuntimeStatusByHost)?.summaryKey ?? "Off"
+  }
+
+  @objc static func videoFrameInterpolationRuntimeStatusDetailKey(for key: String) -> String {
+    runtimeStatus(for: key, from: videoFrameInterpolationRuntimeStatusByHost)?.detailKey
+      ?? "Video Frame Interpolation Runtime Detail Idle"
   }
 
   @objc static func mouseMode(for key: String) -> String {
@@ -1024,7 +1195,8 @@ class SettingsClass: NSObject {
     store: inout [String: InputRuntimeStatusSnapshot],
     hostKey: String,
     summaryKey: String,
-    detailKey: String?
+    detailKey: String?,
+    notificationName: Notification.Name
   ) {
     inputRuntimeStatusLock.lock()
     let previous = store[hostKey]
@@ -1037,7 +1209,7 @@ class SettingsClass: NSObject {
 
     DispatchQueue.main.async {
       NotificationCenter.default.post(
-        name: .moonlightInputRuntimeStatusDidChange,
+        name: notificationName,
         object: nil,
         userInfo: ["hostKey": hostKey]
       )

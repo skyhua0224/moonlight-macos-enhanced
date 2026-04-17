@@ -98,6 +98,23 @@ extension SettingsModel {
     remoteFpsEnabled = Self.defaultRemoteFpsEnabled
     selectedRemoteFps = Self.defaultRemoteFps
     remoteCustomFps = Self.defaultRemoteCustomFps
+    selectedHdrTransferFunction = Self.defaultHdrTransferFunction
+    sunshineTargetDisplayName = Self.defaultSunshineTargetDisplayName
+    sunshineUseVirtualDisplay = Self.defaultSunshineUseVirtualDisplay
+    selectedSunshineScreenMode = Self.defaultSunshineScreenMode
+    sunshineHdrBrightnessOverride = Self.defaultSunshineHdrBrightnessOverride
+    sunshineMaxBrightness = Self.defaultSunshineMaxBrightness
+    sunshineMinBrightness = Self.defaultSunshineMinBrightness
+    sunshineMaxAverageBrightness = Self.defaultSunshineMaxAverageBrightness
+    selectedHdrMetadataSource = Self.defaultHdrMetadataSource
+    selectedHdrClientDisplayProfile = Self.defaultHdrClientDisplayProfile
+    hdrManualMaxBrightness = Self.defaultHdrManualMaxBrightness
+    hdrManualMinBrightness = Self.defaultHdrManualMinBrightness
+    hdrManualMaxAverageBrightness = Self.defaultHdrManualMaxAverageBrightness
+    hdrOpticalOutputScale = Self.defaultHdrOpticalOutputScale
+    selectedHdrHlgViewingEnvironment = Self.defaultHdrHlgViewingEnvironment
+    selectedHdrEdrStrategy = Self.defaultHdrEdrStrategy
+    selectedHdrToneMappingPolicy = Self.defaultHdrToneMappingPolicy
 
     bitrateSliderValue = Self.defaultBitrateSliderValue
     customBitrate = Int(
@@ -113,10 +130,15 @@ extension SettingsModel {
     streamResolutionScale = Self.defaultStreamResolutionScale
     streamResolutionScaleRatio = Self.defaultStreamResolutionScaleRatio
 
+    selectedVideoRendererMode = Self.defaultVideoRendererMode
     selectedVideoCodec = Self.defaultVideoCodec
     hdr = Self.defaultHdr
     selectedPacingOptions = Self.defaultPacingOptions
     selectedSmoothnessLatencyMode = Self.defaultSmoothnessLatencyMode
+    selectedDisplaySyncMode = Self.defaultDisplaySyncMode
+    selectedFrameQueueTarget = Self.defaultFrameQueueTarget
+    selectedResponsivenessBias = Self.defaultResponsivenessBias
+    selectedAllowDrawableTimeoutMode = Self.defaultAllowDrawableTimeoutMode
 
     audioOnPC = Self.defaultAudioOnPC
     selectedAudioConfiguration = Self.defaultAudioConfiguration
@@ -175,7 +197,9 @@ extension SettingsModel {
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
     mouseMode = Self.defaultMouseMode
-    selectedUpscalingMode = Self.getString(from: Self.defaultUpscalingMode, in: Self.upscalingModes)
+    selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)
+    selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(
+      for: Self.defaultFrameInterpolationMode)
     selectedConnectionMethod = "Auto"
   }
 
@@ -384,9 +408,12 @@ extension SettingsModel {
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
       mouseMode = Self.getString(from: settings.mouseMode ?? (Self.defaultMouseMode == "game" ? 0 : 1), in: Self.mouseModes)
-      selectedUpscalingMode = Self.getString(
-        from: settings.upscalingMode ?? Self.defaultUpscalingMode, in: Self.upscalingModes)
+      selectedUpscalingMode = Self.upscalingModeTitle(
+        for: settings.upscalingMode ?? Self.defaultUpscalingMode)
       selectedConnectionMethod = settings.connectionMethod ?? "Auto"
+      selectedVideoRendererMode = Self.videoRendererModeSelection(
+        for: settings.videoRendererMode
+          ?? Self.videoRendererModeRawValue(for: Self.defaultVideoRendererMode))
 
       remoteResolutionEnabled = settings.remoteResolution ?? Self.defaultRemoteResolutionEnabled
       if remoteResolutionEnabled,
@@ -425,6 +452,45 @@ extension SettingsModel {
         selectedRemoteFps = Self.defaultRemoteFps
         remoteCustomFps = Self.defaultRemoteCustomFps
       }
+      selectedHdrTransferFunction = Self.hdrTransferFunctionSelection(
+        for: settings.hdrTransferFunction
+          ?? Self.hdrTransferFunctionRawValue(for: Self.defaultHdrTransferFunction))
+      sunshineTargetDisplayName =
+        settings.sunshineTargetDisplayName ?? Self.defaultSunshineTargetDisplayName
+      sunshineUseVirtualDisplay =
+        settings.sunshineUseVirtualDisplay ?? Self.defaultSunshineUseVirtualDisplay
+      selectedSunshineScreenMode = Self.sunshineScreenModeSelection(
+        for: settings.sunshineScreenMode)
+      sunshineHdrBrightnessOverride =
+        settings.sunshineHdrBrightnessOverride ?? Self.defaultSunshineHdrBrightnessOverride
+      sunshineMaxBrightness = settings.sunshineMaxBrightness ?? Self.defaultSunshineMaxBrightness
+      sunshineMinBrightness = settings.sunshineMinBrightness ?? Self.defaultSunshineMinBrightness
+      sunshineMaxAverageBrightness =
+        settings.sunshineMaxAverageBrightness ?? Self.defaultSunshineMaxAverageBrightness
+      selectedHdrMetadataSource = Self.hdrMetadataSourceSelection(for: settings.hdrMetadataSource)
+      selectedHdrClientDisplayProfile = Self.hdrClientDisplayProfileSelection(
+        for: settings.hdrClientDisplayProfile)
+      hdrManualMaxBrightness =
+        settings.hdrManualMaxBrightness ?? Self.defaultHdrManualMaxBrightness
+      hdrManualMinBrightness =
+        settings.hdrManualMinBrightness ?? Self.defaultHdrManualMinBrightness
+      hdrManualMaxAverageBrightness =
+        settings.hdrManualMaxAverageBrightness ?? Self.defaultHdrManualMaxAverageBrightness
+      hdrOpticalOutputScale = settings.hdrOpticalOutputScale ?? Self.defaultHdrOpticalOutputScale
+      selectedHdrHlgViewingEnvironment = Self.hdrHlgViewingEnvironmentSelection(
+        for: settings.hdrHlgViewingEnvironment)
+      selectedHdrEdrStrategy = Self.hdrEdrStrategySelection(for: settings.hdrEdrStrategy)
+      selectedHdrToneMappingPolicy = Self.hdrToneMappingPolicySelection(
+        for: settings.hdrToneMappingPolicy)
+      selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(
+        for: settings.frameInterpolationMode)
+      selectedDisplaySyncMode = Self.displaySyncModeSelection(for: settings.displaySyncMode)
+      selectedFrameQueueTarget = Self.frameQueueTargetSelection(for: settings.frameQueueTarget)
+      let legacyResponsivenessBias = (settings.timingPrioritizeResponsiveness ?? false) ? 1 : 0
+      selectedResponsivenessBias = Self.responsivenessBiasSelection(
+        for: settings.timingResponsivenessBias ?? legacyResponsivenessBias)
+      selectedAllowDrawableTimeoutMode = Self.allowDrawableTimeoutSelection(
+        for: settings.allowDrawableTimeoutMode)
 
       func loadNillableDimensionSetting(inputDimensions: CGSize?) -> CGSize? {
         let finalSize: CGSize?
@@ -480,9 +546,7 @@ extension SettingsModel {
     let touchscreenMode = Self.getInt(from: selectedTouchscreenMode, in: Self.touchscreenModes)
     let mouseModeVal = Self.getInt(from: mouseMode, in: Self.mouseModes)
 
-    // Persist Off on unsupported systems to avoid saving an unusable mode.
-    let rawUpscalingMode = Self.getInt(from: selectedUpscalingMode, in: Self.upscalingModes)
-    let upscalingMode = Self.isMetalFXSupported ? rawUpscalingMode : 0
+    let upscalingMode = Self.upscalingModeRawValue(for: selectedUpscalingMode)
 
     var remoteResolutionWidth: Int? = nil
     var remoteResolutionHeight: Int? = nil
@@ -508,6 +572,35 @@ extension SettingsModel {
         remoteFpsRate = selectedRemoteFps
       }
     }
+    let hdrTransferFunction = Self.hdrTransferFunctionRawValue(
+      for: selectedHdrTransferFunction)
+    let hdrMetadataSource = Self.hdrMetadataSourceRawValue(for: selectedHdrMetadataSource)
+    let hdrClientDisplayProfile = Self.hdrClientDisplayProfileRawValue(
+      for: selectedHdrClientDisplayProfile)
+    let frameInterpolationMode = Self.frameInterpolationModeRawValue(
+      for: selectedFrameInterpolationMode)
+    let hdrHlgViewingEnvironment = Self.hdrHlgViewingEnvironmentRawValue(
+      for: selectedHdrHlgViewingEnvironment)
+    let hdrEdrStrategy = Self.hdrEdrStrategyRawValue(for: selectedHdrEdrStrategy)
+    let hdrToneMappingPolicy = Self.hdrToneMappingPolicyRawValue(
+      for: selectedHdrToneMappingPolicy)
+    let displaySyncMode = Self.displaySyncModeRawValue(for: selectedDisplaySyncMode)
+    let frameQueueTarget = Self.frameQueueTargetRawValue(for: selectedFrameQueueTarget)
+    let timingResponsivenessBias = Self.responsivenessBiasRawValue(
+      for: selectedResponsivenessBias)
+    let allowDrawableTimeoutMode = Self.allowDrawableTimeoutRawValue(
+      for: selectedAllowDrawableTimeoutMode)
+    let trimmedSunshineTargetDisplayName = sunshineTargetDisplayName.trimmingCharacters(
+      in: .whitespacesAndNewlines)
+    let sunshineTargetDisplayName =
+      trimmedSunshineTargetDisplayName.isEmpty ? nil : trimmedSunshineTargetDisplayName
+    let sunshineScreenMode = Self.sunshineScreenModeRawValue(for: selectedSunshineScreenMode)
+    let persistedSunshineMaxBrightness =
+      sunshineHdrBrightnessOverride ? sunshineMaxBrightness : nil
+    let persistedSunshineMinBrightness =
+      sunshineHdrBrightnessOverride ? sunshineMinBrightness : nil
+    let persistedSunshineMaxAverageBrightness =
+      sunshineHdrBrightnessOverride ? sunshineMaxAverageBrightness : nil
 
     let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
     let index = max(0, min(Int(bitrateSliderValue), steps.count - 1))
@@ -524,6 +617,8 @@ extension SettingsModel {
       bitrate = effectiveBitrate
     }
     let codec = Self.getInt(from: selectedVideoCodec, in: Self.videoCodecs)
+    let videoRendererMode = Self.videoRendererModeRawValue(
+      for: Self.normalizedVideoRendererMode(selectedVideoRendererMode))
     let framePacing = Self.getInt(from: selectedPacingOptions, in: Self.pacingOptions)
     let smoothnessLatencyMode = Self.getInt(
       from: selectedSmoothnessLatencyMode, in: Self.smoothnessLatencyModes)
@@ -581,11 +676,29 @@ extension SettingsModel {
       remoteResolutionHeight: remoteResolutionHeight,
       remoteFps: remoteFpsEnabled,
       remoteFpsRate: remoteFpsRate,
+      hdrTransferFunction: hdrTransferFunction,
+      hdrMetadataSource: hdrMetadataSource,
+      hdrClientDisplayProfile: hdrClientDisplayProfile,
+      hdrManualMaxBrightness: hdrManualMaxBrightness,
+      hdrManualMinBrightness: hdrManualMinBrightness,
+      hdrManualMaxAverageBrightness: hdrManualMaxAverageBrightness,
+      hdrOpticalOutputScale: hdrOpticalOutputScale,
+      hdrHlgViewingEnvironment: hdrHlgViewingEnvironment,
+      hdrEdrStrategy: hdrEdrStrategy,
+      hdrToneMappingPolicy: hdrToneMappingPolicy,
+      sunshineTargetDisplayName: sunshineTargetDisplayName,
+      sunshineUseVirtualDisplay: sunshineUseVirtualDisplay,
+      sunshineScreenMode: sunshineScreenMode,
+      sunshineHdrBrightnessOverride: sunshineHdrBrightnessOverride,
+      sunshineMaxBrightness: persistedSunshineMaxBrightness,
+      sunshineMinBrightness: persistedSunshineMinBrightness,
+      sunshineMaxAverageBrightness: persistedSunshineMaxAverageBrightness,
 
       bitrate: bitrate,
       customBitrate: autoAdjustBitrate ? nil : customBitrate,
       unlockMaxBitrate: unlockMaxBitrate,
       codec: codec,
+      videoRendererMode: videoRendererMode,
       hdr: hdr,
       framePacing: framePacing,
       audioOnPC: audioOnPC,
@@ -639,10 +752,15 @@ extension SettingsModel {
       rewrittenScrollMode: persistedRewrittenScrollMode,
       streamShortcuts: StreamShortcutProfile.normalizedShortcuts(streamShortcuts),
       upscalingMode: upscalingMode,
+      frameInterpolationMode: frameInterpolationMode,
       connectionMethod: selectedConnectionMethod,
       smoothnessLatencyMode: smoothnessLatencyMode,
       timingBufferLevel: timingBufferLevel,
       timingPrioritizeResponsiveness: timingPrioritizeResponsiveness,
+      displaySyncMode: displaySyncMode,
+      frameQueueTarget: frameQueueTarget,
+      timingResponsivenessBias: timingResponsivenessBias,
+      allowDrawableTimeoutMode: allowDrawableTimeoutMode,
       timingCompatibilityMode: timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround
     )

@@ -55,6 +55,7 @@ typedef struct {
 
 - (id)initWithView:(OSView *)view;
 
+- (void)prewarmPresentationForStreamConfig:(StreamConfiguration *)streamConfig;
 - (void)setupWithVideoFormat:(int)videoFormat
                    frameRate:(int)frameRate
                upscalingMode:(int)upscalingMode

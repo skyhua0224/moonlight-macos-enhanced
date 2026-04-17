@@ -41,6 +41,8 @@ struct AppView: View {
   @ObservedObject private var awdlManager = AwdlHelperManager.sharedManager
   @AppStorage("theme") private var appAppearanceRawValue = AppAppearanceOption.system.rawValue
   @AppStorage("autoDiscoverNewHosts") private var autoDiscoverNewHosts = true
+  @AppStorage("settings.app.videoCapabilityStatusExpanded") private var videoCapabilityStatusExpanded =
+    false
   @SwiftUI.State private var showLiveLogViewer = false
   @SwiftUI.State private var showAwdlHelperWarning = false
   @SwiftUI.State private var awdlEnableAfterWarning = true
@@ -265,6 +267,26 @@ struct AppView: View {
           .frame(height: 32)
 
         FormSection(title: "Advanced") {
+          DisclosureGroup(isExpanded: $videoCapabilityStatusExpanded) {
+            VideoCapabilityStatusPanel(matrix: settingsModel.videoCapabilityMatrix)
+              .padding(.top, 8)
+              .frame(maxWidth: .infinity, alignment: .leading)
+          } label: {
+            HStack {
+              Text(languageManager.localize("Capability Status"))
+              Spacer()
+              Text(
+                videoCapabilityStatusExpanded
+                  ? languageManager.localize("Expanded")
+                  : languageManager.localize("Collapsed")
+              )
+              .font(.footnote)
+              .foregroundColor(.secondary)
+            }
+          }
+
+          Divider()
+
           AwdlNetworkCompatibilitySettingsSection(
             awdlManager: awdlManager,
             showWarning: $showAwdlHelperWarning,

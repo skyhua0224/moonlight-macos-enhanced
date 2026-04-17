@@ -271,6 +271,7 @@ typedef NS_ENUM(NSUInteger, HIDScrollSemanticKind) {
 typedef NS_ENUM(NSInteger, HIDPhysicalWheelModeOption) {
     HIDPhysicalWheelModeOptionNotched = 0,
     HIDPhysicalWheelModeOptionHighPrecision = 1,
+    HIDPhysicalWheelModeOptionAutomatic = 2,
 };
 
 typedef NS_ENUM(NSInteger, HIDRewrittenScrollModeOption) {

@@ -33,6 +33,17 @@ static inline void HIDUpdateScrollRuntimeStatus(HIDSupport *support, HIDScrollCl
                                            detailKey:detailKey];
 }
 
+static inline BOOL HIDPhysicalWheelModePrefersHighPrecision(HIDPhysicalWheelModeOption mode) {
+    switch (mode) {
+        case HIDPhysicalWheelModeOptionAutomatic:
+        case HIDPhysicalWheelModeOptionHighPrecision:
+            return YES;
+        case HIDPhysicalWheelModeOptionNotched:
+        default:
+            return NO;
+    }
+}
+
 @implementation HIDSupport (Scroll)
 
 - (void)handleGCMouseScrollValueY:(float)value API_AVAILABLE(macos(11.0)) {
@@ -278,17 +289,9 @@ static inline void HIDUpdateScrollRuntimeStatus(HIDSupport *support, HIDScrollCl
                 break;
         }
     } else if (physicalWheelSemantic && !precise) {
-        switch (physicalWheelMode) {
-            case HIDPhysicalWheelModeOptionHighPrecision:
-                highResolutionPath = YES;
-                quantizedWheel = NO;
-                break;
-            case HIDPhysicalWheelModeOptionNotched:
-            default:
-                highResolutionPath = NO;
-                quantizedWheel = YES;
-                break;
-        }
+        BOOL prefersHighPrecision = HIDPhysicalWheelModePrefersHighPrecision(physicalWheelMode);
+        highResolutionPath = prefersHighPrecision;
+        quantizedWheel = !prefersHighPrecision;
     }
     CGFloat normalizedDeltaX = 0.0;
     CGFloat normalizedDeltaY = 0.0;
@@ -313,7 +316,9 @@ static inline void HIDUpdateScrollRuntimeStatus(HIDSupport *support, HIDScrollCl
                 break;
         }
     } else if (physicalWheelSemantic && !precise) {
-        if (physicalWheelMode == HIDPhysicalWheelModeOptionHighPrecision) {
+        if (physicalWheelMode == HIDPhysicalWheelModeOptionAutomatic) {
+            scrollMode = horizontalDominant ? @"appkit-horizontal-wheel-auto" : @"appkit-wheel-auto";
+        } else if (physicalWheelMode == HIDPhysicalWheelModeOptionHighPrecision) {
             scrollMode = horizontalDominant ? @"appkit-horizontal-wheel-high-precision" : @"appkit-wheel-high-precision";
         }
     }
@@ -392,7 +397,7 @@ static inline void HIDUpdateScrollRuntimeStatus(HIDSupport *support, HIDScrollCl
         if (syntheticRewritten) {
             scrollSpeed = rewrittenScrollSpeed;
         } else if (physicalWheelSemantic) {
-            scrollSpeed = physicalWheelMode == HIDPhysicalWheelModeOptionHighPrecision
+            scrollSpeed = HIDPhysicalWheelModePrefersHighPrecision(physicalWheelMode)
                 ? HIDPhysicalWheelHighPrecisionScrollSpeed(self.host, wheelScrollSpeed)
                 : wheelScrollSpeed;
         }

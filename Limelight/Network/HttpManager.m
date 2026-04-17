@@ -24,6 +24,77 @@
 #define LONG_TIMEOUT_SEC 60
 #define EXTRA_LONG_TIMEOUT_SEC 180
 
+@interface MLSunshineDisplaysResponse : NSObject <Response>
+@property (nonatomic) NSInteger statusCode;
+@property (nonatomic, strong) NSString *statusMessage;
+@property (nonatomic, strong) NSData *data;
+@property (nonatomic, copy) NSArray<NSDictionary<NSString*, id>*> *displays;
+@end
+
+@implementation MLSunshineDisplaysResponse
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _statusCode = 500;
+        _statusMessage = @"Server Error";
+        _displays = @[];
+    }
+    return self;
+}
+
+- (void)populateWithData:(NSData *)data {
+    self.data = data;
+    if (data.length == 0) {
+        self.statusCode = 500;
+        self.statusMessage = @"Empty response";
+        self.displays = @[];
+        return;
+    }
+
+    NSError *jsonError = nil;
+    id jsonObject = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+    if (![jsonObject isKindOfClass:[NSDictionary class]]) {
+        self.statusCode = 500;
+        self.statusMessage = jsonError.localizedDescription ?: @"Invalid Sunshine displays response";
+        self.displays = @[];
+        return;
+    }
+
+    NSDictionary *json = (NSDictionary *)jsonObject;
+    NSNumber *statusCode = json[@"status_code"];
+    NSString *statusMessage = json[@"status_message"];
+    NSArray *displays = json[@"displays"];
+
+    self.statusCode = statusCode != nil ? statusCode.integerValue : 500;
+    self.statusMessage = statusMessage.length > 0 ? statusMessage : @"Server Error";
+    if ([displays isKindOfClass:[NSArray class]]) {
+        NSMutableArray<NSDictionary<NSString*, id>*> *parsedDisplays = [NSMutableArray arrayWithCapacity:displays.count];
+        for (id entry in displays) {
+            if (![entry isKindOfClass:[NSDictionary class]]) {
+                continue;
+            }
+
+            NSString *displayName = [entry[@"display_name"] isKindOfClass:[NSString class]] ? entry[@"display_name"] : @"";
+            NSString *deviceId = [entry[@"device_id"] isKindOfClass:[NSString class]] ? entry[@"device_id"] : displayName;
+            NSString *friendlyName = [entry[@"friendly_name"] isKindOfClass:[NSString class]] ? entry[@"friendly_name"] : deviceId;
+            NSNumber *index = [entry[@"index"] isKindOfClass:[NSNumber class]] ? entry[@"index"] : @(parsedDisplays.count);
+
+            [parsedDisplays addObject:@{
+                @"index": index,
+                @"display_name": displayName ?: @"",
+                @"device_id": deviceId ?: @"",
+                @"friendly_name": friendlyName ?: @"",
+            }];
+        }
+        self.displays = parsedDisplays;
+    } else {
+        self.displays = @[];
+    }
+}
+
+@end
+
 @implementation HttpManager {
     NSString* _baseHTTPURL;
     NSString* _baseHTTPSURL;
@@ -290,6 +361,62 @@ static const NSString* HTTPS_PORT = @"47984";
     return [self newHttpServerInfoRequest:false];
 }
 
+- (NSURLRequest *)newDisplaysRequest {
+    NSString *urlString = [NSString stringWithFormat:@"%@/displays?uniqueid=%@", _baseHTTPSURL, _clientUniqueId];
+    return [self createRequestFromString:urlString timeout:SHORT_TIMEOUT_SEC];
+}
+
+- (NSArray<NSDictionary<NSString*, id>*>*)fetchSunshineDisplays {
+    MLSunshineDisplaysResponse *response = [[MLSunshineDisplaysResponse alloc] init];
+    HttpRequest *request = [HttpRequest requestForResponse:response withUrlRequest:[self newDisplaysRequest]];
+    [self executeRequestSynchronously:request];
+
+    if (response.statusCode != 200) {
+        Log(LOG_W, @"[sunshine] Display list request failed: %ld %@", (long)response.statusCode, response.statusMessage ?: @"");
+        return @[];
+    }
+
+    Log(LOG_I, @"[sunshine] Loaded %lu host displays", (unsigned long)response.displays.count);
+    return response.displays ?: @[];
+}
+
+- (void)appendEncodedQueryParameter:(NSMutableString *)params key:(NSString *)key value:(NSString *)value {
+    if (value.length == 0) {
+        return;
+    }
+
+    NSCharacterSet *allowed = [NSCharacterSet URLQueryAllowedCharacterSet];
+    NSString *encodedValue = [value stringByAddingPercentEncodingWithAllowedCharacters:allowed];
+    if (encodedValue.length == 0) {
+        encodedValue = value;
+    }
+
+    [params appendFormat:@"&%@=%@", key, encodedValue];
+}
+
+- (void)appendSunshineFoundationParams:(NSMutableString *)extraParams
+                                config:(StreamConfiguration *)config {
+    if (config.sunshineTargetDisplayName.length > 0) {
+        [self appendEncodedQueryParameter:extraParams
+                                      key:@"display_name"
+                                    value:config.sunshineTargetDisplayName];
+    }
+
+    if (config.sunshineUseVirtualDisplay) {
+        [extraParams appendString:@"&useVdd=1"];
+    }
+
+    if (config.sunshineScreenMode >= 0) {
+        [extraParams appendFormat:@"&customScreenMode=%d", config.sunshineScreenMode];
+    }
+
+    if (config.sunshineHdrBrightnessOverride) {
+        [extraParams appendFormat:@"&maxBrightness=%.3f", config.sunshineMaxBrightness];
+        [extraParams appendFormat:@"&minBrightness=%.6f", config.sunshineMinBrightness];
+        [extraParams appendFormat:@"&maxAverageBrightness=%.3f", config.sunshineMaxAverageBrightness];
+    }
+}
+
 - (NSURLRequest*) newLaunchRequest:(StreamConfiguration*)config {
     BOOL sops = config.optimizeGameSettings;
 
@@ -348,6 +475,8 @@ static const NSString* HTTPS_PORT = @"47984";
     } @catch (NSException* exception) {
         // Best-effort only; keep defaults on any failure.
     }
+
+    [self appendSunshineFoundationParams:extraParams config:config];
 
     // Ensure even dimensions (some encoders/decoders require this)
     modeWidth &= ~1;
@@ -430,6 +559,8 @@ static const NSString* HTTPS_PORT = @"47984";
         }
     } @catch (NSException* exception) {
     }
+
+    [self appendSunshineFoundationParams:extraParams config:config];
 
     modeWidth &= ~1;
     modeHeight &= ~1;

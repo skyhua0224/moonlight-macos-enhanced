@@ -17,10 +17,44 @@
 ## ✨ Core Capabilities
 
 - **Native macOS client** — AppKit / SwiftUI interface, Apple Silicon and Intel support, dark mode, and bilingual UI
-- **Full streaming feature set** — custom resolution and FPS, HEVC / H.264 hardware decoding, HDR, YUV 4:4:4, MetalFX, and auto bitrate
+- **Full streaming feature set** — custom resolution and FPS, AV1 / HEVC / H.264 decode, HDR, YUV 4:4:4, MetalFX / VT enhancement, and auto bitrate
+- **Multi-renderer pipeline** — Auto now prefers `Native Renderer`, with `Metal Renderer` and `Compatibility Renderer` available when needed
 - **Input and control upgrades** — Free Mouse / Locked Mouse, Automatic driver routing, configurable stream shortcuts, and controller enhancements
 - **Audio and media improvements** — lower-latency local playback, multi-channel receive and playback, audio enhancement mode, and improved microphone path
 - **Connectivity and stability** — per-host connection methods, custom ports / IPv6 / domains, performance overlay, diagnostics, and AWDL stability helpers
+
+<details>
+<summary><strong>Video / HDR / renderer pipeline</strong></summary>
+
+- Video negotiation covers `AV1 / HEVC / H.264`, HDR, YUV `4:4:4`, remote resolution / FPS overrides, and adaptive bitrate control
+- `Auto` follows a fixed order: `Native Renderer → Metal Renderer → Compatibility Renderer`
+- `Native Renderer` uses `VideoToolbox decode + native sample-buffer presentation` and is tuned for the lowest latency, highest default color accuracy, and stable HDR playback
+- `Metal Renderer` uses a deeper `Metal / EDR` presentation path with `HLG / PQ`, HDR metadata source, client HDR profile, luminance parameters, optical output scale, HLG viewing environment, EDR strategy, and tone-mapping policy
+- `Metal Renderer` also exposes presentation-timing controls such as display sync, frame queue target, responsiveness bias, and drawable-timeout behavior
+- The enhancement stack can use `VT Low-Latency Super Resolution`, `VT Quality Super Resolution`, `MetalFX`, `Basic Scaling`, and `VT Low-Latency Frame Interpolation`, with automatic fallback when needed
+
+</details>
+
+<details>
+<summary><strong>Audio / microphone pipeline</strong></summary>
+
+- The default playback path has moved to a more direct `Core Audio`-oriented local renderer with lower extra buffering, while keeping compatibility fallback in place
+- Supports host `Opus multistream` receive, local decode, negotiation, and playback for `2ch / 5.1 / 7.1 / 7.1.4`
+- Real multi-channel devices keep their channel semantics whenever possible; headphones and `2.0 / 2.1` speakers can switch to `Audio Enhancement` for client-side spatial feel, soundstage, reverb, and EQ rerendering
+- `Audio Enhancement` includes presets, manual EQ, spatial intensity, soundstage width, and reverb controls for stereo listening devices
+- When paired with a compatible Foundation Sunshine host, Moonlight can use the fuller multi-channel negotiation path, microphone uplink, and related enhancement flows
+
+</details>
+
+<details>
+<summary><strong>Host integration / input / diagnostics</strong></summary>
+
+- Mouse input defaults to `Automatic` routing in the order `CoreHID → HID → MFI`; on supported macOS versions it will try the higher-polling `CoreHID` relative mouse path first and fall back automatically when permissions or runtime conditions do not allow it
+- The input stack covers `Free Mouse / Locked Mouse`, keyboard shortcut translation, separate physical wheel / smoothed wheel / trackpad strategies, multi-controller support, rumble, Guide emulation, and controller mouse
+- Can send Foundation Sunshine launch extensions such as `display_name`, `useVdd`, `customScreenMode`, and HDR display-profile overrides
+- Host and network integration also includes per-host connection methods, custom ports, IPv6, domains, `AWDL`, performance overlay, connection warnings, input diagnostics, and both raw and curated logs
+
+</details>
 
 ## 🖥️ Host Compatibility
 
@@ -58,17 +92,24 @@
 
 ## 🔊 Audio and Video
 
-### Video
-- Custom resolution, FPS, remote resolution, and remote FPS
-- HEVC / H.264 hardware decoding
-- HDR, YUV 4:4:4, MetalFX upscaling, and auto bitrate tuning
-- Fullscreen, borderless, and windowed display modes
+### Video Pipeline
+- Custom resolution, FPS, remote resolution, and remote FPS overrides
+- Video negotiation for `AV1 / HEVC / H.264`, HDR, YUV `4:4:4`, and adaptive bitrate tuning
+- `Native Renderer / Metal Renderer / Compatibility Renderer` presentation paths with ordered automatic fallback
+- `Native Renderer` is aimed at the lowest latency and highest default color accuracy; `Metal Renderer` is aimed at deeper HDR and color control; `Compatibility Renderer` is kept for older systems and recovery cases
 
-### Audio
-- The default mode uses a newer low-latency local playback path with less extra buffering and copying
-- Supports `2ch / 5.1 / 7.1 / 7.1.4` receive and playback with better preservation of channel semantics
-- Includes an `Audio Enhancement` mode for headphones and `2.0 / 2.1` speakers with spatial feel, soundstage, reverb, and EQ controls
-- When paired with a compatible [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine), Moonlight can use the enhanced microphone path
+### HDR, Color, and Enhancement
+- HDR transfer functions support `HLG / PQ / Auto`, with presentation tuned to the current display path
+- `Metal Renderer` exposes HDR metadata source, client HDR profile, luminance parameters, optical output scale, HLG viewing environment, EDR strategy, and tone-mapping policy
+- The enhancement stack supports `VT Low-Latency Super Resolution`, `VT Quality Super Resolution`, `MetalFX`, and `Basic Scaling`
+- `VT Low-Latency Frame Interpolation` is also integrated into the Metal video path for cadence smoothing on high-refresh displays
+
+### Audio Pipeline
+- The default audio path uses a more direct `Core Audio`-oriented low-latency local renderer with compatibility fallback
+- Local receive, decode, negotiation, and playback for `2ch / 5.1 / 7.1 / 7.1.4`
+- When the output device supports real multi-channel playback, Moonlight keeps the multichannel layout whenever possible; stereo devices can switch to `Audio Enhancement`
+- `Audio Enhancement` is designed for headphones and `2.0 / 2.1` speakers, with client-side spatial feel, soundstage, reverb, EQ presets, and manual controls
+- When paired with a compatible [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine), Moonlight can use the enhanced microphone uplink and fuller multi-channel negotiation path
 
 ## 🖱️ Input and Control
 
@@ -81,11 +122,16 @@
 - **Locked Mouse**: better for games and sustained relative motion
 - **Free Mouse**: better for remote control, multi-display use, and desktop apps
 
-### Input Enhancements
-- Reworked Mouse, Keyboard, and Controller settings layout
-- Controls for local cursor, pointer speed, wheel speed, swapped buttons, reverse scroll, and CoreHID report-rate cap
-- Separate strategies for physical wheel, rewritten / smoothed wheel, and trackpad input
-- Multi-controller support, rumble, Guide emulation, and controller mouse mode
+### Mouse and Wheel Pipeline
+- On supported systems, `CoreHID` provides the higher-polling relative mouse path; if permissions or runtime conditions block it, Moonlight falls back automatically to `HID / MFI / AppKit` compatibility paths
+- Controls for local cursor, pointer speed, swapped buttons, reverse scroll, and `CoreHID` report-rate cap
+- Separate handling for `physical wheel`, `rewritten / smoothed wheel`, and `trackpad` input sources
+- Physical wheel modes support automatic, high-precision, and notched behavior, with separate distance, speed, and tail-filter tuning
+
+### Keyboard, Controllers, and Shortcuts
+- Keyboard input supports common Windows shortcut translation, custom translation rules, and Moonlight-specific stream shortcuts
+- Controller input supports multi-controller sessions, rumble, Guide emulation, and controller mouse mode
+- Mouse, Keyboard, and Controller settings have been reorganized so the most-used input controls are easier to reach
 
 ### Stream Shortcuts
 These Moonlight-specific stream shortcuts can be adjusted in `Settings → Input → Keyboard`:
