@@ -62,6 +62,22 @@ static const double kEnhancedEQFrequencies24Band[] = {
 };
 static const NSUInteger kEnhancedEQBandCount24 = sizeof(kEnhancedEQFrequencies24Band) / sizeof(kEnhancedEQFrequencies24Band[0]);
 
+static int MLResolvedDynamicRangeModeForPreference(BOOL hdrEnabled, int hdrTransferFunction) {
+    if (!hdrEnabled) {
+        return DYNAMIC_RANGE_MODE_SDR;
+    }
+
+    switch (hdrTransferFunction) {
+        case 1:
+            return DYNAMIC_RANGE_MODE_HDR10_PQ;
+        case 2:
+            return DYNAMIC_RANGE_MODE_HLG;
+        case 0:
+        default:
+            return DYNAMIC_RANGE_MODE_HLG;
+    }
+}
+
 static inline float MLApplyMakeupGainAndSoftClip(float sample, float gain) {
     float x = sample * gain;
     float ax = fabsf(x);
@@ -2512,11 +2528,18 @@ void ClConnectionStatusUpdate(int status)
         }
     }
 
-    if (av1Supported && !enableYuv444) {
+    if (av1Supported) {
         if (config.enableHdr) {
             supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN10;
         } else {
             supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN8;
+        }
+
+        if (enableYuv444) {
+            supportedVideoFormats |= VIDEO_FORMAT_AV1_HIGH8_444;
+            if (config.enableHdr) {
+                supportedVideoFormats |= VIDEO_FORMAT_AV1_HIGH10_444;
+            }
         }
     }
 
@@ -2536,6 +2559,13 @@ void ClConnectionStatusUpdate(int status)
     // HEVC must be supported when HDR is enabled
     assert(!_streamConfig.enableHdr || _streamConfig.supportsHevc);
 #endif
+
+    _streamConfig.dynamicRangeMode =
+        MLResolvedDynamicRangeModeForPreference(config.enableHdr, config.hdrTransferFunction);
+    Log(LOG_I, @"[diag] HDR transfer preference resolved: hdr=%d tf=%d dynamicRangeMode=%d",
+        config.enableHdr ? 1 : 0,
+        config.hdrTransferFunction,
+        _streamConfig.dynamicRangeMode);
 
     memcpy(_streamConfig.remoteInputAesKey, [config.riKey bytes], [config.riKey length]);
     memset(_streamConfig.remoteInputAesIv, 0, 16);
@@ -2658,6 +2688,10 @@ void ClConnectionStatusUpdate(int status)
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (self->_micStopping || !self->_streamConfig.enableMic) {
+                Log(LOG_I, @"Microphone start skipped because capture is stopping");
+                return;
+            }
             [self startMicrophoneEngineLocked];
         });
     }];
@@ -2731,6 +2765,10 @@ void ClConnectionStatusUpdate(int status)
 
 - (void)startMicrophoneEngineLocked
 {
+    if (_micStopping || !_streamConfig.enableMic) {
+        return;
+    }
+
     if (self.micAudioEngine != nil && self.micAudioEngine.isRunning) {
         return;
     }
@@ -3021,26 +3059,24 @@ void ClConnectionStatusUpdate(int status)
     }
     self.micConverter = nil;
 
-    _micSendFailures = 0;
-    if (_micEncoder != NULL) {
-        opus_multistream_encoder_destroy(_micEncoder);
-        _micEncoder = NULL;
-    }
-
-    dispatch_block_t clearBlock = ^{
+    dispatch_block_t teardownBlock = ^{
+        self->_micSendFailures = 0;
+        if (self->_micEncoder != NULL) {
+            opus_multistream_encoder_destroy(self->_micEncoder);
+            self->_micEncoder = NULL;
+        }
         [self->_micPcmQueue setLength:0];
     };
     if (_micQueue != nil) {
         if (dispatch_get_specific(gMicQueueKey) == gMicQueueKey) {
-            clearBlock();
+            teardownBlock();
         } else {
-            dispatch_sync(_micQueue, clearBlock);
+            dispatch_sync(_micQueue, teardownBlock);
         }
     } else {
-        clearBlock();
+        teardownBlock();
     }
 
-    _micQueue = nil;
     destroyMicrophoneStreamCtx(&_connectionContext.micContext);
 }
 #endif

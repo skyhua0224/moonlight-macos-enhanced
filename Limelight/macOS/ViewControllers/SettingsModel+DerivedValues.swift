@@ -8,6 +8,7 @@
 
 import AppKit
 import CoreGraphics
+import Metal
 import SwiftUI
 import VideoToolbox
 
@@ -59,17 +60,22 @@ import VideoToolbox
 }
 
 @objc enum PhysicalWheelScrollMode: Int, CaseIterable {
-  case notched = 0
+  case automatic = 2
   case highPrecision = 1
+  case notched = 0
 
-  static let defaultMode: Self = .notched
+  static let defaultMode: Self = .automatic
 
   init(persistedRawValue: Int?) {
     switch persistedRawValue {
+    case PhysicalWheelScrollMode.automatic.rawValue:
+      self = .automatic
     case PhysicalWheelScrollMode.highPrecision.rawValue:
       self = .highPrecision
-    default:
+    case PhysicalWheelScrollMode.notched.rawValue:
       self = .notched
+    default:
+      self = .automatic
     }
   }
 
@@ -79,6 +85,8 @@ import VideoToolbox
 
   var displayKey: String {
     switch self {
+    case .automatic:
+      return "Automatic"
     case .notched:
       return "Notched"
     case .highPrecision:
@@ -435,12 +443,210 @@ extension SettingsModel {
     return false
   }
 
-  private static let allUpscalingModes: [String] = [
-    "Off", "MetalFX Spatial (Quality)", "MetalFX Spatial (Performance)",
+  static var hevcHardwareDecodeSupported: Bool {
+    VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)
+  }
+
+  private static func displayHDRAvailability(for screen: NSScreen?) -> CapabilityAvailability {
+    guard let screen else { return .unavailable }
+
+    let currentEDR = screen.maximumExtendedDynamicRangeColorComponentValue
+    let potentialEDR = screen.maximumPotentialExtendedDynamicRangeColorComponentValue
+    let p3Gamut = NSDisplayGamut(rawValue: 1) ?? NSDisplayGamut(rawValue: 0)!
+    let wideGamut = screen.canRepresent(p3Gamut)
+
+    if potentialEDR > 1.0 && wideGamut {
+      return .available
+    }
+    if currentEDR > 1.0 || wideGamut {
+      return .limited
+    }
+    return .unavailable
+  }
+
+  private static func enhancedRendererAvailability(
+    metalAvailable: Bool,
+    displayHDRAvailability: CapabilityAvailability
+  ) -> CapabilityAvailability {
+    guard metalAvailable else { return .unavailable }
+    if displayHDRAvailability == .unavailable {
+      return .limited
+    }
+    return .available
+  }
+
+  private static func lowLatencySuperResolutionAvailability() -> CapabilityAvailability {
+    if #available(macOS 26.0, *) {
+      return VTLowLatencySuperResolutionScalerConfiguration.isSupported ? .available : .unavailable
+    }
+    return .unavailable
+  }
+
+  private static func lowLatencyFrameInterpolationAvailability() -> CapabilityAvailability {
+    if #available(macOS 26.0, *) {
+      return VTLowLatencyFrameInterpolationConfiguration.isSupported ? .available : .unavailable
+    }
+    return .unavailable
+  }
+
+  private static func qualitySuperResolutionAvailability() -> CapabilityAvailability {
+    if #available(macOS 26.0, *) {
+      guard VTSuperResolutionScalerConfiguration.isSupported else { return .unavailable }
+      let supportedScaleFactors = VTSuperResolutionScalerConfiguration.supportedScaleFactors
+      let supports2x = supportedScaleFactors.contains(2)
+      guard supports2x else { return .limited }
+      guard
+        let config = VTSuperResolutionScalerConfiguration(
+          frameWidth: 1280,
+          frameHeight: 720,
+          scaleFactor: 2,
+          inputType: .video,
+          usePrecomputedFlow: false,
+          qualityPrioritization: .normal,
+          revision: VTSuperResolutionScalerConfiguration.defaultRevision
+        )
+      else {
+        return .limited
+      }
+
+      switch config.configurationModelStatus {
+      case .ready:
+        return .available
+      case .downloadRequired, .downloading:
+        return .limited
+      @unknown default:
+        return .limited
+      }
+    }
+    return .unavailable
+  }
+
+  static func currentVideoCapabilityMatrix() -> VideoCapabilityMatrix {
+    let screen = NSScreen.main ?? NSScreen.screens.first
+    let displayName = screen?.localizedName ?? ""
+    let metalAvailable = MTLCreateSystemDefaultDevice() != nil
+    let hdrAvailability = displayHDRAvailability(for: screen)
+
+    return VideoCapabilityMatrix(
+      displayName: displayName,
+      items: [
+        VideoCapabilityItem(
+          id: "renderer.native",
+          titleKey: "Native Renderer",
+          availability: .available,
+          detailKey: "Native Renderer detail"
+        ),
+        VideoCapabilityItem(
+          id: "renderer.enhanced",
+          titleKey: "Enhanced Renderer",
+          availability: enhancedRendererAvailability(
+            metalAvailable: metalAvailable,
+            displayHDRAvailability: hdrAvailability),
+          detailKey: "Enhanced Renderer detail"
+        ),
+        VideoCapabilityItem(
+          id: "renderer.compatibility",
+          titleKey: "Compatibility Renderer",
+          availability: .available,
+          detailKey: "Compatibility Renderer detail"
+        ),
+        VideoCapabilityItem(
+          id: "display.hdr",
+          titleKey: "HDR Display",
+          availability: hdrAvailability,
+          detailKey: "HDR Display detail"
+        ),
+        VideoCapabilityItem(
+          id: "decode.av1",
+          titleKey: "AV1 Decode",
+          availability: av1HardwareDecodeSupported ? .available : .limited,
+          detailKey: "AV1 Decode detail"
+        ),
+        VideoCapabilityItem(
+          id: "decode.hevc",
+          titleKey: "HEVC Decode",
+          availability: hevcHardwareDecodeSupported ? .available : .limited,
+          detailKey: "HEVC Decode detail"
+        ),
+        VideoCapabilityItem(
+          id: "enhancement.metalfx",
+          titleKey: "MetalFX",
+          availability: isMetalFXSupported ? .available : .unavailable,
+          detailKey: "MetalFX capability detail"
+        ),
+        VideoCapabilityItem(
+          id: "enhancement.vtLowLatencySR",
+          titleKey: "VT Low-Latency Super Resolution",
+          availability: lowLatencySuperResolutionAvailability(),
+          detailKey: "VT Low-Latency Super Resolution detail"
+        ),
+        VideoCapabilityItem(
+          id: "enhancement.vtLowLatencyFI",
+          titleKey: "VT Low-Latency Frame Interpolation",
+          availability: lowLatencyFrameInterpolationAvailability(),
+          detailKey: "VT Low-Latency Frame Interpolation detail"
+        ),
+        VideoCapabilityItem(
+          id: "enhancement.vtQualitySR",
+          titleKey: "VT Quality Super Resolution",
+          availability: qualitySuperResolutionAvailability(),
+          detailKey: "VT Quality Super Resolution detail"
+        ),
+        VideoCapabilityItem(
+          id: "sunshine.extensions",
+          titleKey: "Sunshine Extensions",
+          availability: .available,
+          detailKey: "Sunshine Extensions detail"
+        ),
+      ]
+    )
+  }
+
+  static let upscalingModeOptions: [(title: String, value: Int)] = [
+    ("Auto", 6),
+    ("VT Low-Latency Super Resolution", 3),
+    ("VT Quality Super Resolution", 4),
+    ("MetalFX Spatial (Quality)", 1),
+    ("MetalFX Spatial (Performance)", 2),
+    ("Basic Scaling", 5),
+    ("Off", 0),
   ]
 
   static var upscalingModes: [String] {
-    isMetalFXSupported ? allUpscalingModes : ["Off"]
+    upscalingModeOptions.map(\.title)
+  }
+
+  static func upscalingModeRawValue(for title: String) -> Int {
+    upscalingModeOptions.first(where: { $0.title == title })?.value ?? defaultUpscalingMode
+  }
+
+  static func upscalingModeTitle(for rawValue: Int) -> String {
+    upscalingModeOptions.first(where: { $0.value == rawValue })?.title
+      ?? upscalingModeOptions.first(where: { $0.value == defaultUpscalingMode })?.title
+      ?? "Auto"
+  }
+  static let frameInterpolationModeOptions: [(title: String, value: Int)] = [
+    ("Off", 0),
+    ("VT Low-Latency Frame Interpolation", 1),
+  ]
+  static var frameInterpolationModes: [String] {
+    frameInterpolationModeOptions.map(\.title)
+  }
+  static let defaultFrameInterpolationMode = 0
+
+  static func frameInterpolationModeRawValue(for title: String) -> Int {
+    frameInterpolationModeOptions.first(where: { $0.title == title })?.value
+      ?? defaultFrameInterpolationMode
+  }
+
+  static func frameInterpolationModeSelection(for rawValue: Int?) -> String {
+    guard let rawValue else {
+      return frameInterpolationModeOptions.first(where: { $0.value == defaultFrameInterpolationMode })?.title
+        ?? "Off"
+    }
+    return frameInterpolationModeOptions.first(where: { $0.value == rawValue })?.title
+      ?? frameInterpolationModeOptions.first(where: { $0.value == defaultFrameInterpolationMode })?.title
+      ?? "Off"
   }
 
   static let defaultResolution = CGSizeMake(1920, 1080)
@@ -456,6 +662,232 @@ extension SettingsModel {
   static let defaultRemoteFpsEnabled = false
   static let defaultRemoteFps = 60
   static let defaultRemoteCustomFps: CGFloat? = nil
+  static let hdrTransferFunctionOptions: [(title: String, value: Int)] = [
+    ("Auto", 0),
+    ("HLG", 2),
+    ("PQ", 1),
+  ]
+  static var hdrTransferFunctions: [String] {
+    hdrTransferFunctionOptions.map(\.title)
+  }
+  static let defaultHdrTransferFunction = "Auto"
+
+  static func hdrTransferFunctionRawValue(for selection: String) -> Int {
+    hdrTransferFunctionOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func hdrTransferFunctionSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultHdrTransferFunction }
+    return hdrTransferFunctionOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultHdrTransferFunction
+  }
+  static let hdrMetadataSourceOptions: [(title: String, value: Int)] = [
+    ("Hybrid", 2),
+    ("Host", 0),
+    ("Client Override", 1),
+  ]
+  static var hdrMetadataSources: [String] {
+    hdrMetadataSourceOptions.map(\.title)
+  }
+  static let defaultHdrMetadataSource = "Hybrid"
+
+  static func hdrMetadataSourceRawValue(for selection: String) -> Int {
+    hdrMetadataSourceOptions.first(where: { $0.title == selection })?.value ?? 2
+  }
+
+  static func hdrMetadataSourceSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultHdrMetadataSource }
+    return hdrMetadataSourceOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultHdrMetadataSource
+  }
+
+  static let hdrClientDisplayProfileOptions: [(title: String, value: Int)] = [
+    ("Auto", 0),
+    ("Manual", 1),
+  ]
+  static var hdrClientDisplayProfiles: [String] {
+    hdrClientDisplayProfileOptions.map(\.title)
+  }
+  static let defaultHdrClientDisplayProfile = "Auto"
+
+  static func hdrClientDisplayProfileRawValue(for selection: String) -> Int {
+    hdrClientDisplayProfileOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func hdrClientDisplayProfileSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultHdrClientDisplayProfile }
+    return hdrClientDisplayProfileOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultHdrClientDisplayProfile
+  }
+  static let defaultHdrManualMaxBrightness: CGFloat = 1000.0
+  static let defaultHdrManualMinBrightness: CGFloat = 0.001
+  static let defaultHdrManualMaxAverageBrightness: CGFloat = 1000.0
+
+  static let hdrHlgViewingEnvironmentOptions: [(title: String, value: Int)] = [
+    ("Auto", 0),
+    ("Reference", 1),
+    ("Dim Room", 2),
+    ("Office", 3),
+    ("Bright Room", 4),
+  ]
+  static var hdrHlgViewingEnvironments: [String] {
+    hdrHlgViewingEnvironmentOptions.map(\.title)
+  }
+  static let defaultHdrHlgViewingEnvironment = "Auto"
+
+  static func hdrHlgViewingEnvironmentRawValue(for selection: String) -> Int {
+    hdrHlgViewingEnvironmentOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func hdrHlgViewingEnvironmentSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultHdrHlgViewingEnvironment }
+    return hdrHlgViewingEnvironmentOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultHdrHlgViewingEnvironment
+  }
+
+  static let hdrEdrStrategyOptions: [(title: String, value: Int)] = [
+    ("Auto", 0),
+    ("Conservative", 1),
+    ("Balanced", 2),
+    ("Peak", 3),
+  ]
+  static var hdrEdrStrategies: [String] {
+    hdrEdrStrategyOptions.map(\.title)
+  }
+  static let defaultHdrEdrStrategy = "Auto"
+
+  static func hdrEdrStrategyRawValue(for selection: String) -> Int {
+    hdrEdrStrategyOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func hdrEdrStrategySelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultHdrEdrStrategy }
+    return hdrEdrStrategyOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultHdrEdrStrategy
+  }
+
+  static let hdrToneMappingPolicyOptions: [(title: String, value: Int)] = [
+    ("Auto", 0),
+    ("Preserve Highlights", 1),
+    ("Preserve Midtones", 2),
+    ("Preserve Shadows", 3),
+    ("Reference", 4),
+  ]
+  static var hdrToneMappingPolicies: [String] {
+    hdrToneMappingPolicyOptions.map(\.title)
+  }
+  static let defaultHdrToneMappingPolicy = "Auto"
+
+  static func hdrToneMappingPolicyRawValue(for selection: String) -> Int {
+    hdrToneMappingPolicyOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func hdrToneMappingPolicySelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultHdrToneMappingPolicy }
+    return hdrToneMappingPolicyOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultHdrToneMappingPolicy
+  }
+
+  static let displaySyncModeOptions: [(title: String, value: Int)] = [
+    ("Auto", 0),
+    ("On", 1),
+    ("Off", 2),
+  ]
+  static var displaySyncModes: [String] {
+    displaySyncModeOptions.map(\.title)
+  }
+  static let defaultDisplaySyncMode = "Auto"
+
+  static func displaySyncModeRawValue(for selection: String) -> Int {
+    displaySyncModeOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func displaySyncModeSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultDisplaySyncMode }
+    return displaySyncModeOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultDisplaySyncMode
+  }
+
+  static let frameQueueTargetOptions: [(title: String, value: Int)] = [
+    ("Auto", -1),
+    ("0", 0),
+    ("1", 1),
+    ("2", 2),
+    ("3", 3),
+  ]
+  static var frameQueueTargets: [String] {
+    frameQueueTargetOptions.map(\.title)
+  }
+  static let defaultFrameQueueTarget = "Auto"
+
+  static func frameQueueTargetRawValue(for selection: String) -> Int {
+    frameQueueTargetOptions.first(where: { $0.title == selection })?.value ?? -1
+  }
+
+  static func frameQueueTargetSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultFrameQueueTarget }
+    return frameQueueTargetOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultFrameQueueTarget
+  }
+
+  static let responsivenessBiasOptions: [(title: String, value: Int)] = [
+    ("Off", 0),
+    ("Mild", 1),
+    ("Strong", 2),
+  ]
+  static var responsivenessBiasModes: [String] {
+    responsivenessBiasOptions.map(\.title)
+  }
+  static let defaultResponsivenessBias = "Off"
+
+  static func responsivenessBiasRawValue(for selection: String) -> Int {
+    responsivenessBiasOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func responsivenessBiasSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultResponsivenessBias }
+    return responsivenessBiasOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultResponsivenessBias
+  }
+
+  static let allowDrawableTimeoutOptions: [(title: String, value: Int)] = [
+    ("Auto", 0),
+    ("On", 1),
+    ("Off", 2),
+  ]
+  static var allowDrawableTimeoutModes: [String] {
+    allowDrawableTimeoutOptions.map(\.title)
+  }
+  static let defaultAllowDrawableTimeoutMode = "Auto"
+
+  static func allowDrawableTimeoutRawValue(for selection: String) -> Int {
+    allowDrawableTimeoutOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func allowDrawableTimeoutSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultAllowDrawableTimeoutMode }
+    return allowDrawableTimeoutOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultAllowDrawableTimeoutMode
+  }
+
+  static let sunshineScreenModeOptions: [(title: String, value: Int)] = [
+    ("Host Default", -1),
+    ("Verify Only", 0),
+    ("Activate Display", 1),
+    ("Make Primary", 2),
+    ("Only Stream Display", 3),
+    ("Use As Secondary", 4),
+  ]
+  static var sunshineScreenModes: [String] {
+    sunshineScreenModeOptions.map(\.title)
+  }
+  static let defaultSunshineTargetDisplayName = ""
+  static let defaultSunshineUseVirtualDisplay = false
+  static let defaultSunshineScreenMode = "Host Default"
+  static let defaultSunshineHdrBrightnessOverride = false
+  static let defaultSunshineMaxBrightness: CGFloat = 1000.0
+  static let defaultSunshineMinBrightness: CGFloat = 0.001
+  static let defaultSunshineMaxAverageBrightness: CGFloat = 1000.0
   static let defaultBitrateSliderValue = {
     var bitrateIndex = 0
     for i in 0..<SettingsModel.lockedBitrateSteps.count {
@@ -466,7 +898,56 @@ extension SettingsModel {
     }
     return Float(bitrateIndex)
   }()
+  static let videoRendererModeOptions: [(title: String, value: Int)] = [
+    ("Native Renderer (Recommended)", 2),
+    ("Metal Renderer", 1),
+    ("Compatibility Renderer", 3),
+  ]
+  static var videoRendererModes: [String] {
+    videoRendererModeOptions.map(\.title)
+  }
+  static func videoRendererModeRawValue(for selection: String) -> Int {
+    videoRendererModeOptions.first(where: { $0.title == selection })?.value
+      ?? defaultVideoRendererModeRawValue
+  }
+
+  static func videoRendererModeSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultVideoRendererMode }
+    if rawValue == 0 {
+      return defaultVideoRendererMode
+    }
+    return videoRendererModeOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultVideoRendererMode
+  }
+
+  static func normalizedVideoRendererMode(_ value: String?) -> String {
+    guard let value else { return defaultVideoRendererMode }
+    if let alias = videoRendererModesLegacyAliases[value] {
+      return alias
+    }
+    return videoRendererModes.contains(value) ? value : defaultVideoRendererMode
+  }
+
+  static let presentStrategyOptions: [(title: String, value: Int)] = [
+    ("Auto", 0),
+    ("Lowest Latency", 1),
+    ("Balanced", 2),
+    ("Smoothest", 3),
+  ]
+  static var presentStrategies: [String] {
+    presentStrategyOptions.map(\.title)
+  }
+
+  static let videoRendererModesLegacyAliases = [
+    "Auto (Recommended)": "Native Renderer (Recommended)",
+    "Enhanced": "Metal Renderer",
+    "Native": "Native Renderer (Recommended)",
+    "Native Renderer": "Native Renderer (Recommended)",
+    "Compatibility": "Compatibility Renderer",
+  ]
   static let defaultVideoCodec = "H.264"
+  static let defaultVideoRendererMode = "Native Renderer (Recommended)"
+  static let defaultVideoRendererModeRawValue = 2
   static let defaultHdr = false
   static let smoothnessLatencyLow = "Low Latency"
   static let smoothnessLatencyBalanced = "Balanced (Recommended)"
@@ -492,6 +973,7 @@ extension SettingsModel {
   static let defaultTimingPrioritizeResponsiveness = false
   static let defaultTimingCompatibilityMode = false
   static let defaultTimingSdrCompatibilityWorkaround = false
+  static let defaultHdrOpticalOutputScale: CGFloat = 100.0
   static let defaultAudioOnPC = false
   static let defaultAudioConfiguration = "Stereo"
   static let defaultAudioOutputMode = "Default"
@@ -550,7 +1032,7 @@ extension SettingsModel {
   static let defaultTouchscreenMode = 0
   static let defaultGamepadMouseMode = false
   static let defaultMouseMode = "remote"
-  static let defaultUpscalingMode = 0
+  static let defaultUpscalingMode = 6
   static let defaultDimNonHoveredArtwork = true
   static let defaultUnlockMaxBitrate = false
 
@@ -600,6 +1082,16 @@ extension SettingsModel {
       return defaultEnhancedAudioEQLayout
     }
     return value
+  }
+
+  static func sunshineScreenModeRawValue(for selection: String) -> Int {
+    sunshineScreenModeOptions.first(where: { $0.title == selection })?.value ?? -1
+  }
+
+  static func sunshineScreenModeSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultSunshineScreenMode }
+    return sunshineScreenModeOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultSunshineScreenMode
   }
 
   static func sanitizedEnhancedAudioEQGains(_ gains: [Double]?, layout: String) -> [Double] {

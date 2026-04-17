@@ -873,6 +873,14 @@
                                  stats.receivedBytes != self.streamHealthLastReceivedBytes);
     BOOL hasPayloadInFreshWindow = (statsFresh || !statsTimestampValid) && hasPayloadInWindow;
 
+    if (self.waitingForFirstRenderedFrame && stats.renderedFrames > 0) {
+        self.waitingForFirstRenderedFrame = NO;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.streamView.statusText = nil;
+        });
+        Log(LOG_I, @"[diag] First rendered frame observed; clearing startup loading indicator");
+    }
+
     if (hasPayloadInFreshWindow || hasProgressSinceLast) {
         self.streamHealthSawPayload = YES;
     }

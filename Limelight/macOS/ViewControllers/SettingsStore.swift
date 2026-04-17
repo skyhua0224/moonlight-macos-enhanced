@@ -39,11 +39,29 @@ struct Settings: Encodable, Decodable {
   let remoteResolutionHeight: Int?
   let remoteFps: Bool?
   let remoteFpsRate: Int?
+  let hdrTransferFunction: Int?
+  var hdrMetadataSource: Int? = nil
+  var hdrClientDisplayProfile: Int? = nil
+  var hdrManualMaxBrightness: CGFloat? = nil
+  var hdrManualMinBrightness: CGFloat? = nil
+  var hdrManualMaxAverageBrightness: CGFloat? = nil
+  var hdrOpticalOutputScale: CGFloat? = nil
+  var hdrHlgViewingEnvironment: Int? = nil
+  var hdrEdrStrategy: Int? = nil
+  var hdrToneMappingPolicy: Int? = nil
+  let sunshineTargetDisplayName: String?
+  let sunshineUseVirtualDisplay: Bool?
+  let sunshineScreenMode: Int?
+  let sunshineHdrBrightnessOverride: Bool?
+  let sunshineMaxBrightness: CGFloat?
+  let sunshineMinBrightness: CGFloat?
+  let sunshineMaxAverageBrightness: CGFloat?
 
   let bitrate: Int
   let customBitrate: Int?
   let unlockMaxBitrate: Bool?
   let codec: Int
+  let videoRendererMode: Int?
   let hdr: Bool
   let framePacing: Int
   let audioOnPC: Bool
@@ -99,10 +117,15 @@ struct Settings: Encodable, Decodable {
   let rewrittenScrollMode: Int?
   let streamShortcuts: [String: StreamShortcut]?
   let upscalingMode: Int?
+  let frameInterpolationMode: Int?
   let connectionMethod: String?
   let smoothnessLatencyMode: Int?
   let timingBufferLevel: Int?
   let timingPrioritizeResponsiveness: Bool?
+  var displaySyncMode: Int? = nil
+  var frameQueueTarget: Int? = nil
+  var timingResponsivenessBias: Int? = nil
+  var allowDrawableTimeoutMode: Int? = nil
   let timingCompatibilityMode: Bool?
   let timingSdrCompatibilityWorkaround: Bool?
 
@@ -163,10 +186,28 @@ struct Settings: Encodable, Decodable {
       remoteResolutionHeight: remoteResolutionHeight,
       remoteFps: remoteFps,
       remoteFpsRate: remoteFpsRate,
+      hdrTransferFunction: hdrTransferFunction,
+      hdrMetadataSource: hdrMetadataSource,
+      hdrClientDisplayProfile: hdrClientDisplayProfile,
+      hdrManualMaxBrightness: hdrManualMaxBrightness,
+      hdrManualMinBrightness: hdrManualMinBrightness,
+      hdrManualMaxAverageBrightness: hdrManualMaxAverageBrightness,
+      hdrOpticalOutputScale: hdrOpticalOutputScale,
+      hdrHlgViewingEnvironment: hdrHlgViewingEnvironment,
+      hdrEdrStrategy: hdrEdrStrategy,
+      hdrToneMappingPolicy: hdrToneMappingPolicy,
+      sunshineTargetDisplayName: sunshineTargetDisplayName,
+      sunshineUseVirtualDisplay: sunshineUseVirtualDisplay,
+      sunshineScreenMode: sunshineScreenMode,
+      sunshineHdrBrightnessOverride: sunshineHdrBrightnessOverride,
+      sunshineMaxBrightness: sunshineMaxBrightness,
+      sunshineMinBrightness: sunshineMinBrightness,
+      sunshineMaxAverageBrightness: sunshineMaxAverageBrightness,
       bitrate: bitrate,
       customBitrate: customBitrate,
       unlockMaxBitrate: unlockMaxBitrate,
       codec: codec,
+      videoRendererMode: videoRendererMode,
       hdr: hdr,
       framePacing: framePacing,
       audioOnPC: audioOnPC,
@@ -216,10 +257,15 @@ struct Settings: Encodable, Decodable {
       rewrittenScrollMode: rewrittenScrollMode,
       streamShortcuts: streamShortcuts,
       upscalingMode: upscalingMode,
+      frameInterpolationMode: frameInterpolationMode,
       connectionMethod: nil,
       smoothnessLatencyMode: smoothnessLatencyMode,
       timingBufferLevel: timingBufferLevel,
       timingPrioritizeResponsiveness: timingPrioritizeResponsiveness,
+      displaySyncMode: displaySyncMode,
+      frameQueueTarget: frameQueueTarget,
+      timingResponsivenessBias: timingResponsivenessBias,
+      allowDrawableTimeoutMode: allowDrawableTimeoutMode,
       timingCompatibilityMode: timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround
     )
@@ -273,9 +319,21 @@ extension SettingsClass {
     remoteResolutionHeight: Int?? = nil,
     remoteFps: Bool? = nil,
     remoteFpsRate: Int?? = nil,
+    hdrTransferFunction: Int?? = nil,
+    hdrManualMaxBrightness: CGFloat?? = nil,
+    hdrManualMinBrightness: CGFloat?? = nil,
+    hdrManualMaxAverageBrightness: CGFloat?? = nil,
+    sunshineTargetDisplayName: String?? = nil,
+    sunshineUseVirtualDisplay: Bool? = nil,
+    sunshineScreenMode: Int?? = nil,
+    sunshineHdrBrightnessOverride: Bool? = nil,
+    sunshineMaxBrightness: CGFloat?? = nil,
+    sunshineMinBrightness: CGFloat?? = nil,
+    sunshineMaxAverageBrightness: CGFloat?? = nil,
     bitrate: Int? = nil,
     customBitrate: Int?? = nil,
     codec: Int? = nil,
+    videoRendererMode: Int?? = nil,
     hdr: Bool? = nil,
     connectionMethod: String? = nil,
     mouseMode: Int? = nil,
@@ -301,10 +359,37 @@ extension SettingsClass {
       remoteResolutionHeight != nil ? remoteResolutionHeight! : settings.remoteResolutionHeight
     let resolvedRemoteFps = remoteFps ?? settings.remoteFps
     let resolvedRemoteFpsRate = remoteFpsRate != nil ? remoteFpsRate! : settings.remoteFpsRate
+    let resolvedHdrTransferFunction =
+      hdrTransferFunction != nil ? hdrTransferFunction! : settings.hdrTransferFunction
+    let resolvedHdrManualMaxBrightness =
+      hdrManualMaxBrightness != nil ? hdrManualMaxBrightness! : settings.hdrManualMaxBrightness
+    let resolvedHdrManualMinBrightness =
+      hdrManualMinBrightness != nil ? hdrManualMinBrightness! : settings.hdrManualMinBrightness
+    let resolvedHdrManualMaxAverageBrightness =
+      hdrManualMaxAverageBrightness != nil
+      ? hdrManualMaxAverageBrightness! : settings.hdrManualMaxAverageBrightness
+    let resolvedSunshineTargetDisplayName =
+      sunshineTargetDisplayName != nil
+      ? sunshineTargetDisplayName! : settings.sunshineTargetDisplayName
+    let resolvedSunshineUseVirtualDisplay =
+      sunshineUseVirtualDisplay ?? settings.sunshineUseVirtualDisplay
+    let resolvedSunshineScreenMode =
+      sunshineScreenMode != nil ? sunshineScreenMode! : settings.sunshineScreenMode
+    let resolvedSunshineHdrBrightnessOverride =
+      sunshineHdrBrightnessOverride ?? settings.sunshineHdrBrightnessOverride
+    let resolvedSunshineMaxBrightness =
+      sunshineMaxBrightness != nil ? sunshineMaxBrightness! : settings.sunshineMaxBrightness
+    let resolvedSunshineMinBrightness =
+      sunshineMinBrightness != nil ? sunshineMinBrightness! : settings.sunshineMinBrightness
+    let resolvedSunshineMaxAverageBrightness =
+      sunshineMaxAverageBrightness != nil
+      ? sunshineMaxAverageBrightness! : settings.sunshineMaxAverageBrightness
 
     let resolvedBitrate = bitrate ?? settings.bitrate
     let resolvedCustomBitrate = customBitrate != nil ? customBitrate! : settings.customBitrate
     let resolvedCodec = codec ?? settings.codec
+    let resolvedVideoRendererMode =
+      videoRendererMode != nil ? videoRendererMode! : settings.videoRendererMode
     let resolvedHdr = hdr ?? settings.hdr
     let resolvedKeyboardCompatibilityMode =
       keyboardCompatibilityMode ?? settings.keyboardCompatibilityMode
@@ -333,11 +418,29 @@ extension SettingsClass {
       remoteResolutionHeight: resolvedRemoteResolutionHeight,
       remoteFps: resolvedRemoteFps,
       remoteFpsRate: resolvedRemoteFpsRate,
+      hdrTransferFunction: resolvedHdrTransferFunction,
+      hdrMetadataSource: settings.hdrMetadataSource,
+      hdrClientDisplayProfile: settings.hdrClientDisplayProfile,
+      hdrManualMaxBrightness: resolvedHdrManualMaxBrightness,
+      hdrManualMinBrightness: resolvedHdrManualMinBrightness,
+      hdrManualMaxAverageBrightness: resolvedHdrManualMaxAverageBrightness,
+      hdrOpticalOutputScale: settings.hdrOpticalOutputScale,
+      hdrHlgViewingEnvironment: settings.hdrHlgViewingEnvironment,
+      hdrEdrStrategy: settings.hdrEdrStrategy,
+      hdrToneMappingPolicy: settings.hdrToneMappingPolicy,
+      sunshineTargetDisplayName: resolvedSunshineTargetDisplayName,
+      sunshineUseVirtualDisplay: resolvedSunshineUseVirtualDisplay,
+      sunshineScreenMode: resolvedSunshineScreenMode,
+      sunshineHdrBrightnessOverride: resolvedSunshineHdrBrightnessOverride,
+      sunshineMaxBrightness: resolvedSunshineMaxBrightness,
+      sunshineMinBrightness: resolvedSunshineMinBrightness,
+      sunshineMaxAverageBrightness: resolvedSunshineMaxAverageBrightness,
 
       bitrate: resolvedBitrate,
       customBitrate: resolvedCustomBitrate,
       unlockMaxBitrate: settings.unlockMaxBitrate,
       codec: resolvedCodec,
+      videoRendererMode: resolvedVideoRendererMode,
       hdr: resolvedHdr,
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
@@ -391,10 +494,15 @@ extension SettingsClass {
       rewrittenScrollMode: settings.rewrittenScrollMode,
       streamShortcuts: resolvedStreamShortcuts,
       upscalingMode: settings.upscalingMode,
+      frameInterpolationMode: settings.frameInterpolationMode,
       connectionMethod: resolvedConnectionMethod,
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,
+      displaySyncMode: settings.displaySyncMode,
+      frameQueueTarget: settings.frameQueueTarget,
+      timingResponsivenessBias: settings.timingResponsivenessBias,
+      allowDrawableTimeoutMode: settings.allowDrawableTimeoutMode,
       timingCompatibilityMode: settings.timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround
     )

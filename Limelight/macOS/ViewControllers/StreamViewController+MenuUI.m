@@ -1106,6 +1106,29 @@
     });
 }
 
+- (void)scheduleDeferredStreamMenuEntrypointsVisibilityRetries {
+    if (!MLUseFloatingControlOrb) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    static const NSTimeInterval retryDelays[] = { 0.10, 0.28, 0.55 };
+    for (NSUInteger i = 0; i < sizeof(retryDelays) / sizeof(retryDelays[0]); i++) {
+        NSTimeInterval delay = retryDelays[i];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || !strongSelf.view.window || strongSelf.stopStreamInProgress || strongSelf.reconnectInProgress) {
+                return;
+            }
+
+            [strongSelf requestStreamMenuEntrypointsVisibilityUpdate];
+            if ([strongSelf isWindowInCurrentSpace]) {
+                [strongSelf bringStreamControlsToFront];
+            }
+        });
+    }
+}
+
 - (void)updateStreamMenuEntrypointsVisibility {
     if (![NSThread isMainThread]) {
         dispatch_async(dispatch_get_main_queue(), ^{

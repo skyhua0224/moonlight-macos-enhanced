@@ -61,10 +61,20 @@
 @property (nonatomic, strong) id hostLatencyObserver;
 @property (nonatomic, copy) NSString *currentHostUUID;
 @property (nonatomic, copy) NSString *offlineOverlayHostUUID;
+@property (nonatomic, copy) NSString *pendingSessionSunshineTargetDisplayNameOverride;
+@property (nonatomic) BOOL hasPendingSessionSunshineTargetDisplayOverride;
+@property (nonatomic, strong) NSNumber *pendingSessionSunshineScreenModeOverride;
+@property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *cachedSunshineDisplays;
+@property (nonatomic, copy) NSString *cachedSunshineDisplaysHostUUID;
+@property (nonatomic) BOOL refreshingSunshineDisplays;
 
 @end
 
 const CGFloat scaleBase = 1.125;
+static NSUserInterfaceItemIdentifier const MLSunshineOverridesSeparatorMenuItemIdentifier = @"sunshineOverridesSeparatorMenuItem";
+static NSUserInterfaceItemIdentifier const MLSunshineThisStreamDisplayMenuItemIdentifier = @"sunshineThisStreamDisplayMenuItem";
+static NSUserInterfaceItemIdentifier const MLSunshineThisStreamModeMenuItemIdentifier = @"sunshineThisStreamModeMenuItem";
+static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIdentifier = @"sunshineRefreshDisplaysMenuItem";
 
 @implementation AppsViewController
 
@@ -203,6 +213,7 @@ const CGFloat scaleBase = 1.125;
     [self handleStreamingStateChange:nil];
 
     [self updateOfflineOverlayForCurrentHost];
+    [self refreshSunshineDisplaysIfNeededForce:NO];
 }
 
 - (void)updateOfflineOverlayForCurrentHost {
@@ -495,6 +506,10 @@ const CGFloat scaleBase = 1.125;
     // Reload apps
     [self loadApps];
     self.runningApp = [self findRunningApp:newHost];
+    [self clearPendingSunshineStreamOverrides];
+    self.cachedSunshineDisplays = @[];
+    self.cachedSunshineDisplaysHostUUID = nil;
+    [self refreshSunshineDisplaysIfNeededForce:NO];
 
     // Check streaming state for new host
     [self handleStreamingStateChange:nil];
@@ -587,6 +602,10 @@ const CGFloat scaleBase = 1.125;
     StreamViewController *streamVC = segue.destinationController;
     streamVC.app = self.runningApp;
     streamVC.delegate = self;
+    streamVC.hasSessionSunshineTargetDisplayOverride = self.hasPendingSessionSunshineTargetDisplayOverride;
+    streamVC.sessionSunshineTargetDisplayNameOverride = self.pendingSessionSunshineTargetDisplayNameOverride;
+    streamVC.sessionSunshineScreenModeOverride = self.pendingSessionSunshineScreenModeOverride;
+    [self clearPendingSunshineStreamOverrides];
 }
 
 
@@ -876,6 +895,314 @@ const CGFloat scaleBase = 1.125;
     quitAppMenuItem.representedObject = app;
     quitAppMenuItem.hidden = ![self isAppRunning:app];
     quitAppMenuItem.enabled = [self isAppRunning:app];
+
+    [self rebuildSunshineOverrideItemsInMenu:menu];
+    [self refreshSunshineDisplaysIfNeededForce:NO];
+}
+
+- (NSArray<NSDictionary<NSString *, id> *> *)sunshineScreenModeEntries {
+    return @[
+        @{@"title": @"Host Default", @"value": @(-1)},
+        @{@"title": @"Verify Only", @"value": @(0)},
+        @{@"title": @"Activate Display", @"value": @(1)},
+        @{@"title": @"Make Primary", @"value": @(2)},
+        @{@"title": @"Only Stream Display", @"value": @(3)},
+        @{@"title": @"Use As Secondary", @"value": @(4)},
+    ];
+}
+
+- (NSString *)preferredSunshineHostAddress {
+    if (self.host.activeAddress.length > 0) {
+        return self.host.activeAddress;
+    }
+    if (self.host.localAddress.length > 0) {
+        return self.host.localAddress;
+    }
+    if (self.host.address.length > 0) {
+        return self.host.address;
+    }
+    if (self.host.externalAddress.length > 0) {
+        return self.host.externalAddress;
+    }
+    if (self.host.ipv6Address.length > 0) {
+        return self.host.ipv6Address;
+    }
+    return nil;
+}
+
+- (void)clearPendingSunshineStreamOverrides {
+    self.hasPendingSessionSunshineTargetDisplayOverride = NO;
+    self.pendingSessionSunshineTargetDisplayNameOverride = nil;
+    self.pendingSessionSunshineScreenModeOverride = nil;
+}
+
+- (void)refreshSunshineDisplaysIfNeededForce:(BOOL)force {
+    if (self.host.uuid.length == 0 || self.host.serverCert == nil) {
+        return;
+    }
+    if (self.refreshingSunshineDisplays) {
+        return;
+    }
+    if (!force &&
+        self.cachedSunshineDisplaysHostUUID.length > 0 &&
+        [self.cachedSunshineDisplaysHostUUID isEqualToString:self.host.uuid]) {
+        return;
+    }
+
+    NSString *address = [self preferredSunshineHostAddress];
+    if (address.length == 0) {
+        return;
+    }
+
+    self.refreshingSunshineDisplays = YES;
+    NSString *hostUUID = [self.host.uuid copy];
+    NSData *serverCert = self.host.serverCert;
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        HttpManager *httpManager = [[HttpManager alloc] initWithHost:address
+                                                            uniqueId:[IdManager getUniqueId]
+                                                          serverCert:serverCert];
+        NSArray<NSDictionary<NSString *, id> *> *displays = [httpManager fetchSunshineDisplays];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.refreshingSunshineDisplays = NO;
+            if (![self.host.uuid isEqualToString:hostUUID]) {
+                return;
+            }
+
+            self.cachedSunshineDisplaysHostUUID = hostUUID;
+            self.cachedSunshineDisplays = displays ?: @[];
+        });
+    });
+}
+
+- (NSInteger)indexForSunshineMenuInsertionInMenu:(NSMenu *)menu {
+    NSMenuItem *quitItem = [HostsViewController getMenuItemForIdentifier:@"quitAppMenuItem" inMenu:menu];
+    if (quitItem != nil) {
+        NSInteger quitIndex = [menu indexOfItem:quitItem];
+        if (quitIndex > 0) {
+            return quitIndex;
+        }
+    }
+    return menu.numberOfItems;
+}
+
+- (NSString *)sunshineDisplayLabelForValue:(NSString *)value {
+    if (value.length == 0) {
+        return NSLocalizedString(@"Host Default", @"Host Default");
+    }
+
+    for (NSDictionary<NSString *, id> *entry in self.cachedSunshineDisplays ?: @[]) {
+        NSString *deviceId = [entry[@"device_id"] isKindOfClass:[NSString class]] ? entry[@"device_id"] : @"";
+        if (![deviceId isEqualToString:value]) {
+            continue;
+        }
+
+        NSString *friendlyName = [entry[@"friendly_name"] isKindOfClass:[NSString class]] ? entry[@"friendly_name"] : deviceId;
+        NSString *displayName = [entry[@"display_name"] isKindOfClass:[NSString class]] ? entry[@"display_name"] : deviceId;
+        if (friendlyName.length > 0 &&
+            ![friendlyName isEqualToString:deviceId] &&
+            ![friendlyName isEqualToString:displayName]) {
+            return [NSString stringWithFormat:@"%@ (%@)", friendlyName, deviceId];
+        }
+        return friendlyName.length > 0 ? friendlyName : deviceId;
+    }
+
+    return value;
+}
+
+- (NSString *)sunshineScreenModeTitleForValue:(NSInteger)value {
+    for (NSDictionary<NSString *, id> *entry in [self sunshineScreenModeEntries]) {
+        NSNumber *rawValue = entry[@"value"];
+        if (rawValue.integerValue == value) {
+            return NSLocalizedString(entry[@"title"], nil);
+        }
+    }
+    return NSLocalizedString(@"Host Default", @"Host Default");
+}
+
+- (void)removeSunshineOverrideItemsFromMenu:(NSMenu *)menu {
+    NSMutableArray<NSMenuItem *> *itemsToRemove = [NSMutableArray array];
+    for (NSMenuItem *item in menu.itemArray) {
+        NSUserInterfaceItemIdentifier identifier = item.identifier;
+        if ([identifier isEqualToString:MLSunshineOverridesSeparatorMenuItemIdentifier] ||
+            [identifier isEqualToString:MLSunshineThisStreamDisplayMenuItemIdentifier] ||
+            [identifier isEqualToString:MLSunshineThisStreamModeMenuItemIdentifier] ||
+            [identifier isEqualToString:MLSunshineRefreshDisplaysMenuItemIdentifier]) {
+            [itemsToRemove addObject:item];
+        }
+    }
+
+    for (NSMenuItem *item in itemsToRemove) {
+        [menu removeItem:item];
+    }
+}
+
+- (void)configureSunshineDisplaySubmenu:(NSMenu *)submenu {
+    NSMenuItem *followHostSettingItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Follow Host Setting", @"Follow Host Setting")
+                                                                   action:@selector(selectPendingSunshineStreamDisplayOverride:)
+                                                            keyEquivalent:@""];
+    followHostSettingItem.target = self;
+    followHostSettingItem.representedObject = [NSNull null];
+    followHostSettingItem.state = self.hasPendingSessionSunshineTargetDisplayOverride ? NSControlStateValueOff : NSControlStateValueOn;
+    [submenu addItem:followHostSettingItem];
+
+    NSMenuItem *hostDefaultItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Host Default", @"Host Default")
+                                                             action:@selector(selectPendingSunshineStreamDisplayOverride:)
+                                                      keyEquivalent:@""];
+    hostDefaultItem.target = self;
+    hostDefaultItem.representedObject = @"";
+    hostDefaultItem.state = self.hasPendingSessionSunshineTargetDisplayOverride &&
+        self.pendingSessionSunshineTargetDisplayNameOverride.length == 0 ? NSControlStateValueOn : NSControlStateValueOff;
+    [submenu addItem:hostDefaultItem];
+
+    NSArray<NSDictionary<NSString *, id> *> *displays = self.cachedSunshineDisplays ?: @[];
+    if (displays.count > 0) {
+        [submenu addItem:[NSMenuItem separatorItem]];
+        for (NSDictionary<NSString *, id> *entry in displays) {
+            NSString *deviceId = [entry[@"device_id"] isKindOfClass:[NSString class]] ? entry[@"device_id"] : @"";
+            if (deviceId.length == 0) {
+                continue;
+            }
+
+            NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[self sunshineDisplayLabelForValue:deviceId]
+                                                          action:@selector(selectPendingSunshineStreamDisplayOverride:)
+                                                   keyEquivalent:@""];
+            item.target = self;
+            item.representedObject = deviceId;
+            item.state = (self.hasPendingSessionSunshineTargetDisplayOverride &&
+                          [self.pendingSessionSunshineTargetDisplayNameOverride isEqualToString:deviceId])
+                ? NSControlStateValueOn : NSControlStateValueOff;
+            [submenu addItem:item];
+        }
+    } else {
+        [submenu addItem:[NSMenuItem separatorItem]];
+        NSString *title = self.refreshingSunshineDisplays
+            ? NSLocalizedString(@"Loading…", @"Loading")
+            : NSLocalizedString(@"No Host Displays Found", @"No host displays found");
+        NSMenuItem *placeholder = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+        placeholder.enabled = NO;
+        [submenu addItem:placeholder];
+    }
+
+    if (self.hasPendingSessionSunshineTargetDisplayOverride &&
+        self.pendingSessionSunshineTargetDisplayNameOverride.length > 0) {
+        BOOL found = NO;
+        for (NSDictionary<NSString *, id> *entry in displays) {
+            NSString *deviceId = [entry[@"device_id"] isKindOfClass:[NSString class]] ? entry[@"device_id"] : @"";
+            if ([deviceId isEqualToString:self.pendingSessionSunshineTargetDisplayNameOverride]) {
+                found = YES;
+                break;
+            }
+        }
+        if (!found) {
+            [submenu addItem:[NSMenuItem separatorItem]];
+            NSMenuItem *fallbackItem = [[NSMenuItem alloc] initWithTitle:self.pendingSessionSunshineTargetDisplayNameOverride
+                                                                  action:@selector(selectPendingSunshineStreamDisplayOverride:)
+                                                           keyEquivalent:@""];
+            fallbackItem.target = self;
+            fallbackItem.representedObject = self.pendingSessionSunshineTargetDisplayNameOverride;
+            fallbackItem.state = NSControlStateValueOn;
+            [submenu addItem:fallbackItem];
+        }
+    }
+}
+
+- (void)configureSunshineScreenModeSubmenu:(NSMenu *)submenu {
+    NSMenuItem *followHostSettingItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Follow Host Setting", @"Follow Host Setting")
+                                                                   action:@selector(selectPendingSunshineStreamScreenModeOverride:)
+                                                            keyEquivalent:@""];
+    followHostSettingItem.target = self;
+    followHostSettingItem.representedObject = [NSNull null];
+    followHostSettingItem.state = self.pendingSessionSunshineScreenModeOverride == nil ? NSControlStateValueOn : NSControlStateValueOff;
+    [submenu addItem:followHostSettingItem];
+    [submenu addItem:[NSMenuItem separatorItem]];
+
+    for (NSDictionary<NSString *, id> *entry in [self sunshineScreenModeEntries]) {
+        NSString *title = entry[@"title"];
+        NSNumber *value = entry[@"value"];
+        if (title.length == 0 || value == nil) {
+            continue;
+        }
+
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(title, nil)
+                                                      action:@selector(selectPendingSunshineStreamScreenModeOverride:)
+                                               keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = value;
+        item.state = (self.pendingSessionSunshineScreenModeOverride != nil &&
+                      self.pendingSessionSunshineScreenModeOverride.integerValue == value.integerValue)
+            ? NSControlStateValueOn : NSControlStateValueOff;
+        [submenu addItem:item];
+    }
+}
+
+- (void)rebuildSunshineOverrideItemsInMenu:(NSMenu *)menu {
+    [self removeSunshineOverrideItemsFromMenu:menu];
+
+    NSInteger insertionIndex = [self indexForSunshineMenuInsertionInMenu:menu];
+
+    NSMenuItem *separator = [NSMenuItem separatorItem];
+    separator.identifier = MLSunshineOverridesSeparatorMenuItemIdentifier;
+    [menu insertItem:separator atIndex:insertionIndex++];
+
+    NSMenu *displaySubmenu = [[NSMenu alloc] initWithTitle:NSLocalizedString(@"This Stream Display", @"This Stream Display")];
+    [self configureSunshineDisplaySubmenu:displaySubmenu];
+    NSMenuItem *displayMenuItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"This Stream Display", @"This Stream Display")
+                                                             action:nil
+                                                      keyEquivalent:@""];
+    displayMenuItem.identifier = MLSunshineThisStreamDisplayMenuItemIdentifier;
+    displayMenuItem.submenu = displaySubmenu;
+    [menu insertItem:displayMenuItem atIndex:insertionIndex++];
+
+    NSMenu *modeSubmenu = [[NSMenu alloc] initWithTitle:NSLocalizedString(@"This Stream Screen Mode", @"This Stream Screen Mode")];
+    [self configureSunshineScreenModeSubmenu:modeSubmenu];
+    NSMenuItem *modeMenuItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"This Stream Screen Mode", @"This Stream Screen Mode")
+                                                          action:nil
+                                                   keyEquivalent:@""];
+    modeMenuItem.identifier = MLSunshineThisStreamModeMenuItemIdentifier;
+    modeMenuItem.submenu = modeSubmenu;
+    [menu insertItem:modeMenuItem atIndex:insertionIndex++];
+
+    NSMenuItem *refreshItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Refresh Host Displays", @"Refresh host displays")
+                                                         action:@selector(refreshSunshineDisplaysMenuItemClicked:)
+                                                  keyEquivalent:@""];
+    refreshItem.target = self;
+    refreshItem.identifier = MLSunshineRefreshDisplaysMenuItemIdentifier;
+    refreshItem.enabled = !self.refreshingSunshineDisplays;
+    [menu insertItem:refreshItem atIndex:insertionIndex];
+}
+
+- (IBAction)refreshSunshineDisplaysMenuItemClicked:(id)sender {
+    self.cachedSunshineDisplaysHostUUID = nil;
+    self.cachedSunshineDisplays = @[];
+    [self refreshSunshineDisplaysIfNeededForce:YES];
+}
+
+- (IBAction)selectPendingSunshineStreamDisplayOverride:(NSMenuItem *)sender {
+    if ([sender.representedObject isKindOfClass:[NSNull class]]) {
+        self.hasPendingSessionSunshineTargetDisplayOverride = NO;
+        self.pendingSessionSunshineTargetDisplayNameOverride = nil;
+        return;
+    }
+
+    self.hasPendingSessionSunshineTargetDisplayOverride = YES;
+    self.pendingSessionSunshineTargetDisplayNameOverride =
+        [sender.representedObject isKindOfClass:[NSString class]] ? sender.representedObject : @"";
+    Log(LOG_I, @"[sunshine] Next stream display override=%@",
+        [self sunshineDisplayLabelForValue:self.pendingSessionSunshineTargetDisplayNameOverride]);
+}
+
+- (IBAction)selectPendingSunshineStreamScreenModeOverride:(NSMenuItem *)sender {
+    if ([sender.representedObject isKindOfClass:[NSNull class]]) {
+        self.pendingSessionSunshineScreenModeOverride = nil;
+        return;
+    }
+
+    if ([sender.representedObject isKindOfClass:[NSNumber class]]) {
+        self.pendingSessionSunshineScreenModeOverride = sender.representedObject;
+        Log(LOG_I, @"[sunshine] Next stream screen mode override=%@",
+            [self sunshineScreenModeTitleForValue:self.pendingSessionSunshineScreenModeOverride.integerValue]);
+    }
 }
 
 - (void)didHover:(BOOL)hovered forApp:(TemporaryApp *)app {

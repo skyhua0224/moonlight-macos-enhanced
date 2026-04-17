@@ -21,6 +21,24 @@ struct StreamView: View {
   @SwiftUI.State private var showRemoteCustomResolutionGroup = false
   @SwiftUI.State private var showRemoteCustomFpsGroup = false
 
+  private static let sunshineBrightnessFormatter: NumberFormatter = {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    formatter.minimumFractionDigits = 0
+    formatter.maximumFractionDigits = 3
+    formatter.minimum = 0
+    return formatter
+  }()
+
+  private static let sunshineMinBrightnessFormatter: NumberFormatter = {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    formatter.minimumFractionDigits = 0
+    formatter.maximumFractionDigits = 6
+    formatter.minimum = 0
+    return formatter
+  }()
+
   private func nativeDisplayPixelSize() -> CGSize? {
     guard let screen = NSScreen.main else { return nil }
     guard
@@ -287,58 +305,6 @@ struct StreamView: View {
 
           Divider()
 
-          if SettingsModel.isMetalFXSupported {
-            FormCell(
-              title: "Upscaling", contentWidth: 200,
-              content: {
-                Picker("", selection: $settingsModel.selectedUpscalingMode) {
-                  ForEach(SettingsModel.upscalingModes, id: \.self) { mode in
-                    Text(languageManager.localize(mode))
-                  }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .trailing)
-              })
-          } else {
-            VStack(alignment: .leading, spacing: 6) {
-              HStack {
-                Text(languageManager.localize("Upscaling"))
-                Spacer()
-                Text(languageManager.localize("Not supported"))
-                  .foregroundColor(.secondary)
-              }
-              Text(languageManager.localize("MetalFX requires macOS 13 or later."))
-                .font(.footnote)
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-          }
-
-          Text(languageManager.localize("AI enhancement recommended hint"))
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-          Divider()
-
-          Text(languageManager.localize("Scale vs Upscaling hint"))
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-          if settingsModel.streamResolutionScale && settingsModel.streamResolutionScaleRatio < 100
-            && settingsModel.selectedUpscalingMode == "Off"
-          {
-            Divider()
-
-            Text(languageManager.localize("Resolution Scale + Upscaling hint"))
-              .font(.footnote)
-              .foregroundColor(.secondary)
-              .frame(maxWidth: .infinity, alignment: .leading)
-          }
-
-          Divider()
-
           ToggleCell(
             title: "Remote Resolution",
             hintKey: "Remote overrides hint",
@@ -454,6 +420,124 @@ struct StreamView: View {
                   .fixedSize()
                 })
             }
+          }
+        }
+
+        Spacer()
+          .frame(height: 32)
+
+        FormSection(title: "Host Display") {
+          SettingDescriptionRow(textKey: "Sunshine Foundation section detail")
+
+          Divider()
+
+          FormCell(
+            title: "Target Display", contentWidth: 220,
+            content: {
+              HStack(spacing: 8) {
+                Picker("", selection: $settingsModel.sunshineTargetDisplayName) {
+                  ForEach(settingsModel.sunshineDisplayPickerOptions) { option in
+                    Text(option.title).tag(option.value)
+                  }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .trailing)
+
+                if settingsModel.isLoadingSunshineDisplays {
+                  ProgressView()
+                    .controlSize(.small)
+                } else {
+                  Button(action: {
+                    settingsModel.refreshSunshineDisplays(force: true)
+                  }) {
+                    Image(systemName: "arrow.clockwise")
+                  }
+                  .buttonStyle(.plain)
+                }
+              }
+            })
+
+          SettingDescriptionRow(textKey: "Target Display detail")
+
+          Divider()
+
+          ToggleCell(
+            title: "Use Virtual Display",
+            boolBinding: $settingsModel.sunshineUseVirtualDisplay
+          )
+
+          SettingDescriptionRow(textKey: "Use Virtual Display detail")
+
+          Divider()
+
+          FormCell(
+            title: "Screen Mode", contentWidth: 220,
+            content: {
+              Picker("", selection: $settingsModel.selectedSunshineScreenMode) {
+                ForEach(SettingsModel.sunshineScreenModes, id: \.self) { mode in
+                  Text(languageManager.localize(mode))
+                }
+              }
+              .labelsHidden()
+              .frame(maxWidth: .infinity, alignment: .trailing)
+            })
+
+          SettingDescriptionRow(textKey: "Screen Mode detail")
+
+          Divider()
+
+          ToggleCell(
+            title: "Override HDR Display Profile",
+            boolBinding: $settingsModel.sunshineHdrBrightnessOverride
+          )
+
+          SettingDescriptionRow(textKey: "Override HDR Display Profile detail")
+
+          if settingsModel.sunshineHdrBrightnessOverride {
+            Divider()
+
+            FormCell(
+              title: "Max Brightness", contentWidth: 140,
+              content: {
+                TextField(
+                  "1000",
+                  value: $settingsModel.sunshineMaxBrightness,
+                  formatter: Self.sunshineBrightnessFormatter
+                )
+                .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 120)
+              })
+
+            Divider()
+
+            FormCell(
+              title: "Min Brightness", contentWidth: 140,
+              content: {
+                TextField(
+                  "0.001",
+                  value: $settingsModel.sunshineMinBrightness,
+                  formatter: Self.sunshineMinBrightnessFormatter
+                )
+                .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 120)
+              })
+
+            Divider()
+
+            FormCell(
+              title: "Max Average Brightness", contentWidth: 180,
+              content: {
+                TextField(
+                  "1000",
+                  value: $settingsModel.sunshineMaxAverageBrightness,
+                  formatter: Self.sunshineBrightnessFormatter
+                )
+                .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 120)
+              })
           }
         }
 
@@ -587,6 +671,9 @@ struct StreamView: View {
           showRemoteCustomFpsGroup =
             settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
         }
+      }
+      .onAppear {
+        settingsModel.refreshSunshineDisplays(force: false)
       }
     }
   }

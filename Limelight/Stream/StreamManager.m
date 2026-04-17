@@ -16,6 +16,7 @@
 #import "HttpResponse.h"
 #import "HttpRequest.h"
 #import "IdManager.h"
+#include "Limelight.h"
 
 @implementation StreamManager {
     StreamConfiguration* _config;
@@ -24,6 +25,7 @@
     id<ConnectionCallbacks> _callbacks;
     Connection* _connection;
     NSOperationQueue* _connectionQueue;
+    VideoDecoderRenderer* _renderer;
 }
 
 @synthesize connection = _connection;
@@ -39,16 +41,41 @@
 }
 
 - (void)main {
+    const uint64_t startupStartMs = LiGetMillis();
+    __block uint64_t rendererWarmupScheduledMs = 0;
+    __block uint64_t rendererWarmupFinishedMs = 0;
+
+    if (_config != nil) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (self.isCancelled || self->_callbacks == nil) {
+                return;
+            }
+
+            rendererWarmupScheduledMs = LiGetMillis();
+            if (self->_renderer == nil) {
+                self->_renderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView];
+            }
+            [self->_renderer prewarmPresentationForStreamConfig:self->_config];
+            rendererWarmupFinishedMs = LiGetMillis();
+            Log(LOG_I, @"[startup] Renderer warmup total=%llums",
+                (unsigned long long)(rendererWarmupFinishedMs - rendererWarmupScheduledMs));
+        });
+    }
+
+    const uint64_t cryptoStartMs = LiGetMillis();
     [CryptoManager generateKeyPairUsingSSL];
+    const uint64_t cryptoEndMs = LiGetMillis();
     NSString* uniqueId = [IdManager getUniqueId];
     
     HttpManager* hMan = [[HttpManager alloc] initWithHost:_config.host
                                                  uniqueId:uniqueId
                                                      serverCert:_config.serverCert];
     
+    const uint64_t serverInfoStartMs = LiGetMillis();
     ServerInfoResponse* serverInfoResp = [[ServerInfoResponse alloc] init];
     [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest:false]
                                        fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
+    const uint64_t serverInfoEndMs = LiGetMillis();
     if (self.isCancelled || _callbacks == nil) {
         return;
     }
@@ -72,6 +99,7 @@
     }
     
     // resumeApp and launchApp handle calling launchFailed
+    const uint64_t hostLaunchStartMs = LiGetMillis();
     if ([serverState hasSuffix:@"_SERVER_BUSY"]) {
         // App already running, resume it
         if (![self resumeApp:hMan]) {
@@ -83,6 +111,7 @@
             return;
         }
     }
+    const uint64_t hostLaunchEndMs = LiGetMillis();
     if (self.isCancelled || _callbacks == nil) {
         return;
     }
@@ -99,6 +128,11 @@
     // Populate the config's version fields from serverinfo
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
+    Log(LOG_I, @"[startup] Network prep crypto=%llums serverInfo=%llums hostLaunch=%llums total=%llums",
+        (unsigned long long)(cryptoEndMs - cryptoStartMs),
+        (unsigned long long)(serverInfoEndMs - serverInfoStartMs),
+        (unsigned long long)(hostLaunchEndMs - hostLaunchStartMs),
+        (unsigned long long)(hostLaunchEndMs - startupStartMs));
     
     // Initializing the renderer must be done on the main thread
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -106,8 +140,14 @@
             return;
         }
 
-        VideoDecoderRenderer* renderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView];
-        self->_connection = [[Connection alloc] initWithConfig:self->_config renderer:renderer connectionCallbacks:self->_callbacks];
+        uint64_t mainBindStartMs = LiGetMillis();
+        if (self->_renderer == nil) {
+            self->_renderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView];
+            [self->_renderer prewarmPresentationForStreamConfig:self->_config];
+            rendererWarmupFinishedMs = LiGetMillis();
+        }
+
+        self->_connection = [[Connection alloc] initWithConfig:self->_config renderer:self->_renderer connectionCallbacks:self->_callbacks];
         if (self.isCancelled || self->_callbacks == nil) {
             self->_connection = nil;
             return;
@@ -117,6 +157,11 @@
         self->_connectionQueue = [[NSOperationQueue alloc] init];
         self->_connectionQueue.maxConcurrentOperationCount = 1;
         [self->_connectionQueue addOperation:self->_connection];
+        Log(LOG_I, @"[startup] Main bind rendererWarmupQueued=%llums rendererWarmupReady=%llums connectionQueue=%llums total=%llums",
+            rendererWarmupScheduledMs != 0 ? (unsigned long long)(rendererWarmupScheduledMs - startupStartMs) : 0,
+            rendererWarmupFinishedMs != 0 ? (unsigned long long)(rendererWarmupFinishedMs - startupStartMs) : 0,
+            (unsigned long long)(LiGetMillis() - mainBindStartMs),
+            (unsigned long long)(LiGetMillis() - startupStartMs));
     });
 }
 

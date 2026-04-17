@@ -8,4 +8,5 @@ build-*/
 tmp/
 Limelight/Version.xcconfig
 .reference/
+.plans/
 .DS_Store

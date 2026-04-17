@@ -22,6 +22,54 @@ struct ConnectionCandidate: Identifiable {
   let state: Int
 }
 
+struct SunshineDisplayOption: Identifiable, Equatable {
+  let id: String
+  let value: String
+  let title: String
+}
+
+enum CapabilityAvailability: Int {
+  case available = 0
+  case limited = 1
+  case unavailable = 2
+
+  var localizationKey: String {
+    switch self {
+    case .available:
+      return "Available"
+    case .limited:
+      return "Limited"
+    case .unavailable:
+      return "Unavailable"
+    }
+  }
+
+  var tint: Color {
+    switch self {
+    case .available:
+      return .green
+    case .limited:
+      return .orange
+    case .unavailable:
+      return .secondary
+    }
+  }
+}
+
+struct VideoCapabilityItem: Identifiable, Equatable {
+  let id: String
+  let titleKey: String
+  let availability: CapabilityAvailability
+  let detailKey: String?
+}
+
+struct VideoCapabilityMatrix: Equatable {
+  let displayName: String
+  let items: [VideoCapabilityItem]
+
+  static let empty = VideoCapabilityMatrix(displayName: "", items: [])
+}
+
 class SettingsModel: ObservableObject {
   static let globalHostId = "__global__"
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
@@ -97,6 +145,8 @@ class SettingsModel: ObservableObject {
       guard !isLoading else { return }
       UserDefaults.standard.set(selectedHost?.id, forKey: "selectedSettingsProfile")
       loadSettings()
+      refreshVideoDiagnosticsState()
+      refreshSunshineDisplays(force: false)
     }
   }
 
@@ -172,6 +222,8 @@ class SettingsModel: ObservableObject {
   var isApplyingSmoothnessLatencyPreset = false
   var isSyncingSmoothnessLatencyMode = false
   var isApplyingEnhancedAudioPreset = false
+  var sunshineDisplayFetchGeneration = 0
+  var loadedSunshineDisplaysHostId: String?
 
   var resolutionChangedCallback: (() -> Void)?
   var fpsChangedCallback: (() -> Void)?
@@ -231,6 +283,108 @@ class SettingsModel: ObservableObject {
     }
   }
   @Published var remoteCustomFps: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedHdrTransferFunction: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var sunshineTargetDisplayName: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var sunshineUseVirtualDisplay: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedSunshineScreenMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var sunshineHdrBrightnessOverride: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var sunshineMaxBrightness: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var sunshineMinBrightness: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var sunshineMaxAverageBrightness: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedHdrMetadataSource: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedHdrClientDisplayProfile: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var hdrManualMaxBrightness: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var hdrManualMinBrightness: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var hdrManualMaxAverageBrightness: CGFloat? {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var hdrOpticalOutputScale: CGFloat {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedHdrHlgViewingEnvironment: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedHdrEdrStrategy: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedHdrToneMappingPolicy: String {
     didSet {
       guard !isLoading else { return }
       saveSettings()
@@ -306,6 +460,17 @@ class SettingsModel: ObservableObject {
   @Published var streamResolutionScaleRatio: Int {
     didSet {
       guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedVideoRendererMode: String {
+    didSet {
+      guard !isLoading else { return }
+      let normalized = Self.normalizedVideoRendererMode(selectedVideoRendererMode)
+      if normalized != selectedVideoRendererMode {
+        selectedVideoRendererMode = normalized
+        return
+      }
       saveSettings()
     }
   }
@@ -502,6 +667,30 @@ class SettingsModel: ObservableObject {
         return
       }
       syncSmoothnessLatencyModeFromTimingDetails()
+      saveSettings()
+    }
+  }
+  @Published var selectedDisplaySyncMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedFrameQueueTarget: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedResponsivenessBias: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var selectedAllowDrawableTimeoutMode: String {
+    didSet {
+      guard !isLoading else { return }
       saveSettings()
     }
   }
@@ -762,12 +951,27 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var selectedFrameInterpolationMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var selectedConnectionMethod: String {
     didSet {
       guard !isLoading else { return }
       saveSettings()
     }
   }
+  @Published var availableSunshineDisplays: [SunshineDisplayOption]
+  @Published var isLoadingSunshineDisplays: Bool
+  @Published var videoCapabilityMatrix: VideoCapabilityMatrix
+  @Published var videoRuntimeStatusSummaryKey: String
+  @Published var videoRuntimeStatusDetailKey: String
+  @Published var videoEnhancementRuntimeStatusSummaryKey: String
+  @Published var videoEnhancementRuntimeStatusDetailKey: String
+  @Published var videoFrameInterpolationRuntimeStatusSummaryKey: String
+  @Published var videoFrameInterpolationRuntimeStatusDetailKey: String
 
   var connectionCandidates: [ConnectionCandidate] {
     var candidates: [ConnectionCandidate] = []
@@ -824,6 +1028,117 @@ class SettingsModel: ObservableObject {
     }
     return candidates
   }
+
+  var sunshineDisplayPickerOptions: [SunshineDisplayOption] {
+    var options: [SunshineDisplayOption] = [
+      SunshineDisplayOption(
+        id: "__host_default__",
+        value: Self.defaultSunshineTargetDisplayName,
+        title: LanguageManager.shared.localize("Host Default"))
+    ]
+
+    for option in availableSunshineDisplays {
+      if option.value.isEmpty {
+        continue
+      }
+      if !options.contains(where: { $0.value == option.value }) {
+        options.append(option)
+      }
+    }
+
+    let trimmedSelection = sunshineTargetDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !trimmedSelection.isEmpty && !options.contains(where: { $0.value == trimmedSelection }) {
+      options.append(
+        SunshineDisplayOption(id: "__saved_\(trimmedSelection)", value: trimmedSelection, title: trimmedSelection))
+    }
+
+    return options
+  }
+
+  private static func sunshineDisplayLabel(from rawEntry: [String: Any]) -> String {
+    let deviceId = rawEntry["device_id"] as? String ?? ""
+    let friendlyName = rawEntry["friendly_name"] as? String ?? deviceId
+    let displayName = rawEntry["display_name"] as? String ?? deviceId
+
+    if !friendlyName.isEmpty &&
+      friendlyName != deviceId &&
+      friendlyName != displayName
+    {
+      return "\(friendlyName) (\(deviceId))"
+    }
+
+    if !friendlyName.isEmpty {
+      return friendlyName
+    }
+
+    return deviceId
+  }
+
+  private func currentTemporaryHost() -> TemporaryHost? {
+    guard let hostId = selectedHost?.id, hostId != Self.globalHostId else { return nil }
+    let dataMan = DataManager()
+    guard let hosts = dataMan.getHosts() as? [TemporaryHost] else { return nil }
+    return hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == hostId })
+  }
+
+  func refreshSunshineDisplays(force: Bool = false) {
+    guard let host = currentTemporaryHost() else {
+      if !availableSunshineDisplays.isEmpty || isLoadingSunshineDisplays {
+        availableSunshineDisplays = []
+        isLoadingSunshineDisplays = false
+      }
+      loadedSunshineDisplaysHostId = nil
+      return
+    }
+
+    let address =
+      host.activeAddress ?? host.localAddress ?? host.address ?? host.externalAddress
+      ?? host.ipv6Address
+    guard let address, !address.isEmpty, host.serverCert != nil else {
+      availableSunshineDisplays = []
+      isLoadingSunshineDisplays = false
+      loadedSunshineDisplaysHostId = nil
+      return
+    }
+
+    if !force && loadedSunshineDisplaysHostId == host.uuid && !availableSunshineDisplays.isEmpty {
+      return
+    }
+    if isLoadingSunshineDisplays && !force {
+      return
+    }
+
+    sunshineDisplayFetchGeneration += 1
+    let fetchGeneration = sunshineDisplayFetchGeneration
+    let hostId = host.uuid
+    let serverCert = host.serverCert
+    isLoadingSunshineDisplays = true
+
+    DispatchQueue.global(qos: .userInitiated).async {
+      let httpManager = HttpManager(
+        host: address,
+        uniqueId: IdManager.getUniqueId(),
+        serverCert: serverCert)
+      let rawEntries = (httpManager?.fetchSunshineDisplays() as? [[String: Any]]) ?? []
+      let resolvedOptions = rawEntries.compactMap { entry -> SunshineDisplayOption? in
+        let deviceId = entry["device_id"] as? String ?? ""
+        guard !deviceId.isEmpty else { return nil }
+        return SunshineDisplayOption(
+          id: deviceId,
+          value: deviceId,
+          title: Self.sunshineDisplayLabel(from: entry))
+      }
+
+      DispatchQueue.main.async {
+        guard self.sunshineDisplayFetchGeneration == fetchGeneration else { return }
+        guard self.selectedHost?.id == hostId else { return }
+        self.availableSunshineDisplays = resolvedOptions
+        self.isLoadingSunshineDisplays = false
+        self.loadedSunshineDisplaysHostId = hostId
+      }
+    }
+  }
+
   init() {
     if let hosts = Self.hosts {
       let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile")
@@ -886,6 +1201,23 @@ class SettingsModel: ObservableObject {
     remoteFpsEnabled = Self.defaultRemoteFpsEnabled
     selectedRemoteFps = Self.defaultRemoteFps
     remoteCustomFps = Self.defaultRemoteCustomFps
+    selectedHdrTransferFunction = Self.defaultHdrTransferFunction
+    sunshineTargetDisplayName = Self.defaultSunshineTargetDisplayName
+    sunshineUseVirtualDisplay = Self.defaultSunshineUseVirtualDisplay
+    selectedSunshineScreenMode = Self.defaultSunshineScreenMode
+    sunshineHdrBrightnessOverride = Self.defaultSunshineHdrBrightnessOverride
+    sunshineMaxBrightness = Self.defaultSunshineMaxBrightness
+    sunshineMinBrightness = Self.defaultSunshineMinBrightness
+    sunshineMaxAverageBrightness = Self.defaultSunshineMaxAverageBrightness
+    selectedHdrMetadataSource = Self.defaultHdrMetadataSource
+    selectedHdrClientDisplayProfile = Self.defaultHdrClientDisplayProfile
+    hdrManualMaxBrightness = Self.defaultHdrManualMaxBrightness
+    hdrManualMinBrightness = Self.defaultHdrManualMinBrightness
+    hdrManualMaxAverageBrightness = Self.defaultHdrManualMaxAverageBrightness
+    hdrOpticalOutputScale = Self.defaultHdrOpticalOutputScale
+    selectedHdrHlgViewingEnvironment = Self.defaultHdrHlgViewingEnvironment
+    selectedHdrEdrStrategy = Self.defaultHdrEdrStrategy
+    selectedHdrToneMappingPolicy = Self.defaultHdrToneMappingPolicy
 
     bitrateSliderValue = Self.defaultBitrateSliderValue
     customBitrate = Int(
@@ -901,10 +1233,15 @@ class SettingsModel: ObservableObject {
     streamResolutionScale = Self.defaultStreamResolutionScale
     streamResolutionScaleRatio = Self.defaultStreamResolutionScaleRatio
 
+    selectedVideoRendererMode = Self.defaultVideoRendererMode
     selectedVideoCodec = Self.defaultVideoCodec
     hdr = Self.defaultHdr
     selectedPacingOptions = Self.defaultPacingOptions
     selectedSmoothnessLatencyMode = Self.defaultSmoothnessLatencyMode
+    selectedDisplaySyncMode = Self.defaultDisplaySyncMode
+    selectedFrameQueueTarget = Self.defaultFrameQueueTarget
+    selectedResponsivenessBias = Self.defaultResponsivenessBias
+    selectedAllowDrawableTimeoutMode = Self.defaultAllowDrawableTimeoutMode
 
     audioOnPC = Self.defaultAudioOnPC
     selectedAudioConfiguration = Self.defaultAudioConfiguration
@@ -963,8 +1300,19 @@ class SettingsModel: ObservableObject {
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
     mouseMode = Self.defaultMouseMode
-    selectedUpscalingMode = Self.getString(from: Self.defaultUpscalingMode, in: Self.upscalingModes)
+    selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)
+    selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(
+      for: Self.defaultFrameInterpolationMode)
     selectedConnectionMethod = "Auto"
+    availableSunshineDisplays = []
+    isLoadingSunshineDisplays = false
+    videoCapabilityMatrix = Self.currentVideoCapabilityMatrix()
+    videoRuntimeStatusSummaryKey = "Video Runtime Path Idle"
+    videoRuntimeStatusDetailKey = "Video Runtime Detail Idle"
+    videoEnhancementRuntimeStatusSummaryKey = "Off"
+    videoEnhancementRuntimeStatusDetailKey = "Video Enhancement Runtime Detail Idle"
+    videoFrameInterpolationRuntimeStatusSummaryKey = "Off"
+    videoFrameInterpolationRuntimeStatusDetailKey = "Video Frame Interpolation Runtime Detail Idle"
 
     NotificationCenter.default.addObserver(
       self, selector: #selector(handleHostLatencyUpdate),
@@ -978,6 +1326,14 @@ class SettingsModel: ObservableObject {
       self, selector: #selector(handleConnectionMethodUpdate),
       name: NSNotification.Name("ConnectionMethodUpdated"), object: nil)
 
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleScreenParametersUpdate),
+      name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleVideoRuntimeStatusUpdate),
+      name: .moonlightVideoRuntimeStatusDidChange, object: nil)
+
     LoggerSetCuratedModeEnabled(debugLogMode != "raw")
     LoggerSetMinimumLevel(Self.loggerLevel(from: debugLogMinLevel))
     LoggerSetInputDiagnosticsEnabled(debugLogInputDiagnostics)
@@ -990,6 +1346,9 @@ class SettingsModel: ObservableObject {
       guard let hostId = notification.userInfo?["hostId"] as? String else { return }
       self?.selectHost(id: hostId)
     }
+
+    refreshVideoDiagnosticsState()
+    refreshSunshineDisplays(force: false)
   }
 
   deinit {
@@ -1038,6 +1397,50 @@ class SettingsModel: ObservableObject {
         self.objectWillChange.send()
       }
     }
+  }
+
+  @objc func handleScreenParametersUpdate(_ notification: Notification) {
+    DispatchQueue.main.async {
+      self.refreshVideoCapabilityMatrix()
+    }
+  }
+
+  @objc func handleVideoRuntimeStatusUpdate(_ notification: Notification) {
+    let hostKey = notification.userInfo?["hostKey"] as? String
+    let selectedHostId = selectedHost?.id ?? Self.globalHostId
+    guard hostKey == nil || hostKey == selectedHostId || hostKey == Self.globalHostId else {
+      return
+    }
+
+    DispatchQueue.main.async {
+      self.refreshVideoRuntimeStatus()
+    }
+  }
+
+  func refreshVideoDiagnosticsState() {
+    refreshVideoCapabilityMatrix()
+    refreshVideoRuntimeStatus()
+  }
+
+  func refreshVideoCapabilityMatrix() {
+    let updated = Self.currentVideoCapabilityMatrix()
+    if updated != videoCapabilityMatrix {
+      videoCapabilityMatrix = updated
+    }
+  }
+
+  func refreshVideoRuntimeStatus() {
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    videoRuntimeStatusSummaryKey = SettingsClass.videoRuntimeStatusSummaryKey(for: hostId)
+    videoRuntimeStatusDetailKey = SettingsClass.videoRuntimeStatusDetailKey(for: hostId)
+    videoEnhancementRuntimeStatusSummaryKey = SettingsClass.videoEnhancementRuntimeStatusSummaryKey(
+      for: hostId)
+    videoEnhancementRuntimeStatusDetailKey = SettingsClass.videoEnhancementRuntimeStatusDetailKey(
+      for: hostId)
+    videoFrameInterpolationRuntimeStatusSummaryKey =
+      SettingsClass.videoFrameInterpolationRuntimeStatusSummaryKey(for: hostId)
+    videoFrameInterpolationRuntimeStatusDetailKey =
+      SettingsClass.videoFrameInterpolationRuntimeStatusDetailKey(for: hostId)
   }
 
   func applyEnhancedAudioPresetIfNeeded() {

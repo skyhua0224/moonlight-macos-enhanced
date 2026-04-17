@@ -24,6 +24,9 @@ struct Resolution {
 @interface StreamViewController : NSViewController
 @property (nonatomic, strong) TemporaryApp *app;
 @property (nonatomic, weak) id<AppsViewControllerDelegate> delegate;
+@property (nonatomic) BOOL hasSessionSunshineTargetDisplayOverride;
+@property (nonatomic, copy) NSString *sessionSunshineTargetDisplayNameOverride;
+@property (nonatomic, strong) NSNumber *sessionSunshineScreenModeOverride;
 
 + (struct Resolution)getResolution;
 @end

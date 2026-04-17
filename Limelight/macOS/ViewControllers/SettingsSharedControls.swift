@@ -257,6 +257,54 @@ struct InlineSectionLabel: View {
   }
 }
 
+struct VideoCapabilityStatusPanel: View {
+  let matrix: VideoCapabilityMatrix
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text(
+        String(
+          format: languageManager.localize("Detected Display: %@"),
+          matrix.displayName.isEmpty
+            ? languageManager.localize("Unknown")
+            : matrix.displayName
+        )
+      )
+      .font(.footnote)
+      .foregroundColor(.secondary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+
+      ForEach(Array(matrix.items.enumerated()), id: \.element.id) { index, item in
+        VideoCapabilityStatusRow(item: item)
+
+        if let detailKey = item.detailKey {
+          SettingDescriptionRow(textKey: detailKey)
+        }
+
+        if index < matrix.items.count - 1 {
+          Divider()
+        }
+      }
+    }
+  }
+}
+
+struct VideoCapabilityStatusRow: View {
+  let item: VideoCapabilityItem
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    HStack(spacing: 12) {
+      Text(languageManager.localize(item.titleKey))
+      Spacer()
+      Text(languageManager.localize(item.availability.localizationKey))
+        .font(.footnote.weight(.semibold))
+        .foregroundColor(item.availability.tint)
+    }
+  }
+}
+
 struct InfoHintButton: View {
   let hintKey: String
   @ObservedObject var languageManager = LanguageManager.shared

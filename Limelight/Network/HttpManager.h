@@ -26,10 +26,11 @@
 - (NSURLRequest*) newHttpServerInfoRequest;
 - (NSURLRequest*) newLaunchRequest:(StreamConfiguration*)config;
 - (NSURLRequest*) newResumeRequest:(StreamConfiguration*)config;
+- (NSURLRequest*) newDisplaysRequest;
 - (NSURLRequest*) newQuitAppRequest;
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString*)appId;
+- (NSArray<NSDictionary<NSString*, id>*>*) fetchSunshineDisplays;
 - (void) executeRequestSynchronously:(HttpRequest*)request;
 
 @end
-
 

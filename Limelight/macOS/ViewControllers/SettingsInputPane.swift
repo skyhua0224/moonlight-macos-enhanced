@@ -34,7 +34,9 @@ struct InputView: View {
   }
 
   private var showsHighPrecisionWheelTuning: Bool {
-    settingsModel.selectedPhysicalWheelMode == PhysicalWheelScrollMode.highPrecision.displayKey
+    settingsModel.selectedPhysicalWheelMode == PhysicalWheelScrollMode.automatic.displayKey
+      || settingsModel.selectedPhysicalWheelMode
+        == PhysicalWheelScrollMode.highPrecision.displayKey
       || settingsModel.physicalWheelHighPrecisionScale
         != SettingsModel.defaultPhysicalWheelHighPrecisionScale
   }
