@@ -19,8 +19,8 @@
 - **Native macOS client** — AppKit / SwiftUI interface, Apple Silicon and Intel support, dark mode, and bilingual UI
 - **Full streaming feature set** — custom resolution and FPS, AV1 / HEVC / H.264 decode, HDR, YUV 4:4:4, MetalFX / VT enhancement, and auto bitrate
 - **Multiple video renderers** — includes `Native Renderer`, `Metal Renderer`, and `Compatibility Renderer`; `Native Renderer` is the recommended default, while `Metal Renderer` provides deeper HDR and color controls
-- **Input and control upgrades** — Free Mouse / Locked Mouse, Automatic driver routing, configurable stream shortcuts, and controller enhancements
-- **Audio and media improvements** — lower-latency local playback, multi-channel receive and playback, audio enhancement mode, and improved microphone path
+- **Input and control upgrades** — built around a `CoreHID` low-latency, high-polling mouse input path for more direct and more precise relative movement; Free Mouse moves naturally across displays, while Locked Mouse is better suited for games and sustained relative input, with configurable stream shortcuts and controller enhancements
+- **Audio and media improvements** — uses a lower-latency `Core Audio` local playback path with multi-channel receive and playback, plus client-side audio enhancement, EQ control, and improved microphone uplink
 - **Connectivity and stability** — per-host connection methods, custom ports / IPv6 / domains, performance overlay, diagnostics, and AWDL stability helpers
 
 <details>
@@ -39,10 +39,10 @@
 <details>
 <summary><strong>Audio / microphone pipeline</strong></summary>
 
-- The default playback path has moved to a more direct `Core Audio`-oriented local renderer with lower extra buffering, while keeping compatibility fallback in place
+- The default playback path uses a more direct `Core Audio` low-latency local renderer to reduce extra buffering and unnecessary handoff while keeping playback stable
 - Supports host `Opus multistream` receive, local decode, negotiation, and playback for `2ch / 5.1 / 7.1 / 7.1.4`
-- Real multi-channel devices keep their channel semantics whenever possible; headphones and `2.0 / 2.1` speakers can switch to `Audio Enhancement` for client-side spatial feel, soundstage, reverb, and EQ rerendering
-- `Audio Enhancement` includes presets, manual EQ, spatial intensity, soundstage width, and reverb controls for stereo listening devices
+- Real multi-channel devices keep their channel semantics whenever possible; headphones and `2.0 / 2.1` speakers can switch to `Audio Enhancement` for a client-side rerender better suited to stereo listening devices
+- `Audio Enhancement` includes presets, EQ, spatial feel, soundstage, and other listening controls for headphones and stereo speakers
 - When paired with a compatible Foundation Sunshine host, Moonlight can use the fuller multi-channel negotiation path, microphone uplink, and related enhancement flows
 
 </details>
@@ -50,7 +50,8 @@
 <details>
 <summary><strong>Host integration / input / diagnostics</strong></summary>
 
-- Mouse input defaults to `Automatic` routing in the order `CoreHID → HID → MFI`; on supported macOS versions it will try the higher-polling `CoreHID` relative mouse path first and fall back automatically when permissions or runtime conditions do not allow it
+- Mouse input is built around a `CoreHID` low-latency, high-polling path for more direct, more responsive relative movement and a stronger game-control feel
+- `Free Mouse` is better for remote desktop, desktop apps, and multi-display setups, letting you move naturally onto other displays; `Locked Mouse` is better for games, FPS titles, and sustained relative input
 - The input stack covers `Free Mouse / Locked Mouse`, keyboard shortcut translation, separate physical wheel / smoothed wheel / trackpad strategies, multi-controller support, rumble, Guide emulation, and controller mouse
 - Can send Foundation Sunshine host-display extension parameters and let you choose the target display, streaming mode, `display_name`, `useVdd`, `customScreenMode`, and HDR display-profile overrides from host settings or when starting a stream
 - Host and network integration also includes per-host connection methods, custom ports, IPv6, domains, `AWDL`, performance overlay, connection warnings, input diagnostics, and both raw and curated logs
@@ -106,10 +107,10 @@
 - `VT Low-Latency Frame Interpolation` is also integrated into the Metal video path for cadence smoothing on high-refresh displays
 
 ### Audio Pipeline
-- The default audio path uses a more direct `Core Audio`-oriented low-latency local renderer with compatibility fallback
+- The default audio path uses a more direct `Core Audio`-oriented low-latency local renderer
 - Local receive, decode, negotiation, and playback for `2ch / 5.1 / 7.1 / 7.1.4`
 - When the output device supports real multi-channel playback, Moonlight keeps the multichannel layout whenever possible; stereo devices can switch to `Audio Enhancement`
-- `Audio Enhancement` is designed for headphones and `2.0 / 2.1` speakers, with client-side spatial feel, soundstage, reverb, EQ presets, and manual controls
+- `Audio Enhancement` is designed for headphones and `2.0 / 2.1` speakers, with client-side EQ, spatial feel, soundstage, and preset control
 - When paired with a compatible [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine), Moonlight can use the enhanced microphone uplink and fuller multi-channel negotiation path
 
 ## 🖱️ Input and Control
@@ -121,10 +122,10 @@
 
 ### Mouse Modes
 - **Locked Mouse**: better for games and sustained relative motion
-- **Free Mouse**: better for remote control, multi-display use, and desktop apps
+- **Free Mouse**: better for remote control, multi-display use, and desktop apps, with natural movement across other displays
 
 ### Mouse and Wheel Pipeline
-- On supported systems, `CoreHID` provides the higher-polling relative mouse path; if permissions or runtime conditions block it, Moonlight falls back automatically to `HID / MFI / AppKit` compatibility paths
+- `CoreHID` provides a lower-latency, higher-polling relative mouse experience for more direct control, finer movement detail, and better sustained aiming or camera motion
 - Controls for local cursor, pointer speed, swapped buttons, reverse scroll, and `CoreHID` report-rate cap
 - Separate handling for `physical wheel`, `rewritten / smoothed wheel`, and `trackpad` input sources
 - Physical wheel modes support automatic, high-precision, and notched behavior, with separate distance, speed, and tail-filter tuning
