@@ -18,7 +18,7 @@
 
 - **Native macOS client** — AppKit / SwiftUI interface, Apple Silicon and Intel support, dark mode, and bilingual UI
 - **Full streaming feature set** — custom resolution and FPS, AV1 / HEVC / H.264 decode, HDR, YUV 4:4:4, MetalFX / VT enhancement, and auto bitrate
-- **Multi-renderer pipeline** — Auto now prefers `Native Renderer`, with `Metal Renderer` and `Compatibility Renderer` available when needed
+- **Multiple video renderers** — includes `Native Renderer`, `Metal Renderer`, and `Compatibility Renderer`; `Native Renderer` is the recommended default, while `Metal Renderer` provides deeper HDR and color controls
 - **Input and control upgrades** — Free Mouse / Locked Mouse, Automatic driver routing, configurable stream shortcuts, and controller enhancements
 - **Audio and media improvements** — lower-latency local playback, multi-channel receive and playback, audio enhancement mode, and improved microphone path
 - **Connectivity and stability** — per-host connection methods, custom ports / IPv6 / domains, performance overlay, diagnostics, and AWDL stability helpers
@@ -27,10 +27,11 @@
 <summary><strong>Video / HDR / renderer pipeline</strong></summary>
 
 - Video negotiation covers `AV1 / HEVC / H.264`, HDR, YUV `4:4:4`, remote resolution / FPS overrides, and adaptive bitrate control
-- `Auto` follows a fixed order: `Native Renderer → Metal Renderer → Compatibility Renderer`
-- `Native Renderer` uses `VideoToolbox decode + native sample-buffer presentation` and is tuned for the lowest latency, highest default color accuracy, and stable HDR playback
+- Provides three video playback paths: `Native Renderer`, `Metal Renderer`, and `Compatibility Renderer`
+- `Native Renderer` uses `VideoToolbox decode + native sample-buffer presentation` and is the recommended default for lower latency, higher default color accuracy, and stable HDR playback
 - `Metal Renderer` uses a deeper `Metal / EDR` presentation path with `HLG / PQ`, HDR metadata source, client HDR profile, luminance parameters, optical output scale, HLG viewing environment, EDR strategy, and tone-mapping policy
 - `Metal Renderer` also exposes presentation-timing controls such as display sync, frame queue target, responsiveness bias, and drawable-timeout behavior
+- `Compatibility Renderer` keeps the legacy presentation path for older systems, compatibility issues, and recovery scenarios
 - The enhancement stack can use `VT Low-Latency Super Resolution`, `VT Quality Super Resolution`, `MetalFX`, `Basic Scaling`, and `VT Low-Latency Frame Interpolation`, with automatic fallback when needed
 
 </details>
@@ -51,7 +52,7 @@
 
 - Mouse input defaults to `Automatic` routing in the order `CoreHID → HID → MFI`; on supported macOS versions it will try the higher-polling `CoreHID` relative mouse path first and fall back automatically when permissions or runtime conditions do not allow it
 - The input stack covers `Free Mouse / Locked Mouse`, keyboard shortcut translation, separate physical wheel / smoothed wheel / trackpad strategies, multi-controller support, rumble, Guide emulation, and controller mouse
-- Can send Foundation Sunshine launch extensions such as `display_name`, `useVdd`, `customScreenMode`, and HDR display-profile overrides
+- Can send Foundation Sunshine host-display extension parameters and let you choose the target display, streaming mode, `display_name`, `useVdd`, `customScreenMode`, and HDR display-profile overrides from host settings or when starting a stream
 - Host and network integration also includes per-host connection methods, custom ports, IPv6, domains, `AWDL`, performance overlay, connection warnings, input diagnostics, and both raw and curated logs
 
 </details>
@@ -95,7 +96,7 @@
 ### Video Pipeline
 - Custom resolution, FPS, remote resolution, and remote FPS overrides
 - Video negotiation for `AV1 / HEVC / H.264`, HDR, YUV `4:4:4`, and adaptive bitrate tuning
-- `Native Renderer / Metal Renderer / Compatibility Renderer` presentation paths with ordered automatic fallback
+- `Native Renderer / Metal Renderer / Compatibility Renderer` presentation paths
 - `Native Renderer` is aimed at the lowest latency and highest default color accuracy; `Metal Renderer` is aimed at deeper HDR and color control; `Compatibility Renderer` is kept for older systems and recovery cases
 
 ### HDR, Color, and Enhancement
