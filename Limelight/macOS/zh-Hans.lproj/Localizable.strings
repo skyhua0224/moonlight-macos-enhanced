@@ -767,3 +767,8 @@
 "Shortcut Translation Mode Hybrid detail" = "把常用 ⌘ 组合键按 Windows 快捷键方式处理，同时交换左 Ctrl 和左 Win。";
 "Reconnect Stream" = "重连串流";
 "Stream Shortcuts" = "串流快捷键";
+"Clipboard" = "剪贴板";
+"Clipboard Sync" = "剪贴板同步";
+"Clipboard Sync detail" = "当当前串流会话持有剪贴板同步控制权时，自动同步文本和单张图片。";
+"Clipboard Sync Foundation detail" = "此功能适用于 Foundation Sunshine 主机。受支持的主机会默认启用自动同步，不支持的主机会直接忽略。";
+"Auto Sync" = "自动同步";

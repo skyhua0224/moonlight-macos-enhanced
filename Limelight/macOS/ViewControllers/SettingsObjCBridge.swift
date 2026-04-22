@@ -41,6 +41,52 @@ class SettingsClass: NSObject {
     return MouseInputDriverStrategy.defaultStrategy
   }
 
+  private static func persistedClipboardSyncMode(for key: String) -> Int? {
+    Settings.persistedSettings(for: key)?.clipboardSyncMode
+  }
+
+  private static func temporaryHost(for key: String) -> TemporaryHost? {
+    guard key != SettingsModel.globalHostId else { return nil }
+    guard let hosts = DataManager().getHosts() as? [TemporaryHost] else { return nil }
+    return hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == key })
+  }
+
+  private static func inferredHostRuntimeLabel(for key: String) -> String? {
+    guard let host = temporaryHost(for: key) else { return nil }
+
+    let haystack = [
+      host.gfeVersion,
+      host.appVersion,
+      host.name,
+      host.displayName,
+    ]
+    .compactMap { $0?.lowercased() }
+    .joined(separator: "\n")
+
+    guard !haystack.isEmpty else { return nil }
+
+    if haystack.contains("apollo") {
+      return "Apollo"
+    }
+    if haystack.contains("foundation sunshine") || haystack.contains("sunshine foundation") {
+      return "Foundation Sunshine"
+    }
+    if haystack.contains("sunshine") {
+      return "Sunshine"
+    }
+    if haystack.contains("geforce") || haystack.contains("gamestream") || haystack.contains("nvidia") {
+      return "GameStream / GFE"
+    }
+    return nil
+  }
+
+  private static func inferredDefaultClipboardSyncMode(for key: String) -> Int {
+    guard clipboardSyncSupported(for: key) else {
+      return SettingsModel.defaultClipboardSyncMode
+    }
+    return SettingsModel.clipboardSyncModeRawValue(for: "Auto Sync")
+  }
+
   @objc static func getSettings(for key: String) -> [String: Any]? {
     if let settings = Settings.getSettings(for: key) {
       let objcSettings: [String: Any?] = [
@@ -178,6 +224,8 @@ class SettingsClass: NSObject {
         "upscalingMode": settings.upscalingMode,
         "frameInterpolationMode": settings.frameInterpolationMode
           ?? SettingsModel.defaultFrameInterpolationMode,
+        "clipboardSyncMode": settings.clipboardSyncMode
+          ?? SettingsModel.defaultClipboardSyncMode,
         // Single source of truth: Settings.connectionMethod (persisted by SettingsModel)
         "connectionMethod": settings.connectionMethod ?? "Auto",
         "smoothnessLatencyMode": settings.smoothnessLatencyMode,
@@ -340,6 +388,7 @@ class SettingsClass: NSObject {
       upscalingMode: settings.upscalingMode,
       frameInterpolationMode: settings.frameInterpolationMode,
       connectionMethod: settings.connectionMethod,
+      clipboardSyncMode: settings.clipboardSyncMode,
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,
@@ -440,6 +489,7 @@ class SettingsClass: NSObject {
         upscalingMode: updated.upscalingMode,
         frameInterpolationMode: updated.frameInterpolationMode,
         connectionMethod: updated.connectionMethod,
+        clipboardSyncMode: updated.clipboardSyncMode,
         smoothnessLatencyMode: updated.smoothnessLatencyMode,
         timingBufferLevel: updated.timingBufferLevel,
         timingPrioritizeResponsiveness: updated.timingPrioritizeResponsiveness,
@@ -548,6 +598,7 @@ class SettingsClass: NSObject {
       upscalingMode: settings.upscalingMode,
       frameInterpolationMode: settings.frameInterpolationMode,
       connectionMethod: settings.connectionMethod,
+      clipboardSyncMode: settings.clipboardSyncMode,
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,
@@ -1231,6 +1282,26 @@ class SettingsClass: NSObject {
       return settings.showPerformanceOverlay ?? SettingsModel.defaultShowPerformanceOverlay
     }
     return SettingsModel.defaultShowPerformanceOverlay
+  }
+
+  @objc static func clipboardSyncMode(for key: String) -> Int {
+    if let rawValue = persistedClipboardSyncMode(for: key) {
+      return rawValue
+    }
+    if key != SettingsModel.globalHostId,
+      let globalRawValue = persistedClipboardSyncMode(for: SettingsModel.globalHostId)
+    {
+      return globalRawValue
+    }
+    return inferredDefaultClipboardSyncMode(for: key)
+  }
+
+  @objc static func clipboardSyncEnabled(for key: String) -> Bool {
+    clipboardSyncMode(for: key) != 0
+  }
+
+  @objc static func clipboardSyncSupported(for key: String) -> Bool {
+    inferredHostRuntimeLabel(for: key) == "Foundation Sunshine"
   }
 
   @objc static func showConnectionWarnings(for key: String) -> Bool {

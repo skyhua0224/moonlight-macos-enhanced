@@ -119,6 +119,7 @@ struct Settings: Encodable, Decodable {
   let upscalingMode: Int?
   let frameInterpolationMode: Int?
   let connectionMethod: String?
+  let clipboardSyncMode: Int?
   let smoothnessLatencyMode: Int?
   let timingBufferLevel: Int?
   let timingPrioritizeResponsiveness: Bool?
@@ -259,6 +260,7 @@ struct Settings: Encodable, Decodable {
       upscalingMode: upscalingMode,
       frameInterpolationMode: frameInterpolationMode,
       connectionMethod: nil,
+      clipboardSyncMode: clipboardSyncMode,
       smoothnessLatencyMode: smoothnessLatencyMode,
       timingBufferLevel: timingBufferLevel,
       timingPrioritizeResponsiveness: timingPrioritizeResponsiveness,
@@ -285,6 +287,10 @@ struct Settings: Encodable, Decodable {
     }
 
     return nil
+  }
+
+  static func persistedSettings(for key: String) -> Self? {
+    cachedPersistedSettings(forProfileKey: SettingsClass.profileKey(for: key))
   }
 }
 
@@ -496,6 +502,7 @@ extension SettingsClass {
       upscalingMode: settings.upscalingMode,
       frameInterpolationMode: settings.frameInterpolationMode,
       connectionMethod: resolvedConnectionMethod,
+      clipboardSyncMode: settings.clipboardSyncMode,
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,

@@ -215,6 +215,13 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     uint64_t _micLastPingTimeMs;
     uint32_t _micPingCount;
 #endif
+    dispatch_queue_t _clipboardControlQueue;
+}
+
+- (void)ensureControlContextBacklink {
+    if (_connectionContext.controlContext.connectionContext == NULL) {
+        _connectionContext.controlContext.connectionContext = &_connectionContext;
+    }
 }
 
 static NSMutableDictionary<NSValue*, Connection*>* gConnectionMap;
@@ -223,6 +230,7 @@ static void *gConnectionMapQueueKey = &gConnectionMapQueueKey;
 static os_unfair_lock gConnectionMapLock = OS_UNFAIR_LOCK_INIT;
 static os_unfair_lock gConnectionLifecycleLock = OS_UNFAIR_LOCK_INIT;
 static void *gMicQueueKey = &gMicQueueKey;
+static void *gClipboardQueueKey = &gClipboardQueueKey;
 
 #define OUTPUT_BUS 0
 
@@ -2222,6 +2230,25 @@ void ClConnectionStatusUpdate(int status)
     }
 }
 
+void ClClipboardItemReceived(const LI_CLIPBOARD_ITEM *item)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+
+    Log(LOG_I, @"Clipboard item received: type=%u length=%u flags=0x%x itemId=%llu mime=%s name=%s",
+        item != NULL ? item->type : 0,
+        item != NULL ? item->length : 0,
+        item != NULL ? item->flags : 0,
+        item != NULL ? item->itemId : 0,
+        item != NULL && item->mimeType != NULL ? item->mimeType : "",
+        item != NULL && item->name != NULL ? item->name : "");
+
+    if (callbacks != nil &&
+        [callbacks respondsToSelector:@selector(clipboardItemReceived:)]) {
+        [callbacks clipboardItemReceived:item];
+    }
+}
+
 - (void)dealloc
 {
     // Remove notification observer to prevent crashes from stale references
@@ -2289,6 +2316,8 @@ void ClConnectionStatusUpdate(int status)
     _audioDeviceChannelCount = 2;
     _audioRenderChannelCount = 0;
     _audioBufferReadFrameOffset = 0;
+    _clipboardControlQueue = dispatch_queue_create("moonlight.connection.clipboard", DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_set_specific(_clipboardControlQueue, gClipboardQueueKey, gClipboardQueueKey, NULL);
     [self updateVolume];
     
     NSString* cleanHost;
@@ -2328,6 +2357,7 @@ void ClConnectionStatusUpdate(int status)
     _rendererStreamConfig = config;
 
     memset(&_connectionContext, 0, sizeof(_connectionContext));
+    _connectionContext.controlContext.connectionContext = &_connectionContext;
 
     // Initialize all socket fields to INVALID_SOCKET (-1) after memset zeroes them to 0.
     // This prevents EXC_GUARD crashes on macOS when closeSocket() is called on an
@@ -2601,6 +2631,7 @@ void ClConnectionStatusUpdate(int status)
     _clCallbacks.logMessage = ClLogMessage;
     _clCallbacks.rumble = ClRumble;
     _clCallbacks.connectionStatusUpdate = ClConnectionStatusUpdate;
+    _clCallbacks.clipboardItemReceived = ClClipboardItemReceived;
 
     return self;
 }
@@ -2611,6 +2642,181 @@ void ClConnectionStatusUpdate(int status)
 
 - (void *)controlStreamContext {
     return &_connectionContext.controlContext;
+}
+
+- (BOOL)isClipboardControlReady {
+    [self ensureControlContextBacklink];
+    PML_CONTROL_STREAM_CONTEXT ctx = &_connectionContext.controlContext;
+    if (ctx->stopping || ctx->connectionContext == NULL || ctx->packetTypes == NULL) {
+        return NO;
+    }
+
+    if (APP_VERSION_AT_LEAST_CTX(ctx->connectionContext, 5, 0, 0)) {
+        if (ctx->client == NULL || ctx->peer == NULL || ctx->peer->state != ENET_PEER_STATE_CONNECTED) {
+            return NO;
+        }
+    }
+    else if (ctx->ctlSock == INVALID_SOCKET) {
+        return NO;
+    }
+
+    if (ctx->encryptedControlStream && ctx->encryptionCtx == NULL) {
+        return NO;
+    }
+
+    return YES;
+}
+
+- (NSString *)clipboardControlReadinessReason {
+    [self ensureControlContextBacklink];
+    PML_CONTROL_STREAM_CONTEXT ctx = &_connectionContext.controlContext;
+    if (ctx->stopping) {
+        return [NSString stringWithFormat:@"control-stopping-stage-%d", _connectionContext.stage];
+    }
+    if (ctx->connectionContext == NULL) {
+        return [NSString stringWithFormat:@"missing-connection-context-stage-%d", _connectionContext.stage];
+    }
+    if (ctx->packetTypes == NULL) {
+        return [NSString stringWithFormat:@"missing-packet-types-stage-%d", _connectionContext.stage];
+    }
+
+    if (APP_VERSION_AT_LEAST_CTX(ctx->connectionContext, 5, 0, 0)) {
+        if (ctx->client == NULL) {
+            return [NSString stringWithFormat:@"missing-enet-client-stage-%d", _connectionContext.stage];
+        }
+        if (ctx->peer == NULL) {
+            return [NSString stringWithFormat:@"missing-enet-peer-stage-%d", _connectionContext.stage];
+        }
+        if (ctx->peer->state != ENET_PEER_STATE_CONNECTED) {
+            return [NSString stringWithFormat:@"enet-peer-state-%u-stage-%d",
+                    (unsigned int)ctx->peer->state,
+                    _connectionContext.stage];
+        }
+    }
+    else if (ctx->ctlSock == INVALID_SOCKET) {
+        return [NSString stringWithFormat:@"invalid-tcp-control-socket-stage-%d", _connectionContext.stage];
+    }
+
+    if (ctx->encryptedControlStream && ctx->encryptionCtx == NULL) {
+        return [NSString stringWithFormat:@"missing-control-encryption-context-stage-%d", _connectionContext.stage];
+    }
+
+    return [NSString stringWithFormat:@"ready-stage-%d", _connectionContext.stage];
+}
+
+- (uint32_t)clipboardHostFeatureFlags {
+    [self ensureControlContextBacklink];
+    return LiGetHostFeatureFlagsCtx(&_connectionContext);
+}
+
+- (NSString *)clipboardControlDebugSummary {
+    [self ensureControlContextBacklink];
+    PML_CONTROL_STREAM_CONTEXT ctx = &_connectionContext.controlContext;
+    unsigned int peerState = ctx->peer != NULL ? (unsigned int)ctx->peer->state : 0;
+    return [NSString stringWithFormat:@"conn=%p connCtx=%p ctrlCtx=%p stage=%d packetTypes=%p client=%p peer=%p peerState=%u encrypted=%d encCtx=%p ctlSock=%d hostFlags=0x%08x",
+            self,
+            &_connectionContext,
+            ctx,
+            _connectionContext.stage,
+            ctx->packetTypes,
+            ctx->client,
+            ctx->peer,
+            peerState,
+            ctx->encryptedControlStream ? 1 : 0,
+            ctx->encryptionCtx,
+            (int)ctx->ctlSock,
+            [self clipboardHostFeatureFlags]];
+}
+
+- (int)performClipboardControlOperationNamed:(NSString *)name
+                                       block:(int (^)(void))block {
+    if (block == nil) {
+        return -1;
+    }
+
+    __block int result = -1;
+    void (^operation)(void) = ^{
+        [self ensureControlContextBacklink];
+        LiSetThreadConnectionContext(&_connectionContext);
+        os_unfair_lock_lock(&gConnectionLifecycleLock);
+        result = block();
+        os_unfair_lock_unlock(&gConnectionLifecycleLock);
+        Log(LOG_I, @"[clipboard] %@ result=%d summary=%@",
+            name ?: @"operation",
+            result,
+            [self clipboardControlDebugSummary]);
+    };
+
+    if (dispatch_get_specific(gClipboardQueueKey) == gClipboardQueueKey) {
+        operation();
+    } else {
+        dispatch_sync(_clipboardControlQueue, operation);
+    }
+
+    return result;
+}
+
+- (int)bindClipboardSession {
+    Log(LOG_I, @"[clipboard] bind request conn=%p connCtx=%p ctrlCtx=%p",
+        self,
+        &_connectionContext,
+        &_connectionContext.controlContext);
+    return [self performClipboardControlOperationNamed:@"bind"
+                                                 block:^int {
+        return LiBindClipboardSession();
+    }];
+}
+
+- (int)unbindClipboardSession {
+    Log(LOG_I, @"[clipboard] unbind request conn=%p connCtx=%p ctrlCtx=%p",
+        self,
+        &_connectionContext,
+        &_connectionContext.controlContext);
+    return [self performClipboardControlOperationNamed:@"unbind"
+                                                 block:^int {
+        return LiUnbindClipboardSession();
+    }];
+}
+
+- (int)requestClipboardSnapshot {
+    Log(LOG_I, @"[clipboard] snapshot request conn=%p connCtx=%p ctrlCtx=%p",
+        self,
+        &_connectionContext,
+        &_connectionContext.controlContext);
+    return [self performClipboardControlOperationNamed:@"snapshot"
+                                                 block:^int {
+        return LiRequestClipboardSnapshot();
+    }];
+}
+
+- (int)sendClipboardItemData:(NSData *)data
+                        type:(uint8_t)type
+                    mimeType:(NSString *)mimeType
+                        name:(NSString *)name
+                      itemId:(uint64_t)itemId
+                 contentHash:(uint64_t)contentHash {
+    LI_CLIPBOARD_ITEM item;
+    memset(&item, 0, sizeof(item));
+
+    item.type = type;
+    item.data = data.bytes;
+    item.length = (uint32_t)data.length;
+    item.mimeType = mimeType.length > 0 ? mimeType.UTF8String : NULL;
+    item.name = name.length > 0 ? name.UTF8String : NULL;
+    item.itemId = itemId;
+    item.contentHash = contentHash;
+
+    Log(LOG_I, @"[clipboard] send item request conn=%p connCtx=%p ctrlCtx=%p type=%u length=%u itemId=%llu",
+        self,
+        &_connectionContext,
+        &_connectionContext.controlContext,
+        item.type,
+        item.length,
+        item.itemId);
+    return [self performClipboardControlOperationNamed:@"send-item"
+                                                 block:^int {
+        return LiSendClipboardItem(&item);
+    }];
 }
 
 - (BOOL)getVideoDiagnosticSnapshot:(MLVideoDiagnosticSnapshot *)snapshot {
@@ -2680,21 +2886,20 @@ void ClConnectionStatusUpdate(int status)
         _micPcmQueue = [NSMutableData data];
     }
 
-    // Ask for permission on macOS
-    [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL granted) {
-        if (!granted) {
-            Log(LOG_W, @"Microphone permission denied\n");
+    AVAuthorizationStatus authStatus = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
+    if (authStatus != AVAuthorizationStatusAuthorized) {
+        Log(LOG_I, @"Microphone start skipped because permission is not authorized: status=%ld",
+            (long)authStatus);
+        return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_micStopping || !self->_streamConfig.enableMic) {
+            Log(LOG_I, @"Microphone start skipped because capture is stopping");
             return;
         }
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (self->_micStopping || !self->_streamConfig.enableMic) {
-                Log(LOG_I, @"Microphone start skipped because capture is stopping");
-                return;
-            }
-            [self startMicrophoneEngineLocked];
-        });
-    }];
+        [self startMicrophoneEngineLocked];
+    });
 }
 
 - (AudioDeviceID)audioDeviceIDForUID:(NSString*)uid

@@ -455,6 +455,17 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL globalInactivePointerInsideStreamView;
 
 @property (nonatomic, strong) id activeSpaceDidChangeObserver;
+@property (nonatomic, strong) NSTimer *clipboardMonitorTimer;
+@property (nonatomic, strong) Connection *clipboardRuntimeConnection;
+@property (nonatomic) NSInteger clipboardLastChangeCount;
+@property (nonatomic) NSInteger clipboardLastActivationDiagnosticState;
+@property (nonatomic) uint64_t clipboardLastActivationDiagnosticLogMs;
+@property (nonatomic, copy) NSString *clipboardLastActivationDiagnosticMessage;
+@property (nonatomic) BOOL clipboardSessionBound;
+@property (nonatomic) BOOL clipboardAwaitingInitialSnapshot;
+@property (nonatomic) uint64_t clipboardInitialSnapshotDeadlineMs;
+@property (nonatomic) uint64_t clipboardPendingEchoSuppressionHash;
+@property (nonatomic) BOOL clipboardHasPendingEchoSuppressionHash;
 @property (nonatomic) BOOL spaceTransitionInProgress;
 @property (nonatomic) BOOL fullscreenTransitionInProgress;
 @property (nonatomic) BOOL streamMenuEntrypointsUpdateScheduled;
@@ -494,6 +505,16 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)launchFailed:(NSString *)message;
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor;
 - (void)connectionStatusUpdate:(int)status;
+- (Connection *)currentClipboardConnection;
+- (BOOL)isClipboardSyncEnabledForCurrentHost;
+- (BOOL)isClipboardSyncOwner;
+- (void)claimClipboardSyncOwnershipIfNeeded;
+- (void)releaseClipboardSyncOwnershipWithUnbind:(BOOL)shouldUnbind;
+- (void)activateClipboardBindingIfPossible;
+- (void)startClipboardMonitorIfNeeded;
+- (void)stopClipboardMonitor;
+- (void)handleClipboardMonitorTick;
+- (void)sendCurrentLocalClipboardIfNeeded;
 
 @end
 
