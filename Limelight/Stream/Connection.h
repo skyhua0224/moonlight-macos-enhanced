@@ -8,6 +8,7 @@
 
 #import "StreamConfiguration.h"
 #import "VideoDecoderRenderer.h"
+#import "Limelight.h"
 
 @protocol ConnectionCallbacks <NSObject>
 
@@ -21,6 +22,9 @@
      lowFreqMotor:(unsigned short)lowFreqMotor
     highFreqMotor:(unsigned short)highFreqMotor;
 - (void)connectionStatusUpdate:(int)status;
+
+@optional
+- (void)clipboardItemReceived:(const LI_CLIPBOARD_ITEM *)item;
 
 @end
 
@@ -55,6 +59,19 @@ typedef struct {
     connectionCallbacks:(id<ConnectionCallbacks>)callbacks;
 - (void *)inputStreamContext;
 - (void *)controlStreamContext;
+- (BOOL)isClipboardControlReady;
+- (NSString *)clipboardControlReadinessReason;
+- (uint32_t)clipboardHostFeatureFlags;
+- (NSString *)clipboardControlDebugSummary;
+- (int)bindClipboardSession;
+- (int)unbindClipboardSession;
+- (int)requestClipboardSnapshot;
+- (int)sendClipboardItemData:(NSData *)data
+                        type:(uint8_t)type
+                    mimeType:(NSString *)mimeType
+                        name:(NSString *)name
+                      itemId:(uint64_t)itemId
+                 contentHash:(uint64_t)contentHash;
 - (BOOL)getVideoDiagnosticSnapshot:(MLVideoDiagnosticSnapshot *)snapshot;
 - (void)notifyInputStreamReadyForMicrophoneControlIfNeeded;
 - (void)terminate;

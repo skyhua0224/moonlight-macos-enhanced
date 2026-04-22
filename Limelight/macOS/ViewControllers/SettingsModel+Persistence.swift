@@ -200,6 +200,8 @@ extension SettingsModel {
     selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)
     selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(
       for: Self.defaultFrameInterpolationMode)
+    selectedClipboardSyncMode = Self.clipboardSyncModeSelection(
+      for: SettingsClass.clipboardSyncMode(for: selectedHost?.id ?? Self.globalHostId))
     selectedConnectionMethod = "Auto"
   }
 
@@ -484,6 +486,8 @@ extension SettingsModel {
         for: settings.hdrToneMappingPolicy)
       selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(
         for: settings.frameInterpolationMode)
+      selectedClipboardSyncMode = Self.clipboardSyncModeSelection(
+        for: SettingsClass.clipboardSyncMode(for: hostId))
       selectedDisplaySyncMode = Self.displaySyncModeSelection(for: settings.displaySyncMode)
       selectedFrameQueueTarget = Self.frameQueueTargetSelection(for: settings.frameQueueTarget)
       let legacyResponsivenessBias = (settings.timingPrioritizeResponsiveness ?? false) ? 1 : 0
@@ -579,6 +583,8 @@ extension SettingsModel {
       for: selectedHdrClientDisplayProfile)
     let frameInterpolationMode = Self.frameInterpolationModeRawValue(
       for: selectedFrameInterpolationMode)
+    let clipboardSyncMode = Self.clipboardSyncModeRawValue(
+      for: selectedClipboardSyncMode)
     let hdrHlgViewingEnvironment = Self.hdrHlgViewingEnvironmentRawValue(
       for: selectedHdrHlgViewingEnvironment)
     let hdrEdrStrategy = Self.hdrEdrStrategyRawValue(for: selectedHdrEdrStrategy)
@@ -754,6 +760,7 @@ extension SettingsModel {
       upscalingMode: upscalingMode,
       frameInterpolationMode: frameInterpolationMode,
       connectionMethod: selectedConnectionMethod,
+      clipboardSyncMode: clipboardSyncMode,
       smoothnessLatencyMode: smoothnessLatencyMode,
       timingBufferLevel: timingBufferLevel,
       timingPrioritizeResponsiveness: timingPrioritizeResponsiveness,

@@ -33,6 +33,20 @@ struct InputView: View {
     settingsModel.mouseMode == "remote"
   }
 
+  private var settingsHostKey: String {
+    settingsModel.selectedHost?.id ?? SettingsModel.globalHostId
+  }
+
+  private var clipboardSyncAvailableForSelectedHost: Bool {
+    SettingsClass.clipboardSyncSupported(for: settingsHostKey)
+  }
+
+  private var clipboardSyncDetailKey: String {
+    clipboardSyncAvailableForSelectedHost
+      ? "Clipboard Sync detail"
+      : "Clipboard Sync Foundation detail"
+  }
+
   private var showsHighPrecisionWheelTuning: Bool {
     settingsModel.selectedPhysicalWheelMode == PhysicalWheelScrollMode.automatic.displayKey
       || settingsModel.selectedPhysicalWheelMode
@@ -126,6 +140,10 @@ struct InputView: View {
 
         Divider()
       }
+
+      clipboardSyncRow
+
+      Divider()
 
       DisclosureGroup(
         isExpanded: $mouseTuningExpanded,
@@ -407,6 +425,20 @@ struct InputView: View {
         }
       )
     }
+  }
+
+  private var clipboardSyncRow: some View {
+    PickerSettingRow(
+      title: "Clipboard Sync",
+      detailKey: clipboardSyncDetailKey,
+      content: {
+        Picker("", selection: $settingsModel.selectedClipboardSyncMode) {
+          ForEach(SettingsModel.clipboardSyncModes, id: \.self) { mode in
+            Text(languageManager.localize(mode))
+          }
+        }
+        .labelsHidden()
+      })
   }
 }
 

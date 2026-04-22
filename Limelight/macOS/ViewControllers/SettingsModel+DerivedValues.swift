@@ -648,6 +648,29 @@ extension SettingsModel {
       ?? frameInterpolationModeOptions.first(where: { $0.value == defaultFrameInterpolationMode })?.title
       ?? "Off"
   }
+  static let clipboardSyncModeOptions: [(title: String, value: Int)] = [
+    ("Off", 0),
+    ("Auto Sync", 1),
+  ]
+  static var clipboardSyncModes: [String] {
+    clipboardSyncModeOptions.map(\.title)
+  }
+  static let defaultClipboardSyncMode = 0
+
+  static func clipboardSyncModeRawValue(for title: String) -> Int {
+    clipboardSyncModeOptions.first(where: { $0.title == title })?.value
+      ?? defaultClipboardSyncMode
+  }
+
+  static func clipboardSyncModeSelection(for rawValue: Int?) -> String {
+    guard let rawValue else {
+      return clipboardSyncModeOptions.first(where: { $0.value == defaultClipboardSyncMode })?.title
+        ?? "Off"
+    }
+    return clipboardSyncModeOptions.first(where: { $0.value == rawValue })?.title
+      ?? clipboardSyncModeOptions.first(where: { $0.value == defaultClipboardSyncMode })?.title
+      ?? "Off"
+  }
 
   static let defaultResolution = CGSizeMake(1920, 1080)
   static let defaultCustomResWidth: CGFloat? = nil
@@ -1033,6 +1056,7 @@ extension SettingsModel {
   static let defaultGamepadMouseMode = false
   static let defaultMouseMode = "remote"
   static let defaultUpscalingMode = 6
+  static let defaultClipboardSyncModeSelection = "Off"
   static let defaultDimNonHoveredArtwork = true
   static let defaultUnlockMaxBitrate = false
 

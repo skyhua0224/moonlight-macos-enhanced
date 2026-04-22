@@ -768,3 +768,8 @@
 "Shortcut Translation Mode Hybrid detail" = "Translates common ⌘ shortcuts like Windows shortcuts and also swaps the left Ctrl and left Win positions.";
 "Reconnect Stream" = "Reconnect Stream";
 "Stream Shortcuts" = "Stream Shortcuts";
+"Clipboard" = "Clipboard";
+"Clipboard Sync" = "Clipboard Sync";
+"Clipboard Sync detail" = "Automatically syncs text and one image while this stream owns clipboard sync.";
+"Clipboard Sync Foundation detail" = "Available for Foundation Sunshine hosts. Supported hosts default to Auto Sync, and unsupported hosts simply ignore it.";
+"Auto Sync" = "Auto Sync";

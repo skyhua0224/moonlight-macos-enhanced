@@ -957,6 +957,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var selectedClipboardSyncMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var selectedConnectionMethod: String {
     didSet {
       guard !isLoading else { return }
@@ -1303,6 +1309,8 @@ class SettingsModel: ObservableObject {
     selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)
     selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(
       for: Self.defaultFrameInterpolationMode)
+    selectedClipboardSyncMode = Self.clipboardSyncModeSelection(
+      for: Self.defaultClipboardSyncMode)
     selectedConnectionMethod = "Auto"
     availableSunshineDisplays = []
     isLoadingSunshineDisplays = false
