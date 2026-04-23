@@ -72,14 +72,20 @@ final class CoreHIDMouseDriver: NSObject {
       return
     }
 
-    guard InputMonitoringPermissionManager.sharedManager.requestAuthorizationIfNeeded(
-      interactive: requestsListenAccessIfNeeded
-    ) else {
-      postFailureIfNeeded(
-        reason: Failure.permissionDeniedReason,
-        messageKey: Failure.permissionDeniedMessageKey
+    let permissionManager = InputMonitoringPermissionManager.sharedManager
+    if requestsListenAccessIfNeeded {
+      let granted = permissionManager.requestAuthorizationIfNeeded(
+        interactive: true
       )
-      return
+      guard granted else {
+        postFailureIfNeeded(
+          reason: Failure.permissionDeniedReason,
+          messageKey: Failure.permissionDeniedMessageKey
+        )
+        return
+      }
+    } else {
+      permissionManager.requestAuthorizationIfNeeded(interactive: false)
     }
 
     managerTask = Task { [weak self] in

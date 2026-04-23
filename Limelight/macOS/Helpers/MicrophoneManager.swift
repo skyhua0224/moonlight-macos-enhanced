@@ -281,6 +281,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     private var observedSystemState: InputMonitoringAuthorizationState = .notDetermined
     private var needsStreamReentry = false
     private var hasPersistedGrantHistory = false
+    private var hasRuntimeVerifiedGrantThisSession = false
     private var didAttemptAuthorizationThisSession = false
     private var shouldSuggestSettingsRepair = false
     private var expectedSystemRefreshUntilUptime: TimeInterval = 0
@@ -290,7 +291,13 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         hasPersistedGrantHistory = UserDefaults.standard.bool(forKey: Self.everGrantedKey)
         let initialState = Self.currentSystemAuthorizationState()
         observedSystemState = initialState
-        authorizationState = initialState
+        if initialState == .granted {
+            authorizationState = .granted
+        } else if hasPersistedGrantHistory {
+            authorizationState = .grantedNeedsReentry
+        } else {
+            authorizationState = initialState
+        }
         didBecomeActiveObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
@@ -308,6 +315,18 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
 
     @objc var isGranted: Bool {
         authorizationState == .granted || authorizationState == .grantedNeedsReentry
+    }
+
+    @objc var shouldAttemptRuntimeActivationWithoutPrompt: Bool {
+        if isGranted {
+            return true
+        }
+
+        if hasPersistedGrantHistory || UserDefaults.standard.bool(forKey: Self.everGrantedKey) {
+            return true
+        }
+
+        return false
     }
 
     @objc var displayStatusLabelKey: String {
@@ -461,7 +480,9 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
                 self.lastFailureMessage = message
                 self.shouldSuggestSettingsRepair =
                     self.hasPersistedGrantHistory || self.didAttemptAuthorizationThisSession
-                self.presentRuntimeAlertIfNeeded()
+                if self.didAttemptAuthorizationThisSession {
+                    self.presentRuntimeAlertIfNeeded()
+                }
             }
         }
     }
@@ -470,8 +491,13 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     func noteCoreHIDDidBecomeActive() {
         DispatchQueue.main.async {
             self.needsStreamReentry = false
+            self.hasRuntimeVerifiedGrantThisSession = true
             self.markGrantObserved()
-            self.applySystemAuthorizationState(Self.currentSystemAuthorizationState())
+            self.observedSystemState = .granted
+            self.authorizationState = .granted
+            self.lastFailureMessage = ""
+            self.hasShownRuntimeAlert = false
+            self.shouldSuggestSettingsRepair = false
         }
     }
 
@@ -602,6 +628,29 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     }
 
     private func applySystemAuthorizationState(_ state: InputMonitoringAuthorizationState) {
+        if state != .granted && state != .unsupported {
+            if hasRuntimeVerifiedGrantThisSession {
+                observedSystemState = .granted
+                markGrantObserved()
+                authorizationState = .granted
+                lastFailureMessage = ""
+                hasShownRuntimeAlert = false
+                shouldSuggestSettingsRepair = false
+                return
+            }
+
+            if hasPersistedGrantHistory || UserDefaults.standard.bool(forKey: Self.everGrantedKey) {
+                hasPersistedGrantHistory = true
+                observedSystemState = state
+                endWaitingForSystemRefresh()
+                authorizationState = .grantedNeedsReentry
+                lastFailureMessage = ""
+                hasShownRuntimeAlert = false
+                shouldSuggestSettingsRepair = false
+                return
+            }
+        }
+
         let transitionedToGranted = observedSystemState != .granted && state == .granted
         observedSystemState = state
 
@@ -825,6 +874,15 @@ final class AwdlHelperManager: NSObject, ObservableObject {
                 if !state.present {
                     self.logInfo("[diag] AWDL helper status: awdl0 unavailable")
                     self.authorizationState = .unavailable
+                    return
+                }
+
+                if installState == .installed {
+                    if self.authorizationState != .ready {
+                        self.logInfo("[diag] AWDL helper status: persistent helper installed and ready")
+                    }
+                    self.authorizationState = .ready
+                    self.lastErrorMessage = ""
                     return
                 }
 
@@ -1383,9 +1441,19 @@ final class AwdlHelperManager: NSObject, ObservableObject {
 
         if !isSandboxedBuild {
             let hasBundledHelper = MLAwdlAuthorizationHelper.bundledPrivilegedHelperAvailable()
+            let persistentHelperInstalled =
+                MLAwdlAuthorizationHelper.installedPrivilegedHelperHasUsableSignature() &&
+                MLAwdlAuthorizationHelper.privilegedHelperLaunchdJobLoaded()
             if let helperError = runPrivilegedIfconfigViaAuthorizationHelper(argument) {
                 logWarning("[diag] AWDL privileged helper request failed: \(helperError)")
-                publishHelperInstallState(hasBundledHelper ? .notReady : .adminPromptOnly)
+                publishHelperInstallState(
+                    persistentHelperInstalled ? .installed : (hasBundledHelper ? .notReady : .adminPromptOnly)
+                )
+                if persistentHelperInstalled {
+                    logWarning("[diag] AWDL helper is already installed; skipping administrator fallback for this stream")
+                    publishExecutionPath(.privilegedHelper)
+                    return helperError
+                }
                 if hasBundledHelper {
                     logInfo("[diag] AWDL helper falling back to administrator command prompt")
                     if let fallbackError = runPrivilegedIfconfigViaAppleScript(argument) {
