@@ -19,7 +19,8 @@
 - **Native macOS client** — AppKit / SwiftUI interface, Apple Silicon and Intel support, dark mode, and bilingual UI
 - **Full streaming feature set** — custom resolution and FPS, AV1 / HEVC / H.264 decode, HDR, YUV 4:4:4, MetalFX / VT enhancement, and auto bitrate
 - **Multiple video renderers** — includes `Native Renderer`, `Metal Renderer`, and `Compatibility Renderer`; `Native Renderer` is the recommended default, while `Metal Renderer` provides deeper HDR and color controls
-- **Input and control upgrades** — built around a `CoreHID` low-latency, high-polling mouse input path for more direct and more precise relative movement; Free Mouse moves naturally across displays, while Locked Mouse is better suited for games and sustained relative input, with configurable stream shortcuts, controller enhancements, and bidirectional clipboard sync for text and single images on Foundation Sunshine
+- **Clipboard support** — when paired with Foundation Sunshine, Moonlight supports bidirectional copy and paste for text and single-image items, with stream-window focus deciding which session owns clipboard sync
+- **Input and control upgrades** — built around a `CoreHID` low-latency, high-polling mouse input path for more direct and more precise relative movement; Free Mouse moves naturally across displays, while Locked Mouse is better suited for games and sustained relative input, with configurable stream shortcuts and controller enhancements
 - **Audio and media improvements** — uses a lower-latency `Core Audio` local playback path with multi-channel receive and playback, plus client-side audio enhancement, EQ control, and improved microphone uplink
 - **Connectivity and stability** — per-host connection methods, custom ports / IPv6 / domains, performance overlay, diagnostics, and AWDL stability helpers
 
@@ -63,7 +64,7 @@
 
 | Host Software | Compatibility | Notes |
 |---------------|---------------|-------|
-| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ Recommended | Best support for microphone, YUV 4:4:4, and multi-channel audio features |
+| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ Recommended | Best support for microphone, YUV 4:4:4, multi-channel audio, and bidirectional clipboard sync for text and single-image items |
 | [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ Supported | Most features work; some advanced paths are limited |
 | GeForce Experience | ⚠️ Basic | Deprecated and missing newer features such as microphone uplink |
 
