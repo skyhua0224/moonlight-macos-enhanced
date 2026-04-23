@@ -668,7 +668,10 @@
         return NO;
     }
 
-    [self updateEdgeMenuPointerInsideForPoint:[self viewPointForMouseEvent:event]];
+    NSPoint point = [self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration]
+        ? [self currentMouseLocationInViewCoordinates]
+        : [self viewPointForMouseEvent:event];
+    [self updateEdgeMenuPointerInsideForPoint:point];
     if (self.edgeMenuPointerInside) {
         return NO;
     }

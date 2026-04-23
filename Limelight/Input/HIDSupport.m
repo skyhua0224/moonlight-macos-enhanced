@@ -1218,7 +1218,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     self.coreHIDMouseDriver = [[CoreHIDMouseDriver alloc] init];
     self.coreHIDMouseDriver.delegate = self;
     self.coreHIDMouseDriver.maximumReportRate = [SettingsClass coreHIDMaxMouseReportRateFor:self.host.uuid];
-    self.coreHIDMouseDriver.requestsListenAccessIfNeeded = self.useCoreHIDMouse;
+    self.coreHIDMouseDriver.requestsListenAccessIfNeeded = NO;
     [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
                                         summaryKey:@"Mouse Runtime Path CoreHID Pending"
                                          detailKey:@"Mouse Runtime Detail CoreHID Pending"];

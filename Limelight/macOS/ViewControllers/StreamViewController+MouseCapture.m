@@ -416,6 +416,14 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     return [self appKitSemanticViewPointForMouseEvent:event];
 }
 
+- (NSPoint)boundaryInteractionViewPointForMouseEvent:(NSEvent *)event {
+    if ([self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration]) {
+        return [self currentMouseLocationInViewCoordinates];
+    }
+
+    return [self viewPointForMouseEvent:event];
+}
+
 - (NSPoint)screenPointForMouseEvent:(NSEvent *)event {
     NSPoint virtualPoint = NSZeroPoint;
     NSSize referenceSize = NSZeroSize;
@@ -1386,6 +1394,10 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return MLFreeMouseExitEdgeNone;
     }
 
+    if ([self shouldUseCoreHIDTightFreeMouseHandoff]) {
+        point = [self boundaryInteractionViewPointForMouseEvent:event];
+    }
+
     NSRect triggerRect = [self edgeMenuInteractionRectInBounds:self.view.bounds];
     if (!NSPointInRect(point, triggerRect)) {
         return MLFreeMouseExitEdgeNone;
@@ -1456,8 +1468,10 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     BOOL tightHandoff = [self shouldUseCoreHIDTightFreeMouseHandoff];
-    NSPoint point = [self viewPointForMouseEvent:event];
     NSPoint currentPoint = [self currentMouseLocationInViewCoordinates];
+    NSPoint point = tightHandoff
+        ? currentPoint
+        : [self boundaryInteractionViewPointForMouseEvent:event];
     CGFloat threshold = tightHandoff ? MLCoreHIDFreeMouseExitThreshold : 2.0;
     MLFreeMouseExitEdge edgeMenuExitEdge = [self edgeMenuReleaseExitEdgeForEvent:event point:point];
     if (edgeMenuExitEdge != MLFreeMouseExitEdgeNone) {
@@ -1465,7 +1479,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     MLFreeMouseExitEdge currentPointerExitEdge = [self freeMouseExitEdgeForOutsideViewPoint:currentPoint];
-    if (!tightHandoff && currentPointerExitEdge != MLFreeMouseExitEdgeNone) {
+    if (currentPointerExitEdge != MLFreeMouseExitEdgeNone) {
         return currentPointerExitEdge;
     }
 
@@ -1523,7 +1537,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (NSPoint)preferredFreeMouseExitSyncViewPointForEvent:(NSEvent *)event
                                               exitEdge:(MLFreeMouseExitEdge)exitEdge {
-    NSPoint semanticPoint = [self viewPointForMouseEvent:event];
+    NSPoint semanticPoint = [self boundaryInteractionViewPointForMouseEvent:event];
     if (![self shouldUseCoreHIDTightFreeMouseHandoff] || exitEdge == MLFreeMouseExitEdgeNone) {
         return semanticPoint;
     }
@@ -1594,6 +1608,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         : [self viewPointForMouseEvent:event];
     [self prepareCoreHIDVirtualCursorForSystemPointerSyncIfNeeded];
     [self syncRemoteCursorToViewPoint:syncPoint clampToBounds:YES];
+    [self ensureStreamWindowKeyIfPossible];
     [self rearmMouseCaptureIfPossibleWithReason:@"free-mouse-edge-return"];
     if (self.isMouseCaptured) {
         self.pendingFreeMouseReentryEdge = MLFreeMouseExitEdgeNone;
@@ -1621,6 +1636,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         [self syncRemoteCursorToMouseEvent:event clampToBounds:YES];
     }
 
+    [self ensureStreamWindowKeyIfPossible];
     [self rearmMouseCaptureIfPossibleWithReason:@"mouse-exited-view-reentry"];
     if (self.isMouseCaptured) {
         self.pendingMouseExitedRecapture = NO;
@@ -1633,7 +1649,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (BOOL)captureFreeMouseIfNeededForEvent:(NSEvent *)event {
     if (self.edgeMenuTemporaryReleaseActive) {
-        [self updateEdgeMenuPointerInsideForPoint:[self viewPointForMouseEvent:event]];
+        [self updateEdgeMenuPointerInsideForPoint:[self boundaryInteractionViewPointForMouseEvent:event]];
         if (self.edgeMenuPointerInside || self.edgeMenuDragging || self.edgeMenuMenuVisible) {
             return NO;
         }
@@ -2390,6 +2406,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)mouseMoved:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2420,6 +2437,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)mouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2449,6 +2467,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)rightMouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2478,6 +2497,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)otherMouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }

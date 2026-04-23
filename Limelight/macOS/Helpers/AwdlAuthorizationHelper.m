@@ -460,7 +460,14 @@ static NSString * const MLAwdlIfconfigToolPath = @"/sbin/ifconfig";
                errorMessage:(NSString * _Nullable * _Nullable)errorMessage {
     BOOL hasBundledHelper = [self bundledPrivilegedHelperAvailable];
     BOOL canBlessHelper = [self mainApplicationSupportsPrivilegedHelperBlessing];
-    BOOL helperInstalled = hasBundledHelper ? [self queryHelperInstalledWithErrorMessage:nil] : NO;
+    BOOL helperInstalled = NO;
+    if (hasBundledHelper) {
+        helperInstalled = ([self installedPrivilegedHelperHasUsableSignature] &&
+                           [self privilegedHelperLaunchdJobLoaded]);
+        if (!helperInstalled) {
+            helperInstalled = [self queryHelperInstalledWithErrorMessage:nil];
+        }
+    }
 
     if (!hasBundledHelper || (!helperInstalled && !canBlessHelper)) {
         if (![self prepareExecutionAuthorizationWithPrompt:prompt errorMessage:errorMessage]) {
