@@ -19,7 +19,7 @@
 - **Native macOS client** — AppKit / SwiftUI interface, Apple Silicon and Intel support, dark mode, and bilingual UI
 - **Full streaming feature set** — custom resolution and FPS, AV1 / HEVC / H.264 decode, HDR, YUV 4:4:4, MetalFX / VT enhancement, and auto bitrate
 - **Multiple video renderers** — includes `Native Renderer`, `Metal Renderer`, and `Compatibility Renderer`; `Native Renderer` is the recommended default, while `Metal Renderer` provides deeper HDR and color controls
-- **Input and control upgrades** — built around a `CoreHID` low-latency, high-polling mouse input path for more direct and more precise relative movement; Free Mouse moves naturally across displays, while Locked Mouse is better suited for games and sustained relative input, with configurable stream shortcuts and controller enhancements
+- **Input and control upgrades** — built around a `CoreHID` low-latency, high-polling mouse input path for more direct and more precise relative movement; Free Mouse moves naturally across displays, while Locked Mouse is better suited for games and sustained relative input, with configurable stream shortcuts, controller enhancements, and bidirectional clipboard sync for text and single images on Foundation Sunshine
 - **Audio and media improvements** — uses a lower-latency `Core Audio` local playback path with multi-channel receive and playback, plus client-side audio enhancement, EQ control, and improved microphone uplink
 - **Connectivity and stability** — per-host connection methods, custom ports / IPv6 / domains, performance overlay, diagnostics, and AWDL stability helpers
 
@@ -54,6 +54,7 @@
 - `Free Mouse` is better for remote desktop, desktop apps, and multi-display setups, letting you move naturally onto other displays; `Locked Mouse` is better for games, FPS titles, and sustained relative input
 - The input stack covers `Free Mouse / Locked Mouse`, keyboard shortcut translation, separate physical wheel / smoothed wheel / trackpad strategies, multi-controller support, rumble, Guide emulation, and controller mouse
 - Can send Foundation Sunshine host-display extension parameters and let you choose the target display, streaming mode, `display_name`, `useVdd`, `customScreenMode`, and HDR display-profile overrides from host settings or when starting a stream
+- When paired with Foundation Sunshine, Moonlight can also use bidirectional clipboard sync for text and single-image items, with stream-window focus deciding which session owns clipboard sync
 - Host and network integration also includes per-host connection methods, custom ports, IPv6, domains, `AWDL`, performance overlay, connection warnings, input diagnostics, and both raw and curated logs
 
 </details>
