@@ -48,6 +48,17 @@
 @property (nonatomic) NSInteger controllerDriver;
 @property (nonatomic) BOOL isPS5Bluetooth;
 @property (nonatomic) uint8_t ds5OutputSequence;
+@property (atomic) BOOL reportedPlayStationArrival;
+@property (atomic) uint16_t requestedGyroRateHz;
+@property (atomic) uint16_t requestedAccelRateHz;
+@property (atomic) uint64_t lastGyroReportUs;
+@property (atomic) uint64_t lastAccelReportUs;
+@property (nonatomic) BOOL ps4PrimaryTouchActive;
+@property (nonatomic) BOOL ps4SecondaryTouchActive;
+@property (nonatomic) float ps4PrimaryTouchX;
+@property (nonatomic) float ps4PrimaryTouchY;
+@property (nonatomic) float ps4SecondaryTouchX;
+@property (nonatomic) float ps4SecondaryTouchY;
 
 @property (nonatomic) SwitchSimpleStatePacket_t lastSimpleSwitchState;
 @property (nonatomic) SwitchStatePacket_t lastSwitchState;
@@ -157,6 +168,9 @@
 - (void)handleDpad:(NSInteger)intValue;
 - (void)updateButtonFlags:(int)flag state:(BOOL)set;
 - (void)setupHidManager;
+- (BOOL)reportPlayStationControllerArrival;
+- (void)handlePS4TouchpadState:(PS4StatePacket_t *)state;
+- (void)handlePS4MotionState:(PS4StatePacket_t *)state;
 - (void)tearDownHidManagerOnMainThread;
 - (BOOL)reserveDetailedInputDiagnosticsLogSequence:(NSUInteger *)sequence;
 - (void)syncScrollTraceDiagnosticsPreferenceToInputContext;

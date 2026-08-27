@@ -1947,7 +1947,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
     if (!self.hidSupport.shouldSendInputEvents) {
         return;
     }
-    [self.controllerSupport setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+    if (self.controllerSupport != nil) {
+        [self.controllerSupport setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+    } else {
+        [self.hidSupport setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+    }
 }
 
 - (void)connectionStatusUpdate:(int)status {

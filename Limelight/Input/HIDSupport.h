@@ -97,6 +97,9 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
                           referenceWidth:(short *)referenceWidth
                          referenceHeight:(short *)referenceHeight;
 - (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs;
+- (void)setMotionEventState:(uint16_t)controllerNumber
+                 motionType:(uint8_t)motionType
+               reportRateHz:(uint16_t)reportRateHz;
 @end
 
 @interface HIDSupport (ScrollInput)

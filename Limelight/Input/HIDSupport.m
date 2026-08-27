@@ -380,7 +380,16 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 @implementation HIDSupport
 
 - (void)setInputContext:(void *)inputContext {
+    if (_inputContext == inputContext) {
+        return;
+    }
+
     _inputContext = inputContext;
+    self.reportedPlayStationArrival = NO;
+    self.requestedGyroRateHz = 0;
+    self.requestedAccelRateHz = 0;
+    self.lastGyroReportUs = 0;
+    self.lastAccelReportUs = 0;
     [self syncScrollTraceDiagnosticsPreferenceToInputContext];
 }
 
@@ -816,6 +825,132 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
         HIDDispatchInput(self, inputCtx, ^{
             LiSendMultiControllerEventCtx(inputCtx, playerIndex, 1, lastButtonFlags, lastLeftTrigger, lastRightTrigger, lastLeftStickX, lastLeftStickY, lastRightStickX, lastRightStickY);
         });
+    }
+}
+
+- (BOOL)reportPlayStationControllerArrival {
+    if (self.controllerDriver != 0) {
+        return NO;
+    }
+    if (self.reportedPlayStationArrival) {
+        return YES;
+    }
+
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!inputCtx || !self.shouldSendInputEvents) {
+        return NO;
+    }
+
+    uint32_t buttons = PLAY_FLAG | BACK_FLAG | UP_FLAG | DOWN_FLAG | LEFT_FLAG | RIGHT_FLAG |
+                       LB_FLAG | RB_FLAG | LS_CLK_FLAG | RS_CLK_FLAG | SPECIAL_FLAG |
+                       A_FLAG | B_FLAG | X_FLAG | Y_FLAG | TOUCHPAD_FLAG;
+    uint16_t capabilities = LI_CCAP_ANALOG_TRIGGERS | LI_CCAP_RUMBLE | LI_CCAP_TOUCHPAD |
+                            LI_CCAP_ACCEL | LI_CCAP_GYRO;
+    int err = LiSendControllerArrivalEventCtx(inputCtx, 0, 1, LI_CTYPE_PS, buttons, capabilities);
+    if (err != 0) {
+        return NO;
+    }
+
+    self.reportedPlayStationArrival = YES;
+    Log(LOG_I, @"HID PlayStation controller arrival: buttons=0x%x capabilities=0x%x", buttons, capabilities);
+    return YES;
+}
+
+- (void)setMotionEventState:(uint16_t)controllerNumber
+                 motionType:(uint8_t)motionType
+               reportRateHz:(uint16_t)reportRateHz {
+    if (controllerNumber != 0) {
+        return;
+    }
+
+    if (motionType == LI_MOTION_TYPE_GYRO) {
+        self.requestedGyroRateHz = reportRateHz;
+        self.lastGyroReportUs = 0;
+    } else if (motionType == LI_MOTION_TYPE_ACCEL) {
+        self.requestedAccelRateHz = reportRateHz;
+        self.lastAccelReportUs = 0;
+    }
+
+    Log(LOG_I, @"HID controller motion request: type=%u rate=%u Hz", motionType, reportRateHz);
+}
+
+static inline int16_t PS4ReadS16(const UInt8 bytes[2]) {
+    return (int16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
+}
+
+- (void)sendPS4TouchWithActive:(BOOL)active
+                             x:(float)x
+                             y:(float)y
+                     wasActive:(BOOL)wasActive
+                         lastX:(float)lastX
+                         lastY:(float)lastY
+                     pointerId:(uint32_t)pointerId {
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!inputCtx || ![self reportPlayStationControllerArrival]) {
+        return;
+    }
+
+    uint8_t eventType;
+    if (active && !wasActive) eventType = LI_TOUCH_EVENT_DOWN;
+    else if (!active && wasActive) eventType = LI_TOUCH_EVENT_UP;
+    else if (active && (x != lastX || y != lastY)) eventType = LI_TOUCH_EVENT_MOVE;
+    else return;
+
+    float eventX = active ? x : lastX;
+    float eventY = active ? y : lastY;
+    LiSendControllerTouchEventCtx(inputCtx, 0, eventType, pointerId, eventX, eventY, active ? 1.0f : 0.0f);
+}
+
+- (void)handlePS4TouchpadState:(PS4StatePacket_t *)state {
+    BOOL primaryActive = (state->ucTouchpadCounter1 & 0x80) == 0;
+    float primaryX = MIN(1.0f, (state->rgucTouchpadData1[0] |
+                              ((state->rgucTouchpadData1[1] & 0x0F) << 8)) / 1920.0f);
+    float primaryY = MIN(1.0f, ((state->rgucTouchpadData1[1] >> 4) |
+                              (state->rgucTouchpadData1[2] << 4)) / 920.0f);
+    [self sendPS4TouchWithActive:primaryActive x:primaryX y:primaryY
+                       wasActive:self.ps4PrimaryTouchActive
+                           lastX:self.ps4PrimaryTouchX lastY:self.ps4PrimaryTouchY pointerId:0];
+    self.ps4PrimaryTouchActive = primaryActive;
+    self.ps4PrimaryTouchX = primaryX;
+    self.ps4PrimaryTouchY = primaryY;
+
+    BOOL secondaryActive = (state->ucTouchpadCounter2 & 0x80) == 0;
+    float secondaryX = MIN(1.0f, (state->rgucTouchpadData2[0] |
+                                ((state->rgucTouchpadData2[1] & 0x0F) << 8)) / 1920.0f);
+    float secondaryY = MIN(1.0f, ((state->rgucTouchpadData2[1] >> 4) |
+                                (state->rgucTouchpadData2[2] << 4)) / 920.0f);
+    [self sendPS4TouchWithActive:secondaryActive x:secondaryX y:secondaryY
+                       wasActive:self.ps4SecondaryTouchActive
+                           lastX:self.ps4SecondaryTouchX lastY:self.ps4SecondaryTouchY pointerId:1];
+    self.ps4SecondaryTouchActive = secondaryActive;
+    self.ps4SecondaryTouchX = secondaryX;
+    self.ps4SecondaryTouchY = secondaryY;
+}
+
+- (void)handlePS4MotionState:(PS4StatePacket_t *)state {
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!inputCtx || ![self reportPlayStationControllerArrival]) {
+        return;
+    }
+
+    uint64_t nowUs = PltGetMicroseconds();
+    uint16_t gyroRate = self.requestedGyroRateHz;
+    if (gyroRate > 0 && (self.lastGyroReportUs == 0 || nowUs - self.lastGyroReportUs >= 1000000ULL / gyroRate)) {
+        self.lastGyroReportUs = nowUs;
+        LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_GYRO,
+                                       PS4ReadS16(state->rgucGyroX) / 16.0f,
+                                       PS4ReadS16(state->rgucGyroY) / 16.0f,
+                                       PS4ReadS16(state->rgucGyroZ) / 16.0f);
+    }
+
+    uint16_t accelRate = self.requestedAccelRateHz;
+    if (accelRate > 0 && (self.lastAccelReportUs == 0 || nowUs - self.lastAccelReportUs >= 1000000ULL / accelRate)) {
+        self.lastAccelReportUs = nowUs;
+        const float scale = 9.80665f / 8192.0f;
+        LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_ACCEL,
+                                       PS4ReadS16(state->rgucAccelX) * scale,
+                                       PS4ReadS16(state->rgucAccelY) * scale,
+                                       PS4ReadS16(state->rgucAccelZ) * scale);
     }
 }
 
@@ -1753,6 +1888,7 @@ void myHIDReportCallback (
         [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x80) != 0];
 
         [self updateButtonFlags:SPECIAL_FLAG state:(state->rgucButtonsHatAndCounter[2] & 0x01) != 0];
+        [self updateButtonFlags:TOUCHPAD_FLAG state:(state->rgucButtonsHatAndCounter[2] & 0x02) != 0];
         
         self.controller.lastLeftTrigger = state->ucTriggerLeft;
         self.controller.lastRightTrigger = state->ucTriggerRight;
@@ -1761,6 +1897,11 @@ void myHIDReportCallback (
         self.controller.lastLeftStickY = (state->ucLeftJoystickY - 128) * -255;
         self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
         self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
+
+        if (self.controllerDriver == 0 && [self reportPlayStationControllerArrival]) {
+            [self handlePS4TouchpadState:state];
+            [self handlePS4MotionState:state];
+        }
         
         if (self.controllerDriver == 0) {
 
@@ -1985,6 +2126,11 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.gamepadMenuPressed = NO;
     self.controller.menuGesture = (ControllerMenuGesture){0};
     if (self.controllerDriver == 0) {
+        self.reportedPlayStationArrival = NO;
+        self.requestedGyroRateHz = 0;
+        self.requestedAccelRateHz = 0;
+        self.ps4PrimaryTouchActive = NO;
+        self.ps4SecondaryTouchActive = NO;
         self.controller.lastButtonFlags = 0;
         self.controller.lastLeftTrigger = 0;
         self.controller.lastRightTrigger = 0;
