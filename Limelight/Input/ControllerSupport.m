@@ -24,6 +24,13 @@
 
 #import <math.h>
 
+// Exact zero gyro samples are reliable protocol packets. Use hysteresis and a
+// settling period so sensor noise cannot repeatedly enqueue reliable zeros on
+// a slow connection.
+static const double kControllerGyroRestEnterDps = 1.0;
+static const double kControllerGyroRestExitDps = 1.5;
+static const NSUInteger kControllerGyroRestSamples = 8;
+
 static inline PML_INPUT_STREAM_CONTEXT ControllerInputContext(ControllerSupport *support) {
     PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)support.inputContext;
     if (ctx != NULL && ctx->connectionContext != NULL) {
@@ -598,6 +605,33 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 }
 
+-(void) cleanupControllerMotion:(Controller*)controller
+{
+    [controller.gyroTimer invalidate];
+    [controller.accelTimer invalidate];
+    controller.gyroTimer = nil;
+    controller.accelTimer = nil;
+
+    if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *)) {
+        if (controller.gamepad.motion.sensorsRequireManualActivation) {
+            controller.gamepad.motion.sensorsActive = NO;
+        }
+    }
+}
+
+-(void)setInputContext:(void *)inputContext
+{
+    if (_inputContext == inputContext) {
+        return;
+    }
+
+    _inputContext = inputContext;
+    for (Controller *controller in _controllers.allValues) {
+        controller.controllerAnnounced = NO;
+        [self cleanupControllerMotion:controller];
+    }
+}
+
 @synthesize shouldSendInputEvents = _shouldSendInputEvents;
 
 - (void)setShouldSendInputEvents:(BOOL)enabled {
@@ -617,6 +651,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     _multiController ? (unsigned char)_controllerNumbers : 1, 0, 0, 0, 0, 0, 0, 0);
                 if (controller.trackpadMouseButton != 0)
                     LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
+                if (controller.gyroTimer != nil) {
+                    LiSendControllerMotionEventCtx(input, controller.playerIndex,
+                                                   LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
+                }
+                controller.lastGyroSample = (GCRotationRate){};
+                controller.lastAccelSample = (GCAcceleration){};
                 controller.hasSentGamepadState = NO;
                 ResetControllerTrackpadMouseState(controller);
             }
@@ -965,56 +1005,99 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
--(void) setMotionEventState:(unsigned short)controllerNumber
-                  motionType:(unsigned char)motionType
-                reportRateHz:(unsigned short)reportRateHz
+-(void)setMotionEventState:(uint16_t)controllerNumber
+                 motionType:(uint8_t)motionType
+               reportRateHz:(uint16_t)reportRateHz
 {
-    if (self.controllerMotionMode == 2 || !ControllerIsFeedbackTarget(self, controllerNumber)) {
-        return;
-    }
-    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
-    GCController *gamepad = controller.gamepad;
-    if (gamepad == nil) {
-        return;
-    }
-    if (@available(macOS 10.15, *)) {
-        if (gamepad.motion == nil) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.controllerMotionMode == 2 || !ControllerIsFeedbackTarget(self, controllerNumber)) {
             return;
         }
-    } else {
-        return;
-    }
-
-    if (reportRateHz == 0) {
-        gamepad.motion.valueChangedHandler = nil;
-        return;
-    }
-
-    __weak typeof(self) weakSelf = self;
-    gamepad.motion.valueChangedHandler = ^(GCMotion *motion) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (strongSelf == nil) {
-            return;
-        }
-        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(strongSelf);
-        if (inputCtx == NULL) {
+        Controller *controller = [self->_controllers objectForKey:@(controllerNumber)];
+        if (controller.gamepad.motion == nil) {
             return;
         }
 
+        NSTimeInterval interval = reportRateHz > 0 ? 1.0 / reportRateHz : 0;
         if (motionType == LI_MOTION_TYPE_ACCEL) {
-            GCAcceleration acceleration = motion.userAcceleration;
-            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, motionType,
-                                           acceleration.x * 9.80665f,
-                                           acceleration.y * 9.80665f,
-                                           acceleration.z * 9.80665f);
+            [controller.accelTimer invalidate];
+            controller.accelTimer = nil;
+            controller.lastAccelSample = (GCAcceleration){};
+            if (reportRateHz > 0 && controller.gamepad.motion.hasGravityAndUserAcceleration) {
+                controller.accelTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
+                    GCAcceleration sample = controller.gamepad.motion.acceleration;
+                    GCAcceleration previousSample = controller.lastAccelSample;
+                    if (memcmp(&sample, &previousSample, sizeof(sample)) == 0) return;
+                    controller.lastAccelSample = sample;
+                    PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                    if (inputCtx && (self.shouldSendInputEvents && controller.controllerAnnounced)) {
+                        LiSendControllerMotionEventCtx(inputCtx, controller.playerIndex, LI_MOTION_TYPE_ACCEL,
+                                                       sample.x * -9.80665f,
+                                                       sample.y * -9.80665f,
+                                                       sample.z * -9.80665f);
+                    }
+                }];
+            }
         } else if (motionType == LI_MOTION_TYPE_GYRO) {
-            GCRotationRate rotation = motion.rotationRate;
-            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, motionType,
-                                           rotation.x, rotation.y, rotation.z);
+            BOOL wasReporting = controller.gyroTimer != nil;
+            [controller.gyroTimer invalidate];
+            controller.gyroTimer = nil;
+            controller.lastGyroSample = (GCRotationRate){};
+            controller.gyroAtRest = YES;
+            controller.gyroStationarySampleCount = 0;
+            if (reportRateHz > 0 && controller.gamepad.motion.hasRotationRate) {
+                controller.gyroTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
+                    GCRotationRate sample = controller.gamepad.motion.rotationRate;
+                    GCRotationRate filteredSample = {
+                        sample.x * 57.2957795,
+                        sample.z * 57.2957795,
+                        sample.y * -57.2957795,
+                    };
+                    double magnitude = sqrt(filteredSample.x * filteredSample.x +
+                                            filteredSample.y * filteredSample.y +
+                                            filteredSample.z * filteredSample.z);
+                    if (controller.gyroAtRest) {
+                        if (magnitude <= kControllerGyroRestExitDps) {
+                            filteredSample = (GCRotationRate){};
+                        } else {
+                            controller.gyroAtRest = NO;
+                        }
+                    } else if (magnitude <= kControllerGyroRestEnterDps) {
+                        controller.gyroStationarySampleCount += 1;
+                        if (controller.gyroStationarySampleCount >= kControllerGyroRestSamples) {
+                            controller.gyroAtRest = YES;
+                            controller.gyroStationarySampleCount = 0;
+                            filteredSample = (GCRotationRate){};
+                        }
+                    } else {
+                        controller.gyroStationarySampleCount = 0;
+                    }
+                    GCRotationRate previousSample = controller.lastGyroSample;
+                    if (memcmp(&filteredSample, &previousSample, sizeof(filteredSample)) == 0) return;
+                    controller.lastGyroSample = filteredSample;
+                    PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                    if (inputCtx && (self.shouldSendInputEvents && controller.controllerAnnounced)) {
+                        LiSendControllerMotionEventCtx(inputCtx, controller.playerIndex, LI_MOTION_TYPE_GYRO,
+                                                       (float)filteredSample.x,
+                                                       (float)filteredSample.y,
+                                                       (float)filteredSample.z);
+                    }
+                }];
+            } else if (wasReporting) {
+                PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                if (inputCtx && (self.shouldSendInputEvents && controller.controllerAnnounced)) {
+                    LiSendControllerMotionEventCtx(inputCtx, controller.playerIndex,
+                                                   LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
+                }
+            }
         }
-    };
-    gamepad.motion.sensorsActive = YES;
-    (void)reportRateHz;
+
+        if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *)) {
+            if (controller.gamepad.motion.sensorsRequireManualActivation) {
+                controller.gamepad.motion.sensorsActive = controller.gyroTimer != nil || controller.accelTimer != nil;
+            }
+        }
+    });
 }
 
 -(void) updateLeftStick:(Controller*)controller x:(short)x y:(short)y
@@ -1082,12 +1165,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 -(void) updateButtonFlags:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
+        int previousFlags = controller.lastButtonFlags;
         controller.lastButtonFlags = flags;
         
         // This must be called before handleSpecialCombosPressed
         // because we clear the original button flags there
-        int releasedButtons = (controller.lastButtonFlags ^ flags) & ~flags;
-        int pressedButtons = (controller.lastButtonFlags ^ flags) & flags;
+        int releasedButtons = (previousFlags ^ flags) & ~flags;
+        int pressedButtons = (previousFlags ^ flags) & flags;
         
         [self handleSpecialCombosReleased:controller releasedButtons:releasedButtons];
         
@@ -1098,16 +1182,22 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 -(void) setButtonFlag:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
+        int pressedButtons = flags & ~controller.lastButtonFlags;
         controller.lastButtonFlags |= flags;
-        [self handleSpecialCombosPressed:controller pressedButtons:flags];
+        if (pressedButtons != 0) {
+            [self handleSpecialCombosPressed:controller pressedButtons:pressedButtons];
+        }
     }
 }
 
 -(void) clearButtonFlag:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
+        int releasedButtons = flags & controller.lastButtonFlags;
         controller.lastButtonFlags &= ~flags;
-        [self handleSpecialCombosReleased:controller releasedButtons:flags];
+        if (releasedButtons != 0) {
+            [self handleSpecialCombosReleased:controller releasedButtons:releasedButtons];
+        }
     }
 }
 
@@ -1934,6 +2024,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         
         // Stop haptics on this controller
         [self cleanupControllerHaptics:limeController];
+        [self cleanupControllerMotion:limeController];
         
         limeController.gamepad = nil;
         
@@ -2040,6 +2131,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     
     for (Controller* controller in [_controllers allValues]) {
         [self cleanupControllerHaptics:controller];
+        [self cleanupControllerMotion:controller];
     }
     [_ds5HapticsAudioRenderer reset];
     _ds5HapticsAudioRenderer = nil;

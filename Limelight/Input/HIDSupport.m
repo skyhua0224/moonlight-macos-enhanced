@@ -14,6 +14,54 @@
 NSString *const HIDMouseModeToggledNotification = @"HIDMouseModeToggledNotification";
 NSString *const HIDGamepadQuitNotification = @"HIDGamepadQuitNotification";
 
+// Factory-calibrated DS4 gyros can retain roughly 1-2 dps of thermal noise
+// after a movement. Requiring every axis vector to stay below 1 dps caused
+// the stationary counter to be reset repeatedly, producing several seconds
+// of visible drift. Hysteresis preserves deliberate low-speed motion while
+// allowing a genuinely stationary controller to settle promptly.
+static const float kHIDGyroRestEnterDps = 2.0f;
+static const float kHIDGyroRestExitDps = 3.0f;
+static const float kHIDGyroImmediateRestExitDps = 8.0f;
+static const uint64_t kHIDGyroRestEnterDurationUs = 30000;
+static const uint64_t kHIDGyroRestExitDurationUs = 25000;
+static const float kHIDGyroFilterDiagnosticDeltaDps = 80.0f;
+
+static inline float HIDMedianOfFive(const float values[5]) {
+    float sorted[5];
+    memcpy(sorted, values, sizeof(sorted));
+    for (NSUInteger i = 1; i < 5; i++) {
+        float value = sorted[i];
+        NSInteger j = (NSInteger)i - 1;
+        while (j >= 0 && sorted[j] > value) {
+            sorted[j + 1] = sorted[j];
+            j -= 1;
+        }
+        sorted[j + 1] = value;
+    }
+    return sorted[2];
+}
+
+static inline void HIDApplyPS4GyroMedianFilter(PS4GyroMedianFilter *filter,
+                                               float *x, float *y, float *z) {
+    NSUInteger index = filter->nextIndex;
+    filter->x[index] = *x;
+    filter->y[index] = *y;
+    filter->z[index] = *z;
+    filter->nextIndex = (index + 1) % 5;
+    if (filter->count < 5) {
+        filter->count += 1;
+    }
+
+    // At the measured native rate of roughly 260 Hz, five samples cover about
+    // 19 ms. This rejects bursts lasting up to two HID reports while keeping
+    // the temporal delay comparable to the former 3-sample/100 Hz filter.
+    if (filter->count == 5) {
+        *x = HIDMedianOfFive(filter->x);
+        *y = HIDMedianOfFive(filter->y);
+        *z = HIDMedianOfFive(filter->z);
+    }
+}
+
 
 struct KeyMapping {
     unsigned short mac;
@@ -379,6 +427,56 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 
 @implementation HIDSupport
 
+- (BOOL)shouldSendInputEvents {
+    return self.controllerInputEnabled;
+}
+
+- (void)setShouldSendInputEvents:(BOOL)shouldSendInputEvents {
+    BOOL wasSending;
+    @synchronized (self) {
+        if (self.controllerInputEnabled == shouldSendInputEvents) {
+            return;
+        }
+        wasSending = self.controllerInputEnabled;
+        self.controllerInputEnabled = shouldSendInputEvents;
+    }
+
+    // Input capture can remain suspended long enough for the old sensor
+    // history to become meaningless. Re-prime the filter and force the next
+    // gyro value to be sent after the explicit neutral sample below.
+    self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
+    self.ps4GyroRateWindowStartUs = 0;
+    self.ps4GyroRateWindowSamples = 0;
+    self.hasLastPS4GyroSample = NO;
+    self.ps4GyroAtRest = YES;
+    self.ps4GyroStationarySinceUs = 0;
+    self.ps4GyroMovingSinceUs = 0;
+
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (wasSending && !shouldSendInputEvents && inputCtx && self.controllerDriver == 0) {
+        int playerIndex = self.controller.playerIndex;
+        BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
+        HIDDispatchInput(self, inputCtx, ^{
+            // Never leave a remote button, trigger, or stick held when local
+            // input capture is suspended.
+            LiSendMultiControllerEventCtx(inputCtx, playerIndex, 1, 0, 0, 0, 0, 0, 0, 0);
+            if (stopGyro) {
+                LiSendControllerMotionEventCtx(inputCtx, playerIndex,
+                                               LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
+            }
+        });
+    }
+
+    if (shouldSendInputEvents) {
+        // Resynchronize the complete current state. Analog controls may not
+        // generate another callback if they remain held at a constant value.
+        IOHIDDeviceRef device = [self getFirstDevice];
+        if (device != nil && (!isPlayStation(device) || self.reportedPlayStationArrival)) {
+            [self sendControllerEvent];
+        }
+    }
+}
+
 - (void)setInputContext:(void *)inputContext {
     if (_inputContext == inputContext) {
         return;
@@ -390,6 +488,16 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     self.requestedAccelRateHz = 0;
     self.lastGyroReportUs = 0;
     self.lastAccelReportUs = 0;
+    self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
+    self.ps4GyroRateWindowStartUs = 0;
+    self.ps4GyroRateWindowSamples = 0;
+    self.hasLastPS4GyroSample = NO;
+    self.ps4GyroAtRest = YES;
+    self.ps4GyroStationarySinceUs = 0;
+    self.ps4GyroMovingSinceUs = 0;
+    self.remainingPS4MotionDiagnosticSamples = 0;
+    self.remainingPS4GyroFilterDiagnosticLogs = 0;
+    self.remainingPS4GyroRestDiagnosticLogs = 0;
     [self syncScrollTraceDiagnosticsPreferenceToInputContext];
 }
 
@@ -832,12 +940,15 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     if (self.controllerDriver != 0) {
         return NO;
     }
+    if (!self.shouldSendInputEvents) {
+        return NO;
+    }
     if (self.reportedPlayStationArrival) {
         return YES;
     }
 
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-    if (!inputCtx || !self.shouldSendInputEvents) {
+    if (!inputCtx) {
         return NO;
     }
 
@@ -864,8 +975,26 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     }
 
     if (motionType == LI_MOTION_TYPE_GYRO) {
+        BOOL wasReporting = self.requestedGyroRateHz > 0;
         self.requestedGyroRateHz = reportRateHz;
         self.lastGyroReportUs = 0;
+        self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
+        self.ps4GyroRateWindowStartUs = 0;
+        self.ps4GyroRateWindowSamples = 0;
+        self.hasLastPS4GyroSample = NO;
+        self.ps4GyroAtRest = YES;
+        self.ps4GyroStationarySinceUs = 0;
+        self.ps4GyroMovingSinceUs = 0;
+        self.remainingPS4MotionDiagnosticSamples = reportRateHz > 0 ? 3 : 0;
+        self.remainingPS4GyroFilterDiagnosticLogs = reportRateHz > 0 ? 8 : 0;
+        self.remainingPS4GyroRestDiagnosticLogs = reportRateHz > 0 ? 12 : 0;
+        if (wasReporting && reportRateHz == 0) {
+            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+            if (inputCtx && [self reportPlayStationControllerArrival]) {
+                LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_GYRO,
+                                               0.0f, 0.0f, 0.0f);
+            }
+        }
     } else if (motionType == LI_MOTION_TYPE_ACCEL) {
         self.requestedAccelRateHz = reportRateHz;
         self.lastAccelReportUs = 0;
@@ -876,6 +1005,125 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 
 static inline int16_t PS4ReadS16(const UInt8 bytes[2]) {
     return (int16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
+}
+
+static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
+    // DualShock 4 sticks commonly fluctuate by one or two raw counts while
+    // untouched. Comparing the raw bytes causes a reliable controller packet
+    // for every fluctuation, which can delay trigger updates on a poor link.
+    // Keep this deadzone local to the sticks: trigger values remain untouched.
+    static const int center = 128;
+    static const int deadzone = 3;
+    int delta = (int)value - center;
+    int output;
+
+    if (abs(delta) <= deadzone) {
+        output = 0;
+    } else if (delta > 0) {
+        output = (delta - deadzone) * INT16_MAX / (127 - deadzone);
+    } else {
+        output = (delta + deadzone) * -INT16_MIN / (128 - deadzone);
+    }
+
+    if (inverted) {
+        output = -output;
+    }
+    return (short)MAX(MIN(output, INT16_MAX), INT16_MIN);
+}
+
+- (void)loadPS4MotionCalibrationForDevice:(IOHIDDeviceRef)device {
+    if (!isPS4(device)) {
+        return;
+    }
+
+    UInt8 data[64] = {};
+    data[0] = k_ePS4FeatureReportIdGyroCalibration_USB;
+    int size = [self hidGetFeatureReport:device data:data length:sizeof(data)];
+
+    CFTypeRef transportValue = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDTransportKey));
+    NSString *transport = (__bridge NSString *)transportValue;
+    BOOL isBluetooth = [transport caseInsensitiveCompare:@"Bluetooth"] == NSOrderedSame;
+    if (isBluetooth) {
+        memset(data, 0, sizeof(data));
+        data[0] = k_ePS4FeatureReportIdGyroCalibration_BT;
+        size = [self hidGetFeatureReport:device data:data length:sizeof(data)];
+    }
+
+    if (size < 35) {
+        Log(LOG_W, @"Unable to read DualShock 4 motion calibration (transport=%@ size=%d)",
+            transport ?: @"unknown", size);
+        self.ps4MotionCalibration = (PS4MotionCalibration){};
+        return;
+    }
+
+    BOOL hasData = NO;
+    for (int i = 1; i < size; i++) {
+        if (data[i] != 0) {
+            hasData = YES;
+            break;
+        }
+    }
+    if (!hasData) {
+        Log(LOG_W, @"DualShock 4 returned empty motion calibration data");
+        self.ps4MotionCalibration = (PS4MotionCalibration){};
+        return;
+    }
+
+    int16_t gyroBias[3] = {
+        PS4ReadS16(&data[1]), PS4ReadS16(&data[3]), PS4ReadS16(&data[5])
+    };
+    int16_t gyroPlus[3];
+    int16_t gyroMinus[3];
+    if (isBluetooth) {
+        gyroPlus[0] = PS4ReadS16(&data[7]);
+        gyroPlus[1] = PS4ReadS16(&data[9]);
+        gyroPlus[2] = PS4ReadS16(&data[11]);
+        gyroMinus[0] = PS4ReadS16(&data[13]);
+        gyroMinus[1] = PS4ReadS16(&data[15]);
+        gyroMinus[2] = PS4ReadS16(&data[17]);
+    } else {
+        gyroPlus[0] = PS4ReadS16(&data[7]);
+        gyroMinus[0] = PS4ReadS16(&data[9]);
+        gyroPlus[1] = PS4ReadS16(&data[11]);
+        gyroMinus[1] = PS4ReadS16(&data[13]);
+        gyroPlus[2] = PS4ReadS16(&data[15]);
+        gyroMinus[2] = PS4ReadS16(&data[17]);
+    }
+
+    int16_t gyroSpeedPlus = PS4ReadS16(&data[19]);
+    int16_t gyroSpeedMinus = PS4ReadS16(&data[21]);
+    float gyroNumerator = (float)(gyroSpeedPlus + gyroSpeedMinus) * 16.0f;
+
+    PS4MotionCalibration calibration = {};
+    calibration.valid = YES;
+    for (int axis = 0; axis < 3; axis++) {
+        float denominator = (float)(abs(gyroPlus[axis] - gyroBias[axis]) +
+                                    abs(gyroMinus[axis] - gyroBias[axis]));
+        calibration.bias[axis] = gyroBias[axis];
+        calibration.scale[axis] = denominator != 0.0f ? gyroNumerator / denominator : 0.0f;
+        if (abs(calibration.bias[axis]) > 1024 ||
+            fabsf(1.0f - calibration.scale[axis]) > 0.5f) {
+            calibration.valid = NO;
+        }
+    }
+
+    for (int axis = 0; axis < 3; axis++) {
+        int offset = 23 + axis * 4;
+        int16_t plus = PS4ReadS16(&data[offset]);
+        int16_t minus = PS4ReadS16(&data[offset + 2]);
+        int range = plus - minus;
+        calibration.bias[axis + 3] = plus - range / 2;
+        calibration.scale[axis + 3] = range != 0 ? 16384.0f / range : 0.0f;
+        if (abs(calibration.bias[axis + 3]) > 1024 ||
+            fabsf(1.0f - calibration.scale[axis + 3]) > 0.5f) {
+            calibration.valid = NO;
+        }
+    }
+
+    self.ps4MotionCalibration = calibration.valid ? calibration : (PS4MotionCalibration){};
+    Log(calibration.valid ? LOG_I : LOG_W,
+        calibration.valid ? @"Loaded DualShock 4 motion calibration" :
+                            @"Ignoring invalid DualShock 4 motion calibration");
 }
 
 - (void)sendPS4TouchWithActive:(BOOL)active
@@ -935,22 +1183,133 @@ static inline int16_t PS4ReadS16(const UInt8 bytes[2]) {
 
     uint64_t nowUs = PltGetMicroseconds();
     uint16_t gyroRate = self.requestedGyroRateHz;
-    if (gyroRate > 0 && (self.lastGyroReportUs == 0 || nowUs - self.lastGyroReportUs >= 1000000ULL / gyroRate)) {
-        self.lastGyroReportUs = nowUs;
-        LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_GYRO,
-                                       PS4ReadS16(state->rgucGyroX) / 16.0f,
-                                       PS4ReadS16(state->rgucGyroY) / 16.0f,
-                                       PS4ReadS16(state->rgucGyroZ) / 16.0f);
+    if (gyroRate > 0) {
+        // Process every native HID report. Only transmission is rate-limited
+        // to Sunshine's requested frequency below.
+        if (self.ps4GyroRateWindowStartUs != UINT64_MAX) {
+            if (self.ps4GyroRateWindowStartUs == 0) {
+                self.ps4GyroRateWindowStartUs = nowUs;
+            }
+            self.ps4GyroRateWindowSamples += 1;
+            uint64_t rateWindowUs = nowUs - self.ps4GyroRateWindowStartUs;
+            if (rateWindowUs >= 1000000ULL) {
+                double nativeRate = self.ps4GyroRateWindowSamples * 1000000.0 / rateWindowUs;
+                Log(LOG_I, @"HID gyro rates: native=%.1f Hz requested=%u Hz", nativeRate, gyroRate);
+                self.ps4GyroRateWindowStartUs = UINT64_MAX;
+            }
+        }
+        BOOL gyroReportDue = self.lastGyroReportUs == 0 ||
+                             nowUs - self.lastGyroReportUs >= 1000000ULL / gyroRate;
+        PS4MotionCalibration calibration = self.ps4MotionCalibration;
+        float calibrationScaleX = calibration.valid ? calibration.scale[0] : 1.0f;
+        float calibrationScaleY = calibration.valid ? calibration.scale[1] : 1.0f;
+        float calibrationScaleZ = calibration.valid ? calibration.scale[2] : 1.0f;
+        int calibrationBiasX = calibration.valid ? calibration.bias[0] : 0;
+        int calibrationBiasY = calibration.valid ? calibration.bias[1] : 0;
+        int calibrationBiasZ = calibration.valid ? calibration.bias[2] : 0;
+        float x = (PS4ReadS16(state->rgucGyroX) - calibrationBiasX) * calibrationScaleX / 16.0f;
+        float y = (PS4ReadS16(state->rgucGyroY) - calibrationBiasY) * calibrationScaleY / 16.0f;
+        float z = (PS4ReadS16(state->rgucGyroZ) - calibrationBiasZ) * calibrationScaleZ / 16.0f;
+        float unfilteredX = x;
+        float unfilteredY = y;
+        float unfilteredZ = z;
+        PS4GyroMedianFilter medianFilter = self.ps4GyroMedianFilter;
+        HIDApplyPS4GyroMedianFilter(&medianFilter, &x, &y, &z);
+        self.ps4GyroMedianFilter = medianFilter;
+        float filterDeltaX = unfilteredX - x;
+        float filterDeltaY = unfilteredY - y;
+        float filterDeltaZ = unfilteredZ - z;
+        float filterDelta = sqrtf(filterDeltaX * filterDeltaX +
+                                  filterDeltaY * filterDeltaY +
+                                  filterDeltaZ * filterDeltaZ);
+        if (filterDelta >= kHIDGyroFilterDiagnosticDeltaDps &&
+            self.remainingPS4GyroFilterDiagnosticLogs > 0) {
+            self.remainingPS4GyroFilterDiagnosticLogs -= 1;
+            Log(LOG_I, @"HID gyro median correction: input=(%.1f,%.1f,%.1f) output=(%.1f,%.1f,%.1f) delta=%.1f dps",
+                unfilteredX, unfilteredY, unfilteredZ, x, y, z, filterDelta);
+        }
+        float magnitude = sqrtf(x * x + y * y + z * z);
+        float restInputX = x;
+        float restInputY = y;
+        float restInputZ = z;
+        BOOL wasAtRest = self.ps4GyroAtRest;
+        if (self.ps4GyroAtRest) {
+            if (magnitude >= kHIDGyroImmediateRestExitDps) {
+                self.ps4GyroAtRest = NO;
+                self.ps4GyroMovingSinceUs = 0;
+            } else if (magnitude > kHIDGyroRestExitDps) {
+                if (self.ps4GyroMovingSinceUs == 0) {
+                    self.ps4GyroMovingSinceUs = nowUs;
+                } else if (nowUs - self.ps4GyroMovingSinceUs >= kHIDGyroRestExitDurationUs) {
+                    self.ps4GyroAtRest = NO;
+                    self.ps4GyroMovingSinceUs = 0;
+                }
+            } else {
+                self.ps4GyroMovingSinceUs = 0;
+            }
+
+            // Suppress short sensor-noise bursts while waiting for enough
+            // evidence of real motion. A deliberate movement above 8 dps is
+            // still forwarded immediately; slower motion adds about 30 ms.
+            if (self.ps4GyroAtRest) {
+                x = y = z = 0.0f;
+            }
+        } else if (magnitude <= kHIDGyroRestEnterDps) {
+            if (self.ps4GyroStationarySinceUs == 0) {
+                self.ps4GyroStationarySinceUs = nowUs;
+            } else if (nowUs - self.ps4GyroStationarySinceUs >= kHIDGyroRestEnterDurationUs) {
+                self.ps4GyroAtRest = YES;
+                self.ps4GyroStationarySinceUs = 0;
+                self.ps4GyroMovingSinceUs = 0;
+                x = y = z = 0.0f;
+            }
+        } else {
+            self.ps4GyroStationarySinceUs = 0;
+            self.ps4GyroMovingSinceUs = 0;
+        }
+        if (wasAtRest != self.ps4GyroAtRest &&
+            self.remainingPS4GyroRestDiagnosticLogs > 0) {
+            self.remainingPS4GyroRestDiagnosticLogs -= 1;
+            Log(LOG_I, @"HID gyro %@ rest: rate=(%.2f,%.2f,%.2f) magnitude=%.2f dps",
+                self.ps4GyroAtRest ? @"entered" : @"left",
+                restInputX, restInputY, restInputZ, magnitude);
+        }
+        // Send a newly detected neutral state immediately. Other values stay
+        // within the report rate requested by Sunshine.
+        gyroReportDue |= !wasAtRest && self.ps4GyroAtRest;
+        if (gyroReportDue) {
+            self.lastGyroReportUs = nowUs;
+            if (self.remainingPS4MotionDiagnosticSamples > 0) {
+                self.remainingPS4MotionDiagnosticSamples -= 1;
+                Log(LOG_I, @"HID gyro sample: raw=(%d,%d,%d) filtered=(%.3f,%.3f,%.3f) calibrated=%d",
+                    PS4ReadS16(state->rgucGyroX), PS4ReadS16(state->rgucGyroY),
+                    PS4ReadS16(state->rgucGyroZ), x, y, z, calibration.valid);
+            }
+            if (!self.hasLastPS4GyroSample || x != self.lastPS4GyroX ||
+                y != self.lastPS4GyroY || z != self.lastPS4GyroZ) {
+                self.hasLastPS4GyroSample = YES;
+                self.lastPS4GyroX = x;
+                self.lastPS4GyroY = y;
+                self.lastPS4GyroZ = z;
+                LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_GYRO, x, y, z);
+            }
+        }
     }
 
     uint16_t accelRate = self.requestedAccelRateHz;
     if (accelRate > 0 && (self.lastAccelReportUs == 0 || nowUs - self.lastAccelReportUs >= 1000000ULL / accelRate)) {
         self.lastAccelReportUs = nowUs;
-        const float scale = 9.80665f / 8192.0f;
+        PS4MotionCalibration calibration = self.ps4MotionCalibration;
+        float scaleX = (calibration.valid ? calibration.scale[3] : 1.0f) * 9.80665f / 8192.0f;
+        float scaleY = (calibration.valid ? calibration.scale[4] : 1.0f) * 9.80665f / 8192.0f;
+        float scaleZ = (calibration.valid ? calibration.scale[5] : 1.0f) * 9.80665f / 8192.0f;
+        int biasX = calibration.valid ? calibration.bias[3] : 0;
+        int biasY = calibration.valid ? calibration.bias[4] : 0;
+        int biasZ = calibration.valid ? calibration.bias[5] : 0;
         LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_ACCEL,
-                                       PS4ReadS16(state->rgucAccelX) * scale,
-                                       PS4ReadS16(state->rgucAccelY) * scale,
-                                       PS4ReadS16(state->rgucAccelZ) * scale);
+                                       (PS4ReadS16(state->rgucAccelX) - biasX) * scaleX,
+                                       (PS4ReadS16(state->rgucAccelY) - biasY) * scaleY,
+                                       (PS4ReadS16(state->rgucAccelZ) - biasZ) * scaleZ);
     }
 }
 
@@ -1839,6 +2198,10 @@ void myHIDReportCallback (
                           uint8_t *               report,
                           CFIndex                 reportLength) {
     HIDSupport *self = (__bridge HIDSupport *)context;
+
+    if (report == NULL || reportLength < 1) {
+        return;
+    }
     
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
     if (!isPlayStation(device) && !isNintendo(device)) {
@@ -1846,10 +2209,10 @@ void myHIDReportCallback (
     };
     
     if (isPS4(device)) {
-        PS4StatePacket_t *state = (PS4StatePacket_t *)report;
+        NSUInteger stateOffset;
         switch (report[0]) {
             case k_EPS4ReportIdUsbState:
-                state = (PS4StatePacket_t *)(report + 1);
+                stateOffset = 1;
                 break;
             case k_EPS4ReportIdBluetoothState1:
             case k_EPS4ReportIdBluetoothState2:
@@ -1861,14 +2224,25 @@ void myHIDReportCallback (
             case k_EPS4ReportIdBluetoothState8:
             case k_EPS4ReportIdBluetoothState9:
                 // Bluetooth state packets have two additional bytes at the beginning, the first notes if HID is present.
-                if (report[1] & 0x80) {
-                    state = (PS4StatePacket_t *)(report + 3);
+                if (reportLength < 3 || !(report[1] & 0x80)) {
+                    return;
                 }
+                stateOffset = 3;
                 break;
+            case k_EPS4ReportIdDisconnectMessage:
+                return;
             default:
                 NSLog(@"Unknown PS4 packet: 0x%hhu", report[0]);
-                break;
+                return;
         }
+
+        if (reportLength < 0 || (NSUInteger)reportLength < stateOffset + sizeof(PS4StatePacket_t)) {
+            Log(LOG_W, @"Ignoring truncated PS4 input report: id=0x%02x length=%ld",
+                report[0], (long)reportLength);
+            return;
+        }
+
+        PS4StatePacket_t *state = (PS4StatePacket_t *)(report + stateOffset);
                 
         
         UInt8 abxy = state->rgucButtonsHatAndCounter[0] >> 4;
@@ -1893,32 +2267,51 @@ void myHIDReportCallback (
         self.controller.lastLeftTrigger = state->ucTriggerLeft;
         self.controller.lastRightTrigger = state->ucTriggerRight;
 
-        self.controller.lastLeftStickX = (state->ucLeftJoystickX - 128) * 255 + 1;
-        self.controller.lastLeftStickY = (state->ucLeftJoystickY - 128) * -255;
-        self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
-        self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
+        self.controller.lastLeftStickX = PS4NormalizeStickAxis(state->ucLeftJoystickX, NO);
+        self.controller.lastLeftStickY = PS4NormalizeStickAxis(state->ucLeftJoystickY, YES);
+        self.controller.lastRightStickX = PS4NormalizeStickAxis(state->ucRightJoystickX, NO);
+        self.controller.lastRightStickY = PS4NormalizeStickAxis(state->ucRightJoystickY, YES);
 
-        if (self.controllerDriver == 0 && [self reportPlayStationControllerArrival]) {
-            [self handlePS4TouchpadState:state];
-            [self handlePS4MotionState:state];
+        BOOL leftTriggerPressed = (otherButtons & 0x04) != 0;
+        BOOL rightTriggerPressed = (otherButtons & 0x08) != 0;
+        BOOL previousLeftTriggerPressed = (self.lastPS4State.rgucButtonsHatAndCounter[1] & 0x04) != 0;
+        BOOL previousRightTriggerPressed = (self.lastPS4State.rgucButtonsHatAndCounter[1] & 0x08) != 0;
+        BOOL playStationReady = self.controllerDriver == 0 && [self reportPlayStationControllerArrival];
+        if (playStationReady && leftTriggerPressed != previousLeftTriggerPressed) {
+            Log(LOG_I, @"HID L2 %@ (analog=%u)",
+                leftTriggerPressed ? @"pressed" : @"released", state->ucTriggerLeft);
         }
-        
-        if (self.controllerDriver == 0) {
+        if (playStationReady && rightTriggerPressed != previousRightTriggerPressed) {
+            Log(LOG_I, @"HID R2 %@ (analog=%u)",
+                rightTriggerPressed ? @"pressed" : @"released", state->ucTriggerRight);
+        }
 
+        if (playStationReady) {
             if (self.lastPS4State.rgucButtonsHatAndCounter[0] != state->rgucButtonsHatAndCounter[0] ||
                 self.lastPS4State.rgucButtonsHatAndCounter[1] != state->rgucButtonsHatAndCounter[1] ||
-                self.lastPS4State.rgucButtonsHatAndCounter[2] != state->rgucButtonsHatAndCounter[2] ||
+                // Bits 2-7 are a rolling hardware report counter. Comparing
+                // the whole byte queues a reliable controller packet for
+                // every ~260 Hz HID report even when no control has changed.
+                (self.lastPS4State.rgucButtonsHatAndCounter[2] & 0x03) !=
+                    (state->rgucButtonsHatAndCounter[2] & 0x03) ||
                 self.lastPS4State.ucTriggerLeft != state->ucTriggerLeft ||
                 self.lastPS4State.ucTriggerRight != state->ucTriggerRight ||
-                self.lastPS4State.ucLeftJoystickX != state->ucLeftJoystickX ||
-                self.lastPS4State.ucLeftJoystickY != state->ucLeftJoystickY ||
-                self.lastPS4State.ucRightJoystickX != state->ucRightJoystickX ||
-                self.lastPS4State.ucRightJoystickY != state->ucRightJoystickY ||
+                PS4NormalizeStickAxis(self.lastPS4State.ucLeftJoystickX, NO) != self.controller.lastLeftStickX ||
+                PS4NormalizeStickAxis(self.lastPS4State.ucLeftJoystickY, YES) != self.controller.lastLeftStickY ||
+                PS4NormalizeStickAxis(self.lastPS4State.ucRightJoystickX, NO) != self.controller.lastRightStickX ||
+                PS4NormalizeStickAxis(self.lastPS4State.ucRightJoystickY, YES) != self.controller.lastRightStickY ||
                 0)
             {
+                // Queue buttons, triggers, and sticks before high-rate sensor
+                // data so gameplay controls win when network capacity is low.
                 [self sendControllerEvent];
                 self.lastPS4State = *state;
             }
+        }
+
+        if (playStationReady) {
+            [self handlePS4TouchpadState:state];
+            [self handlePS4MotionState:state];
         }
     } else if (isPS5(device)) {
         PS5StatePacket_t *state = (PS5StatePacket_t *)report;
@@ -2112,6 +2505,7 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
                                 IOHIDDeviceRef          device) {
     HIDSupport *self = (__bridge HIDSupport *)context;
 
+    [self loadPS4MotionCalibrationForDevice:device];
     [self rumbleSync];
 }
 
@@ -2127,8 +2521,22 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.controller.menuGesture = (ControllerMenuGesture){0};
     if (self.controllerDriver == 0) {
         self.reportedPlayStationArrival = NO;
-        self.requestedGyroRateHz = 0;
-        self.requestedAccelRateHz = 0;
+        // Sunshine generally sends motion report rates only once per virtual
+        // controller session. Preserve them across a physical HID reconnect;
+        // setInputContext resets them when the streaming session changes.
+        self.lastGyroReportUs = 0;
+        self.lastAccelReportUs = 0;
+        self.ps4MotionCalibration = (PS4MotionCalibration){};
+        self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
+        self.ps4GyroRateWindowStartUs = 0;
+        self.ps4GyroRateWindowSamples = 0;
+        self.hasLastPS4GyroSample = NO;
+        self.ps4GyroAtRest = YES;
+        self.ps4GyroStationarySinceUs = 0;
+        self.ps4GyroMovingSinceUs = 0;
+        self.remainingPS4MotionDiagnosticSamples = self.requestedGyroRateHz > 0 ? 3 : 0;
+        self.remainingPS4GyroFilterDiagnosticLogs = self.requestedGyroRateHz > 0 ? 8 : 0;
+        self.remainingPS4GyroRestDiagnosticLogs = self.requestedGyroRateHz > 0 ? 12 : 0;
         self.ps4PrimaryTouchActive = NO;
         self.ps4SecondaryTouchActive = NO;
         self.controller.lastButtonFlags = 0;
