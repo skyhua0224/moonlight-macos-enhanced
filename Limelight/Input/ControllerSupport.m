@@ -659,6 +659,32 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 }
 
+/** Stops sensor reporting and detaches the borrowed GameController callback during teardown. */
+-(void) cleanupControllerMotion:(Controller*)controller
+{
+    controller.gamepad.motion.valueChangedHandler = nil;
+    @synchronized (controller) {
+        controller.accelReportRateHz = 0;
+        controller.gyroReportRateHz = 0;
+        controller.lastAccelReportTime = 0;
+        controller.lastGyroReportTime = 0;
+    }
+    controller.gamepad.motion.sensorsActive = NO;
+}
+
+-(void)setInputContext:(void *)inputContext
+{
+    if (_inputContext == inputContext) {
+        return;
+    }
+
+    _inputContext = inputContext;
+    for (Controller *controller in _controllers.allValues) {
+        controller.controllerAnnounced = NO;
+        [self cleanupControllerMotion:controller];
+    }
+}
+
 @synthesize shouldSendInputEvents = _shouldSendInputEvents;
 @synthesize dualSenseTouchpad = _dualSenseTouchpad;
 
@@ -1204,13 +1230,14 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 -(void) updateButtonFlags:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
+        int previousFlags = controller.lastButtonFlags;
         controller.lastButtonFlags = flags;
 
         // This must be called before handleSpecialCombosPressed
         // because we clear the original button flags there
-        int releasedButtons = (controller.lastButtonFlags ^ flags) & ~flags;
-        int pressedButtons = (controller.lastButtonFlags ^ flags) & flags;
-
+        int releasedButtons = (previousFlags ^ flags) & ~flags;
+        int pressedButtons = (previousFlags ^ flags) & flags;
+        
         [self handleSpecialCombosReleased:controller releasedButtons:releasedButtons];
 
         [self handleSpecialCombosPressed:controller pressedButtons:pressedButtons];
@@ -1220,16 +1247,22 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 -(void) setButtonFlag:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
+        int pressedButtons = flags & ~controller.lastButtonFlags;
         controller.lastButtonFlags |= flags;
-        [self handleSpecialCombosPressed:controller pressedButtons:flags];
+        if (pressedButtons != 0) {
+            [self handleSpecialCombosPressed:controller pressedButtons:pressedButtons];
+        }
     }
 }
 
 -(void) clearButtonFlag:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
+        int releasedButtons = flags & controller.lastButtonFlags;
         controller.lastButtonFlags &= ~flags;
-        [self handleSpecialCombosReleased:controller releasedButtons:flags];
+        if (releasedButtons != 0) {
+            [self handleSpecialCombosReleased:controller releasedButtons:releasedButtons];
+        }
     }
 }
 
@@ -2142,7 +2175,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
         // Stop haptics on this controller
         [self cleanupControllerHaptics:limeController];
-
+        [self cleanupControllerMotion:limeController];
+        
         limeController.gamepad = nil;
 
         // Inform the server of the updated active gamepads before removing this controller
@@ -2252,6 +2286,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
     for (Controller* controller in [_controllers allValues]) {
         [self cleanupControllerHaptics:controller];
+        [self cleanupControllerMotion:controller];
     }
     [_ds5HapticsAudioRenderer reset];
     _ds5HapticsAudioRenderer = nil;

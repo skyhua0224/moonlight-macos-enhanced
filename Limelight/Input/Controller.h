@@ -27,6 +27,14 @@
 @property(nonatomic) short lastRightStickX;
 @property(nonatomic) short lastRightStickY;
 
+// Motion sampling state.
+@property(nonatomic, strong, nullable) NSTimer *gyroTimer;
+@property(nonatomic, strong, nullable) NSTimer *accelTimer;
+@property(nonatomic) GCRotationRate lastGyroSample;
+@property(nonatomic) GCAcceleration lastAccelSample;
+@property(nonatomic) BOOL gyroAtRest;
+@property(nonatomic) NSUInteger gyroStationarySampleCount;
+
 // Enhanced Sunshine controller state.
 @property(nonatomic) BOOL controllerAnnounced;
 @property(nonatomic) uint32_t lastHapticsSequence;
