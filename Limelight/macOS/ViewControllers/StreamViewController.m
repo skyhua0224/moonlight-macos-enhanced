@@ -626,6 +626,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self tearDownStreamLifecycleObserversAndTimers];
 
     self.hidSupport.shouldSendInputEvents = NO;
+    self.hidSupport.shouldSendControllerEvents = NO;
     self.controllerSupport.shouldSendInputEvents = NO;
     self.hidSupport.inputContext = NULL;
     self.controllerSupport.inputContext = NULL;
@@ -1526,6 +1527,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 self.hidSupport.inputContext = inputContext;
                 self.controllerSupport.inputContext = inputContext;
                 self.hidSupport.shouldSendInputEvents = YES;
+                self.hidSupport.shouldSendControllerEvents = YES;
                 self.controllerSupport.shouldSendInputEvents = YES;
                 [self.streamMan.connection notifyInputStreamReadyForMicrophoneControlIfNeeded];
                 [self rearmMouseCaptureIfPossibleWithReason:@"input-stream-established"];
@@ -1637,6 +1639,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
                     self.controllerSupport.inputContext = inputContext;
                     // Ensure input is enabled immediately after stream start
                     self.hidSupport.shouldSendInputEvents = YES;
+                    self.hidSupport.shouldSendControllerEvents = YES;
                     self.controllerSupport.shouldSendInputEvents = YES;
 
                     // If input stream isn't initialized yet, retry briefly to bind after start
@@ -1880,7 +1883,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
     if ([SettingsClass rumbleFor:self.app.host.uuid]) {
-        if (self.hidSupport.shouldSendInputEvents) {
+        if (self.hidSupport.shouldSendControllerEvents) {
             if (self.controllerSupport != nil) {
                 [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
             } else {
@@ -1893,7 +1896,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 - (void)rumbleTriggers:(unsigned short)controllerNumber
       leftTriggerMotor:(unsigned short)leftTriggerMotor
      rightTriggerMotor:(unsigned short)rightTriggerMotor {
-    if (![SettingsClass rumbleFor:self.app.host.uuid] || !self.hidSupport.shouldSendInputEvents) {
+    if (![SettingsClass rumbleFor:self.app.host.uuid] || !self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     [self.controllerSupport rumbleTriggers:controllerNumber leftTriggerMotor:leftTriggerMotor rightTriggerMotor:rightTriggerMotor];
@@ -1903,7 +1906,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
                        red:(unsigned char)red
                      green:(unsigned char)green
                       blue:(unsigned char)blue {
-    if (!self.hidSupport.shouldSendInputEvents) {
+    if (!self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     [self.controllerSupport setControllerLED:controllerNumber red:red green:green blue:blue];
@@ -1915,7 +1918,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
                   typeRight:(unsigned char)typeRight
                        left:(const unsigned char *)left
                       right:(const unsigned char *)right {
-    if (!self.hidSupport.shouldSendInputEvents) {
+    if (!self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     [self.controllerSupport setAdaptiveTriggers:controllerNumber eventFlags:eventFlags typeLeft:typeLeft typeRight:typeRight left:left right:right];
@@ -1929,13 +1932,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)controllerRumbleFallback:(unsigned short)number low:(unsigned short)low high:(unsigned short)high {
     // Legacy HID backend is single-device. Never misroute another player's output.
-    if (number == 0 && self.hidSupport.shouldSendInputEvents) {
+    if (number == 0 && self.hidSupport.shouldSendControllerEvents) {
         [self.hidSupport rumbleLowFreqMotor:low highFreqMotor:high];
     }
 }
 
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame {
-    if (!self.hidSupport.shouldSendInputEvents) {
+    if (!self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     [self.controllerSupport ds5HapticsPcm:frame];
@@ -1944,7 +1947,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {
-    if (!self.hidSupport.shouldSendInputEvents) {
+    if (!self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     if (self.controllerSupport != nil) {

@@ -31,6 +31,7 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 
 @interface HIDSupport : NSObject
 @property(atomic) BOOL shouldSendInputEvents;
+@property(atomic) BOOL shouldSendControllerEvents;
 @property(atomic) TemporaryHost *host;
 @property(nonatomic, assign) void *inputContext;
 @property(nonatomic, copy) HIDFreeMouseAbsoluteSyncHandler freeMouseAbsoluteSyncHandler;

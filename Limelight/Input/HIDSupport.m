@@ -427,18 +427,18 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 
 @implementation HIDSupport
 
-- (BOOL)shouldSendInputEvents {
+- (BOOL)shouldSendControllerEvents {
     return self.controllerInputEnabled;
 }
 
-- (void)setShouldSendInputEvents:(BOOL)shouldSendInputEvents {
+- (void)setShouldSendControllerEvents:(BOOL)shouldSendControllerEvents {
     BOOL wasSending;
     @synchronized (self) {
-        if (self.controllerInputEnabled == shouldSendInputEvents) {
+        if (self.controllerInputEnabled == shouldSendControllerEvents) {
             return;
         }
         wasSending = self.controllerInputEnabled;
-        self.controllerInputEnabled = shouldSendInputEvents;
+        self.controllerInputEnabled = shouldSendControllerEvents;
     }
 
     // Input capture can remain suspended long enough for the old sensor
@@ -453,7 +453,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     self.ps4GyroMovingSinceUs = 0;
 
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-    if (wasSending && !shouldSendInputEvents && inputCtx && self.controllerDriver == 0) {
+    if (wasSending && !shouldSendControllerEvents && inputCtx && self.controllerDriver == 0) {
         int playerIndex = self.controller.playerIndex;
         BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
         HIDDispatchInput(self, inputCtx, ^{
@@ -467,7 +467,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
         });
     }
 
-    if (shouldSendInputEvents) {
+    if (shouldSendControllerEvents) {
         // Resynchronize the complete current state. Analog controls may not
         // generate another callback if they remain held at a constant value.
         IOHIDDeviceRef device = [self getFirstDevice];
@@ -498,6 +498,8 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     self.remainingPS4MotionDiagnosticSamples = 0;
     self.remainingPS4GyroFilterDiagnosticLogs = 0;
     self.remainingPS4GyroRestDiagnosticLogs = 0;
+    self.ps4PrimaryTouchActive = NO;
+    self.ps4SecondaryTouchActive = NO;
     [self syncScrollTraceDiagnosticsPreferenceToInputContext];
 }
 
@@ -903,7 +905,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 
 
 - (void)sendControllerEvent {
-    if (self.shouldSendInputEvents) {
+    if (self.shouldSendControllerEvents) {
         // Capture state
         int playerIndex = self.controller.playerIndex;
         int lastButtonFlags = self.controller.lastButtonFlags;
@@ -940,7 +942,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     if (self.controllerDriver != 0) {
         return NO;
     }
-    if (!self.shouldSendInputEvents) {
+    if (!self.shouldSendControllerEvents) {
         return NO;
     }
     if (self.reportedPlayStationArrival) {
@@ -2572,7 +2574,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     if (self.controller.isMouseMode == active) return;
     PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
     int heldMouseButtons = self.controller.lastMouseModeButtonFlags;
-    if (input && self.shouldSendInputEvents) {
+    if (input && self.shouldSendControllerEvents) {
         int player = self.controller.playerIndex;
         HIDDispatchInput(self, input, ^{
             if (heldMouseButtons & A_FLAG)
@@ -2599,7 +2601,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 
 - (void)updateGamepadMenuGesture {
     BOOL enabled = self.gamepadMouseModeEnabled && self.gamepadMouseModeLongPressMenuEnabled &&
-        self.controllerDriver == 0 && self.shouldSendInputEvents;
+        self.controllerDriver == 0 && self.shouldSendControllerEvents;
     ControllerMenuGesture gesture = self.controller.menuGesture;
     double now = NSProcessInfo.processInfo.systemUptime;
     BOOL toggle = ControllerMenuGestureUpdate(&gesture, enabled, self.gamepadMenuPressed, now);
@@ -2633,7 +2635,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
     
     // Mouse Click Logic
-    if (self.controller.isMouseMode) {
+    if (self.controller.isMouseMode && self.shouldSendControllerEvents) {
         if (flag == A_FLAG) {
             // Left Click
             BOOL wasPressed = (self.controller.lastMouseModeButtonFlags & A_FLAG) != 0;

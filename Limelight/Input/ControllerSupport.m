@@ -1009,8 +1009,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                  motionType:(uint8_t)motionType
                reportRateHz:(uint16_t)reportRateHz
 {
+    void *requestedInputContext = self.inputContext;
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.controllerMotionMode == 2 || !ControllerIsFeedbackTarget(self, controllerNumber)) {
+        if (self.inputContext != requestedInputContext || requestedInputContext == NULL ||
+            self.controllerMotionMode == 2 || !ControllerIsFeedbackTarget(self, controllerNumber)) {
             return;
         }
         Controller *controller = [self->_controllers objectForKey:@(controllerNumber)];
@@ -1025,6 +1027,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             controller.lastAccelSample = (GCAcceleration){};
             if (reportRateHz > 0 && controller.gamepad.motion.hasGravityAndUserAcceleration) {
                 controller.accelTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
+                    if (!self.shouldSendInputEvents || !controller.controllerAnnounced) return;
                     GCAcceleration sample = controller.gamepad.motion.acceleration;
                     GCAcceleration previousSample = controller.lastAccelSample;
                     if (memcmp(&sample, &previousSample, sizeof(sample)) == 0) return;
@@ -1047,6 +1050,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             controller.gyroStationarySampleCount = 0;
             if (reportRateHz > 0 && controller.gamepad.motion.hasRotationRate) {
                 controller.gyroTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
+                    if (!self.shouldSendInputEvents || !controller.controllerAnnounced) return;
                     GCRotationRate sample = controller.gamepad.motion.rotationRate;
                     GCRotationRate filteredSample = {
                         sample.x * 57.2957795,
@@ -1260,7 +1264,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 }
                 supportedButtonFlags |= TOUCHPAD_FLAG;
             }
-            if (controller.gamepad.motion != nil && allowsPlayStationExtensions) {
+            if (controller.gamepad.motion != nil && allowsPlayStationExtensions && self.controllerMotionMode != 2) {
                 capabilities |= LI_CCAP_ACCEL | LI_CCAP_GYRO;
             }
             if (controller.gamepad.battery != nil) {
@@ -1269,9 +1273,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             if (controller.gamepad.light != nil && allowsPlayStationExtensions) {
                 capabilities |= LI_CCAP_RGB_LED;
             }
-            LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
-                                            (uint16_t)[ControllerSupport getConnectedGamepadMask:nil],
+            int arrivalResult = LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
+                                            (uint16_t)(_multiController ? (unsigned char)_controllerNumbers : 1),
                                             controllerType, supportedButtonFlags, capabilities);
+            if (arrivalResult != 0) {
+                [_controllerStreamLock unlock];
+                return;
+            }
             LogControllerMappingDiagnostics(controller, controllerType, supportedButtonFlags, capabilities, self);
             controller.controllerAnnounced = YES;
 
@@ -1308,7 +1316,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         if (_multiController) {
             LiSendMultiControllerEventCtx(inputCtx,
                                           controller.playerIndex,
-                                          [ControllerSupport getConnectedGamepadMask:nil],
+                                          (uint16_t)(_multiController ? (unsigned char)_controllerNumbers : 1),
                                           controller.lastButtonFlags,
                                           controller.lastLeftTrigger,
                                           controller.lastRightTrigger,
