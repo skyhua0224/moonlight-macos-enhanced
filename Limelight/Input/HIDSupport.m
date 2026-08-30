@@ -515,42 +515,29 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 - (BOOL)shouldSendInputEvents {
     return __atomic_load_n(&_shouldSendInputEvents, __ATOMIC_ACQUIRE);
 }
+/** Updates physical keyboard/mouse delivery without changing the independent controller gate. */
 - (void)setShouldSendInputEvents:(BOOL)enabled {
     BOOL wasEnabled = __atomic_load_n(&_shouldSendInputEvents, __ATOMIC_ACQUIRE);
     if (wasEnabled && !enabled) {
         [self.precisionTouchpad reset];
         [self releaseAllPressedMouseButtons];
         [self releaseAllModifierKeys];
-        if (self.controllerDriver == 0) {
-            PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
-            if (HIDValidateInputContext(input, "pause-controller-input")) {
-                int player = self.controller.playerIndex;
-                HIDDispatchInput(self, input, ^{
-                    LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
-                });
-            }
-        }
-        [self rumbleLowFreqMotor:0 highFreqMotor:0];
-        ControllerMenuGesture gesture = self.controller.menuGesture;
-        ControllerMenuGestureInterrupt(&gesture, self.gamepadMenuPressed);
-        self.controller.menuGesture = gesture;
     }
     __atomic_store_n(&_shouldSendInputEvents, enabled, __ATOMIC_RELEASE);
-    if (!wasEnabled && enabled && self.controllerDriver == 0) [self sendControllerEvent];
 }
 
-- (BOOL)shouldSendInputEvents {
+- (BOOL)shouldSendControllerEvents {
     return self.controllerInputEnabled;
 }
 
-- (void)setShouldSendInputEvents:(BOOL)shouldSendInputEvents {
+- (void)setShouldSendControllerEvents:(BOOL)shouldSendControllerEvents {
     BOOL wasSending;
     @synchronized (self) {
-        if (self.controllerInputEnabled == shouldSendInputEvents) {
+        if (self.controllerInputEnabled == shouldSendControllerEvents) {
             return;
         }
         wasSending = self.controllerInputEnabled;
-        self.controllerInputEnabled = shouldSendInputEvents;
+        self.controllerInputEnabled = shouldSendControllerEvents;
     }
 
     // Input capture can remain suspended long enough for the old sensor
@@ -565,7 +552,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     self.ps4GyroMovingSinceUs = 0;
 
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-    if (wasSending && !shouldSendInputEvents && inputCtx && self.controllerDriver == 0) {
+    if (wasSending && !shouldSendControllerEvents && inputCtx && self.controllerDriver == 0) {
         int playerIndex = self.controller.playerIndex;
         BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
         HIDDispatchInput(self, inputCtx, ^{
@@ -579,7 +566,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         });
     }
 
-    if (shouldSendInputEvents) {
+    if (shouldSendControllerEvents) {
         // Resynchronize the complete current state. Analog controls may not
         // generate another callback if they remain held at a constant value.
         IOHIDDeviceRef device = [self getFirstDevice];
@@ -610,6 +597,8 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     self.remainingPS4MotionDiagnosticSamples = 0;
     self.remainingPS4GyroFilterDiagnosticLogs = 0;
     self.remainingPS4GyroRestDiagnosticLogs = 0;
+    self.ps4PrimaryTouchActive = NO;
+    self.ps4SecondaryTouchActive = NO;
     [self syncScrollTraceDiagnosticsPreferenceToInputContext];
 }
 
@@ -1043,7 +1032,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 
 - (void)sendControllerEvent {
     uint64_t routing = [self evaluateControllerShortcuts];
-    if (self.shouldSendInputEvents) {
+    if (self.shouldSendControllerEvents) {
         // Capture state
         int playerIndex = self.controller.playerIndex;
         int lastButtonFlags = self.controller.lastButtonFlags;
@@ -1089,7 +1078,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     if (self.controllerDriver != 0) {
         return NO;
     }
-    if (!self.shouldSendInputEvents) {
+    if (!self.shouldSendControllerEvents) {
         return NO;
     }
     if (self.reportedPlayStationArrival) {
@@ -2997,7 +2986,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     if (self.controller.isMouseMode == active) return;
     PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
     int heldMouseButtons = self.controller.lastMouseModeButtonFlags;
-    if (input && self.shouldSendInputEvents) {
+    if (input && self.shouldSendControllerEvents) {
         int player = self.controller.playerIndex;
         HIDDispatchInput(self, input, ^{
             if (heldMouseButtons & A_FLAG)
@@ -3025,7 +3014,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 - (void)updateGamepadMenuGesture {
     // With the shortcut runtime attached, Menu long-press is one of its bindings.
     BOOL enabled = self.controllerShortcutHandler == nil && self.gamepadMouseModeLongPressMenuEnabled &&
-        self.controllerDriver == 0 && self.shouldSendInputEvents;
+        self.controllerDriver == 0 && self.shouldSendControllerEvents;
     ControllerMenuGesture gesture = self.controller.menuGesture;
     double now = NSProcessInfo.processInfo.systemUptime;
     BOOL toggle = ControllerMenuGestureUpdate(&gesture, enabled, self.gamepadMenuPressed, now);
@@ -3063,7 +3052,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
     
     // Mouse Click Logic
-    if (self.controller.isMouseMode) {
+    if (self.controller.isMouseMode && self.shouldSendControllerEvents) {
         if (flag == A_FLAG) {
             // Left Click
             BOOL wasPressed = (self.controller.lastMouseModeButtonFlags & A_FLAG) != 0;

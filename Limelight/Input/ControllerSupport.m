@@ -1335,7 +1335,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             } else if (!hasTouchpad && allowsPlayStationExtensions && self.advertiseTouchpadForShortcut) {
                 capabilities |= LI_CCAP_TOUCHPAD;
             }
-            if (controller.gamepad.motion != nil && allowsPlayStationExtensions) {
+            if (controller.gamepad.motion != nil && allowsPlayStationExtensions && self.controllerMotionMode != 2) {
                 capabilities |= LI_CCAP_ACCEL | LI_CCAP_GYRO;
             }
             if (controller.gamepad.battery != nil) {
@@ -1344,9 +1344,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             if (controller.gamepad.light != nil && allowsPlayStationExtensions) {
                 capabilities |= LI_CCAP_RGB_LED;
             }
-            LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
-                                            (uint16_t)[ControllerSupport getConnectedGamepadMask:nil],
+            int arrivalResult = LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
+                                            (uint16_t)(_multiController ? (unsigned char)_controllerNumbers : 1),
                                             controllerType, supportedButtonFlags, capabilities);
+            if (arrivalResult != 0) {
+                [_controllerStreamLock unlock];
+                return;
+            }
             LogControllerMappingDiagnostics(controller, controllerType, supportedButtonFlags, capabilities, self);
             controller.controllerAnnounced = YES;
 
@@ -1393,7 +1397,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         if (_multiController) {
             LiSendMultiControllerEventCtx(inputCtx,
                                           controller.playerIndex,
-                                          [ControllerSupport getConnectedGamepadMask:nil],
+                                          (uint16_t)(unsigned char)_controllerNumbers,
                                           state.buttons,
                                           state.leftTrigger,
                                           state.rightTrigger,

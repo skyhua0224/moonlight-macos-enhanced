@@ -34,6 +34,7 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 @property(nonatomic, copy) uint64_t (^controllerShortcutHandler)(unsigned short, uint32_t);
 - (void)refreshControllerShortcutOutput;
 - (void)toggleControllerMouseMode;
+@property(atomic) BOOL shouldSendControllerEvents;
 @property(atomic) TemporaryHost *host;
 @property(nonatomic, assign) void *inputContext;
 @property(nonatomic, copy) HIDFreeMouseAbsoluteSyncHandler freeMouseAbsoluteSyncHandler;
