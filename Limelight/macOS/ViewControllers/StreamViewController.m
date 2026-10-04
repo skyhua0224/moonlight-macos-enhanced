@@ -2481,8 +2481,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSString *blobId = descriptor[@"id"];
     NSString *mimeType = descriptor[@"mime"];
     NSNumber *advertisedSize = descriptor[@"size"];
+    NSCharacterSet *allowedIdCharacters = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"];
     if (![blobId isKindOfClass:[NSString class]] || blobId.length == 0 || blobId.length > 128 ||
-        ![mimeType isKindOfClass:[NSString class]]) {
+        ![mimeType isKindOfClass:[NSString class]] ||
+        [blobId rangeOfCharacterFromSet:[allowedIdCharacters invertedSet]].location != NSNotFound) {
         Log(LOG_W, @"[clipboard] Dropping malformed blob reference");
         return;
     }
