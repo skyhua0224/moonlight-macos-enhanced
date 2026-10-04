@@ -166,13 +166,13 @@
 ### 下载发布版
 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载最新 `.dmg`。
 
-> ⚠️ 此应用当前未做 Apple 公证。若 macOS 提示“Moonlight.app 已损坏”或阻止打开，通常是 Gatekeeper 拦截未公证应用，并不一定代表文件真的损坏。
+> ⚠️ 此应用当前未做 Apple 公证。若 macOS 提示“MoonlightEnhanced.app 已损坏”或阻止打开，通常是 Gatekeeper 拦截未公证应用，并不一定代表文件真的损坏。
 >
 > 首次启动建议按这个顺序尝试：
 > 1. 右键应用，选择“打开”
 > 2. 前往 **系统设置 → 隐私与安全性**，选择“仍要打开”
 > 3. 若仍被拦截，执行：
->    `xattr -dr com.apple.quarantine /Applications/Moonlight.app`
+>    `xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app`
 
 ### 从源码构建
 

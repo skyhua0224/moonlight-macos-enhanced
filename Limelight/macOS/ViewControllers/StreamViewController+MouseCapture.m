@@ -1841,6 +1841,14 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return;
     }
 
+    if ([setting isEqualToString:@"gamepadMouseModeLongPressMenu"] && self.controllerSupport != nil) {
+        self.controllerSupport.gamepadMouseModeLongPressMenuEnabled =
+            [SettingsClass gamepadMouseModeLongPressMenuFor:self.app.host.uuid];
+        Log(LOG_D, @"[diag] Live gamepad Menu long-press setting refresh applied: enabled=%d",
+            self.controllerSupport.gamepadMouseModeLongPressMenuEnabled ? 1 : 0);
+        return;
+    }
+
     NSString *desiredMode = [SettingsClass mouseModeFor:self.app.host.uuid];
     BOOL wantsRemoteDesktopMode = [desiredMode isEqualToString:@"remote"];
     if (wantsRemoteDesktopMode != self.isRemoteDesktopMode) {

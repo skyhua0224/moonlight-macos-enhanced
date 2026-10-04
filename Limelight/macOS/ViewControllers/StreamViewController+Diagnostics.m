@@ -2717,6 +2717,7 @@
 }
 
 - (void)viewDidLayout {
+    self.streamViewLayoutInProgress = YES;
     [super viewDidLayout];
     [self layoutConnectionWarning];
     [self layoutMouseModeIndicator];
@@ -2984,6 +2985,7 @@
     }
 
     [self bringStreamControlsToFront];
+    self.streamViewLayoutInProgress = NO;
 }
 
 - (void)layoutConnectionWarning {

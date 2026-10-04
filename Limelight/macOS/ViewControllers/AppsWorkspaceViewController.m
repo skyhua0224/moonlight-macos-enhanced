@@ -7,7 +7,7 @@
 
 #import "AppsWorkspaceViewController.h"
 #import "AppsViewController.h"
-#import "Moonlight-Swift.h" // Import Swift bridge for HostSidebarViewFactory
+#import "MoonlightEnhanced-Swift.h" // Import Swift bridge for HostSidebarViewFactory
 #import "DataManager.h"
 #import "TemporaryHost.h"
 

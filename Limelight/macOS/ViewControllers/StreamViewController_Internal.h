@@ -21,7 +21,7 @@
 #import "StreamManager.h"
 #import "VideoDecoderRenderer.h"
 #import "HIDSupport.h"
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 #import "LogBuffer.h"
 
 #import <IOKit/pwr_mgt/IOPMLib.h>
@@ -254,6 +254,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) id windowWillCloseNotification;
 @property (nonatomic, strong) id appDidBecomeActiveObserver;
 @property (nonatomic, strong) id appDidResignActiveObserver;
+@property (nonatomic) BOOL streamViewLayoutInProgress;
+@property (nonatomic) BOOL streamControlsFrontUpdateScheduled;
 @property (nonatomic) int cursorHiddenCounter;
 @property (nonatomic) int cgCursorHiddenCounter;
 

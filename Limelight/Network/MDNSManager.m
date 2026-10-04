@@ -68,18 +68,33 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
 }
 
 + (NSString*)sockAddrToString:(NSData*)addrData {
+    if (addrData.length < sizeof(struct sockaddr)) {
+        return nil;
+    }
     char addrStr[INET6_ADDRSTRLEN];
+    memset(addrStr, 0, sizeof(addrStr));
     struct sockaddr* addr = (struct sockaddr*)[addrData bytes];
     if (addr->sa_family == AF_INET) {
-        inet_ntop(addr->sa_family, &((struct sockaddr_in*)addr)->sin_addr, addrStr, sizeof(addrStr));
-    }
-    else {
+        if (addrData.length < sizeof(struct sockaddr_in)) {
+            return nil;
+        }
+        if (inet_ntop(addr->sa_family, &((struct sockaddr_in*)addr)->sin_addr, addrStr, sizeof(addrStr)) == NULL) {
+            return nil;
+        }
+    } else if (addr->sa_family == AF_INET6) {
+        if (addrData.length < sizeof(struct sockaddr_in6)) {
+            return nil;
+        }
         struct sockaddr_in6* sin6 = (struct sockaddr_in6*)addr;
-        inet_ntop(addr->sa_family, &sin6->sin6_addr, addrStr, sizeof(addrStr));
+        if (inet_ntop(addr->sa_family, &sin6->sin6_addr, addrStr, sizeof(addrStr)) == NULL) {
+            return nil;
+        }
         if (sin6->sin6_scope_id != 0) {
             // Link-local addresses with scope IDs are special
             return [NSString stringWithFormat: @"%s%%%u", addrStr, sin6->sin6_scope_id];
         }
+    } else {
+        return nil;
     }
     return [NSString stringWithFormat: @"%s", addrStr];
 }
@@ -161,7 +176,13 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
             continue;
         }
         
-        return [MDNSManager sockAddrToString:addrData];
+        NSString *candidate = [MDNSManager sockAddrToString:addrData];
+        struct in6_addr parsed;
+        if (candidate.length == 0 || inet_pton(AF_INET6, candidate.UTF8String, &parsed) != 1) {
+            Log(LOG_W, @"Ignoring invalid global IPv6 mDNS address: %@", candidate ?: @"(null)");
+            continue;
+        }
+        return candidate;
     }
     
     return nil;
@@ -220,6 +241,9 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
         }
         
         host.ipv6Address = [MDNSManager getBestIpv6Address:addresses];
+        host.address = service.port > 0 && service.hostName.length > 0
+            ? [NSString stringWithFormat:@"%@:%ld", service.hostName, (long)service.port]
+            : service.hostName;
         Log(LOG_I, @"IPv6 address chosen: %@ -> %@", [service hostName], host.ipv6Address);
         
         host.activeAddress = host.localAddress;

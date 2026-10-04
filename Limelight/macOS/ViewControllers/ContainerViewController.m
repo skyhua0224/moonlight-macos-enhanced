@@ -10,7 +10,7 @@
 #import "AppsWorkspaceViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "Helpers.h"
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 @interface CustomSearchField : NSSearchField
 @end

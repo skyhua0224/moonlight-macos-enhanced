@@ -4,3 +4,5 @@
 "NSInputMonitoringUsageDescription" = "用于捕获高回报率鼠标输入，以提供更低延迟的串流操控体验。";
 /* macOS 在请求本地网络权限时展示 */
 "NSLocalNetworkUsageDescription" = "用于发现并连接局域网内的串流主机。";
+"CFBundleDisplayName" = "Moonlight 增强版";
+"CFBundleName" = "Moonlight 增强版";

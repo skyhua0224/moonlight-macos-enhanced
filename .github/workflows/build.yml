@@ -72,8 +72,8 @@ jobs:
 
     - name: Verify ${{ matrix.variant }} binary slices
       run: |
-        main_binary="build/Build/Products/Release/Moonlight.app/Contents/MacOS/Moonlight"
-        helper_binary="build/Build/Products/Release/Moonlight.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMac.AwdlPrivilegedHelper"
+        main_binary="build/Build/Products/Release/MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced"
+        helper_binary="build/Build/Products/Release/MoonlightEnhanced.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMacEnhanced.AwdlPrivilegedHelper"
 
         lipo -info "$main_binary"
         file "$main_binary"
@@ -104,8 +104,8 @@ jobs:
     - name: Package ${{ matrix.variant }} app bundle
       run: |
         mkdir -p dist/app
-        cp -R "build/Build/Products/Release/Moonlight.app" "dist/app/Moonlight.app"
-        tar -czf "dist/Moonlight-macOS-${{ matrix.variant }}.app.tar.gz" -C dist/app Moonlight.app
+        cp -R "build/Build/Products/Release/MoonlightEnhanced.app" "dist/app/MoonlightEnhanced.app"
+        tar -czf "dist/Moonlight-macOS-${{ matrix.variant }}.app.tar.gz" -C dist/app MoonlightEnhanced.app
 
     - name: Create ${{ matrix.variant }} DMG
       run: |
@@ -113,16 +113,16 @@ jobs:
 
         create-dmg \
           --volname "Moonlight macOS Enhanced (${{ matrix.variant }})" \
-          --volicon "dist/app/Moonlight.app/Contents/Resources/AppIcon.icns" \
+          --volicon "dist/app/MoonlightEnhanced.app/Contents/Resources/AppIcon.icns" \
           --window-pos 200 120 \
           --window-size 600 400 \
           --icon-size 100 \
-          --icon "Moonlight.app" 150 185 \
-          --hide-extension "Moonlight.app" \
+          --icon "MoonlightEnhanced.app" 150 185 \
+          --hide-extension "MoonlightEnhanced.app" \
           --app-drop-link 450 185 \
           "dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg" \
-          "dist/app/Moonlight.app" || \
-        hdiutil create -volname "Moonlight-${{ matrix.variant }}" -srcfolder "dist/app/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg"
+          "dist/app/MoonlightEnhanced.app" || \
+        hdiutil create -volname "Moonlight-${{ matrix.variant }}" -srcfolder "dist/app/MoonlightEnhanced.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg"
 
     - name: Upload ${{ matrix.variant }} app artifact
       uses: actions/upload-artifact@v7
@@ -165,11 +165,11 @@ jobs:
     - name: Merge universal app bundle
       run: |
         mkdir -p dist/universal
-        rsync -a "work/arm64/Moonlight.app/" "dist/universal/Moonlight.app/"
+        rsync -a "work/arm64/MoonlightEnhanced.app/" "dist/universal/MoonlightEnhanced.app/"
 
-        export ARM_APP="$PWD/work/arm64/Moonlight.app"
-        export X86_APP="$PWD/work/x86_64/Moonlight.app"
-        export UNIVERSAL_APP="$PWD/dist/universal/Moonlight.app"
+        export ARM_APP="$PWD/work/arm64/MoonlightEnhanced.app"
+        export X86_APP="$PWD/work/x86_64/MoonlightEnhanced.app"
+        export UNIVERSAL_APP="$PWD/dist/universal/MoonlightEnhanced.app"
 
         python3 <<'PY'
         import os
@@ -241,8 +241,8 @@ jobs:
 
     - name: Verify universal binary slices
       run: |
-        main_binary="dist/universal/Moonlight.app/Contents/MacOS/Moonlight"
-        helper_binary="dist/universal/Moonlight.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMac.AwdlPrivilegedHelper"
+        main_binary="dist/universal/MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced"
+        helper_binary="dist/universal/MoonlightEnhanced.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMacEnhanced.AwdlPrivilegedHelper"
 
         lipo -info "$main_binary"
         lipo -info "$helper_binary"
@@ -266,16 +266,16 @@ jobs:
 
         create-dmg \
           --volname "Moonlight macOS Enhanced (universal)" \
-          --volicon "dist/universal/Moonlight.app/Contents/Resources/AppIcon.icns" \
+          --volicon "dist/universal/MoonlightEnhanced.app/Contents/Resources/AppIcon.icns" \
           --window-pos 200 120 \
           --window-size 600 400 \
           --icon-size 100 \
-          --icon "Moonlight.app" 150 185 \
-          --hide-extension "Moonlight.app" \
+          --icon "MoonlightEnhanced.app" 150 185 \
+          --hide-extension "MoonlightEnhanced.app" \
           --app-drop-link 450 185 \
           "dist/Moonlight-macOS-Enhanced-universal.dmg" \
-          "dist/universal/Moonlight.app" || \
-        hdiutil create -volname "Moonlight-universal" -srcfolder "dist/universal/Moonlight.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-universal.dmg"
+          "dist/universal/MoonlightEnhanced.app" || \
+        hdiutil create -volname "Moonlight-universal" -srcfolder "dist/universal/MoonlightEnhanced.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-universal.dmg"
 
     - name: Upload universal DMG artifact
       uses: actions/upload-artifact@v7

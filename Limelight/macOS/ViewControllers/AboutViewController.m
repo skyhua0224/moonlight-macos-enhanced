@@ -8,7 +8,7 @@
 
 #import "AboutViewController.h"
 #import "Helpers.h"
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 @interface AboutViewController ()
 @property (weak) IBOutlet NSVisualEffectView *backgroundEffectView;

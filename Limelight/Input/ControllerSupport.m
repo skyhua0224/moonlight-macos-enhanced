@@ -265,6 +265,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     char _controllerNumbers;
     bool _multiController;
     BOOL _gamepadMouseModeEnabled;
+    BOOL _gamepadMouseModeLongPressMenuEnabled;
     bool _isMouseModeActive;
     NSDate *_startPressTime;
     float _accumulatedMouseX;
@@ -272,6 +273,15 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     NSTimer *_mouseTimer;
 
     NSMutableDictionary<NSNumber * /* key flag */, NSMutableDictionary<NSNumber * /* player index */, ButtonDebouncer *> *> *_debouncers;
+}
+
+- (void)setGamepadMouseModeLongPressMenuEnabled:(BOOL)enabled {
+    _gamepadMouseModeLongPressMenuEnabled = enabled;
+    if (!enabled) {
+        for (Controller *controller in [_controllers allValues]) {
+            controller.startButtonDownTime = nil;
+        }
+    }
 }
 
 // UPDATE_BUTTON_FLAG(controller, flag, pressed)
@@ -1112,6 +1122,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     _controllerNumbers = 0;
     _multiController = streamConfig.multiController;
     _gamepadMouseModeEnabled = streamConfig.gamepadMouseMode;
+    _gamepadMouseModeLongPressMenuEnabled = streamConfig.gamepadMouseModeLongPressMenu;
     _presenceDelegate = delegate;
 
     _debouncers = [[NSMutableDictionary alloc] init];
@@ -1330,11 +1341,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             }
         }
         
-        if (startPressed) {
+        if (_gamepadMouseModeLongPressMenuEnabled && startPressed) {
             if (controller.startButtonDownTime == nil) {
                 controller.startButtonDownTime = [NSDate date];
             }
-        } else {
+        } else if (_gamepadMouseModeLongPressMenuEnabled) {
             // Start released
             if (controller.startButtonDownTime != nil) {
                 // Check if it was held long enough
@@ -1357,6 +1368,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 // Reset
                 controller.startButtonDownTime = nil;
             }
+        } else {
+            // Disabling the gesture while Menu is held must not leave a stale
+            // timestamp that can turn the next short press into a toggle.
+            controller.startButtonDownTime = nil;
         }
         
         // 2. Mouse Movement Logic

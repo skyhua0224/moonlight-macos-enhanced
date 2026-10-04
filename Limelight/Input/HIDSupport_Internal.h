@@ -10,7 +10,7 @@
 #import "Ticks.h"
 #import "HIDSupportRumbleTypes.h"
 
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 #include <limits.h>
 #include <math.h>
 

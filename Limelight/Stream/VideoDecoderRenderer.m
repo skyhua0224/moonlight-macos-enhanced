@@ -21,7 +21,7 @@
 #include <libavformat/avio.h>
 #include <libavutil/mem.h>
 #pragma clang diagnostic pop
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 @import VideoToolbox;
 @import MetalKit;
@@ -316,6 +316,33 @@ static BOOL MLMetalFXIsSupported(void)
     return NO;
 }
 
+// Apple documents MTLViewport as a pixel-space clipping rectangle whose
+// origin is the upper-left corner. Keep the aspect calculation in pixels so
+// the same fit is used for the direct blit and the MetalFX output texture.
+static void MLAspectFitPixelSize(NSUInteger sourceWidth,
+                                 NSUInteger sourceHeight,
+                                 NSUInteger targetWidth,
+                                 NSUInteger targetHeight,
+                                 NSUInteger *fitWidth,
+                                 NSUInteger *fitHeight) {
+    if (fitWidth == NULL || fitHeight == NULL || sourceWidth == 0 || sourceHeight == 0 ||
+        targetWidth == 0 || targetHeight == 0) {
+        return;
+    }
+
+    double sourceAspect = (double)sourceWidth / (double)sourceHeight;
+    double targetAspect = (double)targetWidth / (double)targetHeight;
+    if (sourceAspect > targetAspect) {
+        *fitWidth = targetWidth;
+        *fitHeight = MAX((NSUInteger)1, MIN(targetHeight,
+                                            (NSUInteger)llround((double)targetWidth / sourceAspect)));
+    } else {
+        *fitHeight = targetHeight;
+        *fitWidth = MAX((NSUInteger)1, MIN(targetWidth,
+                                           (NSUInteger)llround((double)targetHeight * sourceAspect)));
+    }
+}
+
 static MLHDRTransferMode MLResolveHDRTransferMode(BOOL hdrEnabled, NSInteger hdrTransferFunction)
 {
     if (!hdrEnabled) {
@@ -418,7 +445,11 @@ static float MLResolvedEDRHeadroomForStrategy(MLHDREDRStrategy strategy,
             return safePotential;
         case MLHDREDRStrategyAuto:
         default:
-            return MIN(safePotential, 1.55f);
+            // Apple exposes the display's usable peak through
+            // maximumPotentialExtendedDynamicRangeColorComponentValue.
+            // Auto follows that capability instead of applying a fixed
+            // 1.55x cap that can under-drive HDR displays.
+            return safePotential;
     }
 }
 
@@ -799,7 +830,8 @@ static NSString *const kMetalShaderSource = @"#include <metal_stdlib>\n"
 "float3 toneMapHdrToSdr(float3 rgb, uint hdrMode, float opticalOutputScale, uint tonePolicy, float4 hdrLuminance) {\n"
 "    float3 linear = hdrLinearize(rgb, hdrMode, opticalOutputScale);\n"
 "    linear = bt2020ToRec709(linear);\n"
-"    float exposure = hdrMode == 1 ? 0.82 : 1.08;\n"
+"    // Transfer functions and EDR metadata establish reference white.\n"
+"    float exposure = 1.0;\n"
 "    float minLuminance = max(hdrLuminance.x, 0.0001);\n"
 "    float maxLuminance = max(hdrLuminance.y, 100.0);\n"
 "    float maxAverageLuminance = clamp(hdrLuminance.z, minLuminance, maxLuminance);\n"
@@ -4010,7 +4042,8 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
 
     MTLRenderPassDescriptor *passDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
     passDescriptor.colorAttachments[0].texture = drawable.texture;
-    passDescriptor.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+    passDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
+    passDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
     passDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
 
     id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:passDescriptor];
@@ -4020,6 +4053,20 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
 
     [renderEncoder setRenderPipelineState:_blitRenderPipelineState];
     [renderEncoder setFragmentTexture:sourceTexture atIndex:0];
+    NSUInteger fitWidth = drawable.texture.width;
+    NSUInteger fitHeight = drawable.texture.height;
+    MLAspectFitPixelSize(sourceTexture.width, sourceTexture.height,
+                         drawable.texture.width, drawable.texture.height,
+                         &fitWidth, &fitHeight);
+    MTLViewport viewport = {
+        .originX = ((double)drawable.texture.width - (double)fitWidth) * 0.5,
+        .originY = ((double)drawable.texture.height - (double)fitHeight) * 0.5,
+        .width = (double)fitWidth,
+        .height = (double)fitHeight,
+        .znear = 0.0,
+        .zfar = 1.0,
+    };
+    [renderEncoder setViewport:viewport];
     [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
     [renderEncoder endEncoding];
     return YES;
@@ -4044,11 +4091,25 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
         MTLFXSpatialScalerColorProcessingMode colorMode =
             _enableHdr ? MTLFXSpatialScalerColorProcessingModeHDR : MTLFXSpatialScalerColorProcessingModePerceptual;
 
+        NSUInteger fitWidth = drawable.texture.width;
+        NSUInteger fitHeight = drawable.texture.height;
+        MLAspectFitPixelSize(sourceTexture.width, sourceTexture.height,
+                             drawable.texture.width, drawable.texture.height,
+                             &fitWidth, &fitHeight);
+        // MetalFX is an upscaler. When the drawable is smaller than the
+        // source, fall back to the direct aspect-fit renderer instead of
+        // asking the scaler to downscale or changing the requested stream.
+        if (fitWidth < sourceTexture.width || fitHeight < sourceTexture.height) {
+            return NO;
+        }
+        BOOL outputMatchesDrawable = fitWidth == drawable.texture.width &&
+                                     fitHeight == drawable.texture.height;
+
         if (_spatialScaler
             && ([_spatialScaler inputWidth] != sourceTexture.width
                 || [_spatialScaler inputHeight] != sourceTexture.height
-                || [_spatialScaler outputWidth] != drawable.texture.width
-                || [_spatialScaler outputHeight] != drawable.texture.height
+                || [_spatialScaler outputWidth] != fitWidth
+                || [_spatialScaler outputHeight] != fitHeight
                 || [_spatialScaler colorTextureFormat] != sourceTexture.pixelFormat
                 || [_spatialScaler outputTextureFormat] != view.colorPixelFormat
                 || [_spatialScaler colorProcessingMode] != colorMode)) {
@@ -4059,8 +4120,8 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
             MTLFXSpatialScalerDescriptor *scalerDesc = [[MTLFXSpatialScalerDescriptor alloc] init];
             scalerDesc.inputWidth = sourceTexture.width;
             scalerDesc.inputHeight = sourceTexture.height;
-            scalerDesc.outputWidth = drawable.texture.width;
-            scalerDesc.outputHeight = drawable.texture.height;
+            scalerDesc.outputWidth = fitWidth;
+            scalerDesc.outputHeight = fitHeight;
             scalerDesc.colorTextureFormat = sourceTexture.pixelFormat;
             scalerDesc.outputTextureFormat = view.colorPixelFormat;
             scalerDesc.colorProcessingMode = colorMode;
@@ -4072,14 +4133,14 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
         }
 
         id<MTLTexture> targetTexture = drawable.texture;
-        if (drawable.texture.storageMode != MTLStorageModePrivate) {
-            if (!_upscaledTexture || _upscaledTexture.width != drawable.texture.width
-                || _upscaledTexture.height != drawable.texture.height
-                || _upscaledTexture.pixelFormat != drawable.texture.pixelFormat) {
+        if (!outputMatchesDrawable || drawable.texture.storageMode != MTLStorageModePrivate) {
+            if (!_upscaledTexture || _upscaledTexture.width != fitWidth
+                || _upscaledTexture.height != fitHeight
+                || _upscaledTexture.pixelFormat != view.colorPixelFormat) {
                 MTLTextureDescriptor *upscaledDesc =
-                    [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:drawable.texture.pixelFormat
-                                                                      width:drawable.texture.width
-                                                                     height:drawable.texture.height
+                    [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:view.colorPixelFormat
+                                                                      width:fitWidth
+                                                                     height:fitHeight
                                                                   mipmapped:NO];
                 upscaledDesc.storageMode = MTLStorageModePrivate;
                 upscaledDesc.usage = MTLTextureUsageShaderWrite | MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
@@ -4089,6 +4150,8 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
         }
 
         [_spatialScaler setColorTexture:sourceTexture];
+        [_spatialScaler setInputContentWidth:sourceTexture.width];
+        [_spatialScaler setInputContentHeight:sourceTexture.height];
         [_spatialScaler setOutputTexture:targetTexture];
         [_spatialScaler encodeToCommandBuffer:commandBuffer];
 

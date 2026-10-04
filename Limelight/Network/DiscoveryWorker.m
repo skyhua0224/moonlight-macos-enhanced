@@ -15,7 +15,7 @@
 #import "HttpRequest.h"
 #import "DataManager.h"
 #import "StreamingSessionManager.h" // Import for streaming state check
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 @implementation DiscoveryWorker {
     TemporaryHost* _host;
@@ -71,6 +71,9 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     }
     if (_host.address != nil) {
         [orderedSet addObject:_host.address];
+    }
+    if (_host.name.length > 0 && [_host.name hasSuffix:@".local."]) {
+        [orderedSet addObject:_host.name];
     }
     if (_host.externalAddress != nil) {
         [orderedSet addObject:_host.externalAddress];
@@ -221,6 +224,13 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             NSTimeInterval rtt = -[start timeIntervalSinceNow] * 1000.0;
             
             BOOL success = [strongSelf checkResponse:serverInfoResp];
+            if (!success) {
+                Log(LOG_D, @"Discovery probe failed: host=%@ address=%@ status=%ld message=%@",
+                    [strongSelf getHost].name,
+                    address,
+                    (long)serverInfoResp.statusCode,
+                    serverInfoResp.statusMessage ?: @"unknown");
+            }
             
             [lock lock];
             if (success) {

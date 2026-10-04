@@ -106,6 +106,7 @@ struct Settings: Encodable, Decodable {
   let reverseScrollDirection: Bool?
   let touchscreenMode: Int?
   let gamepadMouseMode: Bool?
+  let gamepadMouseModeLongPressMenu: Bool?
   let mouseMode: Int?
   let pointerSensitivity: CGFloat?
   let wheelScrollSpeed: CGFloat?
@@ -247,6 +248,7 @@ struct Settings: Encodable, Decodable {
       reverseScrollDirection: reverseScrollDirection,
       touchscreenMode: touchscreenMode,
       gamepadMouseMode: gamepadMouseMode,
+      gamepadMouseModeLongPressMenu: gamepadMouseModeLongPressMenu,
       mouseMode: mouseMode,
       pointerSensitivity: pointerSensitivity,
       wheelScrollSpeed: wheelScrollSpeed,
@@ -489,6 +491,7 @@ extension SettingsClass {
       reverseScrollDirection: settings.reverseScrollDirection,
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
+      gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
       mouseMode: resolvedMouseMode,
       pointerSensitivity: settings.pointerSensitivity,
       wheelScrollSpeed: settings.wheelScrollSpeed,

@@ -21,7 +21,7 @@
 #import "ConnectionEditorViewController.h"
 
 #import "TemporaryHost.h"
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 #import "Utils.h"
 
 #import "CryptoManager.h"
