@@ -25,6 +25,11 @@
 @property(nonatomic) short lastRightStickX;
 @property(nonatomic) short lastRightStickY;
 
+// Enhanced Sunshine controller state.
+@property(nonatomic) BOOL controllerAnnounced;
+@property(nonatomic) BOOL primaryTouchActive;
+@property(nonatomic) BOOL secondaryTouchActive;
+
 @property(nonatomic) HapticContext *_Nullable lowFreqMotor;
 @property(nonatomic) HapticContext *_Nullable highFreqMotor;
 

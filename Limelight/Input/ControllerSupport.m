@@ -20,12 +20,77 @@
 @import AudioToolbox;
 @import CoreHaptics;
 
+#import <math.h>
+
 static inline PML_INPUT_STREAM_CONTEXT ControllerInputContext(ControllerSupport *support) {
     PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)support.inputContext;
     if (ctx != NULL && ctx->connectionContext != NULL) {
         LiSetThreadConnectionContext(ctx->connectionContext);
     }
     return ctx;
+}
+
+static BOOL SendControllerTouch(ControllerSupport *support, Controller *controller,
+                                uint32_t pointerId, BOOL active, float x, float y) {
+    PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(support);
+    if (inputCtx == NULL) {
+        return active;
+    }
+
+    // GameController reports DualSense touchpad axes as a normalized direction
+    // pad. Sunshine expects normalized top-left origin coordinates.
+    float normalizedX = fminf(1.0f, fmaxf(0.0f, (x + 1.0f) * 0.5f));
+    float normalizedY = fminf(1.0f, fmaxf(0.0f, (1.0f - y) * 0.5f));
+    BOOL hasContact = fabsf(x) > 0.001f || fabsf(y) > 0.001f;
+    uint8_t eventType;
+    if (hasContact && !active) {
+        eventType = LI_TOUCH_EVENT_DOWN;
+    } else if (hasContact && active) {
+        eventType = LI_TOUCH_EVENT_MOVE;
+    } else if (!hasContact && active) {
+        eventType = LI_TOUCH_EVENT_UP;
+    } else {
+        return active;
+    }
+
+    LiSendControllerTouchEventCtx(inputCtx, (uint8_t)controller.playerIndex, eventType,
+                                  pointerId, normalizedX, normalizedY,
+                                  hasContact ? 1.0f : 0.0f);
+    return hasContact;
+}
+
+static void ApplyDualSenseTriggerEffect(GCDualSenseAdaptiveTrigger *trigger,
+                                        uint8_t type, const uint8_t *effect) {
+    if (trigger == nil) {
+        return;
+    }
+    if (type == 0 || effect == NULL) {
+        [trigger setModeOff];
+        return;
+    }
+
+    float p0 = effect[0] / 255.0f;
+    float p1 = effect[1] / 255.0f;
+    float p2 = effect[2] / 255.0f;
+    if (@available(macOS 11.3, *)) {
+        switch (type) {
+            case 0x01: // Feedback: start position + resistive strength.
+                [trigger setModeFeedbackWithStartPosition:p0 resistiveStrength:p1];
+                break;
+            case 0x02: // Weapon: start position + end position + strength.
+                [trigger setModeWeaponWithStartPosition:p0 endPosition:MAX(p0 + 0.001f, p1)
+                                    resistiveStrength:p2];
+                break;
+            case 0x06: // Vibration: start position + amplitude + frequency.
+                [trigger setModeVibrationWithStartPosition:p0 amplitude:p1 frequency:p2];
+                break;
+            default:
+                // The macOS public API has no equivalent for the remaining
+                // vendor effect encodings; fail closed instead of guessing.
+                [trigger setModeOff];
+                break;
+        }
+    }
 }
 
 enum ButtonDebouncerState {
@@ -229,6 +294,119 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     [controller.highFreqMotor setMotorAmplitude:highFreqMotor];
 }
 
+-(void) rumbleTriggers:(unsigned short)controllerNumber
+      leftTriggerMotor:(unsigned short)leftTriggerMotor
+     rightTriggerMotor:(unsigned short)rightTriggerMotor
+{
+    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    if (controller == nil) {
+        return;
+    }
+
+    // GameController exposes left/right haptic localities, but macOS has no
+    // public trigger-motor API. Mapping the two trigger channels to those
+    // localities preserves independent feedback on DualSense and provides a
+    // documented fallback on other controllers.
+    [controller.lowFreqMotor setMotorAmplitude:leftTriggerMotor];
+    [controller.highFreqMotor setMotorAmplitude:rightTriggerMotor];
+}
+
+-(void) setControllerLED:(unsigned short)controllerNumber
+                       red:(unsigned char)red
+                     green:(unsigned char)green
+                      blue:(unsigned char)blue
+{
+    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    GCController *gamepad = controller.gamepad;
+    if (gamepad == nil) {
+        return;
+    }
+
+    if (@available(macOS 10.15, *)) {
+        if (gamepad.light != nil) {
+            gamepad.light.color = [[GCColor alloc] initWithRed:red / 255.0
+                                                         green:green / 255.0
+                                                          blue:blue / 255.0];
+            return;
+        }
+    }
+
+    Log(LOG_I, @"Controller %hu does not expose a public RGB LED API on this macOS driver", controllerNumber);
+}
+
+-(void) setAdaptiveTriggers:(unsigned short)controllerNumber
+                 eventFlags:(unsigned char)eventFlags
+                   typeLeft:(unsigned char)typeLeft
+                  typeRight:(unsigned char)typeRight
+                       left:(const unsigned char *)left
+                      right:(const unsigned char *)right
+{
+    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    GCController *gamepad = controller.gamepad;
+    if (gamepad == nil || ![gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+        return;
+    }
+
+    if (@available(macOS 11.3, *)) {
+        GCDualSenseGamepad *dualSense = (GCDualSenseGamepad *)gamepad.extendedGamepad;
+        if ((eventFlags & DS_EFFECT_LEFT_TRIGGER) != 0) {
+            ApplyDualSenseTriggerEffect(dualSense.leftTrigger, typeLeft, left);
+        }
+        if ((eventFlags & DS_EFFECT_RIGHT_TRIGGER) != 0) {
+            ApplyDualSenseTriggerEffect(dualSense.rightTrigger, typeRight, right);
+        }
+    }
+}
+
+-(void) setMotionEventState:(unsigned short)controllerNumber
+                  motionType:(unsigned char)motionType
+                reportRateHz:(unsigned short)reportRateHz
+{
+    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    GCController *gamepad = controller.gamepad;
+    if (gamepad == nil) {
+        return;
+    }
+    if (@available(macOS 10.15, *)) {
+        if (gamepad.motion == nil) {
+            return;
+        }
+    } else {
+        return;
+    }
+
+    if (reportRateHz == 0) {
+        gamepad.motion.valueChangedHandler = nil;
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    gamepad.motion.valueChangedHandler = ^(GCMotion *motion) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil) {
+            return;
+        }
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(strongSelf);
+        if (inputCtx == NULL) {
+            return;
+        }
+
+        if (motionType == LI_MOTION_TYPE_ACCEL) {
+            GCAcceleration acceleration = motion.userAcceleration;
+            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, motionType,
+                                           acceleration.x * 9.80665f,
+                                           acceleration.y * 9.80665f,
+                                           acceleration.z * 9.80665f);
+        } else if (motionType == LI_MOTION_TYPE_GYRO) {
+            GCRotationRate rotation = motion.rotationRate;
+            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, motionType,
+                                           rotation.x, rotation.y, rotation.z);
+        }
+    };
+    gamepad.motion.sensorsActive = YES;
+    (void)reportRateHz;
+}
+
 -(void) updateLeftStick:(Controller*)controller x:(short)x y:(short)y
 {
     @synchronized(controller) {
@@ -347,6 +525,52 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             [_controllerStreamLock unlock];
             return;
         }
+
+        if (!controller.controllerAnnounced) {
+            uint8_t controllerType = LI_CTYPE_UNKNOWN;
+            uint16_t capabilities = LI_CCAP_ANALOG_TRIGGERS | LI_CCAP_RUMBLE;
+            uint32_t supportedButtonFlags = A_FLAG | B_FLAG | X_FLAG | Y_FLAG |
+                                             UP_FLAG | DOWN_FLAG | LEFT_FLAG | RIGHT_FLAG |
+                                             LB_FLAG | RB_FLAG | PLAY_FLAG | BACK_FLAG |
+                                             LS_CLK_FLAG | RS_CLK_FLAG | SPECIAL_FLAG;
+            GCExtendedGamepad *extended = controller.gamepad.extendedGamepad;
+            BOOL hasTouchpad = [extended isKindOfClass:[GCDualSenseGamepad class]] ||
+                               [extended isKindOfClass:[GCDualShockGamepad class]];
+            if (hasTouchpad) {
+                controllerType = LI_CTYPE_PS;
+                capabilities |= LI_CCAP_TOUCHPAD | LI_CCAP_TRIGGER_RUMBLE;
+                supportedButtonFlags |= TOUCHPAD_FLAG;
+            }
+            if (controller.gamepad.motion != nil) {
+                capabilities |= LI_CCAP_ACCEL | LI_CCAP_GYRO;
+            }
+            if (controller.gamepad.battery != nil) {
+                capabilities |= LI_CCAP_BATTERY_STATE;
+            }
+            if (controller.gamepad.light != nil) {
+                capabilities |= LI_CCAP_RGB_LED;
+            }
+            LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
+                                            (uint16_t)[ControllerSupport getConnectedGamepadMask:nil],
+                                            controllerType, supportedButtonFlags, capabilities);
+            controller.controllerAnnounced = YES;
+
+            if (controller.gamepad.battery != nil) {
+                GCDeviceBattery *battery = controller.gamepad.battery;
+                uint8_t batteryState = LI_BATTERY_STATE_UNKNOWN;
+                switch (battery.batteryState) {
+                    case GCDeviceBatteryStateDischarging: batteryState = LI_BATTERY_STATE_DISCHARGING; break;
+                    case GCDeviceBatteryStateCharging: batteryState = LI_BATTERY_STATE_CHARGING; break;
+                    case GCDeviceBatteryStateFull: batteryState = LI_BATTERY_STATE_FULL; break;
+                    default: break;
+                }
+                uint8_t percentage = battery.batteryLevel >= 0.0f && battery.batteryLevel <= 1.0f
+                    ? (uint8_t)lrintf(battery.batteryLevel * 100.0f)
+                    : LI_BATTERY_PERCENTAGE_UNKNOWN;
+                LiSendControllerBatteryEventCtx(inputCtx, (uint8_t)controller.playerIndex,
+                                                batteryState, percentage);
+            }
+        }
         
         if (_multiController) {
             LiSendMultiControllerEventCtx(inputCtx,
@@ -396,9 +620,26 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         
         if (controller.extendedGamepad != NULL) {
             controller.extendedGamepad.valueChangedHandler = NULL;
+            if (@available(macOS 11.0, *)) {
+                if ([controller.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+                    GCDualSenseGamepad *dualSense = (GCDualSenseGamepad *)controller.extendedGamepad;
+                    dualSense.touchpadPrimary.valueChangedHandler = nil;
+                    dualSense.touchpadSecondary.valueChangedHandler = nil;
+                    dualSense.touchpadButton.pressedChangedHandler = nil;
+                } else if ([controller.extendedGamepad isKindOfClass:[GCDualShockGamepad class]]) {
+                    GCDualShockGamepad *dualShock = (GCDualShockGamepad *)controller.extendedGamepad;
+                    dualShock.touchpadPrimary.valueChangedHandler = nil;
+                    dualShock.touchpadSecondary.valueChangedHandler = nil;
+                    dualShock.touchpadButton.pressedChangedHandler = nil;
+                }
+            }
         }
         else if (controller.gamepad != NULL) {
             controller.gamepad.valueChangedHandler = NULL;
+        }
+        if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
+            controller.motion.valueChangedHandler = nil;
+            controller.motion.sensorsActive = NO;
         }
     }
 }
@@ -540,6 +781,57 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 [self updateTriggers:limeController left:leftTrigger right:rightTrigger];
                 [self updateFinished:limeController];
             };
+
+            if (@available(macOS 11.0, *)) {
+                GCControllerDirectionPad *primary = nil;
+                GCControllerDirectionPad *secondary = nil;
+                if ([controller.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+                    GCDualSenseGamepad *dualSense = (GCDualSenseGamepad *)controller.extendedGamepad;
+                    primary = dualSense.touchpadPrimary;
+                    secondary = dualSense.touchpadSecondary;
+                } else if ([controller.extendedGamepad isKindOfClass:[GCDualShockGamepad class]]) {
+                    GCDualShockGamepad *dualShock = (GCDualShockGamepad *)controller.extendedGamepad;
+                    primary = dualShock.touchpadPrimary;
+                    secondary = dualShock.touchpadSecondary;
+                }
+                if (primary != nil) {
+                    Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
+                    primary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
+                        touchController.primaryTouchActive = SendControllerTouch(
+                            self, touchController, (uint32_t)touchController.playerIndex * 2,
+                            touchController.primaryTouchActive, xValue, yValue);
+                    };
+                }
+                if (secondary != nil) {
+                    Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
+                    secondary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
+                        touchController.secondaryTouchActive = SendControllerTouch(
+                            self, touchController, (uint32_t)touchController.playerIndex * 2 + 1,
+                            touchController.secondaryTouchActive, xValue, yValue);
+                    };
+                }
+
+                GCControllerButtonInput *touchButton = nil;
+                if ([controller.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+                    touchButton = [(GCDualSenseGamepad *)controller.extendedGamepad touchpadButton];
+                } else if ([controller.extendedGamepad isKindOfClass:[GCDualShockGamepad class]]) {
+                    touchButton = [(GCDualShockGamepad *)controller.extendedGamepad touchpadButton];
+                }
+                if (touchButton != nil) {
+                    Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
+                    touchButton.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+                        (void)button;
+                        (void)value;
+                        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                        if (inputCtx != NULL) {
+                            LiSendControllerTouchEventCtx(inputCtx, (uint8_t)touchController.playerIndex,
+                                                          LI_TOUCH_EVENT_BUTTON_ONLY,
+                                                          (uint32_t)touchController.playerIndex * 2,
+                                                          0.0f, 0.0f, pressed ? 1.0f : 0.0f);
+                        }
+                    };
+                }
+            }
         }
         else if (controller.gamepad != NULL) {
             controller.gamepad.valueChangedHandler = ^(GCGamepad *gamepad, GCControllerElement *element) {
@@ -734,6 +1026,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             }
             
             limeController.gamepad = controller;
+            limeController.controllerAnnounced = NO;
+            limeController.primaryTouchActive = NO;
+            limeController.secondaryTouchActive = NO;
 
             // Prepare controller haptics for use
             [self initializeControllerHaptics:limeController];

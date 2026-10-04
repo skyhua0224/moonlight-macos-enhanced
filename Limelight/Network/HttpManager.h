@@ -12,6 +12,10 @@
 
 @interface HttpManager : NSObject <NSURLSessionDelegate>
 
+typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
+                                     NSHTTPURLResponse * _Nullable response,
+                                     NSError * _Nullable error);
+
 - (id) initWithHost:(NSString*) host uniqueId:(NSString*) uniqueId serverCert:(NSData*) serverCert;
 - (void) setServerCert:(NSData*) serverCert;
 - (NSURLRequest*) newPairRequest:(NSData*)salt clientCert:(NSData*)clientCert;
@@ -31,6 +35,7 @@
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString*)appId;
 - (NSArray<NSDictionary<NSString*, id>*>*) fetchSunshineDisplays;
 - (void) executeRequestSynchronously:(HttpRequest*)request;
+- (NSURLRequest *)newClipboardRequestWithPath:(NSString *)path;
+- (void)executeDataRequest:(NSURLRequest *)request completion:(MLHttpDataCompletion)completion;
 
 @end
-

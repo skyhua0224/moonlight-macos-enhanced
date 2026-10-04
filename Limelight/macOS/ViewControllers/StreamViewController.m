@@ -20,6 +20,7 @@ static NSScreen *MLScreenContainingMouseLocation(void) {
 
 static const NSTimeInterval MLClipboardMonitorInterval = 0.25;
 static const NSUInteger MLClipboardImageSizeLimit = 4 * 1024 * 1024;
+static const NSUInteger MLClipboardBlobSizeLimit = 64 * 1024 * 1024;
 static const uint64_t MLClipboardActivationRepeatLogIntervalMs = 1000;
 static const uint64_t MLClipboardControlStartupGraceMs = 500;
 static const uint64_t MLClipboardFNVOffsetBasis = 14695981039346656037ULL;
@@ -246,6 +247,53 @@ static BOOL MLClipboardAgentDecodeFrame(const uint8_t *bytes,
 highFreqMotor:(unsigned short)highFreqMotor {
     [self forwardIfCurrentNamed:@"rumble" block:^(id<MLStreamScopedCallbackOwner> owner) {
         [owner rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+    }];
+}
+
+- (void)rumbleTriggers:(unsigned short)controllerNumber
+      leftTriggerMotor:(unsigned short)leftTriggerMotor
+     rightTriggerMotor:(unsigned short)rightTriggerMotor {
+    [self forwardIfCurrentNamed:@"rumbleTriggers" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(rumbleTriggers:leftTriggerMotor:rightTriggerMotor:)]) {
+            [owner rumbleTriggers:controllerNumber leftTriggerMotor:leftTriggerMotor rightTriggerMotor:rightTriggerMotor];
+        }
+    }];
+}
+
+- (void)setControllerLED:(unsigned short)controllerNumber
+                       red:(unsigned char)red
+                     green:(unsigned char)green
+                      blue:(unsigned char)blue {
+    [self forwardIfCurrentNamed:@"setControllerLED" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(setControllerLED:red:green:blue:)]) {
+            [owner setControllerLED:controllerNumber red:red green:green blue:blue];
+        }
+    }];
+}
+
+- (void)setAdaptiveTriggers:(unsigned short)controllerNumber
+                 eventFlags:(unsigned char)eventFlags
+                   typeLeft:(unsigned char)typeLeft
+                  typeRight:(unsigned char)typeRight
+                       left:(const unsigned char *)left
+                      right:(const unsigned char *)right {
+    NSData *leftPayload = left != NULL ? [NSData dataWithBytes:left length:DS_EFFECT_PAYLOAD_SIZE] : nil;
+    NSData *rightPayload = right != NULL ? [NSData dataWithBytes:right length:DS_EFFECT_PAYLOAD_SIZE] : nil;
+    [self forwardIfCurrentNamed:@"setAdaptiveTriggers" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(setAdaptiveTriggers:eventFlags:typeLeft:typeRight:left:right:)]) {
+            [owner setAdaptiveTriggers:controllerNumber eventFlags:eventFlags typeLeft:typeLeft typeRight:typeRight
+                                   left:leftPayload.bytes right:rightPayload.bytes];
+        }
+    }];
+}
+
+- (void)setMotionEventState:(unsigned short)controllerNumber
+                  motionType:(unsigned char)motionType
+                reportRateHz:(unsigned short)reportRateHz {
+    [self forwardIfCurrentNamed:@"setMotionEventState" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(setMotionEventState:motionType:reportRateHz:)]) {
+            [owner setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+        }
     }];
 }
 
@@ -1734,6 +1782,46 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 }
 
+- (void)rumbleTriggers:(unsigned short)controllerNumber
+      leftTriggerMotor:(unsigned short)leftTriggerMotor
+     rightTriggerMotor:(unsigned short)rightTriggerMotor {
+    if (![SettingsClass rumbleFor:self.app.host.uuid] || !self.hidSupport.shouldSendInputEvents) {
+        return;
+    }
+    [self.controllerSupport rumbleTriggers:controllerNumber leftTriggerMotor:leftTriggerMotor rightTriggerMotor:rightTriggerMotor];
+}
+
+- (void)setControllerLED:(unsigned short)controllerNumber
+                       red:(unsigned char)red
+                     green:(unsigned char)green
+                      blue:(unsigned char)blue {
+    if (!self.hidSupport.shouldSendInputEvents) {
+        return;
+    }
+    [self.controllerSupport setControllerLED:controllerNumber red:red green:green blue:blue];
+}
+
+- (void)setAdaptiveTriggers:(unsigned short)controllerNumber
+                 eventFlags:(unsigned char)eventFlags
+                   typeLeft:(unsigned char)typeLeft
+                  typeRight:(unsigned char)typeRight
+                       left:(const unsigned char *)left
+                      right:(const unsigned char *)right {
+    if (!self.hidSupport.shouldSendInputEvents) {
+        return;
+    }
+    [self.controllerSupport setAdaptiveTriggers:controllerNumber eventFlags:eventFlags typeLeft:typeLeft typeRight:typeRight left:left right:right];
+}
+
+- (void)setMotionEventState:(unsigned short)controllerNumber
+                  motionType:(unsigned char)motionType
+                reportRateHz:(unsigned short)reportRateHz {
+    if (!self.hidSupport.shouldSendInputEvents) {
+        return;
+    }
+    [self.controllerSupport setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+}
+
 - (void)connectionStatusUpdate:(int)status {
     dispatch_async(dispatch_get_main_queue(), ^{
         Log(LOG_I, @"[diag] Connection status update: status=%d captured=%d input=%d reconnect=%d stopInProgress=%d",
@@ -2060,10 +2148,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     NSData *pngData = [pasteboard dataForType:NSPasteboardTypePNG];
     if (pngData.length > 0) {
-        if (pngData.length > MLClipboardImageSizeLimit) {
+        NSUInteger imageLimit = foundationRawClipboard ? MLClipboardBlobSizeLimit : MLClipboardImageSizeLimit;
+        if (pngData.length > imageLimit) {
             self.clipboardLastChangeCount = changeCount;
             Log(LOG_I, @"[clipboard] Rejecting image clipboard payload larger than %lu bytes",
-                (unsigned long)MLClipboardImageSizeLimit);
+                (unsigned long)imageLimit);
             return;
         }
         payload = pngData;
@@ -2093,10 +2182,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 Log(LOG_I, @"[clipboard] Ignoring image clipboard payload that could not be normalized to PNG");
                 return;
             }
-            if (pngData.length > MLClipboardImageSizeLimit) {
+            NSUInteger imageLimit = foundationRawClipboard ? MLClipboardBlobSizeLimit : MLClipboardImageSizeLimit;
+            if (pngData.length > imageLimit) {
                 self.clipboardLastChangeCount = changeCount;
                 Log(LOG_I, @"[clipboard] Rejecting image clipboard payload larger than %lu bytes",
-                    (unsigned long)MLClipboardImageSizeLimit);
+                    (unsigned long)imageLimit);
                 return;
             }
             payload = pngData;
@@ -2147,6 +2237,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSData *rawFrame = nil;
     int err = 0;
     BOOL sentCompoundRawFrame = NO;
+    if (foundationRawClipboard && payload.length > MLClipboardAgentInlinePayloadLimit) {
+        self.clipboardLastChangeCount = changeCount;
+        [self uploadClipboardBlob:payload mimeType:mimeType contentHash:contentHash];
+        return;
+    }
     if (foundationRawClipboard && compoundTextPayload.length > 0) {
         uint32_t token = arc4random() | 1U;
         NSData *textFrame = MLClipboardAgentEncodeFrame(LI_CLIPBOARD_KIND_TEXT, token, compoundTextPayload);
@@ -2321,6 +2416,105 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.clipboardPendingAgentPNG = nil;
 }
 
+- (HttpManager *)clipboardHTTPManagerForCurrentHost {
+    if (self.clipboardHTTPManager == nil && self.app.host.activeAddress.length > 0 && self.app.host.serverCert != nil) {
+        self.clipboardHTTPManager = [[HttpManager alloc] initWithHost:self.app.host.activeAddress
+                                                              uniqueId:[IdManager getUniqueId]
+                                                            serverCert:self.app.host.serverCert];
+    }
+    return self.clipboardHTTPManager;
+}
+
+- (void)uploadClipboardBlob:(NSData *)payload
+                   mimeType:(NSString *)mimeType
+                contentHash:(uint64_t)contentHash {
+    if (payload.length == 0 || payload.length > MLClipboardBlobSizeLimit) {
+        return;
+    }
+
+    HttpManager *http = [self clipboardHTTPManagerForCurrentHost];
+    NSURLRequest *baseRequest = [http newClipboardRequestWithPath:@"/api/v1/clipboard/blob"];
+    if (baseRequest == nil) {
+        Log(LOG_W, @"[clipboard] Cannot create blob upload request");
+        return;
+    }
+
+    NSMutableURLRequest *request = [baseRequest mutableCopy];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/octet-stream" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:mimeType ?: @"application/octet-stream" forHTTPHeaderField:@"X-Clipboard-Mime"];
+    request.HTTPBody = payload;
+
+    [http executeDataRequest:request completion:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
+        if (error != nil || response.statusCode < 200 || response.statusCode >= 300) {
+            Log(LOG_W, @"[clipboard] Blob upload failed: status=%ld error=%@",
+                (long)response.statusCode, error.localizedDescription ?: @"none");
+            return;
+        }
+
+        NSError *jsonError = nil;
+        NSDictionary *json = data.length > 0 ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError] : nil;
+        NSString *blobId = [json isKindOfClass:[NSDictionary class]] ? json[@"id"] : nil;
+        if (![blobId isKindOfClass:[NSString class]] || blobId.length == 0 || blobId.length > 128) {
+            Log(LOG_W, @"[clipboard] Blob upload returned no valid id: %@", jsonError.localizedDescription ?: @"invalid response");
+            return;
+        }
+
+        NSDictionary *descriptor = @{
+            @"id": blobId,
+            @"mime": mimeType ?: @"application/octet-stream",
+            @"size": @(payload.length),
+            @"hash": @(contentHash),
+        };
+        NSData *descriptorData = [NSJSONSerialization dataWithJSONObject:descriptor options:0 error:&jsonError];
+        NSData *frame = descriptorData != nil ? MLClipboardAgentEncodeFrame(LI_CLIPBOARD_KIND_REF, 0, descriptorData) : nil;
+        Connection *connection = [self currentClipboardConnection];
+        if (frame == nil || connection == nil || [connection sendClipboardRawData:frame] != 0) {
+            Log(LOG_W, @"[clipboard] Failed to send blob reference after upload");
+            return;
+        }
+        Log(LOG_I, @"[clipboard] Sent blob reference id=%@ length=%lu", blobId, (unsigned long)payload.length);
+    }];
+}
+
+- (void)fetchClipboardBlobWithDescriptor:(NSDictionary *)descriptor {
+    NSString *blobId = descriptor[@"id"];
+    NSString *mimeType = descriptor[@"mime"];
+    NSNumber *advertisedSize = descriptor[@"size"];
+    if (![blobId isKindOfClass:[NSString class]] || blobId.length == 0 || blobId.length > 128 ||
+        ![mimeType isKindOfClass:[NSString class]]) {
+        Log(LOG_W, @"[clipboard] Dropping malformed blob reference");
+        return;
+    }
+    if (advertisedSize != nil && (advertisedSize.longLongValue < 0 || advertisedSize.unsignedLongLongValue > MLClipboardBlobSizeLimit)) {
+        Log(LOG_W, @"[clipboard] Dropping oversized blob reference id=%@", blobId);
+        return;
+    }
+
+    HttpManager *http = [self clipboardHTTPManagerForCurrentHost];
+    NSURLRequest *request = [http newClipboardRequestWithPath:[NSString stringWithFormat:@"/api/v1/clipboard/blob/%@", blobId]];
+    if (request == nil) {
+        return;
+    }
+    [http executeDataRequest:request completion:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
+        if (error != nil || response.statusCode < 200 || response.statusCode >= 300 || data.length == 0 || data.length > MLClipboardBlobSizeLimit) {
+            Log(LOG_W, @"[clipboard] Blob fetch failed id=%@ status=%ld error=%@", blobId, (long)response.statusCode, error.localizedDescription ?: @"none");
+            return;
+        }
+        if (advertisedSize != nil && advertisedSize.unsignedIntegerValue != data.length) {
+            Log(LOG_W, @"[clipboard] Blob size mismatch id=%@ got=%lu advertised=%@", blobId, (unsigned long)data.length, advertisedSize);
+            return;
+        }
+        if ([mimeType isEqualToString:@"image/png"]) {
+            [self handleClipboardAgentFrameKind:LI_CLIPBOARD_KIND_PNG token:0 payload:data];
+        } else if ([mimeType hasPrefix:@"text/"] && [data rangeOfData:[NSData dataWithBytes:"\0" length:1] options:0 range:NSMakeRange(0, data.length)].location == NSNotFound) {
+            [self handleClipboardAgentFrameKind:LI_CLIPBOARD_KIND_TEXT token:0 payload:data];
+        } else {
+            Log(LOG_I, @"[clipboard] Ignoring fetched blob with unsupported mime=%@", mimeType);
+        }
+    }];
+}
+
 - (void)applyPendingClipboardAgentCompoundIfReady {
     if (self.clipboardPendingAgentText.length == 0 || self.clipboardPendingAgentPNG.length == 0) {
         return;
@@ -2412,7 +2606,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
             return;
         }
         if (kind == LI_CLIPBOARD_KIND_REF) {
-            Log(LOG_I, @"[clipboard] Foundation blob reference received token=%u; HTTPS blob fetch is pending", token);
+            NSError *jsonError = nil;
+            NSDictionary *descriptor = [NSJSONSerialization JSONObjectWithData:payload options:0 error:&jsonError];
+            if (![descriptor isKindOfClass:[NSDictionary class]]) {
+                Log(LOG_W, @"[clipboard] Dropping malformed blob reference: %@", jsonError.localizedDescription ?: @"invalid JSON");
+                return;
+            }
+            [self fetchClipboardBlobWithDescriptor:descriptor];
             return;
         }
         [self handleClipboardAgentFrameKind:kind token:token payload:payload];

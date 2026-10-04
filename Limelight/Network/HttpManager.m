@@ -301,6 +301,31 @@ static const NSString* HTTPS_PORT = @"47984";
     return request;
 }
 
+- (NSURLRequest *)newClipboardRequestWithPath:(NSString *)path {
+    if (path.length == 0 || ![path hasPrefix:@"/"]) {
+        return nil;
+    }
+    NSString *urlString = [NSString stringWithFormat:@"%@%@", _baseHTTPSURL, path];
+    return [self createRequestFromString:urlString timeout:EXTRA_LONG_TIMEOUT_SEC];
+}
+
+- (void)executeDataRequest:(NSURLRequest *)request completion:(MLHttpDataCompletion)completion {
+    if (request == nil || completion == nil) {
+        return;
+    }
+
+    NSURLSessionConfiguration *config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request
+                                            completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(data, (NSHTTPURLResponse *)response, error);
+            [session finishTasksAndInvalidate];
+        });
+    }];
+    [task resume];
+}
+
 - (NSURLRequest*) newPairRequest:(NSData*)salt clientCert:(NSData*)clientCert {
     NSString* urlString = [NSString stringWithFormat:@"%@/pair?uniqueid=%@&devicename=%@&updateState=1&phrase=getservercert&salt=%@&clientcert=%@",
                            _baseHTTPURL, _clientUniqueId, _deviceName, [self bytesToHex:salt], [self bytesToHex:clientCert]];
