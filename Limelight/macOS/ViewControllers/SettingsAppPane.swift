@@ -999,9 +999,9 @@ private struct DebugLogLiveView: View {
   private var currentModeDisplayName: String {
     switch currentMode {
     case .defaultLog:
-      return "默认日志 / Default Log"
+      return languageManager.localize("Curated Log")
     case .raw:
-      return "原始日志 / Raw"
+      return languageManager.localize("Raw Log")
     }
   }
 
@@ -1063,12 +1063,13 @@ private struct DebugLogLiveView: View {
 
   private var categoryMenuTitle: String {
     if selectedCategoryFilters.isEmpty {
-      return "未筛选 / No Filter"
+      return languageManager.localize("No Filter")
     }
     if selectedCategoryFilters.count == 1 {
       return selectedCategoryDescriptors.first?.displayName ?? "1 Selected"
     }
-    return "已选 \(selectedCategoryFilters.count) 项 / \(selectedCategoryFilters.count) Selected"
+    return String(
+      format: languageManager.localize("%d Selected"), selectedCategoryFilters.count)
   }
 
   private var selectedCategorySummary: String? {
@@ -1153,7 +1154,7 @@ private struct DebugLogLiveView: View {
 
   private func categoryFilterExportSummary() -> String {
     let selected = selectedCategoryDescriptors.map(\.displayName)
-    return selected.isEmpty ? "未筛选（显示全部） / No Filter (Showing All)" : selected.joined(separator: " | ")
+    return selected.isEmpty ? languageManager.localize("No Filter (Showing All)") : selected.joined(separator: " | ")
   }
 
   private func scheduleSearchRefresh() {
@@ -1267,18 +1268,18 @@ private struct DebugLogLiveView: View {
           .font(.caption)
           .foregroundColor(.secondary)
         Picker("", selection: $settingsModel.debugLogMode) {
-          Text("默认日志 / Default").tag("default")
-          Text("原始日志 / Raw").tag("raw")
+          Text(languageManager.localize("Curated Log")).tag("default")
+          Text(languageManager.localize("Raw Log")).tag("raw")
         }
         .pickerStyle(.segmented)
         .frame(width: 260)
 
         Picker("", selection: $settingsModel.debugLogMinLevel) {
-          Text("All").tag("all")
-          Text("Debug").tag("debug")
-          Text("Info").tag("info")
-          Text("Warn").tag("warn")
-          Text("Error").tag("error")
+          Text(languageManager.localize("All")).tag("all")
+          Text(languageManager.localize("Debug")).tag("debug")
+          Text(languageManager.localize("Info")).tag("info")
+          Text(languageManager.localize("Warn")).tag("warn")
+          Text(languageManager.localize("Error")).tag("error")
         }
         .frame(width: 140)
 
@@ -1324,7 +1325,7 @@ private struct DebugLogLiveView: View {
       }
 
       HStack(spacing: 8) {
-        TextField("搜索关键词 / 主机 / 错误码 / 分类", text: $searchText)
+        TextField(languageManager.localize("Search terms / host / error code / category"), text: $searchText)
           .textFieldStyle(.roundedBorder)
 
         DebugLogCategoryFilterMenuButton(
@@ -1361,10 +1362,10 @@ private struct DebugLogLiveView: View {
             .lineLimit(1)
         }
 
-        DebugLogStatBadge(label: "Debug", value: visibleDebugCount, color: .gray)
-        DebugLogStatBadge(label: "Info", value: visibleInfoCount, color: .blue)
-        DebugLogStatBadge(label: "Warn", value: visibleWarnCount, color: .orange)
-        DebugLogStatBadge(label: "Error", value: visibleErrorCount, color: .red)
+        DebugLogStatBadge(label: languageManager.localize("Debug"), value: visibleDebugCount, color: .gray)
+        DebugLogStatBadge(label: languageManager.localize("Info"), value: visibleInfoCount, color: .blue)
+        DebugLogStatBadge(label: languageManager.localize("Warn"), value: visibleWarnCount, color: .orange)
+        DebugLogStatBadge(label: languageManager.localize("Error"), value: visibleErrorCount, color: .red)
         Spacer()
       }
 
@@ -1498,8 +1499,8 @@ private struct DebugLogCategoryFilterMenuButton: NSViewRepresentable {
 
       let statusItem = NSMenuItem(
         title: parent.selectedFilters.isEmpty
-          ? "当前未筛选（显示全部） / No Filter Applied"
-          : "清空分类筛选 / Clear Category Filters",
+          ? LanguageManager.shared.localize("No Filter Applied")
+          : LanguageManager.shared.localize("Clear Category Filters"),
         action: parent.selectedFilters.isEmpty ? nil : #selector(handleClearAction(_:)),
         keyEquivalent: ""
       )
@@ -1513,7 +1514,7 @@ private struct DebugLogCategoryFilterMenuButton: NSViewRepresentable {
         item.image = systemImage(named: domain.systemImageName)
 
         let submenu = NSMenu(title: domain.displayName)
-        let allItem = NSMenuItem(title: "全部 / All", action: #selector(handleDomainAction(_:)), keyEquivalent: "")
+        let allItem = NSMenuItem(title: LanguageManager.shared.localize("All"), action: #selector(handleDomainAction(_:)), keyEquivalent: "")
         allItem.target = self
         allItem.representedObject = domain.categoryKey
         allItem.state = parent.selectedFilters.contains(domain.categoryKey) ? .on : .off
@@ -1571,10 +1572,10 @@ private struct DebugLogEntryDetailView: View {
   var body: some View {
     VStack(spacing: 12) {
       HStack {
-        Text("日志详情 / Log Detail")
+        Text(LanguageManager.shared.localize("Log Detail"))
           .font(.headline)
         Spacer()
-        Button("关闭 / Close") {
+        Button(LanguageManager.shared.localize("Close")) {
           dismiss()
         }
       }
@@ -1596,7 +1597,7 @@ private struct DebugLogEntryDetailView: View {
       }
 
       VStack(alignment: .leading, spacing: 6) {
-        Text("默认视图 / Default View")
+        Text(LanguageManager.shared.localize("Curated View"))
           .font(.caption)
           .foregroundColor(.secondary)
         Text(entry.defaultTitle)
@@ -1615,7 +1616,7 @@ private struct DebugLogEntryDetailView: View {
       Divider()
 
       VStack(alignment: .leading, spacing: 6) {
-        Text("解析消息 / Parsed Message")
+        Text(LanguageManager.shared.localize("Parsed Message"))
           .font(.caption)
           .foregroundColor(.secondary)
         Text(entry.message.isEmpty ? entry.rawLine : entry.message)
@@ -1627,7 +1628,7 @@ private struct DebugLogEntryDetailView: View {
       Divider()
 
       VStack(alignment: .leading, spacing: 6) {
-        Text("原始行 / Raw Line")
+        Text(LanguageManager.shared.localize("Raw Line"))
           .font(.caption)
           .foregroundColor(.secondary)
         ScrollView {
