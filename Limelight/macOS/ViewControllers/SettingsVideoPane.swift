@@ -166,6 +166,12 @@ struct VideoView: View {
 
           Divider()
 
+          ToggleCell(title: "10-bit SDR", boolBinding: $settingsModel.enable10BitSdr)
+
+          SettingDescriptionRow(textKey: "10-bit SDR detail")
+
+          Divider()
+
           FormCell(
             title: "Transfer Function", contentWidth: 200,
             content: {

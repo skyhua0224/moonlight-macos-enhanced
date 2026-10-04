@@ -1297,6 +1297,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     } else {
         streamConfig.enableHdr = NO;
     }
+    streamConfig.enable10BitSdr = [SettingsClass enable10BitSdrFor:self.app.host.uuid] &&
+                                  !streamConfig.enableHdr &&
+                                  streamConfig.videoCodecPreference != 0 &&
+                                  (streamConfig.videoCodecPreference == 2 ? av1DecodeSupported : hevcDecodeSupported);
 
     NSString *codecName = @"H.264";
     if (streamConfig.videoCodecPreference == 2) {

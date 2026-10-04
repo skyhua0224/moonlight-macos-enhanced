@@ -36,6 +36,7 @@
 @property(nonatomic) CGFloat enhancedAudioReverbAmount;
 @property(nonatomic, copy) NSArray<NSNumber *> *enhancedAudioEQGains;
 @property(nonatomic) BOOL enableHdr;
+@property(nonatomic) BOOL enable10BitSdr;
 @property(nonatomic) int videoRendererMode;
 @property(nonatomic) int hdrTransferFunction;
 @property(nonatomic) int hdrMetadataSource;

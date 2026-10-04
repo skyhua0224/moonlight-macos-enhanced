@@ -549,6 +549,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var enable10BitSdr: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var selectedPacingOptions: String {
     didSet {
       guard !isLoading, !isApplyingSmoothnessLatencyPreset else { return }
@@ -1249,6 +1255,7 @@ class SettingsModel: ObservableObject {
     selectedVideoRendererMode = Self.defaultVideoRendererMode
     selectedVideoCodec = Self.defaultVideoCodec
     hdr = Self.defaultHdr
+    enable10BitSdr = Self.defaultEnable10BitSdr
     selectedPacingOptions = Self.defaultPacingOptions
     selectedSmoothnessLatencyMode = Self.defaultSmoothnessLatencyMode
     selectedDisplaySyncMode = Self.defaultDisplaySyncMode

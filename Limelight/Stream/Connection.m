@@ -2462,6 +2462,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 #if !defined(VIDEO_FORMAT_H264_HIGH8_444)
     // Legacy moonlight-common-c
     _streamConfig.enableHdr = config.enableHdr;
+    _streamConfig.enable10BitSdr = config.enable10BitSdr;
 
     // Use some of the HEVC encoding efficiency improvements to
     // reduce bandwidth usage while still gaining some image
@@ -2551,7 +2552,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         routeThroughTunnel ? 1 : 0);
     
     // HDR implies HEVC allowed
-    if (config.enableHdr) {
+    if (config.enableHdr || config.enable10BitSdr) {
         config.allowHevc = YES;
     }
 
@@ -2571,7 +2572,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     BOOL av1Supported = codecPreference >= 2 && VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1);
 
     // If HDR is requested, at least one 10-bit codec path must be available.
-    assert(!config.enableHdr || hevcSupported || av1Supported);
+    assert(!(config.enableHdr || config.enable10BitSdr) || hevcSupported || av1Supported);
 
     BOOL enableYuv444 = NO;
     @try {
@@ -2592,7 +2593,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     int supportedVideoFormats = VIDEO_FORMAT_H264;
     if (hevcSupported) {
         supportedVideoFormats |= VIDEO_FORMAT_H265;
-        if (config.enableHdr) {
+        if (config.enableHdr || config.enable10BitSdr) {
             supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
         }
     }
@@ -2601,14 +2602,14 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         supportedVideoFormats |= VIDEO_FORMAT_H264_HIGH8_444;
         if (hevcSupported) {
             supportedVideoFormats |= VIDEO_FORMAT_H265_REXT8_444;
-            if (config.enableHdr) {
+            if (config.enableHdr || config.enable10BitSdr) {
                 supportedVideoFormats |= VIDEO_FORMAT_H265_REXT10_444;
             }
         }
     }
 
     if (av1Supported) {
-        if (config.enableHdr) {
+        if (config.enableHdr || config.enable10BitSdr) {
             supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN10;
         } else {
             supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN8;
@@ -2616,7 +2617,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
         if (enableYuv444) {
             supportedVideoFormats |= VIDEO_FORMAT_AV1_HIGH8_444;
-            if (config.enableHdr) {
+            if (config.enableHdr || config.enable10BitSdr) {
                 supportedVideoFormats |= VIDEO_FORMAT_AV1_HIGH10_444;
             }
         }
@@ -2627,7 +2628,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         codecPreference,
         av1Supported ? 1 : 0,
         hevcSupported ? 1 : 0,
-        config.enableHdr ? 1 : 0,
+        (config.enableHdr || config.enable10BitSdr) ? 1 : 0,
         enableYuv444 ? 1 : 0,
         supportedVideoFormats);
 #else
@@ -2641,8 +2642,9 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
     _streamConfig.dynamicRangeMode =
         MLResolvedDynamicRangeModeForPreference(config.enableHdr, config.hdrTransferFunction);
-    Log(LOG_I, @"[diag] HDR transfer preference resolved: hdr=%d tf=%d dynamicRangeMode=%d",
+    Log(LOG_I, @"[diag] Dynamic range resolved: hdr=%d tenBitSdr=%d tf=%d dynamicRangeMode=%d",
         config.enableHdr ? 1 : 0,
+        config.enable10BitSdr ? 1 : 0,
         config.hdrTransferFunction,
         _streamConfig.dynamicRangeMode);
 

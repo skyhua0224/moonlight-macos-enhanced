@@ -972,6 +972,7 @@ extension SettingsModel {
   static let defaultVideoRendererMode = "Native Renderer (Recommended)"
   static let defaultVideoRendererModeRawValue = 2
   static let defaultHdr = false
+  static let defaultEnable10BitSdr = false
   static let smoothnessLatencyLow = "Low Latency"
   static let smoothnessLatencyBalanced = "Balanced (Recommended)"
   static let smoothnessLatencySmooth = "Smoothness First"

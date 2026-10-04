@@ -107,9 +107,10 @@ class SettingsClass: NSObject {
         "remoteResolutionHeight": settings.remoteResolutionHeight ?? 0,
         "remoteFps": settings.remoteFps ?? false,
         "remoteFpsRate": settings.remoteFpsRate ?? 0,
-        "hdrTransferFunction": settings.hdrTransferFunction
+      "hdrTransferFunction": settings.hdrTransferFunction
           ?? SettingsModel.hdrTransferFunctionRawValue(
             for: SettingsModel.defaultHdrTransferFunction),
+        "enable10BitSdr": settings.enable10BitSdr ?? SettingsModel.defaultEnable10BitSdr,
         "hdrMetadataSource": settings.hdrMetadataSource
           ?? SettingsModel.hdrMetadataSourceRawValue(
             for: SettingsModel.defaultHdrMetadataSource),
@@ -335,6 +336,7 @@ class SettingsClass: NSObject {
       codec: settings.codec,
       videoRendererMode: settings.videoRendererMode,
       hdr: settings.hdr,
+      enable10BitSdr: settings.enable10BitSdr,
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
       audioConfiguration: settings.audioConfiguration,
@@ -440,7 +442,8 @@ class SettingsClass: NSObject {
         unlockMaxBitrate: updated.unlockMaxBitrate,
         codec: updated.codec,
         videoRendererMode: updated.videoRendererMode,
-        hdr: updated.hdr,
+      hdr: updated.hdr,
+      enable10BitSdr: updated.enable10BitSdr,
         framePacing: updated.framePacing,
         audioOnPC: updated.audioOnPC,
         audioConfiguration: updated.audioConfiguration,
@@ -547,6 +550,7 @@ class SettingsClass: NSObject {
       codec: settings.codec,
       videoRendererMode: settings.videoRendererMode,
       hdr: settings.hdr,
+      enable10BitSdr: settings.enable10BitSdr,
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
       audioConfiguration: settings.audioConfiguration,
@@ -650,7 +654,8 @@ class SettingsClass: NSObject {
       remoteFps: remoteFpsEnabled,
       remoteFpsRate: .some(explicitRemoteFps),
       codec: codec,
-      hdr: codec != 0 ? settings.hdr : false
+      hdr: codec != 0 ? settings.hdr : false,
+      enable10BitSdr: settings.enable10BitSdr
     )
 
     persist(updated, for: key)
@@ -1397,6 +1402,13 @@ class SettingsClass: NSObject {
       return settings.gamepadMouseModeLongPressMenu ?? SettingsModel.defaultGamepadMouseModeLongPressMenu
     }
     return SettingsModel.defaultGamepadMouseModeLongPressMenu
+  }
+
+  @objc static func enable10BitSdr(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.enable10BitSdr ?? SettingsModel.defaultEnable10BitSdr
+    }
+    return SettingsModel.defaultEnable10BitSdr
   }
 
   @objc static func pointerSensitivity(for key: String) -> CGFloat {
