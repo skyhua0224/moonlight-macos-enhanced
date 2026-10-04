@@ -2051,77 +2051,10 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 }
 
 - (void)installGlobalMouseMonitorIfNeeded {
-    if (self.globalMouseMovedMonitor) {
-        return;
-    }
-
-    __weak typeof(self) weakSelf = self;
-    self.globalMouseMovedMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:(NSEventMaskMouseMoved |
-                                                                                   NSEventMaskLeftMouseDragged |
-                                                                                   NSEventMaskRightMouseDragged |
-                                                                                   NSEventMaskOtherMouseDragged)
-                                                                          handler:^(__unused NSEvent *event) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) {
-                return;
-            }
-
-            if (!strongSelf.isRemoteDesktopMode ||
-                strongSelf.isMouseCaptured ||
-                strongSelf.stopStreamInProgress ||
-                strongSelf.reconnectInProgress ||
-                strongSelf.spaceTransitionInProgress ||
-                strongSelf.edgeMenuTemporaryReleaseActive ||
-                strongSelf.edgeMenuDragging ||
-                strongSelf.edgeMenuMenuVisible) {
-                strongSelf.globalInactivePointerInsideStreamView = NO;
-                return;
-            }
-
-            if ([NSApp isActive]) {
-                strongSelf.globalInactivePointerInsideStreamView = NO;
-                return;
-            }
-
-            if (![strongSelf isWindowInCurrentSpace]) {
-                strongSelf.globalInactivePointerInsideStreamView = NO;
-                return;
-            }
-
-            BOOL pointerInside = [strongSelf isCurrentPointerInsideStreamView];
-            if (!pointerInside) {
-                strongSelf.globalInactivePointerInsideStreamView = NO;
-                return;
-            }
-
-            if (strongSelf.globalInactivePointerInsideStreamView) {
-                return;
-            }
-
-            strongSelf.globalInactivePointerInsideStreamView = YES;
-            Log(LOG_I, @"[diag] Global pointer re-entered visible stream view while inactive; requesting reactivation");
-            [NSApp activateIgnoringOtherApps:YES];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) innerSelf = weakSelf;
-                if (!innerSelf || ![NSApp isActive] || ![innerSelf isWindowInCurrentSpace]) {
-                    return;
-                }
-                [innerSelf ensureStreamWindowKeyIfPossible];
-                [innerSelf rearmMouseCaptureIfPossibleWithReason:@"mouse-entered-view"];
-                [innerSelf scheduleDeferredMouseCaptureRearmWithReason:@"mouse-entered-view" delay:0.10];
-                [innerSelf scheduleDeferredMouseCaptureRearmWithReason:@"mouse-entered-view" delay:0.28];
-            });
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.06 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) innerSelf = weakSelf;
-                if (!innerSelf || ![NSApp isActive] || ![innerSelf isWindowInCurrentSpace]) {
-                    return;
-                }
-                [innerSelf ensureStreamWindowKeyIfPossible];
-                [innerSelf rearmMouseCaptureIfPossibleWithReason:@"mouse-entered-view"];
-            });
-        });
-    }];
+    // The stable mouse contract requires an explicit click before a background
+    // stream window becomes active. Automatic hover activation made Command-Tab
+    // unusable and caused the window to steal focus without a click (#21/#40).
+    // Platform Smart Mouse owns any future metadata-driven reactivation policy.
 }
 
 #pragma mark - Mouse Tracking Area
