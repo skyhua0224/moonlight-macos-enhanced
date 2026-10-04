@@ -2249,6 +2249,16 @@ void ClClipboardItemReceived(const LI_CLIPBOARD_ITEM *item)
     }
 }
 
+void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks != nil &&
+        [callbacks respondsToSelector:@selector(clipboardDataReceived:length:)]) {
+        [callbacks clipboardDataReceived:data length:length];
+    }
+}
+
 - (void)dealloc
 {
     // Remove notification observer to prevent crashes from stale references
@@ -2632,6 +2642,7 @@ void ClClipboardItemReceived(const LI_CLIPBOARD_ITEM *item)
     _clCallbacks.rumble = ClRumble;
     _clCallbacks.connectionStatusUpdate = ClConnectionStatusUpdate;
     _clCallbacks.clipboardItemReceived = ClClipboardItemReceived;
+    _clCallbacks.clipboardDataReceived = ClClipboardDataReceived;
 
     return self;
 }
@@ -2816,6 +2827,18 @@ void ClClipboardItemReceived(const LI_CLIPBOARD_ITEM *item)
     return [self performClipboardControlOperationNamed:@"send-item"
                                                  block:^int {
         return LiSendClipboardItem(&item);
+    }];
+}
+
+- (int)sendClipboardRawData:(NSData *)data {
+    if (data == nil || data.length == 0 || data.length > UINT16_MAX) {
+        return -1;
+    }
+
+    Log(LOG_I, @"[clipboard] send raw agent frame length=%lu", (unsigned long)data.length);
+    return [self performClipboardControlOperationNamed:@"send-raw"
+                                                 block:^int {
+        return LiSendClipboardData(data.bytes, (int)data.length);
     }];
 }
 
