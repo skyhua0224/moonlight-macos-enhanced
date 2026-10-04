@@ -24,6 +24,9 @@ static const uint64_t MLClipboardActivationRepeatLogIntervalMs = 1000;
 static const uint64_t MLClipboardControlStartupGraceMs = 500;
 static const uint64_t MLClipboardFNVOffsetBasis = 14695981039346656037ULL;
 static const uint64_t MLClipboardFNVPrime = 1099511628211ULL;
+static const uint8_t MLClipboardAgentWireVersion = 1;
+static const NSUInteger MLClipboardAgentFrameHeaderSize = 10;
+static const NSUInteger MLClipboardAgentInlinePayloadLimit = 60000;
 
 static __weak StreamViewController *MLActiveClipboardController = nil;
 
@@ -72,6 +75,58 @@ static uint64_t MLComputeClipboardHash(uint8_t type, NSData *data, NSString *nam
 
 static uint64_t MLGenerateClipboardItemId(void) {
     return (((uint64_t)LiGetMillis()) << 16) ^ (uint64_t)arc4random();
+}
+
+static NSData *MLClipboardAgentEncodeFrame(uint8_t kind, uint32_t token, NSData *payload) {
+    if (payload == nil || payload.length > MLClipboardAgentInlinePayloadLimit) {
+        return nil;
+    }
+
+    NSMutableData *frame = [NSMutableData dataWithCapacity:MLClipboardAgentFrameHeaderSize + payload.length];
+    uint8_t version = MLClipboardAgentWireVersion;
+    uint32_t tokenLE = CFSwapInt32HostToLittle(token);
+    uint32_t lengthLE = CFSwapInt32HostToLittle((uint32_t)payload.length);
+    [frame appendBytes:&version length:sizeof(version)];
+    [frame appendBytes:&kind length:sizeof(kind)];
+    [frame appendBytes:&tokenLE length:sizeof(tokenLE)];
+    [frame appendBytes:&lengthLE length:sizeof(lengthLE)];
+    [frame appendData:payload];
+    return frame;
+}
+
+static BOOL MLClipboardAgentDecodeFrame(const uint8_t *bytes,
+                                        NSUInteger length,
+                                        uint8_t *kind,
+                                        uint32_t *token,
+                                        NSData **payload) {
+    if (bytes == NULL || length < MLClipboardAgentFrameHeaderSize ||
+        bytes[0] != MLClipboardAgentWireVersion || kind == NULL ||
+        token == NULL || payload == NULL) {
+        return NO;
+    }
+
+    uint32_t tokenLE = 0;
+    uint32_t payloadLengthLE = 0;
+    memcpy(&tokenLE, bytes + 2, sizeof(tokenLE));
+    memcpy(&payloadLengthLE, bytes + 6, sizeof(payloadLengthLE));
+    uint32_t payloadLength = CFSwapInt32LittleToHost(payloadLengthLE);
+    if (payloadLength > MLClipboardAgentInlinePayloadLimit ||
+        length < MLClipboardAgentFrameHeaderSize + payloadLength) {
+        return NO;
+    }
+
+    uint8_t decodedKind = bytes[1];
+    if (decodedKind != LI_CLIPBOARD_KIND_TEXT &&
+        decodedKind != LI_CLIPBOARD_KIND_PNG &&
+        decodedKind != LI_CLIPBOARD_KIND_REF) {
+        return NO;
+    }
+
+    *kind = decodedKind;
+    *token = CFSwapInt32LittleToHost(tokenLE);
+    *payload = [NSData dataWithBytes:bytes + MLClipboardAgentFrameHeaderSize
+                               length:payloadLength];
+    return YES;
 }
 
 @interface MLClipboardItemSnapshot : NSObject
@@ -204,6 +259,15 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self forwardIfCurrentNamed:@"clipboardItemReceived" block:^(id<MLStreamScopedCallbackOwner> owner) {
         if ([owner respondsToSelector:@selector(clipboardItemReceived:)]) {
             [owner clipboardItemReceived:item];
+        }
+    }];
+}
+
+- (void)clipboardDataReceived:(const uint8_t *)data length:(uint32_t)length {
+    NSData *frame = data != NULL && length > 0 ? [NSData dataWithBytes:data length:length] : nil;
+    [self forwardIfCurrentNamed:@"clipboardDataReceived" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(clipboardDataReceived:length:)]) {
+            [owner clipboardDataReceived:frame.bytes length:(uint32_t)frame.length];
         }
     }];
 }
@@ -1980,6 +2044,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
         return;
     }
 
+    BOOL foundationRawClipboard = [SettingsClass clipboardSyncSupportedFor:self.app.host.uuid];
+
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
     NSInteger changeCount = pasteboard.changeCount;
     if (changeCount == self.clipboardLastChangeCount) {
@@ -1987,6 +2053,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 
     NSData *payload = nil;
+    NSData *compoundTextPayload = nil;
     NSString *mimeType = nil;
     NSString *itemName = nil;
     uint8_t itemType = LI_CLIPBOARD_ITEM_TYPE_NONE;
@@ -2059,6 +2126,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
         return;
     }
 
+    if (foundationRawClipboard && itemType == LI_CLIPBOARD_ITEM_TYPE_IMAGE) {
+        NSString *compoundText = MLNormalizeClipboardText([pasteboard stringForType:NSPasteboardTypeString]);
+        NSData *textData = [compoundText dataUsingEncoding:NSUTF8StringEncoding];
+        if (textData.length > 0 && textData.length <= MLClipboardAgentInlinePayloadLimit) {
+            compoundTextPayload = textData;
+        }
+    }
+
     uint64_t contentHash = MLComputeClipboardHash(itemType, payload, itemName);
     if (self.clipboardHasPendingEchoSuppressionHash &&
         self.clipboardPendingEchoSuppressionHash == contentHash) {
@@ -2069,12 +2144,46 @@ highFreqMotor:(unsigned short)highFreqMotor {
         return;
     }
 
-    int err = [connection sendClipboardItemData:payload
+    NSData *rawFrame = nil;
+    int err = 0;
+    BOOL sentCompoundRawFrame = NO;
+    if (foundationRawClipboard && compoundTextPayload.length > 0) {
+        uint32_t token = arc4random() | 1U;
+        NSData *textFrame = MLClipboardAgentEncodeFrame(LI_CLIPBOARD_KIND_TEXT, token, compoundTextPayload);
+        NSData *imageFrame = MLClipboardAgentEncodeFrame(LI_CLIPBOARD_KIND_PNG, token, payload);
+        err = textFrame != nil && imageFrame != nil ? [connection sendClipboardRawData:textFrame] : -1;
+        if (err == 0) {
+            err = [connection sendClipboardRawData:imageFrame];
+        }
+        sentCompoundRawFrame = err == 0;
+        rawFrame = imageFrame;
+    } else {
+        rawFrame = foundationRawClipboard
+            ? MLClipboardAgentEncodeFrame(itemType == LI_CLIPBOARD_ITEM_TYPE_IMAGE
+                                          ? LI_CLIPBOARD_KIND_PNG
+                                          : LI_CLIPBOARD_KIND_TEXT,
+                                          0,
+                                          payload)
+            : nil;
+        err = rawFrame != nil
+            ? [connection sendClipboardRawData:rawFrame]
+            : [connection sendClipboardItemData:payload
                                            type:itemType
                                        mimeType:mimeType
                                            name:itemName
                                          itemId:MLGenerateClipboardItemId()
                                     contentHash:contentHash];
+    }
+    if (err == LI_ERR_UNSUPPORTED && rawFrame != nil) {
+        // Keep legacy Sunshine compatibility when a host advertises the old
+        // clipboard extension but has no user-session v1 agent.
+        err = [connection sendClipboardItemData:payload
+                                           type:itemType
+                                       mimeType:mimeType
+                                           name:itemName
+                                         itemId:MLGenerateClipboardItemId()
+                                    contentHash:contentHash];
+    }
     if (err == LI_ERR_UNSUPPORTED) {
         self.clipboardLastChangeCount = changeCount;
         Log(LOG_I, @"[clipboard] Host rejected clipboard item type=%u; keeping sync active for supported types",
@@ -2093,9 +2202,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     self.clipboardLastChangeCount = changeCount;
     [self resetClipboardActivationDiagnosticState];
-    Log(LOG_I, @"[clipboard] Sent local clipboard item: type=%u length=%lu name=%@",
+    Log(LOG_I, @"[clipboard] Sent local clipboard item: type=%u length=%lu raw=%d compound=%d name=%@",
         itemType,
         (unsigned long)payload.length,
+        rawFrame != nil ? 1 : 0,
+        sentCompoundRawFrame ? 1 : 0,
         itemName ?: @"");
 }
 
@@ -2199,6 +2310,112 @@ highFreqMotor:(unsigned short)highFreqMotor {
             snapshot.mimeType.UTF8String ?: "",
             snapshot.name.UTF8String ?: "");
         [self applyReceivedClipboardSnapshot:snapshot];
+    });
+}
+
+- (void)resetPendingClipboardAgentBurst {
+    [self.clipboardPendingAgentTimer invalidate];
+    self.clipboardPendingAgentTimer = nil;
+    self.clipboardPendingAgentToken = 0;
+    self.clipboardPendingAgentText = nil;
+    self.clipboardPendingAgentPNG = nil;
+}
+
+- (void)applyPendingClipboardAgentCompoundIfReady {
+    if (self.clipboardPendingAgentText.length == 0 || self.clipboardPendingAgentPNG.length == 0) {
+        return;
+    }
+
+    NSImage *image = [[NSImage alloc] initWithData:self.clipboardPendingAgentPNG];
+    NSString *text = [[NSString alloc] initWithData:self.clipboardPendingAgentText encoding:NSUTF8StringEncoding];
+    if (image == nil || text == nil) {
+        [self resetPendingClipboardAgentBurst];
+        return;
+    }
+
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard declareTypes:@[NSPasteboardTypeString, NSPasteboardTypePNG, NSPasteboardTypeTIFF] owner:nil];
+    [pasteboard setString:MLNormalizeClipboardText(text) forType:NSPasteboardTypeString];
+    [pasteboard setData:self.clipboardPendingAgentPNG forType:NSPasteboardTypePNG];
+    NSData *tiff = image.TIFFRepresentation;
+    if (tiff.length > 0) {
+        [pasteboard setData:tiff forType:NSPasteboardTypeTIFF];
+    }
+
+    self.clipboardLastChangeCount = pasteboard.changeCount;
+    self.clipboardHasPendingEchoSuppressionHash = YES;
+    self.clipboardPendingEchoSuppressionHash = MLComputeClipboardHash(
+        LI_CLIPBOARD_ITEM_TYPE_IMAGE, self.clipboardPendingAgentPNG, nil);
+    [self resetPendingClipboardAgentBurst];
+}
+
+- (void)handleClipboardAgentFrameKind:(uint8_t)kind
+                                token:(uint32_t)token
+                              payload:(NSData *)payload {
+    if (token == 0) {
+        MLClipboardItemSnapshot *snapshot = [[MLClipboardItemSnapshot alloc] init];
+        snapshot.type = kind == LI_CLIPBOARD_KIND_TEXT ? LI_CLIPBOARD_ITEM_TYPE_TEXT : LI_CLIPBOARD_ITEM_TYPE_IMAGE;
+        snapshot.data = payload;
+        snapshot.mimeType = kind == LI_CLIPBOARD_KIND_TEXT ? @"text/plain;charset=utf-8" : @"image/png";
+        snapshot.contentHash = MLComputeClipboardHash(snapshot.type, payload, nil);
+        [self applyReceivedClipboardSnapshot:snapshot];
+        return;
+    }
+
+    if (self.clipboardPendingAgentToken != token) {
+        [self resetPendingClipboardAgentBurst];
+        self.clipboardPendingAgentToken = token;
+    }
+    if (kind == LI_CLIPBOARD_KIND_TEXT) {
+        self.clipboardPendingAgentText = payload;
+    } else if (kind == LI_CLIPBOARD_KIND_PNG) {
+        self.clipboardPendingAgentPNG = payload;
+    }
+
+    [self.clipboardPendingAgentTimer invalidate];
+    self.clipboardPendingAgentTimer = nil;
+    if (self.clipboardPendingAgentText.length > 0 && self.clipboardPendingAgentPNG.length > 0) {
+        [self applyPendingClipboardAgentCompoundIfReady];
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    self.clipboardPendingAgentTimer = [NSTimer scheduledTimerWithTimeInterval:0.15 repeats:NO block:^(__unused NSTimer *timer) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || strongSelf.clipboardPendingAgentToken != token) {
+            return;
+        }
+        NSData *singlePayload = strongSelf.clipboardPendingAgentText ?: strongSelf.clipboardPendingAgentPNG;
+        uint8_t singleKind = strongSelf.clipboardPendingAgentText != nil ? LI_CLIPBOARD_KIND_TEXT : LI_CLIPBOARD_KIND_PNG;
+        [strongSelf resetPendingClipboardAgentBurst];
+        if (singlePayload.length > 0) {
+            [strongSelf handleClipboardAgentFrameKind:singleKind token:0 payload:singlePayload];
+        }
+    }];
+}
+
+- (void)clipboardDataReceived:(const uint8_t *)data length:(uint32_t)length {
+    if (data == NULL || length == 0) {
+        return;
+    }
+
+    NSData *frame = [NSData dataWithBytes:data length:length];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        uint8_t kind = 0;
+        uint32_t token = 0;
+        NSData *payload = nil;
+        if (!MLClipboardAgentDecodeFrame(frame.bytes, frame.length, &kind, &token, &payload)) {
+            Log(LOG_W, @"[clipboard] Dropping malformed Foundation clipboard agent frame length=%u", length);
+            return;
+        }
+        if (![self isClipboardSyncEnabledForCurrentHost] || ![self isClipboardSyncOwner]) {
+            return;
+        }
+        if (kind == LI_CLIPBOARD_KIND_REF) {
+            Log(LOG_I, @"[clipboard] Foundation blob reference received token=%u; HTTPS blob fetch is pending", token);
+            return;
+        }
+        [self handleClipboardAgentFrameKind:kind token:token payload:payload];
     });
 }
 

@@ -25,6 +25,7 @@
 
 @optional
 - (void)clipboardItemReceived:(const LI_CLIPBOARD_ITEM *)item;
+- (void)clipboardDataReceived:(const uint8_t *)data length:(uint32_t)length;
 
 @end
 
@@ -72,6 +73,7 @@ typedef struct {
                         name:(NSString *)name
                       itemId:(uint64_t)itemId
                  contentHash:(uint64_t)contentHash;
+- (int)sendClipboardRawData:(NSData *)data;
 - (BOOL)getVideoDiagnosticSnapshot:(MLVideoDiagnosticSnapshot *)snapshot;
 - (void)notifyInputStreamReadyForMicrophoneControlIfNeeded;
 - (void)terminate;
