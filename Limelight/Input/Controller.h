@@ -29,6 +29,14 @@
 @property(nonatomic) BOOL controllerAnnounced;
 @property(nonatomic) BOOL primaryTouchActive;
 @property(nonatomic) BOOL secondaryTouchActive;
+@property(nonatomic) float lastPrimaryTouchX;
+@property(nonatomic) float lastPrimaryTouchY;
+@property(nonatomic) float lastSecondaryTouchX;
+@property(nonatomic) float lastSecondaryTouchY;
+@property(nonatomic) float trackpadMouseAccumulatedX;
+@property(nonatomic) float trackpadMouseAccumulatedY;
+@property(nonatomic) float trackpadScrollAccumulatedY;
+@property(nonatomic) int trackpadMouseButton;
 
 @property(nonatomic) HapticContext *_Nullable lowFreqMotor;
 @property(nonatomic) HapticContext *_Nullable highFreqMotor;

@@ -558,6 +558,8 @@ struct VideoView: View {
             boolBinding: $settingsModel.showConnectionWarnings)
         }
 
+        PerformanceDiagnosticsPanel()
+
       }
       .padding()
     }
@@ -621,6 +623,209 @@ private struct VideoPercentageSliderRow: View {
       }
 
       Slider(value: $value, in: range, step: step)
+    }
+  }
+}
+
+struct PerformanceDiagnosticsSnapshot: Codable, Equatable {
+  let updatedAt: Date
+  let receivedFps: Double
+  let decodedFps: Double
+  let renderedFps: Double
+  let onePercentLowFps: Double
+  let networkJitterMs: Double
+  let framePacingJitterMs: Double
+  let networkDroppedFrames: UInt64
+  let pacerDroppedFrames: UInt64
+  let receivedBytes: UInt64
+  let decodedFrames: UInt64
+  let renderedFrames: UInt64
+  let totalFrames: UInt64
+  let totalRenderTimeMs: Double
+  let totalDecodeTimeMs: Double
+  let audioUnderruns: UInt64
+
+  init?(userInfo: [AnyHashable: Any]) {
+    guard let timestampMs = (userInfo["timestampMs"] as? NSNumber)?.doubleValue else {
+      return nil
+    }
+
+    func number(_ key: String) -> NSNumber {
+      (userInfo[key] as? NSNumber) ?? 0
+    }
+
+    updatedAt = Date(timeIntervalSince1970: timestampMs / 1000.0)
+    receivedFps = number("receivedFps").doubleValue
+    decodedFps = number("decodedFps").doubleValue
+    renderedFps = number("renderedFps").doubleValue
+    onePercentLowFps = number("onePercentLowFps").doubleValue
+    networkJitterMs = number("networkJitterMs").doubleValue
+    framePacingJitterMs = number("framePacingJitterMs").doubleValue
+    networkDroppedFrames = number("networkDroppedFrames").uint64Value
+    pacerDroppedFrames = number("pacerDroppedFrames").uint64Value
+    receivedBytes = number("receivedBytes").uint64Value
+    decodedFrames = number("decodedFrames").uint64Value
+    renderedFrames = number("renderedFrames").uint64Value
+    totalFrames = number("totalFrames").uint64Value
+    totalRenderTimeMs = number("totalRenderTimeMs").doubleValue
+    totalDecodeTimeMs = number("totalDecodeTimeMs").doubleValue
+    audioUnderruns = number("audioUnderruns").uint64Value
+  }
+
+  var bitrateMbps: Double {
+    Double(receivedBytes) * 8.0 / 1_000_000.0
+  }
+
+  var averageRenderTimeMs: Double {
+    renderedFrames > 0 ? totalRenderTimeMs / Double(renderedFrames) : 0
+  }
+
+  var averageDecodeTimeMs: Double {
+    decodedFrames > 0 ? totalDecodeTimeMs / Double(decodedFrames) : 0
+  }
+}
+
+final class PerformanceDiagnosticsStore: ObservableObject {
+  static let shared = PerformanceDiagnosticsStore()
+
+  @Published private(set) var snapshot: PerformanceDiagnosticsSnapshot?
+  @Published private(set) var exportStatus: String?
+
+  private var observer: NSObjectProtocol?
+
+  private init() {
+    observer = NotificationCenter.default.addObserver(
+      forName: Notification.Name("MoonlightPerformanceDiagnosticsDidUpdate"),
+      object: nil,
+      queue: .main
+    ) { [weak self] note in
+      guard
+        let userInfo = note.userInfo,
+        let snapshot = PerformanceDiagnosticsSnapshot(userInfo: userInfo)
+      else {
+        return
+      }
+      self?.snapshot = snapshot
+    }
+  }
+
+  deinit {
+    if let observer {
+      NotificationCenter.default.removeObserver(observer)
+    }
+  }
+
+  func exportReport() {
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = "moonlight-performance-report.json"
+    panel.allowedFileTypes = ["json"]
+    panel.canCreateDirectories = true
+
+    panel.begin { [weak self] response in
+      guard response == .OK, let url = panel.url else { return }
+
+      struct Export: Codable {
+        let generatedAt: Date
+        let snapshot: PerformanceDiagnosticsSnapshot?
+      }
+
+      let encoder = JSONEncoder()
+      encoder.dateEncodingStrategy = .iso8601
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      do {
+        let data = try encoder.encode(
+          Export(generatedAt: Date(), snapshot: self?.snapshot)
+        )
+        try data.write(to: url, options: .atomic)
+        self?.exportStatus = "Performance report exported"
+      } catch {
+        self?.exportStatus = "Performance report export failed"
+      }
+    }
+  }
+}
+
+private struct PerformanceDiagnosticsPanel: View {
+  @ObservedObject private var store = PerformanceDiagnosticsStore.shared
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    FormSection(title: "Performance Diagnostics") {
+      if let snapshot = store.snapshot {
+        VStack(alignment: .leading, spacing: 10) {
+          diagnosticsRow("Rendered FPS", value: String(format: "%.1f", snapshot.renderedFps))
+          diagnosticsRow("1% Low", value: String(format: "%.1f", snapshot.onePercentLowFps))
+          diagnosticsRow(
+            "Frame Pacing Jitter",
+            value: String(format: "%.2f ms", snapshot.framePacingJitterMs)
+          )
+          diagnosticsRow(
+            "Network Jitter",
+            value: String(format: "%.2f ms", snapshot.networkJitterMs)
+          )
+          diagnosticsRow("Bitrate", value: String(format: "%.1f Mbps", snapshot.bitrateMbps))
+          diagnosticsRow(
+            "Dropped Frames",
+            value: "\(snapshot.networkDroppedFrames) network · \(snapshot.pacerDroppedFrames) pacer"
+          )
+          diagnosticsRow(
+            "Decode / Render",
+            value: String(
+              format: "%.2f / %.2f ms",
+              snapshot.averageDecodeTimeMs,
+              snapshot.averageRenderTimeMs
+            )
+          )
+          diagnosticsRow("Audio Underruns", value: "\(snapshot.audioUnderruns)")
+          Text(
+            String(
+              format: "Updated %@",
+              snapshot.updatedAt.formatted(date: .omitted, time: .standard)
+            )
+          )
+          .font(.footnote)
+          .foregroundColor(.secondary)
+        }
+      } else {
+        Text(languageManager.localize("Performance Diagnostics Waiting"))
+          .foregroundColor(.secondary)
+      }
+
+      Divider()
+
+      HStack {
+        Button(languageManager.localize("Export Performance Report")) {
+          store.exportReport()
+        }
+        .macOS27ProminentButtonStyle()
+        Spacer()
+        if let exportStatus = store.exportStatus {
+          Text(languageManager.localize(exportStatus))
+            .font(.footnote)
+            .foregroundColor(.secondary)
+        }
+      }
+    }
+  }
+
+  private func diagnosticsRow(_ title: String, value: String) -> some View {
+    HStack {
+      Text(languageManager.localize(title))
+      Spacer()
+      Text(value)
+        .availableMonospacedDigit()
+        .foregroundColor(.secondary)
+    }
+  }
+}
+
+private extension View {
+  @ViewBuilder
+  func macOS27ProminentButtonStyle() -> some View {
+    if #available(macOS 26.0, *) {
+      self.buttonStyle(.glassProminent)
+    } else {
+      self.buttonStyle(.borderedProminent)
     }
   }
 }

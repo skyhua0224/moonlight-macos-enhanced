@@ -1204,7 +1204,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
             }
         }
 
-        streamConfig.sunshineUseVirtualDisplay = [prefs[@"sunshineUseVirtualDisplay"] boolValue];
+        streamConfig.sunshineUseVirtualDisplay = self.sessionSunshineUseVirtualDisplayOverride != nil
+            ? self.sessionSunshineUseVirtualDisplayOverride.boolValue
+            : [prefs[@"sunshineUseVirtualDisplay"] boolValue];
         streamConfig.sunshineScreenMode = self.sessionSunshineScreenModeOverride != nil
             ? self.sessionSunshineScreenModeOverride.intValue
             : (prefs[@"sunshineScreenMode"] != nil ? [prefs[@"sunshineScreenMode"] intValue] : -1);
@@ -1377,6 +1379,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
     streamConfig.gamepadMouseMode = [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
     streamConfig.gamepadMouseModeLongPressMenu = [SettingsClass gamepadMouseModeLongPressMenuFor:self.app.host.uuid];
+    streamConfig.gamepadTrackpadPointerSensitivity = [SettingsClass pointerSensitivityFor:self.app.host.uuid];
+    streamConfig.gamepadTrackpadScrollSpeed = [SettingsClass gestureScrollSpeedFor:self.app.host.uuid];
+    streamConfig.gamepadTrackpadReverseScroll = [SettingsClass reverseScrollDirectionFor:self.app.host.uuid];
     streamConfig.upscalingMode = (int)[SettingsClass upscalingModeFor:self.app.host.uuid];
     streamConfig.frameInterpolationMode = prefs[@"frameInterpolationMode"] != nil ? [prefs[@"frameInterpolationMode"] intValue] : 0;
     Log(LOG_I, @"[diag] Stream timing config: preset=%d framePacing=%d buffer=%d responsiveness=%d compatibility=%d vsync=%d sdrCompat=%d",

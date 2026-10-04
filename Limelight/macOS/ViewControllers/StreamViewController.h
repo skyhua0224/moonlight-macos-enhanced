@@ -27,6 +27,7 @@ struct Resolution {
 @property (nonatomic) BOOL hasSessionSunshineTargetDisplayOverride;
 @property (nonatomic, copy) NSString *sessionSunshineTargetDisplayNameOverride;
 @property (nonatomic, strong) NSNumber *sessionSunshineScreenModeOverride;
+@property (nonatomic, strong) NSNumber *sessionSunshineUseVirtualDisplayOverride;
 
 + (struct Resolution)getResolution;
 @end

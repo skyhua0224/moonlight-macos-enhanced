@@ -375,25 +375,17 @@ struct FormSection<Content: View>: View {
   }
 
   var body: some View {
-    GroupBox(
-      content: {
-        VStack {
-          Group {
-            content
-          }
-          .padding([.top], 1)
-        }
-        .padding([.top, .bottom], 6)
-        .padding([.leading, .trailing], 6)
-      },
-      label: {
-        Text(languageManager.localize(title))
-          .font(
-            .system(.body, design: .rounded)
-              .weight(.semibold)
-          )
-          .padding(.bottom, 6)
-      })
+    VStack(alignment: .leading, spacing: 10) {
+      Text(languageManager.localize(title))
+        .font(.headline)
+        .foregroundStyle(.primary)
+
+      VStack(alignment: .leading, spacing: 0) {
+        content
+      }
+      .padding(14)
+      .background(.quaternary.opacity(0.24), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
   }
 }
 

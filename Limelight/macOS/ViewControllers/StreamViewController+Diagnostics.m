@@ -853,12 +853,58 @@
     [self attemptReconnectWithReason:@"adaptive-drop-mitigation"];
 }
 
+- (void)publishPerformanceDiagnosticsSnapshot {
+    if (!self.streamMan || !self.streamMan.connection || !self.streamMan.connection.renderer) {
+        return;
+    }
+
+    VideoStats stats = self.streamMan.connection.renderer.videoStats;
+    uint64_t nowStatsMs = LiGetMillis();
+    uint64_t elapsedMs = 0;
+    if (stats.measurementStartTimestamp > 0 && nowStatsMs >= stats.measurementStartTimestamp) {
+        elapsedMs = MAX(1ULL, nowStatsMs - stats.measurementStartTimestamp);
+    }
+
+    float (^displayedFps)(float, uint32_t) = ^float(float completedFps, uint32_t frameCount) {
+        if (completedFps > 0.05f) {
+            return completedFps;
+        }
+        if (elapsedMs == 0 || frameCount == 0) {
+            return 0.0f;
+        }
+        return (float)((double)frameCount / MAX(0.001, (double)elapsedMs / 1000.0));
+    };
+
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:@"MoonlightPerformanceDiagnosticsDidUpdate"
+                      object:nil
+                    userInfo:@{
+                        @"timestampMs": @(nowStatsMs),
+                        @"receivedFps": @(displayedFps(stats.receivedFps, stats.receivedFrames)),
+                        @"decodedFps": @(displayedFps(stats.decodedFps, stats.decodedFrames)),
+                        @"renderedFps": @(displayedFps(stats.renderedFps, stats.renderedFrames)),
+                        @"decodedFrames": @(stats.decodedFrames),
+                        @"renderedFrames": @(stats.renderedFrames),
+                        @"totalFrames": @(stats.totalFrames),
+                        @"onePercentLowFps": @(stats.renderedFpsOnePercentLow),
+                        @"networkJitterMs": @(stats.jitterMs),
+                        @"framePacingJitterMs": @(stats.renderFramePacingJitterMs),
+                        @"networkDroppedFrames": @(stats.networkDroppedFrames),
+                        @"pacerDroppedFrames": @(stats.pacerDroppedFrames),
+                        @"receivedBytes": @(stats.receivedBytes),
+                        @"totalRenderTimeMs": @(stats.totalRenderTime),
+                        @"totalDecodeTimeMs": @(stats.totalDecodeTime),
+                        @"audioUnderruns": @([self.streamMan.connection audioUnderrunCount])
+                    }];
+}
+
 - (void)pollStreamHealthDiagnostics:(NSTimer *)timer {
     (void)timer;
     if (!self.streamMan || !self.streamMan.connection || !self.streamMan.connection.renderer) {
         return;
     }
 
+    [self publishPerformanceDiagnosticsSnapshot];
     VideoStats stats = self.streamMan.connection.renderer.videoStats;
     uint64_t nowMs = [self nowMs];
     uint64_t nowStatsMs = LiGetMillis();
@@ -2474,6 +2520,7 @@
 }
 
 - (void)updateStats {
+    [self publishPerformanceDiagnosticsSnapshot];
     if (!self.overlayContainer) return;
 
     VideoStats stats = self.streamMan.connection.renderer.videoStats;
@@ -2552,6 +2599,7 @@
     float loss = stats.totalFrames > 0 ? (float)stats.networkDroppedFrames / stats.totalFrames * 100.0f : 0;
     float jitter = stats.jitterMs;
     float onePercentLowFps = stats.renderedFpsOnePercentLow;
+    float framePacingJitter = stats.renderFramePacingJitterMs;
 
     // Approximate current video bitrate over the last measurement window (≈1s)
     double bitrateMbps = (double)stats.receivedBytes * 8.0 / 1000.0 / 1000.0;
@@ -2632,6 +2680,9 @@
     append(@" ms  Br ", labelAttrs);
     append([NSString stringWithFormat:@"%.1f", bitrateMbps], valueAttrs);
     append(@" Mbps", labelAttrs);
+    append(@"  Pace ", labelAttrs);
+    append([NSString stringWithFormat:@"%.1f", framePacingJitter], valueAttrs);
+    append(@" ms", labelAttrs);
     
     // Latency
     append(@"  |  ", labelAttrs);

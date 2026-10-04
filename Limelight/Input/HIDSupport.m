@@ -1998,6 +1998,16 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
                 if ([self.controller.startButtonDownTime timeIntervalSinceNow] < -1.0) {
                     // Toggle
                     self.controller.isMouseMode = !self.controller.isMouseMode;
+                    self.controller.primaryTouchActive = NO;
+                    self.controller.secondaryTouchActive = NO;
+                    self.controller.lastPrimaryTouchX = 0.0f;
+                    self.controller.lastPrimaryTouchY = 0.0f;
+                    self.controller.lastSecondaryTouchX = 0.0f;
+                    self.controller.lastSecondaryTouchY = 0.0f;
+                    self.controller.trackpadMouseAccumulatedX = 0.0f;
+                    self.controller.trackpadMouseAccumulatedY = 0.0f;
+                    self.controller.trackpadScrollAccumulatedY = 0.0f;
+                    self.controller.trackpadMouseButton = 0;
                     
                     // Notify UI
                     dispatch_async(dispatch_get_main_queue(), ^{

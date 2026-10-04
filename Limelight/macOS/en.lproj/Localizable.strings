@@ -593,6 +593,7 @@
 "Target Display" = "Target Display";
 "Target Display detail" = "Choose a Sunshine display reported by the host. Host Default keeps the host-side default display selection.";
 "Use Virtual Display" = "Use Virtual Display";
+"Use Physical Display" = "Use Physical Display";
 "Use Virtual Display detail" = "Requests a Sunshine virtual display session when the host supports VDD.";
 "Screen Mode" = "Screen Mode";
 "Screen Mode detail" = "Controls how Sunshine prepares the host display topology for this session.";
@@ -605,6 +606,7 @@
 "Follow Host Setting" = "Follow Host Setting";
 "This Stream Display" = "This Stream Display";
 "This Stream Screen Mode" = "This Stream Screen Mode";
+"This App Virtual Display" = "This App Virtual Display";
 "Refresh Host Displays" = "Refresh Host Displays";
 "No Host Displays Found" = "No Host Displays Found";
 "Loading…" = "Loading…";

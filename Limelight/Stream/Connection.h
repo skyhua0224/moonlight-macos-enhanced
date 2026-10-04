@@ -91,6 +91,7 @@ typedef struct {
                  contentHash:(uint64_t)contentHash;
 - (int)sendClipboardRawData:(NSData *)data;
 - (BOOL)getVideoDiagnosticSnapshot:(MLVideoDiagnosticSnapshot *)snapshot;
+- (uint64_t)audioUnderrunCount;
 - (void)notifyInputStreamReadyForMicrophoneControlIfNeeded;
 - (void)terminate;
 - (void)main;
