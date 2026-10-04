@@ -13,6 +13,7 @@
 #import "NSWindow+Moonlight.h"
 #import "AlertPresenter.h"
 #import "Connection.h"
+#import "HttpManager.h"
 #import "StreamConfiguration.h"
 #import "DataManager.h"
 #import "ControllerSupport.h"
@@ -240,6 +241,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
 @property (nonatomic, strong) HIDSupport *hidSupport;
+@property (nonatomic, strong) HttpManager *clipboardHTTPManager;
 @property (nonatomic) BOOL useSystemControllerDriver;
 @property (nonatomic, strong) StreamManager *streamMan;
 @property (nonatomic, strong) NSOperationQueue *streamOpQueue;

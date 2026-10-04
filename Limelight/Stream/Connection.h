@@ -24,6 +24,22 @@
 - (void)connectionStatusUpdate:(int)status;
 
 @optional
+- (void)rumbleTriggers:(unsigned short)controllerNumber
+      leftTriggerMotor:(unsigned short)leftTriggerMotor
+     rightTriggerMotor:(unsigned short)rightTriggerMotor;
+- (void)setControllerLED:(unsigned short)controllerNumber
+                       red:(unsigned char)red
+                     green:(unsigned char)green
+                      blue:(unsigned char)blue;
+- (void)setAdaptiveTriggers:(unsigned short)controllerNumber
+                 eventFlags:(unsigned char)eventFlags
+                   typeLeft:(unsigned char)typeLeft
+                  typeRight:(unsigned char)typeRight
+                       left:(const unsigned char *)left
+                      right:(const unsigned char *)right;
+- (void)setMotionEventState:(unsigned short)controllerNumber
+                  motionType:(unsigned char)motionType
+                reportRateHz:(unsigned short)reportRateHz;
 - (void)clipboardItemReceived:(const LI_CLIPBOARD_ITEM *)item;
 - (void)clipboardDataReceived:(const uint8_t *)data length:(uint32_t)length;
 

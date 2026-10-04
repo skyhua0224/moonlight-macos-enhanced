@@ -2221,6 +2221,43 @@ void ClRumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsi
     }
 }
 
+void ClRumbleTriggers(uint16_t controllerNumber, uint16_t leftTriggerMotor, uint16_t rightTriggerMotor)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks != nil && [callbacks respondsToSelector:@selector(rumbleTriggers:leftTriggerMotor:rightTriggerMotor:)]) {
+        [callbacks rumbleTriggers:controllerNumber leftTriggerMotor:leftTriggerMotor rightTriggerMotor:rightTriggerMotor];
+    }
+}
+
+void ClSetControllerLED(uint16_t controllerNumber, uint8_t red, uint8_t green, uint8_t blue)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks != nil && [callbacks respondsToSelector:@selector(setControllerLED:red:green:blue:)]) {
+        [callbacks setControllerLED:controllerNumber red:red green:green blue:blue];
+    }
+}
+
+void ClSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlags, uint8_t typeLeft, uint8_t typeRight,
+                           uint8_t *left, uint8_t *right)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks != nil && [callbacks respondsToSelector:@selector(setAdaptiveTriggers:eventFlags:typeLeft:typeRight:left:right:)]) {
+        [callbacks setAdaptiveTriggers:controllerNumber eventFlags:eventFlags typeLeft:typeLeft typeRight:typeRight left:left right:right];
+    }
+}
+
+void ClSetMotionEventState(uint16_t controllerNumber, uint8_t motionType, uint16_t reportRateHz)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks != nil && [callbacks respondsToSelector:@selector(setMotionEventState:motionType:reportRateHz:)]) {
+        [callbacks setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+    }
+}
+
 void ClConnectionStatusUpdate(int status)
 {
     Connection *conn = CurrentConnection();
@@ -2640,6 +2677,10 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _clCallbacks.connectionTerminated = ClConnectionTerminated;
     _clCallbacks.logMessage = ClLogMessage;
     _clCallbacks.rumble = ClRumble;
+    _clCallbacks.rumbleTriggers = ClRumbleTriggers;
+    _clCallbacks.setControllerLED = ClSetControllerLED;
+    _clCallbacks.setAdaptiveTriggers = ClSetAdaptiveTriggers;
+    _clCallbacks.setMotionEventState = ClSetMotionEventState;
     _clCallbacks.connectionStatusUpdate = ClConnectionStatusUpdate;
     _clCallbacks.clipboardItemReceived = ClClipboardItemReceived;
     _clCallbacks.clipboardDataReceived = ClClipboardDataReceived;
