@@ -4,14 +4,17 @@ import Foundation
 final class MLLogCategoryDescriptor: NSObject {
   let domainKey: String
   let categoryKey: String
-  let displayName: String
-  let badgeText: String
+  private let displayNameKey: String
+  private let badgeTextKey: String
+
+  var displayName: String { LanguageManager.shared.localize(displayNameKey) }
+  var badgeText: String { LanguageManager.shared.localize(badgeTextKey) }
 
   init(domainKey: String, categoryKey: String, displayName: String, badgeText: String) {
     self.domainKey = domainKey
     self.categoryKey = categoryKey
-    self.displayName = displayName
-    self.badgeText = badgeText
+    self.displayNameKey = displayName
+    self.badgeTextKey = badgeText
   }
 
   var searchableText: String {
@@ -88,146 +91,146 @@ final class MLLogCategoryClassifier: NSObject {
     "discovery": .init(
       domainKey: "discovery",
       categoryKey: "discovery",
-      displayName: "发现 / Discovery",
-      badgeText: "发现"
+      displayName: "Discovery",
+      badgeText: "Discovery"
     ),
     "discovery.mdns": .init(
       domainKey: "discovery",
       categoryKey: "discovery.mdns",
-      displayName: "发现 · mDNS / Discovery · mDNS",
-      badgeText: "发现/mDNS"
+      displayName: "Discovery · mDNS",
+      badgeText: "Discovery/mDNS"
     ),
     "network": .init(
       domainKey: "network",
       categoryKey: "network",
-      displayName: "网络 / Network",
-      badgeText: "网络"
+      displayName: "Network",
+      badgeText: "Network"
     ),
     "network.http": .init(
       domainKey: "network",
       categoryKey: "network.http",
-      displayName: "网络 · 请求 / Network · Request",
-      badgeText: "网络/请求"
+      displayName: "Network · Request",
+      badgeText: "Network/Request"
     ),
     "network.transport": .init(
       domainKey: "network",
       categoryKey: "network.transport",
-      displayName: "网络 · 传输 / Network · Transport",
-      badgeText: "网络/传输"
+      displayName: "Network · Transport",
+      badgeText: "Network/Transport"
     ),
     "network.tls": .init(
       domainKey: "network",
       categoryKey: "network.tls",
-      displayName: "网络 · TLS / Network · TLS",
-      badgeText: "网络/TLS"
+      displayName: "Network · TLS",
+      badgeText: "Network/TLS"
     ),
     "pairing": .init(
       domainKey: "pairing",
       categoryKey: "pairing",
-      displayName: "配对 / Pairing",
-      badgeText: "配对"
+      displayName: "Pairing",
+      badgeText: "Pairing"
     ),
     "pairing.identity": .init(
       domainKey: "pairing",
       categoryKey: "pairing.identity",
-      displayName: "配对 · 身份 / Pairing · Identity",
-      badgeText: "配对/身份"
+      displayName: "Pairing · Identity",
+      badgeText: "Pairing/Identity"
     ),
     "stream": .init(
       domainKey: "stream",
       categoryKey: "stream",
-      displayName: "串流 / Stream",
-      badgeText: "串流"
+      displayName: "Stream",
+      badgeText: "Stream"
     ),
     "stream.lifecycle": .init(
       domainKey: "stream",
       categoryKey: "stream.lifecycle",
-      displayName: "串流 · 生命周期 / Stream · Lifecycle",
-      badgeText: "串流/生命周期"
+      displayName: "Stream · Lifecycle",
+      badgeText: "Stream/Lifecycle"
     ),
     "input": .init(
       domainKey: "input",
       categoryKey: "input",
-      displayName: "输入 / Input",
-      badgeText: "输入"
+      displayName: "Input",
+      badgeText: "Input"
     ),
     "input.scroll": .init(
       domainKey: "input",
       categoryKey: "input.scroll",
-      displayName: "输入 · 滚轮 / Input · Scroll",
-      badgeText: "输入/滚轮"
+      displayName: "Input · Scroll",
+      badgeText: "Input/Scroll"
     ),
     "input.mouse": .init(
       domainKey: "input",
       categoryKey: "input.mouse",
-      displayName: "输入 · 鼠标 / Input · Mouse",
-      badgeText: "输入/鼠标"
+      displayName: "Input · Mouse",
+      badgeText: "Input/Mouse"
     ),
     "input.click": .init(
       domainKey: "input",
       categoryKey: "input.click",
-      displayName: "输入 · 点击 / Input · Click",
-      badgeText: "输入/点击"
+      displayName: "Input · Click",
+      badgeText: "Input/Click"
     ),
     "input.capture": .init(
       domainKey: "input",
       categoryKey: "input.capture",
-      displayName: "输入 · 捕获 / Input · Capture",
-      badgeText: "输入/捕获"
+      displayName: "Input · Capture",
+      badgeText: "Input/Capture"
     ),
     "video": .init(
       domainKey: "video",
       categoryKey: "video",
-      displayName: "视频 / Video",
-      badgeText: "视频"
+      displayName: "Video",
+      badgeText: "Video"
     ),
     "video.decoder": .init(
       domainKey: "video",
       categoryKey: "video.decoder",
-      displayName: "视频 · 解码 / Video · Decoder",
-      badgeText: "视频/解码"
+      displayName: "Video · Decoder",
+      badgeText: "Video/Decoder"
     ),
     "audio": .init(
       domainKey: "audio",
       categoryKey: "audio",
-      displayName: "音频 / Audio",
-      badgeText: "音频"
+      displayName: "Audio",
+      badgeText: "Audio"
     ),
     "audio.pipeline": .init(
       domainKey: "audio",
       categoryKey: "audio.pipeline",
-      displayName: "音频 · 管线 / Audio · Pipeline",
-      badgeText: "音频/管线"
+      displayName: "Audio · Pipeline",
+      badgeText: "Audio/Pipeline"
     ),
     "ui": .init(
       domainKey: "ui",
       categoryKey: "ui",
-      displayName: "界面 / UI",
-      badgeText: "界面"
+      displayName: "UI",
+      badgeText: "UI"
     ),
     "ui.window": .init(
       domainKey: "ui",
       categoryKey: "ui.window",
-      displayName: "界面 · 窗口 / UI · Window",
-      badgeText: "界面/窗口"
+      displayName: "UI · Window",
+      badgeText: "UI/Window"
     ),
     "system": .init(
       domainKey: "system",
       categoryKey: "system",
-      displayName: "系统 / System",
-      badgeText: "系统"
+      displayName: "System",
+      badgeText: "System"
     ),
     "system.noise": .init(
       domainKey: "system",
       categoryKey: "system.noise",
-      displayName: "系统 · 噪音 / System · Noise",
-      badgeText: "系统/噪音"
+      displayName: "System · Noise",
+      badgeText: "System/Noise"
     ),
     "other": .init(
       domainKey: "other",
       categoryKey: "other",
-      displayName: "其他 / Other",
-      badgeText: "其他"
+      displayName: "Other",
+      badgeText: "Other"
     ),
   ]
 
@@ -305,7 +308,7 @@ final class MLLogCategoryClassifier: NSObject {
 
   static func displayName(forFilterKey filterKey: String?) -> String {
     guard let filterKey, !filterKey.isEmpty, filterKey != "all" else {
-      return "全部 / All"
+      return LanguageManager.shared.localize("All")
     }
     return descriptor(forCategoryKey: filterKey).displayName
   }
@@ -506,15 +509,15 @@ enum DebugNoiseCategory: String, CaseIterable {
   var displayName: String {
     switch self {
     case .appKitMenuInconsistency:
-      return "AppKit 菜单噪音 / AppKit Menu Inconsistency"
+      return "AppKit Menu Inconsistency"
     case .networkStackNoise:
-      return "系统网络噪音 / Network Stack Noise"
+      return "Network Stack Noise"
     case .systemTransportFallback:
-      return "系统传输回退噪音 / System Transport Fallback"
+      return "System Transport Fallback"
     case .discoveryChatter:
-      return "发现服务噪音 / Discovery Chatter"
+      return "Discovery Chatter"
     case .hostIdentityMismatch:
-      return "主机身份不匹配 / Host Identity Mismatch"
+      return "Host Identity Mismatch"
     }
   }
 }
@@ -744,18 +747,18 @@ enum DebugLogParser {
       case .hostIdentityMismatch:
         var details: [String] = []
         if current.certificateMismatchCount > 0 {
-          details.append("证书不匹配 \(current.certificateMismatchCount) 次")
+          details.append("Certificate mismatches: \(current.certificateMismatchCount)")
         }
         if current.incorrectHostCount > 0 {
-          details.append("错误主机 \(current.incorrectHostCount) 次")
+          details.append("Incorrect hosts: \(current.incorrectHostCount)")
         }
         if let expected = DebugLogNoiseClassifier.shortHostIdentity(current.expectedHostIdentity) {
-          details.append("期望 \(expected)")
+          details.append("Expected \(expected)")
         }
         if let actual = DebugLogNoiseClassifier.shortHostIdentity(current.actualHostIdentity) {
-          details.append("收到 \(actual)")
+          details.append("Received \(actual)")
         }
-        let detailText = details.isEmpty ? "主机身份校验失败" : details.joined(separator: ", ")
+        let detailText = details.isEmpty ? "Host identity verification failed" : details.joined(separator: ", ")
         summaryLine =
           "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(detailText))"
       default:
@@ -845,7 +848,7 @@ enum DebugLogParser {
             if let expected = DebugLogNoiseClassifier.extractExpectedHost(from: entry.rawLine) {
               current.expectedHostIdentity = expected
             }
-            current.reason = "主机身份校验"
+            current.reason = "Host identity verification"
             current.target = "cert-or-host-mismatch"
           } else {
             current.reason = DebugLogNoiseClassifier.extractErrorCodeDescription(from: entry.rawLine)
@@ -867,7 +870,7 @@ enum DebugLogParser {
         reason: category == .discoveryChatter
           ? DebugLogNoiseClassifier.extractDiscoveryHost(from: entry.rawLine)
           : category == .hostIdentityMismatch
-            ? "主机身份校验"
+            ? "Host identity verification"
           : DebugLogNoiseClassifier.extractErrorCodeDescription(from: entry.rawLine),
         target: category == .discoveryChatter
           ? (DebugLogNoiseClassifier.extractDiscoveryState(from: entry.rawLine)
@@ -1054,178 +1057,178 @@ enum DebugLogParser {
     switch category.categoryKey {
     case "discovery.mdns":
       if normalized == "starting discovery" {
-        return .init(title: "开始扫描主机", detail: "准备探测已知主机和局域网广播服务")
+        return .init(title: "Started scanning for hosts", detail: "Preparing to probe known hosts and local network discovery services")
       }
       if normalized == "starting mdns discovery" {
-        return .init(title: "开始 mDNS 发现", detail: nil)
+        return .init(title: "Started mDNS discovery", detail: nil)
       }
       if normalized == "stopping discovery" {
-        return .init(title: "停止扫描主机", detail: nil)
+        return .init(title: "Stopped scanning for hosts", detail: nil)
       }
       if normalized == "stopping mdns discovery" {
-        return .init(title: "停止 mDNS 发现", detail: nil)
+        return .init(title: "Stopped mDNS discovery", detail: nil)
       }
       if normalized == "updating hosts..." {
-        return .init(title: "正在更新主机列表", detail: nil)
+        return .init(title: "Updating host list", detail: nil)
       }
       if let host = firstCapture(in: message, pattern: #"Found new host:\s*(.+)$"#) {
-        return .init(title: "发现新主机", detail: host)
+        return .init(title: "Discovered a new host", detail: host)
       }
       if let host = firstCapture(in: message, pattern: #"Found existing host through MDNS:\s*(.+)$"#) {
-        return .init(title: "mDNS 发现已知主机", detail: host)
+        return .init(title: "mDNS discovered a known host", detail: host)
       }
       if let captures = captures(in: message, pattern: #"Resolved address:\s*([^\s]+)\s*->\s*(.+)$"#), captures.count >= 2 {
-        return .init(title: "解析到主机地址", detail: "\(captures[0]) → \(captures[1])")
+        return .init(title: "Resolved host address", detail: "\(captures[0]) → \(captures[1])")
       }
       if let captures = captures(in: message, pattern: #"Discovery summary for\s+([^:]+):\s*(.+)$"#), captures.count >= 2 {
-        return .init(title: "主机探测结果", detail: "\(captures[0])：\(captures[1])")
+        return .init(title: "Host probe result", detail: "\(captures[0]): \(captures[1])")
       }
       if let host = firstCapture(in: message, pattern: #"Found service:\s+.+\.\s([^ ]+)\s+-?\d+$"#) {
-        return .init(title: "发现广播服务", detail: host)
+        return .init(title: "Discovered broadcast service", detail: host)
       }
       return .init(title: cleaned, detail: nil)
 
     case "pairing.identity":
       if normalized.contains("server certificate mismatch") {
-        return .init(title: "服务器证书与已保存身份不匹配", detail: "这通常表示访问到了错误主机，或主机证书已经变化")
+        return .init(title: "Server certificate does not match the saved identity", detail: "This usually means the wrong host was reached or the host certificate changed")
       }
       if normalized.contains("client certificate imported in memory without keychain access") {
-        return .init(title: "客户端证书已导入内存", detail: "本次连接不会写入钥匙串")
+        return .init(title: "Client certificate loaded into memory", detail: "This connection will not write to Keychain")
       }
       if let captures = captures(in: message, pattern: #"incorrect host:\s*([^\s]+)\s+expected:\s*([^\s]+)"#), captures.count >= 2 {
         let actual = DebugLogNoiseClassifier.shortHostIdentity(captures[0]) ?? captures[0]
         let expected = DebugLogNoiseClassifier.shortHostIdentity(captures[1]) ?? captures[1]
-        return .init(title: "收到身份不匹配的主机响应", detail: "实际 \(actual) · 期望 \(expected)")
+        return .init(title: "Received a response from a host with a mismatched identity", detail: "Actual \(actual) · Expected \(expected)")
       }
       return .init(title: cleaned, detail: nil)
 
     case "network.tls":
       if let code = firstCapture(in: message, pattern: #"error\s+(-?\d+)"#) ?? firstCapture(in: message, pattern: #"Code=(-?\d+)"#) {
-        return .init(title: "TLS / 证书握手失败", detail: "错误码 \(code)")
+        return .init(title: "TLS / certificate handshake failed", detail: "Error code \(code)")
       }
-      return .init(title: "TLS / 证书验证失败", detail: cleaned)
+      return .init(title: "TLS / certificate verification failed", detail: cleaned)
 
     case "network.http", "network.transport":
       if let code = firstCapture(in: message, pattern: #"Request failed with error\s+(-?\d+)"#) {
-        return .init(title: friendlyNetworkFailureTitle(for: code), detail: "错误码 \(code)")
+        return .init(title: friendlyNetworkFailureTitle(for: code), detail: "Error code \(code)")
       }
       if normalized.contains("app list successfully retreived") || normalized.contains("app list successfully retrieved") {
         let tries = firstCapture(in: message, pattern: #"took\s+(\d+)\s+tries"#) ?? "0"
-        return .init(title: "应用列表获取成功", detail: "重试次数 \(tries)")
+        return .init(title: "App list retrieved", detail: "Retry count \(tries)")
       }
       if normalized.contains("stun failed to get wan address") {
         let code = firstCapture(in: message, pattern: #":\s*(-?\d+)$"#) ?? "unknown"
-        return .init(title: "STUN 获取公网地址失败", detail: "错误码 \(code)")
+        return .init(title: "STUN failed to obtain the public address", detail: "Error code \(code)")
       }
       if normalized.contains("requesting:") && normalized.contains("/resume?") {
-        return .init(title: "正在请求恢复串流会话", detail: nil)
+        return .init(title: "Requesting stream session resume", detail: nil)
       }
       if normalized.contains("received response:") {
-        return .init(title: "收到主机响应", detail: nil)
+        return .init(title: "Received host response", detail: nil)
       }
       if normalized.contains("making request:") {
-        return .init(title: "正在发送主机请求", detail: nil)
+        return .init(title: "Sending host request", detail: nil)
       }
       return .init(title: cleaned, detail: nil)
 
     case "stream.lifecycle":
       if normalized.contains("stream target selection:") {
         let active = value(forKey: "active", in: message)
-        return .init(title: "已选择串流目标", detail: active)
+        return .init(title: "Stream target selected", detail: active)
       }
       if normalized.contains("stream target classification:") {
         let reason = value(forKey: "reason", in: message)
-        return .init(title: "已完成串流路径判定", detail: reason)
+        return .init(title: "Stream route classification completed", detail: reason)
       }
       if let detail = suffix(in: cleaned, after: "Stream risk assessment:") {
-        return .init(title: "串流规格评估", detail: detail)
+        return .init(title: "Stream specification assessment", detail: detail)
       }
       if let detail = suffix(in: cleaned, after: "Recommended fallback:") {
-        return .init(title: "建议的回退配置", detail: detail)
+        return .init(title: "Recommended fallback configuration", detail: detail)
       }
       if let detail = suffix(in: cleaned, after: "Stream timing config:") {
-        return .init(title: "已应用串流时序配置", detail: detail)
+        return .init(title: "Stream timing configuration applied", detail: detail)
       }
       if normalized.contains("listartconnectionctx") {
-        return .init(title: "开始建立串流连接", detail: nil)
+        return .init(title: "Starting stream connection", detail: nil)
       }
       if normalized.contains("clconnectionstarted") || normalized.contains("connectionstarted") {
-        return .init(title: "串流连接已启动", detail: cleaned)
+        return .init(title: "Stream connection started", detail: cleaned)
       }
       if normalized.contains("input stream established") {
-        return .init(title: "输入链路已建立", detail: nil)
+        return .init(title: "Input path established", detail: nil)
       }
       if normalized.contains("performclose invoked") {
-        return .init(title: "用户请求关闭串流窗口", detail: nil)
+        return .init(title: "User requested the stream window to close", detail: nil)
       }
       if normalized.contains("disconnect requested") {
-        return .init(title: "收到断开串流请求", detail: cleaned)
+        return .init(title: "Received stream disconnect request", detail: cleaned)
       }
       if normalized.contains("stream stop took") {
-        return .init(title: "串流停止完成", detail: cleaned)
+        return .init(title: "Stream stopped", detail: cleaned)
       }
       if normalized.contains("input summary") {
-        return .init(title: "输入统计摘要", detail: suffixAfterFirstColon(in: cleaned) ?? cleaned)
+        return .init(title: "Input statistics summary", detail: suffixAfterFirstColon(in: cleaned) ?? cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "input.scroll":
       if normalized.contains("scroll-trace start") {
-        return .init(title: "滚轮输入开始", detail: cleaned)
+        return .init(title: "Scroll input started", detail: cleaned)
       }
       if normalized.contains("scroll-trace render") {
-        return .init(title: "滚轮效果已显示", detail: cleaned)
+        return .init(title: "Scroll effect displayed", detail: cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "input.mouse":
       if normalized.contains("absolute pos=") {
-        return .init(title: "发送绝对鼠标位置", detail: cleaned)
+        return .init(title: "Sent absolute mouse position", detail: cleaned)
       }
       if normalized.contains("relative raw=") {
-        return .init(title: "发送相对鼠标位移", detail: cleaned)
+        return .init(title: "Sent relative mouse movement", detail: cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "input.click":
-      return .init(title: "鼠标点击事件", detail: cleaned)
+      return .init(title: "Mouse click event", detail: cleaned)
 
     case "input.capture":
       if let reason = value(forKey: "reason", in: message) {
-        return .init(title: "鼠标捕获状态变化", detail: reason)
+        return .init(title: "Mouse capture state changed", detail: reason)
       }
-      return .init(title: "鼠标捕获状态变化", detail: cleaned)
+      return .init(title: "Mouse capture state changed", detail: cleaned)
 
     case "video.decoder":
       if normalized.contains("got sps") || normalized.contains("got pps") {
-        return .init(title: "视频流参数已更新", detail: cleaned)
+        return .init(title: "Video stream parameters updated", detail: cleaned)
       }
       if normalized.contains("constructing new h264 format description") {
-        return .init(title: "重建 H.264 解码格式", detail: nil)
+        return .init(title: "Rebuilt H.264 decode format", detail: nil)
       }
       if normalized.contains("renderer pacing target updated") {
-        return .init(title: "渲染节奏目标已更新", detail: cleaned)
+        return .init(title: "Render pacing target updated", detail: cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "audio.pipeline":
       if normalized.contains("microphone disabled in settings") {
-        return .init(title: "麦克风已在设置中关闭", detail: nil)
+        return .init(title: "Microphone disabled in Settings", detail: nil)
       }
       if normalized.contains("microphone setting:") {
-        return .init(title: "麦克风配置已下发", detail: cleaned)
+        return .init(title: "Microphone configuration applied", detail: cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "ui.window":
       if normalized.contains("startup display mode requesting fullscreen toggle") {
-        return .init(title: "请求切换到全屏", detail: nil)
+        return .init(title: "Requested fullscreen", detail: nil)
       }
       if normalized.contains("window-did-enter-fullscreen") {
-        return .init(title: "窗口已进入全屏", detail: nil)
+        return .init(title: "Window entered fullscreen", detail: nil)
       }
       if normalized.contains("window-did-exit-fullscreen") {
-        return .init(title: "窗口已退出全屏", detail: nil)
+        return .init(title: "Window exited fullscreen", detail: nil)
       }
       return .init(title: cleaned, detail: nil)
 
@@ -1248,17 +1251,17 @@ enum DebugLogParser {
   private static func friendlyNetworkFailureTitle(for code: String) -> String {
     switch code {
     case "-1202":
-      return "证书校验失败，准备回退"
+      return "Certificate validation failed; preparing fallback"
     case "-1200":
-      return "TLS 安全连接失败，准备回退"
+      return "TLS secure connection failed; preparing fallback"
     case "-1001":
-      return "请求超时，准备回退"
+      return "Request timed out; preparing fallback"
     case "-1004":
-      return "无法连接服务器，准备回退"
+      return "Could not connect to the server; preparing fallback"
     case "-1005":
-      return "网络连接中断"
+      return "Network connection interrupted"
     default:
-      return "网络请求失败，准备回退"
+      return "Network request failed; preparing fallback"
     }
   }
 

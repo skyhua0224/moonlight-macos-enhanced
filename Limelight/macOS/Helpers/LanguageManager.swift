@@ -71,9 +71,10 @@ public class LanguageManager: NSObject, ObservableObject {
     if useChinese {
       if let val = zhHans[key] { return val }
       if let val = localizedString(key, languageCode: "zh-Hans") { return val }
-      return key
     }
 
+    // English is the development language and the safe fallback for incomplete
+    // localization keys.
     if let val = en[key] { return val }
     if let val = localizedString(key, languageCode: "en") { return val }
     return key
