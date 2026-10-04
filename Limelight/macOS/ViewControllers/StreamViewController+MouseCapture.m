@@ -2747,6 +2747,20 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     return YES;
 }
 
+- (BOOL)keyboardTranslationLocalActionReleasesHeldModifiers:(NSString *)action {
+    if (action.length == 0) {
+        return NO;
+    }
+
+    return [action isEqualToString:KeyboardTranslationProfile.localActionShowDisconnectOptions]
+        || [action isEqualToString:KeyboardTranslationProfile.localActionDisconnectStream]
+        || [action isEqualToString:KeyboardTranslationProfile.localActionCloseAndQuitApp]
+        || [action isEqualToString:KeyboardTranslationProfile.localActionReconnectStream]
+        || [action isEqualToString:KeyboardTranslationProfile.localActionOpenControlCenter]
+        || [action isEqualToString:KeyboardTranslationProfile.localActionReleaseMouseCapture]
+        || [action isEqualToString:KeyboardTranslationProfile.localActionToggleBorderlessWindowed];
+}
+
 - (BOOL)handleKeyboardTranslationRuleForEvent:(NSEvent *)event {
     KeyboardTranslationRule *rule = [self keyboardTranslationRuleMatchingEvent:event];
     if (rule == nil) {
@@ -2754,7 +2768,11 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"keyboard-translation" event:event];
-    [self.hidSupport releaseAllModifierKeys];
+
+    if (rule.outputKind == KeyboardTranslationOutputKindLocalAction &&
+        [self keyboardTranslationLocalActionReleasesHeldModifiers:rule.localAction]) {
+        [self.hidSupport releaseAllModifierKeys];
+    }
 
     if (rule.outputKind == KeyboardTranslationOutputKindRemoteShortcut) {
         if (rule.outputShortcut != nil) {

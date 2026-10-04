@@ -8,6 +8,7 @@
 #import "HIDSupport_Internal.h"
 
 #import <IOKit/hid/IOHIDElement.h>
+#import <IOKit/hidsystem/IOLLEvent.h>
 
 
 NSString *const HIDMouseModeToggledNotification = @"HIDMouseModeToggledNotification";
@@ -200,6 +201,29 @@ static NSEventModifierFlags HIDModifierFlagForKeyCode(unsigned short keyCode) {
         default:
             return 0;
     }
+}
+
+static NSEventModifierFlags HIDDeviceModifierMaskForKeyCode(unsigned short keyCode) {
+    switch (keyCode) {
+        case kVK_Shift:        return NX_DEVICELSHIFTKEYMASK;
+        case kVK_RightShift:   return NX_DEVICERSHIFTKEYMASK;
+        case kVK_Control:      return NX_DEVICELCTLKEYMASK;
+        case kVK_RightControl: return NX_DEVICERCTLKEYMASK;
+        case kVK_Option:       return NX_DEVICELALTKEYMASK;
+        case kVK_RightOption:  return NX_DEVICERALTKEYMASK;
+        case kVK_Command:      return NX_DEVICELCMDKEYMASK;
+        case kVK_RightCommand: return NX_DEVICERCMDKEYMASK;
+        default:               return 0;
+    }
+}
+
+static BOOL HIDEventCarriesDeviceModifierState(NSEventModifierFlags flags) {
+    static const NSEventModifierFlags deviceModifiers =
+        NX_DEVICELCTLKEYMASK | NX_DEVICERCTLKEYMASK |
+        NX_DEVICELSHIFTKEYMASK | NX_DEVICERSHIFTKEYMASK |
+        NX_DEVICELALTKEYMASK | NX_DEVICERALTKEYMASK |
+        NX_DEVICELCMDKEYMASK | NX_DEVICERCMDKEYMASK;
+    return (flags & deviceModifiers) != 0;
 }
 
 static HIDKeyboardPhysicalModifierMask HIDEffectivePhysicalModifierMaskForEvent(HIDKeyboardPhysicalModifierMask physicalMask,
@@ -821,7 +845,10 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
         return;
     }
 
-    BOOL pressed = (event.modifierFlags & modifierFlag) != 0;
+    NSEventModifierFlags deviceMask = HIDDeviceModifierMaskForKeyCode(event.keyCode);
+    BOOL pressed = (deviceMask != 0 && HIDEventCarriesDeviceModifierState(event.modifierFlags))
+        ? ((event.modifierFlags & deviceMask) != 0)
+        : ((event.modifierFlags & modifierFlag) != 0);
     if (pressed) {
         self.keyboardPhysicalModifierSourceMask |= mask;
     } else {
