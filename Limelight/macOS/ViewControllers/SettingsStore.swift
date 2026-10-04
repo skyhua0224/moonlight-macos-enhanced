@@ -63,6 +63,7 @@ struct Settings: Encodable, Decodable {
   let codec: Int
   let videoRendererMode: Int?
   let hdr: Bool
+  let enable10BitSdr: Bool?
   let framePacing: Int
   let audioOnPC: Bool
   let audioConfiguration: Int
@@ -211,6 +212,7 @@ struct Settings: Encodable, Decodable {
       codec: codec,
       videoRendererMode: videoRendererMode,
       hdr: hdr,
+      enable10BitSdr: enable10BitSdr,
       framePacing: framePacing,
       audioOnPC: audioOnPC,
       audioConfiguration: audioConfiguration,
@@ -343,6 +345,7 @@ extension SettingsClass {
     codec: Int? = nil,
     videoRendererMode: Int?? = nil,
     hdr: Bool? = nil,
+    enable10BitSdr: Bool? = nil,
     connectionMethod: String? = nil,
     mouseMode: Int? = nil,
     volumeLevel: CGFloat? = nil,
@@ -399,6 +402,7 @@ extension SettingsClass {
     let resolvedVideoRendererMode =
       videoRendererMode != nil ? videoRendererMode! : settings.videoRendererMode
     let resolvedHdr = hdr ?? settings.hdr
+    let resolvedEnable10BitSdr = enable10BitSdr ?? settings.enable10BitSdr
     let resolvedKeyboardCompatibilityMode =
       keyboardCompatibilityMode ?? settings.keyboardCompatibilityMode
     let resolvedVolumeLevel = volumeLevel ?? settings.volumeLevel
@@ -450,6 +454,7 @@ extension SettingsClass {
       codec: resolvedCodec,
       videoRendererMode: resolvedVideoRendererMode,
       hdr: resolvedHdr,
+      enable10BitSdr: resolvedEnable10BitSdr,
       framePacing: settings.framePacing,
       audioOnPC: settings.audioOnPC,
       audioConfiguration: settings.audioConfiguration,

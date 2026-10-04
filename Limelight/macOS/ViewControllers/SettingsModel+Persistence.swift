@@ -133,6 +133,7 @@ extension SettingsModel {
     selectedVideoRendererMode = Self.defaultVideoRendererMode
     selectedVideoCodec = Self.defaultVideoCodec
     hdr = Self.defaultHdr
+    enable10BitSdr = Self.defaultEnable10BitSdr
     selectedPacingOptions = Self.defaultPacingOptions
     selectedSmoothnessLatencyMode = Self.defaultSmoothnessLatencyMode
     selectedDisplaySyncMode = Self.defaultDisplaySyncMode
@@ -276,6 +277,7 @@ extension SettingsModel {
 
       selectedVideoCodec = Self.getString(from: settings.codec, in: Self.videoCodecs)
       hdr = settings.hdr
+      enable10BitSdr = settings.enable10BitSdr ?? Self.defaultEnable10BitSdr
       selectedPacingOptions = Self.getString(from: settings.framePacing, in: Self.pacingOptions)
       selectedSmoothnessLatencyMode = Self.getString(
         from: settings.smoothnessLatencyMode
@@ -708,6 +710,7 @@ extension SettingsModel {
       codec: codec,
       videoRendererMode: videoRendererMode,
       hdr: hdr,
+      enable10BitSdr: enable10BitSdr,
       framePacing: framePacing,
       audioOnPC: audioOnPC,
       audioConfiguration: audioConfig,

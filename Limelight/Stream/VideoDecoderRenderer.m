@@ -1159,6 +1159,7 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     NSInteger _timingResponsivenessBias;
     MLAllowDrawableTimeoutMode _allowDrawableTimeoutMode;
     BOOL _enableHdr;
+    BOOL _enable10BitSdr;
     NSInteger _hdrTransferFunctionPreference;
     MLHDRMetadataSourceMode _hdrMetadataSourceMode;
     MLHDRClientDisplayProfileMode _hdrClientDisplayProfileMode;
@@ -2353,6 +2354,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _timingResponsivenessBias = streamConfig ? streamConfig.timingResponsivenessBias : (_timingPrioritizeResponsiveness ? 1 : 0);
     _allowDrawableTimeoutMode = streamConfig ? (MLAllowDrawableTimeoutMode)streamConfig.allowDrawableTimeoutMode : MLAllowDrawableTimeoutModeAuto;
     _enableHdr = streamConfig ? streamConfig.enableHdr : NO;
+    _enable10BitSdr = streamConfig ? streamConfig.enable10BitSdr : NO;
     _hdrTransferFunctionPreference = streamConfig ? streamConfig.hdrTransferFunction : 0;
     _hdrMetadataSourceMode = streamConfig ? (MLHDRMetadataSourceMode)streamConfig.hdrMetadataSource : MLHDRMetadataSourceModeHybrid;
     _hdrClientDisplayProfileMode = streamConfig ? (MLHDRClientDisplayProfileMode)streamConfig.hdrClientDisplayProfile : MLHDRClientDisplayProfileModeAuto;
@@ -2563,7 +2565,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     MTLPixelFormat desiredPixelFormat = MTLPixelFormatBGRA8Unorm;
     if (_enableHdr && _hdrOutputUsesEDR) {
         desiredPixelFormat = MTLPixelFormatRGBA16Float;
-    } else if (_enableHdr && !_hdrToneMapToSDR) {
+    } else if ((_enableHdr && !_hdrToneMapToSDR) || _enable10BitSdr) {
         desiredPixelFormat = MTLPixelFormatBGR10A2Unorm;
     }
     BOOL outputFormatChanged = (_metalView.colorPixelFormat != desiredPixelFormat);
@@ -4322,7 +4324,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
             MTLPixelFormat intermediatePixelFormat = MTLPixelFormatBGRA8Unorm;
             if (_enableHdr && _hdrOutputUsesEDR) {
                 intermediatePixelFormat = MTLPixelFormatRGBA16Float;
-            } else if (_enableHdr && !_hdrToneMapToSDR) {
+            } else if ((_enableHdr && !_hdrToneMapToSDR) || _enable10BitSdr) {
                 intermediatePixelFormat = MTLPixelFormatBGR10A2Unorm;
             }
             id<MTLTexture> intermediateTexture = [self intermediateTextureForWidth:workingWidth
