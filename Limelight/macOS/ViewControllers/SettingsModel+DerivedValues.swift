@@ -1054,6 +1054,7 @@ extension SettingsModel {
   static let defaultFreeMouseMotionMode = FreeMouseMotionMode.defaultMode.displayKey
   static let defaultTouchscreenMode = 0
   static let defaultGamepadMouseMode = false
+  static let defaultGamepadMouseModeLongPressMenu = true
   static let defaultMouseMode = "remote"
   static let defaultUpscalingMode = 6
   static let defaultClipboardSyncModeSelection = "Off"

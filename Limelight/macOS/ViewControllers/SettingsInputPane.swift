@@ -417,6 +417,14 @@ struct InputView: View {
                 hintKey: "Gamepad Mouse Hint",
                 boolBinding: $settingsModel.gamepadMouseMode
               )
+
+              Divider()
+
+              ToggleCell(
+                title: "Long-press Menu to Toggle Mouse Mode",
+                hintKey: "Long-press Menu Mouse Hint",
+                boolBinding: $settingsModel.gamepadMouseModeLongPressMenu
+              )
             }
           }
         },

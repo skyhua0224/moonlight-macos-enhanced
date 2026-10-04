@@ -804,6 +804,21 @@
 }
 
 - (void)bringStreamControlsToFront {
+    if (self.streamViewLayoutInProgress) {
+        if (!self.streamControlsFrontUpdateScheduled) {
+            self.streamControlsFrontUpdateScheduled = YES;
+            __weak typeof(self) weakSelf = self;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (strongSelf == nil) {
+                    return;
+                }
+                strongSelf.streamControlsFrontUpdateScheduled = NO;
+                [strongSelf bringStreamControlsToFront];
+            });
+        }
+        return;
+    }
     if (![self isWindowInCurrentSpace]) {
         return;
     }

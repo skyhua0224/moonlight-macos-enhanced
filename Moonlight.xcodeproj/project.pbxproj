@@ -53,7 +53,7 @@
 
 /* Begin PBXFileReference section */
 		4C2556A121F56F280009838E /* Moonlight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Moonlight.entitlements; sourceTree = "<group>"; };
-		4C7E0A7A1FECBFFD00684411 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4C7E0A7A1FECBFFD00684411 /* MoonlightEnhanced.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MoonlightEnhanced.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CD17E9B2733C0FC004D438C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = "moonlight-common.xcodeproj"; path = "moonlight-common/moonlight-common.xcodeproj"; sourceTree = "<group>"; };
 		A42858432D5066A000E39078 /* FFmpeg.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:KHSNQKXT55:Martin Kenny"; lastKnownFileType = wrapper.xcframework; name = FFmpeg.xcframework; path = xcframeworks/FFmpeg.xcframework; sourceTree = "<group>"; };
@@ -236,7 +236,7 @@
 		FB290CEF19B2C406004C83CF /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				4C7E0A7A1FECBFFD00684411 /* Moonlight.app */,
+				4C7E0A7A1FECBFFD00684411 /* MoonlightEnhanced.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -271,7 +271,7 @@
 			);
 			name = "Moonlight for macOS";
 			productName = "Moonlight for macOS";
-			productReference = 4C7E0A7A1FECBFFD00684411 /* Moonlight.app */;
+			productReference = 4C7E0A7A1FECBFFD00684411 /* MoonlightEnhanced.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -466,8 +466,8 @@
 					"-weak_framework",
 					MetalFX,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMac;
-				PRODUCT_NAME = Moonlight;
+				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMacEnhanced;
+				PRODUCT_NAME = MoonlightEnhanced;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -526,8 +526,8 @@
 					"-weak_framework",
 					MetalFX,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMac;
-				PRODUCT_NAME = Moonlight;
+				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMacEnhanced;
+				PRODUCT_NAME = MoonlightEnhanced;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

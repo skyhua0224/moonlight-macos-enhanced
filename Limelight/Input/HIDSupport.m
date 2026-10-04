@@ -1984,7 +1984,10 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 
 - (void)updateButtonFlags:(int)flag state:(BOOL)set {
     // Mouse Mode Toggle Logic (Long Press Start)
-    if (flag == PLAY_FLAG) {
+    if (flag == PLAY_FLAG &&
+        self.controllerDriver == 0 &&
+        [SettingsClass gamepadMouseModeFor:self.host.uuid] &&
+        [SettingsClass gamepadMouseModeLongPressMenuFor:self.host.uuid]) {
         if (set) {
             if (self.controller.startButtonDownTime == nil) {
                 self.controller.startButtonDownTime = [NSDate date];

@@ -22,6 +22,7 @@
 @interface ControllerSupport : NSObject
 @property(nonatomic) BOOL shouldSendInputEvents;
 @property(nonatomic) BOOL gamepadMouseModeEnabled;
+@property(nonatomic) BOOL gamepadMouseModeLongPressMenuEnabled;
 @property(nonatomic, assign) void *inputContext;
 
 - (id)initWithConfig:(StreamConfiguration *)streamConfig
@@ -32,6 +33,7 @@
 - (Controller *)getOscController;
 #endif
 - (void)cleanup;
+- (void)setGamepadMouseModeLongPressMenuEnabled:(BOOL)enabled;
 
 - (void)updateLeftStick:(Controller *)controller x:(short)x y:(short)y;
 - (void)updateRightStick:(Controller *)controller x:(short)x y:(short)y;

@@ -177,7 +177,7 @@ def build_body(version: str) -> str:
         "- 可在终端运行以下命令：",
         "  Run this command in Terminal:",
         "```bash",
-        "xattr -dr com.apple.quarantine /Applications/Moonlight.app",
+        "xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app",
         "```",
         "- 执行后重新打开应用。",
         "  Launch the app again after the command finishes.",

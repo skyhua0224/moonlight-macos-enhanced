@@ -16,7 +16,7 @@
                   <BuildableReference
                      BuildableIdentifier = "primary"
                      BlueprintIdentifier = "4C7E0A791FECBFFD00684411"
-                     BuildableName = "Moonlight.app"
+                     BuildableName = "MoonlightEnhanced.app"
                      BlueprintName = "Moonlight for macOS"
                      ReferencedContainer = "container:Moonlight.xcodeproj">
                   </BuildableReference>
@@ -34,7 +34,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "4C7E0A791FECBFFD00684411"
-               BuildableName = "Moonlight.app"
+                     BuildableName = "MoonlightEnhanced.app"
                BlueprintName = "Moonlight for macOS"
                ReferencedContainer = "container:Moonlight.xcodeproj">
             </BuildableReference>
@@ -63,7 +63,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "4C7E0A791FECBFFD00684411"
-            BuildableName = "Moonlight.app"
+            BuildableName = "MoonlightEnhanced.app"
             BlueprintName = "Moonlight for macOS"
             ReferencedContainer = "container:Moonlight.xcodeproj">
          </BuildableReference>
@@ -92,7 +92,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "4C7E0A791FECBFFD00684411"
-            BuildableName = "Moonlight.app"
+            BuildableName = "MoonlightEnhanced.app"
             BlueprintName = "Moonlight for macOS"
             ReferencedContainer = "container:Moonlight.xcodeproj">
          </BuildableReference>

@@ -11,7 +11,7 @@
 #import "NSApplication+Moonlight.h"
 #import "HostCellView.h"
 #import "NSView+Moonlight.h"
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 #undef NSLocalizedString
 #define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]

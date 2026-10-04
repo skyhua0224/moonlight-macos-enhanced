@@ -4,3 +4,5 @@
 "NSInputMonitoringUsageDescription" = "Used to capture high-rate mouse input for low-latency streaming controls.";
 /* Permission prompt shown by macOS when Local Network access is requested */
 "NSLocalNetworkUsageDescription" = "Used to discover and connect to game streaming hosts on your local network.";
+"CFBundleDisplayName" = "Moonlight Enhanced";
+"CFBundleName" = "Moonlight Enhanced";

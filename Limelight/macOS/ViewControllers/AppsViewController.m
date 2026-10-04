@@ -18,7 +18,7 @@
 #import "ImageFader.h"
 #import "NSView+Moonlight.h"
 
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 #import "StreamingSessionManager.h"
 
 #import "F.h"

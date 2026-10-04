@@ -10,7 +10,7 @@
 #import "HttpRequest.h"
 #import "CryptoManager.h"
 #import "TemporaryApp.h"
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 #include <libxml2/libxml/xmlreader.h>
 #include <string.h>

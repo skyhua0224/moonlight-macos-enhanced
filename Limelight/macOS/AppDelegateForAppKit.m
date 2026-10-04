@@ -19,7 +19,7 @@
 #import "AppsViewController.h"
 #import "AppsWorkspaceViewController.h"
 #import "TemporaryHost.h"
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 #import <objc/runtime.h>
 
 typedef enum : NSUInteger {

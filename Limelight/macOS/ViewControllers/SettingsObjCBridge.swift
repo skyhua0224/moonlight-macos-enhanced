@@ -204,6 +204,7 @@ class SettingsClass: NSObject {
         "swapMouseButtons": settings.swapMouseButtons,
         "reverseScrollDirection": settings.reverseScrollDirection,
         "gamepadMouseMode": settings.gamepadMouseMode,
+        "gamepadMouseModeLongPressMenu": settings.gamepadMouseModeLongPressMenu,
         "mouseMode": settings.mouseMode,
         "touchscreenMode": settings.touchscreenMode,
         "pointerSensitivity": settings.pointerSensitivity ?? SettingsModel.defaultPointerSensitivity,
@@ -375,6 +376,7 @@ class SettingsClass: NSObject {
       reverseScrollDirection: settings.reverseScrollDirection,
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
+      gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
       mouseMode: settings.mouseMode,
       pointerSensitivity: settings.pointerSensitivity,
       wheelScrollSpeed: settings.wheelScrollSpeed,
@@ -476,6 +478,7 @@ class SettingsClass: NSObject {
         reverseScrollDirection: updated.reverseScrollDirection,
         touchscreenMode: updated.touchscreenMode,
         gamepadMouseMode: updated.gamepadMouseMode,
+        gamepadMouseModeLongPressMenu: updated.gamepadMouseModeLongPressMenu,
         mouseMode: updated.mouseMode,
         pointerSensitivity: updated.pointerSensitivity,
         wheelScrollSpeed: updated.wheelScrollSpeed,
@@ -585,6 +588,7 @@ class SettingsClass: NSObject {
       reverseScrollDirection: settings.reverseScrollDirection,
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
+      gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
       mouseMode: settings.mouseMode,
       pointerSensitivity: settings.pointerSensitivity,
       wheelScrollSpeed: settings.wheelScrollSpeed,
@@ -1386,6 +1390,13 @@ class SettingsClass: NSObject {
       return settings.gamepadMouseMode ?? SettingsModel.defaultGamepadMouseMode
     }
     return SettingsModel.defaultGamepadMouseMode
+  }
+
+  @objc static func gamepadMouseModeLongPressMenu(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.gamepadMouseModeLongPressMenu ?? SettingsModel.defaultGamepadMouseModeLongPressMenu
+    }
+    return SettingsModel.defaultGamepadMouseModeLongPressMenu
   }
 
   @objc static func pointerSensitivity(for key: String) -> CGFloat {

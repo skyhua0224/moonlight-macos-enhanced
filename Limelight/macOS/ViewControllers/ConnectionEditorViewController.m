@@ -14,7 +14,7 @@
 #import "IdManager.h"
 #import "DataManager.h"
 #import "LatencyProbe.h"
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 #define MLString(key) [[LanguageManager shared] localize:key]
 

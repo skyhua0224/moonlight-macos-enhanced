@@ -12,7 +12,7 @@
 #import "NSView+Moonlight.h"
 #import "AppsViewController.h"
 
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 #import <QuartzCore/QuartzCore.h>
 

@@ -10,7 +10,7 @@
 #import "LogBuffer.h"
 #import "Utils.h"
 
-#import "Moonlight-Swift.h"
+#import "MoonlightEnhanced-Swift.h"
 
 #import <AudioUnit/AudioUnit.h>
 #import <CoreAudio/CoreAudio.h>
@@ -74,7 +74,9 @@ static int MLResolvedDynamicRangeModeForPreference(BOOL hdrEnabled, int hdrTrans
             return DYNAMIC_RANGE_MODE_HLG;
         case 0:
         default:
-            return DYNAMIC_RANGE_MODE_HLG;
+            // PQ is the interoperable HDR default for game-streaming hosts;
+            // HLG remains an explicit user preference.
+            return DYNAMIC_RANGE_MODE_HDR10_PQ;
     }
 }
 
