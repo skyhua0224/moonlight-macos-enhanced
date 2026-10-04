@@ -14,6 +14,7 @@
 #import "AlertPresenter.h"
 #import "Connection.h"
 #import "HttpManager.h"
+#import "IdManager.h"
 #import "StreamConfiguration.h"
 #import "DataManager.h"
 #import "ControllerSupport.h"
