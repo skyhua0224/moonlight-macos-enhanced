@@ -22,6 +22,10 @@ class SettingsHostingController<RootView: View>: NSWindowController {
     window.collectionBehavior = [.fullScreenNone]
     window.tabbingMode = .disallowed
     window.title = LanguageManager.shared.localize("Settings")
+    if #available(macOS 26.0, *) {
+      window.titlebarAppearsTransparent = true
+      window.toolbarStyle = .unified
+    }
 
     self.init(window: window)
 

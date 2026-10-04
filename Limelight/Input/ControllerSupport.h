@@ -23,6 +23,9 @@
 @property(nonatomic) BOOL shouldSendInputEvents;
 @property(nonatomic) BOOL gamepadMouseModeEnabled;
 @property(nonatomic) BOOL gamepadMouseModeLongPressMenuEnabled;
+@property(nonatomic) CGFloat gamepadTrackpadPointerSensitivity;
+@property(nonatomic) CGFloat gamepadTrackpadScrollSpeed;
+@property(nonatomic) BOOL gamepadTrackpadReverseScroll;
 @property(nonatomic, assign) void *inputContext;
 
 - (id)initWithConfig:(StreamConfiguration *)streamConfig

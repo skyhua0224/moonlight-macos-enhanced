@@ -30,8 +30,74 @@ static inline PML_INPUT_STREAM_CONTEXT ControllerInputContext(ControllerSupport 
     return ctx;
 }
 
-static BOOL SendControllerTouch(ControllerSupport *support, Controller *controller,
-                                uint32_t pointerId, BOOL active, float x, float y) {
+static void ResetControllerTrackpadMouseState(Controller *controller) {
+    controller.primaryTouchActive = NO;
+    controller.secondaryTouchActive = NO;
+    controller.lastPrimaryTouchX = 0.0f;
+    controller.lastPrimaryTouchY = 0.0f;
+    controller.lastSecondaryTouchX = 0.0f;
+    controller.lastSecondaryTouchY = 0.0f;
+    controller.trackpadMouseAccumulatedX = 0.0f;
+    controller.trackpadMouseAccumulatedY = 0.0f;
+    controller.trackpadScrollAccumulatedY = 0.0f;
+    controller.trackpadMouseButton = 0;
+}
+
+static void LogControllerMappingDiagnostics(Controller *controller,
+                                            uint8_t controllerType,
+                                            uint32_t supportedButtonFlags,
+                                            uint16_t capabilities) {
+    NSDictionary *mapping = @{
+        @"schema": @"ds5-mapping-v1",
+        @"player": @(controller.playerIndex),
+        @"controllerType": @(controllerType),
+        @"buttonFlags": @(supportedButtonFlags),
+        @"capabilities": @(capabilities),
+        @"buttons": @{
+            @"south": @"A/Cross",
+            @"east": @"B/Circle",
+            @"west": @"X/Square",
+            @"north": @"Y/Triangle",
+            @"leftShoulder": @"L1",
+            @"rightShoulder": @"R1",
+            @"menu": @"Options",
+            @"back": @"Create",
+            @"guide": @"PS",
+            @"touchpadButton": @"Touchpad"
+        },
+        @"dpad": @"8-way-hat",
+        @"triggers": @{
+            @"encoding": @"analog-uint8",
+            @"digitalThreshold": @30
+        },
+        @"sticks": @{
+            @"encoding": @"signed-int16",
+            @"range": @[@(-32768), @32767]
+        },
+        @"touchpad": @{
+            @"native": @"Foundation controller-touch",
+            @"mouseMode": @"single-finger-relative-pointer-two-finger-high-res-scroll",
+            @"secondaryClick": @"two-finger-touchpad-click"
+        }
+    };
+    NSError *error = nil;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:mapping options:0 error:&error];
+    NSString *json = data != nil ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+    Log(LOG_I, @"[controller-mapping] %@", json ?: [NSString stringWithFormat:@"{\"error\":\"%@\"}", error]);
+}
+
+static GCControllerTouchpad *PhysicalControllerTouchpad(GCController *controller) {
+    if (@available(macOS 11.0, *)) {
+        for (GCControllerTouchpad *touchpad in controller.physicalInputProfile.allTouchpads) {
+            return touchpad;
+        }
+    }
+    return nil;
+}
+
+static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controller *controller,
+                                           uint32_t pointerId, BOOL active,
+                                           float x, float y, BOOL hasContact) {
     PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(support);
     if (inputCtx == NULL) {
         return active;
@@ -41,7 +107,90 @@ static BOOL SendControllerTouch(ControllerSupport *support, Controller *controll
     // pad. Sunshine expects normalized top-left origin coordinates.
     float normalizedX = fminf(1.0f, fmaxf(0.0f, (x + 1.0f) * 0.5f));
     float normalizedY = fminf(1.0f, fmaxf(0.0f, (1.0f - y) * 0.5f));
-    BOOL hasContact = fabsf(x) > 0.001f || fabsf(y) > 0.001f;
+
+    // GameController exposes each DualSense contact as a direction pad. In
+    // mouse mode, turn the contact position deltas into relative pointer or
+    // high-resolution scroll events. Native controller-touch events remain
+    // unchanged while controller mode is active.
+    if (controller.isMouseMode) {
+        BOOL isSecondary = (pointerId & 1U) != 0;
+        BOOL oldPrimaryActive = controller.primaryTouchActive;
+        BOOL oldSecondaryActive = controller.secondaryTouchActive;
+        float previousX = isSecondary ? controller.lastSecondaryTouchX : controller.lastPrimaryTouchX;
+        float previousY = isSecondary ? controller.lastSecondaryTouchY : controller.lastPrimaryTouchY;
+        float previousCentroidX = (controller.lastPrimaryTouchX + controller.lastSecondaryTouchX) * 0.5f;
+        float previousCentroidY = (controller.lastPrimaryTouchY + controller.lastSecondaryTouchY) * 0.5f;
+
+        if (hasContact) {
+            if (isSecondary) {
+                controller.lastSecondaryTouchX = normalizedX;
+                controller.lastSecondaryTouchY = normalizedY;
+            } else {
+                controller.lastPrimaryTouchX = normalizedX;
+                controller.lastPrimaryTouchY = normalizedY;
+            }
+        }
+
+        BOOL currentPrimaryActive = isSecondary ? oldPrimaryActive : hasContact;
+        BOOL currentSecondaryActive = isSecondary ? hasContact : oldSecondaryActive;
+        BOOL wasTwoFinger = oldPrimaryActive && oldSecondaryActive;
+        BOOL isTwoFinger = currentPrimaryActive && currentSecondaryActive;
+        BOOL wasSingleFinger = (oldPrimaryActive != oldSecondaryActive);
+        BOOL isSingleFinger = (currentPrimaryActive != currentSecondaryActive);
+
+        // A contact-count transition establishes a fresh baseline. This
+        // prevents the second finger landing (or first finger lifting) from
+        // producing a cursor jump.
+        if (hasContact && ((isTwoFinger && !wasTwoFinger) ||
+                           (isSingleFinger && !wasSingleFinger))) {
+            if (isSecondary) {
+                controller.lastSecondaryTouchX = normalizedX;
+                controller.lastSecondaryTouchY = normalizedY;
+            } else {
+                controller.lastPrimaryTouchX = normalizedX;
+                controller.lastPrimaryTouchY = normalizedY;
+            }
+            return hasContact;
+        }
+
+        float deltaX = 0.0f;
+        float deltaY = 0.0f;
+        if (isTwoFinger && wasTwoFinger) {
+            float currentCentroidX = (controller.lastPrimaryTouchX + controller.lastSecondaryTouchX) * 0.5f;
+            float currentCentroidY = (controller.lastPrimaryTouchY + controller.lastSecondaryTouchY) * 0.5f;
+            deltaX = currentCentroidX - previousCentroidX;
+            deltaY = currentCentroidY - previousCentroidY;
+        } else if (isSingleFinger && wasSingleFinger && active) {
+            deltaX = normalizedX - previousX;
+            deltaY = normalizedY - previousY;
+        }
+
+        const float pointerScale = 1200.0f *
+            fminf(4.0f, fmaxf(0.1f, (float)support.gamepadTrackpadPointerSensitivity));
+        const float scrollScale = 2400.0f *
+            fminf(4.0f, fmaxf(0.1f, (float)support.gamepadTrackpadScrollSpeed));
+        if (isTwoFinger) {
+            float scrollDeltaY = support.gamepadTrackpadReverseScroll ? deltaY : -deltaY;
+            controller.trackpadScrollAccumulatedY += scrollDeltaY * scrollScale;
+            short scroll = (short)controller.trackpadScrollAccumulatedY;
+            if (scroll != 0) {
+                LiSendHighResScrollEventCtx(inputCtx, scroll);
+                controller.trackpadScrollAccumulatedY -= scroll;
+            }
+        } else if (isSingleFinger) {
+            controller.trackpadMouseAccumulatedX += deltaX * pointerScale;
+            controller.trackpadMouseAccumulatedY += deltaY * pointerScale;
+            short moveX = (short)controller.trackpadMouseAccumulatedX;
+            short moveY = (short)controller.trackpadMouseAccumulatedY;
+            if (moveX != 0 || moveY != 0) {
+                LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
+                controller.trackpadMouseAccumulatedX -= moveX;
+                controller.trackpadMouseAccumulatedY -= moveY;
+            }
+        }
+
+        return hasContact;
+    }
     uint8_t eventType;
     if (hasContact && !active) {
         eventType = LI_TOUCH_EVENT_DOWN;
@@ -57,6 +206,13 @@ static BOOL SendControllerTouch(ControllerSupport *support, Controller *controll
                                   pointerId, normalizedX, normalizedY,
                                   hasContact ? 1.0f : 0.0f);
     return hasContact;
+}
+
+static BOOL SendControllerTouch(ControllerSupport *support, Controller *controller,
+                                uint32_t pointerId, BOOL active, float x, float y) {
+    BOOL hasContact = fabsf(x) > 0.001f || fabsf(y) > 0.001f;
+    return SendControllerTouchWithContact(support, controller, pointerId, active,
+                                          x, y, hasContact);
 }
 
 static void ApplyDualSenseTriggerEffect(GCDualSenseAdaptiveTrigger *trigger,
@@ -563,6 +719,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
                                             (uint16_t)[ControllerSupport getConnectedGamepadMask:nil],
                                             controllerType, supportedButtonFlags, capabilities);
+            LogControllerMappingDiagnostics(controller, controllerType, supportedButtonFlags, capabilities);
             controller.controllerAnnounced = YES;
 
             if (controller.gamepad.battery != nil) {
@@ -642,6 +799,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     dualShock.touchpadSecondary.valueChangedHandler = nil;
                     dualShock.touchpadButton.pressedChangedHandler = nil;
                 }
+                GCControllerTouchpad *physicalTouchpad = PhysicalControllerTouchpad(controller);
+                physicalTouchpad.touchDown = nil;
+                physicalTouchpad.touchMoved = nil;
+                physicalTouchpad.touchUp = nil;
             }
         }
         else if (controller.gamepad != NULL) {
@@ -804,9 +965,46 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     primary = dualShock.touchpadPrimary;
                     secondary = dualShock.touchpadSecondary;
                 }
-                if (primary != nil) {
+                GCControllerTouchpad *physicalTouchpad = PhysicalControllerTouchpad(controller);
+                if (physicalTouchpad != nil) {
+                    if (primary != nil) {
+                        primary.valueChangedHandler = nil;
+                    }
+                    Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
+                    physicalTouchpad.touchDown = ^(GCControllerTouchpad *touchpad,
+                                                   float xValue, float yValue,
+                                                   float buttonValue, BOOL buttonPressed) {
+                        (void)touchpad;
+                        (void)buttonValue;
+                        (void)buttonPressed;
+                        touchController.primaryTouchActive = SendControllerTouchWithContact(
+                            self, touchController, (uint32_t)touchController.playerIndex * 2,
+                            touchController.primaryTouchActive, xValue, yValue, YES);
+                    };
+                    physicalTouchpad.touchMoved = ^(GCControllerTouchpad *touchpad,
+                                                    float xValue, float yValue,
+                                                    float buttonValue, BOOL buttonPressed) {
+                        (void)touchpad;
+                        (void)buttonValue;
+                        (void)buttonPressed;
+                        touchController.primaryTouchActive = SendControllerTouchWithContact(
+                            self, touchController, (uint32_t)touchController.playerIndex * 2,
+                            touchController.primaryTouchActive, xValue, yValue, YES);
+                    };
+                    physicalTouchpad.touchUp = ^(GCControllerTouchpad *touchpad,
+                                                 float xValue, float yValue,
+                                                 float buttonValue, BOOL buttonPressed) {
+                        (void)touchpad;
+                        (void)buttonValue;
+                        (void)buttonPressed;
+                        touchController.primaryTouchActive = SendControllerTouchWithContact(
+                            self, touchController, (uint32_t)touchController.playerIndex * 2,
+                            touchController.primaryTouchActive, xValue, yValue, NO);
+                    };
+                } else if (primary != nil) {
                     Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
                     primary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
+                        (void)pad;
                         touchController.primaryTouchActive = SendControllerTouch(
                             self, touchController, (uint32_t)touchController.playerIndex * 2,
                             touchController.primaryTouchActive, xValue, yValue);
@@ -815,6 +1013,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 if (secondary != nil) {
                     Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
                     secondary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
+                        (void)pad;
                         touchController.secondaryTouchActive = SendControllerTouch(
                             self, touchController, (uint32_t)touchController.playerIndex * 2 + 1,
                             touchController.secondaryTouchActive, xValue, yValue);
@@ -834,10 +1033,31 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                         (void)value;
                         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
                         if (inputCtx != NULL) {
-                            LiSendControllerTouchEventCtx(inputCtx, (uint8_t)touchController.playerIndex,
-                                                          LI_TOUCH_EVENT_BUTTON_ONLY,
-                                                          (uint32_t)touchController.playerIndex * 2,
-                                                          0.0f, 0.0f, pressed ? 1.0f : 0.0f);
+                            if (touchController.isMouseMode) {
+                                if (pressed) {
+                                    // A physical click with the second
+                                    // contact down behaves like a secondary
+                                    // click, matching the usual trackpad
+                                    // convention. Remember the selected
+                                    // button until release in case the
+                                    // contact is lifted first.
+                                    touchController.trackpadMouseButton =
+                                        touchController.secondaryTouchActive ? BUTTON_RIGHT : BUTTON_LEFT;
+                                }
+                                int buttonCode = touchController.trackpadMouseButton != 0
+                                    ? touchController.trackpadMouseButton : BUTTON_LEFT;
+                                LiSendMouseButtonEventCtx(inputCtx,
+                                                          pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE,
+                                                          buttonCode);
+                                if (!pressed) {
+                                    touchController.trackpadMouseButton = 0;
+                                }
+                            } else {
+                                LiSendControllerTouchEventCtx(inputCtx, (uint8_t)touchController.playerIndex,
+                                                              LI_TOUCH_EVENT_BUTTON_ONLY,
+                                                              (uint32_t)touchController.playerIndex * 2,
+                                                              0.0f, 0.0f, pressed ? 1.0f : 0.0f);
+                            }
                         }
                     };
                 }
@@ -1123,6 +1343,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     _multiController = streamConfig.multiController;
     _gamepadMouseModeEnabled = streamConfig.gamepadMouseMode;
     _gamepadMouseModeLongPressMenuEnabled = streamConfig.gamepadMouseModeLongPressMenu;
+    _gamepadTrackpadPointerSensitivity = streamConfig.gamepadTrackpadPointerSensitivity > 0.0
+        ? streamConfig.gamepadTrackpadPointerSensitivity : 1.0;
+    _gamepadTrackpadScrollSpeed = streamConfig.gamepadTrackpadScrollSpeed > 0.0
+        ? streamConfig.gamepadTrackpadScrollSpeed : 1.0;
+    _gamepadTrackpadReverseScroll = streamConfig.gamepadTrackpadReverseScroll;
     _presenceDelegate = delegate;
 
     _debouncers = [[NSMutableDictionary alloc] init];
@@ -1352,6 +1577,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 if ([controller.startButtonDownTime timeIntervalSinceNow] < -1.0) {
                     // Toggle
                     controller.isMouseMode = !controller.isMouseMode;
+                    ResetControllerTrackpadMouseState(controller);
                     
                     // Notify delegate
                     if ([self->_presenceDelegate respondsToSelector:@selector(mouseModeToggled:)]) {
@@ -1379,7 +1605,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             float deltaX = 0;
             float deltaY = 0;
             
-            if (gamepad) {
+            // The right stick remains a compatibility fallback, but a live
+            // touch contact owns the pointer until it is lifted. This avoids
+            // mixing stick motion into a precise touchpad gesture.
+            if (gamepad && !controller.primaryTouchActive && !controller.secondaryTouchActive) {
                 deltaX = gamepad.rightThumbstick.xAxis.value;
                 deltaY = gamepad.rightThumbstick.yAxis.value;
             }

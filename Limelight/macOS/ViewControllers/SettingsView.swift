@@ -103,12 +103,8 @@ struct SettingsView: View {
   }
 
   var body: some View {
-    NavigationView {
-      Sidebar(selectedPane: $selectedPane)
-      Detail(pane: selectedPane)
-        .environmentObject(settingsModel)
-    }
-    .frame(minWidth: 575, minHeight: 275)
+    settingsNavigation
+    .frame(minWidth: 760, minHeight: 520)
     .onAppear {
       if selectedPane == .legacy {
         selectedPane = .app
@@ -121,6 +117,25 @@ struct SettingsView: View {
       }
     }
   }
+
+  @ViewBuilder
+  private var settingsNavigation: some View {
+    if #available(macOS 13.0, *) {
+      NavigationSplitView {
+        Sidebar(selectedPane: $selectedPane)
+      } detail: {
+        Detail(pane: selectedPane)
+          .environmentObject(settingsModel)
+      }
+      .navigationSplitViewStyle(.balanced)
+    } else {
+      NavigationView {
+        Sidebar(selectedPane: $selectedPane)
+        Detail(pane: selectedPane)
+          .environmentObject(settingsModel)
+      }
+    }
+  }
 }
 
 struct Sidebar: View {
@@ -128,7 +143,7 @@ struct Sidebar: View {
   @ObservedObject var languageManager = LanguageManager.shared
 
   var body: some View {
-    // This "selectionBinding" is needed to make selection work with a macOS 11 Big Sur compatible List() constructor
+    // Keep selection explicit so the sidebar remains stable across macOS releases.
     let selectionBinding = Binding<SettingsPaneType?>(
       get: {
         selectedPane
@@ -214,18 +229,13 @@ struct PaneCellView: View {
     let iconSize = CGFloat(14)
     let containerSize = iconSize + (iconSize / 3)
 
-    HStack(spacing: 6) {
-      Image(systemName: pane.symbol)
-        .adaptiveForegroundColor(.white)
-        .font(.callout)
-        .frame(width: containerSize, height: containerSize)
-        .padding(1)
-        .background(
-          RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .foregroundColor(pane.color)
-        )
-
+    Label {
       Text(languageManager.localize(pane.title))
+    } icon: {
+      Image(systemName: pane.symbol)
+        .symbolRenderingMode(.hierarchical)
+        .foregroundStyle(pane.color)
+        .frame(width: containerSize)
     }
   }
 }

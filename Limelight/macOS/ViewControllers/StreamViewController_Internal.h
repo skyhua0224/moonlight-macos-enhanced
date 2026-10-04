@@ -773,6 +773,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)resetStreamHealthDiagnostics;
 - (void)stopStreamHealthDiagnostics;
 - (void)startStreamHealthDiagnostics;
+- (void)publishPerformanceDiagnosticsSnapshot;
 - (void)attemptAdaptiveMitigationForDropRate:(float)dropRate;
 - (void)pollStreamHealthDiagnostics:(NSTimer *)timer;
 - (void)logStreamHealthSummaryWithReason:(NSString *)reason;

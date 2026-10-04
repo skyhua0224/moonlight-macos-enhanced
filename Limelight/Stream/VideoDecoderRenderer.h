@@ -44,6 +44,11 @@ typedef struct {
 
   // Rolling 1% low FPS derived from recent rendered frame intervals.
   float renderedFpsOnePercentLow;
+
+  // Population standard deviation of recent rendered frame intervals (ms).
+  // This is a display-side frame pacing metric and is separate from the
+  // RFC3550-style network inter-arrival jitter above.
+  float renderFramePacingJitterMs;
 } VideoStats;
 
 @interface VideoDecoderRenderer : NSObject

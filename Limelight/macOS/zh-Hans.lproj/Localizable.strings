@@ -592,6 +592,7 @@
 "Target Display" = "目标显示器";
 "Target Display detail" = "从主机返回的 Sunshine 显示器列表中选择目标显示器。选择“主机默认”时，会保留主机侧的默认显示器设置。";
 "Use Virtual Display" = "使用虚拟显示器";
+"Use Physical Display" = "使用物理显示器";
 "Use Virtual Display detail" = "当主机支持 VDD 时，请求使用 Sunshine 虚拟显示器会话。";
 "Screen Mode" = "屏幕模式";
 "Screen Mode detail" = "控制 Sunshine 在本次会话开始前如何准备主机显示拓扑。";
@@ -604,6 +605,7 @@
 "Follow Host Setting" = "跟随主机设置";
 "This Stream Display" = "本次串流显示器";
 "This Stream Screen Mode" = "本次串流屏幕模式";
+"This App Virtual Display" = "此应用虚拟显示器";
 "Refresh Host Displays" = "刷新主机显示器";
 "No Host Displays Found" = "未找到主机显示器";
 "Loading…" = "加载中…";

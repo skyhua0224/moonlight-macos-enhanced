@@ -305,6 +305,29 @@ static float MLComputeRenderedOnePercentLowFps(const uint16_t *samples, NSUInteg
     return 1000.0f / (float)averageWorstFrameTimeMs;
 }
 
+static float MLComputeRenderFramePacingJitterMs(const uint16_t *samples, NSUInteger count)
+{
+    if (samples == NULL || count < 2 || count > kMLRenderIntervalSampleCapacity) {
+        return 0.0f;
+    }
+
+    double sum = 0.0;
+    for (NSUInteger idx = 0; idx < count; idx++) {
+        sum += samples[idx];
+    }
+    double mean = sum / (double)count;
+    if (mean <= 0.0) {
+        return 0.0f;
+    }
+
+    double squaredError = 0.0;
+    for (NSUInteger idx = 0; idx < count; idx++) {
+        double delta = (double)samples[idx] - mean;
+        squaredError += delta * delta;
+    }
+    return (float)sqrt(squaredError / (double)count);
+}
+
 static BOOL MLMetalFXIsSupported(void)
 {
 #if ML_HAS_METALFX
@@ -1426,6 +1449,8 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     snapshotStats.jitterMs = _jitterMsEstimate;
     snapshotStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(_renderIntervalSamples,
                                                                                _renderIntervalSampleCount);
+    snapshotStats.renderFramePacingJitterMs = MLComputeRenderFramePacingJitterMs(_renderIntervalSamples,
+                                                                                  _renderIntervalSampleCount);
     snapshotStats.lastUpdatedTimestamp = renderSampleNowMs;
     _videoStats = snapshotStats;
 }
@@ -4650,6 +4675,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             self->_activeWndVideoStats.jitterMs = self->_jitterMsEstimate;
             self->_activeWndVideoStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(self->_renderIntervalSamples,
                                                                                                    self->_renderIntervalSampleCount);
+            self->_activeWndVideoStats.renderFramePacingJitterMs = MLComputeRenderFramePacingJitterMs(self->_renderIntervalSamples,
+                                                                                                      self->_renderIntervalSampleCount);
 
             VideoStats completedStats = self->_activeWndVideoStats;
             completedStats.lastUpdatedTimestamp = now;
@@ -4732,6 +4759,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         snapshotStats.jitterMs = self->_jitterMsEstimate;
         snapshotStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(self->_renderIntervalSamples,
                                                                                    self->_renderIntervalSampleCount);
+        snapshotStats.renderFramePacingJitterMs = MLComputeRenderFramePacingJitterMs(self->_renderIntervalSamples,
+                                                                                      self->_renderIntervalSampleCount);
         snapshotStats.lastUpdatedTimestamp = LiGetMillis();
         self->_videoStats = snapshotStats;
 

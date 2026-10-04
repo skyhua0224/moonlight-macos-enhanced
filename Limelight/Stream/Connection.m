@@ -220,6 +220,12 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     dispatch_queue_t _clipboardControlQueue;
 }
 
+- (uint64_t)audioUnderrunCount {
+    @synchronized (self) {
+        return _audioUnderrunCount;
+    }
+}
+
 - (void)ensureControlContextBacklink {
     if (_connectionContext.controlContext.connectionContext == NULL) {
         _connectionContext.controlContext.connectionContext = &_connectionContext;

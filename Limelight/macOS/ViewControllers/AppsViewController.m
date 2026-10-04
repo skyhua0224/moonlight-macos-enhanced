@@ -64,6 +64,8 @@
 @property (nonatomic, copy) NSString *pendingSessionSunshineTargetDisplayNameOverride;
 @property (nonatomic) BOOL hasPendingSessionSunshineTargetDisplayOverride;
 @property (nonatomic, strong) NSNumber *pendingSessionSunshineScreenModeOverride;
+@property (nonatomic, strong) NSNumber *pendingSessionSunshineUseVirtualDisplayOverride;
+@property (nonatomic, strong) TemporaryApp *sunshineOverrideApp;
 @property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *cachedSunshineDisplays;
 @property (nonatomic, copy) NSString *cachedSunshineDisplaysHostUUID;
 @property (nonatomic) BOOL refreshingSunshineDisplays;
@@ -74,7 +76,10 @@ const CGFloat scaleBase = 1.125;
 static NSUserInterfaceItemIdentifier const MLSunshineOverridesSeparatorMenuItemIdentifier = @"sunshineOverridesSeparatorMenuItem";
 static NSUserInterfaceItemIdentifier const MLSunshineThisStreamDisplayMenuItemIdentifier = @"sunshineThisStreamDisplayMenuItem";
 static NSUserInterfaceItemIdentifier const MLSunshineThisStreamModeMenuItemIdentifier = @"sunshineThisStreamModeMenuItem";
+static NSUserInterfaceItemIdentifier const MLSunshineThisAppVirtualDisplayMenuItemIdentifier = @"sunshineThisAppVirtualDisplayMenuItem";
 static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIdentifier = @"sunshineRefreshDisplaysMenuItem";
+
+static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.SunshinePerAppTopology.";
 
 @implementation AppsViewController
 
@@ -605,6 +610,7 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
     streamVC.hasSessionSunshineTargetDisplayOverride = self.hasPendingSessionSunshineTargetDisplayOverride;
     streamVC.sessionSunshineTargetDisplayNameOverride = self.pendingSessionSunshineTargetDisplayNameOverride;
     streamVC.sessionSunshineScreenModeOverride = self.pendingSessionSunshineScreenModeOverride;
+    streamVC.sessionSunshineUseVirtualDisplayOverride = self.pendingSessionSunshineUseVirtualDisplayOverride;
     [self clearPendingSunshineStreamOverrides];
 }
 
@@ -896,8 +902,70 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
     quitAppMenuItem.hidden = ![self isAppRunning:app];
     quitAppMenuItem.enabled = [self isAppRunning:app];
 
+    self.sunshineOverrideApp = app;
+    [self loadPersistedSunshineTopologyForCurrentApp];
     [self rebuildSunshineOverrideItemsInMenu:menu];
     [self refreshSunshineDisplaysIfNeededForce:NO];
+}
+
+- (NSString *)sunshinePerAppTopologyDefaultsKey {
+    if (self.host.uuid.length == 0 || self.sunshineOverrideApp.id.length == 0) {
+        return nil;
+    }
+    return [NSString stringWithFormat:@"%@%@.%@",
+            MLSunshinePerAppTopologyDefaultsPrefix,
+            self.host.uuid,
+            self.sunshineOverrideApp.id];
+}
+
+- (void)loadPersistedSunshineTopologyForCurrentApp {
+    self.hasPendingSessionSunshineTargetDisplayOverride = NO;
+    self.pendingSessionSunshineTargetDisplayNameOverride = nil;
+    self.pendingSessionSunshineScreenModeOverride = nil;
+    self.pendingSessionSunshineUseVirtualDisplayOverride = nil;
+
+    NSString *key = [self sunshinePerAppTopologyDefaultsKey];
+    NSDictionary *saved = key.length > 0 ? [[NSUserDefaults standardUserDefaults] dictionaryForKey:key] : nil;
+    if (![saved isKindOfClass:[NSDictionary class]]) {
+        return;
+    }
+
+    if ([saved[@"displayName"] isKindOfClass:[NSString class]]) {
+        self.hasPendingSessionSunshineTargetDisplayOverride = YES;
+        self.pendingSessionSunshineTargetDisplayNameOverride = saved[@"displayName"];
+    }
+    if ([saved[@"screenMode"] isKindOfClass:[NSNumber class]]) {
+        self.pendingSessionSunshineScreenModeOverride = saved[@"screenMode"];
+    }
+    if ([saved[@"useVirtualDisplay"] isKindOfClass:[NSNumber class]]) {
+        self.pendingSessionSunshineUseVirtualDisplayOverride = saved[@"useVirtualDisplay"];
+    }
+}
+
+- (void)persistPendingSunshineTopologyForCurrentApp {
+    NSString *key = [self sunshinePerAppTopologyDefaultsKey];
+    if (key.length == 0) {
+        return;
+    }
+
+    NSMutableDictionary *saved = [NSMutableDictionary dictionary];
+    if (self.hasPendingSessionSunshineTargetDisplayOverride &&
+        self.pendingSessionSunshineTargetDisplayNameOverride != nil) {
+        saved[@"displayName"] = self.pendingSessionSunshineTargetDisplayNameOverride;
+    }
+    if (self.pendingSessionSunshineScreenModeOverride != nil) {
+        saved[@"screenMode"] = self.pendingSessionSunshineScreenModeOverride;
+    }
+    if (self.pendingSessionSunshineUseVirtualDisplayOverride != nil) {
+        saved[@"useVirtualDisplay"] = self.pendingSessionSunshineUseVirtualDisplayOverride;
+    }
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (saved.count > 0) {
+        [defaults setObject:saved forKey:key];
+    } else {
+        [defaults removeObjectForKey:key];
+    }
 }
 
 - (NSArray<NSDictionary<NSString *, id> *> *)sunshineScreenModeEntries {
@@ -934,6 +1002,8 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
     self.hasPendingSessionSunshineTargetDisplayOverride = NO;
     self.pendingSessionSunshineTargetDisplayNameOverride = nil;
     self.pendingSessionSunshineScreenModeOverride = nil;
+    self.pendingSessionSunshineUseVirtualDisplayOverride = nil;
+    self.sunshineOverrideApp = nil;
 }
 
 - (void)refreshSunshineDisplaysIfNeededForce:(BOOL)force {
@@ -1027,6 +1097,7 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
         if ([identifier isEqualToString:MLSunshineOverridesSeparatorMenuItemIdentifier] ||
             [identifier isEqualToString:MLSunshineThisStreamDisplayMenuItemIdentifier] ||
             [identifier isEqualToString:MLSunshineThisStreamModeMenuItemIdentifier] ||
+            [identifier isEqualToString:MLSunshineThisAppVirtualDisplayMenuItemIdentifier] ||
             [identifier isEqualToString:MLSunshineRefreshDisplaysMenuItemIdentifier]) {
             [itemsToRemove addObject:item];
         }
@@ -1136,6 +1207,37 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
     }
 }
 
+- (void)configureSunshineVirtualDisplaySubmenu:(NSMenu *)submenu {
+    NSMenuItem *followHostSettingItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Follow Host Setting", @"Follow Host Setting")
+                                                                   action:@selector(selectPendingSunshineUseVirtualDisplayOverride:)
+                                                            keyEquivalent:@""];
+    followHostSettingItem.target = self;
+    followHostSettingItem.representedObject = [NSNull null];
+    followHostSettingItem.state = self.pendingSessionSunshineUseVirtualDisplayOverride == nil
+        ? NSControlStateValueOn : NSControlStateValueOff;
+    [submenu addItem:followHostSettingItem];
+    [submenu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *enabledItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Use Virtual Display", @"Use Virtual Display")
+                                                         action:@selector(selectPendingSunshineUseVirtualDisplayOverride:)
+                                                  keyEquivalent:@""];
+    enabledItem.target = self;
+    enabledItem.representedObject = @YES;
+    enabledItem.state = self.pendingSessionSunshineUseVirtualDisplayOverride.boolValue
+        ? NSControlStateValueOn : NSControlStateValueOff;
+    [submenu addItem:enabledItem];
+
+    NSMenuItem *disabledItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Use Physical Display", @"Use Physical Display")
+                                                          action:@selector(selectPendingSunshineUseVirtualDisplayOverride:)
+                                                   keyEquivalent:@""];
+    disabledItem.target = self;
+    disabledItem.representedObject = @NO;
+    disabledItem.state = self.pendingSessionSunshineUseVirtualDisplayOverride != nil &&
+        !self.pendingSessionSunshineUseVirtualDisplayOverride.boolValue
+        ? NSControlStateValueOn : NSControlStateValueOff;
+    [submenu addItem:disabledItem];
+}
+
 - (void)rebuildSunshineOverrideItemsInMenu:(NSMenu *)menu {
     [self removeSunshineOverrideItemsFromMenu:menu];
 
@@ -1163,6 +1265,15 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
     modeMenuItem.submenu = modeSubmenu;
     [menu insertItem:modeMenuItem atIndex:insertionIndex++];
 
+    NSMenu *virtualDisplaySubmenu = [[NSMenu alloc] initWithTitle:NSLocalizedString(@"This App Virtual Display", @"This App Virtual Display")];
+    [self configureSunshineVirtualDisplaySubmenu:virtualDisplaySubmenu];
+    NSMenuItem *virtualDisplayMenuItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"This App Virtual Display", @"This App Virtual Display")
+                                                                       action:nil
+                                                                keyEquivalent:@""];
+    virtualDisplayMenuItem.identifier = MLSunshineThisAppVirtualDisplayMenuItemIdentifier;
+    virtualDisplayMenuItem.submenu = virtualDisplaySubmenu;
+    [menu insertItem:virtualDisplayMenuItem atIndex:insertionIndex++];
+
     NSMenuItem *refreshItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Refresh Host Displays", @"Refresh host displays")
                                                          action:@selector(refreshSunshineDisplaysMenuItemClicked:)
                                                   keyEquivalent:@""];
@@ -1182,6 +1293,7 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
     if ([sender.representedObject isKindOfClass:[NSNull class]]) {
         self.hasPendingSessionSunshineTargetDisplayOverride = NO;
         self.pendingSessionSunshineTargetDisplayNameOverride = nil;
+        [self persistPendingSunshineTopologyForCurrentApp];
         return;
     }
 
@@ -1190,11 +1302,13 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
         [sender.representedObject isKindOfClass:[NSString class]] ? sender.representedObject : @"";
     Log(LOG_I, @"[sunshine] Next stream display override=%@",
         [self sunshineDisplayLabelForValue:self.pendingSessionSunshineTargetDisplayNameOverride]);
+    [self persistPendingSunshineTopologyForCurrentApp];
 }
 
 - (IBAction)selectPendingSunshineStreamScreenModeOverride:(NSMenuItem *)sender {
     if ([sender.representedObject isKindOfClass:[NSNull class]]) {
         self.pendingSessionSunshineScreenModeOverride = nil;
+        [self persistPendingSunshineTopologyForCurrentApp];
         return;
     }
 
@@ -1202,7 +1316,22 @@ static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIden
         self.pendingSessionSunshineScreenModeOverride = sender.representedObject;
         Log(LOG_I, @"[sunshine] Next stream screen mode override=%@",
             [self sunshineScreenModeTitleForValue:self.pendingSessionSunshineScreenModeOverride.integerValue]);
+        [self persistPendingSunshineTopologyForCurrentApp];
     }
+}
+
+- (IBAction)selectPendingSunshineUseVirtualDisplayOverride:(NSMenuItem *)sender {
+    if ([sender.representedObject isKindOfClass:[NSNull class]]) {
+        self.pendingSessionSunshineUseVirtualDisplayOverride = nil;
+    } else if ([sender.representedObject isKindOfClass:[NSNumber class]]) {
+        self.pendingSessionSunshineUseVirtualDisplayOverride = sender.representedObject;
+    }
+    [self persistPendingSunshineTopologyForCurrentApp];
+    Log(LOG_I, @"[sunshine] App display topology override: app=%@ useVdd=%@",
+        self.sunshineOverrideApp.id ?: @"(unknown)",
+        self.pendingSessionSunshineUseVirtualDisplayOverride == nil
+            ? @"host-default"
+            : (self.pendingSessionSunshineUseVirtualDisplayOverride.boolValue ? @"true" : @"false"));
 }
 
 - (void)didHover:(BOOL)hovered forApp:(TemporaryApp *)app {
