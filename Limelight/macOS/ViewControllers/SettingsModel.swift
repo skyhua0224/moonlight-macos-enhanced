@@ -55,6 +55,36 @@ enum SunshineDisplayCapabilityState: Equatable {
   }
 }
 
+enum SunshineVddState: String, Equatable {
+  case ready
+  case driverMissing = "driver_missing"
+  case driverUnreachable = "driver_unreachable"
+  case unsupportedPlatform = "unsupported_platform"
+  case unknown
+
+  init(wireValue: String?) {
+    self = Self(rawValue: wireValue ?? "") ?? .unknown
+  }
+
+  var titleKey: String {
+    switch self {
+    case .ready: return "VDD Ready"
+    case .driverMissing: return "VDD Driver Missing"
+    case .driverUnreachable: return "VDD Driver Unreachable"
+    case .unsupportedPlatform: return "VDD Unsupported Platform"
+    case .unknown: return "VDD State Unknown"
+    }
+  }
+
+  var tint: Color {
+    switch self {
+    case .ready: return .green
+    case .driverMissing, .driverUnreachable, .unknown: return .orange
+    case .unsupportedPlatform: return .secondary
+    }
+  }
+}
+
 struct SunshineDisplayOption: Identifiable, Equatable {
   let id: String
   let value: String
@@ -62,6 +92,11 @@ struct SunshineDisplayOption: Identifiable, Equatable {
   let displayName: String
   let friendlyName: String
   let index: Int
+  let isPrimary: Bool = false
+  let currentScalePercent: Int? = nil
+  let recommendedScalePercent: Int? = nil
+  let supportedScalePercents: [Int] = []
+  let scaleSetSupported: Bool = false
 }
 
 enum CapabilityAvailability: Int {
@@ -115,6 +150,8 @@ class SettingsModel: ObservableObject {
   static let controllerFeedbackTargetKeyPrefix = "settings.controller.feedbackTarget."
   static let controllerVirtualTypeKeyPrefix = "settings.controller.virtualType."
   static let controllerCalibrationKeyPrefix = "settings.controller.calibration."
+  static let sunshineVddCapabilityKeyPrefix = "settings.sunshine.vddCapability."
+  static let sunshineVddStateKeyPrefix = "settings.sunshine.vddState."
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
   static let streamShortcutsChangedNotification = Notification.Name("MoonlightStreamShortcutsDidChange")
   static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
@@ -1074,6 +1111,9 @@ class SettingsModel: ObservableObject {
   @Published var isLoadingSunshineDisplays: Bool
   @Published var sunshineDisplayCapabilityState: SunshineDisplayCapabilityState
   @Published var sunshineDisplayCapabilityMessage: String
+  @Published var sunshineVddCapabilityVersion: Int?
+  @Published var sunshineVddState: SunshineVddState
+  @Published var sunshineDisplayCount: Int
   @Published var sunshineDisplayRuntimeStateKey: String
   @Published var sunshineDisplayRuntimeDetail: String
   @Published var videoCapabilityMatrix: VideoCapabilityMatrix
@@ -1175,6 +1215,15 @@ class SettingsModel: ObservableObject {
     return options
   }
 
+  var sunshineVddSupportsSelection: Bool {
+    guard let version = sunshineVddCapabilityVersion else {
+      // Older Foundation/Sunshine endpoints do not advertise VDD metadata;
+      // preserve legacy launch compatibility in that case.
+      return true
+    }
+    return version > 0
+  }
+
   private static func sunshineDisplayLabel(from rawEntry: [String: Any]) -> String {
     let deviceId = rawEntry["device_id"] as? String ?? ""
     let friendlyName = rawEntry["friendly_name"] as? String ?? deviceId
@@ -1210,6 +1259,9 @@ class SettingsModel: ObservableObject {
       loadedSunshineDisplaysHostId = nil
       sunshineDisplayCapabilityState = .unavailable
       sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("No Sunshine host selected")
+      sunshineVddCapabilityVersion = nil
+      sunshineVddState = .unknown
+      sunshineDisplayCount = 0
       return
     }
 
@@ -1222,6 +1274,9 @@ class SettingsModel: ObservableObject {
       loadedSunshineDisplaysHostId = nil
       sunshineDisplayCapabilityState = .unavailable
       sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("Sunshine display endpoint unavailable")
+      sunshineVddCapabilityVersion = nil
+      sunshineVddState = .unknown
+      sunshineDisplayCount = 0
       return
     }
 
@@ -1248,6 +1303,10 @@ class SettingsModel: ObservableObject {
       let snapshot = (httpManager?.fetchSunshineDisplaySnapshot() as? [String: Any]) ?? [:]
       let statusCode = (snapshot["statusCode"] as? NSNumber)?.intValue ?? 0
       let statusMessage = snapshot["statusMessage"] as? String ?? ""
+      let count = (snapshot["count"] as? NSNumber)?.intValue ?? 0
+      let vdd = snapshot["vdd"] as? [String: Any]
+      let vddVersion = (vdd?["capability_version"] as? NSNumber)?.intValue
+      let vddState = SunshineVddState(wireValue: vdd?["state"] as? String)
       let rawEntries = (snapshot["displays"] as? [[String: Any]]) ?? []
       let resolvedOptions = rawEntries.compactMap { entry -> SunshineDisplayOption? in
         let deviceId = entry["device_id"] as? String ?? ""
@@ -1255,19 +1314,34 @@ class SettingsModel: ObservableObject {
         let displayName = entry["display_name"] as? String ?? ""
         let friendlyName = entry["friendly_name"] as? String ?? deviceId
         let index = (entry["index"] as? NSNumber)?.intValue ?? 0
+        let supportedScales = (entry["supported_scale_percents"] as? [NSNumber])?.map(\.intValue) ?? []
         return SunshineDisplayOption(
           id: deviceId,
           value: deviceId,
           title: Self.sunshineDisplayLabel(from: entry),
           displayName: displayName,
           friendlyName: friendlyName,
-          index: index)
+          index: index,
+          isPrimary: (entry["is_primary"] as? NSNumber)?.boolValue ?? false,
+          currentScalePercent: (entry["current_scale_percent"] as? NSNumber)?.intValue,
+          recommendedScalePercent: (entry["recommended_scale_percent"] as? NSNumber)?.intValue,
+          supportedScalePercents: supportedScales,
+          scaleSetSupported: (entry["scale_set_supported"] as? NSNumber)?.boolValue ?? false)
       }
 
       DispatchQueue.main.async {
         guard self.sunshineDisplayFetchGeneration == fetchGeneration else { return }
         guard self.selectedHost?.id == hostId else { return }
         self.availableSunshineDisplays = resolvedOptions
+        self.sunshineDisplayCount = max(count, resolvedOptions.count)
+        self.sunshineVddCapabilityVersion = vddVersion
+        self.sunshineVddState = vddState
+        if statusCode == 200 {
+          UserDefaults.standard.set(
+            vddVersion as Any?, forKey: Self.sunshineVddCapabilityKeyPrefix + hostId)
+          UserDefaults.standard.set(
+            vddState.rawValue, forKey: Self.sunshineVddStateKeyPrefix + hostId)
+        }
         self.isLoadingSunshineDisplays = false
         self.loadedSunshineDisplaysHostId = hostId
         self.sunshineDisplayCapabilityState = statusCode == 200 ? .available : .unavailable
@@ -1460,6 +1534,9 @@ class SettingsModel: ObservableObject {
     isLoadingSunshineDisplays = false
     sunshineDisplayCapabilityState = .unknown
     sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("Display capability has not been queried")
+    sunshineVddCapabilityVersion = nil
+    sunshineVddState = .unknown
+    sunshineDisplayCount = 0
     sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Idle"
     sunshineDisplayRuntimeDetail = ""
     videoCapabilityMatrix = Self.currentVideoCapabilityMatrix()
@@ -1592,6 +1669,8 @@ class SettingsModel: ObservableObject {
         self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Active"
       case "reconnected":
         self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Reconnected"
+      case "failed":
+        self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Failed"
       default:
         self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Idle"
       }

@@ -1204,9 +1204,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
             }
         }
 
-        streamConfig.sunshineUseVirtualDisplay = self.sessionSunshineUseVirtualDisplayOverride != nil
+        BOOL requestedUseVdd = self.sessionSunshineUseVirtualDisplayOverride != nil
             ? self.sessionSunshineUseVirtualDisplayOverride.boolValue
             : [prefs[@"sunshineUseVirtualDisplay"] boolValue];
+        streamConfig.sunshineUseVirtualDisplay = requestedUseVdd &&
+            [SettingsClass sunshineVddSupportsFor:self.app.host.uuid];
+        if (requestedUseVdd && !streamConfig.sunshineUseVirtualDisplay) {
+            Log(LOG_W, @"[sunshine] Ignoring useVdd=1 because the latest display topology probe reports VDD unsupported");
+        }
         streamConfig.sunshineScreenMode = self.sessionSunshineScreenModeOverride != nil
             ? self.sessionSunshineScreenModeOverride.intValue
             : (prefs[@"sunshineScreenMode"] != nil ? [prefs[@"sunshineScreenMode"] intValue] : -1);
@@ -1802,6 +1807,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)stageFailed:(const char *)stageName withError:(int)errorCode {
     Log(LOG_I, @"Stage %s failed: %ld", stageName, errorCode);
+    [self publishSunshineDisplayRuntimeState:@"failed"];
     self.connectWatchdogToken += 1;
     [self stopStreamHealthDiagnostics];
     [self finalizeInputDiagnosticsWithReason:[NSString stringWithFormat:@"stage-failed:%s", stageName ?: "unknown"]];
@@ -1817,6 +1823,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 }
 
 - (void)launchFailed:(NSString *)message {
+    [self publishSunshineDisplayRuntimeState:@"failed"];
     self.connectWatchdogToken += 1;
     [self stopStreamHealthDiagnostics];
     [self finalizeInputDiagnosticsWithReason:@"launch-failed"];

@@ -1032,7 +1032,18 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
         HttpManager *httpManager = [[HttpManager alloc] initWithHost:address
                                                             uniqueId:[IdManager getUniqueId]
                                                           serverCert:serverCert];
-        NSArray<NSDictionary<NSString *, id> *> *displays = [httpManager fetchSunshineDisplays];
+        NSDictionary<NSString *, id> *snapshot = [httpManager fetchSunshineDisplaySnapshot];
+        NSArray<NSDictionary<NSString *, id> *> *displays = snapshot[@"displays"] ?: @[];
+        NSDictionary<NSString *, id> *vdd = [snapshot[@"vdd"] isKindOfClass:[NSDictionary class]]
+            ? snapshot[@"vdd"] : nil;
+        NSNumber *vddCapability = [vdd[@"capability_version"] isKindOfClass:[NSNumber class]]
+            ? vdd[@"capability_version"] : nil;
+        NSString *vddKey = [NSString stringWithFormat:@"settings.sunshine.vddCapability.%@", hostUUID];
+        if (vddCapability != nil) {
+            [[NSUserDefaults standardUserDefaults] setObject:vddCapability forKey:vddKey];
+        } else {
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:vddKey];
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
             self.refreshingSunshineDisplays = NO;
             if (![self.host.uuid isEqualToString:hostUUID]) {
@@ -1223,6 +1234,9 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
                                                   keyEquivalent:@""];
     enabledItem.target = self;
     enabledItem.representedObject = @YES;
+    NSNumber *vddCapability = [[NSUserDefaults standardUserDefaults]
+        objectForKey:[NSString stringWithFormat:@"settings.sunshine.vddCapability.%@", self.host.uuid]];
+    enabledItem.enabled = vddCapability == nil || vddCapability.integerValue > 0;
     enabledItem.state = self.pendingSessionSunshineUseVirtualDisplayOverride.boolValue
         ? NSControlStateValueOn : NSControlStateValueOff;
     [submenu addItem:enabledItem];
