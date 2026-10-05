@@ -1,3 +1,15 @@
 [submodule "moonlight-common/moonlight-common-c"]
 	path = moonlight-common/moonlight-common-c
 	url = https://github.com/skyhua0224/moonlight-common-c.git
+[submodule "RemoteUSB/third_party/usbipdcpp"]
+	path = RemoteUSB/third_party/usbipdcpp
+	url = https://github.com/yunsmall/usbipdcpp.git
+[submodule "RemoteUSB/third_party/libusb"]
+	path = RemoteUSB/third_party/libusb
+	url = https://github.com/libusb/libusb.git
+[submodule "RemoteUSB/third_party/asio"]
+	path = RemoteUSB/third_party/asio
+	url = https://github.com/chriskohlhoff/asio.git
+[submodule "RemoteUSB/third_party/spdlog"]
+	path = RemoteUSB/third_party/spdlog
+	url = https://github.com/gabime/spdlog.git
