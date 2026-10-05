@@ -638,10 +638,12 @@
 "Display Capability Loading" = "正在查询主机";
 "Display Topology Available" = "Foundation 显示拓扑可用";
 "Display Topology Unavailable" = "Foundation 显示拓扑不可用";
-"HDR10+" = "HDR10+";
-"Dolby Vision 8.x" = "Dolby Vision 8.x";
-"HDR10+ capability detail" = "设备支持 HEVC 和 HDR 显示，但 Apple 公共 macOS API 无法保证 HDR10+ 动态元数据端到端保留，因此标记为受限并继续使用 HDR10/PQ 链路。";
-"Dolby Vision capability detail" = "macOS 15+ 提供公开的 Dolby 元数据生成 API，但客户端仍缺少有文档支持的 Profile 8.1/8.4 解码协商和 RPU 保留链路，因此这是部分能力，不代表完整支持。";
+"HDR10+ Dynamic Metadata" = "HDR10+ 动态元数据";
+"Dolby Vision Profile 8.1" = "Dolby Vision Profile 8.1";
+"Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
+"HDR10+ capability detail" = "最新 Foundation 主机会注入 HDR10+ SEI。macOS 13+ 会协商该能力并观察 Core Media 逐帧元数据，但在确认 Metal 输出端实际消费前仍标记为受限。";
+"Dolby Vision 8.1 capability detail" = "当前 Mac 暴露了 Apple Dolby HEVC 解码器和 EDR 显示链路。客户端会为 Foundation Profile 8.1 构造同时包含 hvcC 与 dvcC 的 dvh1 描述，必要时回退到 Apple 公开的逐帧元数据生成器。在当前显示器上完成真实 Foundation RPU 验证前，该能力标记为受限。";
+"Dolby Vision 8.4 capability detail" = "当前 Mac 暴露了 Dolby HEVC 与 HLG 基础层所需能力。客户端会为 Foundation Profile 8.4 构造同时包含 hvcC 与 dvcC 的 dvh1 描述，并提供 Apple 公开的元数据生成回退。在当前显示器上完成真实 Foundation RPU 验证前，该能力标记为受限。";
 "Display capability has not been queried" = "刷新主机显示器列表以查询 Foundation 能力。";
 "Loading Foundation display topology" = "正在加载 Foundation 显示拓扑…";
 "Foundation display topology endpoint ready" = "Foundation 显示拓扑端点已就绪。";
