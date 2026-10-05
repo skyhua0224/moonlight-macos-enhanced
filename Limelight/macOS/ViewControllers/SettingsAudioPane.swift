@@ -33,7 +33,7 @@ struct AudioView: View {
   var body: some View {
     ScrollView {
       LazyVStack {
-        FormSection(title: "Audio") {
+        SystemSettingsGroup(title: "Audio") {
           FormCell(
             title: "Audio Configuration", contentWidth: 200,
             content: {
@@ -170,31 +170,25 @@ struct AudioView: View {
             }
           }
 
-          VStack(alignment: .center) {
+          HStack(alignment: .center, spacing: 10) {
             Text(languageManager.localize("Volume"))
-
-            let volume = Int(settingsModel.volumeLevel * 100)
-            Slider(value: $settingsModel.volumeLevel, in: 0.0...1.0) {
-              ZStack(alignment: .leading) {
-                Text("\(100)%")
-                  .availableMonospacedDigit()
-                  .hidden()
-                Text("\(volume)%")
-                  .availableMonospacedDigit()
-              }
-            } minimumValueLabel: {
-              Image(systemName: "speaker.wave.1.fill")
-            } maximumValueLabel: {
-              Image(systemName: "speaker.wave.3.fill")
-            } onEditingChanged: { changed in
-
-            }
+              .frame(width: 82, alignment: .leading)
+            Image(systemName: "speaker.wave.1.fill")
+              .foregroundStyle(.secondary)
+            Slider(value: $settingsModel.volumeLevel, in: 0.0...1.0)
+            Image(systemName: "speaker.wave.3.fill")
+              .foregroundStyle(.secondary)
+            Text("\(Int(settingsModel.volumeLevel * 100))%")
+              .availableMonospacedDigit()
+              .frame(width: 48, alignment: .trailing)
           }
+          .frame(minHeight: 48)
+          .padding(.vertical, 6)
         }
 
         Spacer().frame(height: 16)
 
-        FormSection(title: "Microphone") {
+        SystemSettingsGroup(title: "Microphone") {
           ToggleCell(
             title: "Enable Microphone",
             hintKey: "Microphone hint",
@@ -277,7 +271,7 @@ private struct AudioPresetChipRow: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text(title)
+      Text(languageManager.localize(title))
         .font(.headline)
 
       ScrollView(.horizontal, showsIndicators: false) {
@@ -311,11 +305,12 @@ private struct AudioPresetChipRow: View {
 private struct AudioParameterSliderRow: View {
   let title: String
   @Binding var value: CGFloat
+  @ObservedObject private var languageManager = LanguageManager.shared
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text(title)
+        Text(languageManager.localize(title))
         Spacer()
         Text("\(Int(value * 100))%")
           .foregroundColor(.secondary)
@@ -528,7 +523,7 @@ private struct MicPermissionRow: View {
           .controlSize(.small)
         }
       @unknown default:
-        Text("Unknown")
+        Text(languageManager.localize("Unknown"))
           .foregroundColor(.secondary)
           .font(.callout)
       }

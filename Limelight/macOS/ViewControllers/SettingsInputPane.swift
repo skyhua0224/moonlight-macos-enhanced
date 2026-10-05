@@ -13,7 +13,15 @@ import CoreGraphics
 import GameController
 import SwiftUI
 
+enum InputScope {
+  case all
+  case controller
+  case keyboardMouse
+  case usb
+}
+
 struct InputView: View {
+  let scope: InputScope
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
   @ObservedObject private var inputMonitoringManager = InputMonitoringPermissionManager.sharedManager
@@ -22,6 +30,10 @@ struct InputView: View {
   @AppStorage("settings.input.mouseTuningExpanded") private var mouseTuningExpanded = false
   @AppStorage("settings.input.controllerAdvancedExpanded") private var controllerAdvancedExpanded =
     false
+
+  init(scope: InputScope = .all) {
+    self.scope = scope
+  }
 
   private var selectedMouseStrategy: MouseInputDriverStrategy {
     MouseInputDriverStrategy(selection: settingsModel.selectedMouseDriver)
@@ -80,11 +92,17 @@ struct InputView: View {
   var body: some View {
     ScrollView {
       LazyVStack(spacing: 32) {
-        mouseSection
-        keyboardSection
-        controllerSection
-        remoteUSBSection
-        RemoteFileMappingView()
+        if scope == .all || scope == .keyboardMouse {
+          mouseSection
+          keyboardSection
+        }
+        if scope == .all || scope == .controller {
+          controllerSection
+        }
+        if scope == .all || scope == .usb {
+          remoteUSBSection
+          RemoteFileMappingView()
+        }
       }
       .padding()
     }
@@ -561,53 +579,106 @@ struct InputView: View {
   }
 
   private var remoteUSBSection: some View {
-    FormSection(title: "Remote USB/IP") {
-      HStack(alignment: .top, spacing: 12) {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .center, spacing: 12) {
         Image(systemName: "cable.connector.horizontal")
-          .foregroundColor(.accentColor)
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Foundation USB forwarding")
-            .font(.headline)
-          Text(remoteUSB.status)
-            .font(.footnote)
-            .foregroundColor(.secondary)
+          .font(.system(size: 18, weight: .semibold))
+          .foregroundStyle(.teal)
+          .frame(width: 38, height: 38)
+          .background(.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+
+        VStack(alignment: .leading, spacing: 3) {
+          Text(languageManager.localize("Remote USB/IP"))
+            .font(.title3.weight(.semibold))
+          Text(languageManager.localize("Foundation USB forwarding"))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
         }
-        Spacer()
-        Button("Refresh") {
+
+        Spacer(minLength: 12)
+
+        Button {
           remoteUSB.refresh(host: settingsModel.selectedHost)
+        } label: {
+          Label(languageManager.localize("Refresh"), systemImage: "arrow.clockwise")
         }
         .buttonStyle(.bordered)
       }
 
       if remoteUSB.capabilityAvailable {
-        ForEach(Array(remoteUSB.devices.enumerated()), id: \.offset) { _, device in
-          Divider()
-          HStack {
-            VStack(alignment: .leading, spacing: 3) {
-              Text(device.product.isEmpty ? device.busID : device.product)
-              Text("\(device.vidPID) · \(device.busID)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            }
-            Spacer()
-            if remoteUSB.selectedBusID == device.busID {
-              Button("Stop") { remoteUSB.stop() }
-                .buttonStyle(.bordered)
-            } else {
-              Button("Forward") { remoteUSB.start(device: device) }
-                .buttonStyle(.borderedProminent)
-                .disabled(!device.isClaimable)
-            }
+        VStack(spacing: 0) {
+          ForEach(Array(remoteUSB.devices.enumerated()), id: \.offset) { index, device in
+            if index > 0 { Divider() }
+            USBDeviceRow(device: device, remoteUSB: remoteUSB)
           }
         }
+        .background(
+          Color(nsColor: .controlBackgroundColor),
+          in: RoundedRectangle(cornerRadius: 12)
+        )
       } else {
-        Text("Foundation must advertise USB forwarding before a device can be shared.")
-          .font(.footnote)
-          .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+          Text(languageManager.localize(remoteUSB.status))
+            .font(.body.weight(.medium))
+          Text(languageManager.localize(
+            "Foundation must advertise USB forwarding before a device can be shared."))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+          Color(nsColor: .controlBackgroundColor),
+          in: RoundedRectangle(cornerRadius: 12)
+        )
       }
     }
     .onAppear {
       remoteUSB.refresh(host: settingsModel.selectedHost)
+    }
+  }
+
+  private struct USBDeviceRow: View {
+    let device: MLRemoteUSBDevice
+    @ObservedObject var remoteUSB: RemoteUSBForwardingViewModel
+    @ObservedObject private var languageManager = LanguageManager.shared
+
+    var body: some View {
+      HStack(spacing: 12) {
+        Image(systemName: device.isClaimable
+          ? "externaldrive.connected.to.line.below" : "externaldrive")
+          .font(.system(size: 17, weight: .medium))
+          .foregroundStyle(device.isClaimable ? .teal : .secondary)
+          .frame(width: 28, height: 28)
+
+        VStack(alignment: .leading, spacing: 3) {
+          Text(device.product.isEmpty ? device.busID : device.product)
+            .font(.body.weight(.medium))
+            .lineLimit(1)
+          Text("\(device.vidPID) · \(device.busID)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+          Text(languageManager.localize(device.isClaimable ? "Available" : "Unavailable"))
+            .font(.caption)
+            .foregroundStyle(device.isClaimable ? .green : .secondary)
+        }
+
+        Spacer(minLength: 12)
+
+        if remoteUSB.selectedBusID == device.busID {
+          Button(languageManager.localize("Stop")) { remoteUSB.stop() }
+            .buttonStyle(.bordered)
+        } else {
+          Button(languageManager.localize("Forward")) { remoteUSB.start(device: device) }
+            .buttonStyle(.borderedProminent)
+            .disabled(!device.isClaimable)
+        }
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
     }
   }
 
@@ -737,6 +808,7 @@ private struct PickerSettingRow<Content: View>: View {
         SettingDescriptionRow(textKey: detailKey)
       }
     }
+    .padding(.vertical, 6)
   }
 }
 

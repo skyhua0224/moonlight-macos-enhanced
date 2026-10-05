@@ -168,6 +168,9 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     [prefsWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
 
     [prefsWC showWindow:nil];
+    [prefsWC.window setContentSize:NSMakeSize(1060.0, 720.0)];
+    [prefsWC.window setMinSize:NSMakeSize(900.0, 620.0)];
+    [prefsWC.window center];
     [prefsWC.window makeKeyAndOrderFront:nil];
 }
 
@@ -180,6 +183,9 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     [prefsWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
 
     [prefsWC showWindow:nil];
+    [prefsWC.window setContentSize:NSMakeSize(1060.0, 720.0)];
+    [prefsWC.window setMinSize:NSMakeSize(900.0, 620.0)];
+    [prefsWC.window center];
     [prefsWC.window makeKeyAndOrderFront:nil];
 }
 

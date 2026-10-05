@@ -201,9 +201,10 @@ struct ToggleCell: View {
   }
 
   var body: some View {
-    HStack {
+    HStack(alignment: .firstTextBaseline, spacing: 16) {
       HStack(spacing: 6) {
         Text(languageManager.localize(title))
+          .fixedSize(horizontal: false, vertical: true)
         if let hintKey {
           InfoHintButton(hintKey: hintKey)
         }
@@ -215,6 +216,8 @@ struct ToggleCell: View {
         .toggleStyle(.switch)
         .controlSize(.small)
     }
+    .frame(minHeight: 48)
+    .padding(.vertical, 6)
   }
 }
 
@@ -241,6 +244,9 @@ struct SettingDescriptionRow: View {
       .font(.footnote)
       .foregroundColor(color)
       .frame(maxWidth: .infinity, alignment: .leading)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.top, 2)
+    .padding(.bottom, 10)
   }
 }
 
@@ -253,7 +259,8 @@ struct InlineSectionLabel: View {
       .font(.footnote.weight(.semibold))
       .foregroundColor(.secondary)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.top, 2)
+      .padding(.top, 10)
+      .padding(.bottom, 5)
   }
 }
 
@@ -383,8 +390,16 @@ struct FormSection<Content: View>: View {
       VStack(alignment: .leading, spacing: 0) {
         content
       }
-      .padding(14)
-      .background(.quaternary.opacity(0.24), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+      .padding(.horizontal, 16)
+      .padding(.vertical, 8)
+      .background(
+        Color(nsColor: .controlBackgroundColor),
+        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .stroke(Color(nsColor: .separatorColor).opacity(0.55), lineWidth: 0.5)
+      )
     }
   }
 }
@@ -402,8 +417,10 @@ struct FormCell<Content: View>: View {
   }
 
   var body: some View {
-    HStack {
+    HStack(alignment: .firstTextBaseline, spacing: 16) {
       Text(languageManager.localize(title))
+        .fixedSize(horizontal: false, vertical: true)
+        .layoutPriority(1)
 
       Spacer()
 
@@ -415,6 +432,74 @@ struct FormCell<Content: View>: View {
               .frame(width: contentWidth, alignment: .trailing)
           })
     }
+    .frame(minHeight: 48)
+    .padding(.vertical, 6)
+  }
+}
+
+/// System Settings-style group: a title followed by a single continuous list
+/// of rows with shared insets and separators.
+struct SystemSettingsGroup<Content: View>: View {
+  let title: String?
+  let content: Content
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  init(title: String? = nil, @ViewBuilder content: () -> Content) {
+    self.title = title
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      if let title {
+        Text(languageManager.localize(title))
+          .font(.headline)
+      }
+      VStack(alignment: .leading, spacing: 0) {
+        content
+      }
+      .background(
+        Color(nsColor: .controlBackgroundColor),
+        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .stroke(Color(nsColor: .separatorColor).opacity(0.55), lineWidth: 0.5)
+      )
+    }
+  }
+}
+
+struct SystemSettingsNavigationRow<Content: View>: View {
+  let title: String
+  let subtitle: String?
+  let content: Content
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  init(title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
+    self.title = title
+    self.subtitle = subtitle
+    self.content = content()
+  }
+
+  var body: some View {
+    HStack(spacing: 12) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(languageManager.localize(title))
+          .font(.body.weight(.medium))
+        if let subtitle {
+          Text(languageManager.localize(subtitle))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      Spacer(minLength: 12)
+      content
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
+    .frame(minHeight: 64)
   }
 }
 
