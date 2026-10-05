@@ -211,7 +211,7 @@ struct AppView: View {
   var body: some View {
     ScrollView {
       LazyVStack {
-        FormSection(title: "Behaviour") {
+        SystemSettingsGroup(title: "Behaviour") {
           FormCell(title: "Appearance", contentWidth: 170) {
             Picker("", selection: appAppearanceBinding) {
               ForEach(AppAppearanceOption.allCases) { option in
@@ -247,7 +247,7 @@ struct AppView: View {
         Spacer()
           .frame(height: 32)
 
-        FormSection(title: "Visuals") {
+        SystemSettingsGroup(title: "Visuals") {
           ToggleCell(
             title: "Dim Non-Hovered Apps", boolBinding: $settingsModel.dimNonHoveredArtwork)
 
@@ -266,7 +266,7 @@ struct AppView: View {
         Spacer()
           .frame(height: 32)
 
-        FormSection(title: "Advanced") {
+        SystemSettingsGroup(title: "Advanced") {
           DisclosureGroup(isExpanded: $videoCapabilityStatusExpanded) {
             VideoCapabilityStatusPanel(matrix: settingsModel.videoCapabilityMatrix)
               .padding(.top, 8)

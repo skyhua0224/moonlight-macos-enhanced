@@ -21,6 +21,9 @@ class SettingsHostingController<RootView: View>: NSWindowController {
     window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
     window.collectionBehavior = [.fullScreenNone]
     window.tabbingMode = .disallowed
+    window.setContentSize(NSSize(width: 1_060, height: 720))
+    window.minSize = NSSize(width: 900, height: 620)
+    window.center()
     window.title = LanguageManager.shared.localize("Settings")
     if #available(macOS 26.0, *) {
       window.titlebarAppearsTransparent = true
