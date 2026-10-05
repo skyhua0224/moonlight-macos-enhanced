@@ -425,6 +425,129 @@ extension SettingsModel {
   ]
   static var multiControllerModes: [String] = ["Single", "Auto"]
 
+  enum ControllerHapticsMode: String, CaseIterable {
+    case automatic
+    case systemHaptics
+    case compatibility
+
+    var displayKey: String {
+      switch self {
+      case .automatic: return "Automatic"
+      case .systemHaptics: return "System Haptics"
+      case .compatibility: return "Compatibility Rumble"
+      }
+    }
+
+    init(selection: String) {
+      self = Self.allCases.first { $0.displayKey == selection } ?? .automatic
+    }
+  }
+
+  enum ControllerMotionMode: String, CaseIterable {
+    case hostRequested
+    case disabled
+
+    var displayKey: String {
+      switch self {
+      case .hostRequested: return "Host Requested"
+      case .disabled: return "Disabled"
+      }
+    }
+
+    init(selection: String) {
+      self = Self.allCases.first { $0.displayKey == selection } ?? .hostRequested
+    }
+  }
+
+  enum ControllerFeedbackTarget: String, CaseIterable {
+    case automatic
+    case controller1
+    case controller2
+    case controller3
+    case controller4
+
+    var displayKey: String {
+      switch self {
+      case .automatic: return "Automatic"
+      case .controller1: return "Controller 1"
+      case .controller2: return "Controller 2"
+      case .controller3: return "Controller 3"
+      case .controller4: return "Controller 4"
+      }
+    }
+
+    var controllerNumber: Int {
+      switch self {
+      case .automatic: return -1
+      case .controller1: return 0
+      case .controller2: return 1
+      case .controller3: return 2
+      case .controller4: return 3
+      }
+    }
+
+    init(selection: String) {
+      self = Self.allCases.first { $0.displayKey == selection } ?? .automatic
+    }
+  }
+
+  enum ControllerVirtualType: String, CaseIterable {
+    case automatic
+    case xbox360
+    case playStation
+
+    var displayKey: String {
+      switch self {
+      case .automatic: return "Automatic"
+      case .xbox360: return "Xbox 360"
+      case .playStation: return "PlayStation"
+      }
+    }
+
+    var rawType: Int {
+      switch self {
+      case .automatic: return 0
+      case .xbox360: return 1
+      case .playStation: return 2
+      }
+    }
+
+    init(selection: String) {
+      self = Self.allCases.first { $0.displayKey == selection } ?? .automatic
+    }
+  }
+
+  struct ControllerCalibration: Codable, Equatable {
+    var leftCenterX: Double = 0
+    var leftCenterY: Double = 0
+    var rightCenterX: Double = 0
+    var rightCenterY: Double = 0
+    var leftGain: Double = 1
+    var rightGain: Double = 1
+
+    static let `default` = ControllerCalibration()
+
+    var isDefault: Bool {
+      self == .default
+    }
+
+    var normalized: ControllerCalibration {
+      var value = self
+      value.leftCenterX = min(1.0, max(-1.0, value.leftCenterX))
+      value.leftCenterY = min(1.0, max(-1.0, value.leftCenterY))
+      value.rightCenterX = min(1.0, max(-1.0, value.rightCenterX))
+      value.rightCenterY = min(1.0, max(-1.0, value.rightCenterY))
+      value.leftGain = min(2.0, max(0.25, value.leftGain))
+      value.rightGain = min(2.0, max(0.25, value.rightGain))
+      return value
+    }
+  }
+
+  static var controllerHapticsModes: [String] = ControllerHapticsMode.allCases.map(\.displayKey)
+  static var controllerMotionModes: [String] = ControllerMotionMode.allCases.map(\.displayKey)
+  static var controllerFeedbackTargets: [String] = ControllerFeedbackTarget.allCases.map(\.displayKey)
+  static var controllerVirtualTypes: [String] = ControllerVirtualType.allCases.map(\.displayKey)
+
   static var controllerDrivers: [String] = ["HID", "MFi"]
   static var mouseDrivers: [String] = MouseInputDriverStrategy.displayKeys
   static var physicalWheelModes: [String] = PhysicalWheelScrollMode.displayKeys
@@ -526,6 +649,35 @@ extension SettingsModel {
     let displayName = screen?.localizedName ?? ""
     let metalAvailable = MTLCreateSystemDefaultDevice() != nil
     let hdrAvailability = displayHDRAvailability(for: screen)
+    let hdr10PlusAvailability: CapabilityAvailability
+    if hdrAvailability == .unavailable {
+      hdr10PlusAvailability = .unavailable
+    } else if !hevcHardwareDecodeSupported {
+      hdr10PlusAvailability = .unavailable
+    } else {
+      // Apple exposes public HEVC/HDR10 static metadata and EDR APIs, but no
+      // public macOS API that guarantees HDR10+ dynamic metadata survives
+      // VideoToolbox decode through Core Video and Metal presentation.
+      hdr10PlusAvailability = .limited
+    }
+    let dolbyVisionAvailability: CapabilityAvailability
+    if hdrAvailability == .unavailable {
+      dolbyVisionAvailability = .unavailable
+    } else if #available(macOS 15.0, *) {
+      // Apple exposes a public Dolby metadata generation session on macOS 15+
+      // but does not expose a public profile 8.1/8.4 decoder negotiation
+      // contract. This is therefore a partial capability, never full support.
+      do {
+        _ = try VTHDRPerFrameMetadataGenerationSession(
+          framesPerSecond: 60,
+          hdrFormats: [.dolbyVision])
+        dolbyVisionAvailability = .limited
+      } catch {
+        dolbyVisionAvailability = .unavailable
+      }
+    } else {
+      dolbyVisionAvailability = .unavailable
+    }
 
     return VideoCapabilityMatrix(
       displayName: displayName,
@@ -555,6 +707,18 @@ extension SettingsModel {
           titleKey: "HDR Display",
           availability: hdrAvailability,
           detailKey: "HDR Display detail"
+        ),
+        VideoCapabilityItem(
+          id: "display.hdr10Plus",
+          titleKey: "HDR10+",
+          availability: hdr10PlusAvailability,
+          detailKey: "HDR10+ capability detail"
+        ),
+        VideoCapabilityItem(
+          id: "display.dolbyVision",
+          titleKey: "Dolby Vision 8.x",
+          availability: dolbyVisionAvailability,
+          detailKey: "Dolby Vision capability detail"
         ),
         VideoCapabilityItem(
           id: "decode.av1",
@@ -1056,6 +1220,11 @@ extension SettingsModel {
   static let defaultTouchscreenMode = 0
   static let defaultGamepadMouseMode = false
   static let defaultGamepadMouseModeLongPressMenu = true
+  static let defaultControllerDeadzone = 0.0
+  static let defaultControllerHapticsMode = ControllerHapticsMode.automatic.displayKey
+  static let defaultControllerMotionMode = ControllerMotionMode.hostRequested.displayKey
+  static let defaultControllerFeedbackTarget = ControllerFeedbackTarget.automatic.displayKey
+  static let defaultControllerVirtualType = ControllerVirtualType.automatic.displayKey
   static let defaultMouseMode = "remote"
   static let defaultUpscalingMode = 6
   static let defaultClipboardSyncModeSelection = "Off"

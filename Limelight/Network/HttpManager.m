@@ -31,6 +31,42 @@
 @property (nonatomic, copy) NSArray<NSDictionary<NSString*, id>*> *displays;
 @end
 
+@interface MLSunshineUSBForwardingResponse : NSObject <Response>
+@property (nonatomic) NSInteger statusCode;
+@property (nonatomic, strong) NSString *statusMessage;
+@property (nonatomic, strong) NSData *data;
+@end
+
+@implementation MLSunshineUSBForwardingResponse
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _statusCode = 500;
+        _statusMessage = @"Server Error";
+    }
+    return self;
+}
+
+- (void)populateWithData:(NSData *)data {
+    self.data = data ?: [NSData data];
+    NSError *error = nil;
+    id object = self.data.length > 0
+        ? [NSJSONSerialization JSONObjectWithData:self.data options:0 error:&error] : nil;
+    if (![object isKindOfClass:[NSDictionary class]]) {
+        self.statusCode = 500;
+        self.statusMessage = error.localizedDescription ?: @"Invalid USB forwarding response";
+    } else {
+        NSDictionary *json = (NSDictionary *)object;
+        self.statusCode = [json[@"status_code"] respondsToSelector:@selector(integerValue)]
+            ? [json[@"status_code"] integerValue] : 200;
+        self.statusMessage = [json[@"status_message"] isKindOfClass:[NSString class]]
+            ? json[@"status_message"] : @"";
+    }
+}
+
+@end
+
 @implementation MLSunshineDisplaysResponse
 
 - (instancetype)init {
@@ -392,17 +428,86 @@ static const NSString* HTTPS_PORT = @"47984";
 }
 
 - (NSArray<NSDictionary<NSString*, id>*>*)fetchSunshineDisplays {
+    return [self fetchSunshineDisplaySnapshot][@"displays"] ?: @[];
+}
+
+- (NSDictionary<NSString*, id>*)fetchSunshineDisplaySnapshot {
     MLSunshineDisplaysResponse *response = [[MLSunshineDisplaysResponse alloc] init];
     HttpRequest *request = [HttpRequest requestForResponse:response withUrlRequest:[self newDisplaysRequest]];
     [self executeRequestSynchronously:request];
 
     if (response.statusCode != 200) {
         Log(LOG_W, @"[sunshine] Display list request failed: %ld %@", (long)response.statusCode, response.statusMessage ?: @"");
-        return @[];
+        return @{
+            @"statusCode": @(response.statusCode),
+            @"statusMessage": response.statusMessage ?: @"",
+            @"displays": @[]
+        };
     }
 
     Log(LOG_I, @"[sunshine] Loaded %lu host displays", (unsigned long)response.displays.count);
-    return response.displays ?: @[];
+    return @{
+        @"statusCode": @(response.statusCode),
+        @"statusMessage": response.statusMessage ?: @"",
+        @"displays": response.displays ?: @[]
+    };
+}
+
+- (NSDictionary<NSString*, id>*)fetchSunshineUSBForwardingCapability {
+    NSString *urlString = [NSString stringWithFormat:@"%@/api/v1/usb-forwarding?uniqueid=%@",
+                           _baseHTTPSURL, _clientUniqueId];
+    NSURLRequest *requestURL = [self createRequestFromString:urlString timeout:SHORT_TIMEOUT_SEC];
+    MLSunshineUSBForwardingResponse *response = [[MLSunshineUSBForwardingResponse alloc] init];
+    HttpRequest *request = [HttpRequest requestForResponse:response withUrlRequest:requestURL];
+    [self executeRequestSynchronously:request];
+
+    NSMutableDictionary *result = [@{
+        @"statusCode": @(response.statusCode),
+        @"statusMessage": response.statusMessage ?: @"",
+        @"available": @NO,
+        @"enabled": @NO
+    } mutableCopy];
+    if (response.statusCode != 200 || response.data.length == 0) {
+        return result;
+    }
+
+    NSError *error = nil;
+    id object = [NSJSONSerialization JSONObjectWithData:response.data options:0 error:&error];
+    if (![object isKindOfClass:[NSDictionary class]]) {
+        result[@"statusMessage"] = error.localizedDescription ?: @"Invalid USB forwarding response";
+        return result;
+    }
+
+    NSDictionary *json = (NSDictionary *)object;
+    NSNumber *version = [json[@"version"] isKindOfClass:[NSNumber class]] ? json[@"version"] : nil;
+    NSNumber *enabled = [json[@"enabled"] isKindOfClass:[NSNumber class]] ? json[@"enabled"] : nil;
+    NSNumber *available = [json[@"available"] isKindOfClass:[NSNumber class]] ? json[@"available"] : nil;
+    NSString *reason = [json[@"reason"] isKindOfClass:[NSString class]] ? json[@"reason"] : @"";
+    NSString *token = [json[@"token"] isKindOfClass:[NSString class]] ? json[@"token"] : @"";
+    NSNumber *port = [json[@"port"] isKindOfClass:[NSNumber class]] ? json[@"port"] : nil;
+    BOOL validToken = token.length == 64;
+    if (validToken) {
+        NSRegularExpression *hex = [NSRegularExpression regularExpressionWithPattern:@"\\A[0-9a-fA-F]{64}\\z"
+                                                                                options:0
+                                                                                  error:NULL];
+        validToken = [hex firstMatchInString:token options:0 range:NSMakeRange(0, token.length)] != nil;
+    }
+    BOOL valid = version.integerValue == 1 && enabled != nil && available != nil &&
+        port != nil && port.integerValue > 0 && port.integerValue <= 65535 && validToken;
+    if (!valid) {
+        result[@"statusMessage"] = reason.length > 0 ? reason : @"Invalid USB forwarding capability";
+        return result;
+    }
+
+    result[@"enabled"] = enabled;
+    result[@"available"] = available;
+    result[@"reason"] = reason;
+    if (enabled.boolValue && available.boolValue) {
+        result[@"port"] = port;
+        // Keep the token only in this in-memory result; callers must not persist it.
+        result[@"token"] = token;
+    }
+    return result;
 }
 
 - (void)appendEncodedQueryParameter:(NSMutableString *)params key:(NSString *)key value:(NSString *)value {

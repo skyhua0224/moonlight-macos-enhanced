@@ -1379,9 +1379,23 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
     streamConfig.gamepadMouseMode = [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
     streamConfig.gamepadMouseModeLongPressMenu = [SettingsClass gamepadMouseModeLongPressMenuFor:self.app.host.uuid];
+    streamConfig.nativeTouchpad = [SettingsClass nativeTouchpadFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadPointerSensitivity = [SettingsClass pointerSensitivityFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadScrollSpeed = [SettingsClass gestureScrollSpeedFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadReverseScroll = [SettingsClass reverseScrollDirectionFor:self.app.host.uuid];
+    streamConfig.gamepadDeadzone = [SettingsClass controllerDeadzoneFor:self.app.host.uuid];
+    streamConfig.controllerHapticsMode = [SettingsClass controllerHapticsModeFor:self.app.host.uuid];
+    streamConfig.controllerMotionMode = [SettingsClass controllerMotionModeFor:self.app.host.uuid];
+    streamConfig.controllerFeedbackTarget = [SettingsClass controllerFeedbackTargetFor:self.app.host.uuid];
+    streamConfig.controllerVirtualType = [SettingsClass controllerVirtualTypeFor:self.app.host.uuid];
+    NSDictionary<NSString *, NSNumber *> *controllerCalibration =
+        [SettingsClass controllerCalibrationFor:self.app.host.uuid];
+    streamConfig.controllerLeftCenterX = controllerCalibration[@"leftCenterX"].doubleValue;
+    streamConfig.controllerLeftCenterY = controllerCalibration[@"leftCenterY"].doubleValue;
+    streamConfig.controllerRightCenterX = controllerCalibration[@"rightCenterX"].doubleValue;
+    streamConfig.controllerRightCenterY = controllerCalibration[@"rightCenterY"].doubleValue;
+    streamConfig.controllerLeftGain = controllerCalibration[@"leftGain"].doubleValue;
+    streamConfig.controllerRightGain = controllerCalibration[@"rightGain"].doubleValue;
     streamConfig.upscalingMode = (int)[SettingsClass upscalingModeFor:self.app.host.uuid];
     streamConfig.frameInterpolationMode = prefs[@"frameInterpolationMode"] != nil ? [prefs[@"frameInterpolationMode"] intValue] : 0;
     Log(LOG_I, @"[diag] Stream timing config: preset=%d framePacing=%d buffer=%d responsiveness=%d compatibility=%d vsync=%d sdrCompat=%d",
@@ -1509,6 +1523,41 @@ highFreqMotor:(unsigned short)highFreqMotor {
     });
 }
 
+- (void)publishSunshineDisplayRuntimeState:(NSString *)phase {
+    if (self.app.host.uuid.length == 0) {
+        return;
+    }
+
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid] ?: @{};
+    NSString *displayName = self.sessionSunshineTargetDisplayNameOverride.length > 0
+        ? self.sessionSunshineTargetDisplayNameOverride
+        : ([prefs[@"sunshineTargetDisplayName"] isKindOfClass:[NSString class]]
+           ? prefs[@"sunshineTargetDisplayName"] : @"");
+    BOOL useVdd = self.sessionSunshineUseVirtualDisplayOverride != nil
+        ? self.sessionSunshineUseVirtualDisplayOverride.boolValue
+        : [prefs[@"sunshineUseVirtualDisplay"] boolValue];
+    NSInteger screenMode = self.sessionSunshineScreenModeOverride != nil
+        ? self.sessionSunshineScreenModeOverride.integerValue
+        : (prefs[@"sunshineScreenMode"] != nil ? [prefs[@"sunshineScreenMode"] integerValue] : -1);
+
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:@"MoonlightSunshineDisplayRuntimeDidChange"
+                      object:nil
+                    userInfo:@{
+                        @"hostKey": self.app.host.uuid,
+                        @"phase": phase ?: @"idle",
+                        @"displayName": displayName ?: @"",
+                        @"useVdd": @(useVdd),
+                        @"screenMode": @(screenMode)
+                    }];
+    Log(LOG_I, @"[sunshine] Display runtime state: phase=%@ host=%@ display=%@ useVdd=%d customScreenMode=%ld",
+        phase ?: @"idle",
+        self.app.host.uuid,
+        displayName.length > 0 ? displayName : @"Host Default",
+        useVdd ? 1 : 0,
+        (long)screenMode);
+}
+
 - (void)connectionStarted {
     Log(LOG_I, @"[diag] StreamViewController connectionStarted received: main=%d activeGen=%lu",
         [NSThread isMainThread] ? 1 : 0,
@@ -1590,6 +1639,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         Log(LOG_I, @"connectionStarted (t=%.0fms) window style=%llu level=%ld", CACurrentMediaTime() * 1000.0, (unsigned long long)self.view.window.styleMask, (long)self.view.window.level);
 
         BOOL wasReconnect = self.reconnectInProgress;
+        [self publishSunshineDisplayRuntimeState:wasReconnect ? @"reconnected" : @"active"];
         if (self.reconnectInProgress) {
             self.reconnectInProgress = NO;
             [self hideReconnectOverlay];
@@ -1682,6 +1732,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld (0x%08x)", (long)errorCode, (unsigned int)errorCode);
+    [self publishSunshineDisplayRuntimeState:@"idle"];
     LiSetThreadConnectionContext(NULL);
     self.clipboardRuntimeConnection = nil;
     self.waitingForFirstRenderedFrame = NO;

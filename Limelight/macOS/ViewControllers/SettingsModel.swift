@@ -22,10 +22,46 @@ struct ConnectionCandidate: Identifiable {
   let state: Int
 }
 
+enum SunshineDisplayCapabilityState: Equatable {
+  case unknown
+  case loading
+  case available
+  case unavailable
+
+  var titleKey: String {
+    switch self {
+    case .unknown: return "Display Capability Unknown"
+    case .loading: return "Display Capability Loading"
+    case .available: return "Display Topology Available"
+    case .unavailable: return "Display Topology Unavailable"
+    }
+  }
+
+  var systemImage: String {
+    switch self {
+    case .unknown: return "questionmark.circle"
+    case .loading: return "arrow.triangle.2.circlepath"
+    case .available: return "checkmark.circle.fill"
+    case .unavailable: return "exclamationmark.triangle.fill"
+    }
+  }
+
+  var tint: Color {
+    switch self {
+    case .unknown, .loading: return .secondary
+    case .available: return .green
+    case .unavailable: return .orange
+    }
+  }
+}
+
 struct SunshineDisplayOption: Identifiable, Equatable {
   let id: String
   let value: String
   let title: String
+  let displayName: String
+  let friendlyName: String
+  let index: Int
 }
 
 enum CapabilityAvailability: Int {
@@ -72,6 +108,13 @@ struct VideoCapabilityMatrix: Equatable {
 
 class SettingsModel: ObservableObject {
   static let globalHostId = "__global__"
+  static let controllerNativeTouchpadKeyPrefix = "settings.controller.nativeTouchpad."
+  static let controllerDeadzoneKeyPrefix = "settings.controller.deadzone."
+  static let controllerHapticsModeKeyPrefix = "settings.controller.hapticsMode."
+  static let controllerMotionModeKeyPrefix = "settings.controller.motionMode."
+  static let controllerFeedbackTargetKeyPrefix = "settings.controller.feedbackTarget."
+  static let controllerVirtualTypeKeyPrefix = "settings.controller.virtualType."
+  static let controllerCalibrationKeyPrefix = "settings.controller.calibration."
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
   static let streamShortcutsChangedNotification = Notification.Name("MoonlightStreamShortcutsDidChange")
   static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
@@ -944,6 +987,51 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var nativeTouchpad: Bool {
+    didSet {
+      guard !isLoading else { return }
+      let hostId = selectedHost?.id ?? Self.globalHostId
+      UserDefaults.standard.set(
+        nativeTouchpad,
+        forKey: Self.controllerNativeTouchpadKeyPrefix + hostId)
+    }
+  }
+  @Published var controllerDeadzone: Double {
+    didSet {
+      guard !isLoading else { return }
+      persistControllerSettings()
+    }
+  }
+  @Published var selectedControllerHapticsMode: String {
+    didSet {
+      guard !isLoading else { return }
+      persistControllerSettings()
+    }
+  }
+  @Published var selectedControllerMotionMode: String {
+    didSet {
+      guard !isLoading else { return }
+      persistControllerSettings()
+    }
+  }
+  @Published var selectedControllerFeedbackTarget: String {
+    didSet {
+      guard !isLoading else { return }
+      persistControllerSettings()
+    }
+  }
+  @Published var selectedControllerVirtualType: String {
+    didSet {
+      guard !isLoading else { return }
+      persistControllerSettings()
+    }
+  }
+  @Published var controllerCalibration: ControllerCalibration {
+    didSet {
+      guard !isLoading else { return }
+      persistControllerSettings()
+    }
+  }
   @Published var gamepadMouseModeLongPressMenu: Bool {
     didSet {
       guard !isLoading else { return }
@@ -984,6 +1072,10 @@ class SettingsModel: ObservableObject {
   }
   @Published var availableSunshineDisplays: [SunshineDisplayOption]
   @Published var isLoadingSunshineDisplays: Bool
+  @Published var sunshineDisplayCapabilityState: SunshineDisplayCapabilityState
+  @Published var sunshineDisplayCapabilityMessage: String
+  @Published var sunshineDisplayRuntimeStateKey: String
+  @Published var sunshineDisplayRuntimeDetail: String
   @Published var videoCapabilityMatrix: VideoCapabilityMatrix
   @Published var videoRuntimeStatusSummaryKey: String
   @Published var videoRuntimeStatusDetailKey: String
@@ -1053,7 +1145,10 @@ class SettingsModel: ObservableObject {
       SunshineDisplayOption(
         id: "__host_default__",
         value: Self.defaultSunshineTargetDisplayName,
-        title: LanguageManager.shared.localize("Host Default"))
+        title: LanguageManager.shared.localize("Host Default"),
+        displayName: "",
+        friendlyName: "",
+        index: -1)
     ]
 
     for option in availableSunshineDisplays {
@@ -1068,7 +1163,13 @@ class SettingsModel: ObservableObject {
     let trimmedSelection = sunshineTargetDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
     if !trimmedSelection.isEmpty && !options.contains(where: { $0.value == trimmedSelection }) {
       options.append(
-        SunshineDisplayOption(id: "__saved_\(trimmedSelection)", value: trimmedSelection, title: trimmedSelection))
+        SunshineDisplayOption(
+          id: "__saved_\(trimmedSelection)",
+          value: trimmedSelection,
+          title: trimmedSelection,
+          displayName: trimmedSelection,
+          friendlyName: trimmedSelection,
+          index: -1))
     }
 
     return options
@@ -1107,6 +1208,8 @@ class SettingsModel: ObservableObject {
         isLoadingSunshineDisplays = false
       }
       loadedSunshineDisplaysHostId = nil
+      sunshineDisplayCapabilityState = .unavailable
+      sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("No Sunshine host selected")
       return
     }
 
@@ -1117,6 +1220,8 @@ class SettingsModel: ObservableObject {
       availableSunshineDisplays = []
       isLoadingSunshineDisplays = false
       loadedSunshineDisplaysHostId = nil
+      sunshineDisplayCapabilityState = .unavailable
+      sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("Sunshine display endpoint unavailable")
       return
     }
 
@@ -1132,20 +1237,31 @@ class SettingsModel: ObservableObject {
     let hostId = host.uuid
     let serverCert = host.serverCert
     isLoadingSunshineDisplays = true
+    sunshineDisplayCapabilityState = .loading
+    sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("Loading Foundation display topology")
 
     DispatchQueue.global(qos: .userInitiated).async {
       let httpManager = HttpManager(
         host: address,
         uniqueId: IdManager.getUniqueId(),
         serverCert: serverCert)
-      let rawEntries = (httpManager?.fetchSunshineDisplays() as? [[String: Any]]) ?? []
+      let snapshot = (httpManager?.fetchSunshineDisplaySnapshot() as? [String: Any]) ?? [:]
+      let statusCode = (snapshot["statusCode"] as? NSNumber)?.intValue ?? 0
+      let statusMessage = snapshot["statusMessage"] as? String ?? ""
+      let rawEntries = (snapshot["displays"] as? [[String: Any]]) ?? []
       let resolvedOptions = rawEntries.compactMap { entry -> SunshineDisplayOption? in
         let deviceId = entry["device_id"] as? String ?? ""
         guard !deviceId.isEmpty else { return nil }
+        let displayName = entry["display_name"] as? String ?? ""
+        let friendlyName = entry["friendly_name"] as? String ?? deviceId
+        let index = (entry["index"] as? NSNumber)?.intValue ?? 0
         return SunshineDisplayOption(
           id: deviceId,
           value: deviceId,
-          title: Self.sunshineDisplayLabel(from: entry))
+          title: Self.sunshineDisplayLabel(from: entry),
+          displayName: displayName,
+          friendlyName: friendlyName,
+          index: index)
       }
 
       DispatchQueue.main.async {
@@ -1154,6 +1270,12 @@ class SettingsModel: ObservableObject {
         self.availableSunshineDisplays = resolvedOptions
         self.isLoadingSunshineDisplays = false
         self.loadedSunshineDisplaysHostId = hostId
+        self.sunshineDisplayCapabilityState = statusCode == 200 ? .available : .unavailable
+        self.sunshineDisplayCapabilityMessage = statusCode == 200
+          ? LanguageManager.shared.localize("Foundation display topology endpoint ready")
+          : (statusMessage.isEmpty
+            ? LanguageManager.shared.localize("Sunshine display endpoint unavailable")
+            : statusMessage)
       }
     }
   }
@@ -1319,6 +1441,13 @@ class SettingsModel: ObservableObject {
     appArtworkHeight = Self.defaultAppArtworkHeight
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
+    nativeTouchpad = true
+    controllerDeadzone = Self.defaultControllerDeadzone
+    selectedControllerHapticsMode = Self.defaultControllerHapticsMode
+    selectedControllerMotionMode = Self.defaultControllerMotionMode
+    selectedControllerFeedbackTarget = Self.defaultControllerFeedbackTarget
+    selectedControllerVirtualType = Self.defaultControllerVirtualType
+    controllerCalibration = .default
     gamepadMouseModeLongPressMenu = Self.defaultGamepadMouseModeLongPressMenu
     mouseMode = Self.defaultMouseMode
     selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)
@@ -1329,6 +1458,10 @@ class SettingsModel: ObservableObject {
     selectedConnectionMethod = "Auto"
     availableSunshineDisplays = []
     isLoadingSunshineDisplays = false
+    sunshineDisplayCapabilityState = .unknown
+    sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("Display capability has not been queried")
+    sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Idle"
+    sunshineDisplayRuntimeDetail = ""
     videoCapabilityMatrix = Self.currentVideoCapabilityMatrix()
     videoRuntimeStatusSummaryKey = "Video Runtime Path Idle"
     videoRuntimeStatusDetailKey = "Video Runtime Detail Idle"
@@ -1356,6 +1489,10 @@ class SettingsModel: ObservableObject {
     NotificationCenter.default.addObserver(
       self, selector: #selector(handleVideoRuntimeStatusUpdate),
       name: .moonlightVideoRuntimeStatusDidChange, object: nil)
+
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleSunshineDisplayRuntimeUpdate),
+      name: NSNotification.Name("MoonlightSunshineDisplayRuntimeDidChange"), object: nil)
 
     LoggerSetCuratedModeEnabled(debugLogMode != "raw")
     LoggerSetMinimumLevel(Self.loggerLevel(from: debugLogMinLevel))
@@ -1437,6 +1574,32 @@ class SettingsModel: ObservableObject {
 
     DispatchQueue.main.async {
       self.refreshVideoRuntimeStatus()
+    }
+  }
+
+  @objc func handleSunshineDisplayRuntimeUpdate(_ notification: Notification) {
+    let hostKey = notification.userInfo?["hostKey"] as? String
+    let selectedHostId = selectedHost?.id ?? Self.globalHostId
+    guard hostKey == nil || hostKey == selectedHostId else { return }
+
+    let phase = notification.userInfo?["phase"] as? String ?? "idle"
+    let displayName = notification.userInfo?["displayName"] as? String ?? ""
+    let useVdd = notification.userInfo?["useVdd"] as? Bool ?? false
+    let screenMode = notification.userInfo?["screenMode"] as? Int ?? -1
+    DispatchQueue.main.async {
+      switch phase {
+      case "active":
+        self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Active"
+      case "reconnected":
+        self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Reconnected"
+      default:
+        self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Idle"
+      }
+      self.sunshineDisplayRuntimeDetail = String(
+        format: "display=%@ · useVdd=%@ · customScreenMode=%d",
+        displayName.isEmpty ? "Host Default" : displayName,
+        useVdd ? "true" : "false",
+        screenMode)
     }
   }
 

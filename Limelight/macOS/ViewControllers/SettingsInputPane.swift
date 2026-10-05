@@ -10,6 +10,7 @@ import AVFoundation
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
+import GameController
 import SwiftUI
 
 struct InputView: View {
@@ -413,6 +414,123 @@ struct InputView: View {
               Divider()
 
               ToggleCell(
+                title: "Native Touchpad Input",
+                hintKey: "Native Touchpad Input hint",
+                boolBinding: $settingsModel.nativeTouchpad
+              )
+
+              Divider()
+
+              PickerSettingRow(
+                title: "DualSense Haptics",
+                detailKey: "DualSense Haptics detail",
+                stacked: true,
+                content: {
+                  Picker("", selection: $settingsModel.selectedControllerHapticsMode) {
+                    ForEach(SettingsModel.controllerHapticsModes, id: \.self) { mode in
+                      Text(languageManager.localize(mode))
+                    }
+                  }
+                  .labelsHidden()
+                })
+
+              Divider()
+
+              PickerSettingRow(
+                title: "Feedback Controller",
+                detailKey: "Feedback Controller detail",
+                stacked: true,
+                content: {
+                  Picker("", selection: $settingsModel.selectedControllerFeedbackTarget) {
+                    ForEach(SettingsModel.controllerFeedbackTargets, id: \.self) { target in
+                      Text(languageManager.localize(target))
+                    }
+                  }
+                  .labelsHidden()
+                })
+
+              Divider()
+
+              PickerSettingRow(
+                title: "Host Controller Type",
+                detailKey: "Host Controller Type detail",
+                stacked: true,
+                content: {
+                  Picker("", selection: $settingsModel.selectedControllerVirtualType) {
+                    ForEach(SettingsModel.controllerVirtualTypes, id: \.self) { type in
+                      Text(languageManager.localize(type))
+                    }
+                  }
+                  .labelsHidden()
+                })
+
+              Divider()
+
+              PickerSettingRow(
+                title: "Motion Sensors",
+                detailKey: "Motion Sensors detail",
+                stacked: true,
+                content: {
+                  Picker("", selection: $settingsModel.selectedControllerMotionMode) {
+                    ForEach(SettingsModel.controllerMotionModes, id: \.self) { mode in
+                      Text(languageManager.localize(mode))
+                    }
+                  }
+                  .labelsHidden()
+                })
+
+              Divider()
+
+              VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                  Text(languageManager.localize("Joystick Deadzone"))
+                  Spacer()
+                  Text(String(format: "%.0f%%", settingsModel.controllerDeadzone * 100.0))
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+                }
+                Slider(value: $settingsModel.controllerDeadzone, in: 0.0...0.30, step: 0.01)
+                Text(languageManager.localize("Joystick Deadzone hint"))
+                  .font(.footnote)
+                  .foregroundColor(.secondary)
+              }
+
+              Divider()
+
+              VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                  Text(languageManager.localize("Stick Calibration"))
+                    .font(.callout.weight(.medium))
+                  Spacer()
+                  Button(languageManager.localize("Reset")) {
+                    settingsModel.resetControllerCalibration()
+                  }
+                  .buttonStyle(.bordered)
+                }
+                Text(languageManager.localize("Stick Calibration detail"))
+                  .font(.footnote)
+                  .foregroundColor(.secondary)
+                HStack(spacing: 12) {
+                  calibrationField(
+                    title: "Left X", value: $settingsModel.controllerCalibration.leftCenterX)
+                  calibrationField(
+                    title: "Left Y", value: $settingsModel.controllerCalibration.leftCenterY)
+                }
+                HStack(spacing: 12) {
+                  calibrationField(
+                    title: "Right X", value: $settingsModel.controllerCalibration.rightCenterX)
+                  calibrationField(
+                    title: "Right Y", value: $settingsModel.controllerCalibration.rightCenterY)
+                  calibrationField(
+                    title: "Left Gain", value: $settingsModel.controllerCalibration.leftGain)
+                  calibrationField(
+                    title: "Right Gain", value: $settingsModel.controllerCalibration.rightGain)
+                }
+              }
+
+              Divider()
+
+              ToggleCell(
                 title: "Gamepad Mouse Emulation",
                 hintKey: "Gamepad Mouse Hint",
                 boolBinding: $settingsModel.gamepadMouseMode
@@ -425,6 +543,10 @@ struct InputView: View {
                 hintKey: "Long-press Menu Mouse Hint",
                 boolBinding: $settingsModel.gamepadMouseModeLongPressMenu
               )
+
+              Divider()
+
+              controllerDiagnosticsCard
             }
           }
         },
@@ -433,6 +555,50 @@ struct InputView: View {
         }
       )
     }
+  }
+
+  private func calibrationField(title: String, value: Binding<Double>) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(languageManager.localize(title))
+        .font(.caption)
+        .foregroundColor(.secondary)
+      TextField("0.00", value: value, format: .number.precision(.fractionLength(2)))
+        .textFieldStyle(.roundedBorder)
+        .frame(width: 74)
+    }
+  }
+
+  private var controllerDiagnosticsCard: some View {
+    let controllers = GCController.controllers()
+    let dualSenseCount: Int
+    if #available(macOS 11.0, *) {
+      dualSenseCount = controllers.filter {
+        $0.extendedGamepad is GCDualSenseGamepad
+      }.count
+    } else {
+      dualSenseCount = 0
+    }
+
+    return VStack(alignment: .leading, spacing: 8) {
+      Label(languageManager.localize("Controller Diagnostics"), systemImage: "stethoscope")
+        .font(.callout.weight(.medium))
+      Text(String(
+        format: languageManager.localize("Controller Diagnostics summary"),
+        controllers.count,
+        dualSenseCount
+      ))
+      .font(.footnote)
+      .foregroundColor(.secondary)
+      Text(languageManager.localize("Controller Diagnostics detail"))
+        .font(.footnote)
+        .foregroundColor(.secondary)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(12)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .fill(Color(NSColor.controlBackgroundColor))
+    )
   }
 
   private var clipboardSyncRow: some View {

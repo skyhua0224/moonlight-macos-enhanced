@@ -814,6 +814,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)attemptReconnectWithReason:(NSString *)reason;
 - (void)setupOverlay;
 - (void)updateStats;
+- (void)publishSunshineDisplayRuntimeState:(NSString *)phase;
 - (void)showConnectionWarning;
 - (void)viewDidLayout;
 - (void)layoutConnectionWarning;
