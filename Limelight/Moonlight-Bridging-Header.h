@@ -3,6 +3,7 @@
 //
 
 #import "DataManager.h"
+#import "CryptoManager.h"
 #import "TemporaryHost.h"
 #import "ConnectionEndpointStore.h"
 #import "ConnectionEditorViewController.h"

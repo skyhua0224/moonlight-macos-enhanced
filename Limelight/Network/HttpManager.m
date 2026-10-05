@@ -533,6 +533,61 @@ static const NSString* HTTPS_PORT = @"47984";
     return result;
 }
 
+- (NSDictionary<NSString*, id>*)fetchSunshineFileMappingCapability {
+    NSString *urlString = [NSString stringWithFormat:@"%@/api/v1/file-mapping/capability?client_uuid=%@",
+                           _baseHTTPSURL,
+                           [_clientUniqueId stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet] ?: @""];
+    NSURLRequest *requestURL = [self createRequestFromString:urlString timeout:SHORT_TIMEOUT_SEC];
+    HttpResponse *response = [[HttpResponse alloc] init];
+    HttpRequest *request = [HttpRequest requestForResponse:response withUrlRequest:requestURL];
+    [self executeRequestSynchronously:request];
+
+    NSMutableDictionary *result = [@{
+        @"statusCode": @(response.statusCode),
+        @"statusMessage": response.statusMessage ?: @"",
+        @"ok": @NO,
+        @"enabled": @NO,
+        @"listening": @NO
+    } mutableCopy];
+    if (response.statusCode != 200 || response.data.length == 0) {
+        return result;
+    }
+
+    NSError *error = nil;
+    id object = [NSJSONSerialization JSONObjectWithData:response.data options:0 error:&error];
+    if (![object isKindOfClass:NSDictionary.class]) {
+        result[@"statusMessage"] = error.localizedDescription ?: @"Invalid file mapping capability response";
+        return result;
+    }
+
+    NSDictionary *json = (NSDictionary *)object;
+    NSNumber *ok = [json[@"ok"] isKindOfClass:NSNumber.class] ? json[@"ok"] : @NO;
+    NSNumber *enabled = [json[@"enabled"] isKindOfClass:NSNumber.class] ? json[@"enabled"] : @NO;
+    NSNumber *listening = [json[@"listening"] isKindOfClass:NSNumber.class] ? json[@"listening"] : @NO;
+    NSNumber *port = [json[@"port"] isKindOfClass:NSNumber.class] ? json[@"port"] : nil;
+    NSString *endpoint = [json[@"session_endpoint"] isKindOfClass:NSString.class] ? json[@"session_endpoint"] : @"";
+    NSString *sessionURL = [json[@"session_url"] isKindOfClass:NSString.class] ? json[@"session_url"] : @"";
+    NSString *token = [json[@"session_token"] isKindOfClass:NSString.class] ? json[@"session_token"] : @"";
+    NSString *clientUUID = [json[@"client_uuid"] isKindOfClass:NSString.class] ? json[@"client_uuid"] : @"";
+    BOOL validToken = token.length >= 16 && token.length <= 256;
+    BOOL validPort = port != nil && port.integerValue > 0 && port.integerValue <= 65535;
+    BOOL valid = ok.boolValue && enabled.boolValue && listening.boolValue && validPort &&
+        endpoint.length > 0 && sessionURL.length > 0 && validToken && clientUUID.length > 0;
+    result[@"ok"] = @(valid);
+    result[@"enabled"] = enabled;
+    result[@"listening"] = listening;
+    result[@"reason"] = [json[@"error"] isKindOfClass:NSString.class] ? json[@"error"] : @"";
+    if (valid) {
+        result[@"port"] = port;
+        result[@"session_endpoint"] = endpoint;
+        result[@"session_url"] = sessionURL;
+        result[@"session_token"] = token;
+        result[@"client_uuid"] = clientUUID;
+        result[@"features"] = [json[@"features"] isKindOfClass:NSArray.class] ? json[@"features"] : @[];
+    }
+    return result;
+}
+
 - (void)appendEncodedQueryParameter:(NSMutableString *)params key:(NSString *)key value:(NSString *)value {
     if (value.length == 0) {
         return;
