@@ -1217,6 +1217,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         streamConfig.sunshineScreenMode = self.sessionSunshineScreenModeOverride != nil
             ? self.sessionSunshineScreenModeOverride.intValue
             : (prefs[@"sunshineScreenMode"] != nil ? [prefs[@"sunshineScreenMode"] intValue] : -1);
+        streamConfig.sunshineTouchKeyboardAutoInvoke = [prefs[@"sunshineTouchKeyboardAutoInvoke"] boolValue];
         streamConfig.sunshineHdrBrightnessOverride = [prefs[@"sunshineHdrBrightnessOverride"] boolValue];
         streamConfig.sunshineMaxBrightness = prefs[@"sunshineMaxBrightness"] != nil ? [prefs[@"sunshineMaxBrightness"] doubleValue] : 1000.0;
         streamConfig.sunshineMinBrightness = prefs[@"sunshineMinBrightness"] != nil ? [prefs[@"sunshineMinBrightness"] doubleValue] : 0.001;

@@ -179,6 +179,7 @@ extension SettingsModel {
     sunshineTargetDisplayName = Self.defaultSunshineTargetDisplayName
     sunshineUseVirtualDisplay = Self.defaultSunshineUseVirtualDisplay
     selectedSunshineScreenMode = Self.defaultSunshineScreenMode
+    sunshineTouchKeyboardAutoInvoke = Self.defaultSunshineTouchKeyboardAutoInvoke
     sunshineHdrBrightnessOverride = Self.defaultSunshineHdrBrightnessOverride
     sunshineMaxBrightness = Self.defaultSunshineMaxBrightness
     sunshineMinBrightness = Self.defaultSunshineMinBrightness
@@ -553,6 +554,8 @@ extension SettingsModel {
         settings.sunshineUseVirtualDisplay ?? Self.defaultSunshineUseVirtualDisplay
       selectedSunshineScreenMode = Self.sunshineScreenModeSelection(
         for: settings.sunshineScreenMode)
+      sunshineTouchKeyboardAutoInvoke =
+        settings.sunshineTouchKeyboardAutoInvoke ?? Self.defaultSunshineTouchKeyboardAutoInvoke
       sunshineHdrBrightnessOverride =
         settings.sunshineHdrBrightnessOverride ?? Self.defaultSunshineHdrBrightnessOverride
       sunshineMaxBrightness = settings.sunshineMaxBrightness ?? Self.defaultSunshineMaxBrightness
@@ -785,6 +788,7 @@ extension SettingsModel {
       sunshineTargetDisplayName: sunshineTargetDisplayName,
       sunshineUseVirtualDisplay: sunshineUseVirtualDisplay,
       sunshineScreenMode: sunshineScreenMode,
+      sunshineTouchKeyboardAutoInvoke: sunshineTouchKeyboardAutoInvoke,
       sunshineHdrBrightnessOverride: sunshineHdrBrightnessOverride,
       sunshineMaxBrightness: persistedSunshineMaxBrightness,
       sunshineMinBrightness: persistedSunshineMinBrightness,

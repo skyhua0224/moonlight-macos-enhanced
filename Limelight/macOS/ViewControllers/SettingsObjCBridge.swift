@@ -141,6 +141,9 @@ class SettingsClass: NSObject {
         "sunshineScreenMode":
           settings.sunshineScreenMode
           ?? SettingsModel.sunshineScreenModeRawValue(for: SettingsModel.defaultSunshineScreenMode),
+        "sunshineTouchKeyboardAutoInvoke":
+          settings.sunshineTouchKeyboardAutoInvoke
+          ?? SettingsModel.defaultSunshineTouchKeyboardAutoInvoke,
         "sunshineHdrBrightnessOverride":
           settings.sunshineHdrBrightnessOverride ?? SettingsModel.defaultSunshineHdrBrightnessOverride,
         "sunshineMaxBrightness":
@@ -325,6 +328,7 @@ class SettingsClass: NSObject {
       sunshineTargetDisplayName: settings.sunshineTargetDisplayName,
       sunshineUseVirtualDisplay: settings.sunshineUseVirtualDisplay,
       sunshineScreenMode: settings.sunshineScreenMode,
+      sunshineTouchKeyboardAutoInvoke: settings.sunshineTouchKeyboardAutoInvoke,
       sunshineHdrBrightnessOverride: settings.sunshineHdrBrightnessOverride,
       sunshineMaxBrightness: settings.sunshineMaxBrightness,
       sunshineMinBrightness: settings.sunshineMinBrightness,
@@ -433,6 +437,7 @@ class SettingsClass: NSObject {
         sunshineTargetDisplayName: updated.sunshineTargetDisplayName,
         sunshineUseVirtualDisplay: updated.sunshineUseVirtualDisplay,
         sunshineScreenMode: updated.sunshineScreenMode,
+        sunshineTouchKeyboardAutoInvoke: updated.sunshineTouchKeyboardAutoInvoke,
         sunshineHdrBrightnessOverride: updated.sunshineHdrBrightnessOverride,
         sunshineMaxBrightness: updated.sunshineMaxBrightness,
         sunshineMinBrightness: updated.sunshineMinBrightness,
@@ -539,6 +544,7 @@ class SettingsClass: NSObject {
       sunshineTargetDisplayName: settings.sunshineTargetDisplayName,
       sunshineUseVirtualDisplay: settings.sunshineUseVirtualDisplay,
       sunshineScreenMode: settings.sunshineScreenMode,
+      sunshineTouchKeyboardAutoInvoke: settings.sunshineTouchKeyboardAutoInvoke,
       sunshineHdrBrightnessOverride: settings.sunshineHdrBrightnessOverride,
       sunshineMaxBrightness: settings.sunshineMaxBrightness,
       sunshineMinBrightness: settings.sunshineMinBrightness,

@@ -268,6 +268,7 @@
 				4C7E0A771FECBFFD00684411 /* Frameworks */,
 				4C7E0A781FECBFFD00684411 /* Resources */,
 				A4C4E0012E8A100000A1B001 /* Build AWDL Privileged Helper */,
+				B7C4E0012E8A100000A1B002 /* Build Remote USB Helper */,
 				A428584B2D50682400E39078 /* Embed Frameworks */,
 			);
 			buildRules = (
@@ -354,6 +355,28 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		B7C4E0012E8A100000A1B002 /* Build Remote USB Helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/RemoteUSB/CMakeLists.txt",
+				"$(SRCROOT)/RemoteUSB/main.cpp",
+				"$(SRCROOT)/scripts/build_remote_usb_helper.sh",
+			);
+			name = "Build Remote USB Helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/MacOS/moonlight-usbd",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "\"${SRCROOT}/scripts/build_remote_usb_helper.sh\"\n";
+		};
 		A4C4E0012E8A100000A1B001 /* Build AWDL Privileged Helper */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;

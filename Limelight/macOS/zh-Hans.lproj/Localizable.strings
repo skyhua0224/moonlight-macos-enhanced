@@ -660,6 +660,8 @@
 "Screen Mode detail" = "控制 Sunshine 在本次会话开始前如何准备主机显示拓扑。";
 "Override HDR Display Profile" = "覆盖 HDR 显示档案";
 "Override HDR Display Profile detail" = "向 Sunshine 发送客户端显示亮度参数，适用于支持 HDR 的虚拟显示器场景。";
+"Show Touch Keyboard Automatically" = "自动显示触摸键盘";
+"Show Touch Keyboard Automatically detail" = "远端可编辑输入框获得焦点时，请求 Foundation Sunshine 显示触摸键盘。";
 "Max Brightness" = "最大亮度";
 "Min Brightness" = "最小亮度";
 "Max Average Brightness" = "最大平均亮度";

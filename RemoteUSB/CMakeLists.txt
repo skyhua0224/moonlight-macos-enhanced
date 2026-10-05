@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.24)
 project(moonlight-usbd VERSION 1.0.0 LANGUAGES C CXX)
 
+# usbipdcpp's C++23 std::format path uses libc++ floating-point to_chars,
+# introduced by the Apple SDK at macOS 13.3. The main application remains
+# deployable to macOS 12; the optional USB exporter is gated at 13.3.
+if(APPLE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.3" CACHE STRING "" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
