@@ -7,6 +7,7 @@
 #import "ConnectionEndpointStore.h"
 #import "ConnectionEditorViewController.h"
 #import "HttpManager.h"
+#import "RemoteUSBForwardingSession.h"
 #import "HttpRequest.h"
 #import "ServerInfoResponse.h"
 #import "IdManager.h"

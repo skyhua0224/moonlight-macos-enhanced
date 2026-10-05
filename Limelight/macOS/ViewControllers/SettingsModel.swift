@@ -92,11 +92,35 @@ struct SunshineDisplayOption: Identifiable, Equatable {
   let displayName: String
   let friendlyName: String
   let index: Int
-  let isPrimary: Bool = false
-  let currentScalePercent: Int? = nil
-  let recommendedScalePercent: Int? = nil
-  let supportedScalePercents: [Int] = []
-  let scaleSetSupported: Bool = false
+  let isPrimary: Bool
+  let currentScalePercent: Int?
+  let recommendedScalePercent: Int?
+  let supportedScalePercents: [Int]
+  let scaleSetSupported: Bool
+
+  init(id: String,
+       value: String,
+       title: String,
+       displayName: String,
+       friendlyName: String,
+       index: Int,
+       isPrimary: Bool = false,
+       currentScalePercent: Int? = nil,
+       recommendedScalePercent: Int? = nil,
+       supportedScalePercents: [Int] = [],
+       scaleSetSupported: Bool = false) {
+    self.id = id
+    self.value = value
+    self.title = title
+    self.displayName = displayName
+    self.friendlyName = friendlyName
+    self.index = index
+    self.isPrimary = isPrimary
+    self.currentScalePercent = currentScalePercent
+    self.recommendedScalePercent = recommendedScalePercent
+    self.supportedScalePercents = supportedScalePercents
+    self.scaleSetSupported = scaleSetSupported
+  }
 }
 
 enum CapabilityAvailability: Int {
@@ -1295,7 +1319,7 @@ class SettingsModel: ObservableObject {
     sunshineDisplayCapabilityState = .loading
     sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("Loading Foundation display topology")
 
-    DispatchQueue.global(qos: .userInitiated).async {
+    DispatchQueue.global(qos: .userInitiated).async(execute: DispatchWorkItem {
       let httpManager = HttpManager(
         host: address,
         uniqueId: IdManager.getUniqueId(),
@@ -1351,7 +1375,7 @@ class SettingsModel: ObservableObject {
             ? LanguageManager.shared.localize("Sunshine display endpoint unavailable")
             : statusMessage)
       }
-    }
+    })
   }
 
   init() {

@@ -17,6 +17,7 @@ struct InputView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
   @ObservedObject private var inputMonitoringManager = InputMonitoringPermissionManager.sharedManager
+  @StateObject private var remoteUSB = RemoteUSBForwardingViewModel()
   @AppStorage("settings.input.mouseAdvancedExpanded") private var mouseAdvancedExpanded = false
   @AppStorage("settings.input.mouseTuningExpanded") private var mouseTuningExpanded = false
   @AppStorage("settings.input.controllerAdvancedExpanded") private var controllerAdvancedExpanded =
@@ -82,6 +83,7 @@ struct InputView: View {
         mouseSection
         keyboardSection
         controllerSection
+        remoteUSBSection
       }
       .padding()
     }
@@ -554,6 +556,57 @@ struct InputView: View {
           SettingsDisclosureLabel(title: "Advanced Controller Settings")
         }
       )
+    }
+  }
+
+  private var remoteUSBSection: some View {
+    FormSection(title: "Remote USB/IP") {
+      HStack(alignment: .top, spacing: 12) {
+        Image(systemName: "cable.connector.horizontal")
+          .foregroundColor(.accentColor)
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Foundation USB forwarding")
+            .font(.headline)
+          Text(remoteUSB.status)
+            .font(.footnote)
+            .foregroundColor(.secondary)
+        }
+        Spacer()
+        Button("Refresh") {
+          remoteUSB.refresh(host: settingsModel.selectedHost)
+        }
+        .buttonStyle(.bordered)
+      }
+
+      if remoteUSB.capabilityAvailable {
+        ForEach(Array(remoteUSB.devices.enumerated()), id: \.offset) { _, device in
+          Divider()
+          HStack {
+            VStack(alignment: .leading, spacing: 3) {
+              Text(device.product.isEmpty ? device.busID : device.product)
+              Text("\(device.vidPID) · \(device.busID)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+            Spacer()
+            if remoteUSB.selectedBusID == device.busID {
+              Button("Stop") { remoteUSB.stop() }
+                .buttonStyle(.bordered)
+            } else {
+              Button("Forward") { remoteUSB.start(device: device) }
+                .buttonStyle(.borderedProminent)
+                .disabled(!device.isClaimable)
+            }
+          }
+        }
+      } else {
+        Text("Foundation must advertise USB forwarding before a device can be shared.")
+          .font(.footnote)
+          .foregroundColor(.secondary)
+      }
+    }
+    .onAppear {
+      remoteUSB.refresh(host: settingsModel.selectedHost)
     }
   }
 

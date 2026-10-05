@@ -446,11 +446,13 @@ extension SettingsModel {
 
   enum ControllerMotionMode: String, CaseIterable {
     case hostRequested
+    case alwaysOn
     case disabled
 
     var displayKey: String {
       switch self {
       case .hostRequested: return "Host Requested"
+      case .alwaysOn: return "Always On"
       case .disabled: return "Disabled"
       }
     }

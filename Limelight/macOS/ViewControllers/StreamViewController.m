@@ -7,6 +7,7 @@
 //
 
 #import "StreamViewController_Internal.h"
+#import "RemoteUSBForwardingSession.h"
 
 static NSScreen *MLScreenContainingMouseLocation(void) {
     NSPoint mouseLocation = [NSEvent mouseLocation];
@@ -600,6 +601,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 
     [self stopStreamHealthDiagnostics];
+    [[MLRemoteUSBForwardingSession sharedSession] stop];
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"begin-stop:%@", reason ?: @"unknown"]];
     [self finalizeInputDiagnosticsWithReason:reason];
     [[AwdlHelperManager sharedManager] endStreamSessionWithReason:reason ?: @"begin-stop"];
@@ -1745,6 +1747,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.clipboardRuntimeConnection = nil;
     self.waitingForFirstRenderedFrame = NO;
     [self stopStreamHealthDiagnostics];
+    [[MLRemoteUSBForwardingSession sharedSession] stop];
     [self finalizeInputDiagnosticsWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
     self.streamHealthConnectionStartedMs = 0;
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
