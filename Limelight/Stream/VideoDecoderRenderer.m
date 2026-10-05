@@ -8,6 +8,7 @@
 
 #import "VideoDecoderRenderer.h"
 #include "Limelight-internal.h"
+#include "DynamicHdr.h"
 #import "RendererLayerContainer.h"
 
 #include "Limelight.h"
@@ -229,6 +230,49 @@ static NSString *MLVideoRuntimeSummaryKey(MLActiveVideoRendererMode mode)
     }
 }
 
+static CFTypeRef MLCreateDolbyVisionMetadataSession(float frameRate)
+{
+#if TARGET_OS_OSX
+    if (@available(macOS 15.0, *)) {
+        const void *dolbyVision = kVTHDRPerFrameMetadataGenerationHDRFormatType_DolbyVision;
+        CFArrayRef formats = CFArrayCreate(kCFAllocatorDefault,
+                                           &dolbyVision,
+                                           1,
+                                           &kCFTypeArrayCallBacks);
+        if (formats == NULL) {
+            return NULL;
+        }
+
+        const void *keys[] = { kVTHDRPerFrameMetadataGenerationOptionsKey_HDRFormats };
+        const void *values[] = { formats };
+        CFDictionaryRef options = CFDictionaryCreate(kCFAllocatorDefault,
+                                                     keys,
+                                                     values,
+                                                     1,
+                                                     &kCFTypeDictionaryKeyCallBacks,
+                                                     &kCFTypeDictionaryValueCallBacks);
+        CFRelease(formats);
+        if (options == NULL) {
+            return NULL;
+        }
+
+        VTHDRPerFrameMetadataGenerationSessionRef session = NULL;
+        OSStatus status = VTHDRPerFrameMetadataGenerationSessionCreate(
+            kCFAllocatorDefault,
+            MAX(frameRate, 1.0f),
+            options,
+            &session);
+        CFRelease(options);
+        if (status == noErr) {
+            return session;
+        }
+
+        Log(LOG_W, @"[hdr] Apple Dolby Vision per-frame metadata session unavailable: %d", (int)status);
+    }
+#endif
+    return NULL;
+}
+
 static NSString *MLVideoEnhancementEngineName(MLActiveVideoEnhancementEngine engine)
 {
     switch (engine) {
@@ -270,6 +314,61 @@ static int MLCompareUInt16Ascending(const void *lhs, const void *rhs)
         return 1;
     }
     return 0;
+}
+
+static void MLLogDynamicHDRImageAttachments(CVImageBufferRef imageBuffer,
+                                             BOOL *hdr10PlusObserved,
+                                             BOOL *dolbyObserved)
+{
+    if (imageBuffer == NULL || hdr10PlusObserved == NULL || dolbyObserved == NULL) {
+        return;
+    }
+
+    CFDictionaryRef attachments = CVBufferGetAttachments(
+        imageBuffer, kCVAttachmentMode_ShouldPropagate);
+    if (attachments == NULL) {
+        return;
+    }
+
+    CFIndex count = CFDictionaryGetCount(attachments);
+    if (count <= 0) {
+        return;
+    }
+
+    const void **keys = calloc((size_t)count, sizeof(void *));
+    const void **values = calloc((size_t)count, sizeof(void *));
+    if (keys == NULL || values == NULL) {
+        free(keys);
+        free(values);
+        return;
+    }
+    CFDictionaryGetKeysAndValues(attachments, keys, values);
+    for (CFIndex index = 0; index < count; index++) {
+        if (CFGetTypeID(keys[index]) != CFStringGetTypeID()) {
+            continue;
+        }
+        CFStringRef key = (CFStringRef)keys[index];
+        char keyName[256] = {0};
+        if (!CFStringGetCString(key, keyName, sizeof(keyName), kCFStringEncodingUTF8)) {
+            continue;
+        }
+        NSString *name = [NSString stringWithUTF8String:keyName];
+        NSString *lowerName = name.lowercaseString;
+        if (!*hdr10PlusObserved &&
+            ([lowerName containsString:@"hdr10+"] ||
+             [lowerName containsString:@"hdr10plus"])) {
+            *hdr10PlusObserved = YES;
+            Log(LOG_I, @"[video] Apple propagated HDR10+ per-frame metadata attachment: %@", name);
+        }
+        if (!*dolbyObserved &&
+            ([lowerName containsString:@"dolby"] ||
+             [lowerName containsString:@"rpu"])) {
+            *dolbyObserved = YES;
+            Log(LOG_I, @"[video] Apple propagated Dolby/RPU metadata attachment: %@", name);
+        }
+    }
+    free(keys);
+    free(values);
 }
 
 static float MLComputeRenderedOnePercentLowFps(const uint16_t *samples, NSUInteger count)
@@ -1095,10 +1194,13 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     Boolean waitingForSps, waitingForPps, waitingForVps;
 
     int videoFormat;
+    NSInteger _streamWidth;
+    NSInteger _streamHeight;
 
     NSData *spsData, *ppsData, *vpsData;
     CMVideoFormatDescriptionRef _imageFormatDesc;
     CMVideoFormatDescriptionRef formatDesc;
+    CMVideoFormatDescriptionRef _baseHEVCFormatDesc;
     CMVideoFormatDescriptionRef _nativeImageFormatDesc;
 
     CVDisplayLinkRef _displayLink;
@@ -1208,6 +1310,13 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     NSUInteger _lastLoggedDrawableHeight;
     OSType _lastLoggedDecodedPixelFormat;
     size_t _lastLoggedDecodedPlaneCount;
+    BOOL _hdr10PlusMetadataObserved;
+    BOOL _hdr10PlusMetadataOutputObserved;
+    BOOL _dolbyMetadataObserved;
+    BOOL _dynamicDolbyVision;
+    int _dynamicDolbyVisionProfile;
+    BOOL _dolbyVisionGeneratedMetadata;
+    CFTypeRef _dolbyVisionMetadataSession;
     uint64_t _lastNativeDisplayBackpressureLogMs;
     NSUInteger _nativeDisplayBackpressureCount;
     uint64_t _nativeDisplayBackpressureWindowStartMs;
@@ -1227,15 +1336,64 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
 
 @synthesize videoFormat;
 
+- (AVQueuedSampleBufferRenderingStatus)sampleBufferRenderingStatus
+{
+    if (@available(macOS 14.0, *)) {
+        return displayLayer.sampleBufferRenderer.status;
+    }
+    return displayLayer.status;
+}
+
+- (BOOL)sampleBufferRendererReadyForMoreMediaData
+{
+    if (@available(macOS 14.0, *)) {
+        return displayLayer.sampleBufferRenderer.readyForMoreMediaData;
+    }
+    return displayLayer.readyForMoreMediaData;
+}
+
+- (NSError *)sampleBufferRendererError
+{
+    if (@available(macOS 14.0, *)) {
+        return displayLayer.sampleBufferRenderer.error;
+    }
+    return displayLayer.error;
+}
+
+- (void)enqueueSampleBufferForDisplay:(CMSampleBufferRef)sampleBuffer
+{
+    if (@available(macOS 14.0, *)) {
+        [displayLayer.sampleBufferRenderer enqueueSampleBuffer:sampleBuffer];
+    } else {
+        [displayLayer enqueueSampleBuffer:sampleBuffer];
+    }
+}
+
+- (void)flushSampleBufferRendererRemovingImage:(BOOL)removeImage
+{
+    if (@available(macOS 14.0, *)) {
+        [displayLayer.sampleBufferRenderer flushWithRemovalOfDisplayedImage:removeImage completionHandler:nil];
+    } else if (removeImage) {
+        [displayLayer flushAndRemoveImage];
+    } else {
+        [displayLayer flush];
+    }
+}
+
 - (void)reinitializeDisplayLayer
 {
     if (displayLayer != nil) {
-        [displayLayer flushAndRemoveImage];
+        [self flushSampleBufferRendererRemovingImage:YES];
     }
 
     if (_nativeImageFormatDesc != NULL) {
         CFRelease(_nativeImageFormatDesc);
         _nativeImageFormatDesc = NULL;
+    }
+
+    if (_baseHEVCFormatDesc != NULL) {
+        CFRelease(_baseHEVCFormatDesc);
+        _baseHEVCFormatDesc = NULL;
     }
 
     if (_metalView) {
@@ -1354,6 +1512,15 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 
 - (BOOL)usesDecompressionSession
 {
+    // A negotiated Dolby stream must remain on AVSampleBufferDisplayLayer so
+    // Apple's display pipeline can own the Dolby output. Metal post-processing
+    // would turn this into ordinary base-layer HDR and lose the point of DV.
+    if (_dolbyVisionGeneratedMetadata) {
+        return YES;
+    }
+    if (_dynamicDolbyVision) {
+        return NO;
+    }
     return _activeRendererMode == MLActiveVideoRendererModeEnhanced ||
            _activeRendererMode == MLActiveVideoRendererModeNative;
 }
@@ -1394,6 +1561,15 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
         CFRelease(_decompressionSession);
         _decompressionSession = NULL;
     }
+}
+
+- (void)teardownDolbyVisionMetadataSession
+{
+    if (_dolbyVisionMetadataSession != NULL) {
+        CFRelease(_dolbyVisionMetadataSession);
+        _dolbyVisionMetadataSession = NULL;
+    }
+    _dolbyVisionGeneratedMetadata = NO;
 }
 
 - (void)clearCurrentFrame
@@ -2367,6 +2543,8 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 {
     self->videoFormat = videoFormat;
     self.frameRate = frameRate;
+    _streamWidth = streamConfig ? streamConfig.width : 0;
+    _streamHeight = streamConfig ? streamConfig.height : 0;
     _framePacingMode = streamConfig ? streamConfig.framePacingMode : 1;
     _smoothnessLatencyMode = streamConfig ? streamConfig.smoothnessLatencyMode : 1;
     _timingBufferLevel = streamConfig ? streamConfig.timingBufferLevel : 1;
@@ -2386,6 +2564,16 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _hdrHlgViewingEnvironment = streamConfig ? (MLHDRHLGViewingEnvironment)streamConfig.hdrHlgViewingEnvironment : MLHDRHLGViewingEnvironmentAuto;
     _hdrEdrStrategy = streamConfig ? (MLHDREDRStrategy)streamConfig.hdrEdrStrategy : MLHDREDRStrategyAuto;
     _hdrToneMappingPolicy = streamConfig ? (MLHDRToneMappingPolicy)streamConfig.hdrToneMappingPolicy : MLHDRToneMappingPolicyAuto;
+    _hdr10PlusMetadataObserved = NO;
+    _hdr10PlusMetadataOutputObserved = NO;
+    _dolbyMetadataObserved = NO;
+    _dynamicDolbyVision = NO;
+    _dynamicDolbyVisionProfile = 0;
+    [self teardownDolbyVisionMetadataSession];
+    if (_baseHEVCFormatDesc != NULL) {
+        CFRelease(_baseHEVCFormatDesc);
+        _baseHEVCFormatDesc = NULL;
+    }
     _hdrBrightnessOverrideEnabled = streamConfig
         ? streamConfig.hdrClientDisplayProfile == MLHDRClientDisplayProfileModeManual
         : NO;
@@ -2822,12 +3010,12 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     }
 
     if (_activeRendererMode == MLActiveVideoRendererModeNative &&
-        displayLayer.status == AVQueuedSampleBufferRenderingStatusFailed) {
+        [self sampleBufferRenderingStatus] == AVQueuedSampleBufferRenderingStatusFailed) {
         Log(LOG_W, @"[video] Native display layer entered failed state; flushing and resuming");
-        [displayLayer flushAndRemoveImage];
+        [self flushSampleBufferRendererRemovingImage:YES];
     }
 
-    if (_activeRendererMode == MLActiveVideoRendererModeNative && !displayLayer.readyForMoreMediaData) {
+    if (_activeRendererMode == MLActiveVideoRendererModeNative && ![self sampleBufferRendererReadyForMoreMediaData]) {
         _nativeDisplayBackpressureCount += 1;
         uint64_t nowMs = LiGetMillis();
         if (_nativeDisplayBackpressureWindowStartMs == 0 || nowMs - _nativeDisplayBackpressureWindowStartMs > 1000) {
@@ -2846,7 +3034,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
         if (_nativeDisplayBackpressureBurstCount >= 8 && !_nativeFallbackScheduled) {
             _nativeFallbackScheduled = YES;
             Log(LOG_W, @"[video] Native display layer appears stalled under backpressure; flushing queued samples to recover");
-            [displayLayer flush];
+            [self flushSampleBufferRendererRemovingImage:NO];
         }
         return;
     }
@@ -2900,7 +3088,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
         }
     }
 
-    [displayLayer enqueueSampleBuffer:sampleBuffer];
+    [self enqueueSampleBufferForDisplay:sampleBuffer];
 
     CFRelease(sampleBuffer);
 }
@@ -2922,7 +3110,26 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
             _enableHdr ? 1 : 0);
     }
 
-    if (_activeRendererMode == MLActiveVideoRendererModeNative) {
+    if (_dolbyVisionGeneratedMetadata && _dolbyVisionMetadataSession != NULL) {
+        if (@available(macOS 15.0, *)) {
+            OSStatus metadataStatus = VTHDRPerFrameMetadataGenerationSessionAttachMetadata(
+                (VTHDRPerFrameMetadataGenerationSessionRef)_dolbyVisionMetadataSession,
+                (CVPixelBufferRef)imageBuffer,
+                false);
+            if (metadataStatus != noErr) {
+                Log(LOG_W, @"[video] Dolby Vision per-frame metadata attachment failed: %d; presenting base HEVC", (int)metadataStatus);
+            } else if (!_dolbyMetadataObserved) {
+                _dolbyMetadataObserved = YES;
+                Log(LOG_I, @"[video] Dolby Vision per-frame metadata attached by Apple to decoded IOSurface");
+            }
+        }
+    }
+
+    MLLogDynamicHDRImageAttachments(imageBuffer,
+                                    &_hdr10PlusMetadataOutputObserved,
+                                    &_dolbyMetadataObserved);
+
+    if (_activeRendererMode == MLActiveVideoRendererModeNative || _dolbyVisionGeneratedMetadata) {
         [self enqueueDecodedImageBuffer:imageBuffer
                    presentationTimeStamp:presentationTimeStamp
                                 duration:duration
@@ -4803,6 +5010,11 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
     [self clearCurrentFrame];
     [self teardownDecompressionSession];
+    [self teardownDolbyVisionMetadataSession];
+    if (_baseHEVCFormatDesc != NULL) {
+        CFRelease(_baseHEVCFormatDesc);
+        _baseHEVCFormatDesc = NULL;
+    }
     [self teardownEnhancementProcessor];
     [self teardownFrameInterpolationProcessor];
     [self teardownHDRPresentationResources];
@@ -5024,6 +5236,22 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 - (void)updateBufferForRange:(CMBlockBufferRef)frameBuffer dataBlock:(CMBlockBufferRef)dataBuffer offset:(int)offset length:(int)nalLength
 {
     OSStatus status;
+
+    if (_dolbyVisionGeneratedMetadata && (videoFormat & VIDEO_FORMAT_MASK_H265)) {
+        // Profile 8.x RPU is an HEVC UNSPEC 62 NAL. The base HEVC decoder
+        // must not be handed that NAL when Apple is generating metadata from
+        // the decoded IOSurface instead of consuming the compressed dvh1 path.
+        uint8_t nalHeader[2] = { 0, 0 };
+        if (nalLength >= NALU_START_PREFIX_SIZE + sizeof(nalHeader) &&
+            CMBlockBufferCopyDataBytes(dataBuffer,
+                                       offset + NALU_START_PREFIX_SIZE,
+                                       sizeof(nalHeader),
+                                       nalHeader) == noErr &&
+            ((nalHeader[0] >> 1) & 0x3F) == 62) {
+            return;
+        }
+    }
+
     size_t oldOffset = CMBlockBufferGetDataLength(frameBuffer);
 
     // Append a 4 byte buffer to the frame block for the length prefix
@@ -5170,6 +5398,13 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                 CFRelease(formatDesc);
                 formatDesc = nil;
             }
+            if (_baseHEVCFormatDesc != NULL) {
+                CFRelease(_baseHEVCFormatDesc);
+                _baseHEVCFormatDesc = NULL;
+            }
+            _dynamicDolbyVision = NO;
+            _dynamicDolbyVisionProfile = 0;
+            [self teardownDolbyVisionMetadataSession];
 
             if (videoFormat & VIDEO_FORMAT_MASK_H264) {
                 const uint8_t* const parameterSetPointers[] = { [spsData bytes], [ppsData bytes] };
@@ -5193,23 +5428,118 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
                 Log(LOG_I, @"Constructing new HEVC format description");
 
-                if (@available(iOS 11.0, macOS 10.14, *)) {
-                    status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
-                                                                                 3, /* count of parameter sets */
-                                                                                 parameterSetPointers,
-                                                                                 parameterSetSizes,
-                                                                                 NAL_LENGTH_PREFIX_SIZE,
-                                                                                 nil,
-                                                                                 &formatDesc);
+                // Always build the ordinary HEVC description first. It contains
+                // the legal hvcC decoder configuration record that must also be
+                // present in a Dolby Vision dvh1 description.
+                status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
+                                                                             3,
+                                                                             parameterSetPointers,
+                                                                             parameterSetSizes,
+                                                                             NAL_LENGTH_PREFIX_SIZE,
+                                                                             nil,
+                                                                             &_baseHEVCFormatDesc);
+                if (status == noErr && _baseHEVCFormatDesc != NULL) {
+                    formatDesc = (CMVideoFormatDescriptionRef)CFRetain(_baseHEVCFormatDesc);
                 } else {
-                    // This means Moonlight-common-c decided to give us an HEVC stream
-                    // even though we said we couldn't support it. All we can do is abort().
-                    abort();
+                    Log(LOG_E, @"Failed to create base HEVC format description: %d", (int)status);
+                    _baseHEVCFormatDesc = NULL;
+                    formatDesc = NULL;
                 }
 
+                int negotiatedDynamicHdr = LiGetNegotiatedDynamicHdrFormat();
+                BOOL wantsDolbyVision = negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_81 ||
+                                        negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84;
+                if (formatDesc != NULL && wantsDolbyVision) {
+                    if (@available(macOS 15.0, *)) {
+                        // The dvcC record identifies the single-layer profile:
+                        // 8.1 uses a PQ base layer and 8.4 uses an HLG base
+                        // layer. The hvcC record is copied from the base HEVC
+                        // description above; omitting it makes Core Media reject
+                        // the otherwise syntactically valid dvh1 description.
+                        CFDictionaryRef baseExtensions = CMFormatDescriptionGetExtensions(_baseHEVCFormatDesc);
+                        CFDictionaryRef baseAtoms = baseExtensions
+                            ? CFDictionaryGetValue(baseExtensions, kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms)
+                            : NULL;
+                        CFTypeRef hvcC = baseAtoms ? CFDictionaryGetValue(baseAtoms, CFSTR("hvcC")) : NULL;
+                        if (hvcC != NULL) {
+                            const uint8_t dvcCBytes[] = {
+                                0x01, 0x00, 0x10, 0xF5,
+                                negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84
+                                    ? 0x40 : 0x10
+                            };
+                            NSDictionary *sampleDescriptionAtoms = @{
+                                @"hvcC": (__bridge id)hvcC,
+                                @"dvcC": [NSData dataWithBytes:dvcCBytes length:sizeof(dvcCBytes)]
+                            };
+                            NSMutableDictionary *extensions = [NSMutableDictionary dictionary];
+                            if (baseExtensions != NULL) {
+                                NSArray<NSString *> *preservedKeys = @[
+                                    (__bridge NSString *)kCMFormatDescriptionExtension_ColorPrimaries,
+                                    (__bridge NSString *)kCMFormatDescriptionExtension_TransferFunction,
+                                    (__bridge NSString *)kCMFormatDescriptionExtension_YCbCrMatrix,
+                                    (__bridge NSString *)kCMFormatDescriptionExtension_FullRangeVideo,
+                                    (__bridge NSString *)kCMFormatDescriptionExtension_FieldCount,
+                                    (__bridge NSString *)kCMFormatDescriptionExtension_ChromaLocationTopField,
+                                    (__bridge NSString *)kCMFormatDescriptionExtension_ChromaLocationBottomField,
+                                ];
+                                for (NSString *key in preservedKeys) {
+                                    CFTypeRef value = CFDictionaryGetValue(baseExtensions, (__bridge CFStringRef)key);
+                                    if (value != NULL) {
+                                        extensions[key] = (__bridge id)value;
+                                    }
+                                }
+                            }
+                            extensions[(__bridge NSString *)kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] = sampleDescriptionAtoms;
+                            extensions[(__bridge NSString *)kCMFormatDescriptionExtension_Depth] = @10;
+                            extensions[@"BitsPerComponent"] = @10;
+
+                            CMVideoFormatDescriptionRef dolbyFormatDesc = NULL;
+                            status = CMVideoFormatDescriptionCreate(
+                                kCFAllocatorDefault,
+                                kCMVideoCodecType_DolbyVisionHEVC,
+                                (int)_streamWidth,
+                                (int)_streamHeight,
+                                (__bridge CFDictionaryRef)extensions,
+                                &dolbyFormatDesc);
+                            if (status == noErr && dolbyFormatDesc != NULL) {
+                                CFRelease(formatDesc);
+                                formatDesc = dolbyFormatDesc;
+                                _dynamicDolbyVision = YES;
+                                _dynamicDolbyVisionProfile = negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84 ? 84 : 81;
+                                Log(LOG_I, @"[video] Dolby Vision direct output format armed: profile=%d hvcC=present dvcC=present", _dynamicDolbyVisionProfile);
+                            } else {
+                                Log(LOG_W, @"[video] Dolby Vision dvh1 format unavailable: status=%d; retaining HEVC base layer", (int)status);
+                                if (dolbyFormatDesc != NULL) {
+                                    CFRelease(dolbyFormatDesc);
+                                }
+                            }
+                        } else {
+                            Log(LOG_W, @"[video] Dolby Vision dvh1 format unavailable: base hvcC is missing");
+                        }
+                    }
+                }
+                if (formatDesc != NULL && wantsDolbyVision && !_dynamicDolbyVision) {
+                    // Public macOS 15+ metadata generation is a safe fallback
+                    // for systems that can analyze and present Dolby metadata
+                    // but reject the compressed dvh1 wrapper. This path decodes
+                    // the HEVC base layer, strips the RPU NAL, and lets Apple's
+                    // documented generator attach per-frame Dolby metadata to
+                    // the IOSurface before direct display.
+                    _dolbyVisionMetadataSession = MLCreateDolbyVisionMetadataSession((float)self.frameRate);
+                    _dolbyVisionGeneratedMetadata = _dolbyVisionMetadataSession != NULL;
+                    if (_dolbyVisionGeneratedMetadata) {
+                        Log(LOG_I, @"[video] Dolby Vision generated-metadata fallback armed: profile=%d", negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84 ? 84 : 81);
+                    } else {
+                        Log(LOG_W, @"[video] Dolby Vision generated-metadata fallback unavailable; using base HEVC");
+                    }
+                }
                 if (status != noErr) {
-                    Log(LOG_E, @"Failed to create HEVC format description: %d", (int)status);
-                    formatDesc = NULL;
+                    // A failed Dolby wrapper must never discard the valid base
+                    // HEVC description. Only the base construction above is a
+                    // fatal format error.
+                    if (formatDesc == NULL) {
+                        Log(LOG_E, @"Failed to create HEVC format description: %d", (int)status);
+                    }
                 }
             }
 
@@ -5250,8 +5580,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     }
 
     // Check for previous decoder errors before doing anything
-    if (displayLayer && displayLayer.status == AVQueuedSampleBufferRenderingStatusFailed) {
-        Log(LOG_E, @"Display layer rendering failed: %@", displayLayer.error);
+    if (displayLayer && [self sampleBufferRenderingStatus] == AVQueuedSampleBufferRenderingStatusFailed) {
+        Log(LOG_E, @"Display layer rendering failed: %@", [self sampleBufferRendererError]);
 
         // Recreate the display layer
         dispatch_sync(dispatch_get_main_queue(), ^{
@@ -5355,6 +5685,17 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     CFDictionarySetValue(dict, kCMSampleAttachmentKey_DisplayImmediately, kCFBooleanTrue);
     CFDictionarySetValue(dict, kCMSampleAttachmentKey_IsDependedOnByOthers, kCFBooleanTrue);
 
+    if (@available(macOS 13.0, *)) {
+        CFTypeRef hdr10PlusData = CFDictionaryGetValue(
+            dict, kCMSampleAttachmentKey_HDR10PlusPerFrameData);
+        if (hdr10PlusData != NULL &&
+            CFGetTypeID(hdr10PlusData) == CFDataGetTypeID() &&
+            !_hdr10PlusMetadataObserved) {
+            _hdr10PlusMetadataObserved = YES;
+            Log(LOG_I, @"[video] HDR10+ per-frame metadata is present on the compressed sample");
+        }
+    }
+
     if (frameType == FRAME_TYPE_PFRAME) {
         // P-frame
         CFDictionarySetValue(dict, kCMSampleAttachmentKey_NotSync, kCFBooleanTrue);
@@ -5392,14 +5733,14 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                     (int)status,
                     (unsigned int)infoFlags);
                 [self fallbackToCompatibilityRenderer];
-                [displayLayer enqueueSampleBuffer:sampleBuffer];
+                    [self enqueueSampleBufferForDisplay:sampleBuffer];
             }
         } else {
             [self fallbackToCompatibilityRenderer];
-            [displayLayer enqueueSampleBuffer:sampleBuffer];
+            [self enqueueSampleBufferForDisplay:sampleBuffer];
         }
     } else {
-        [displayLayer enqueueSampleBuffer:sampleBuffer];
+        [self enqueueSampleBufferForDisplay:sampleBuffer];
     }
 
     // Dereference the buffers

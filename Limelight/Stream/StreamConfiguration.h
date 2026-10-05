@@ -48,6 +48,9 @@
 @property(nonatomic) int hdrHlgViewingEnvironment;
 @property(nonatomic) int hdrEdrStrategy;
 @property(nonatomic) int hdrToneMappingPolicy;
+@property(nonatomic) int dynamicHdrCaps;
+@property(nonatomic) int dolbyVisionDirectSurface;
+@property(nonatomic) int dynamicHdrPreference;
 @property(nonatomic, copy) NSString *sunshineTargetDisplayName;
 @property(nonatomic) BOOL sunshineUseVirtualDisplay;
 @property(nonatomic) int sunshineScreenMode;

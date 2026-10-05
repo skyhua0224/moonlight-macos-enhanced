@@ -16,6 +16,9 @@
 #import <CoreAudio/CoreAudio.h>
 #import <AVFoundation/AVFoundation.h>
 #import <VideoToolbox/VideoToolbox.h>
+#if TARGET_OS_OSX
+@import AppKit;
+#endif
 #import <os/lock.h>
 
 #import <arpa/inet.h>
@@ -26,6 +29,7 @@
 
 #include "Limelight.h"
 #include "Limelight-internal.h"
+#include "DynamicHdr.h"
 #include "opus_multistream.h"
 
 // Limelight-internal.h defines these as macros redirecting to
@@ -78,6 +82,21 @@ static int MLResolvedDynamicRangeModeForPreference(BOOL hdrEnabled, int hdrTrans
             // HLG remains an explicit user preference.
             return DYNAMIC_RANGE_MODE_HDR10_PQ;
     }
+}
+
+static BOOL MLAppleDolbyVisionDirectSurfaceAvailable(void) {
+#if TARGET_OS_OSX
+    if (@available(macOS 15.0, *)) {
+        if (!VTIsHardwareDecodeSupported(kCMVideoCodecType_DolbyVisionHEVC) ||
+            ![AVPlayer eligibleForHDRPlayback]) {
+            return NO;
+        }
+        NSScreen *screen = NSScreen.mainScreen ?: NSScreen.screens.firstObject;
+        return screen != nil &&
+            screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0;
+    }
+#endif
+    return NO;
 }
 
 static inline float MLApplyMakeupGainAndSoftClip(float sample, float gain) {
@@ -2648,6 +2667,30 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
     _streamConfig.dynamicRangeMode =
         MLResolvedDynamicRangeModeForPreference(config.enableHdr, config.hdrTransferFunction);
+    _streamConfig.dynamicHdrCaps = 0;
+    _streamConfig.dolbyVisionDirectSurface = 0;
+    _streamConfig.dynamicHdrPreference = 0;
+    if (config.enableHdr &&
+        _streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HDR10_PQ) {
+        if (@available(macOS 13.0, *)) {
+            // Core Media exposes the public HDR10+ per-frame metadata
+            // attachment from macOS 13. Dolby Vision is intentionally not
+            // advertised: this renderer has no documented direct-surface
+            // Dolby decoder contract.
+            _streamConfig.dynamicHdrCaps = DYNAMIC_HDR_CAPS_HDR10_PLUS;
+        }
+    }
+    if (MLAppleDolbyVisionDirectSurfaceAvailable()) {
+        if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HDR10_PQ) {
+            _streamConfig.dynamicHdrCaps |= DYNAMIC_HDR_CAPS_DOLBY_VISION_81;
+        } else if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HLG) {
+            _streamConfig.dynamicHdrCaps |= DYNAMIC_HDR_CAPS_DOLBY_VISION_84;
+        }
+        _streamConfig.dolbyVisionDirectSurface = 1;
+        Log(LOG_I, @"[hdr] Apple Dolby Vision direct-surface candidate enabled: dynamicRangeMode=%d caps=0x%x",
+            _streamConfig.dynamicRangeMode,
+            _streamConfig.dynamicHdrCaps);
+    }
     Log(LOG_I, @"[diag] Dynamic range resolved: hdr=%d tenBitSdr=%d tf=%d dynamicRangeMode=%d",
         config.enableHdr ? 1 : 0,
         config.enable10BitSdr ? 1 : 0,

@@ -7,6 +7,7 @@
 //
 
 import AppKit
+import AVFoundation
 import CoreGraphics
 import Metal
 import SwiftUI
@@ -664,14 +665,17 @@ extension SettingsModel {
     if hdrAvailability == .unavailable {
       dolbyVisionAvailability = .unavailable
     } else if #available(macOS 15.0, *) {
-      // Apple exposes a public Dolby metadata generation session on macOS 15+
-      // but does not expose a public profile 8.1/8.4 decoder negotiation
-      // contract. This is therefore a partial capability, never full support.
+      // The direct path requires Apple's public Dolby HEVC decoder probe,
+      // HDR playback eligibility, and an EDR-capable active display. The
+      // renderer also has a documented per-frame metadata generation fallback.
       do {
         _ = try VTHDRPerFrameMetadataGenerationSession(
           framesPerSecond: 60,
           hdrFormats: [.dolbyVision])
-        dolbyVisionAvailability = .limited
+        let decoderAvailable = VTIsHardwareDecodeSupported(kCMVideoCodecType_DolbyVisionHEVC)
+        let hdrPlaybackEligible = AVPlayer.eligibleForHDRPlayback
+        let edrAvailable = (screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1) > 1
+        dolbyVisionAvailability = decoderAvailable && hdrPlaybackEligible && edrAvailable ? .limited : .unavailable
       } catch {
         dolbyVisionAvailability = .unavailable
       }
@@ -710,15 +714,21 @@ extension SettingsModel {
         ),
         VideoCapabilityItem(
           id: "display.hdr10Plus",
-          titleKey: "HDR10+",
+          titleKey: "HDR10+ Dynamic Metadata",
           availability: hdr10PlusAvailability,
           detailKey: "HDR10+ capability detail"
         ),
         VideoCapabilityItem(
-          id: "display.dolbyVision",
-          titleKey: "Dolby Vision 8.x",
+          id: "display.dolbyVision81",
+          titleKey: "Dolby Vision Profile 8.1",
           availability: dolbyVisionAvailability,
-          detailKey: "Dolby Vision capability detail"
+          detailKey: "Dolby Vision 8.1 capability detail"
+        ),
+        VideoCapabilityItem(
+          id: "display.dolbyVision84",
+          titleKey: "Dolby Vision Profile 8.4",
+          availability: dolbyVisionAvailability,
+          detailKey: "Dolby Vision 8.4 capability detail"
         ),
         VideoCapabilityItem(
           id: "decode.av1",

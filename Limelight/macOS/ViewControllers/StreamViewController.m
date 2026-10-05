@@ -1645,6 +1645,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
         BOOL wasReconnect = self.reconnectInProgress;
         [self publishSunshineDisplayRuntimeState:wasReconnect ? @"reconnected" : @"active"];
+        Log(LOG_I, @"[hdr] Foundation dynamic HDR result: format=%d fallback=%d clientDolbyDirectSurface=0",
+            LiGetNegotiatedDynamicHdrFormat(),
+            LiGetNegotiatedDynamicHdrFallback());
         if (self.reconnectInProgress) {
             self.reconnectInProgress = NO;
             [self hideReconnectOverlay];

@@ -639,10 +639,12 @@
 "Display Capability Loading" = "Querying host";
 "Display Topology Available" = "Foundation topology available";
 "Display Topology Unavailable" = "Foundation topology unavailable";
-"HDR10+" = "HDR10+";
-"Dolby Vision 8.x" = "Dolby Vision 8.x";
-"HDR10+ capability detail" = "HEVC and HDR display support are available, but Apple’s public macOS APIs do not guarantee end-to-end preservation of HDR10+ dynamic metadata. The client reports this as limited and keeps the HDR10/PQ path.";
-"Dolby Vision capability detail" = "macOS 15+ exposes public Dolby metadata generation, but the client still lacks a documented end-to-end Profile 8.1/8.4 decoder negotiation and RPU preservation path. This is partial capability, not a full support claim.";
+"HDR10+ Dynamic Metadata" = "HDR10+ Dynamic Metadata";
+"Dolby Vision Profile 8.1" = "Dolby Vision Profile 8.1";
+"Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
+"HDR10+ capability detail" = "The latest Foundation host injects HDR10+ SEI. macOS 13+ negotiates this capability and observes Core Media per-frame metadata, but the Metal path is still reported limited until display consumption is verified.";
+"Dolby Vision 8.1 capability detail" = "This Mac exposes Apple's Dolby HEVC decoder and EDR display path. The client builds a dvh1 description with hvcC and dvcC for Foundation Profile 8.1, and falls back to Apple's public per-frame metadata generator when needed. Availability is limited until a real Foundation RPU stream is verified on the active display.";
+"Dolby Vision 8.4 capability detail" = "This Mac exposes the Dolby HEVC and HLG base-layer prerequisites. The client builds a dvh1 description with hvcC and dvcC for Foundation Profile 8.4, with Apple's public metadata generation fallback. Availability is limited until a real Foundation RPU stream is verified on the active display.";
 "Display capability has not been queried" = "Refresh the host display list to query Foundation capabilities.";
 "Loading Foundation display topology" = "Loading Foundation display topology…";
 "Foundation display topology endpoint ready" = "The Foundation display topology endpoint is ready.";
