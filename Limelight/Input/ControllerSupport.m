@@ -30,6 +30,52 @@ static inline PML_INPUT_STREAM_CONTEXT ControllerInputContext(ControllerSupport 
     return ctx;
 }
 
+static short ApplyStickCalibration(short rawX, short rawY, CGFloat deadzone,
+                                   CGFloat centerX, CGFloat centerY, CGFloat gain) {
+    float x = (float)rawX / 32767.0f - (float)centerX;
+    float y = (float)rawY / 32767.0f - (float)centerY;
+    float magnitude = sqrtf(x * x + y * y);
+    float threshold = fminf(0.30f, fmaxf(0.0f, (float)deadzone));
+    if (magnitude <= threshold) {
+        return 0;
+    }
+
+    // Radial deadzone preserves direction and remaps the remaining travel to
+    // the full range, matching SDL's calibrated axis semantics.
+    float remappedMagnitude = (magnitude - threshold) / (1.0f - threshold);
+    remappedMagnitude = fminf(1.0f, fmaxf(0.0f, remappedMagnitude));
+    if (magnitude > 0.0001f) {
+        x = (x / magnitude) * remappedMagnitude;
+        y = (y / magnitude) * remappedMagnitude;
+    }
+    float calibratedGain = fminf(2.0f, fmaxf(0.25f, (float)gain));
+    x = fminf(1.0f, fmaxf(-1.0f, x * calibratedGain));
+    y = fminf(1.0f, fmaxf(-1.0f, y * calibratedGain));
+    return (short)lrintf(x * 32767.0f);
+}
+
+static short ApplyStickCalibrationY(short rawX, short rawY, CGFloat deadzone,
+                                    CGFloat centerX, CGFloat centerY, CGFloat gain) {
+    float x = (float)rawX / 32767.0f - (float)centerX;
+    float y = (float)rawY / 32767.0f - (float)centerY;
+    float magnitude = sqrtf(x * x + y * y);
+    float threshold = fminf(0.30f, fmaxf(0.0f, (float)deadzone));
+    if (magnitude <= threshold) {
+        return 0;
+    }
+    float remappedMagnitude = (magnitude - threshold) / (1.0f - threshold);
+    remappedMagnitude = fminf(1.0f, fmaxf(0.0f, remappedMagnitude));
+    if (magnitude > 0.0001f) {
+        y = (y / magnitude) * remappedMagnitude;
+    }
+    float calibratedGain = fminf(2.0f, fmaxf(0.25f, (float)gain));
+    return (short)lrintf(fminf(1.0f, fmaxf(-1.0f, y * calibratedGain)) * 32767.0f);
+}
+
+static BOOL ControllerIsFeedbackTarget(ControllerSupport *support, unsigned short number) {
+    return support.controllerFeedbackTarget < 0 || support.controllerFeedbackTarget == number;
+}
+
 static void ResetControllerTrackpadMouseState(Controller *controller) {
     controller.primaryTouchActive = NO;
     controller.secondaryTouchActive = NO;
@@ -46,7 +92,8 @@ static void ResetControllerTrackpadMouseState(Controller *controller) {
 static void LogControllerMappingDiagnostics(Controller *controller,
                                             uint8_t controllerType,
                                             uint32_t supportedButtonFlags,
-                                            uint16_t capabilities) {
+                                            uint16_t capabilities,
+                                            ControllerSupport *support) {
     NSDictionary *mapping = @{
         @"schema": @"ds5-mapping-v1",
         @"player": @(controller.playerIndex),
@@ -78,6 +125,24 @@ static void LogControllerMappingDiagnostics(Controller *controller,
             @"native": @"Foundation controller-touch",
             @"mouseMode": @"single-finger-relative-pointer-two-finger-high-res-scroll",
             @"secondaryClick": @"two-finger-touchpad-click"
+        },
+        @"settings": @{
+            @"deadzone": @(support.gamepadDeadzone),
+            @"hapticsMode": @(support.controllerHapticsMode),
+            @"motionMode": @(support.controllerMotionMode),
+            @"feedbackTarget": @(support.controllerFeedbackTarget),
+            @"virtualType": @(support.controllerVirtualType),
+            @"leftCalibration": @{
+                @"centerX": @(support.controllerLeftCenterX),
+                @"centerY": @(support.controllerLeftCenterY),
+                @"gain": @(support.controllerLeftGain)
+            },
+            @"rightCalibration": @{
+                @"centerX": @(support.controllerRightCenterX),
+                @"centerY": @(support.controllerRightCenterY),
+                @"gain": @(support.controllerRightGain)
+            },
+            @"outputPath": @"GameController public output APIs; USB authored PCM unavailable"
         }
     };
     NSError *error = nil;
@@ -112,7 +177,7 @@ static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controlle
     // mouse mode, turn the contact position deltas into relative pointer or
     // high-resolution scroll events. Native controller-touch events remain
     // unchanged while controller mode is active.
-    if (controller.isMouseMode) {
+    if (controller.isMouseMode || !support.nativeTouchpadEnabled) {
         BOOL isSecondary = (pointerId & 1U) != 0;
         BOOL oldPrimaryActive = controller.primaryTouchActive;
         BOOL oldSecondaryActive = controller.secondaryTouchActive;
@@ -446,6 +511,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 -(void) rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor
 {
+    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+        return;
+    }
     Controller* controller = [_controllers objectForKey:[NSNumber numberWithInteger:controllerNumber]];
     if (controller == nil && controllerNumber == 0 && _oscEnabled) {
         // No physical controller, but we have on-screen controls
@@ -464,6 +532,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
       leftTriggerMotor:(unsigned short)leftTriggerMotor
      rightTriggerMotor:(unsigned short)rightTriggerMotor
 {
+    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+        return;
+    }
     Controller *controller = [_controllers objectForKey:@(controllerNumber)];
     if (controller == nil) {
         return;
@@ -482,6 +553,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                      green:(unsigned char)green
                       blue:(unsigned char)blue
 {
+    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+        return;
+    }
     Controller *controller = [_controllers objectForKey:@(controllerNumber)];
     GCController *gamepad = controller.gamepad;
     if (gamepad == nil) {
@@ -507,6 +581,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                        left:(const unsigned char *)left
                       right:(const unsigned char *)right
 {
+    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+        return;
+    }
     Controller *controller = [_controllers objectForKey:@(controllerNumber)];
     GCController *gamepad = controller.gamepad;
     if (gamepad == nil || ![gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
@@ -528,6 +605,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz
 {
+    if (self.controllerMotionMode == 2 || !ControllerIsFeedbackTarget(self, controllerNumber)) {
+        return;
+    }
     Controller *controller = [_controllers objectForKey:@(controllerNumber)];
     GCController *gamepad = controller.gamepad;
     if (gamepad == nil) {
@@ -576,16 +656,24 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 -(void) updateLeftStick:(Controller*)controller x:(short)x y:(short)y
 {
     @synchronized(controller) {
-        controller.lastLeftStickX = x;
-        controller.lastLeftStickY = y;
+        controller.lastLeftStickX = ApplyStickCalibration(
+            x, y, self.gamepadDeadzone, self.controllerLeftCenterX,
+            self.controllerLeftCenterY, self.controllerLeftGain);
+        controller.lastLeftStickY = ApplyStickCalibrationY(
+            x, y, self.gamepadDeadzone, self.controllerLeftCenterX,
+            self.controllerLeftCenterY, self.controllerLeftGain);
     }
 }
 
 -(void) updateRightStick:(Controller*)controller x:(short)x y:(short)y
 {
     @synchronized(controller) {
-        controller.lastRightStickX = x;
-        controller.lastRightStickY = y;
+        controller.lastRightStickX = ApplyStickCalibration(
+            x, y, self.gamepadDeadzone, self.controllerRightCenterX,
+            self.controllerRightCenterY, self.controllerRightGain);
+        controller.lastRightStickY = ApplyStickCalibrationY(
+            x, y, self.gamepadDeadzone, self.controllerRightCenterX,
+            self.controllerRightCenterY, self.controllerRightGain);
     }
 }
 
@@ -702,24 +790,31 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             GCExtendedGamepad *extended = controller.gamepad.extendedGamepad;
             BOOL hasTouchpad = [extended isKindOfClass:[GCDualSenseGamepad class]] ||
                                [extended isKindOfClass:[GCDualShockGamepad class]];
-            if (hasTouchpad) {
+            if (self.controllerVirtualType == 1) {
+                controllerType = LI_CTYPE_XBOX;
+            } else if (self.controllerVirtualType == 2) {
                 controllerType = LI_CTYPE_PS;
+            } else if (hasTouchpad) {
+                controllerType = LI_CTYPE_PS;
+            }
+            BOOL allowsPlayStationExtensions = controllerType != LI_CTYPE_XBOX;
+            if (hasTouchpad && allowsPlayStationExtensions) {
                 capabilities |= LI_CCAP_TOUCHPAD | LI_CCAP_TRIGGER_RUMBLE;
                 supportedButtonFlags |= TOUCHPAD_FLAG;
             }
-            if (controller.gamepad.motion != nil) {
+            if (controller.gamepad.motion != nil && allowsPlayStationExtensions) {
                 capabilities |= LI_CCAP_ACCEL | LI_CCAP_GYRO;
             }
             if (controller.gamepad.battery != nil) {
                 capabilities |= LI_CCAP_BATTERY_STATE;
             }
-            if (controller.gamepad.light != nil) {
+            if (controller.gamepad.light != nil && allowsPlayStationExtensions) {
                 capabilities |= LI_CCAP_RGB_LED;
             }
             LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
                                             (uint16_t)[ControllerSupport getConnectedGamepadMask:nil],
                                             controllerType, supportedButtonFlags, capabilities);
-            LogControllerMappingDiagnostics(controller, controllerType, supportedButtonFlags, capabilities);
+            LogControllerMappingDiagnostics(controller, controllerType, supportedButtonFlags, capabilities, self);
             controller.controllerAnnounced = YES;
 
             if (controller.gamepad.battery != nil) {
@@ -1033,7 +1128,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                         (void)value;
                         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
                         if (inputCtx != NULL) {
-                            if (touchController.isMouseMode) {
+                            if (touchController.isMouseMode || !self.nativeTouchpadEnabled) {
                                 if (pressed) {
                                     // A physical click with the second
                                     // contact down behaves like a secondary
@@ -1342,12 +1437,29 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     _controllerNumbers = 0;
     _multiController = streamConfig.multiController;
     _gamepadMouseModeEnabled = streamConfig.gamepadMouseMode;
+    _nativeTouchpadEnabled = streamConfig.nativeTouchpad;
     _gamepadMouseModeLongPressMenuEnabled = streamConfig.gamepadMouseModeLongPressMenu;
     _gamepadTrackpadPointerSensitivity = streamConfig.gamepadTrackpadPointerSensitivity > 0.0
         ? streamConfig.gamepadTrackpadPointerSensitivity : 1.0;
     _gamepadTrackpadScrollSpeed = streamConfig.gamepadTrackpadScrollSpeed > 0.0
         ? streamConfig.gamepadTrackpadScrollSpeed : 1.0;
     _gamepadTrackpadReverseScroll = streamConfig.gamepadTrackpadReverseScroll;
+    _gamepadDeadzone = MIN(0.30, MAX(0.0, streamConfig.gamepadDeadzone));
+    _controllerHapticsMode = streamConfig.controllerHapticsMode;
+    _controllerMotionMode = streamConfig.controllerMotionMode;
+    _controllerFeedbackTarget = streamConfig.controllerFeedbackTarget;
+    _controllerVirtualType = streamConfig.controllerVirtualType;
+    _controllerLeftCenterX = MIN(1.0, MAX(-1.0, streamConfig.controllerLeftCenterX));
+    _controllerLeftCenterY = MIN(1.0, MAX(-1.0, streamConfig.controllerLeftCenterY));
+    _controllerRightCenterX = MIN(1.0, MAX(-1.0, streamConfig.controllerRightCenterX));
+    _controllerRightCenterY = MIN(1.0, MAX(-1.0, streamConfig.controllerRightCenterY));
+    _controllerLeftGain = MIN(2.0, MAX(0.25, streamConfig.controllerLeftGain > 0.0 ? streamConfig.controllerLeftGain : 1.0));
+    _controllerRightGain = MIN(2.0, MAX(0.25, streamConfig.controllerRightGain > 0.0 ? streamConfig.controllerRightGain : 1.0));
+    Log(LOG_I, @"[controller-settings] deadzone=%.3f haptics=%ld motion=%ld feedbackTarget=%ld calibration=(%.3f,%.3f)/(%.3f,%.3f) gain=(%.3f,%.3f)",
+        (double)_gamepadDeadzone, (long)_controllerHapticsMode, (long)_controllerMotionMode,
+        (long)_controllerFeedbackTarget, (double)_controllerLeftCenterX, (double)_controllerLeftCenterY,
+        (double)_controllerRightCenterX, (double)_controllerRightCenterY,
+        (double)_controllerLeftGain, (double)_controllerRightGain);
     _presenceDelegate = delegate;
 
     _debouncers = [[NSMutableDictionary alloc] init];

@@ -34,6 +34,8 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
 - (NSURLRequest*) newQuitAppRequest;
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString*)appId;
 - (NSArray<NSDictionary<NSString*, id>*>*) fetchSunshineDisplays;
+- (NSDictionary<NSString*, id>*) fetchSunshineDisplaySnapshot;
+- (NSDictionary<NSString*, id>*) fetchSunshineUSBForwardingCapability;
 - (void) executeRequestSynchronously:(HttpRequest*)request;
 - (NSURLRequest *)newClipboardRequestWithPath:(NSString *)path;
 - (void)executeDataRequest:(NSURLRequest *)request completion:(MLHttpDataCompletion)completion;

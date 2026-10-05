@@ -76,9 +76,21 @@
 @property(nonatomic, copy) NSString *hostUUID;
 @property(nonatomic) BOOL gamepadMouseMode;
 @property(nonatomic) BOOL gamepadMouseModeLongPressMenu;
+@property(nonatomic) BOOL nativeTouchpad;
 @property(nonatomic) CGFloat gamepadTrackpadPointerSensitivity;
 @property(nonatomic) CGFloat gamepadTrackpadScrollSpeed;
 @property(nonatomic) BOOL gamepadTrackpadReverseScroll;
+@property(nonatomic) CGFloat gamepadDeadzone;
+@property(nonatomic) NSInteger controllerHapticsMode;
+@property(nonatomic) NSInteger controllerMotionMode;
+@property(nonatomic) NSInteger controllerFeedbackTarget;
+@property(nonatomic) NSInteger controllerVirtualType;
+@property(nonatomic) CGFloat controllerLeftCenterX;
+@property(nonatomic) CGFloat controllerLeftCenterY;
+@property(nonatomic) CGFloat controllerRightCenterX;
+@property(nonatomic) CGFloat controllerRightCenterY;
+@property(nonatomic) CGFloat controllerLeftGain;
+@property(nonatomic) CGFloat controllerRightGain;
 @property(nonatomic) int upscalingMode;
 @property(nonatomic) int frameInterpolationMode;
 

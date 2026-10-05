@@ -45,6 +45,83 @@ extension SettingsModel {
     return try? PropertyListDecoder().decode([KeyboardTranslationRule].self, from: data)
   }
 
+  private func controllerSettingKey(_ prefix: String, hostId: String) -> String {
+    prefix + hostId
+  }
+
+  private func controllerSettingObject<T>(
+    prefix: String,
+    hostId: String,
+    as type: T.Type
+  ) -> T? {
+    let defaults = UserDefaults.standard
+    if let value = defaults.object(forKey: controllerSettingKey(prefix, hostId: hostId)) as? T {
+      return value
+    }
+    guard hostId != Self.globalHostId else { return nil }
+    return defaults.object(
+      forKey: controllerSettingKey(prefix, hostId: Self.globalHostId)) as? T
+  }
+
+  func persistControllerSettings() {
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    let defaults = UserDefaults.standard
+    defaults.set(
+      min(0.30, max(0.0, controllerDeadzone)),
+      forKey: Self.controllerDeadzoneKeyPrefix + hostId)
+    defaults.set(
+      selectedControllerHapticsMode,
+      forKey: Self.controllerHapticsModeKeyPrefix + hostId)
+    defaults.set(
+      selectedControllerMotionMode,
+      forKey: Self.controllerMotionModeKeyPrefix + hostId)
+    defaults.set(
+      selectedControllerFeedbackTarget,
+      forKey: Self.controllerFeedbackTargetKeyPrefix + hostId)
+    defaults.set(
+      selectedControllerVirtualType,
+      forKey: Self.controllerVirtualTypeKeyPrefix + hostId)
+    if let data = try? PropertyListEncoder().encode(controllerCalibration.normalized) {
+      defaults.set(data, forKey: Self.controllerCalibrationKeyPrefix + hostId)
+    }
+  }
+
+  func loadControllerSettings(for hostId: String) {
+    controllerDeadzone = min(
+      0.30,
+      max(
+        0.0,
+        controllerSettingObject(
+          prefix: Self.controllerDeadzoneKeyPrefix, hostId: hostId, as: Double.self)
+            ?? Self.defaultControllerDeadzone))
+    selectedControllerHapticsMode = ControllerHapticsMode(
+      selection: controllerSettingObject(
+        prefix: Self.controllerHapticsModeKeyPrefix, hostId: hostId, as: String.self)
+        ?? Self.defaultControllerHapticsMode).displayKey
+    selectedControllerMotionMode = ControllerMotionMode(
+      selection: controllerSettingObject(
+        prefix: Self.controllerMotionModeKeyPrefix, hostId: hostId, as: String.self)
+        ?? Self.defaultControllerMotionMode).displayKey
+    selectedControllerFeedbackTarget = ControllerFeedbackTarget(
+      selection: controllerSettingObject(
+        prefix: Self.controllerFeedbackTargetKeyPrefix, hostId: hostId, as: String.self)
+        ?? Self.defaultControllerFeedbackTarget).displayKey
+    selectedControllerVirtualType = ControllerVirtualType(
+      selection: controllerSettingObject(
+        prefix: Self.controllerVirtualTypeKeyPrefix, hostId: hostId, as: String.self)
+        ?? Self.defaultControllerVirtualType).displayKey
+
+    let data = controllerSettingObject(
+      prefix: Self.controllerCalibrationKeyPrefix, hostId: hostId, as: Data.self)
+    controllerCalibration = (data.flatMap {
+      try? PropertyListDecoder().decode(ControllerCalibration.self, from: $0)
+    })?.normalized ?? .default
+  }
+
+  func resetControllerCalibration() {
+    controllerCalibration = .default
+  }
+
   static func loadKeyboardTranslationRules(for hostId: String) -> [KeyboardTranslationRule] {
     if let cachedRules = cachedKeyboardTranslationRules(for: hostId) {
       return cachedRules
@@ -181,6 +258,12 @@ extension SettingsModel {
     streamShortcuts = StreamShortcutProfile.defaultShortcuts()
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
+    controllerDeadzone = Self.defaultControllerDeadzone
+    selectedControllerHapticsMode = Self.defaultControllerHapticsMode
+    selectedControllerMotionMode = Self.defaultControllerMotionMode
+    selectedControllerFeedbackTarget = Self.defaultControllerFeedbackTarget
+    selectedControllerVirtualType = Self.defaultControllerVirtualType
+    controllerCalibration = .default
     selectedMouseDriver = Self.defaultMouseDriver
     coreHIDMaxMouseReportRate = Self.defaultCoreHIDMaxMouseReportRate
     selectedFreeMouseMotionMode = Self.defaultFreeMouseMotionMode
@@ -225,6 +308,9 @@ extension SettingsModel {
     }
 
     let hostId = selectedHost?.id ?? Self.globalHostId
+    nativeTouchpad = UserDefaults.standard.object(
+      forKey: SettingsModel.controllerNativeTouchpadKeyPrefix + hostId) as? Bool ?? true
+    loadControllerSettings(for: hostId)
     if let settings = Settings.getSettings(for: hostId) {
       selectedResolution = settings.resolution
 

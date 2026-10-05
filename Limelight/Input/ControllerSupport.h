@@ -23,9 +23,21 @@
 @property(nonatomic) BOOL shouldSendInputEvents;
 @property(nonatomic) BOOL gamepadMouseModeEnabled;
 @property(nonatomic) BOOL gamepadMouseModeLongPressMenuEnabled;
+@property(nonatomic) BOOL nativeTouchpadEnabled;
 @property(nonatomic) CGFloat gamepadTrackpadPointerSensitivity;
 @property(nonatomic) CGFloat gamepadTrackpadScrollSpeed;
 @property(nonatomic) BOOL gamepadTrackpadReverseScroll;
+@property(nonatomic) CGFloat gamepadDeadzone;
+@property(nonatomic) NSInteger controllerHapticsMode;
+@property(nonatomic) NSInteger controllerMotionMode;
+@property(nonatomic) NSInteger controllerFeedbackTarget;
+@property(nonatomic) NSInteger controllerVirtualType;
+@property(nonatomic) CGFloat controllerLeftCenterX;
+@property(nonatomic) CGFloat controllerLeftCenterY;
+@property(nonatomic) CGFloat controllerRightCenterX;
+@property(nonatomic) CGFloat controllerRightCenterY;
+@property(nonatomic) CGFloat controllerLeftGain;
+@property(nonatomic) CGFloat controllerRightGain;
 @property(nonatomic, assign) void *inputContext;
 
 - (id)initWithConfig:(StreamConfiguration *)streamConfig

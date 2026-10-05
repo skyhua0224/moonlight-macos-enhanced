@@ -1397,6 +1397,78 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultGamepadMouseMode
   }
 
+  @objc static func nativeTouchpad(for key: String) -> Bool {
+    UserDefaults.standard.object(
+      forKey: SettingsModel.controllerNativeTouchpadKeyPrefix + key) as? Bool ?? true
+  }
+
+  @objc static func controllerDeadzone(for key: String) -> CGFloat {
+    let defaults = UserDefaults.standard
+    let value = (defaults.object(forKey: SettingsModel.controllerDeadzoneKeyPrefix + key) as? NSNumber)
+      ?? (key == SettingsModel.globalHostId
+        ? nil
+        : defaults.object(forKey: SettingsModel.controllerDeadzoneKeyPrefix + SettingsModel.globalHostId) as? NSNumber)
+    return CGFloat(min(0.30, max(0.0, value?.doubleValue ?? SettingsModel.defaultControllerDeadzone)))
+  }
+
+  @objc static func controllerHapticsMode(for key: String) -> Int {
+    let value = UserDefaults.standard.string(
+      forKey: SettingsModel.controllerHapticsModeKeyPrefix + key)
+      ?? (key == SettingsModel.globalHostId ? nil : UserDefaults.standard.string(
+        forKey: SettingsModel.controllerHapticsModeKeyPrefix + SettingsModel.globalHostId))
+      ?? SettingsModel.defaultControllerHapticsMode
+    return SettingsModel.ControllerHapticsMode(selection: value).rawValue == "systemHaptics" ? 1 : 0
+  }
+
+  @objc static func controllerMotionMode(for key: String) -> Int {
+    let value = UserDefaults.standard.string(
+      forKey: SettingsModel.controllerMotionModeKeyPrefix + key)
+      ?? (key == SettingsModel.globalHostId ? nil : UserDefaults.standard.string(
+        forKey: SettingsModel.controllerMotionModeKeyPrefix + SettingsModel.globalHostId))
+      ?? SettingsModel.defaultControllerMotionMode
+    switch SettingsModel.ControllerMotionMode(selection: value) {
+    case .hostRequested: return 0
+    case .alwaysOn: return 1
+    case .disabled: return 2
+    }
+  }
+
+  @objc static func controllerFeedbackTarget(for key: String) -> Int {
+    let value = UserDefaults.standard.string(
+      forKey: SettingsModel.controllerFeedbackTargetKeyPrefix + key)
+      ?? (key == SettingsModel.globalHostId ? nil : UserDefaults.standard.string(
+        forKey: SettingsModel.controllerFeedbackTargetKeyPrefix + SettingsModel.globalHostId))
+      ?? SettingsModel.defaultControllerFeedbackTarget
+    return SettingsModel.ControllerFeedbackTarget(selection: value).controllerNumber
+  }
+
+  @objc static func controllerVirtualType(for key: String) -> Int {
+    let value = UserDefaults.standard.string(
+      forKey: SettingsModel.controllerVirtualTypeKeyPrefix + key)
+      ?? (key == SettingsModel.globalHostId ? nil : UserDefaults.standard.string(
+        forKey: SettingsModel.controllerVirtualTypeKeyPrefix + SettingsModel.globalHostId))
+      ?? SettingsModel.defaultControllerVirtualType
+    return SettingsModel.ControllerVirtualType(selection: value).rawType
+  }
+
+  @objc static func controllerCalibration(for key: String) -> [String: NSNumber] {
+    let defaults = UserDefaults.standard
+    let data = (defaults.object(forKey: SettingsModel.controllerCalibrationKeyPrefix + key) as? Data)
+      ?? (key == SettingsModel.globalHostId ? nil : defaults.object(
+        forKey: SettingsModel.controllerCalibrationKeyPrefix + SettingsModel.globalHostId) as? Data)
+    let calibration = data.flatMap {
+      try? PropertyListDecoder().decode(SettingsModel.ControllerCalibration.self, from: $0)
+    }?.normalized ?? .default
+    return [
+      "leftCenterX": NSNumber(value: calibration.leftCenterX),
+      "leftCenterY": NSNumber(value: calibration.leftCenterY),
+      "rightCenterX": NSNumber(value: calibration.rightCenterX),
+      "rightCenterY": NSNumber(value: calibration.rightCenterY),
+      "leftGain": NSNumber(value: calibration.leftGain),
+      "rightGain": NSNumber(value: calibration.rightGain),
+    ]
+  }
+
   @objc static func gamepadMouseModeLongPressMenu(for key: String) -> Bool {
     if let settings = Settings.getSettings(for: key) {
       return settings.gamepadMouseModeLongPressMenu ?? SettingsModel.defaultGamepadMouseModeLongPressMenu

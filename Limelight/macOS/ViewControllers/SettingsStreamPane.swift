@@ -432,6 +432,53 @@ struct StreamView: View {
           Divider()
 
           FormCell(
+            title: "Display Capability", contentWidth: 0,
+            content: {
+              HStack(spacing: 8) {
+                Image(systemName: settingsModel.sunshineDisplayCapabilityState.systemImage)
+                  .foregroundStyle(settingsModel.sunshineDisplayCapabilityState.tint)
+                Text(languageManager.localize(
+                  settingsModel.sunshineDisplayCapabilityState.titleKey))
+                  .foregroundStyle(.secondary)
+                  .frame(maxWidth: .infinity, alignment: .trailing)
+              }
+            })
+
+          Text(settingsModel.sunshineDisplayCapabilityMessage)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+
+          FormCell(
+            title: "Display Runtime", contentWidth: 0,
+            content: {
+              Text(languageManager.localize(settingsModel.sunshineDisplayRuntimeStateKey))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            })
+
+          if !settingsModel.sunshineDisplayRuntimeDetail.isEmpty {
+            Text(settingsModel.sunshineDisplayRuntimeDetail)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .frame(maxWidth: .infinity, alignment: .trailing)
+          }
+
+          if !settingsModel.availableSunshineDisplays.isEmpty {
+            Text(
+              settingsModel.availableSunshineDisplays
+                .map { "\($0.index + 1). \($0.title)" }
+                .joined(separator: "  ·  ")
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+          }
+
+          Divider()
+
+          FormCell(
             title: "Target Display", contentWidth: 220,
             content: {
               HStack(spacing: 8) {
