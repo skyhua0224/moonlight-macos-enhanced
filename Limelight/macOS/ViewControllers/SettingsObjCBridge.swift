@@ -1469,6 +1469,17 @@ class SettingsClass: NSObject {
     ]
   }
 
+  @objc static func sunshineVddSupports(for key: String) -> Bool {
+    let defaults = UserDefaults.standard
+    let version = (defaults.object(
+      forKey: SettingsModel.sunshineVddCapabilityKeyPrefix + key) as? NSNumber)
+      ?? (key == SettingsModel.globalHostId ? nil : defaults.object(
+        forKey: SettingsModel.sunshineVddCapabilityKeyPrefix + SettingsModel.globalHostId) as? NSNumber)
+    // A missing field is a legacy endpoint. Preserve the existing protocol's
+    // compatibility behavior; an explicit zero is the host's rejection.
+    return version?.intValue != 0
+  }
+
   @objc static func gamepadMouseModeLongPressMenu(for key: String) -> Bool {
     if let settings = Settings.getSettings(for: key) {
       return settings.gamepadMouseModeLongPressMenu ?? SettingsModel.defaultGamepadMouseModeLongPressMenu

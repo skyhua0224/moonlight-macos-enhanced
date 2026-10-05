@@ -450,6 +450,30 @@ struct StreamView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
 
           FormCell(
+            title: "VDD Capability", contentWidth: 0,
+            content: {
+              HStack(spacing: 8) {
+                Image(systemName: settingsModel.sunshineVddState == .ready
+                  ? "checkmark.circle.fill" : "display")
+                  .foregroundStyle(settingsModel.sunshineVddState.tint)
+                Text(languageManager.localize(settingsModel.sunshineVddState.titleKey))
+                  .foregroundStyle(.secondary)
+                if let version = settingsModel.sunshineVddCapabilityVersion {
+                  Text("v\(version)")
+                    .foregroundStyle(.tertiary)
+                }
+              }
+              .frame(maxWidth: .infinity, alignment: .trailing)
+            })
+
+          if settingsModel.sunshineVddCapabilityVersion == 0 {
+            Text(languageManager.localize("VDD unavailable on this host; virtual display selection is disabled."))
+              .font(.footnote)
+              .foregroundStyle(.orange)
+              .frame(maxWidth: .infinity, alignment: .trailing)
+          }
+
+          FormCell(
             title: "Display Runtime", contentWidth: 0,
             content: {
               Text(languageManager.localize(settingsModel.sunshineDisplayRuntimeStateKey))
@@ -467,7 +491,16 @@ struct StreamView: View {
           if !settingsModel.availableSunshineDisplays.isEmpty {
             Text(
               settingsModel.availableSunshineDisplays
-                .map { "\($0.index + 1). \($0.title)" }
+                .map { option in
+                  var label = "\(option.index + 1). \(option.title)"
+                  if option.isPrimary {
+                    label += " · " + languageManager.localize("Primary")
+                  }
+                  if let scale = option.currentScalePercent {
+                    label += " · \(scale)%"
+                  }
+                  return label
+                }
                 .joined(separator: "  ·  ")
             )
             .font(.footnote)
@@ -512,6 +545,7 @@ struct StreamView: View {
             title: "Use Virtual Display",
             boolBinding: $settingsModel.sunshineUseVirtualDisplay
           )
+          .disabled(!settingsModel.sunshineVddSupportsSelection)
 
           SettingDescriptionRow(textKey: "Use Virtual Display detail")
 

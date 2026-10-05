@@ -29,6 +29,8 @@
 @property (nonatomic, strong) NSString *statusMessage;
 @property (nonatomic, strong) NSData *data;
 @property (nonatomic, copy) NSArray<NSDictionary<NSString*, id>*> *displays;
+@property (nonatomic, strong) NSDictionary<NSString *, id> *vdd;
+@property (nonatomic) NSInteger count;
 @end
 
 @interface MLSunshineUSBForwardingResponse : NSObject <Response>
@@ -75,6 +77,8 @@
         _statusCode = 500;
         _statusMessage = @"Server Error";
         _displays = @[];
+        _vdd = @{};
+        _count = 0;
     }
     return self;
 }
@@ -85,6 +89,8 @@
         self.statusCode = 500;
         self.statusMessage = @"Empty response";
         self.displays = @[];
+        self.vdd = @{};
+        self.count = 0;
         return;
     }
 
@@ -94,6 +100,8 @@
         self.statusCode = 500;
         self.statusMessage = jsonError.localizedDescription ?: @"Invalid Sunshine displays response";
         self.displays = @[];
+        self.vdd = @{};
+        self.count = 0;
         return;
     }
 
@@ -101,9 +109,13 @@
     NSNumber *statusCode = json[@"status_code"];
     NSString *statusMessage = json[@"status_message"];
     NSArray *displays = json[@"displays"];
+    NSDictionary *vdd = [json[@"vdd"] isKindOfClass:[NSDictionary class]] ? json[@"vdd"] : @{};
 
     self.statusCode = statusCode != nil ? statusCode.integerValue : 500;
     self.statusMessage = statusMessage.length > 0 ? statusMessage : @"Server Error";
+    self.vdd = vdd;
+    self.count = [json[@"count"] respondsToSelector:@selector(integerValue)]
+        ? [json[@"count"] integerValue] : 0;
     if ([displays isKindOfClass:[NSArray class]]) {
         NSMutableArray<NSDictionary<NSString*, id>*> *parsedDisplays = [NSMutableArray arrayWithCapacity:displays.count];
         for (id entry in displays) {
@@ -115,13 +127,20 @@
             NSString *deviceId = [entry[@"device_id"] isKindOfClass:[NSString class]] ? entry[@"device_id"] : displayName;
             NSString *friendlyName = [entry[@"friendly_name"] isKindOfClass:[NSString class]] ? entry[@"friendly_name"] : deviceId;
             NSNumber *index = [entry[@"index"] isKindOfClass:[NSNumber class]] ? entry[@"index"] : @(parsedDisplays.count);
-
-            [parsedDisplays addObject:@{
+            NSMutableDictionary *parsedEntry = [@{
                 @"index": index,
                 @"display_name": displayName ?: @"",
                 @"device_id": deviceId ?: @"",
                 @"friendly_name": friendlyName ?: @"",
-            }];
+            } mutableCopy];
+            for (NSString *key in @[@"is_primary", @"current_scale_percent",
+                                    @"recommended_scale_percent", @"supported_scale_percents",
+                                    @"scale_set_supported"]) {
+                if (entry[key] != nil) {
+                    parsedEntry[key] = entry[key];
+                }
+            }
+            [parsedDisplays addObject:parsedEntry];
         }
         self.displays = parsedDisplays;
     } else {
@@ -441,7 +460,9 @@ static const NSString* HTTPS_PORT = @"47984";
         return @{
             @"statusCode": @(response.statusCode),
             @"statusMessage": response.statusMessage ?: @"",
-            @"displays": @[]
+            @"displays": @[],
+            @"count": @(response.count),
+            @"vdd": response.vdd ?: @{}
         };
     }
 
@@ -449,7 +470,9 @@ static const NSString* HTTPS_PORT = @"47984";
     return @{
         @"statusCode": @(response.statusCode),
         @"statusMessage": response.statusMessage ?: @"",
-        @"displays": response.displays ?: @[]
+        @"displays": response.displays ?: @[],
+        @"count": @(response.count),
+        @"vdd": response.vdd ?: @{}
     };
 }
 

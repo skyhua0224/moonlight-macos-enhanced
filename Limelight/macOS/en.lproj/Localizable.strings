@@ -345,6 +345,15 @@
 "Right Y" = "Right Y";
 "Left Gain" = "Left Gain";
 "Right Gain" = "Right Gain";
+"VDD Capability" = "VDD Capability";
+"VDD Ready" = "VDD Ready";
+"VDD Driver Missing" = "VDD Driver Missing";
+"VDD Driver Unreachable" = "VDD Driver Unreachable";
+"VDD Unsupported Platform" = "VDD Unsupported Platform";
+"VDD State Unknown" = "VDD State Unknown";
+"VDD unavailable on this host; virtual display selection is disabled." = "VDD is unavailable on this host; virtual display selection is disabled.";
+"Primary" = "Primary";
+"Sunshine Display Runtime Failed" = "Display setup failed";
 "Controller Diagnostics" = "Controller Diagnostics";
 "Controller Diagnostics summary" = "%ld controller(s) connected; %ld DualSense controller(s) detected.";
 "Controller Diagnostics detail" = "Runtime mapping diagnostics are written as structured records when input diagnostics is enabled. Feedback uses Apple public Game Controller APIs.";

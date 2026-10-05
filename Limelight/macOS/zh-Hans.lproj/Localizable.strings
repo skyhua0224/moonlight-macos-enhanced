@@ -344,6 +344,15 @@
 "Right Y" = "右 Y";
 "Left Gain" = "左增益";
 "Right Gain" = "右增益";
+"VDD Capability" = "VDD 能力";
+"VDD Ready" = "VDD 就绪";
+"VDD Driver Missing" = "缺少 VDD 驱动";
+"VDD Driver Unreachable" = "VDD 驱动不可访问";
+"VDD Unsupported Platform" = "平台不支持 VDD";
+"VDD State Unknown" = "VDD 状态未知";
+"VDD unavailable on this host; virtual display selection is disabled." = "此主机不可用 VDD，已禁用虚拟显示器选择。";
+"Primary" = "主显示器";
+"Sunshine Display Runtime Failed" = "显示设置失败";
 "Controller Diagnostics" = "控制器诊断";
 "Controller Diagnostics summary" = "已连接 %ld 个控制器；检测到 %ld 个 DualSense 控制器。";
 "Controller Diagnostics detail" = "启用输入诊断后会记录结构化映射信息。反馈使用 Apple 公共 Game Controller API。";
