@@ -52,6 +52,7 @@ struct Settings: Encodable, Decodable {
   let sunshineTargetDisplayName: String?
   let sunshineUseVirtualDisplay: Bool?
   let sunshineScreenMode: Int?
+  let sunshineTouchKeyboardAutoInvoke: Bool?
   let sunshineHdrBrightnessOverride: Bool?
   let sunshineMaxBrightness: CGFloat?
   let sunshineMinBrightness: CGFloat?
@@ -202,6 +203,7 @@ struct Settings: Encodable, Decodable {
       sunshineTargetDisplayName: sunshineTargetDisplayName,
       sunshineUseVirtualDisplay: sunshineUseVirtualDisplay,
       sunshineScreenMode: sunshineScreenMode,
+      sunshineTouchKeyboardAutoInvoke: sunshineTouchKeyboardAutoInvoke,
       sunshineHdrBrightnessOverride: sunshineHdrBrightnessOverride,
       sunshineMaxBrightness: sunshineMaxBrightness,
       sunshineMinBrightness: sunshineMinBrightness,
@@ -336,6 +338,7 @@ extension SettingsClass {
     sunshineTargetDisplayName: String?? = nil,
     sunshineUseVirtualDisplay: Bool? = nil,
     sunshineScreenMode: Int?? = nil,
+    sunshineTouchKeyboardAutoInvoke: Bool? = nil,
     sunshineHdrBrightnessOverride: Bool? = nil,
     sunshineMaxBrightness: CGFloat?? = nil,
     sunshineMinBrightness: CGFloat?? = nil,
@@ -386,6 +389,8 @@ extension SettingsClass {
       sunshineUseVirtualDisplay ?? settings.sunshineUseVirtualDisplay
     let resolvedSunshineScreenMode =
       sunshineScreenMode != nil ? sunshineScreenMode! : settings.sunshineScreenMode
+    let resolvedSunshineTouchKeyboardAutoInvoke =
+      sunshineTouchKeyboardAutoInvoke ?? settings.sunshineTouchKeyboardAutoInvoke
     let resolvedSunshineHdrBrightnessOverride =
       sunshineHdrBrightnessOverride ?? settings.sunshineHdrBrightnessOverride
     let resolvedSunshineMaxBrightness =
@@ -443,6 +448,7 @@ extension SettingsClass {
       sunshineTargetDisplayName: resolvedSunshineTargetDisplayName,
       sunshineUseVirtualDisplay: resolvedSunshineUseVirtualDisplay,
       sunshineScreenMode: resolvedSunshineScreenMode,
+      sunshineTouchKeyboardAutoInvoke: resolvedSunshineTouchKeyboardAutoInvoke,
       sunshineHdrBrightnessOverride: resolvedSunshineHdrBrightnessOverride,
       sunshineMaxBrightness: resolvedSunshineMaxBrightness,
       sunshineMinBrightness: resolvedSunshineMinBrightness,

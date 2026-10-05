@@ -113,6 +113,12 @@ static NSError *MLRemoteUSBError(NSInteger code, NSString *message) {
 }
 
 - (NSString *)helperPath {
+    if (@available(macOS 13.3, *)) {
+        // USB/IP helper is built against the libc++ APIs available from
+        // macOS 13.3. The main app still supports macOS 12 without it.
+    } else {
+        return @"";
+    }
     NSString *override = NSProcessInfo.processInfo.environment[@"MOONLIGHT_USB_HELPER"];
     if (override.length > 0) {
         return override;

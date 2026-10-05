@@ -416,6 +416,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var sunshineTouchKeyboardAutoInvoke: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var sunshineHdrBrightnessOverride: Bool {
     didSet {
       guard !isLoading else { return }
@@ -1558,6 +1564,7 @@ class SettingsModel: ObservableObject {
     isLoadingSunshineDisplays = false
     sunshineDisplayCapabilityState = .unknown
     sunshineDisplayCapabilityMessage = LanguageManager.shared.localize("Display capability has not been queried")
+    sunshineTouchKeyboardAutoInvoke = Self.defaultSunshineTouchKeyboardAutoInvoke
     sunshineVddCapabilityVersion = nil
     sunshineVddState = .unknown
     sunshineDisplayCount = 0

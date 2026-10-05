@@ -618,6 +618,10 @@ static const NSString* HTTPS_PORT = @"47984";
         [extraParams appendFormat:@"&customScreenMode=%d", config.sunshineScreenMode];
     }
 
+    // Foundation Sunshine's per-client touch keyboard intent. Send an explicit
+    // value so a host-side opt-in cannot override the user's client setting.
+    [extraParams appendFormat:@"&touchKeyboard=%d", config.sunshineTouchKeyboardAutoInvoke ? 1 : 0];
+
     if (config.sunshineHdrBrightnessOverride) {
         [extraParams appendFormat:@"&maxBrightness=%.3f", config.sunshineMaxBrightness];
         [extraParams appendFormat:@"&minBrightness=%.6f", config.sunshineMinBrightness];

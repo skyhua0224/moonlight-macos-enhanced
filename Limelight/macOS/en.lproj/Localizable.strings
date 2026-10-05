@@ -661,6 +661,8 @@
 "Screen Mode detail" = "Controls how Sunshine prepares the host display topology for this session.";
 "Override HDR Display Profile" = "Override HDR Display Profile";
 "Override HDR Display Profile detail" = "Sends client display brightness values to Sunshine for HDR-capable virtual display setups.";
+"Show Touch Keyboard Automatically" = "Show Touch Keyboard Automatically";
+"Show Touch Keyboard Automatically detail" = "Asks Foundation Sunshine to show its touch keyboard when a remote editable field is activated.";
 "Max Brightness" = "Max Brightness";
 "Min Brightness" = "Min Brightness";
 "Max Average Brightness" = "Max Average Brightness";

@@ -54,6 +54,7 @@
 @property(nonatomic, copy) NSString *sunshineTargetDisplayName;
 @property(nonatomic) BOOL sunshineUseVirtualDisplay;
 @property(nonatomic) int sunshineScreenMode;
+@property(nonatomic) BOOL sunshineTouchKeyboardAutoInvoke;
 @property(nonatomic) BOOL sunshineHdrBrightnessOverride;
 @property(nonatomic) CGFloat sunshineMaxBrightness;
 @property(nonatomic) CGFloat sunshineMinBrightness;

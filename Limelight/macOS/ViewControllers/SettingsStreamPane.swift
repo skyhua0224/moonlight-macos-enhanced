@@ -588,9 +588,7 @@ struct StreamView: View {
                 .multilineTextAlignment(.trailing)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 120)
-              })
-
-            Divider()
+            })
 
             FormCell(
               title: "Min Brightness", contentWidth: 140,
@@ -620,6 +618,12 @@ struct StreamView: View {
                 .frame(width: 120)
               })
           }
+
+          ToggleCell(
+            title: "Show Touch Keyboard Automatically",
+            boolBinding: $settingsModel.sunshineTouchKeyboardAutoInvoke
+          )
+          SettingDescriptionRow(textKey: "Show Touch Keyboard Automatically detail")
         }
 
         Spacer()

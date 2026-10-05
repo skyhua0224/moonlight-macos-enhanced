@@ -1083,6 +1083,7 @@ extension SettingsModel {
   static let defaultSunshineTargetDisplayName = ""
   static let defaultSunshineUseVirtualDisplay = false
   static let defaultSunshineScreenMode = "Host Default"
+  static let defaultSunshineTouchKeyboardAutoInvoke = false
   static let defaultSunshineHdrBrightnessOverride = false
   static let defaultSunshineMaxBrightness: CGFloat = 1000.0
   static let defaultSunshineMinBrightness: CGFloat = 0.001
