@@ -84,6 +84,7 @@ struct InputView: View {
         keyboardSection
         controllerSection
         remoteUSBSection
+        RemoteFileMappingView()
       }
       .padding()
     }
