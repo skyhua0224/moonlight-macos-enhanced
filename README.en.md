@@ -14,6 +14,16 @@
 
 ---
 
+## 1.3.9 Release Candidate
+
+**1.3.9 is the final release before the native architecture rebuild.** The candidate focuses on settings, input, connectivity, and Foundation Sunshine integration. See the [1.3.9 RC1 release notes](.github/release-notes/v1.3.9-rc.1.md) for changes and known limitations.
+
+- Settings search includes individual options; clipboard controls are in `Settings → Streaming → Clipboard`.
+- Video settings include a dedicated `10-bit SDR` option. Metal-specific controls appear only when Metal is selected.
+- DualSense offers host touchpad and Mac-style modes, switchable by holding Options. Tapping, natural scrolling, and two-finger gestures are included.
+- About & Updates integrates Sparkle with GitHub-first downloads, an identical CNB archive fallback, and a separate beta channel.
+- USB forwarding, Host Files, and dynamic HDR remain subject to the limitations in the release notes and require compatible systems, hardware, and host configurations.
+
 ## ✨ Core Capabilities
 
 - **Native macOS client** — AppKit / SwiftUI interface, Apple Silicon and Intel support, dark mode, and bilingual UI
@@ -64,11 +74,11 @@
 
 | Host Software | Compatibility | Notes |
 |---------------|---------------|-------|
-| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ Recommended | Best support for microphone, YUV 4:4:4, multi-channel audio, and bidirectional clipboard sync for text and single-image items |
+| [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) | ⭐ Recommended | Best support for microphone, YUV 4:4:4, multi-channel audio, and bidirectional clipboard sync for text and single-image items |
 | [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ Supported | Most features work; some advanced paths are limited |
 | GeForce Experience | ⚠️ Basic | Deprecated and missing newer features such as microphone uplink |
 
-> 💡 Microphone, YUV 4:4:4, and some enhanced input or audio behaviors work best with [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine).
+> 💡 Microphone, YUV 4:4:4, and some enhanced input or audio behaviors work best with [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine).
 
 ## 📦 Downloads
 
@@ -77,6 +87,8 @@
 - If you are not sure which one to choose, start with `universal`
 
 ## 📸 Screenshots
+
+These screenshots are from 1.3.8; settings have been redesigned in 1.3.9.
 
 | Host List | App List |
 |:---------:|:--------:|
@@ -113,7 +125,7 @@
 - Local receive, decode, negotiation, and playback for `2ch / 5.1 / 7.1 / 7.1.4`
 - When the output device supports real multi-channel playback, Moonlight keeps the multichannel layout whenever possible; stereo devices can switch to `Audio Enhancement`
 - `Audio Enhancement` is designed for headphones and `2.0 / 2.1` speakers, with client-side EQ, spatial feel, soundstage, and preset control
-- When paired with a compatible [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine), Moonlight can use the enhanced microphone uplink and fuller multi-channel negotiation path
+- When paired with a compatible [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine), Moonlight can use the enhanced microphone uplink and fuller multi-channel negotiation path
 
 ## 🖱️ Input and Control
 
@@ -138,7 +150,7 @@
 - Mouse, Keyboard, and Controller settings have been reorganized so the most-used input controls are easier to reach
 
 ### Stream Shortcuts
-These Moonlight-specific stream shortcuts can be adjusted in `Settings → Input → Keyboard`:
+These Moonlight-specific stream shortcuts can be adjusted in `Settings → Keyboard & Mouse`:
 
 | Shortcut | Action | Notes |
 |----------|--------|-------|

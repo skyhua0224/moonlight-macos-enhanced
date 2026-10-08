@@ -14,10 +14,20 @@
 
 ---
 
+## 1.3.9 候选版本
+
+**1.3.9 是原生架构重建前最后一个版本。** 当前候选版重点改进设置界面、输入、连接与 Foundation Sunshine 协作；完整变更和已知限制见 [1.3.9 RC1 更新说明](.github/release-notes/v1.3.9-rc.1.md)。
+
+- 设置支持搜索具体选项；剪贴板同步入口位于 `设置 → 串流 → 剪贴板`。
+- 视频设置提供独立的 `10-bit SDR` 选项；Metal 专用调节仅在选择 Metal 渲染器时显示。
+- DualSense 提供远端触控板和 Mac 风格模式，支持长按 Options 切换；支持轻点、自然滚动和双指手势。
+- 关于与更新页接入 Sparkle，采用 GitHub 优先、同版本 CNB 下载镜像回退；测试版使用独立更新渠道。
+- USB 转发、主机文件和动态 HDR 的可用范围与限制以更新说明为准，需要对应的系统、硬件和主机配置支持。
+
 ## ✨ 核心特性
 
 - **原生 macOS 客户端** — AppKit / SwiftUI 界面、Apple Silicon / Intel 双支持、深色模式与双语界面
-- **完整串流能力** — 自定义分辨率与帧率、AV1 / HEVC / H.264 解码、HDR、YUV 4:4:4、MetalFX / VT 增强与自动码率
+- **完整串流能力** — 自定义分辨率与帧率、AV1 / HEVC / H.264 解码、HDR、10-bit SDR、YUV 4:4:4、MetalFX / VT 增强与自动码率
 - **多渲染链路** — 提供 `原生渲染器`、`Metal 渲染器` 与 `兼容渲染器`；`原生渲染器` 为默认推荐选项，`Metal 渲染器` 提供更深的 HDR / 色彩调节
 - **剪贴板支持** — 配合 Foundation Sunshine，支持文本与单张图片的双向复制粘贴，并按串流窗口焦点自动接管当前会话
 - **输入与控制增强** — 支持以 `CoreHID` 为核心的低延迟、高回报率鼠标输入链路，带来更直接、更细腻的相对移动响应；自由鼠标模式可无缝切换到其他屏幕继续操作，锁定鼠标模式更适合游戏与持续相对移动场景，并提供可自定义串流快捷键与手柄增强
@@ -64,11 +74,11 @@
 
 | 主机软件 | 兼容性 | 备注 |
 |----------|--------|------|
-| [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) | ⭐ 推荐 | 支持麦克风、YUV 4:4:4、多通道音频，以及双向剪贴板文本 / 单张图片同步等完整增强能力 |
+| [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) | ⭐ 推荐 | 支持麦克风、YUV 4:4:4、多通道音频，以及双向剪贴板、手柄反馈与显示器配置；具体能力取决于主机版本和配置 |
 | [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ 支持 | 大部分功能可用，部分增强能力受限 |
 | GeForce Experience | ⚠️ 基础支持 | 已停止维护，不支持麦克风等新能力 |
 
-> 💡 麦克风、YUV 4:4:4、部分输入与音频增强能力更适合配合 [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) 使用。
+> 💡 麦克风、YUV 4:4:4、部分输入与音频增强能力更适合配合 [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) 使用。
 
 ## 📦 下载
 
@@ -77,6 +87,8 @@
 - 如果你不清楚它们之间的区别，默认推荐下载 `universal`
 
 ## 📸 截图
+
+以下截图来自 1.3.8；1.3.9 的设置页面已重新设计。
 
 | 主机列表 | 应用列表 |
 |:--------:|:--------:|
@@ -113,7 +125,7 @@
 - 支持 `2ch / 5.1 / 7.1 / 7.1.4` 多通道音频接收、协商与本地播放
 - 当输出设备本身支持多通道时，优先保留真实多通道播放；当输出设备为耳机或 `2.0 / 2.1` 音箱时，可切换 `音效增强`
 - `音效增强` 面向耳机与立体声设备提供客户端侧 EQ、空间感、音场与预设调节
-- 配合支持相关能力的 [Foundation Sunshine](https://github.com/qiin2333/foundation-sunshine) 时，可使用增强后的麦克风 uplink 与更完整的多通道协商路径
+- 配合支持相关能力的 [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) 时，可使用增强后的麦克风 uplink 与更完整的多通道协商路径
 
 ## 🖱️ 输入与控制
 
@@ -138,7 +150,7 @@
 - 鼠标、键盘、手柄设置页已经按使用场景重整，常用输入选项更集中
 
 ### 串流快捷键
-以下 Moonlight 自定义串流快捷键支持在 `设置 → 输入 → 键盘` 中调整：
+以下 Moonlight 自定义串流快捷键支持在 `设置 → 键盘与鼠标` 中调整：
 
 | 快捷键 | 功能 | 说明 |
 |--------|------|------|
