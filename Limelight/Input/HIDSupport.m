@@ -458,10 +458,18 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
             if (self.controllerDriver == 0 && input && LiInputContextIsInitialized(input)) {
                 int player = self.controller.playerIndex;
                 BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
+                BOOL primaryTouchActive = self.ps4PrimaryTouchActive;
+                BOOL secondaryTouchActive = self.ps4SecondaryTouchActive;
+                float primaryX = self.ps4PrimaryTouchX, primaryY = self.ps4PrimaryTouchY;
+                float secondaryX = self.ps4SecondaryTouchX, secondaryY = self.ps4SecondaryTouchY;
                 // Finish queued input and release state before teardown can clear the context.
                 dispatch_sync(self.inputQueue, ^{
                     LiSetThreadConnectionContext(input->connectionContext);
                     LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
+                    if (primaryTouchActive)
+                        LiSendControllerTouchEventCtx(input, player, LI_TOUCH_EVENT_UP, 0, primaryX, primaryY, 0.0f);
+                    if (secondaryTouchActive)
+                        LiSendControllerTouchEventCtx(input, player, LI_TOUCH_EVENT_UP, 1, secondaryX, secondaryY, 0.0f);
                     if (stopGyro) {
                         LiSendControllerMotionEventCtx(input, player, LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
                     }
@@ -472,8 +480,15 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
                 });
             }
             self.controller.lastMouseModeButtonFlags = 0;
+            self.ps4PrimaryTouchActive = NO;
+            self.ps4SecondaryTouchActive = NO;
         } else if (self.controllerDriver == 0) {
             // Physical gamepad state continues to update while delivery is paused.
+            // A replacement DS4 session must advertise its extensions first.
+            IOHIDDeviceRef device = [self getFirstDevice];
+            if (device != NULL && isPS4(device) && ![self reportPlayStationControllerArrival]) {
+                return;
+            }
             [self sendControllerEvent];
         }
     }

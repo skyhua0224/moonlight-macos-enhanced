@@ -651,6 +651,15 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     _multiController ? (unsigned char)_controllerNumbers : 1, 0, 0, 0, 0, 0, 0, 0);
                 if (controller.trackpadMouseButton != 0)
                     LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
+                // Release native contacts before resetting their last delivered positions.
+                if (!ControllerTouchpadUsesMouse(self, controller)) {
+                    if (controller.primaryTouchActive)
+                        LiSendControllerTouchEventCtx(input, controller.playerIndex, LI_TOUCH_EVENT_UP,
+                            controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0.0f);
+                    if (controller.secondaryTouchActive)
+                        LiSendControllerTouchEventCtx(input, controller.playerIndex, LI_TOUCH_EVENT_UP,
+                            controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0.0f);
+                }
                 if (controller.gyroTimer != nil) {
                     LiSendControllerMotionEventCtx(input, controller.playerIndex,
                                                    LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
@@ -1589,7 +1598,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                         (void)button;
                         (void)value;
                         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-                        if (inputCtx != NULL) {
+                        if (inputCtx != NULL && self.shouldSendInputEvents) {
                             if (ControllerTouchpadUsesMouse(self, touchController)) {
                                 if (pressed) {
                                     touchController.trackpadPhysicalClickConsumed = YES;
