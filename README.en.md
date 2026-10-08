@@ -16,7 +16,7 @@
 
 ## 1.3.9 Release Candidate
 
-**1.3.9 is the final release before the native architecture rebuild.** The candidate focuses on settings, input, connectivity, and Foundation Sunshine integration. See the [1.3.9 RC1 release notes](.github/release-notes/v1.3.9-rc.1.md) for changes and known limitations.
+**1.3.9 is the final release before the native architecture rebuild.** The candidate focuses on settings, input, connectivity, and Foundation Sunshine integration. See the [1.3.9 RC2 release notes](.github/release-notes/v1.3.9-rc.2.md) for changes and known limitations.
 
 - Settings search includes individual options; clipboard controls are in `Settings → Streaming → Clipboard`.
 - Video settings include a dedicated `10-bit SDR` option. Metal-specific controls appear only when Metal is selected.
@@ -83,7 +83,7 @@
 
 ## 📦 Downloads
 
-1.3.9 RC1 is a prerelease. Install it manually from the release page while the in-app update feed is being prepared.
+1.3.9 RC2 is a prerelease. Install it manually from the release page while the in-app update feed is being prepared.
 
 - Get the latest build from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases)
 - Each release provides `universal`, `arm64`, and `x86_64` packages
@@ -218,7 +218,7 @@ Enable clipboard sync in `Settings → Streaming → Clipboard` and on the Found
 
 `Settings → About & Updates` displays the app version and provides update checks. Downloads prefer GitHub and can fall back to the identical CNB archive, with Sparkle verifying the archive signature.
 
-Install the current 1.3.9 RC1 manually from the release page while the in-app feed is being prepared. Beta and stable update channels are separate.
+Install the current 1.3.9 RC2 manually from the release page while the in-app feed is being prepared. Beta and stable update channels are separate.
 
 ## 🛠️ Installation
 
