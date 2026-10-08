@@ -82,6 +82,8 @@
 
 ## 📦 下载
 
+1.3.9 RC1 为预发布版本，请从发布页手动下载安装；应用内自动更新渠道正在部署。
+
 - 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载最新版本
 - 发布页提供三种安装包：`universal`、`arm64`、`x86_64`
 - 如果你不清楚它们之间的区别，默认推荐下载 `universal`
