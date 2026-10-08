@@ -20,6 +20,8 @@ struct ReleaseNotesDocument {
     var result: [Block] = []
     for run in parsed.runs {
       let components = run.presentationIntent?.components ?? []
+      // Foundation orders components from the innermost block outward.
+      // The first identity preserves individual list-item paragraphs.
       let identity = components.first?.identity ?? 0
       var text = AttributedString(parsed[run.range])
       text.presentationIntent = nil
@@ -34,10 +36,21 @@ struct ReleaseNotesDocument {
       for component in components {
         switch component.kind {
         case .header(let level): heading = level
-        case .listItem(let number): ordinal = number
-        case .unorderedList: unordered = true
         case .codeBlock: isCode = true
         default: break
+        }
+      }
+      // Pair the nearest item with its enclosing list, so an unordered
+      // ancestor cannot turn a nested ordered list into bullets.
+      for component in components {
+        if ordinal == nil, case .listItem(let number) = component.kind {
+          ordinal = number
+        } else if ordinal != nil {
+          if case .unorderedList = component.kind {
+            unordered = true
+            break
+          }
+          if case .orderedList = component.kind { break }
         }
       }
       let marker = ordinal.map { unordered ? "•" : "\($0)." }

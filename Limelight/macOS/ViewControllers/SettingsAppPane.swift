@@ -523,7 +523,7 @@ private struct AboutUpdateCard: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .disabled(checker.state == .checking || (sparkle.isConfigured && !sparkle.canCheckUpdates))
+        .disabled(sparkle.isConfigured ? !sparkle.canCheckUpdates : checker.state == .checking)
       }
       .padding(16)
     }
