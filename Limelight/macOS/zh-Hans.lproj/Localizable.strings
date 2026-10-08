@@ -1170,3 +1170,8 @@
 "Foundation Sunshine USB forwarding service is unavailable" = "主机的 Foundation Sunshine USB 转发服务未就绪";
 
 "Connecting" = "正在连接";
+
+"Log Detail" = "日志详情";
+"Curated View" = "浓缩视图";
+"Parsed Message" = "解析消息";
+"Raw Line" = "原始行";
