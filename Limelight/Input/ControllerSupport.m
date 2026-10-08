@@ -657,11 +657,19 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 }
                 controller.lastGyroSample = (GCRotationRate){};
                 controller.lastAccelSample = (GCAcceleration){};
-                controller.hasSentGamepadState = NO;
-                ResetControllerTrackpadMouseState(controller);
+                if (controller.lastMouseModeButtonFlags & A_FLAG)
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                if (controller.lastMouseModeButtonFlags & B_FLAG)
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
             }
             [_controllerStreamLock unlock];
             Log(LOG_I, @"[controller] Neutral input sent before pausing controller delivery");
+        }
+        // Clear delivered mouse state even if the stream is already unavailable.
+        for (Controller *controller in _controllers.allValues) {
+            controller.lastMouseModeButtonFlags = 0;
+            controller.hasSentGamepadState = NO;
+            ResetControllerTrackpadMouseState(controller);
         }
     } else if (!wasEnabled && enabled) {
         for (Controller *controller in _controllers.allValues) {
@@ -1445,7 +1453,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 short rightStickX, rightStickY;
                 unsigned char leftTrigger, rightTrigger;
 
-                if (limeController.isMouseMode) {
+                if (limeController.isMouseMode && self->_shouldSendInputEvents) {
                     // Mouse Toggle and Movement are handled by timer
                     
                     // Mouse Clicks (A = Left, B = Right)
@@ -2210,7 +2218,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         }
 
         // 2. Mouse Movement Logic
-        if (controller.isMouseMode) {
+        if (controller.isMouseMode && _shouldSendInputEvents) {
             float deltaX = 0;
             float deltaY = 0;
             

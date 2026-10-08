@@ -427,51 +427,53 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 
 @implementation HIDSupport
 
+@synthesize shouldSendControllerEvents = _shouldSendControllerEvents;
+
 - (BOOL)shouldSendControllerEvents {
-    return self.controllerInputEnabled;
+    @synchronized (self) {
+        return _shouldSendControllerEvents;
+    }
 }
 
-- (void)setShouldSendControllerEvents:(BOOL)shouldSendControllerEvents {
-    BOOL wasSending;
+- (void)setShouldSendControllerEvents:(BOOL)enabled {
     @synchronized (self) {
-        if (self.controllerInputEnabled == shouldSendControllerEvents) {
-            return;
-        }
-        wasSending = self.controllerInputEnabled;
-        self.controllerInputEnabled = shouldSendControllerEvents;
-    }
+        if (_shouldSendControllerEvents == enabled) return;
+        _shouldSendControllerEvents = enabled;
+        self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
+        self.ps4GyroRateWindowStartUs = 0;
+        self.ps4GyroRateWindowSamples = 0;
+        self.hasLastPS4GyroSample = NO;
+        self.ps4GyroAtRest = YES;
+        self.ps4GyroStationarySinceUs = 0;
+        self.ps4GyroMovingSinceUs = 0;
+        if (!enabled) {
+            ControllerMenuGesture gesture = self.controller.menuGesture;
+            ControllerMenuGestureInterrupt(&gesture, self.gamepadMenuPressed);
+            self.controller.menuGesture = gesture;
+            [self.gamepadMenuTimer invalidate];
+            self.gamepadMenuTimer = nil;
 
-    // Input capture can remain suspended long enough for the old sensor
-    // history to become meaningless. Re-prime the filter and force the next
-    // gyro value to be sent after the explicit neutral sample below.
-    self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
-    self.ps4GyroRateWindowStartUs = 0;
-    self.ps4GyroRateWindowSamples = 0;
-    self.hasLastPS4GyroSample = NO;
-    self.ps4GyroAtRest = YES;
-    self.ps4GyroStationarySinceUs = 0;
-    self.ps4GyroMovingSinceUs = 0;
-
-    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-    if (wasSending && !shouldSendControllerEvents && inputCtx && self.controllerDriver == 0) {
-        int playerIndex = self.controller.playerIndex;
-        BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
-        HIDDispatchInput(self, inputCtx, ^{
-            // Never leave a remote button, trigger, or stick held when local
-            // input capture is suspended.
-            LiSendMultiControllerEventCtx(inputCtx, playerIndex, 1, 0, 0, 0, 0, 0, 0, 0);
-            if (stopGyro) {
-                LiSendControllerMotionEventCtx(inputCtx, playerIndex,
-                                               LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
+            int heldMouseButtons = self.controller.lastMouseModeButtonFlags;
+            PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+            if (self.controllerDriver == 0 && input && LiInputContextIsInitialized(input)) {
+                int player = self.controller.playerIndex;
+                BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
+                // Finish queued input and release state before teardown can clear the context.
+                dispatch_sync(self.inputQueue, ^{
+                    LiSetThreadConnectionContext(input->connectionContext);
+                    LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
+                    if (stopGyro) {
+                        LiSendControllerMotionEventCtx(input, player, LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
+                    }
+                    if (heldMouseButtons & A_FLAG)
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                    if (heldMouseButtons & B_FLAG)
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                });
             }
-        });
-    }
-
-    if (shouldSendControllerEvents) {
-        // Resynchronize the complete current state. Analog controls may not
-        // generate another callback if they remain held at a constant value.
-        IOHIDDeviceRef device = [self getFirstDevice];
-        if (device != nil && (!isPlayStation(device) || self.reportedPlayStationArrival)) {
+            self.controller.lastMouseModeButtonFlags = 0;
+        } else if (self.controllerDriver == 0) {
+            // Physical gamepad state continues to update while delivery is paused.
             [self sendControllerEvent];
         }
     }

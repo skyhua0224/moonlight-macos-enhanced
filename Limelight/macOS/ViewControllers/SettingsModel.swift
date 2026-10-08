@@ -185,6 +185,8 @@ class SettingsModel: ObservableObject {
   static let sunshineVddCapabilityKeyPrefix = "settings.sunshine.vddCapability."
   static let sunshineVddStateKeyPrefix = "settings.sunshine.vddState."
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
+  static let controllerSettingsChangedNotification =
+    Notification.Name("MoonlightControllerSettingsDidChange")
   static let streamShortcutsChangedNotification = Notification.Name("MoonlightStreamShortcutsDidChange")
   static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
   static let debugLogModeKey = "debugLog.mode"
@@ -222,6 +224,17 @@ class SettingsModel: ObservableObject {
       object: nil,
       userInfo: [
         "hostId": hostId,
+      ])
+  }
+
+  private func postControllerSettingsChanged(_ setting: String) {
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    NotificationCenter.default.post(
+      name: Self.controllerSettingsChangedNotification,
+      object: nil,
+      userInfo: [
+        "hostId": hostId,
+        "setting": setting,
       ])
   }
 
@@ -888,6 +901,13 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var backgroundControllerInput: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+      postControllerSettingsChanged("backgroundControllerInput")
+    }
+  }
   @Published var selectedControllerDriver: String {
     didSet {
       guard !isLoading else { return }
@@ -1519,6 +1539,7 @@ class SettingsModel: ObservableObject {
     autoFullscreen = Self.defaultAutoFullscreen
     selectedDisplayMode = Self.getString(from: Self.defaultDisplayMode, in: Self.displayModes)
     rumble = Self.defaultRumble
+    backgroundControllerInput = Self.defaultBackgroundControllerInput
     selectedControllerDriver = Self.defaultControllerDriver
     selectedMouseDriver = Self.defaultMouseDriver
     coreHIDMaxMouseReportRate = Self.defaultCoreHIDMaxMouseReportRate

@@ -2909,8 +2909,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
     // Always enable input when capture is active to avoid accidental lockout
     self.hidSupport.shouldSendInputEvents = YES;
-    self.hidSupport.shouldSendControllerEvents = YES;
-    self.controllerSupport.shouldSendInputEvents = YES;
+    [self refreshControllerInputSendingState];
 
     self.pendingFreeMouseReentryEdge = MLFreeMouseExitEdgeNone;
     self.pendingFreeMouseReentryAtMs = 0;
@@ -2978,8 +2977,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     [self allowDisplaySleep];
     
     self.hidSupport.shouldSendInputEvents = NO;
-    self.hidSupport.shouldSendControllerEvents = NO;
-    self.controllerSupport.shouldSendInputEvents = NO;
+    [self refreshControllerInputSendingState];
     self.pendingFreeMouseReentryEdge = MLFreeMouseExitEdgeNone;
     self.pendingFreeMouseReentryAtMs = 0;
     self.pendingMouseExitedRecapture = NO;

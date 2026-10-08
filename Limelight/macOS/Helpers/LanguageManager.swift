@@ -228,6 +228,9 @@ public class LanguageManager: NSObject, ObservableObject {
     "Single": "Single",
     "Auto": "Auto",
     "Rumble Controller": "Rumble Controller",
+    "Background Controller Input": "Background Controller Input",
+    "Background Controller Input detail":
+      "Keep sending controller input to the host when the stream window is not focused.",
     "Buttons": "Buttons",
     "Swap A/B and X/Y Buttons": "Swap A/B and X/Y Buttons",
     "Emulate Guide Button": "Emulate Guide Button (Start + Select)",
@@ -623,6 +626,8 @@ public class LanguageManager: NSObject, ObservableObject {
     "Single": "单人",
     "Auto": "自动",
     "Rumble Controller": "手柄震动",
+    "Background Controller Input": "后台手柄输入",
+    "Background Controller Input detail": "串流窗口未聚焦时，仍继续向主机发送手柄输入。",
     "Buttons": "按键",
     "Swap A/B and X/Y Buttons": "交换手柄的 A/B 和 X/Y 按钮",
     "Emulate Guide Button": "模拟 Guide 键（Start + Select）",

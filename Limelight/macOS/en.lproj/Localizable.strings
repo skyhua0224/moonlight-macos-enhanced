@@ -70,6 +70,8 @@
 "Auto Address Switched Title" = "Auto address switched";
 "Auto Address Switched Message" = "%@ auto-switched from %@ to %@ (%.0fms → %.0fms).";
 "Rumble Controller" = "Rumble Controller";
+"Background Controller Input" = "Background Controller Input";
+"Background Controller Input detail" = "Keep sending controller input to the host when the stream window is not focused.";
 "Buttons" = "Buttons";
 "Swap A/B and X/Y Buttons" = "Swap A/B and X/Y Buttons";
 "Emulate Guide Button" = "Emulate Guide Button (Start + Select)";

@@ -62,7 +62,6 @@ typedef struct {
 @property (nonatomic) NSInteger controllerDriver;
 @property (nonatomic) BOOL isPS5Bluetooth;
 @property (nonatomic) uint8_t ds5OutputSequence;
-@property (atomic) BOOL controllerInputEnabled;
 @property (atomic) BOOL reportedPlayStationArrival;
 @property (atomic) uint16_t requestedGyroRateHz;
 @property (atomic) uint16_t requestedAccelRateHz;

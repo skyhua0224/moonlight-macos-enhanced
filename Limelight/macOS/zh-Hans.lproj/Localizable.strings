@@ -68,6 +68,8 @@
 "Auto Address Switched Title" = "已自动切换地址";
 "Auto Address Switched Message" = "%@ 已从 %@ 切换到 %@（延迟 %.0fms → %.0fms）。";
 "Rumble Controller" = "手柄震动";
+"Background Controller Input" = "后台手柄输入";
+"Background Controller Input detail" = "串流窗口未聚焦时，仍继续向主机发送手柄输入。";
 "Buttons" = "按键";
 "Swap A/B and X/Y Buttons" = "交换 A/B 和 X/Y 键";
 "Emulate Guide Button" = "模拟 Guide 键（Start + Select）";

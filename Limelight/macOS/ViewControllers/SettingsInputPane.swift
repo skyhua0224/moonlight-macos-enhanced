@@ -97,6 +97,11 @@ private struct ControllerSettingsSection: View {
       }
 
       ToggleCell(title: "Rumble", boolBinding: $settingsModel.rumble)
+      ToggleCell(
+        title: "Background Controller Input",
+        hintKey: "Background Controller Input detail",
+        boolBinding: $settingsModel.backgroundControllerInput
+      )
       ToggleCell(title: "Swap Buttons", boolBinding: $settingsModel.swapButtons)
       SettingsRow(title: "DualSense Touchpad Mode", detail: "Native Touchpad detail") {
         Picker("", selection: Binding<String>(
