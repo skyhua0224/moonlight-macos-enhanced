@@ -30,6 +30,7 @@
 - **Full streaming feature set** — custom resolution and FPS, AV1 / HEVC / H.264 decode, HDR, YUV 4:4:4, MetalFX / VT enhancement, and auto bitrate
 - **Multiple video renderers** — includes `Native Renderer`, `Metal Renderer`, and `Compatibility Renderer`; `Native Renderer` is the recommended default, while `Metal Renderer` provides deeper HDR and color controls
 - **Clipboard support** — when paired with Foundation Sunshine, Moonlight supports bidirectional copy and paste for text and single-image items, with stream-window focus deciding which session owns clipboard sync
+- **DualSense / DS5** — standard controls, rumble, lighting, battery and motion, with host touchpad and Mac-style pointer modes
 - **Input and control upgrades** — built around a `CoreHID` low-latency, high-polling mouse input path for more direct and more precise relative movement; Free Mouse moves naturally across displays, while Locked Mouse is better suited for games and sustained relative input, with configurable stream shortcuts and controller enhancements
 - **Audio and media improvements** — uses a lower-latency `Core Audio` local playback path with multi-channel receive and playback, plus client-side audio enhancement, EQ control, and improved microphone uplink
 - **Connectivity and stability** — per-host connection methods, custom ports / IPv6 / domains, performance overlay, diagnostics, and AWDL stability helpers
@@ -117,6 +118,8 @@ These screenshots are from 1.3.8; settings have been redesigned in 1.3.9.
 - `Native Renderer` is aimed at the lowest latency and highest default color accuracy; `Metal Renderer` is aimed at deeper HDR and color control; `Compatibility Renderer` is kept for older systems and recovery cases
 
 ### HDR, Color, and Enhancement
+- Request 10-bit SDR directly in `Settings → Video → 10-bit SDR`, without enabling HDR as a workaround; host and decoder support are required
+- HDR10+ and Dolby Vision 8.1/8.4 provide capability probing, integration, and safe fallback; output depends on the system, hardware, and display path. HDR Vivid is unavailable
 - HDR transfer functions support `HLG / PQ / Auto`, with presentation tuned to the current display path
 - `Metal Renderer` exposes HDR metadata source, client HDR profile, luminance parameters, optical output scale, HLG viewing environment, EDR strategy, and tone-mapping policy
 - The enhancement stack supports `VT Low-Latency Super Resolution`, `VT Quality Super Resolution`, `MetalFX`, and `Basic Scaling`
@@ -151,6 +154,23 @@ These screenshots are from 1.3.8; settings have been redesigned in 1.3.9.
 - Controller input supports multi-controller sessions, rumble, Guide emulation, and controller mouse mode
 - Mouse, Keyboard, and Controller settings have been reorganized so the most-used input controls are easier to reach
 
+### DualSense / DS5
+
+Connect a DS5 to the Mac over Bluetooth or USB. The client sends input to, and receives feedback from, Foundation Sunshine hosts supporting the corresponding capabilities.
+
+| Capability | Behavior |
+| --- | --- |
+| Buttons, sticks, and triggers | Standard PlayStation mapping, with host controller type, button swap, and stick deadzone settings |
+| Rumble and haptics | Native feedback or rumble fallback according to device capability; richer effects depend on the host, system, and connection |
+| Lighting and battery | Host lighting feedback and controller battery reporting |
+| Motion | Gyroscope and accelerometer input with selectable motion mode |
+| Host touchpad | Touch coordinates and presses go to the remote virtual PlayStation controller for games |
+| Mac-style trackpad | One-finger pointer movement and tapping, two-finger scrolling and right-click tapping; follows macOS natural scrolling with an optional reversal |
+
+Select **DualSense Touchpad Mode** in `Settings → Controller`. Enable **Hold Options to Switch Touchpad Mode**, then hold the DS5 **Options button for about two seconds** during streaming to switch modes. Buttons, sticks, and triggers continue sending gamepad input.
+
+The host must support PlayStation virtual controllers and the requested feedback. Enhanced haptic effects can vary between Bluetooth, USB, and host versions. Ordinary controller input does not require USB Mapping.
+
 ### Stream Shortcuts
 These Moonlight-specific stream shortcuts can be adjusted in `Settings → Keyboard & Mouse`:
 
@@ -167,13 +187,37 @@ These Moonlight-specific stream shortcuts can be adjusted in `Settings → Keybo
 
 > 💡 This list covers Moonlight-specific shortcuts only. Standard macOS shortcuts such as `⌘W` and `⌃⌘F` are not listed here.
 
+## 🔗 Foundation Sunshine Integration
+
+### Clipboard
+
+Enable clipboard sync in `Settings → Streaming → Clipboard` and on the Foundation Sunshine host. Text and single PNG images can be copied in both directions, with the foreground stream window owning synchronization. Clipboard sync does not transfer files.
+
+### Displays and Virtual Displays
+
+`Settings → Display & HDR` includes the target display, virtual display (VDD), screen mode, and display parameters. Per-app preferences are applied through Foundation Sunshine during connection and recovery. VDD requires an enabled host driver and capability.
+
+### USB Mapping and Host Files
+
+- `Settings → USB Mapping` forwards selected local USB devices to the host and releases them when streaming stops. The host must support and enable USB forwarding.
+- `Settings → Host Files` accesses shared remote directories through Foundation Sunshine. Access is currently read-only; Finder mounting requires a signed build supporting the necessary App Group.
+- These pages report host capabilities and unavailable states. USB Mapping and Host Files are experimental and depend on host and system support.
+
 ## 🔧 Connectivity, Diagnostics, and Stability
+
+`Settings → App & Diagnostics` provides performance data and report export for receive/decode/render frame rates, 1% low, network and pacing jitter, dropped frames, and audio underruns.
 
 - Per-host connection method management
 - Custom ports, IPv6, and domain-based connections
 - Performance overlay, connection warnings, and input diagnostics
 - Both raw logs and curated logs for troubleshooting
 - AWDL stability helper, reconnect behavior, and timeout recovery
+
+## 🔄 About and Updates
+
+`Settings → About & Updates` displays the app version and provides update checks. Downloads prefer GitHub and can fall back to the identical CNB archive, with Sparkle verifying the archive signature.
+
+Install the current 1.3.9 RC1 manually from the release page while the in-app feed is being prepared. Beta and stable update channels are separate.
 
 ## 🛠️ Installation
 
