@@ -93,6 +93,7 @@ struct Settings: Encodable, Decodable {
   let autoFullscreen: Bool
   let displayMode: Int?
   let rumble: Bool
+  let backgroundControllerInput: Bool?
   let controllerDriver: Int
   let mouseDriver: Int
   let coreHIDAutoEnabled: Bool?
@@ -253,6 +254,7 @@ struct Settings: Encodable, Decodable {
       autoFullscreen: autoFullscreen,
       displayMode: displayMode,
       rumble: rumble,
+      backgroundControllerInput: backgroundControllerInput,
       controllerDriver: controllerDriver,
       mouseDriver: mouseDriver,
       coreHIDAutoEnabled: coreHIDAutoEnabled,
@@ -507,6 +509,7 @@ extension SettingsClass {
       autoFullscreen: settings.autoFullscreen,
       displayMode: settings.displayMode,
       rumble: settings.rumble,
+      backgroundControllerInput: settings.backgroundControllerInput,
       controllerDriver: settings.controllerDriver,
       mouseDriver: settings.mouseDriver,
       coreHIDAutoEnabled: settings.coreHIDAutoEnabled,

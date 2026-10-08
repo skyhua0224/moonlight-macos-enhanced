@@ -332,6 +332,7 @@ extension SettingsModel {
     autoFullscreen = Self.defaultAutoFullscreen
     selectedDisplayMode = Self.getString(from: Self.defaultDisplayMode, in: Self.displayModes)
     rumble = Self.defaultRumble
+    backgroundControllerInput = Self.defaultBackgroundControllerInput
     selectedControllerDriver = Self.defaultControllerDriver
 
     quitAppAfterStream = Self.defaultQuitAppAfterStream
@@ -531,6 +532,8 @@ extension SettingsModel {
       selectedDisplayMode = Self.getString(
         from: settings.displayMode ?? (settings.autoFullscreen ? 1 : 0), in: Self.displayModes)
       rumble = settings.rumble
+      backgroundControllerInput =
+        settings.backgroundControllerInput ?? Self.defaultBackgroundControllerInput
       selectedControllerDriver = Self.getString(
         from: settings.controllerDriver, in: Self.controllerDrivers)
       selectedMouseDriver = MouseInputDriverStrategy(persistedRawValue: settings.mouseDriver)
@@ -963,6 +966,7 @@ extension SettingsModel {
       autoFullscreen: autoFullscreen,
       displayMode: displayMode,
       rumble: rumble,
+      backgroundControllerInput: backgroundControllerInput,
       controllerDriver: controllerDriver,
       mouseDriver: mouseDriver,
       coreHIDAutoEnabled: true,
