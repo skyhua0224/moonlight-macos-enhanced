@@ -5,7 +5,7 @@ import Sparkle
 struct AppView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
-  @State private var showLiveLogViewer = false
+  @SwiftUI.State private var showLiveLogViewer = false
   @AppStorage("theme") private var appearance = 0
   @AppStorage("autoDiscoverNewHosts") private var autoDiscoverNewHosts = true
 

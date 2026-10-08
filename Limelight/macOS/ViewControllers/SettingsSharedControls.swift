@@ -205,7 +205,7 @@ struct InlineSectionLabel: View {
 struct InfoHintButton: View {
   let hintKey: String
   @ObservedObject private var languageManager = LanguageManager.shared
-  @State private var isPresented = false
+  @SwiftUI.State private var isPresented = false
 
   var body: some View {
     Button { isPresented.toggle() } label: {

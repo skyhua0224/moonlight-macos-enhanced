@@ -4,7 +4,7 @@ import SwiftUI
 struct StreamView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
-  @State private var isAddressEditorPresented = false
+  @SwiftUI.State private var isAddressEditorPresented = false
 
   private var selectedHostName: String {
     guard let host = settingsModel.selectedHost else { return languageManager.localize("Default Profile") }
