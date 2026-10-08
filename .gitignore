@@ -18,3 +18,5 @@ docs/1.3.9-*
 dist/
 *.log
 *.ips
+
+release_body.md
