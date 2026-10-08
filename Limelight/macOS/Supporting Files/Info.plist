@@ -43,6 +43,10 @@
 	<array>
 		<string>_nvstream._tcp</string>
 	</array>
+	<key>UpdateChannel</key>
+	<string>$(UPDATE_CHANNEL)</string>
+	<key>UpdateDisplayVersion</key>
+	<string>$(UPDATE_DISPLAY_VERSION)</string>
 	<key>SUFeedURL</key>
 	<string>$(SPARKLE_FEED_URL)</string>
 	<key>SUPublicEDKey</key>
