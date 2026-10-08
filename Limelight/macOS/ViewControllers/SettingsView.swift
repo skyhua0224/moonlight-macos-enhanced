@@ -225,7 +225,7 @@ struct SettingsView: View {
 private struct ModernSettingsRoot: View {
   @Binding var selectedPane: SettingsPaneType
   @ObservedObject var settingsModel: SettingsModel
-  @State private var columnVisibility: NavigationSplitViewVisibility = .all
+  @SwiftUI.State private var columnVisibility: NavigationSplitViewVisibility = .all
 
   var body: some View {
     NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -246,7 +246,7 @@ private struct SettingsSidebar: View {
   @Binding var selection: SettingsPaneType
   @ObservedObject var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
-  @State private var query = ""
+  @SwiftUI.State private var query = ""
 
   private var filteredPanes: [SettingsPaneType] {
     let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
