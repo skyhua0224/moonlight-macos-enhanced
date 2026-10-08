@@ -7,9 +7,10 @@
 //
 
 #import "StreamViewMac.h"
+#import "MoonlightEnhanced-Swift.h"
 
 @interface StreamViewMac ()
-@property (nonatomic, strong) NSProgressIndicator *spinner;
+@property (nonatomic, strong) NSView *startupOverlay;
 
 @end
 
@@ -37,17 +38,25 @@
 - (instancetype)initWithCoder:(NSCoder *)coder {
     self = [super initWithCoder:coder];
     if (self) {
-        self.spinner = [[NSProgressIndicator alloc] init];
-        self.spinner.style = NSProgressIndicatorStyleSpinning;
-        [self.spinner startAnimation:self];
-        [self addSubview:self.spinner];
-        self.spinner.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.spinner.centerXAnchor constraintEqualToAnchor:self.centerXAnchor].active = YES;
-        [self.spinner.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active = YES;
-        [self.spinner.widthAnchor constraintEqualToConstant:32].active = YES;
-        [self.spinner.heightAnchor constraintEqualToConstant:32].active = YES;
+        [self installStartupOverlay];
     }
     return self;
+}
+
+- (instancetype)initWithFrame:(NSRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) [self installStartupOverlay];
+    return self;
+}
+
+- (void)installStartupOverlay {
+    if (self.startupOverlay != nil) return;
+    self.startupOverlay = [StreamingStartupOverlayFactory makeView];
+    self.startupOverlay.frame = self.bounds;
+    self.startupOverlay.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    self.startupOverlay.wantsLayer = YES;
+    self.startupOverlay.layer.zPosition = 1000;
+    [self addSubview:self.startupOverlay positioned:NSWindowAbove relativeTo:nil];
 }
 
 - (void)viewDidMoveToWindow {
@@ -73,11 +82,18 @@
 }
 
 - (void)setStatusText:(NSString *)statusText {
+    if (![NSThread isMainThread]) {
+        NSString *text = [statusText copy];
+        dispatch_async(dispatch_get_main_queue(), ^{ self.statusText = text; });
+        return;
+    }
+    _statusText = [statusText copy];
+    [self installStartupOverlay];
+    self.startupOverlay.hidden = statusText == nil;
     if (statusText == nil) {
-        [self.spinner stopAnimation:self];
-        self.spinner.hidden = YES;
         self.window.title = self.appName;
     } else {
+        [self addSubview:self.startupOverlay positioned:NSWindowAbove relativeTo:nil];
         self.window.title = [[self.appName stringByAppendingString:@" - "] stringByAppendingString:statusText];
     }
 }

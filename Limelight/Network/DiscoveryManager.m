@@ -333,9 +333,13 @@ static BOOL MoonlightShouldAutoDiscoverNewHosts(void) {
              }
         }
 
-        // Always update active address and state
-        existingHost.activeAddress = host.activeAddress;
-        existingHost.state = host.state;
+        // DiscoveryWorker owns the active route and online state. mDNS can
+        // report a stale local address after a WireGuard/DNS route has already
+        // been selected, so it must not overwrite a working activeAddress or
+        // downgrade the worker's state.
+        if (existingHost.activeAddress.length == 0 && host.activeAddress.length > 0) {
+            existingHost.activeAddress = host.activeAddress;
+        }
         return NO;
     }
     else {
@@ -423,6 +427,22 @@ static BOOL MoonlightShouldAutoDiscoverNewHosts(void) {
 
 - (NSOperation*) createWorkerForHost:(TemporaryHost*)host {
     DiscoveryWorker* worker = [[DiscoveryWorker alloc] initWithHost:host uniqueId:_uniqueId];
+    __weak typeof(self) weakSelf = self;
+    __weak DiscoveryWorker *weakWorker = worker;
+    worker.onlineHandler = ^(TemporaryHost *verifiedHost) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            DiscoveryManager *me = weakSelf;
+            DiscoveryWorker *activeWorker = weakWorker;
+            if (!me || !activeWorker || activeWorker.cancelled) return;
+            NSArray *hosts;
+            @synchronized(me->_hostQueue) { hosts = [me->_hostQueue copy]; }
+            if (![hosts containsObject:verifiedHost]) return;
+            [me->_callback updateAllHosts:hosts];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"HostLatencyUpdated" object:nil
+                userInfo:@{@"uuid": verifiedHost.uuid ?: @"", @"latencies": verifiedHost.addressLatencies ?: @{},
+                           @"states": verifiedHost.addressStates ?: @{}}];
+        });
+    };
     return worker;
 }
 

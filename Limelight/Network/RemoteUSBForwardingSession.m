@@ -13,6 +13,49 @@ static NSError *MLRemoteUSBError(NSInteger code, NSString *message) {
                             userInfo:@{NSLocalizedDescriptionKey: message ?: @"Remote USB error"}];
 }
 
+static id MLRemoteUSBJSONObjectFromData(NSData *data, NSError **errorOut) {
+    NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    if (text.length == 0) {
+        if (errorOut) *errorOut = [NSError errorWithDomain:MLRemoteUSBErrorDomain
+                                                       code:4
+                                                   userInfo:@{NSLocalizedDescriptionKey: @"The USB/IP exporter returned no data"}];
+        return nil;
+    }
+    text = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if ([text hasPrefix:@"\uFEFF"]) {
+        text = [text substringFromIndex:1];
+    }
+
+    // The helper contract is one JSON value on stdout. Accept a wrapper
+    // object and harmless diagnostic bytes around that value so an older
+    // helper cannot make the UI report a misleading format error.
+    NSRange firstObject = [text rangeOfString:@"["];
+    NSRange firstArray = [text rangeOfString:@"{"];
+    NSUInteger start = MIN(firstObject.location == NSNotFound ? NSUIntegerMax : firstObject.location,
+                           firstArray.location == NSNotFound ? NSUIntegerMax : firstArray.location);
+    if (start != NSUIntegerMax && start > 0) {
+        text = [text substringFromIndex:start];
+    }
+    NSUInteger closeArray = [text rangeOfString:@"]" options:NSBackwardsSearch].location;
+    NSUInteger closeObject = [text rangeOfString:@"}" options:NSBackwardsSearch].location;
+    NSUInteger end = closeArray == NSNotFound ? closeObject
+        : (closeObject == NSNotFound ? closeArray : MAX(closeArray, closeObject));
+    if (end != NSNotFound && end + 1 < text.length) {
+        text = [text substringToIndex:end + 1];
+    }
+
+    NSData *normalized = [text dataUsingEncoding:NSUTF8StringEncoding];
+    id object = normalized.length > 0
+        ? [NSJSONSerialization JSONObjectWithData:normalized options:0 error:errorOut]
+        : nil;
+    if ([object isKindOfClass:NSDictionary.class]) {
+        NSDictionary *wrapper = (NSDictionary *)object;
+        object = [wrapper[@"devices"] isKindOfClass:NSArray.class] ? wrapper[@"devices"]
+            : ([wrapper[@"usb_devices"] isKindOfClass:NSArray.class] ? wrapper[@"usb_devices"] : object);
+    }
+    return object;
+}
+
 @interface MLRemoteUSBDevice ()
 @property(nonatomic, copy, readwrite) NSString *busID;
 @property(nonatomic, copy, readwrite) NSString *vidPID;
@@ -30,13 +73,15 @@ static NSError *MLRemoteUSBError(NSInteger code, NSString *message) {
 - (instancetype)initWithDictionary:(NSDictionary *)dictionary {
     self = [super init];
     if (self) {
-        _busID = [dictionary[@"busId"] isKindOfClass:NSString.class] ? dictionary[@"busId"] : @"";
-        _vidPID = [dictionary[@"vidPid"] isKindOfClass:NSString.class] ? dictionary[@"vidPid"] : @"";
+        id busID = dictionary[@"busId"] ?: dictionary[@"bus_id"] ?: dictionary[@"busID"];
+        id vidPID = dictionary[@"vidPid"] ?: dictionary[@"vid_pid"] ?: dictionary[@"vidPID"];
+        _busID = [busID isKindOfClass:NSString.class] ? busID : @"";
+        _vidPID = [vidPID isKindOfClass:NSString.class] ? vidPID : @"";
         _serial = [dictionary[@"serial"] isKindOfClass:NSString.class] ? dictionary[@"serial"] : @"";
         _manufacturer = [dictionary[@"manufacturer"] isKindOfClass:NSString.class] ? dictionary[@"manufacturer"] : @"";
         _product = [dictionary[@"product"] isKindOfClass:NSString.class] ? dictionary[@"product"] : @"";
-        _claimable = [dictionary[@"claimable"] boolValue];
-        _isHub = [dictionary[@"isHub"] boolValue] || [dictionary[@"deviceClass"] integerValue] == 9;
+        _claimable = [dictionary[@"claimable"] boolValue] || [dictionary[@"available"] boolValue];
+        _isHub = [dictionary[@"isHub"] boolValue] || [dictionary[@"is_hub"] boolValue] || [dictionary[@"deviceClass"] integerValue] == 9;
     }
     return self;
 }
@@ -167,7 +212,7 @@ static NSError *MLRemoteUSBError(NSInteger code, NSString *message) {
         }
 
         NSError *jsonError = nil;
-        id object = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        id object = MLRemoteUSBJSONObjectFromData(data, &jsonError);
         if (![object isKindOfClass:NSArray.class]) {
             NSError *error = jsonError ?: MLRemoteUSBError(4, @"The USB/IP exporter returned malformed JSON");
             self.state = MLRemoteUSBForwardingStateFailed;

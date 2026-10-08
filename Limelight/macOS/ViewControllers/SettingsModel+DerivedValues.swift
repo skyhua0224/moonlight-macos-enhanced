@@ -249,6 +249,14 @@ extension SettingsModel {
       var minLatency = Double.greatestFiniteMagnitude
       var bestAddress: String?
 
+      // A ping only proves that an IP answers ICMP. It does not prove that
+      // the paired HTTPS GameStream endpoint or its custom port is usable.
+      // Reset stale state before probing and keep ping-only addresses separate
+      // from addresses that passed paired server-info validation.
+      for address in endpoints {
+        states[address] = 0
+      }
+
       for address in endpoints {
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async {
@@ -291,13 +299,10 @@ extension SettingsModel {
               bestAddress = address
             }
           } else if pingMs != nil {
-            // ICMP success implies reachable; treat as online for UI purposes
-            states[address] = NSNumber(value: 1)
+            // Keep the address visible as reachable, but never select it as
+            // the active streaming/capability endpoint from ICMP alone.
+            states[address] = NSNumber(value: 2)
             let bestMetric = pingMs?.doubleValue ?? rtt
-            if bestMetric < minLatency {
-              minLatency = bestMetric
-              bestAddress = address
-            }
           }
           lock.unlock()
           group.leave()
@@ -378,6 +383,22 @@ extension SettingsModel {
     }
     return lockedBitrateSteps + [200, 250, 300, 350, 400, 500, 600, 800, 1000]
   }
+  static func bitrateIndex(forKbps kbps: Int, unlocked: Bool) -> Int {
+    let steps = bitrateSteps(unlocked: unlocked)
+    return steps.firstIndex { Double(kbps) <= Double($0) * 1000 } ?? (steps.count - 1)
+  }
+
+  static func clampedBitrateKbps(_ kbps: Int, unlocked: Bool) -> Int {
+    let steps = bitrateSteps(unlocked: unlocked)
+    return min(Int(steps.last! * 1000), max(Int(steps[0] * 1000), kbps))
+  }
+
+  var effectiveBitrateKbps: Int {
+    let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
+    let index = max(0, min(Int(bitrateSliderValue), steps.count - 1))
+    return customBitrate ?? Int(steps[index] * 1000)
+  }
+
   static var videoCodecs: [String] = ["H.264", "H.265", "AV1"]
   static var pacingOptions: [String] = ["Lowest Latency", "Smoothest Video"]
   static var audioConfigurations: [String] = [
@@ -498,12 +519,14 @@ extension SettingsModel {
     case automatic
     case xbox360
     case playStation
+    case dualSense
 
     var displayKey: String {
       switch self {
       case .automatic: return "Automatic"
       case .xbox360: return "Xbox 360"
       case .playStation: return "PlayStation"
+      case .dualSense: return "DualSense"
       }
     }
 
@@ -512,6 +535,7 @@ extension SettingsModel {
       case .automatic: return 0
       case .xbox360: return 1
       case .playStation: return 2
+      case .dualSense: return 3
       }
     }
 
@@ -719,6 +743,18 @@ extension SettingsModel {
           titleKey: "HDR10+ Dynamic Metadata",
           availability: hdr10PlusAvailability,
           detailKey: "HDR10+ capability detail"
+        ),
+        VideoCapabilityItem(
+          id: "display.hdrVividPQ",
+          titleKey: "HDR Vivid PQ",
+          availability: .unavailable,
+          detailKey: "HDR Vivid macOS limitation detail"
+        ),
+        VideoCapabilityItem(
+          id: "display.hdrVividHLG",
+          titleKey: "HDR Vivid HLG",
+          availability: .unavailable,
+          detailKey: "HDR Vivid macOS limitation detail"
         ),
         VideoCapabilityItem(
           id: "display.dolbyVision81",
@@ -1504,18 +1540,10 @@ extension SettingsModel {
     let kbps = Self.getDefaultBitrateKbps(
       width: Int(res.width), height: Int(res.height), fps: fps, yuv444: enableYUV444)
 
-    let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
-    var bitrateIndex = 0
-    for i in 0..<steps.count {
-      if Float(kbps) <= steps[i] * 1000.0 {
-        bitrateIndex = i
-        break
-      }
-    }
-
+    let clamped = Self.clampedBitrateKbps(kbps, unlocked: unlockMaxBitrate)
     isAdjustingBitrate = true
-    customBitrate = kbps
-    bitrateSliderValue = Float(bitrateIndex)
+    customBitrate = clamped
+    bitrateSliderValue = Float(Self.bitrateIndex(forKbps: clamped, unlocked: unlockMaxBitrate))
     isAdjustingBitrate = false
   }
 

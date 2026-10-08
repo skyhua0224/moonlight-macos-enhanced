@@ -42,6 +42,8 @@
                 reportRateHz:(unsigned short)reportRateHz;
 - (void)clipboardItemReceived:(const LI_CLIPBOARD_ITEM *)item;
 - (void)clipboardDataReceived:(const uint8_t *)data length:(uint32_t)length;
+- (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame;
+- (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame;
 
 @end
 

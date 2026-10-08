@@ -32,6 +32,7 @@
 #import "ServerInfoResponse.h"
 #import "DiscoveryWorker.h"
 #import "ConnectionHelper.h"
+#import "ConnectionEndpointStore.h"
 #import "WakeOnLanManager.h"
 
 #undef NSLocalizedString
@@ -44,6 +45,7 @@
 
 @property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
+@property (nonatomic, strong) NSSearchField *contentSearchField;
 
 @property (nonatomic, strong) NSDictionary<NSString *, NSString *> *appNameToId;
 
@@ -131,6 +133,8 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+
+    [self installContentSearchField];
     
     self.collectionView.dataSource = self;
     [self.collectionView registerNib:[[NSNib alloc] initWithNibNamed:@"AppCell" bundle:nil] forItemWithIdentifier:@"AppCell"];
@@ -151,6 +155,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     self.boxArtCache = [[NSCache alloc] init];
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(mainSearchTextChanged:) name:@"MoonlightMainSearchTextChanged" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleHostAutoAddressSwitched:) name:@"HostAutoAddressSwitched" object:nil];
 
     // Subscribe to streaming state changes
@@ -162,6 +167,16 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
                 usingBlock:^(NSNotification *note) {
         [weakSelf handleStreamingStateChange:note];
     }];
+}
+
+- (void)installContentSearchField {
+    // Search is rendered by the SwiftUI toolbar view.
+}
+
+- (void)mainSearchTextChanged:(NSNotification *)note {
+    self.filterText = note.userInfo[@"text"] ?: @"";
+    [self displayApps];
+    [self.collectionView reloadData];
 }
 
 - (void)dealloc {
@@ -192,8 +207,12 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     [self.parentViewController.view.window moonlight_toolbarItemForIdentifier:@"SidebarToggleToolbarItem"].enabled = YES;
 
 
-    self.getSearchField.delegate = self;
-    self.getSearchField.placeholderString = NSLocalizedString(@"Search Apps", @"Search Apps");
+    [self installContentSearchField];
+    self.contentSearchField.delegate = self;
+    self.contentSearchField.placeholderString = NSLocalizedString(@"Search Apps", @"Search Apps");
+    NSSearchField *toolbarSearchField = [self.parentViewController.view.window moonlight_searchFieldInToolbar];
+    toolbarSearchField.delegate = self;
+    toolbarSearchField.placeholderString = self.contentSearchField.placeholderString;
 }
 
 - (void)viewDidAppear {
@@ -809,6 +828,10 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 #pragma mark - AppsViewControllerDelegate
 
 - (void)openApp:(TemporaryApp *)app {
+    if (![self confirmConnectionRouteForStreaming]) {
+        return;
+    }
+
     // Check if this host is already streaming
     if (![[StreamingSessionManager shared] canStartStreamForHost:self.host.uuid]) {
         NSAlert *alert = [[NSAlert alloc] init];
@@ -832,6 +855,52 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
         self.runningApp = app;
         [self performSegueWithIdentifier:@"streamSegue" sender:nil];
     }
+}
+
+- (BOOL)confirmConnectionRouteForStreaming {
+    NSDictionary *settings = [SettingsClass getSettingsFor:self.host.uuid];
+    NSString *selectedMethod = settings[@"connectionMethod"];
+    if (selectedMethod.length == 0 || [selectedMethod isEqualToString:@"Auto"]) {
+        return YES;
+    }
+
+    NSNumber *selectedState = self.host.addressStates[selectedMethod];
+    if (selectedState == nil || selectedState.boolValue) {
+        return YES;
+    }
+
+    NSString *alternate = nil;
+    for (NSString *endpoint in [ConnectionEndpointStore allEndpointsForHost:self.host]) {
+        if ([endpoint isEqualToString:selectedMethod]) {
+            continue;
+        }
+        if (self.host.addressStates[endpoint].boolValue) {
+            alternate = endpoint;
+            break;
+        }
+    }
+    if (alternate.length == 0) {
+        return YES;
+    }
+
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleWarning;
+    alert.messageText = NSLocalizedString(@"Selected Connection Unavailable", @"Selected connection route unavailable");
+    alert.informativeText = [NSString stringWithFormat:
+        NSLocalizedString(@"Selected Connection Unavailable Detail", @"Selected connection route unavailable detail"),
+        selectedMethod, alternate];
+    [alert addButtonWithTitle:NSLocalizedString(@"Switch and Continue", @"Switch to the reachable connection route")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Try Selected Route", @"Try the selected connection route anyway")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
+
+    NSModalResponse response = [alert runModal];
+    if (response == NSAlertFirstButtonReturn) {
+        [SettingsClass setConnectionMethod:alternate for:self.host.uuid];
+        self.host.activeAddress = alternate;
+        [[[DataManager alloc] init] updateHost:self.host];
+        [self updateWindowSubtitle];
+    }
+    return response != NSAlertThirdButtonReturn;
 }
 
 - (void)quitApp:(TemporaryApp *)app completion:(void (^)(BOOL success))completion {
@@ -980,6 +1049,18 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (NSString *)preferredSunshineHostAddress {
+    if (self.host.activeAddress.length > 0 &&
+        (self.host.addressStates[self.host.activeAddress] == nil ||
+         self.host.addressStates[self.host.activeAddress].boolValue)) {
+        return self.host.activeAddress;
+    }
+
+    for (NSString *endpoint in [ConnectionEndpointStore allEndpointsForHost:self.host]) {
+        if (self.host.addressStates[endpoint].boolValue) {
+            return endpoint;
+        }
+    }
+
     if (self.host.activeAddress.length > 0) {
         return self.host.activeAddress;
     }
@@ -1482,7 +1563,7 @@ static const CGFloat runningAnimationDuration = 1.0;
 #pragma mark - Helpers
 
 - (NSSearchField *)getSearchField {
-    return [self.parentViewController.view.window moonlight_searchFieldInToolbar];
+    return self.contentSearchField ?: [self.parentViewController.view.window moonlight_searchFieldInToolbar];
 }
 
 - (NSIndexPath *)indexPathForApp:(TemporaryApp *)app {

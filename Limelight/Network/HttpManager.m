@@ -21,6 +21,8 @@
 
 #define SHORT_TIMEOUT_SEC 2
 #define NORMAL_TIMEOUT_SEC 5
+#define DISPLAY_TOPOLOGY_TIMEOUT_SEC 15
+#define FILE_MAPPING_TIMEOUT_SEC 10
 #define LONG_TIMEOUT_SEC 60
 #define EXTRA_LONG_TIMEOUT_SEC 180
 
@@ -390,7 +392,7 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (NSURLRequest*) newUnpairRequest {
     NSString* urlString = [NSString stringWithFormat:@"%@/unpair?uniqueid=%@", _baseHTTPURL, _clientUniqueId];
-    return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
+    return [self createRequestFromString:urlString timeout:DISPLAY_TOPOLOGY_TIMEOUT_SEC];
 }
 
 - (NSURLRequest*) newChallengeRequest:(NSData*)challenge {
@@ -443,7 +445,12 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (NSURLRequest *)newDisplaysRequest {
     NSString *urlString = [NSString stringWithFormat:@"%@/displays?uniqueid=%@", _baseHTTPSURL, _clientUniqueId];
-    return [self createRequestFromString:urlString timeout:SHORT_TIMEOUT_SEC];
+    // Foundation Sunshine queries the host display driver and VDD state while
+    // building this response. That can legitimately take longer than the
+    // fast server-info probe, especially while a virtual display is starting.
+    // Keep the capability request bounded, but do not turn driver latency into
+    // a false "topology unavailable" result.
+    return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
 }
 
 - (NSArray<NSDictionary<NSString*, id>*>*)fetchSunshineDisplays {
@@ -479,7 +486,7 @@ static const NSString* HTTPS_PORT = @"47984";
 - (NSDictionary<NSString*, id>*)fetchSunshineUSBForwardingCapability {
     NSString *urlString = [NSString stringWithFormat:@"%@/api/v1/usb-forwarding?uniqueid=%@",
                            _baseHTTPSURL, _clientUniqueId];
-    NSURLRequest *requestURL = [self createRequestFromString:urlString timeout:SHORT_TIMEOUT_SEC];
+    NSURLRequest *requestURL = [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
     MLSunshineUSBForwardingResponse *response = [[MLSunshineUSBForwardingResponse alloc] init];
     HttpRequest *request = [HttpRequest requestForResponse:response withUrlRequest:requestURL];
     [self executeRequestSynchronously:request];
@@ -508,6 +515,15 @@ static const NSString* HTTPS_PORT = @"47984";
     NSString *reason = [json[@"reason"] isKindOfClass:[NSString class]] ? json[@"reason"] : @"";
     NSString *token = [json[@"token"] isKindOfClass:[NSString class]] ? json[@"token"] : @"";
     NSNumber *port = [json[@"port"] isKindOfClass:[NSNumber class]] ? json[@"port"] : nil;
+    // Disabled/unavailable hosts intentionally omit the tunnel port and token.
+    // See Foundation's certificate-authenticated /api/v1/usb-forwarding route.
+    if (version.integerValue == 1 && enabled != nil && available != nil &&
+        (!enabled.boolValue || !available.boolValue)) {
+        result[@"enabled"] = enabled;
+        result[@"available"] = available;
+        result[@"reason"] = reason;
+        return result;
+    }
     BOOL validToken = token.length == 64;
     if (validToken) {
         NSRegularExpression *hex = [NSRegularExpression regularExpressionWithPattern:@"\\A[0-9a-fA-F]{64}\\z"
@@ -518,6 +534,7 @@ static const NSString* HTTPS_PORT = @"47984";
     BOOL valid = version.integerValue == 1 && enabled != nil && available != nil &&
         port != nil && port.integerValue > 0 && port.integerValue <= 65535 && validToken;
     if (!valid) {
+        result[@"statusCode"] = @502;
         result[@"statusMessage"] = reason.length > 0 ? reason : @"Invalid USB forwarding capability";
         return result;
     }
@@ -537,7 +554,8 @@ static const NSString* HTTPS_PORT = @"47984";
     NSString *urlString = [NSString stringWithFormat:@"%@/api/v1/file-mapping/capability?client_uuid=%@",
                            _baseHTTPSURL,
                            [_clientUniqueId stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet] ?: @""];
-    NSURLRequest *requestURL = [self createRequestFromString:urlString timeout:SHORT_TIMEOUT_SEC];
+    NSMutableURLRequest *requestURL = [[self createRequestFromString:urlString timeout:FILE_MAPPING_TIMEOUT_SEC] mutableCopy];
+    [requestURL setValue:_clientUniqueId forHTTPHeaderField:@"X-File-Mapping-Client-UUID"];
     HttpResponse *response = [[HttpResponse alloc] init];
     HttpRequest *request = [HttpRequest requestForResponse:response withUrlRequest:requestURL];
     [self executeRequestSynchronously:request];
@@ -571,8 +589,12 @@ static const NSString* HTTPS_PORT = @"47984";
     NSString *clientUUID = [json[@"client_uuid"] isKindOfClass:NSString.class] ? json[@"client_uuid"] : @"";
     BOOL validToken = token.length >= 16 && token.length <= 256;
     BOOL validPort = port != nil && port.integerValue > 0 && port.integerValue <= 65535;
+    // Current Foundation releases normally return an empty session_url and
+    // require the client to build wss://host:port/session_endpoint. Accept
+    // both forms; rejecting the empty form made the otherwise valid protocol
+    // look unavailable.
     BOOL valid = ok.boolValue && enabled.boolValue && listening.boolValue && validPort &&
-        endpoint.length > 0 && sessionURL.length > 0 && validToken && clientUUID.length > 0;
+        endpoint.length > 0 && validToken && clientUUID.length > 0;
     result[@"ok"] = @(valid);
     result[@"enabled"] = enabled;
     result[@"listening"] = listening;
@@ -626,6 +648,10 @@ static const NSString* HTTPS_PORT = @"47984";
         [extraParams appendFormat:@"&maxBrightness=%.3f", config.sunshineMaxBrightness];
         [extraParams appendFormat:@"&minBrightness=%.6f", config.sunshineMinBrightness];
         [extraParams appendFormat:@"&maxAverageBrightness=%.3f", config.sunshineMaxAverageBrightness];
+    }
+
+    if (config.clientGamepad.length > 0) {
+        [self appendEncodedQueryParameter:extraParams key:@"gamepad" value:config.clientGamepad];
     }
 }
 

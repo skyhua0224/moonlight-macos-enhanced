@@ -1,84 +1,84 @@
 import SwiftUI
 
+/// Host Files exposes the host's shared folders through the native Finder
+/// surface. It is read-only and intentionally has no local-folder comparison
+/// UI because the protocol does not synchronize or compare local files.
 struct RemoteFileMappingView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject private var languageManager = LanguageManager.shared
   @StateObject private var model = RemoteFileMappingViewModel()
+  @Environment(\.openURL) private var openURL
 
   var body: some View {
-    FormSection(title: "File Mapping") {
-      HStack {
-        Image(systemName: "folder.badge.person.crop")
-          .foregroundColor(.accentColor)
-        Text(model.status)
-          .foregroundColor(.secondary)
-        Spacer()
-        Button("Refresh") {
-          model.refresh(host: settingsModel.selectedHost)
-        }
-        .buttonStyle(.bordered)
-      }
+    SettingsContent {
+      SettingsPageHero(
+        title: "Host Files",
+        subtitle: "Host Files settings subtitle",
+        symbol: "folder.badge.gearshape",
+        tint: .teal)
 
-      if !model.mappings.isEmpty {
-        Picker("Shared folder", selection: Binding(
-          get: { model.selectedMappingID ?? model.mappings[0].id },
-          set: { id in
-            if let mapping = model.mappings.first(where: { $0.id == id }) {
-              model.select(mapping: mapping)
-            }
-          })) {
-          ForEach(model.mappings) { mapping in
-            Text(mapping.name).tag(mapping.id)
-          }
-        }
-
-        HStack {
-          Button(action: model.goUp) {
-            Label("Up", systemImage: "arrow.up")
-          }
-          .buttonStyle(.bordered)
-          .disabled(model.currentPath.isEmpty)
-          Text(model.currentPath.isEmpty ? "/" : model.currentPath)
-            .font(.footnote)
-            .foregroundColor(.secondary)
-          Spacer()
-        }
-
-        ForEach(model.entries) { entry in
-          Button {
-            model.open(entry: entry)
-          } label: {
-            HStack {
-              Image(systemName: entry.isDirectory ? "folder" : "doc")
-              Text(entry.name)
-              Spacer()
-              if !entry.isDirectory {
-                Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
-                  .font(.caption)
-                  .foregroundColor(.secondary)
+      FormSection(title: "Host Files") {
+        SettingsRow(title: "Host") {
+          Picker("", selection: selectedHostBinding) {
+            ForEach(SettingsModel.hosts ?? [], id: \.self) { host in
+              if let host {
+                Text(host.id == SettingsModel.globalHostId
+                  ? languageManager.localize("Default Profile") : host.name)
+                  .tag(Optional(host))
               }
             }
           }
-          .buttonStyle(.plain)
+          .labelsHidden()
+          .pickerStyle(.menu)
+          .frame(width: 220, alignment: .trailing)
         }
 
-        if !model.preview.isEmpty {
-          Divider()
-          ScrollView {
-            Text(model.preview)
-              .font(.system(.body, design: .monospaced))
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .textSelection(.enabled)
+        SettingsRow(title: "Host Files Status", detail: "Host Files Status detail") {
+          HStack(spacing: 8) {
+            Circle()
+              .fill(model.finderURL == nil ? Color.orange : Color.green)
+              .frame(width: 8, height: 8)
+            Text(languageManager.localize(model.status))
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
           }
-          .frame(minHeight: 100, maxHeight: 220)
         }
-      } else {
-        Text("Foundation must expose a read-only mapping before files can be browsed.")
-          .font(.footnote)
-          .foregroundColor(.secondary)
+
+        SettingsRow(title: "Open Host Files") {
+          Button(languageManager.localize("Open in Finder")) {
+            if let url = model.finderURL {
+              openURL(url)
+            }
+          }
+          .disabled(model.finderURL == nil)
+        }
+
+        SettingsRow(title: "Refresh") {
+          Button(languageManager.localize("Refresh")) {
+            model.refresh(host: settingsModel.selectedHost)
+          }
+        }
+      }
+
+      SettingDescriptionRow(textKey: "Host Files purpose detail")
+
+      FormSection(title: "Access") {
+        SettingsRow(title: "Access Mode") {
+          Text(languageManager.localize("Read Only"))
+            .foregroundStyle(.secondary)
+        }
+        SettingDescriptionRow(textKey: "Host Files read-only detail")
       }
     }
-    .onAppear {
+    .onAppear { model.refresh(host: settingsModel.selectedHost) }
+    .onChange(of: settingsModel.selectedHost?.id) { _ in
       model.refresh(host: settingsModel.selectedHost)
     }
+  }
+
+  private var selectedHostBinding: Binding<Host?> {
+    Binding(
+      get: { settingsModel.selectedHost },
+      set: { settingsModel.selectedHost = $0 })
   }
 }

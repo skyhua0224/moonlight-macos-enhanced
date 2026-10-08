@@ -10,6 +10,8 @@
 
 @interface DiscoveryWorker : NSOperation
 
+@property(nonatomic, copy) void (^onlineHandler)(TemporaryHost *host);
+
 - (id) initWithHost:(TemporaryHost*)host uniqueId:(NSString*)uniqueId;
 - (void) discoverHost;
 - (TemporaryHost*) getHost;

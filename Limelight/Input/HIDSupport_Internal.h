@@ -43,6 +43,7 @@
 @property (nonatomic) PS5StatePacket_t lastPS5State;
 @property (nonatomic) NSInteger controllerDriver;
 @property (nonatomic) BOOL isPS5Bluetooth;
+@property (nonatomic) uint8_t ds5OutputSequence;
 
 @property (nonatomic) SwitchSimpleStatePacket_t lastSimpleSwitchState;
 @property (nonatomic) SwitchStatePacket_t lastSwitchState;

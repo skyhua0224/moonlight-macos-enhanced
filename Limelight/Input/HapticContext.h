@@ -13,6 +13,8 @@
 
 -(void)setMotorAmplitude:(unsigned short)amplitude;
 -(void)cleanup;
+- (BOOL)setIntensity:(float)intensity sharpness:(float)sharpness;
+@property(nonatomic, readonly) BOOL available;
 
 +(HapticContext*) createContextForHighFreqMotor:(GCController*)gamepad;
 +(HapticContext*) createContextForLowFreqMotor:(GCController*)gamepad;

@@ -1961,6 +1961,24 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     __weak typeof(self) weakSelf = self;
+    self.controllerUserInteractionEnabled = NO;
+    if (self.localModifierMonitor == nil) {
+        self.localModifierMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskFlagsChanged handler:^NSEvent *(NSEvent *event) {
+            StreamViewController *controller = weakSelf;
+            NSWindow *window = controller.view.window;
+            if (controller == nil || window == nil || !window.isKeyWindow ||
+                (event.window != nil && event.window != window)) return event;
+            // SwiftUI overlays can own first responder; modifier-only events
+            // must still reach the stream's keyboard adapter exactly once.
+            [controller flagsChanged:event];
+            if (event.keyCode == kVK_Command || event.keyCode == kVK_RightCommand) {
+                Log(LOG_I, @"[keyboard] Command modifier routed: key=%hu pressed=%d input=%d",
+                    event.keyCode, (event.modifierFlags & NSEventModifierFlagCommand) != 0,
+                    controller.hidSupport.shouldSendInputEvents);
+            }
+            return nil;
+        }];
+    }
     self.localKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent * _Nullable(NSEvent * _Nonnull event) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
@@ -1976,6 +1994,8 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         if (event.window && event.window != window) {
             return event;
         }
+
+        [strongSelf resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"keyboard-chord" event:event];
 
         if ([strongSelf handleKeyboardTranslationRuleForEvent:event]) {
             return nil;
@@ -2182,32 +2202,19 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     if ([self shouldDeferCommandModifierForShortcutHandlingWithEvent:event]) {
         self.deferredCommandModifierPendingForShortcutTranslation = YES;
         self.deferredCommandModifierForwardedAsHeld = NO;
-        NSUInteger dispatchToken = ++self.deferredCommandModifierDispatchToken;
+        ++self.deferredCommandModifierDispatchToken;
         Log(LOG_D, @"[diag] deferring command modifier for shortcut translation: %@",
             MLDisconnectEventSummary(event));
-        __weak typeof(self) weakSelf = self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf ||
-                !strongSelf.deferredCommandModifierPendingForShortcutTranslation ||
-                strongSelf.deferredCommandModifierForwardedAsHeld ||
-                strongSelf.deferredCommandModifierDispatchToken != dispatchToken) {
-                return;
-            }
-
-            NSEventModifierFlags currentModifiers = MLRelevantShortcutModifiers([NSEvent modifierFlags]);
-            if (currentModifiers != NSEventModifierFlagCommand) {
-                return;
-            }
-
-            strongSelf.deferredCommandModifierForwardedAsHeld = YES;
-            Log(LOG_I, @"[diag] deferred command forwarded as held mapped modifier: %@",
-                MLDisconnectEventSummary(event));
-            [strongSelf.hidSupport beginDeferredShortcutTranslationCommandHoldForKeyCode:event.keyCode];
-        });
+        // Decide on the following key event or release. A timer must not turn
+        // a standalone Command press into Control merely because it was held.
         return;
     }
 
+    if (self.deferredCommandModifierPendingForShortcutTranslation &&
+        (relevantModifiers & NSEventModifierFlagCommand) != 0 &&
+        relevantModifiers != NSEventModifierFlagCommand) {
+        [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"modifier-chord" event:event];
+    }
     if (self.deferredCommandModifierPendingForShortcutTranslation) {
         if ((relevantModifiers & NSEventModifierFlagCommand) == 0) {
             self.deferredCommandModifierDispatchToken += 1;
@@ -2222,7 +2229,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
                 Log(LOG_I, @"[diag] deferred command resolved as standalone mapped tap: %@",
                     MLDisconnectEventSummary(event));
                 [self.hidSupport sendSyntheticRemoteModifierTapForKeyCode:event.keyCode
-                            preferShortcutTranslationCommandMapping:YES];
+                            preferShortcutTranslationCommandMapping:NO];
             }
             return;
         }
@@ -2545,39 +2552,9 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return NO;
     }
 
-    NSArray<KeyboardTranslationRule *> *rules = [SettingsClass keyboardTranslationRulesFor:self.app.host.uuid];
-    for (KeyboardTranslationRule *rule in rules) {
-        StreamShortcut *trigger = rule.trigger;
-        if (trigger != nil &&
-            !trigger.modifierOnly &&
-            trigger.hasKeyCode &&
-            (trigger.modifierFlags & NSEventModifierFlagCommand) != 0) {
-            return YES;
-        }
-    }
-
-    NSArray<NSString *> *actions = @[
-        MLShortcutActionShowDisconnectOptions,
-        MLShortcutActionDisconnectStream,
-        MLShortcutActionCloseAndQuitApp,
-        MLShortcutActionReconnectStream,
-        MLShortcutActionOpenControlCenter,
-        MLShortcutActionTogglePerformanceOverlay,
-        MLShortcutActionToggleMouseMode,
-        MLShortcutActionToggleFullscreenControlBall,
-        MLShortcutActionToggleBorderlessWindowed
-    ];
-    for (NSString *action in actions) {
-        StreamShortcut *shortcut = [self streamShortcutForAction:action];
-        if (shortcut != nil &&
-            !shortcut.modifierOnly &&
-            shortcut.hasKeyCode &&
-            (shortcut.modifierFlags & NSEventModifierFlagCommand) != 0) {
-            return YES;
-        }
-    }
-
-    return NO;
+    // A bare Command key opens Start on release even in free-mouse mode,
+    // where pointer capture can be disabled while the stream window is key.
+    return YES;
 }
 
 - (void)resolveDeferredCommandModifierWithoutRemoteTapWithReason:(NSString *)reason event:(NSEvent *)event {

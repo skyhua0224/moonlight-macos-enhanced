@@ -288,6 +288,20 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
 }
 
+- (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame {
+    [self forwardIfCurrentNamed:@"ds5HapticsIrV2" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(ds5HapticsIrV2:)]) [owner ds5HapticsIrV2:frame];
+    }];
+}
+
+- (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame {
+    [self forwardIfCurrentNamed:@"ds5HapticsPcm" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(ds5HapticsPcm:)]) {
+            [owner ds5HapticsPcm:frame];
+        }
+    }];
+}
+
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {
@@ -326,7 +340,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
 @implementation StreamViewController
 
 - (BOOL)useSystemControllerDriver {
-    return [SettingsClass controllerDriverFor:self.app.host.uuid] == 1;
+    // DualSense touch and output reports are exposed by Apple's Game
+    // Controller framework. Select that path automatically for a real DS5,
+    // even when the legacy per-host driver preference is still HID.
+    return [SettingsClass controllerDriverFor:self.app.host.uuid] == 1 ||
+           [ControllerSupport hasDualSenseController];
 }
 
 - (void)viewDidLoad {
@@ -640,7 +658,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     __strong typeof(self) strongSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         double start = CACurrentMediaTime();
-        if (strongSelf.useSystemControllerDriver && strongSelf.controllerSupport != nil) {
+        if (strongSelf.controllerSupport != nil) {
             double cleanupStart = CACurrentMediaTime();
             dispatch_sync(dispatch_get_main_queue(), ^{
                 [strongSelf tearDownControllerSupportOnMainThreadIfNeeded];
@@ -875,6 +893,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [NSEvent removeMonitor:self.localKeyDownMonitor];
         self.localKeyDownMonitor = nil;
     }
+    if (self.localModifierMonitor) {
+        [NSEvent removeMonitor:self.localModifierMonitor];
+        self.localModifierMonitor = nil;
+    }
     if (self.localMouseClickMonitor) {
         [NSEvent removeMonitor:self.localMouseClickMonitor];
         self.localMouseClickMonitor = nil;
@@ -1013,6 +1035,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     if (self.localKeyDownMonitor != nil) {
         [NSEvent removeMonitor:self.localKeyDownMonitor];
         self.localKeyDownMonitor = nil;
+    }
+    if (self.localModifierMonitor != nil) {
+        [NSEvent removeMonitor:self.localModifierMonitor];
+        self.localModifierMonitor = nil;
     }
     if (self.localMouseClickMonitor != nil) {
         [NSEvent removeMonitor:self.localMouseClickMonitor];
@@ -1396,6 +1422,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.controllerMotionMode = [SettingsClass controllerMotionModeFor:self.app.host.uuid];
     streamConfig.controllerFeedbackTarget = [SettingsClass controllerFeedbackTargetFor:self.app.host.uuid];
     streamConfig.controllerVirtualType = [SettingsClass controllerVirtualTypeFor:self.app.host.uuid];
+    // Foundation Sunshine accepts gamepad=ds5 on /launch and /resume. Send
+    // it only when a real DualSense is present; other controllers continue to
+    // use the standard arrival negotiation.
+    if (streamConfig.controllerVirtualType == 3 ||
+        (streamConfig.controllerVirtualType != 1 && [ControllerSupport hasDualSenseController])) {
+        streamConfig.clientGamepad = @"ds5";
+        Log(LOG_I, @"[controller] Declaring gamepad=ds5 for Foundation Sunshine");
+    }
     NSDictionary<NSString *, NSNumber *> *controllerCalibration =
         [SettingsClass controllerCalibrationFor:self.app.host.uuid];
     streamConfig.controllerLeftCenterX = controllerCalibration[@"leftCenterX"].doubleValue;
@@ -1507,8 +1541,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     VideoDecoderRenderer *renderer = self.streamMan.connection.renderer;
     if (renderer != nil) {
-        VideoStats stats = renderer.videoStats;
-        if (stats.renderedFrames > 0) {
+        if (renderer.hasPresentedVideo) {
             self.waitingForFirstRenderedFrame = NO;
             self.streamView.statusText = nil;
             Log(LOG_I, @"[diag] First rendered frame observed via startup poll; clearing loading indicator");
@@ -1888,6 +1921,26 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self.controllerSupport setAdaptiveTriggers:controllerNumber eventFlags:eventFlags typeLeft:typeLeft typeRight:typeRight left:left right:right];
 }
 
+- (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame {
+    if ([SettingsClass rumbleFor:self.app.host.uuid] && self.controllerSupport.shouldSendInputEvents) {
+        [self.controllerSupport ds5HapticsIrV2:frame];
+    }
+}
+
+- (void)controllerRumbleFallback:(unsigned short)number low:(unsigned short)low high:(unsigned short)high {
+    // Legacy HID backend is single-device. Never misroute another player's output.
+    if (number == 0 && self.hidSupport.shouldSendInputEvents) {
+        [self.hidSupport rumbleLowFreqMotor:low highFreqMotor:high];
+    }
+}
+
+- (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame {
+    if (!self.hidSupport.shouldSendInputEvents) {
+        return;
+    }
+    [self.controllerSupport ds5HapticsPcm:frame];
+}
+
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {
@@ -1965,6 +2018,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     return MLActiveClipboardController == self;
 }
 
+- (BOOL)usesClipboardAgentProtocolForConnection:(Connection *)connection {
+    // The negotiated protocol is authoritative. A UI host label can be absent
+    // when display/VDD discovery is unavailable, despite clipboard support.
+    uint32_t flags = [connection clipboardHostFeatureFlags];
+    return (flags & (LI_FF_CLIPBOARD_TEXT | LI_FF_CLIPBOARD_IMAGE)) != 0;
+}
+
 - (void)logClipboardActivationStateIfNeeded:(MLClipboardActivationDiagnosticState)state
                                     message:(NSString *)message {
     uint64_t nowMs = [self nowMs];
@@ -2038,7 +2098,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.clipboardPendingEchoSuppressionHash = 0;
     [self resetClipboardActivationDiagnosticState];
 
-    if (shouldRequestUnbind && connection != nil) {
+    if (shouldRequestUnbind && connection != nil && ![self usesClipboardAgentProtocolForConnection:connection]) {
         int err = [connection unbindClipboardSession];
         if (err != 0 && err != LI_ERR_UNSUPPORTED) {
             Log(LOG_W, @"[clipboard] Failed to unbind clipboard session: %d", err);
@@ -2103,6 +2163,21 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 
     [self resetClipboardActivationDiagnosticState];
+    if ([self usesClipboardAgentProtocolForConnection:connection]) {
+        NSString *readiness = [connection clipboardControlReadinessReason];
+        if (![readiness hasPrefix:@"ready-stage-"]) return;
+        // Foundation v1 has text/PNG/blob frames, not legacy bind/snapshot
+        // commands. Match its GUI agent's existing bidirectional transport.
+        self.clipboardSessionBound = YES;
+        self.clipboardAwaitingInitialSnapshot = NO;
+        self.clipboardInitialSnapshotDeadlineMs = 0;
+        self.clipboardHasPendingEchoSuppressionHash = NO;
+        self.clipboardPendingEchoSuppressionHash = 0;
+        self.clipboardLastChangeCount = [NSPasteboard generalPasteboard].changeCount;
+        [self startClipboardMonitorIfNeeded];
+        Log(LOG_I, @"[clipboard] Activated Foundation v1 text/PNG/blob transport from negotiated capabilities");
+        return;
+    }
     int bindErr = [connection bindClipboardSession];
     if (bindErr == LI_ERR_UNSUPPORTED) {
         Log(LOG_I, @"[clipboard] Host does not advertise clipboard sync");
@@ -2207,7 +2282,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         return;
     }
 
-    BOOL foundationRawClipboard = [SettingsClass clipboardSyncSupportedFor:self.app.host.uuid];
+    BOOL foundationRawClipboard = [self usesClipboardAgentProtocolForConnection:connection];
 
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
     NSInteger changeCount = pasteboard.changeCount;

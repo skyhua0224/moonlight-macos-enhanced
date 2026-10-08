@@ -206,16 +206,59 @@ static NSData* p12 = nil;
 #if TARGET_OS_TV
     return [[NSUserDefaults standardUserDefaults] dataForKey:item];
 #else
+#if TARGET_OS_OSX
+    NSURL *identityDirectory = [CryptoManager macIdentityDirectory];
+    NSData *stored = identityDirectory != nil
+        ? [NSData dataWithContentsOfURL:[identityDirectory URLByAppendingPathComponent:item]] : nil;
+    if (stored.length > 0) {
+        return stored;
+    }
+#endif
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *documentsDirectory = [paths objectAtIndex:0];
     NSString *file = [documentsDirectory stringByAppendingPathComponent:item];
-    return [NSData dataWithContentsOfFile:file];
+    NSData *legacy = [NSData dataWithContentsOfFile:file];
+#if TARGET_OS_OSX
+    // Preserve the existing pairing identity; never delete legacy material.
+    if (legacy.length > 0 && identityDirectory != nil) {
+        [CryptoManager writeCryptoObject:item data:legacy];
+    }
+#endif
+    return legacy;
 #endif
 }
+
+#if TARGET_OS_OSX
++ (NSURL *)macIdentityDirectory {
+    NSURL *support = [[NSFileManager defaultManager] URLForDirectory:NSApplicationSupportDirectory
+                                                          inDomain:NSUserDomainMask
+                                                 appropriateForURL:nil create:YES error:nil];
+    NSURL *directory = [[support URLByAppendingPathComponent:@"Moonlight" isDirectory:YES]
+                        URLByAppendingPathComponent:@"Identity" isDirectory:YES];
+    if (directory == nil || ![[NSFileManager defaultManager] createDirectoryAtURL:directory
+                                                withIntermediateDirectories:YES
+                                                                 attributes:@{NSFilePosixPermissions: @0700}
+                                                                      error:nil]) {
+        return nil;
+    }
+    return directory;
+}
+#endif
 
 + (void) writeCryptoObject:(NSString*)item data:(NSData*)data {
 #if TARGET_OS_TV
     [[NSUserDefaults standardUserDefaults] setObject:data forKey:item];
+#elif TARGET_OS_OSX
+    NSURL *directory = [CryptoManager macIdentityDirectory];
+    if (directory == nil || data.length == 0) return;
+    NSURL *file = [directory URLByAppendingPathComponent:item];
+    NSError *error = nil;
+    if (![data writeToURL:file options:NSDataWritingAtomic error:&error]) {
+        Log(LOG_E, @"Unable to save pairing identity %@: %@", item, error.localizedDescription);
+        return;
+    }
+    [[NSFileManager defaultManager] setAttributes:@{NSFilePosixPermissions: @0600}
+                                   ofItemAtPath:file.path error:nil];
 #else
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *documentsDirectory = [paths objectAtIndex:0];

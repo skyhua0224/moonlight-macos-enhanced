@@ -22,7 +22,16 @@ std::string json_escape(const std::string &value) {
     case '\n': result += "\\n"; break;
     case '\r': result += "\\r"; break;
     case '\t': result += "\\t"; break;
-    default: result += static_cast<char>(c); break;
+    default:
+      if (c < 0x20) {
+        const char hex[] = "0123456789abcdef";
+        result += "\\u00";
+        result += hex[c >> 4];
+        result += hex[c & 0x0f];
+      } else {
+        result += static_cast<char>(c);
+      }
+      break;
     }
   }
   return result;
@@ -89,7 +98,7 @@ int list_devices() {
   }
   libusb_free_device_list(list, 1);
   libusb_exit(nullptr);
-  std::cout << "\n";
+  std::cout << "]\n";
   return 0;
 }
 

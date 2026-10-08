@@ -139,6 +139,14 @@ enum CapabilityAvailability: Int {
     }
   }
 
+  var systemImage: String {
+    switch self {
+    case .available: return "checkmark.circle.fill"
+    case .limited: return "minus.circle.fill"
+    case .unavailable: return "xmark.circle.fill"
+    }
+  }
+
   var tint: Color {
     switch self {
     case .available:
@@ -586,64 +594,38 @@ class SettingsModel: ObservableObject {
   }
   @Published var bitrateSliderValue: Float {
     didSet {
-      guard !isLoading else { return }
+      guard !isLoading, !isAdjustingBitrate else { return }
       let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
-      let index = max(0, min(Int(bitrateSliderValue), steps.count - 1))
-      let kbps = Int(steps[index] * 1000.0)
-
-      if !isAdjustingBitrate {
-        isAdjustingBitrate = true
-        customBitrate = kbps
-        isAdjustingBitrate = false
-      }
-
+      let index = max(0, min(Int(bitrateSliderValue.rounded()), steps.count - 1))
+      isAdjustingBitrate = true
+      customBitrate = Int(steps[index] * 1000)
+      isAdjustingBitrate = false
       saveSettings()
     }
   }
   @Published var customBitrate: Int? {
     didSet {
-      guard !isLoading else { return }
-      guard !isAdjustingBitrate else {
-        saveSettings()
-        return
-      }
-
-      // Keep slider roughly in sync with typed value
-      if let customBitrate {
-        let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
-        var bitrateIndex = 0
-        for i in 0..<steps.count {
-          if Float(customBitrate) <= steps[i] * 1000.0 {
-            bitrateIndex = i
-            break
-          }
-        }
+      guard !isLoading, !isAdjustingBitrate else { return }
+      if let kbps = customBitrate {
+        let clamped = Self.clampedBitrateKbps(kbps, unlocked: unlockMaxBitrate)
         isAdjustingBitrate = true
-        bitrateSliderValue = Float(bitrateIndex)
+        customBitrate = clamped
+        bitrateSliderValue = Float(Self.bitrateIndex(forKbps: clamped, unlocked: unlockMaxBitrate))
         isAdjustingBitrate = false
       }
-
       saveSettings()
     }
   }
-
   @Published var unlockMaxBitrate: Bool {
     didSet {
       guard !isLoading else { return }
-      // Clamp slider to new range
-      let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
-      let maxIndex = Float(max(0, steps.count - 1))
-      if bitrateSliderValue > maxIndex {
-        bitrateSliderValue = maxIndex
-      }
-
-      // Recompute bitrate value from slider under new scale
-      let index = max(0, min(Int(bitrateSliderValue), steps.count - 1))
-      let kbps = Int(steps[index] * 1000.0)
+      // Preserve the actual bitrate, not the slider index, when changing scale.
+      let clamped = Self.clampedBitrateKbps(effectiveBitrateKbps, unlocked: unlockMaxBitrate)
       isAdjustingBitrate = true
-      customBitrate = kbps
+      customBitrate = clamped
+      bitrateSliderValue = Float(Self.bitrateIndex(forKbps: clamped, unlocked: unlockMaxBitrate))
       isAdjustingBitrate = false
-
+      applyAutoBitrateIfNeeded()
       saveSettings()
     }
   }
@@ -1061,6 +1043,8 @@ class SettingsModel: ObservableObject {
       UserDefaults.standard.set(
         nativeTouchpad,
         forKey: Self.controllerNativeTouchpadKeyPrefix + hostId)
+      NotificationCenter.default.post(name: Notification.Name("ControllerTouchpadModeDidChange"), object: nil,
+        userInfo: ["hostId": hostId, "native": nativeTouchpad])
     }
   }
   @Published var controllerDeadzone: Double {
@@ -1246,12 +1230,10 @@ class SettingsModel: ObservableObject {
   }
 
   var sunshineVddSupportsSelection: Bool {
-    guard let version = sunshineVddCapabilityVersion else {
-      // Older Foundation/Sunshine endpoints do not advertise VDD metadata;
-      // preserve legacy launch compatibility in that case.
-      return true
-    }
-    return version > 0
+    // VDD is a host capability. Keep the control disabled until the current
+    // Foundation endpoint explicitly reports a usable driver; an unknown or
+    // missing response must not look like a selectable feature.
+    return sunshineVddState == .ready && (sunshineVddCapabilityVersion ?? 0) > 0
   }
 
   private static func sunshineDisplayLabel(from rawEntry: [String: Any]) -> String {
@@ -1280,6 +1262,22 @@ class SettingsModel: ObservableObject {
     return hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == hostId })
   }
 
+  /// Return an endpoint that can answer capability requests. A manually
+  /// selected connection method remains the streaming route, but capability
+  /// pages may use a reachable alternate endpoint so one broken route does
+  /// not make the whole host's topology appear unavailable.
+  private func sunshineCapabilityAddress(for host: TemporaryHost) -> String? {
+    let endpoints = ConnectionEndpointStore.allEndpoints(for: host)
+    let states = host.addressStates ?? [:]
+    let ordered = [host.activeAddress].compactMap { $0 } + endpoints
+
+    if let reachable = ordered.first(where: { states[$0]?.intValue == 1 }) {
+      return reachable
+    }
+
+    return ordered.first(where: { !$0.isEmpty })
+  }
+
   func refreshSunshineDisplays(force: Bool = false) {
     guard let host = currentTemporaryHost() else {
       if !availableSunshineDisplays.isEmpty || isLoadingSunshineDisplays {
@@ -1295,9 +1293,7 @@ class SettingsModel: ObservableObject {
       return
     }
 
-    let address =
-      host.activeAddress ?? host.localAddress ?? host.address ?? host.externalAddress
-      ?? host.ipv6Address
+    let address = sunshineCapabilityAddress(for: host)
     guard let address, !address.isEmpty, host.serverCert != nil else {
       availableSunshineDisplays = []
       isLoadingSunshineDisplays = false
@@ -1313,7 +1309,10 @@ class SettingsModel: ObservableObject {
     if !force && loadedSunshineDisplaysHostId == host.uuid && !availableSunshineDisplays.isEmpty {
       return
     }
-    if isLoadingSunshineDisplays && !force {
+    // The host display endpoint may enumerate the Windows topology and VDD
+    // driver synchronously. Do not start overlapping requests when the page,
+    // host selection, and refresh button arrive together.
+    if isLoadingSunshineDisplays {
       return
     }
 

@@ -1201,7 +1201,17 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 }
 
 - (NSInteger)controllerDriver {
-    return [SettingsClass controllerDriverFor:self.host.uuid];
+    NSInteger configured = [SettingsClass controllerDriverFor:self.host.uuid];
+    // Keep HIDSupport alive for the DS5 output report path, but suppress its
+    // duplicate input events when Apple's Game Controller path is available.
+    if (configured == 0) {
+        for (GCController *controller in GCController.controllers) {
+            if ([controller.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+                return 1;
+            }
+        }
+    }
+    return configured;
 }
 
 - (void)refreshMouseInputConfiguration {

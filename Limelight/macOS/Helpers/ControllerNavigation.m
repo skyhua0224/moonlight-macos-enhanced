@@ -88,7 +88,11 @@ typedef struct {
         }
         self.lastGamepadState = [self controllerStateFromGamepad:gamepad];
         
-        [NSApplication.sharedApplication.mainWindow.firstResponder controllerEvent:event];
+        NSWindow *window = NSApplication.sharedApplication.keyWindow;
+        if (window != NSApplication.sharedApplication.mainWindow || event.button == kMCE_Unknown) return;
+        NSResponder *responder = window.firstResponder;
+        while (responder != nil && ![responder isKindOfClass:NSCollectionView.class]) responder = responder.nextResponder;
+        if (responder != nil) [responder controllerEvent:event];
     };
 }
 

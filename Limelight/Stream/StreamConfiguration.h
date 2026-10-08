@@ -78,6 +78,8 @@
 @property(nonatomic) int serverCodecModeSupport;
 @property(nonatomic, copy) NSString *sessionUrl;
 @property(nonatomic, copy) NSString *hostUUID;
+/// Client-declared Foundation controller type. Empty uses the standard arrival path.
+@property(nonatomic, copy) NSString *clientGamepad;
 @property(nonatomic) BOOL gamepadMouseMode;
 @property(nonatomic) BOOL gamepadMouseModeLongPressMenu;
 @property(nonatomic) BOOL nativeTouchpad;

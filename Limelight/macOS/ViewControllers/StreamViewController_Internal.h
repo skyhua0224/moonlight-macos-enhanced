@@ -150,11 +150,13 @@ static inline NSString *MLDisconnectEventSummary(NSEvent *event) {
     if (event == nil) {
         return @"(null)";
     }
-    NSString *chars = event.charactersIgnoringModifiers ?: @"";
+    BOOL characterEvent = event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp;
+    NSString *chars = characterEvent ? (event.charactersIgnoringModifiers ?: @"") : @"";
+    unsigned short keyCode = characterEvent || event.type == NSEventTypeFlagsChanged ? event.keyCode : 0;
     NSEventModifierFlags mods = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
     return [NSString stringWithFormat:@"type=%ld keyCode=%hu mods=0x%llx chars=%@ win=%ld",
             (long)event.type,
-            event.keyCode,
+            keyCode,
             (unsigned long long)mods,
             chars,
             (long)event.window.windowNumber];
@@ -437,6 +439,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL menuTitlebarAccessoryInstalled;
 
 @property (nonatomic, strong) id localKeyDownMonitor;
+@property (nonatomic, strong) id localModifierMonitor;
 @property (nonatomic, strong) id localMouseClickMonitor;
 @property (nonatomic, strong) id globalMouseMovedMonitor;
 @property (nonatomic) BOOL deferredCommandModifierPendingForShortcutTranslation;

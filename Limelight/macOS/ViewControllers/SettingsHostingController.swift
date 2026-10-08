@@ -10,6 +10,34 @@ import Cocoa
 import AVFoundation
 import Combine
 import SwiftUI
+import GameController
+
+private final class SettingsControllerInputBoundary: GCEventViewController {
+  private let contentController: NSViewController
+
+  init(contentController: NSViewController) {
+    self.contentController = contentController
+    super.init(nibName: nil, bundle: nil)
+    controllerUserInteractionEnabled = false
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) { fatalError("Use init(contentController:)") }
+
+  override func loadView() {
+    view = NSView()
+    addChild(contentController)
+    let content = contentController.view
+    content.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(content)
+    NSLayoutConstraint.activate([
+      content.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      content.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      content.topAnchor.constraint(equalTo: view.topAnchor),
+      content.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+    ])
+  }
+}
 
 class SettingsHostingController<RootView: View>: NSWindowController {
   private var languageObserver: Any?
@@ -17,12 +45,14 @@ class SettingsHostingController<RootView: View>: NSWindowController {
   convenience init(rootView: RootView) {
     let hostingController = NSHostingController(rootView: rootView)
 
-    let window = NSWindow(contentViewController: hostingController)
+    let window = NSWindow(contentViewController: SettingsControllerInputBoundary(contentController: hostingController))
     window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
     window.collectionBehavior = [.fullScreenNone]
     window.tabbingMode = .disallowed
-    window.setContentSize(NSSize(width: 1_060, height: 720))
-    window.minSize = NSSize(width: 900, height: 620)
+    window.isOpaque = true
+    window.backgroundColor = .windowBackgroundColor
+    window.setContentSize(NSSize(width: 960, height: 680))
+    window.minSize = NSSize(width: 820, height: 560)
     window.center()
     window.title = LanguageManager.shared.localize("Settings")
     if #available(macOS 26.0, *) {

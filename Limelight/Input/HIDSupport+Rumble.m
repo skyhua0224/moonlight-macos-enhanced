@@ -141,47 +141,33 @@ SwitchCommonOutputPacket_t switchRumblePacket;
                 usleep(30000);
             }
         } else if (isPS5(device)) {
-            int dataSize, offset;
-
-            UInt8 data[78] = {};
-            if (self.isPS5Bluetooth) {
-                data[0] = k_EPS5ReportIdBluetoothEffects;
-                data[1] = 0x02; // Magic value
-
-                dataSize = 78;
-                offset = 2;
-            } else {
-                data[0] = k_EPS5ReportIdBluetoothEffects;
-
-                dataSize = 48;
-                offset = 1;
-            }
-            DS5EffectsState_t *effects = (DS5EffectsState_t *)&data[offset];
-
-            UInt8 convertedLowFreqMotor = lowFreqMotor / 256;
-            UInt8 convertedHighFreqMotor = highFreqMotor / 256;
-            if ((convertedLowFreqMotor != self.previousLowFreqMotor || convertedHighFreqMotor != self.previousHighFreqMotor) || (convertedLowFreqMotor == 0 && convertedHighFreqMotor == 0)) {
-
-                self.previousLowFreqMotor = convertedLowFreqMotor;
-                self.previousHighFreqMotor = convertedHighFreqMotor;
-
-                effects->ucEnableBits1 |= 0x01; /* Enable rumble emulation */
-                effects->ucEnableBits1 |= 0x02; /* Disable audio haptics */
-
-                effects->ucRumbleLeft = convertedLowFreqMotor;
-                effects->ucRumbleRight = convertedHighFreqMotor;
-
-                if (self.isPS5Bluetooth) {
-                    // Bluetooth reports need a CRC at the end of the packet (at least on Linux).
-                    UInt8 ubHdr = 0xA2; // hidp header is part of the CRC calculation.
-                    UInt32 unCRC;
-                    unCRC = SDL_crc32(0, &ubHdr, 1);
-                    unCRC = SDL_crc32(unCRC, data, (size_t)(dataSize - sizeof(unCRC)));
-                    memcpy(&data[dataSize - sizeof(unCRC)], &unCRC, sizeof(unCRC));
+            CFTypeRef transport = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDTransportKey));
+            BOOL bluetooth = transport && CFGetTypeID(transport) == CFStringGetTypeID()
+                ? CFStringFind((CFStringRef)transport, CFSTR("Bluetooth"), kCFCompareCaseInsensitive).location != kCFNotFound
+                : self.isPS5Bluetooth;
+            UInt8 data[78] = {0};
+            const int length = bluetooth ? 78 : 48;
+            // Sony DS5 HID: report ID, BT sequence, tag, then effects.
+            data[0] = bluetooth ? 0x31 : 0x02;
+            if (bluetooth) { data[1] = (self.ds5OutputSequence++ & 0x0f) << 4; data[2] = 0x10; }
+            DS5EffectsState_t *effects = (DS5EffectsState_t *)(data + (bluetooth ? 3 : 1));
+            UInt8 low = lowFreqMotor / 256, high = highFreqMotor / 256;
+            if (low != self.previousLowFreqMotor || high != self.previousHighFreqMotor || (!low && !high)) {
+                effects->ucEnableBits1 = 0x03;
+                effects->ucRumbleLeft = low;
+                effects->ucRumbleRight = high;
+                if (bluetooth) {
+                    UInt8 header = 0xA2;
+                    UInt32 crc = SDL_crc32(0, &header, 1);
+                    crc = SDL_crc32(crc, data, length - 4);
+                    for (int i = 0; i < 4; ++i) data[length - 4 + i] = (UInt8)(crc >> (8 * i));
                 }
-
-                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, dataSize);
-                usleep(30000);
+                IOReturn result = IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, data[0], data, length);
+                if (result == kIOReturnSuccess) {
+                    self.previousLowFreqMotor = low;
+                    self.previousHighFreqMotor = high;
+                } else Log(LOG_W, @"[controller-haptics] DS5 HID output failed transport=%@ result=0x%x", bluetooth ? @"Bluetooth" : @"USB", result);
+                usleep(5000);
             }
         } else if (isNintendo(device)) {
             if (self.isRumbleTimer) {

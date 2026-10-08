@@ -1,15 +1,3 @@
-//
-//  SettingsView.swift
-//  Moonlight for macOS
-//
-//  Created by Michael Kenny on 15/1/2024.
-//  Copyright © 2024 Moonlight Game Streaming Project. All rights reserved.
-//
-
-import AVFoundation
-import AppKit
-import Carbon.HIToolbox
-import CoreGraphics
 import GameController
 import SwiftUI
 
@@ -23,945 +11,530 @@ enum InputScope {
 struct InputView: View {
   let scope: InputScope
   @EnvironmentObject private var settingsModel: SettingsModel
-  @ObservedObject var languageManager = LanguageManager.shared
-  @ObservedObject private var inputMonitoringManager = InputMonitoringPermissionManager.sharedManager
   @StateObject private var remoteUSB = RemoteUSBForwardingViewModel()
-  @AppStorage("settings.input.mouseAdvancedExpanded") private var mouseAdvancedExpanded = false
-  @AppStorage("settings.input.mouseTuningExpanded") private var mouseTuningExpanded = false
-  @AppStorage("settings.input.controllerAdvancedExpanded") private var controllerAdvancedExpanded =
-    false
+  @AppStorage("settings.usb.mappingEnabled") private var usbMappingEnabled = true
 
   init(scope: InputScope = .all) {
     self.scope = scope
   }
 
-  private var selectedMouseStrategy: MouseInputDriverStrategy {
-    MouseInputDriverStrategy(selection: settingsModel.selectedMouseDriver)
-  }
-
-  private var coreHIDTuningEnabled: Bool {
-    selectedMouseStrategy == .coreHID || selectedMouseStrategy == .automatic
-  }
-
-  private var showsFreeMouseOptions: Bool {
-    settingsModel.mouseMode == "remote"
-  }
-
-  private var settingsHostKey: String {
-    settingsModel.selectedHost?.id ?? SettingsModel.globalHostId
-  }
-
-  private var clipboardSyncAvailableForSelectedHost: Bool {
-    SettingsClass.clipboardSyncSupported(for: settingsHostKey)
-  }
-
-  private var clipboardSyncDetailKey: String {
-    clipboardSyncAvailableForSelectedHost
-      ? "Clipboard Sync detail"
-      : "Clipboard Sync Foundation detail"
-  }
-
-  private var showsHighPrecisionWheelTuning: Bool {
-    settingsModel.selectedPhysicalWheelMode == PhysicalWheelScrollMode.automatic.displayKey
-      || settingsModel.selectedPhysicalWheelMode
-        == PhysicalWheelScrollMode.highPrecision.displayKey
-      || settingsModel.physicalWheelHighPrecisionScale
-        != SettingsModel.defaultPhysicalWheelHighPrecisionScale
-  }
-
-  private var showsSmoothWheelTailFilter: Bool {
-    settingsModel.selectedRewrittenScrollMode != RewrittenScrollMode.notched.displayKey
-      || settingsModel.smartWheelTailFilter > 0.0001
-  }
-
-  private var selectedKeyboardTranslationDetailKey: String {
-    switch KeyboardCompatibilityMode(selection: settingsModel.selectedKeyboardCompatibilityMode) {
-    case .standard:
-      return "Shortcut Translation Mode Keep Mac detail"
-    case .commandToControl:
-      return "Shortcut Translation Mode CommandToControl detail"
-    case .swapLeftControlAndWin:
-      return "Shortcut Translation Mode SwapLeftControlAndWin detail"
-    case .shortcutTranslation:
-      return "Shortcut Translation Mode ShortcutTranslation detail"
-    case .hybrid:
-      return "Shortcut Translation Mode Hybrid detail"
+  var body: some View {
+    Group {
+      if scope == .usb {
+        USBMappingView()
+      } else {
+        SettingsContent {
+          if scope == .all || scope == .controller {
+            SettingsPageHero(
+              title: "Controller",
+              subtitle: "Controller settings subtitle",
+              symbol: "gamecontroller.fill",
+              tint: .purple
+            )
+            ControllerSettingsSection()
+          }
+          if scope == .all || scope == .keyboardMouse {
+            SettingsPageHero(
+              title: "Keyboard & Mouse",
+              subtitle: "Keyboard and mouse settings subtitle",
+              symbol: "keyboard.fill",
+              tint: .blue
+            )
+            KeyboardMouseSettingsSection()
+            MouseTuningSettingsSection()
+            FormSection(title: "Shortcut Translation Rules") {
+              KeyboardTranslationRulesView(settingsModel: settingsModel)
+            }
+            FormSection(title: "Stream Shortcuts") {
+              ShortcutReferenceView(settingsModel: settingsModel)
+            }
+          }
+          if scope == .all {
+            USBSettingsSection(remoteUSB: remoteUSB, mappingEnabled: $usbMappingEnabled)
+          }
+        }
+      }
     }
+    .onAppear {
+      if scope != .usb && scope == .all && usbMappingEnabled {
+        remoteUSB.refresh(host: settingsModel.selectedHost)
+      }
+    }
+    .onChange(of: usbMappingEnabled) { enabled in
+      if enabled {
+        remoteUSB.refresh(host: settingsModel.selectedHost)
+      } else {
+        remoteUSB.stop()
+      }
+    }
+  }
+}
+
+private struct ControllerSettingsSection: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    FormSection(title: "Controller") {
+      SettingsRow(title: "Controller Driver") {
+        Picker("", selection: $settingsModel.selectedControllerDriver) {
+          ForEach(SettingsModel.controllerDrivers, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 170, alignment: .trailing)
+      }
+
+      SettingsRow(title: "Controller Count") {
+        Picker("", selection: $settingsModel.selectedMultiControllerMode) {
+          ForEach(SettingsModel.multiControllerModes, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 160, alignment: .trailing)
+      }
+
+      ToggleCell(title: "Rumble", boolBinding: $settingsModel.rumble)
+      ToggleCell(title: "Swap Buttons", boolBinding: $settingsModel.swapButtons)
+      SettingsRow(title: "DualSense Touchpad Mode", detail: "Native Touchpad detail") {
+        Picker("", selection: Binding<String>(
+          get: { settingsModel.nativeTouchpad ? "Host Touchpad" : "Mac-style Trackpad" },
+          set: { settingsModel.nativeTouchpad = ($0 == "Host Touchpad") }
+        )) {
+          Text(languageManager.localize("Host Touchpad")).tag("Host Touchpad")
+          Text(languageManager.localize("Mac-style Trackpad")).tag("Mac-style Trackpad")
+        }
+        .labelsHidden()
+        .frame(width: 190, alignment: .trailing)
+      }
+      ToggleCell(title: "Hold Options to Switch Touchpad Mode", hintKey: "DualSense Options hint",
+                 boolBinding: $settingsModel.gamepadMouseModeLongPressMenu)
+      SettingsRow(title: "Haptic Feedback") {
+        Picker("", selection: $settingsModel.selectedControllerHapticsMode) {
+          ForEach(SettingsModel.controllerHapticsModes, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 220, alignment: .trailing)
+      }
+      SettingsRow(title: "Motion Sensor") {
+        Picker("", selection: $settingsModel.selectedControllerMotionMode) {
+          ForEach(SettingsModel.controllerMotionModes, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 220, alignment: .trailing)
+      }
+      SettingsRow(title: "Feedback Target") {
+        Picker("", selection: $settingsModel.selectedControllerFeedbackTarget) {
+          ForEach(SettingsModel.controllerFeedbackTargets, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 220, alignment: .trailing)
+      }
+      ControllerDeadzoneRow(value: $settingsModel.controllerDeadzone)
+      ToggleCell(title: "Emulate Guide Button", boolBinding: $settingsModel.emulateGuide)
+      ToggleCell(title: "Gamepad Mouse Emulation", hintKey: "Gamepad Mouse Hint", boolBinding: $settingsModel.gamepadMouseMode)
+      SettingsChoiceRow(title: "Host Controller Type", selection: $settingsModel.selectedControllerVirtualType,
+                        options: SettingsModel.controllerVirtualTypes)
+      SettingsRow(title: "Connected Controllers") {
+        Text("\(GCController.controllers().count)")
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+}
+
+private struct ControllerDeadzoneRow: View {
+  @Binding var value: Double
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 7) {
+      HStack {
+        Text(languageManager.localize("Controller Deadzone"))
+        Spacer()
+        Text(String(format: "%.0f%%", value * 100))
+          .font(.callout.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+      Slider(value: $value, in: 0...0.30, step: 0.01)
+    }
+    .padding(.vertical, 8)
+  }
+}
+
+private struct KeyboardMouseSettingsSection: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject private var languageManager = LanguageManager.shared
+  @ObservedObject private var inputPermissions = InputMonitoringPermissionManager.sharedManager
+
+  var body: some View {
+    FormSection(title: "Keyboard & Mouse") {
+      SettingsRow(title: "Mouse Mode") {
+        Picker("", selection: $settingsModel.mouseMode) {
+          Text(languageManager.localize("Locked Mouse")).tag("game")
+          Text(languageManager.localize("Free Mouse")).tag("remote")
+        }
+        .labelsHidden()
+        .frame(width: 180, alignment: .trailing)
+      }
+
+      SettingsRow(title: "Mouse Driver") {
+        Picker("", selection: $settingsModel.selectedMouseDriver) {
+          ForEach(SettingsModel.mouseDrivers, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 180, alignment: .trailing)
+      }
+
+      SettingsRow(title: "Keyboard Translation") {
+        Picker("", selection: $settingsModel.selectedKeyboardCompatibilityMode) {
+          ForEach(SettingsModel.keyboardCompatibilityModes, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 240, alignment: .trailing)
+      }
+
+      ToggleCell(title: "Capture System Shortcuts", boolBinding: $settingsModel.captureSystemShortcuts)
+      ToggleCell(title: "Absolute Mouse Mode", boolBinding: $settingsModel.absoluteMouseMode)
+      ToggleCell(title: "Swap Mouse Buttons", boolBinding: $settingsModel.swapMouseButtons)
+      ToggleCell(title: "Reverse Scroll Direction", boolBinding: $settingsModel.reverseScrollDirection)
+      SettingsRow(title: "Pointer Speed") {
+        Slider(value: $settingsModel.pointerSensitivity, in: 0.25...3.0)
+          .frame(width: 190)
+      }
+      SettingsRow(title: "Scroll Mode") {
+        Picker("", selection: $settingsModel.selectedPhysicalWheelMode) {
+          ForEach(SettingsModel.physicalWheelModes, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .frame(width: 180, alignment: .trailing)
+      }
+      SettingsRow(title: "Input Monitoring") {
+        HStack(spacing: 8) {
+          Circle()
+            .fill(inputPermissions.isGranted ? Color.green : Color.orange)
+            .frame(width: 8, height: 8)
+          Text(languageManager.localize(inputPermissions.displayStatusLabelKey))
+            .foregroundStyle(.secondary)
+        }
+      }
+    }
+  }
+}
+
+private struct USBMappingView: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  @StateObject private var remoteUSB = RemoteUSBForwardingViewModel()
+  @AppStorage("settings.usb.mappingEnabled") private var mappingEnabled = true
+
+  private var hostAvailable: Bool {
+    guard let host = settingsModel.selectedHost else { return false }
+    return host.id != SettingsModel.globalHostId
   }
 
   var body: some View {
     ScrollView {
-      LazyVStack(spacing: 32) {
-        if scope == .all || scope == .keyboardMouse {
-          mouseSection
-          keyboardSection
-        }
-        if scope == .all || scope == .controller {
-          controllerSection
-        }
-        if scope == .all || scope == .usb {
-          remoteUSBSection
-          RemoteFileMappingView()
-        }
+      VStack(alignment: .leading, spacing: 22) {
+        USBMappingHeader(
+          mappingEnabled: $mappingEnabled,
+          status: hostAvailable ? remoteUSB.status : "Select a paired host",
+          available: hostAvailable
+        )
+
+        USBMappingStatusCard(
+          status: hostAvailable ? remoteUSB.status : "Select a paired host",
+          available: remoteUSB.capabilityAvailable,
+          enabled: mappingEnabled && hostAvailable
+        )
+
+        USBDeviceGroup(
+          title: "My Devices",
+          emptyTitle: "No mapped devices",
+          devices: remoteUSB.devices.filter { remoteUSB.selectedBusID == $0.busID },
+          remoteUSB: remoteUSB,
+          enabled: mappingEnabled && hostAvailable
+        )
+
+        USBDeviceGroup(
+          title: "Nearby Devices",
+          emptyTitle: remoteUSB.status.contains("Checking") ? "Searching…" : "No claimable USB devices",
+          devices: remoteUSB.devices.filter { remoteUSB.selectedBusID != $0.busID },
+          remoteUSB: remoteUSB,
+          enabled: mappingEnabled && hostAvailable
+        )
+
       }
-      .padding()
-    }
-  }
-
-  private var mouseSection: some View {
-    FormSection(title: "Mouse") {
-      PickerSettingRow(
-        title: "Mouse Mode",
-        detailKey: "Mouse Mode detail",
-        content: {
-          Picker("", selection: $settingsModel.mouseMode) {
-            Label(languageManager.localize("Locked Mouse"), systemImage: "gamecontroller")
-              .tag("game")
-            Label(languageManager.localize("Free Mouse"), systemImage: "cursorarrow.motionlines")
-              .tag("remote")
-          }
-          .labelsHidden()
-        })
-
-      Divider()
-
-      PickerSettingRow(
-        title: "Mouse Driver",
-        content: {
-          Picker("", selection: $settingsModel.selectedMouseDriver) {
-            ForEach(SettingsModel.mouseDrivers, id: \.self) { mode in
-              if mode == MouseInputDriverStrategy.automatic.displayKey {
-                Text("\(languageManager.localize(mode)) · \(languageManager.localize("Recommended"))")
-              } else {
-                Text(languageManager.localize(mode))
-              }
-            }
-          }
-          .labelsHidden()
-        })
-
-      Divider()
-
-      if coreHIDTuningEnabled {
-        CoreHIDPermissionRow(permissionManager: inputMonitoringManager)
-
-        Divider()
-      }
-
-      if showsFreeMouseOptions {
-        PickerSettingRow(
-          title: "Free Mouse Movement",
-          content: {
-            Picker("", selection: $settingsModel.selectedFreeMouseMotionMode) {
-              ForEach(SettingsModel.freeMouseMotionModes, id: \.self) { mode in
-                Text(languageManager.localize(mode))
-              }
-            }
-            .labelsHidden()
-          })
-
-        Divider()
-      }
-
-      clipboardSyncRow
-
-      Divider()
-
-      DisclosureGroup(
-        isExpanded: $mouseTuningExpanded,
-        content: {
-          VStack(alignment: .leading, spacing: 16) {
-            MouseTuningSliderRow(
-              title: "Pointer Speed",
-              value: $settingsModel.pointerSensitivity,
-              range: 0.25...3.0,
-              step: 0.05,
-              minLabel: "25%",
-              maxLabel: "300%"
-            )
-
-            Divider()
-
-            InlineSectionLabel(title: "Wheel")
-
-            PickerSettingRow(
-              title: "Physical Wheel Mode",
-              content: {
-                Picker("", selection: $settingsModel.selectedPhysicalWheelMode) {
-                  ForEach(SettingsModel.physicalWheelModes, id: \.self) { mode in
-                    Text(languageManager.localize(mode))
-                  }
-                }
-                .labelsHidden()
-              })
-
-            Divider()
-
-            MouseTuningSliderRow(
-              title: "Physical Wheel Speed",
-              value: $settingsModel.wheelScrollSpeed,
-              range: 0.1...4.0,
-              step: 0.05,
-              minLabel: "10%",
-              maxLabel: "400%"
-            )
-
-            if showsHighPrecisionWheelTuning {
-              Divider()
-
-              MouseTuningSliderRow(
-                title: "High Precision Wheel Speed",
-                value: $settingsModel.physicalWheelHighPrecisionScale,
-                range: 1.0...12.0,
-                step: 0.25,
-                minLabel: "1×",
-                maxLabel: "12×",
-                valueFormatter: { value in
-                  String(format: "%.2fx", value)
-                }
-              )
-            }
-
-            Divider()
-
-            PickerSettingRow(
-              title: "Smooth Wheel Mode",
-              content: {
-                Picker("", selection: $settingsModel.selectedRewrittenScrollMode) {
-                  ForEach(SettingsModel.rewrittenScrollModes, id: \.self) { mode in
-                    Text(languageManager.localize(mode))
-                  }
-                }
-                .labelsHidden()
-              })
-
-            Divider()
-
-            MouseTuningSliderRow(
-              title: "Smooth Wheel Speed",
-              value: $settingsModel.rewrittenScrollSpeed,
-              range: 0.1...4.0,
-              step: 0.05,
-              minLabel: "10%",
-              maxLabel: "400%"
-            )
-
-            if showsSmoothWheelTailFilter {
-              Divider()
-
-              MouseTuningSliderRow(
-                title: "Smooth Wheel Tail Filter",
-                value: $settingsModel.smartWheelTailFilter,
-                range: 0.0...1.0,
-                step: 0.02,
-                minLabel: "Off",
-                maxLabel: "1.00",
-                valueFormatter: { value in
-                  value <= 0.0001 ? languageManager.localize("Off") : String(format: "%.2f", value)
-                }
-              )
-            }
-
-            Divider()
-
-            MouseTuningSliderRow(
-              title: "Trackpad Speed",
-              value: $settingsModel.gestureScrollSpeed,
-              range: 0.1...4.0,
-              step: 0.05,
-              minLabel: "10%",
-              maxLabel: "400%"
-            )
-          }
-          .padding(.top, 8)
-        },
-        label: {
-          SettingsDisclosureLabel(title: "Pointer & Scroll Tuning")
-        }
-      )
-
-      Divider()
-
-      ToggleCell(
-        title: "Reverse Mouse Scrolling Direction",
-        boolBinding: $settingsModel.reverseScrollDirection
-      )
-
-      Divider()
-
-      ToggleCell(
-        title: "Show Local Cursor",
-        boolBinding: $settingsModel.showLocalCursor
-      )
-
-      Divider()
-
-      DisclosureGroup(
-        isExpanded: $mouseAdvancedExpanded,
-        content: {
-          AdvancedSettingsCard {
-            VStack(alignment: .leading, spacing: 16) {
-              PickerSettingRow(
-                title: "CoreHID Max Mouse Report Rate",
-                hintKey: "CoreHID Max Mouse Report Rate detail",
-                content: {
-                  Picker("", selection: $settingsModel.coreHIDMaxMouseReportRate) {
-                    ForEach(SettingsModel.coreHIDMaxMouseReportRates, id: \.self) { rate in
-                      Text(SettingsModel.coreHIDMaxMouseReportRateLabel(rate))
-                        .tag(rate)
-                    }
-                  }
-                  .labelsHidden()
-                  .disabled(!coreHIDTuningEnabled)
-                })
-
-              Divider()
-
-              ToggleCell(
-                title: "Swap Left and Right Mouse Buttons",
-                boolBinding: $settingsModel.swapMouseButtons
-              )
-
-              Divider()
-
-              PickerSettingRow(
-                title: "Touchscreen Mode",
-                stacked: true,
-                content: {
-                  Picker("", selection: $settingsModel.selectedTouchscreenMode) {
-                    ForEach(SettingsModel.touchscreenModes, id: \.self) { mode in
-                      Text(languageManager.localize(mode))
-                    }
-                  }
-                  .labelsHidden()
-                })
-            }
-          }
-        },
-        label: {
-          SettingsDisclosureLabel(title: "Advanced Mouse Settings")
-        }
-      )
+      .frame(maxWidth: 760, alignment: .leading)
+      .padding(.horizontal, 28)
+      .padding(.vertical, 24)
+      .frame(maxWidth: .infinity, alignment: .center)
     }
     .onAppear {
-      DispatchQueue.main.async {
-        inputMonitoringManager.refreshAuthorizationStatus()
+      if mappingEnabled && hostAvailable {
+        remoteUSB.refresh(host: settingsModel.selectedHost)
+      }
+    }
+    .onChange(of: mappingEnabled) { enabled in
+      if enabled && hostAvailable {
+        remoteUSB.refresh(host: settingsModel.selectedHost)
+      } else {
+        remoteUSB.stop()
       }
     }
   }
+}
 
-  private var keyboardSection: some View {
-    FormSection(title: "Keyboard") {
-      PickerSettingRow(
-        title: "Keyboard Compatibility",
-        detailKey: selectedKeyboardTranslationDetailKey,
-        content: {
-          Picker("", selection: $settingsModel.selectedKeyboardCompatibilityMode) {
-            ForEach(SettingsModel.keyboardCompatibilityModes, id: \.self) { mode in
-              Text(languageManager.localize(mode))
-            }
-          }
-          .labelsHidden()
-        })
+private struct USBMappingStatusCard: View {
+  let status: String
+  let available: Bool
+  let enabled: Bool
+  @ObservedObject private var languageManager = LanguageManager.shared
 
-      Divider()
-
-      ToggleCell(
-        title: "Capture system keyboard shortcuts",
-        boolBinding: $settingsModel.captureSystemShortcuts
-      )
-
-      Divider()
-
-      KeyboardTranslationRulesView(settingsModel: settingsModel)
-
-      Divider()
-
-      ShortcutReferenceView(settingsModel: settingsModel)
+  var body: some View {
+    HStack(spacing: 10) {
+      Circle()
+        .fill(!enabled ? Color.secondary : (available ? Color.green : Color.orange))
+        .frame(width: 9, height: 9)
+      Text(!enabled ? languageManager.localize("USB Mapping Disabled") : localizedStatus)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+      Spacer()
+      if enabled && status.contains("Checking") {
+        ProgressView().controlSize(.small)
+      }
     }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 11)
+    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
   }
 
-  private var controllerSection: some View {
-    FormSection(title: "Controller") {
-      PickerSettingRow(
-        title: "Multi-Controller Mode",
-        stacked: true,
-        content: {
-          Picker("", selection: $settingsModel.selectedMultiControllerMode) {
-            ForEach(SettingsModel.multiControllerModes, id: \.self) { mode in
-              Text(languageManager.localize(mode))
-            }
-          }
-          .labelsHidden()
-        })
-
-      Divider()
-
-      ToggleCell(title: "Rumble Controller", boolBinding: $settingsModel.rumble)
-
-      Divider()
-
-      DisclosureGroup(
-        isExpanded: $controllerAdvancedExpanded,
-        content: {
-          AdvancedSettingsCard {
-            VStack(alignment: .leading, spacing: 14) {
-              PickerSettingRow(
-                title: "Controller Driver",
-                stacked: true,
-                content: {
-                  Picker("", selection: $settingsModel.selectedControllerDriver) {
-                    ForEach(SettingsModel.controllerDrivers, id: \.self) { mode in
-                      Text(languageManager.localize(mode))
-                    }
-                  }
-                  .labelsHidden()
-                })
-
-              Divider()
-
-              ToggleCell(
-                title: "Swap A/B and X/Y Buttons",
-                boolBinding: $settingsModel.swapButtons
-              )
-
-              Divider()
-
-              ToggleCell(
-                title: "Emulate Guide Button",
-                boolBinding: $settingsModel.emulateGuide
-              )
-
-              Divider()
-
-              ToggleCell(
-                title: "Native Touchpad Input",
-                hintKey: "Native Touchpad Input hint",
-                boolBinding: $settingsModel.nativeTouchpad
-              )
-
-              Divider()
-
-              PickerSettingRow(
-                title: "DualSense Haptics",
-                detailKey: "DualSense Haptics detail",
-                stacked: true,
-                content: {
-                  Picker("", selection: $settingsModel.selectedControllerHapticsMode) {
-                    ForEach(SettingsModel.controllerHapticsModes, id: \.self) { mode in
-                      Text(languageManager.localize(mode))
-                    }
-                  }
-                  .labelsHidden()
-                })
-
-              Divider()
-
-              PickerSettingRow(
-                title: "Feedback Controller",
-                detailKey: "Feedback Controller detail",
-                stacked: true,
-                content: {
-                  Picker("", selection: $settingsModel.selectedControllerFeedbackTarget) {
-                    ForEach(SettingsModel.controllerFeedbackTargets, id: \.self) { target in
-                      Text(languageManager.localize(target))
-                    }
-                  }
-                  .labelsHidden()
-                })
-
-              Divider()
-
-              PickerSettingRow(
-                title: "Host Controller Type",
-                detailKey: "Host Controller Type detail",
-                stacked: true,
-                content: {
-                  Picker("", selection: $settingsModel.selectedControllerVirtualType) {
-                    ForEach(SettingsModel.controllerVirtualTypes, id: \.self) { type in
-                      Text(languageManager.localize(type))
-                    }
-                  }
-                  .labelsHidden()
-                })
-
-              Divider()
-
-              PickerSettingRow(
-                title: "Motion Sensors",
-                detailKey: "Motion Sensors detail",
-                stacked: true,
-                content: {
-                  Picker("", selection: $settingsModel.selectedControllerMotionMode) {
-                    ForEach(SettingsModel.controllerMotionModes, id: \.self) { mode in
-                      Text(languageManager.localize(mode))
-                    }
-                  }
-                  .labelsHidden()
-                })
-
-              Divider()
-
-              VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                  Text(languageManager.localize("Joystick Deadzone"))
-                  Spacer()
-                  Text(String(format: "%.0f%%", settingsModel.controllerDeadzone * 100.0))
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
-                }
-                Slider(value: $settingsModel.controllerDeadzone, in: 0.0...0.30, step: 0.01)
-                Text(languageManager.localize("Joystick Deadzone hint"))
-                  .font(.footnote)
-                  .foregroundColor(.secondary)
-              }
-
-              Divider()
-
-              VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                  Text(languageManager.localize("Stick Calibration"))
-                    .font(.callout.weight(.medium))
-                  Spacer()
-                  Button(languageManager.localize("Reset")) {
-                    settingsModel.resetControllerCalibration()
-                  }
-                  .buttonStyle(.bordered)
-                }
-                Text(languageManager.localize("Stick Calibration detail"))
-                  .font(.footnote)
-                  .foregroundColor(.secondary)
-                HStack(spacing: 12) {
-                  calibrationField(
-                    title: "Left X", value: $settingsModel.controllerCalibration.leftCenterX)
-                  calibrationField(
-                    title: "Left Y", value: $settingsModel.controllerCalibration.leftCenterY)
-                }
-                HStack(spacing: 12) {
-                  calibrationField(
-                    title: "Right X", value: $settingsModel.controllerCalibration.rightCenterX)
-                  calibrationField(
-                    title: "Right Y", value: $settingsModel.controllerCalibration.rightCenterY)
-                  calibrationField(
-                    title: "Left Gain", value: $settingsModel.controllerCalibration.leftGain)
-                  calibrationField(
-                    title: "Right Gain", value: $settingsModel.controllerCalibration.rightGain)
-                }
-              }
-
-              Divider()
-
-              ToggleCell(
-                title: "Gamepad Mouse Emulation",
-                hintKey: "Gamepad Mouse Hint",
-                boolBinding: $settingsModel.gamepadMouseMode
-              )
-
-              Divider()
-
-              ToggleCell(
-                title: "Long-press Menu to Toggle Mouse Mode",
-                hintKey: "Long-press Menu Mouse Hint",
-                boolBinding: $settingsModel.gamepadMouseModeLongPressMenu
-              )
-
-              Divider()
-
-              controllerDiagnosticsCard
-            }
-          }
-        },
-        label: {
-          SettingsDisclosureLabel(title: "Advanced Controller Settings")
-        }
-      )
-    }
+  private var localizedStatus: String {
+    if status.hasPrefix("Forwarding") { return languageManager.localize("Forwarding") }
+    return languageManager.localize(status)
   }
+}
 
-  private var remoteUSBSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .center, spacing: 12) {
-        Image(systemName: "cable.connector.horizontal")
-          .font(.system(size: 18, weight: .semibold))
-          .foregroundStyle(.teal)
-          .frame(width: 38, height: 38)
-          .background(.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+private struct USBDeviceGroup: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  let title: String
+  let emptyTitle: String
+  let devices: [MLRemoteUSBDevice]
+  @ObservedObject var remoteUSB: RemoteUSBForwardingViewModel
+  let enabled: Bool
+  @ObservedObject private var languageManager = LanguageManager.shared
 
-        VStack(alignment: .leading, spacing: 3) {
-          Text(languageManager.localize("Remote USB/IP"))
-            .font(.title3.weight(.semibold))
-          Text(languageManager.localize("Foundation USB forwarding"))
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
-        }
-
-        Spacer(minLength: 12)
-
-        Button {
-          remoteUSB.refresh(host: settingsModel.selectedHost)
-        } label: {
-          Label(languageManager.localize("Refresh"), systemImage: "arrow.clockwise")
-        }
-        .buttonStyle(.bordered)
+  var body: some View {
+    VStack(alignment: .leading, spacing: 7) {
+      HStack {
+        Text(LocalizedStringKey(title))
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(.secondary)
+        Spacer()
+        Button(languageManager.localize("Refresh")) { remoteUSB.refresh(host: settingsModel.selectedHost) }
+          .buttonStyle(.borderless)
+          .controlSize(.small)
+          .disabled(!enabled)
       }
 
-      if remoteUSB.capabilityAvailable {
-        VStack(spacing: 0) {
-          ForEach(Array(remoteUSB.devices.enumerated()), id: \.offset) { index, device in
-            if index > 0 { Divider() }
+      VStack(spacing: 0) {
+        if devices.isEmpty {
+          HStack {
+            if enabled { ProgressView().controlSize(.small) }
+            Text(enabled
+              ? languageManager.localize(emptyTitle)
+              : languageManager.localize("USB Mapping Disabled"))
+              .foregroundStyle(.secondary)
+            Spacer()
+          }
+          .frame(minHeight: 48)
+        } else {
+          ForEach(devices, id: \.busID) { device in
             USBDeviceRow(device: device, remoteUSB: remoteUSB)
           }
         }
-        .background(
-          Color(nsColor: .controlBackgroundColor),
-          in: RoundedRectangle(cornerRadius: 12)
-        )
-      } else {
-        VStack(alignment: .leading, spacing: 6) {
-          Text(languageManager.localize(remoteUSB.status))
-            .font(.body.weight(.medium))
-          Text(languageManager.localize(
-            "Foundation must advertise USB forwarding before a device can be shared."))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-          Color(nsColor: .controlBackgroundColor),
-          in: RoundedRectangle(cornerRadius: 12)
-        )
       }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 3)
+      .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
-    .onAppear {
-      remoteUSB.refresh(host: settingsModel.selectedHost)
-    }
-  }
-
-  private struct USBDeviceRow: View {
-    let device: MLRemoteUSBDevice
-    @ObservedObject var remoteUSB: RemoteUSBForwardingViewModel
-    @ObservedObject private var languageManager = LanguageManager.shared
-
-    var body: some View {
-      HStack(spacing: 12) {
-        Image(systemName: device.isClaimable
-          ? "externaldrive.connected.to.line.below" : "externaldrive")
-          .font(.system(size: 17, weight: .medium))
-          .foregroundStyle(device.isClaimable ? .teal : .secondary)
-          .frame(width: 28, height: 28)
-
-        VStack(alignment: .leading, spacing: 3) {
-          Text(device.product.isEmpty ? device.busID : device.product)
-            .font(.body.weight(.medium))
-            .lineLimit(1)
-          Text("\(device.vidPID) · \(device.busID)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-          Text(languageManager.localize(device.isClaimable ? "Available" : "Unavailable"))
-            .font(.caption)
-            .foregroundStyle(device.isClaimable ? .green : .secondary)
-        }
-
-        Spacer(minLength: 12)
-
-        if remoteUSB.selectedBusID == device.busID {
-          Button(languageManager.localize("Stop")) { remoteUSB.stop() }
-            .buttonStyle(.bordered)
-        } else {
-          Button(languageManager.localize("Forward")) { remoteUSB.start(device: device) }
-            .buttonStyle(.borderedProminent)
-            .disabled(!device.isClaimable)
-        }
-      }
-      .padding(.horizontal, 14)
-      .padding(.vertical, 12)
-    }
-  }
-
-  private func calibrationField(title: String, value: Binding<Double>) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(languageManager.localize(title))
-        .font(.caption)
-        .foregroundColor(.secondary)
-      TextField("0.00", value: value, format: .number.precision(.fractionLength(2)))
-        .textFieldStyle(.roundedBorder)
-        .frame(width: 74)
-    }
-  }
-
-  private var controllerDiagnosticsCard: some View {
-    let controllers = GCController.controllers()
-    let dualSenseCount: Int
-    if #available(macOS 11.0, *) {
-      dualSenseCount = controllers.filter {
-        $0.extendedGamepad is GCDualSenseGamepad
-      }.count
-    } else {
-      dualSenseCount = 0
-    }
-
-    return VStack(alignment: .leading, spacing: 8) {
-      Label(languageManager.localize("Controller Diagnostics"), systemImage: "stethoscope")
-        .font(.callout.weight(.medium))
-      Text(String(
-        format: languageManager.localize("Controller Diagnostics summary"),
-        controllers.count,
-        dualSenseCount
-      ))
-      .font(.footnote)
-      .foregroundColor(.secondary)
-      Text(languageManager.localize("Controller Diagnostics detail"))
-        .font(.footnote)
-        .foregroundColor(.secondary)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(12)
-    .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(Color(NSColor.controlBackgroundColor))
-    )
-  }
-
-  private var clipboardSyncRow: some View {
-    PickerSettingRow(
-      title: "Clipboard Sync",
-      detailKey: clipboardSyncDetailKey,
-      content: {
-        Picker("", selection: $settingsModel.selectedClipboardSyncMode) {
-          ForEach(SettingsModel.clipboardSyncModes, id: \.self) { mode in
-            Text(languageManager.localize(mode))
-          }
-        }
-        .labelsHidden()
-      })
   }
 }
 
-private struct SettingsDisclosureLabel: View {
-  let title: String
-  @ObservedObject var languageManager = LanguageManager.shared
+private struct USBSettingsSection: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject var remoteUSB: RemoteUSBForwardingViewModel
+  @Binding var mappingEnabled: Bool
+  @ObservedObject private var languageManager = LanguageManager.shared
 
   var body: some View {
-    HStack(spacing: 8) {
-      Text(languageManager.localize(title))
-        .font(.subheadline.weight(.medium))
+    VStack(alignment: .leading, spacing: 20) {
+      USBMappingHeader(
+        mappingEnabled: $mappingEnabled,
+        status: remoteUSB.status,
+        available: settingsModel.selectedHost?.id != SettingsModel.globalHostId
+      )
+
+      FormSection(title: "USB Mapping") {
+        HStack(alignment: .center, spacing: 10) {
+          Image(systemName: "cable.connector.horizontal")
+            .foregroundStyle(.tint)
+          VStack(alignment: .leading, spacing: 3) {
+            Text(localizedUSBStatus(remoteUSB.status))
+              .font(.body)
+            Text(languageManager.localize("Foundation USB forwarding detail"))
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          Spacer()
+          Button(languageManager.localize("Refresh")) {
+            remoteUSB.refresh(host: settingsModel.selectedHost)
+          }
+          .buttonStyle(.bordered)
+          .disabled(!mappingEnabled)
+        }
+        .padding(.vertical, 8)
+
+        ForEach(remoteUSB.devices, id: \.busID) { device in
+          USBDeviceRow(device: device, remoteUSB: remoteUSB)
+        }
+      }
+
+    }
+  }
+
+  private func localizedUSBStatus(_ status: String) -> String {
+    if status.hasPrefix("Forwarding") { return languageManager.localize("Forwarding") }
+    return languageManager.localize(status)
+  }
+}
+
+private struct USBMappingHeader: View {
+  @Binding var mappingEnabled: Bool
+  let status: String
+  let available: Bool
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    HStack(spacing: 12) {
+      Image(systemName: "cable.connector.horizontal")
+        .font(.system(size: 22, weight: .medium))
+        .foregroundStyle(.teal)
+        .frame(width: 46, height: 46)
+        .background(Color.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+      VStack(alignment: .leading, spacing: 3) {
+        Text(languageManager.localize("USB Mapping"))
+          .font(.title3.weight(.semibold))
+        Text(languageManager.localize("USB settings subtitle"))
+          .font(.callout)
+          .foregroundStyle(.secondary)
+        Text(localizedStatus)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+
       Spacer(minLength: 12)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .contentShape(Rectangle())
-  }
-}
 
-private struct PickerSettingRow<Content: View>: View {
-  let title: String
-  let hintKey: String?
-  let detailKey: String?
-  let stacked: Bool
-  let content: Content
-  @ObservedObject var languageManager = LanguageManager.shared
-
-  init(
-    title: String,
-    hintKey: String? = nil,
-    detailKey: String? = nil,
-    stacked: Bool = false,
-    @ViewBuilder content: () -> Content
-  ) {
-    self.title = title
-    self.hintKey = hintKey
-    self.detailKey = detailKey
-    self.stacked = stacked
-    self.content = content()
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if stacked {
-        HStack(spacing: 6) {
-          Text(languageManager.localize(title))
-          if let hintKey {
-            InfoHintButton(hintKey: hintKey)
-          }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        content
-          .frame(maxWidth: .infinity, alignment: .trailing)
-      } else {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-          HStack(spacing: 6) {
-            Text(languageManager.localize(title))
-            if let hintKey {
-              InfoHintButton(hintKey: hintKey)
-            }
-          }
-          Spacer(minLength: 12)
-          content
-            .fixedSize(horizontal: true, vertical: false)
-        }
-      }
-
-      if let detailKey {
-        SettingDescriptionRow(textKey: detailKey)
-      }
-    }
-    .padding(.vertical, 6)
-  }
-}
-
-private struct MouseTuningSliderRow: View {
-  let title: String
-  let hintKey: String? = nil
-  let detailKey: String? = nil
-  @Binding var value: CGFloat
-  let range: ClosedRange<CGFloat>
-  let step: CGFloat
-  let minLabel: String
-  let maxLabel: String
-  var valueFormatter: ((CGFloat) -> String)? = nil
-  @ObservedObject var languageManager = LanguageManager.shared
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        HStack(spacing: 6) {
-          Text(languageManager.localize(title))
-          if let hintKey {
-            InfoHintButton(hintKey: hintKey)
-          }
-        }
-        Spacer()
-        Text(displayValue)
-          .availableMonospacedDigit()
-          .foregroundColor(.secondary)
-      }
-
-      Slider(value: $value, in: range, step: step) {
-        EmptyView()
-      } minimumValueLabel: {
-        Text(minLabel)
-          .font(.caption)
-          .availableMonospacedDigit()
-      } maximumValueLabel: {
-        Text(maxLabel)
-          .font(.caption)
-          .availableMonospacedDigit()
-      } onEditingChanged: { _ in
-
-      }
-      if let detailKey {
-        SettingDescriptionRow(textKey: detailKey)
-      }
-    }
-  }
-
-  private var displayValue: String {
-    if let valueFormatter {
-      return valueFormatter(value)
-    }
-    return SettingsModel.percentageLabel(for: value)
-  }
-}
-
-private struct CoreHIDPermissionRow: View {
-  @ObservedObject var permissionManager: InputMonitoringPermissionManager
-  @ObservedObject var languageManager = LanguageManager.shared
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        Text(languageManager.localize("Input Monitoring"))
-        Spacer()
-        trailingContent
-      }
-
-      SettingDescriptionRow(textKey: "Input Monitoring detail")
-
-      if let supplementalMessageKey = permissionManager.supplementalStatusMessageKey {
-        Text(languageManager.localize(supplementalMessageKey))
-          .font(.footnote)
-          .foregroundColor(.secondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      } else if let failureMessage = permissionManager.rawFailureMessageForDisplay {
-        Text(failureMessage)
-          .font(.footnote)
-          .foregroundColor(.secondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var trailingContent: some View {
-    if permissionManager.isRequestingAuthorization {
-      ProgressView()
+      Toggle("", isOn: $mappingEnabled)
+        .labelsHidden()
+        .toggleStyle(.switch)
         .controlSize(.small)
-    } else {
-      switch permissionManager.displayStatusLabelKey {
-      case "Granted":
-        Label(languageManager.localize("Granted"), systemImage: "checkmark.circle.fill")
-          .foregroundColor(.green)
-          .font(.callout)
-      case "Granted Pending Reentry":
-        Label(languageManager.localize("Granted Pending Reentry"), systemImage: "arrow.triangle.2.circlepath.circle.fill")
-          .foregroundColor(.green)
-          .font(.callout)
-      case "Checking":
-        HStack(spacing: 8) {
-          Text(languageManager.localize("Checking"))
-            .foregroundColor(.secondary)
-            .font(.callout)
-          Button(languageManager.localize("Open Settings")) {
-            permissionManager.openSystemPreferences()
-          }
-          .controlSize(.small)
-        }
-      case "Check Settings", "Denied":
-        HStack(spacing: 8) {
-          Text(languageManager.localize(permissionManager.displayStatusLabelKey))
-            .foregroundColor(.secondary)
-            .font(.callout)
-          Button(languageManager.localize("Open Settings")) {
-            permissionManager.openSystemPreferences()
-          }
-          .controlSize(.small)
-        }
-      case "Not Granted":
-        HStack(spacing: 8) {
-          Text(languageManager.localize("Not Granted"))
-            .foregroundColor(.secondary)
-            .font(.callout)
-          Button(languageManager.localize("Request")) {
-            permissionManager.requestAuthorization()
-          }
-          .controlSize(.small)
-        }
-      case "Unavailable":
-        Text(languageManager.localize("Unavailable"))
-          .foregroundColor(.secondary)
-          .font(.callout)
-      default:
-        Text(languageManager.localize("Not Granted"))
-          .foregroundColor(.secondary)
-          .font(.callout)
-      }
+        .disabled(!available)
     }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
+    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .opacity(available ? 1 : 0.55)
+  }
+
+  private var localizedStatus: String {
+    if status.hasPrefix("Forwarding") { return languageManager.localize("Forwarding") }
+    return languageManager.localize(status)
   }
 }
 
-private struct AdvancedSettingsCard<Content: View>: View {
-  let content: Content
-
-  init(@ViewBuilder content: () -> Content) {
-    self.content = content()
-  }
+private struct USBDeviceRow: View {
+  let device: MLRemoteUSBDevice
+  @ObservedObject var remoteUSB: RemoteUSBForwardingViewModel
+  @ObservedObject private var languageManager = LanguageManager.shared
 
   var body: some View {
-    content
-      .padding(.top, 8)
-      .frame(maxWidth: .infinity, alignment: .leading)
+    HStack(spacing: 12) {
+      Image(systemName: device.isClaimable ? "externaldrive.connected.to.line.below" : "externaldrive")
+        .foregroundStyle(device.isClaimable ? Color.accentColor : Color.secondary)
+        .frame(width: 24)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(device.product.isEmpty ? device.busID : device.product)
+          .lineLimit(1)
+        Text("\(device.vidPID) · \(device.busID)")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+      Spacer()
+      if remoteUSB.selectedBusID == device.busID {
+        Button(languageManager.localize("Stop")) { remoteUSB.stop() }
+          .buttonStyle(.bordered)
+      } else {
+        Button(languageManager.localize("Forward")) { remoteUSB.start(device: device) }
+          .buttonStyle(.borderedProminent)
+          .disabled(!remoteUSB.capabilityAvailable || !device.isClaimable)
+      }
+    }
+    .padding(.vertical, 8)
+  }
+}
+
+
+private struct MouseTuningSettingsSection: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  private var coreHID: Bool {
+    let strategy = MouseInputDriverStrategy(selection: settingsModel.selectedMouseDriver)
+    return strategy == .automatic || strategy == .coreHID
+  }
+  var body: some View {
+    FormSection(title: "Mouse Tuning") {
+      if settingsModel.mouseMode == "remote" {
+        SettingsChoiceRow(title: "Free Mouse Movement", selection: $settingsModel.selectedFreeMouseMotionMode,
+          options: SettingsModel.freeMouseMotionModes)
+      }
+      SettingsValueSliderRow(title: "Physical Wheel Speed", value: $settingsModel.wheelScrollSpeed,
+        range: 0.1...4, step: 0.05, multiplier: 100, suffix: "%")
+      if settingsModel.selectedPhysicalWheelMode != PhysicalWheelScrollMode.notched.displayKey {
+        SettingsValueSliderRow(title: "High Precision Wheel Speed", value: $settingsModel.physicalWheelHighPrecisionScale,
+          range: 1...12, step: 0.25, suffix: "×")
+      }
+      SettingsChoiceRow(title: "Smooth Wheel Mode", selection: $settingsModel.selectedRewrittenScrollMode, options: SettingsModel.rewrittenScrollModes)
+      SettingsValueSliderRow(title: "Smooth Wheel Speed", value: $settingsModel.rewrittenScrollSpeed,
+        range: 0.1...4, step: 0.05, multiplier: 100, suffix: "%")
+      if settingsModel.selectedRewrittenScrollMode != RewrittenScrollMode.notched.displayKey || settingsModel.smartWheelTailFilter > 0 {
+        SettingsValueSliderRow(title: "Smooth Wheel Tail Filter", value: $settingsModel.smartWheelTailFilter, range: 0...1, step: 0.02)
+      }
+      SettingsValueSliderRow(title: "Trackpad Speed", value: $settingsModel.gestureScrollSpeed,
+        range: 0.1...4, step: 0.05, multiplier: 100, suffix: "%")
+      SettingsRow(title: "CoreHID Max Mouse Report Rate") {
+        Picker("", selection: $settingsModel.coreHIDMaxMouseReportRate) {
+          ForEach(SettingsModel.coreHIDMaxMouseReportRates, id: \.self) { value in
+            Text(SettingsModel.coreHIDMaxMouseReportRateLabel(value)).tag(value)
+          }
+        }.labelsHidden().frame(width: 190).disabled(!coreHID)
+      }
+      SettingsChoiceRow(title: "Touchscreen Mode", selection: $settingsModel.selectedTouchscreenMode, options: SettingsModel.touchscreenModes)
+    }
   }
 }

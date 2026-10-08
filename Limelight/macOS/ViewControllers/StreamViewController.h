@@ -7,6 +7,7 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import <GameController/GCEventViewController.h>
 #import "TemporaryApp.h"
 #import "AppsViewControllerDelegate.h"
 
@@ -21,7 +22,7 @@ struct Resolution {
    int height;
 };
 
-@interface StreamViewController : NSViewController
+@interface StreamViewController : GCEventViewController
 @property (nonatomic, strong) TemporaryApp *app;
 @property (nonatomic, weak) id<AppsViewControllerDelegate> delegate;
 @property (nonatomic) BOOL hasSessionSunshineTargetDisplayOverride;

@@ -84,6 +84,8 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     [self createMainWindow];
+
+    [SparkleUpdateManager startIfConfigured];
     
     self.controllerNavigation = [[ControllerNavigation alloc] init];
     [self refreshLocalizedChrome];
@@ -168,8 +170,8 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     [prefsWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
 
     [prefsWC showWindow:nil];
-    [prefsWC.window setContentSize:NSMakeSize(1060.0, 720.0)];
-    [prefsWC.window setMinSize:NSMakeSize(900.0, 620.0)];
+    [prefsWC.window setContentSize:NSMakeSize(960.0, 680.0)];
+    [prefsWC.window setMinSize:NSMakeSize(820.0, 560.0)];
     [prefsWC.window center];
     [prefsWC.window makeKeyAndOrderFront:nil];
 }
@@ -183,8 +185,8 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     [prefsWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
 
     [prefsWC showWindow:nil];
-    [prefsWC.window setContentSize:NSMakeSize(1060.0, 720.0)];
-    [prefsWC.window setMinSize:NSMakeSize(900.0, 620.0)];
+    [prefsWC.window setContentSize:NSMakeSize(960.0, 680.0)];
+    [prefsWC.window setMinSize:NSMakeSize(820.0, 560.0)];
     [prefsWC.window center];
     [prefsWC.window makeKeyAndOrderFront:nil];
 }
