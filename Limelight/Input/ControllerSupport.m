@@ -667,11 +667,17 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     _accumulatedMouseX = 0;
     _accumulatedMouseY = 0;
     GCExtendedGamepad *gamepad = controller.gamepad.extendedGamepad;
-    // Rebuild A/B and stick state through our existing input handler so held
-    // controls resume immediately when mouse emulation is switched off.
-    if (gamepad.valueChangedHandler) {
-        gamepad.valueChangedHandler(gamepad, gamepad.buttonMenu);
+    // Restore only controls affected by mouse emulation. Calling the complete
+    // input handler here would also feed a held Menu into its debouncer.
+    @synchronized(controller) {
+        controller.lastButtonFlags &= ~(A_FLAG | B_FLAG);
+        if (!active && gamepad.buttonA.pressed) controller.lastButtonFlags |= A_FLAG;
+        if (!active && gamepad.buttonB.pressed) controller.lastButtonFlags |= B_FLAG;
     }
+    [self updateRightStick:controller
+        x:active ? 0 : (short)(gamepad.rightThumbstick.xAxis.value * 0x7FFE)
+        y:active ? 0 : (short)(gamepad.rightThumbstick.yAxis.value * 0x7FFE)];
+    [self updateFinished:controller];
 }
 
 - (void)setGamepadMouseModeEnabled:(BOOL)enabled {
