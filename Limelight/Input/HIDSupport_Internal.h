@@ -29,6 +29,10 @@
 @property (nonatomic, strong) NSDictionary *mappings;
 @property (nonatomic) IOHIDManagerRef hidManager;
 @property (nonatomic, strong) Controller *controller;
+@property (nonatomic) BOOL gamepadMouseModeEnabled;
+@property (nonatomic) BOOL gamepadMouseModeLongPressMenuEnabled;
+@property (nonatomic) BOOL gamepadMenuPressed;
+@property (nonatomic, strong) NSTimer *gamepadMenuTimer;
 @property (nonatomic) CVDisplayLinkRef displayLink;
 @property (atomic) CGFloat mouseDeltaX;
 @property (atomic) CGFloat mouseDeltaY;
@@ -137,6 +141,8 @@
 @property (atomic) uint64_t suppressAppKitScrollUntilMsY;
 
 - (void)sendControllerEvent;
+- (void)updateGamepadMenuGesture;
+- (void)setGamepadMouseModeActive:(BOOL)active;
 - (KeyboardCompatibilityMode)keyboardCompatibilityMode;
 - (BOOL)usesKeyboardCommandToControlCompatibility;
 - (BOOL)usesKeyboardLeftControlWinSwapCompatibility;

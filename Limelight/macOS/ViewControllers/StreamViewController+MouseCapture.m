@@ -1841,9 +1841,13 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return;
     }
 
-    if ([setting isEqualToString:@"gamepadMouseModeLongPressMenu"] && self.controllerSupport != nil) {
+    if ([setting isEqualToString:@"gamepadMouseModeLongPressMenu"] ||
+        [setting isEqualToString:@"gamepadMouseMode"]) {
         self.controllerSupport.gamepadMouseModeLongPressMenuEnabled =
             [SettingsClass gamepadMouseModeLongPressMenuFor:self.app.host.uuid];
+        self.controllerSupport.gamepadMouseModeEnabled =
+            [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
+        [self.hidSupport refreshGamepadMouseModeConfiguration];
         Log(LOG_D, @"[diag] Live gamepad Menu long-press setting refresh applied: enabled=%d",
             self.controllerSupport.gamepadMouseModeLongPressMenuEnabled ? 1 : 0);
         return;

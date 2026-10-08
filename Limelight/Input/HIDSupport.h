@@ -58,6 +58,7 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (void)resetInputDiagnostics;
 - (HIDInputDiagnosticsSnapshot *)consumeInputDiagnosticsSnapshot;
 - (void)refreshMouseInputConfiguration;
+- (void)refreshGamepadMouseModeConfiguration;
 - (void)tearDownHidManager;
 - (BOOL)shouldUseAbsolutePointerPathForCurrentConfiguration;
 - (BOOL)shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration;

@@ -604,6 +604,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     BOOL wasEnabled = _shouldSendInputEvents;
     _shouldSendInputEvents = enabled;
     if (wasEnabled && !enabled) {
+        for (Controller *controller in _controllers.allValues) {
+            ControllerMenuGesture gesture = controller.menuGesture;
+            ControllerMenuGestureInterrupt(&gesture, controller.gamepad.extendedGamepad.buttonMenu.pressed);
+            controller.menuGesture = gesture;
+        }
         PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
         if (input != NULL && LiInputContextIsInitialized(input)) {
             [_controllerStreamLock lock];
@@ -639,12 +644,49 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 }
 
 - (void)setGamepadMouseModeLongPressMenuEnabled:(BOOL)enabled {
+    if (_gamepadMouseModeLongPressMenuEnabled == enabled) return;
     _gamepadMouseModeLongPressMenuEnabled = enabled;
-    if (!enabled) {
-        for (Controller *controller in [_controllers allValues]) {
-            controller.startButtonDownTime = nil;
-            controller.optionsHoldBegan = 0;
-            controller.optionsLongPressConsumed = NO;
+    for (Controller *controller in [_controllers allValues]) {
+        ControllerMenuGesture gesture = controller.menuGesture;
+        ControllerMenuGestureInterrupt(&gesture, controller.gamepad.extendedGamepad.buttonMenu.pressed);
+        controller.menuGesture = gesture;
+    }
+}
+
+- (void)setGamepadMouseModeActive:(BOOL)active forController:(Controller *)controller {
+    if (controller.isMouseMode == active) return;
+    PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+    if (input) {
+        if (controller.lastMouseModeButtonFlags & A_FLAG)
+            LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        if (controller.lastMouseModeButtonFlags & B_FLAG)
+            LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+    }
+    controller.lastMouseModeButtonFlags = 0;
+    controller.isMouseMode = active;
+    _accumulatedMouseX = 0;
+    _accumulatedMouseY = 0;
+    GCExtendedGamepad *gamepad = controller.gamepad.extendedGamepad;
+    // Rebuild A/B and stick state through our existing input handler so held
+    // controls resume immediately when mouse emulation is switched off.
+    if (gamepad.valueChangedHandler) {
+        gamepad.valueChangedHandler(gamepad, gamepad.buttonMenu);
+    }
+}
+
+- (void)setGamepadMouseModeEnabled:(BOOL)enabled {
+    if (_gamepadMouseModeEnabled == enabled) return;
+    _gamepadMouseModeEnabled = enabled;
+    for (Controller *controller in [_controllers allValues]) {
+        if (![controller.gamepad.extendedGamepad isKindOfClass:GCDualSenseGamepad.class]) {
+            ControllerMenuGesture gesture = controller.menuGesture;
+            ControllerMenuGestureInterrupt(&gesture, controller.gamepad.extendedGamepad.buttonMenu.pressed);
+            controller.menuGesture = gesture;
+        }
+        if (!enabled && controller.isMouseMode) {
+            [self setGamepadMouseModeActive:NO forController:controller];
+            if ([_presenceDelegate respondsToSelector:@selector(mouseModeToggled:)])
+                [_presenceDelegate mouseModeToggled:NO];
         }
     }
 }
@@ -1353,7 +1395,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
                     // For older MFi gamepads, the menu button will already be handled by
                     // the controllerPausedHandler.
-                    UPDATE_BUTTON_FLAG(limeController, PLAY_FLAG, gamepad.buttonMenu.pressed && !limeController.optionsLongPressConsumed);
+                    UPDATE_BUTTON_FLAG(limeController, PLAY_FLAG, gamepad.buttonMenu.pressed && !limeController.menuGesture.consumed);
                     
                     // Options button is optional (only present on Xbox One S and PS4 gamepads)
                     if (gamepad.buttonOptions != nil) {
@@ -2030,41 +2072,35 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         BOOL dualSense = [gamepad isKindOfClass:GCDualSenseGamepad.class];
         BOOL enabled = _gamepadMouseModeLongPressMenuEnabled && (dualSense || _gamepadMouseModeEnabled);
         BOOL pressed = gamepad.buttonMenu.pressed;
-        if (enabled && pressed) {
-            if (controller.optionsHoldBegan == 0) controller.optionsHoldBegan = NSProcessInfo.processInfo.systemUptime;
-            if (!controller.optionsLongPressConsumed &&
-                NSProcessInfo.processInfo.systemUptime - controller.optionsHoldBegan >= 2.0) {
-                controller.optionsLongPressConsumed = YES;
-                PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
-                BOOL wasMouse = ControllerTouchpadUsesMouse(self, controller);
-                if (input) {
-                    if (!wasMouse) {
-                        if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, (uint8_t)controller.playerIndex,
-                            LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
-                        if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, (uint8_t)controller.playerIndex,
-                            LI_TOUCH_EVENT_UP, controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0);
-                        if ((controller.lastButtonFlags & TOUCHPAD_FLAG) != 0) [self clearButtonFlag:controller flags:TOUCHPAD_FLAG];
-                    } else if (controller.trackpadMouseButton) {
-                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
-                    }
+        ControllerMenuGesture gesture = controller.menuGesture;
+        BOOL toggle = ControllerMenuGestureUpdate(&gesture, enabled, pressed, NSProcessInfo.processInfo.systemUptime);
+        controller.menuGesture = gesture;
+        if (toggle) {
+            PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+            BOOL wasMouse = ControllerTouchpadUsesMouse(self, controller);
+            if (input) {
+                if (!wasMouse) {
+                    if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, (uint8_t)controller.playerIndex,
+                        LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
+                    if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, (uint8_t)controller.playerIndex,
+                        LI_TOUCH_EVENT_UP, controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0);
+                    if ((controller.lastButtonFlags & TOUCHPAD_FLAG) != 0) [self clearButtonFlag:controller flags:TOUCHPAD_FLAG];
+                } else if (controller.trackpadMouseButton) {
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
                 }
-                if (dualSense) {
-                    controller.touchpadMouseMode = !wasMouse;
-                    controller.hasTouchpadModeOverride = YES;
-                } else controller.isMouseMode = !controller.isMouseMode;
-                ResetControllerTrackpadMouseState(controller);
-                [self clearButtonFlag:controller flags:PLAY_FLAG];
-                [self updateFinished:controller];
-                BOOL nowMouse = ControllerTouchpadUsesMouse(self, controller);
-                Log(LOG_I, @"[controller-touch] Options held player=%d mode=%@", controller.playerIndex,
-                    nowMouse ? @"trackpad-pointer-scroll" : @"host-controller-touch");
-                if ([_presenceDelegate respondsToSelector:@selector(mouseModeToggled:)])
-                    [_presenceDelegate mouseModeToggled:nowMouse];
             }
-        } else {
-            controller.startButtonDownTime = nil;
-            controller.optionsHoldBegan = 0;
-            controller.optionsLongPressConsumed = NO;
+            if (dualSense) {
+                controller.touchpadMouseMode = !wasMouse;
+                controller.hasTouchpadModeOverride = YES;
+            } else [self setGamepadMouseModeActive:!controller.isMouseMode forController:controller];
+            ResetControllerTrackpadMouseState(controller);
+            [self clearButtonFlag:controller flags:PLAY_FLAG];
+            [self updateFinished:controller];
+            BOOL nowMouse = ControllerTouchpadUsesMouse(self, controller);
+            Log(LOG_I, @"[controller-touch] Options held player=%d mode=%@", controller.playerIndex,
+                nowMouse ? @"trackpad-pointer-scroll" : @"host-controller-touch");
+            if ([_presenceDelegate respondsToSelector:@selector(mouseModeToggled:)])
+                [_presenceDelegate mouseModeToggled:nowMouse];
         }
 
         // 2. Mouse Movement Logic
