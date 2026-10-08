@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Sparkle
 
 struct AppView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
@@ -186,7 +187,8 @@ struct UpdatesSettingsPage: View {
 }
 
 private var appVersion: String {
-  Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.9"
+  Bundle.main.object(forInfoDictionaryKey: "UpdateDisplayVersion") as? String
+    ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.9"
 }
 
 private struct ReleaseAsset: Decodable, Identifiable {
@@ -198,9 +200,9 @@ private struct ReleaseAsset: Decodable, Identifiable {
   var id: String { name ?? url ?? UUID().uuidString }
 
   var downloadURL: URL? {
-    if let url, let value = URL(string: url) { return value }
-    if let fallbackUrl, let value = URL(string: fallbackUrl) { return value }
-    return nil
+    let candidates = [url, fallbackUrl].compactMap { $0 }.compactMap(URL.init(string:))
+    return candidates.first(where: { $0.scheme == "https" && $0.host == "github.com" })
+      ?? candidates.first(where: { $0.scheme == "https" })
   }
 }
 
@@ -213,7 +215,7 @@ private struct ReleaseChannel: Decodable {
 }
 
 private struct ReleaseMetadataDocument: Decodable {
-  let channels: [String: ReleaseChannel]
+  let channels: [String: ReleaseChannel?]
 }
 
 private struct GitHubReleaseAsset: Decodable {
@@ -267,14 +269,24 @@ private final class ReleaseUpdateChecker: ObservableObject {
     state = .checking
     errorMessage = ""
     Task {
+      if let githubRelease = await fetchGitHubRelease() {
+        release = githubRelease
+        sourceURL = URL(string: "https://api.github.com/repos/skyhua0224/moonlight-macos-enhanced/releases")
+        state = isNewer(githubRelease.version, than: appVersion) ? .updateAvailable : .upToDate
+        return
+      }
       for rawSource in sources {
         guard let source = URL(string: rawSource) else { continue }
         do {
           var request = URLRequest(url: source)
           request.timeoutInterval = 15
-          let (data, _) = try await URLSession.shared.data(for: request)
+          let (data, response) = try await URLSession.shared.data(for: request)
+          guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode)
+          else { throw URLError(.badServerResponse) }
           let document = try JSONDecoder().decode(ReleaseMetadataDocument.self, from: data)
-          if let channel = document.channels["latest"] {
+          let keys = acceptsPrereleases ? ["latest", "pre-latest"] : ["latest"]
+          let channels = keys.compactMap { document.channels[$0] ?? nil }
+          if let channel = channels.max(by: { isNewer($1.version, than: $0.version) }) {
             release = channel
             sourceURL = source
             state = isNewer(channel.version, than: appVersion) ? .updateAvailable : .upToDate
@@ -285,21 +297,12 @@ private final class ReleaseUpdateChecker: ObservableObject {
         }
       }
 
-      // Keep GitHub as a second metadata authority in addition to the CNB
-      // mirrors. The release assets still carry the CNB-first fallback URLs
-      // used by the download UI, while Sparkle handles signed installation.
-      if let githubRelease = await fetchGitHubRelease() {
-        release = githubRelease
-        sourceURL = URL(string: "https://api.github.com/repos/skyhua0224/moonlight-macos-enhanced/releases/latest")
-        state = isNewer(githubRelease.version, than: appVersion) ? .updateAvailable : .upToDate
-        return
-      }
       state = .unavailable
     }
   }
 
   private func fetchGitHubRelease() async -> ReleaseChannel? {
-    guard let url = URL(string: "https://api.github.com/repos/skyhua0224/moonlight-macos-enhanced/releases/latest") else {
+    guard let url = URL(string: "https://api.github.com/repos/skyhua0224/moonlight-macos-enhanced/releases?per_page=20") else {
       return nil
     }
 
@@ -308,14 +311,18 @@ private final class ReleaseUpdateChecker: ObservableObject {
       request.timeoutInterval = 15
       request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
       request.setValue("MoonlightEnhanced/\(appVersion)", forHTTPHeaderField: "User-Agent")
-      let (data, _) = try await URLSession.shared.data(for: request)
-      let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode)
+      else { throw URLError(.badServerResponse) }
+      let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
+      guard let release = releases.filter({ !$0.prerelease || acceptsPrereleases })
+        .max(by: { isNewer($1.tagName, than: $0.tagName) }) else { return nil }
       let assets = release.assets.map { asset in
         ReleaseAsset(
           type: asset.name.contains("universal") ? "macos-universal-dmg" : nil,
           name: asset.name,
           url: asset.browserDownloadURL,
-          fallbackUrl: nil)
+          fallbackUrl: UpdateSourcePolicy.mirrorURL(for: URL(string: asset.browserDownloadURL))?.absoluteString)
       }
       return ReleaseChannel(
         version: release.tagName,
@@ -329,27 +336,20 @@ private final class ReleaseUpdateChecker: ObservableObject {
   }
 
   private var appVersion: String {
-    Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.9"
+    Bundle.main.object(forInfoDictionaryKey: "UpdateDisplayVersion") as? String
+      ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.9"
+  }
+
+  private var acceptsPrereleases: Bool {
+    Bundle.main.object(forInfoDictionaryKey: "UpdateChannel") as? String == "beta"
   }
 
   private func isNewer(_ candidate: String, than current: String) -> Bool {
-    let lhs = numbers(candidate)
-    let rhs = numbers(current)
-    let count = max(lhs.count, rhs.count)
-    for index in 0..<count {
-      let left = index < lhs.count ? lhs[index] : 0
-      let right = index < rhs.count ? rhs[index] : 0
-      if left != right { return left > right }
-    }
-    return false
+    let candidate = candidate.hasPrefix("v") ? String(candidate.dropFirst()) : candidate
+    let current = current.hasPrefix("v") ? String(current.dropFirst()) : current
+    return SUStandardVersionComparator.default.compareVersion(candidate, toVersion: current) == .orderedDescending
   }
 
-  private func numbers(_ value: String) -> [Int] {
-    value
-      .replacingOccurrences(of: "v", with: "")
-      .split(separator: ".")
-      .map { Int($0.filter(\.isNumber)) ?? 0 }
-  }
 }
 
 struct AboutUpdatesSettingsPage: View {
@@ -359,7 +359,8 @@ struct AboutUpdatesSettingsPage: View {
   @AppStorage("updates.automaticCheck") private var automaticCheck = true
 
   private var appVersion: String {
-    Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.9"
+    Bundle.main.object(forInfoDictionaryKey: "UpdateDisplayVersion") as? String
+      ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.9"
   }
 
   var body: some View {

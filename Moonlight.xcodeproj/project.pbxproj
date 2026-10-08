@@ -588,6 +588,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.3.9;
+				UPDATE_CHANNEL = stable;
+				UPDATE_DISPLAY_VERSION = "$(MARKETING_VERSION)";
 				MTL_ENABLE_DEBUG_INFO = YES;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -598,7 +600,7 @@
 				PRODUCT_NAME = MoonlightEnhanced;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SPARKLE_ED_PUBLIC_KEY = "0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=";
-				SPARKLE_FEED_URL = "https://cnb.cool/AlkaidLab/moonlight-macos-enhanced-release/-/raw/main/appcast.xml";
+				SPARKLE_FEED_URL = "https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
@@ -651,6 +653,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.3.9;
+				UPDATE_CHANNEL = stable;
+				UPDATE_DISPLAY_VERSION = "$(MARKETING_VERSION)";
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -661,7 +665,7 @@
 				PRODUCT_NAME = MoonlightEnhanced;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SPARKLE_ED_PUBLIC_KEY = "0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=";
-				SPARKLE_FEED_URL = "https://cnb.cool/AlkaidLab/moonlight-macos-enhanced-release/-/raw/main/appcast.xml";
+				SPARKLE_FEED_URL = "https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
