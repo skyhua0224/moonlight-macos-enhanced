@@ -86,10 +86,35 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     [self createMainWindow];
 
     [SparkleUpdateManager startIfConfigured];
+    [self installUpdateMenuItem];
     
     self.controllerNavigation = [[ControllerNavigation alloc] init];
     [self refreshLocalizedChrome];
     [self showWelcomePermissionsIfNeeded];
+}
+
+- (void)installUpdateMenuItem {
+    NSMenu *appMenu = NSApp.mainMenu.itemArray.firstObject.submenu;
+    if (appMenu == nil || [appMenu indexOfItemWithTarget:self andAction:@selector(checkForUpdates:)] >= 0) {
+        return;
+    }
+    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:@"Check for Updates…"
+                                               action:@selector(checkForUpdates:)
+                                        keyEquivalent:@""];
+    item.target = self;
+    NSInteger aboutIndex = [appMenu indexOfItemWithTarget:self andAction:@selector(showAbout:)];
+    [appMenu insertItem:item atIndex:aboutIndex >= 0 ? aboutIndex + 1 : 0];
+}
+
+- (IBAction)checkForUpdates:(id)sender {
+    [SparkleUpdateManager checkForUpdatesFromMenu];
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)item {
+    if (item.action == @selector(checkForUpdates:)) {
+        return [SparkleUpdateManager canCheckForUpdates];
+    }
+    return YES;
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {

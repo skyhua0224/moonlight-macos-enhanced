@@ -1,5 +1,6 @@
 import Foundation
 import Sparkle
+import Combine
 
 /// Mirrors only this product's signed release archives, never arbitrary URLs.
 enum UpdateSourcePolicy {
@@ -79,7 +80,13 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
   static let shared = SparkleUpdateManager()
 
   @objc(startIfConfigured)
-  static func startIfConfigured() { _ = shared }
+  static func startIfConfigured() { shared.startUpdater() }
+
+  @objc(checkForUpdatesFromMenu)
+  static func checkForUpdatesFromMenu() { shared.checkForUpdates() }
+
+  @objc(canCheckForUpdates)
+  static var canCheckForUpdates: Bool { shared.isConfigured && shared.canCheckUpdates }
 
   private var updater: SPUUpdater?
   private var userDriver: MirroredUpdateUserDriver?
@@ -89,10 +96,14 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
   private var failedItem: SUAppcastItem?
   private var retryPending = false
   private var userInitiated = false
+  private var didStartUpdater = false
 
   @Published private(set) var isConfigured = false
   @Published private(set) var isChecking = false
   @Published private(set) var lastError: String?
+  @Published private(set) var canCheckUpdates = false
+  @Published private(set) var automaticChecksEnabled = false
+  @Published private(set) var hasInstallableUpdate = false
 
   private override init() {
     super.init()
@@ -105,9 +116,28 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
     let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
     self.userDriver = driver
     self.updater = updater
+    // Migrate the old settings-page preference once. Sparkle then owns and
+    // persists this setting; opening Settings must not reset its schedule.
+    if let legacyPreference = UserDefaults.standard.object(forKey: "updates.automaticCheck") as? Bool {
+      updater.automaticallyChecksForUpdates = legacyPreference
+      UserDefaults.standard.removeObject(forKey: "updates.automaticCheck")
+    }
+    updater.publisher(for: \.canCheckForUpdates).assign(to: &$canCheckUpdates)
+    updater.publisher(for: \.automaticallyChecksForUpdates).assign(to: &$automaticChecksEnabled)
+  }
+
+  private func startUpdater() {
+    guard !didStartUpdater, let updater else { return }
+    didStartUpdater = true
     do {
       try updater.start()
       isConfigured = true
+      // Sparkle permits an immediate launch check only after start(), with
+      // automatic checks enabled. Later scheduling remains Sparkle's job.
+      if updater.automaticallyChecksForUpdates {
+        checkForUpdatesInBackground()
+        ReleaseUpdateChecker.shared.check()
+      }
     } catch {
       lastError = error.localizedDescription
     }
@@ -119,6 +149,7 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
   }
 
   func checkForUpdates() {
+    ReleaseUpdateChecker.shared.check()
     guard let updater, updater.canCheckForUpdates else { return }
     resetCycle()
     userInitiated = true
@@ -140,7 +171,10 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
 
   func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) { appcastLoaded = true }
 
-  func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) { isChecking = false }
+  func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+    hasInstallableUpdate = true
+    isChecking = false
+  }
 
   func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
     request.timeoutInterval = 20
@@ -173,7 +207,7 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
       guard let self, let updater, updater.canCheckForUpdates else { return }
       self.isChecking = true
       if self.userInitiated { updater.checkForUpdates() }
-      else { updater.checkForUpdatesInBackground() }
+      else { updater.resetUpdateCycleAfterShortDelay() }
     }
   }
 
@@ -204,6 +238,7 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
   }
 
   private func resetCycle(keepingError: Bool = false) {
+    if !keepingError { hasInstallableUpdate = false }
     feedIndex = 0
     appcastLoaded = false
     mirrorAttempted = false

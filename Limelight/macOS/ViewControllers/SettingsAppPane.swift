@@ -191,7 +191,7 @@ private var appVersion: String {
     ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.9"
 }
 
-private struct ReleaseAsset: Decodable, Identifiable {
+struct ReleaseAsset: Decodable, Identifiable {
   let type: String?
   let name: String?
   let url: String?
@@ -206,7 +206,7 @@ private struct ReleaseAsset: Decodable, Identifiable {
   }
 }
 
-private struct ReleaseChannel: Decodable {
+struct ReleaseChannel: Decodable {
   let version: String
   let prerelease: Bool?
   let publishedAt: String?
@@ -245,7 +245,8 @@ private struct GitHubRelease: Decodable {
 }
 
 @MainActor
-private final class ReleaseUpdateChecker: ObservableObject {
+final class ReleaseUpdateChecker: ObservableObject {
+  static let shared = ReleaseUpdateChecker()
   enum State: Equatable {
     case idle
     case checking
@@ -355,8 +356,7 @@ private final class ReleaseUpdateChecker: ObservableObject {
 struct AboutUpdatesSettingsPage: View {
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var sparkle = SparkleUpdateManager.shared
-  @StateObject private var checker = ReleaseUpdateChecker()
-  @AppStorage("updates.automaticCheck") private var automaticCheck = true
+  @ObservedObject private var checker = ReleaseUpdateChecker.shared
 
   private var appVersion: String {
     Bundle.main.object(forInfoDictionaryKey: "UpdateDisplayVersion") as? String
@@ -370,7 +370,10 @@ struct AboutUpdatesSettingsPage: View {
         AboutUpdateCard(
           checker: checker,
           sparkle: sparkle,
-          automaticCheck: $automaticCheck,
+          automaticCheck: Binding(
+            get: { sparkle.automaticChecksEnabled },
+            set: { sparkle.automaticallyChecksForUpdates = $0 }
+          ),
           statusText: statusText,
           statusColor: statusColor,
           preferredDownloadURL: preferredDownloadURL,
@@ -385,13 +388,9 @@ struct AboutUpdatesSettingsPage: View {
       .frame(maxWidth: .infinity, alignment: .center)
     }
     .onAppear {
-      sparkle.automaticallyChecksForUpdates = automaticCheck
-      if automaticCheck && checker.state == .idle {
+      if checker.state == .idle {
         checker.check()
       }
-    }
-    .onChange(of: automaticCheck) { enabled in
-      sparkle.automaticallyChecksForUpdates = enabled
     }
   }
 
@@ -452,6 +451,7 @@ private struct AboutHeroCard: View {
 }
 
 private struct AboutUpdateCard: View {
+  @Environment(\.openURL) private var openURL
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject var checker: ReleaseUpdateChecker
   @ObservedObject var sparkle: SparkleUpdateManager
@@ -486,8 +486,7 @@ private struct AboutUpdateCard: View {
             .font(.title3.weight(.semibold))
           if let notes = release.releaseNotes, !notes.isEmpty {
             ScrollView {
-              Text(notes)
-                .font(.footnote)
+              ReleaseNotesView(markdown: notes)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
             }
@@ -495,14 +494,15 @@ private struct AboutUpdateCard: View {
           }
           HStack {
             Spacer()
-            if sparkle.isConfigured {
+            if sparkle.hasInstallableUpdate {
               Button(languageManager.localize("Install Update")) {
                 installUpdate()
               }
               .buttonStyle(.borderedProminent)
+              .disabled(!sparkle.canCheckUpdates)
             } else if let url = preferredDownloadURL(release) {
-              Button(languageManager.localize("Open Download")) {
-                NSWorkspace.shared.open(url)
+              Button(languageManager.localize("Download Update")) {
+                openURL(url)
               }
               .buttonStyle(.borderedProminent)
             }
@@ -519,11 +519,11 @@ private struct AboutUpdateCard: View {
           .fixedSize(horizontal: false, vertical: true)
         Spacer()
         Button(languageManager.localize("Check for Updates")) {
-          checker.check()
+          installUpdate()
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .disabled(checker.state == .checking)
+        .disabled(sparkle.isConfigured ? !sparkle.canCheckUpdates : checker.state == .checking)
       }
       .padding(16)
     }

@@ -203,6 +203,7 @@
 				macOS/Views/NavigatableAlertView.m,
 				macOS/Views/StreamingLockOverlayView.swift,
 				macOS/Views/StreamingStartupOverlay.swift,
+				macOS/Views/ReleaseNotesView.swift,
 				macOS/Views/StreamViewMac.m,
 				Network/AppAssetManager.m,
 				Network/AppAssetResponse.m,

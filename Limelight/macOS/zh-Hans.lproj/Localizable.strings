@@ -1175,3 +1175,7 @@
 "Curated View" = "浓缩视图";
 "Parsed Message" = "解析消息";
 "Raw Line" = "原始行";
+
+"Install Update" = "安装更新";
+"Download Update" = "下载更新";
+"Check for Updates…" = "检查更新…";
