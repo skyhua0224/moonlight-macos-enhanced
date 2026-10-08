@@ -18,7 +18,7 @@ jobs:
       # a missing optional secret cannot silently disable Sparkle in release
       # artifacts. The private signing key remains outside Git.
       SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY || '0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=' }}
-      SPARKLE_FEED_URL: https://cnb.cool/AlkaidLab/moonlight-macos-enhanced-release/-/raw/main/appcast.xml
+      SPARKLE_FEED_URL: https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml
 
     strategy:
       fail-fast: false
@@ -61,6 +61,26 @@ jobs:
         unzip -o xcframeworks.zip -d xcframeworks/
         ls -la xcframeworks/
 
+    - name: Configure version and update channel
+      shell: bash
+      run: |
+        marketing_version=1.3.9
+        display_version=1.3.9
+        update_channel=stable
+        if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-(rc|beta|alpha)[.-][0-9]+)?$ ]]; then
+            echo "Unsupported release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          marketing_version="${BASH_REMATCH[1]}"
+          display_version="${GITHUB_REF_NAME#v}"
+          if [[ -n "${BASH_REMATCH[2]}" ]]; then update_channel=beta; fi
+        fi
+        echo "RELEASE_MARKETING_VERSION=$marketing_version" >> "$GITHUB_ENV"
+        echo "RELEASE_DISPLAY_VERSION=$display_version" >> "$GITHUB_ENV"
+        echo "UPDATE_CHANNEL=$update_channel" >> "$GITHUB_ENV"
+        echo "RELEASE_BUILD_NUMBER=$((1335 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+
     - name: Build ${{ matrix.display_name }} package
       run: |
         xcodebuild -project Moonlight.xcodeproj \
@@ -73,7 +93,10 @@ jobs:
           CODE_SIGN_IDENTITY="-" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          BUILD_NUMBER=${{ github.run_number }} \
+          BUILD_NUMBER="$RELEASE_BUILD_NUMBER" \
+          MARKETING_VERSION="$RELEASE_MARKETING_VERSION" \
+          UPDATE_DISPLAY_VERSION="$RELEASE_DISPLAY_VERSION" \
+          UPDATE_CHANNEL="$UPDATE_CHANNEL" \
           SPARKLE_ED_PUBLIC_KEY="$SPARKLE_ED_PUBLIC_KEY" \
           SPARKLE_FEED_URL="$SPARKLE_FEED_URL" \
           build
@@ -108,6 +131,12 @@ jobs:
           echo "Helper binary missing expected architecture ${{ matrix.archs }}"
           exit 1
         fi
+
+    - name: Sign ${{ matrix.variant }} app bundle
+      run: |
+        python3 scripts/sign_app_bundle.py build/Build/Products/Release/MoonlightEnhanced.app \
+          --entitlements Moonlight.entitlements \
+          --extension-entitlements FileProviderExtension/FileProvider.entitlements
 
     - name: Package ${{ matrix.variant }} app bundle
       run: |
@@ -152,6 +181,9 @@ jobs:
     runs-on: macos-26
 
     steps:
+    - name: Checkout signing tools
+      uses: actions/checkout@v6
+
     - name: Download arm64 app artifact
       uses: actions/download-artifact@v8
       with:
@@ -268,6 +300,12 @@ jobs:
           exit 1
         fi
 
+    - name: Sign universal app bundle
+      run: |
+        python3 scripts/sign_app_bundle.py dist/universal/MoonlightEnhanced.app \
+          --entitlements Moonlight.entitlements \
+          --extension-entitlements FileProviderExtension/FileProvider.entitlements
+
     - name: Create universal DMG
       run: |
         brew install create-dmg || true
@@ -352,6 +390,20 @@ jobs:
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+    - name: Check whether release archives are finalized
+      id: publication
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ github.ref_name }}
+      run: |
+        existing_state=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+          --jq '.[] | select(.tag_name == env.RELEASE_TAG) | (.draft == false or any(.assets[]; .name == "SHA256SUMS"))')
+        if [[ "$existing_state" == true ]]; then
+          echo "locked=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "locked=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Build Release Body
       env:
         VERSION: ${{ steps.version.outputs.VERSION }}
@@ -360,10 +412,13 @@ jobs:
         python3 .github/scripts/build_release_body.py
 
     - name: Create Release
+      if: steps.publication.outputs.locked != 'true'
       uses: softprops/action-gh-release@v3
       with:
         name: ${{ steps.version.outputs.VERSION }}
-        draft: false
+        # Publish only after signing the final archives with the local EdDSA key.
+        # Never replace a published archive: its appcast signature binds its bytes.
+        draft: true
         prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') || contains(github.ref, '-rc') }}
         files: |
           dist/Moonlight-macOS-Enhanced-x86_64.dmg

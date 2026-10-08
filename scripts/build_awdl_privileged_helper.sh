@@ -71,7 +71,7 @@ clang_args=(
   -I"${helper_include_dir}"
 )
 
-for arch in ${ARCHS}; do
+for arch in ${=ARCHS}; do
   clang_args+=(-arch "$arch")
 done
 

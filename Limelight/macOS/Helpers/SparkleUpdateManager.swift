@@ -10,6 +10,14 @@ enum UpdateSourcePolicy {
     "https://www.alkaidlab.cn/release-metadata/moonlight-macos-enhanced-appcast.xml",
   ]
 
+  static func metadataVersion(_ tag: String) -> String {
+    let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+    let withoutBuild = String(version.split(separator: "+", maxSplits: 1).first ?? "")
+    // Sparkle uses the native "1.3.9rc1" form for prerelease comparison.
+    return withoutBuild.replacingOccurrences(
+      of: #"-(rc|alpha|beta)[.-]([0-9]+)$"#, with: "$1$2", options: .regularExpression)
+  }
+
   static func mirrorURL(for url: URL?) -> URL? {
     guard let url, url.scheme == "https", url.host?.lowercased() == "github.com",
       url.user == nil, url.password == nil, url.port == nil,

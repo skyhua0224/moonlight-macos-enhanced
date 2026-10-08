@@ -345,8 +345,8 @@ private final class ReleaseUpdateChecker: ObservableObject {
   }
 
   private func isNewer(_ candidate: String, than current: String) -> Bool {
-    let candidate = candidate.hasPrefix("v") ? String(candidate.dropFirst()) : candidate
-    let current = current.hasPrefix("v") ? String(current.dropFirst()) : current
+    let candidate = UpdateSourcePolicy.metadataVersion(candidate)
+    let current = UpdateSourcePolicy.metadataVersion(current)
     return SUStandardVersionComparator.default.compareVersion(candidate, toVersion: current) == .orderedDescending
   }
 
