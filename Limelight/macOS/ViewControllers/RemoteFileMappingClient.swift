@@ -59,8 +59,7 @@ final class RemoteFileMappingClient: NSObject, URLSessionDelegate {
     guard
       (capability["ok"] as? NSNumber)?.boolValue == true,
       (capability["enabled"] as? NSNumber)?.boolValue == true,
-      let rawURL = capability["session_url"] as? String,
-      let url = URL(string: rawURL),
+      let url = Self.sessionURL(from: capability, host: host),
       url.scheme?.lowercased() == "wss",
       url.host?.isEmpty == false,
       let p12 = CryptoManager.readP12FromFile(),
@@ -250,6 +249,35 @@ final class RemoteFileMappingClient: NSObject, URLSessionDelegate {
     path.split(separator: "/")
       .filter { $0 != "." && $0 != ".." && !$0.isEmpty }
       .joined(separator: "/")
+  }
+
+  private static func sessionURL(from capability: [String: Any], host: String) -> URL? {
+    if let rawURL = capability["session_url"] as? String,
+      !rawURL.isEmpty,
+      let url = URL(string: rawURL),
+      url.scheme?.lowercased() == "wss"
+    {
+      return url
+    }
+
+    guard
+      let port = (capability["port"] as? NSNumber)?.intValue,
+      port > 0 && port <= 65_535,
+      let endpoint = capability["session_endpoint"] as? String,
+      !endpoint.isEmpty
+    else {
+      return nil
+    }
+
+    var components = URLComponents()
+    components.scheme = "wss"
+    components.host = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+    components.port = port
+    components.path = endpoint.hasPrefix("/") ? endpoint : "/" + endpoint
+    if let token = capability["session_token"] as? String, !token.isEmpty {
+      components.queryItems = [URLQueryItem(name: "token", value: token)]
+    }
+    return components.url
   }
 
   private static func loadIdentity(from p12: Data) -> SecIdentity? {

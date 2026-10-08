@@ -13,6 +13,12 @@ jobs:
   build_arch:
     name: Build ${{ matrix.variant }}
     runs-on: ${{ matrix.runner }}
+    env:
+      # The EdDSA public key is safe to publish. Keep a repository fallback so
+      # a missing optional secret cannot silently disable Sparkle in release
+      # artifacts. The private signing key remains outside Git.
+      SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY || '0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=' }}
+      SPARKLE_FEED_URL: https://cnb.cool/AlkaidLab/moonlight-macos-enhanced-release/-/raw/main/appcast.xml
 
     strategy:
       fail-fast: false
@@ -68,6 +74,8 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           BUILD_NUMBER=${{ github.run_number }} \
+          SPARKLE_ED_PUBLIC_KEY="$SPARKLE_ED_PUBLIC_KEY" \
+          SPARKLE_FEED_URL="$SPARKLE_FEED_URL" \
           build
 
     - name: Verify ${{ matrix.variant }} binary slices
@@ -356,7 +364,7 @@ jobs:
       with:
         name: ${{ steps.version.outputs.VERSION }}
         draft: false
-        prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+        prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') || contains(github.ref, '-rc') }}
         files: |
           dist/Moonlight-macOS-Enhanced-x86_64.dmg
           dist/Moonlight-macOS-Enhanced-arm64.dmg

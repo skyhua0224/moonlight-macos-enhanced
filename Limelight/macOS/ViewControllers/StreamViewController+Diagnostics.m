@@ -919,7 +919,7 @@
                                  stats.receivedBytes != self.streamHealthLastReceivedBytes);
     BOOL hasPayloadInFreshWindow = (statsFresh || !statsTimestampValid) && hasPayloadInWindow;
 
-    if (self.waitingForFirstRenderedFrame && stats.renderedFrames > 0) {
+    if (self.waitingForFirstRenderedFrame && self.streamMan.connection.renderer.hasPresentedVideo) {
         self.waitingForFirstRenderedFrame = NO;
         dispatch_async(dispatch_get_main_queue(), ^{
             self.streamView.statusText = nil;

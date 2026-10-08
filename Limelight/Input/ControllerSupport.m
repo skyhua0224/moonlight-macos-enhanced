@@ -13,6 +13,8 @@
 
 #import "DataManager.h"
 #import "HIDSupport.h"
+#import "Ds5HapticsAudioRenderer.h"
+#include "../../modules/controller-feedback/ControllerFeedbackEnvelope.h"
 #include "Limelight.h"
 #include "Limelight-internal.h"
 
@@ -86,7 +88,15 @@ static void ResetControllerTrackpadMouseState(Controller *controller) {
     controller.trackpadMouseAccumulatedX = 0.0f;
     controller.trackpadMouseAccumulatedY = 0.0f;
     controller.trackpadScrollAccumulatedY = 0.0f;
+    controller.trackpadScrollAccumulatedX = 0.0f;
     controller.trackpadMouseButton = 0;
+    controller.trackpadGesture = (ControllerTrackpadGesture){0};
+    controller.trackpadFlushPending = NO;
+    controller.legacyTouchSnapshotPending = NO;
+    controller.trackpadGestureGeneration++;
+    controller.trackpadTouchBegan = 0;
+    controller.trackpadPhysicalClickConsumed = NO;
+    controller.trackpadClickMovementSuppressedUntil = 0;
 }
 
 static void LogControllerMappingDiagnostics(Controller *controller,
@@ -142,7 +152,7 @@ static void LogControllerMappingDiagnostics(Controller *controller,
                 @"centerY": @(support.controllerRightCenterY),
                 @"gain": @(support.controllerRightGain)
             },
-            @"outputPath": @"GameController public output APIs; USB authored PCM unavailable"
+            @"outputPath": @"Foundation authored PCM; GameController RMS fallback; USB physical PCM backend capability-gated"
         }
     };
     NSError *error = nil;
@@ -151,20 +161,66 @@ static void LogControllerMappingDiagnostics(Controller *controller,
     Log(LOG_I, @"[controller-mapping] %@", json ?: [NSString stringWithFormat:@"{\"error\":\"%@\"}", error]);
 }
 
-static GCControllerTouchpad *PhysicalControllerTouchpad(GCController *controller) {
-    if (@available(macOS 11.0, *)) {
-        for (GCControllerTouchpad *touchpad in controller.physicalInputProfile.allTouchpads) {
-            return touchpad;
-        }
+static GCControllerTouchpad *PhysicalControllerTouchpadForSurface(GCController *controller,
+                                                                  GCControllerDirectionPad *surface) {
+    for (GCControllerTouchpad *touchpad in controller.physicalInputProfile.allTouchpads) {
+        if (surface != nil && touchpad.touchSurface == surface) return touchpad;
     }
     return nil;
+}
+
+static BOOL ControllerTouchpadUsesMouse(ControllerSupport *support, Controller *controller) {
+    return controller.isMouseMode || (controller.hasTouchpadModeOverride
+        ? controller.touchpadMouseMode : !support.nativeTouchpadEnabled);
+}
+
+static void FlushControllerTrackpad(ControllerSupport *support, Controller *controller) {
+    PML_INPUT_STREAM_CONTEXT ctx = ControllerInputContext(support);
+    ControllerTrackpadGesture state = controller.trackpadGesture;
+    ControllerTrackpadDelta delta = ControllerTrackpadConsume(&state);
+    controller.trackpadGesture = state;
+    if (ctx == NULL || !support.shouldSendInputEvents || !ControllerTouchpadUsesMouse(support, controller)) {
+        controller.trackpadMouseAccumulatedX = controller.trackpadMouseAccumulatedY = 0;
+        controller.trackpadScrollAccumulatedX = controller.trackpadScrollAccumulatedY = 0;
+        return;
+    }
+    if (NSProcessInfo.processInfo.systemUptime < controller.trackpadClickMovementSuppressedUntil) return;
+    if (delta.scroll) {
+        float scale = 2400.0f * fminf(4.0f, fmaxf(0.1f, (float)support.gamepadTrackpadScrollSpeed));
+        id preference = [[NSUserDefaults standardUserDefaults] objectForKey:@"com.apple.swipescrolldirection"];
+        BOOL natural = preference == nil || [preference boolValue];
+        BOOL inverted = natural != support.gamepadTrackpadReverseScroll;
+        controller.trackpadScrollAccumulatedY += (inverted ? delta.dy : -delta.dy) * scale;
+        controller.trackpadScrollAccumulatedX += (inverted ? -delta.dx : delta.dx) * scale;
+        short horizontal = (short)controller.trackpadScrollAccumulatedX;
+        short vertical = (short)controller.trackpadScrollAccumulatedY;
+        if (horizontal) {
+            LiSendHighResHScrollEventCtx(ctx, horizontal);
+            controller.trackpadScrollAccumulatedX -= horizontal;
+        }
+        if (vertical) {
+            LiSendHighResScrollEventCtx(ctx, vertical);
+            controller.trackpadScrollAccumulatedY -= vertical;
+        }
+    } else {
+        float scale = 1200.0f * fminf(4.0f, fmaxf(0.1f, (float)support.gamepadTrackpadPointerSensitivity));
+        controller.trackpadMouseAccumulatedX += delta.dx * scale;
+        controller.trackpadMouseAccumulatedY += delta.dy * scale;
+        short dx = (short)controller.trackpadMouseAccumulatedX;
+        short dy = (short)controller.trackpadMouseAccumulatedY;
+        if (dx || dy) {
+            LiSendMouseMoveEventCtx(ctx, dx, dy);
+            controller.trackpadMouseAccumulatedX -= dx;
+            controller.trackpadMouseAccumulatedY -= dy;
+        }
+    }
 }
 
 static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controller *controller,
                                            uint32_t pointerId, BOOL active,
                                            float x, float y, BOOL hasContact) {
     PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(support);
-    if (inputCtx == NULL) {
+    if (controller == nil || !support.shouldSendInputEvents || inputCtx == NULL) {
         return active;
     }
 
@@ -177,84 +233,37 @@ static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controlle
     // mouse mode, turn the contact position deltas into relative pointer or
     // high-resolution scroll events. Native controller-touch events remain
     // unchanged while controller mode is active.
-    if (controller.isMouseMode || !support.nativeTouchpadEnabled) {
-        BOOL isSecondary = (pointerId & 1U) != 0;
-        BOOL oldPrimaryActive = controller.primaryTouchActive;
-        BOOL oldSecondaryActive = controller.secondaryTouchActive;
-        float previousX = isSecondary ? controller.lastSecondaryTouchX : controller.lastPrimaryTouchX;
-        float previousY = isSecondary ? controller.lastSecondaryTouchY : controller.lastPrimaryTouchY;
-        float previousCentroidX = (controller.lastPrimaryTouchX + controller.lastSecondaryTouchX) * 0.5f;
-        float previousCentroidY = (controller.lastPrimaryTouchY + controller.lastSecondaryTouchY) * 0.5f;
-
-        if (hasContact) {
-            if (isSecondary) {
-                controller.lastSecondaryTouchX = normalizedX;
-                controller.lastSecondaryTouchY = normalizedY;
-            } else {
-                controller.lastPrimaryTouchX = normalizedX;
-                controller.lastPrimaryTouchY = normalizedY;
-            }
+    if (ControllerTouchpadUsesMouse(support, controller)) {
+        ControllerTrackpadGesture state = controller.trackpadGesture;
+        BOOL transitioned = ControllerTrackpadUpdate(&state, pointerId & 1u, hasContact, normalizedX, normalizedY);
+        controller.trackpadGesture = state;
+        if (transitioned) {
+            controller.trackpadMouseAccumulatedX = controller.trackpadMouseAccumulatedY = 0;
+            controller.trackpadScrollAccumulatedX = controller.trackpadScrollAccumulatedY = 0;
         }
-
-        BOOL currentPrimaryActive = isSecondary ? oldPrimaryActive : hasContact;
-        BOOL currentSecondaryActive = isSecondary ? hasContact : oldSecondaryActive;
-        BOOL wasTwoFinger = oldPrimaryActive && oldSecondaryActive;
-        BOOL isTwoFinger = currentPrimaryActive && currentSecondaryActive;
-        BOOL wasSingleFinger = (oldPrimaryActive != oldSecondaryActive);
-        BOOL isSingleFinger = (currentPrimaryActive != currentSecondaryActive);
-
-        // A contact-count transition establishes a fresh baseline. This
-        // prevents the second finger landing (or first finger lifting) from
-        // producing a cursor jump.
-        if (hasContact && ((isTwoFinger && !wasTwoFinger) ||
-                           (isSingleFinger && !wasSingleFinger))) {
-            if (isSecondary) {
-                controller.lastSecondaryTouchX = normalizedX;
-                controller.lastSecondaryTouchY = normalizedY;
-            } else {
-                controller.lastPrimaryTouchX = normalizedX;
-                controller.lastPrimaryTouchY = normalizedY;
+        if (state.scrollGesture) {
+            // GC delivers contacts separately on the main handler queue.
+            // Consume their final centroid once per callback batch, avoiding
+            // equal-and-opposite half-report scroll events.
+            if (!controller.trackpadFlushPending) {
+                controller.trackpadFlushPending = YES;
+                NSUInteger generation = controller.trackpadGestureGeneration;
+                __weak ControllerSupport *weakSupport = support;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (controller.trackpadGestureGeneration != generation) return;
+                    controller.trackpadFlushPending = NO;
+                    ControllerSupport *currentSupport = weakSupport;
+                    if (currentSupport != nil) FlushControllerTrackpad(currentSupport, controller);
+                });
             }
-            return hasContact;
+        } else {
+            FlushControllerTrackpad(support, controller);
         }
-
-        float deltaX = 0.0f;
-        float deltaY = 0.0f;
-        if (isTwoFinger && wasTwoFinger) {
-            float currentCentroidX = (controller.lastPrimaryTouchX + controller.lastSecondaryTouchX) * 0.5f;
-            float currentCentroidY = (controller.lastPrimaryTouchY + controller.lastSecondaryTouchY) * 0.5f;
-            deltaX = currentCentroidX - previousCentroidX;
-            deltaY = currentCentroidY - previousCentroidY;
-        } else if (isSingleFinger && wasSingleFinger && active) {
-            deltaX = normalizedX - previousX;
-            deltaY = normalizedY - previousY;
-        }
-
-        const float pointerScale = 1200.0f *
-            fminf(4.0f, fmaxf(0.1f, (float)support.gamepadTrackpadPointerSensitivity));
-        const float scrollScale = 2400.0f *
-            fminf(4.0f, fmaxf(0.1f, (float)support.gamepadTrackpadScrollSpeed));
-        if (isTwoFinger) {
-            float scrollDeltaY = support.gamepadTrackpadReverseScroll ? deltaY : -deltaY;
-            controller.trackpadScrollAccumulatedY += scrollDeltaY * scrollScale;
-            short scroll = (short)controller.trackpadScrollAccumulatedY;
-            if (scroll != 0) {
-                LiSendHighResScrollEventCtx(inputCtx, scroll);
-                controller.trackpadScrollAccumulatedY -= scroll;
-            }
-        } else if (isSingleFinger) {
-            controller.trackpadMouseAccumulatedX += deltaX * pointerScale;
-            controller.trackpadMouseAccumulatedY += deltaY * pointerScale;
-            short moveX = (short)controller.trackpadMouseAccumulatedX;
-            short moveY = (short)controller.trackpadMouseAccumulatedY;
-            if (moveX != 0 || moveY != 0) {
-                LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
-                controller.trackpadMouseAccumulatedX -= moveX;
-                controller.trackpadMouseAccumulatedY -= moveY;
-            }
-        }
-
         return hasContact;
+    }
+    if (hasContact) {
+        if (pointerId & 1U) { controller.lastSecondaryTouchX = normalizedX; controller.lastSecondaryTouchY = normalizedY; }
+        else { controller.lastPrimaryTouchX = normalizedX; controller.lastPrimaryTouchY = normalizedY; }
     }
     uint8_t eventType;
     if (hasContact && !active) {
@@ -267,9 +276,10 @@ static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controlle
         return active;
     }
 
-    LiSendControllerTouchEventCtx(inputCtx, (uint8_t)controller.playerIndex, eventType,
-                                  pointerId, normalizedX, normalizedY,
-                                  hasContact ? 1.0f : 0.0f);
+    int result = LiSendControllerTouchEventCtx(inputCtx, (uint8_t)controller.playerIndex, eventType,
+                                  pointerId, normalizedX, normalizedY, hasContact ? 1.0f : 0.0f);
+    if (eventType != LI_TOUCH_EVENT_MOVE)
+        Log(LOG_I, @"[controller-touch] Host event player=%d contact=%u kind=%u result=%d", controller.playerIndex, pointerId, eventType, result);
     return hasContact;
 }
 
@@ -278,6 +288,90 @@ static BOOL SendControllerTouch(ControllerSupport *support, Controller *controll
     BOOL hasContact = fabsf(x) > 0.001f || fabsf(y) > 0.001f;
     return SendControllerTouchWithContact(support, controller, pointerId, active,
                                           x, y, hasContact);
+}
+
+static void QueueControllerTouchSnapshot(ControllerSupport *support, Controller *controller,
+                                         GCControllerDirectionPad *primary,
+                                         GCControllerDirectionPad *secondary) {
+    if (controller.legacyTouchSnapshotPending) return;
+    controller.legacyTouchSnapshotPending = YES;
+    NSUInteger generation = controller.trackpadGestureGeneration;
+    __weak ControllerSupport *weakSupport = support;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (controller.trackpadGestureGeneration != generation) return;
+        controller.legacyTouchSnapshotPending = NO;
+        ControllerSupport *current = weakSupport;
+        if (current == nil) return;
+        float x[2] = {primary.xAxis.value, secondary.xAxis.value};
+        float y[2] = {primary.yAxis.value, secondary.yAxis.value};
+        BOOL touching[2] = {fabsf(x[0]) > 0.001f || fabsf(y[0]) > 0.001f,
+                            fabsf(x[1]) > 0.001f || fabsf(y[1]) > 0.001f};
+        if (ControllerTouchpadUsesMouse(current, controller)) {
+            // Axis handlers can fire between the X and Y resets on release.
+            // Sample the complete profile after that batch, then update both
+            // contacts before deriving any cursor or scroll displacement.
+            ControllerTrackpadGesture state = controller.trackpadGesture;
+            unsigned previousContacts = state.contacts;
+            BOOL changed = NO;
+            for (unsigned i = 0; i < 2; i++) {
+                changed |= ControllerTrackpadUpdate(&state, i, touching[i],
+                    fminf(1, fmaxf(0, (x[i] + 1) * 0.5f)),
+                    fminf(1, fmaxf(0, (1 - y[i]) * 0.5f)));
+            }
+            controller.trackpadGesture = state;
+            controller.primaryTouchActive = touching[0];
+            controller.secondaryTouchActive = touching[1];
+            NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+            if (previousContacts == 0 && state.contacts != 0) {
+                controller.trackpadTouchBegan = now;
+                controller.trackpadPhysicalClickConsumed = controller.trackpadMouseButton != 0;
+            }
+            if (previousContacts != 0 && state.contacts == 0) {
+                BOOL tap = controller.trackpadTouchBegan > 0 &&
+                    now - controller.trackpadTouchBegan <= 0.25 &&
+                    state.maximumTravelSquared <= 0.000064f &&
+                    !controller.trackpadPhysicalClickConsumed;
+                if (tap && current.shouldSendInputEvents) {
+                    PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(current);
+                    if (input != NULL) {
+                        int button = state.maximumContacts == 2 ? BUTTON_RIGHT : BUTTON_LEFT;
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_PRESS, button);
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, button);
+                    }
+                }
+                controller.trackpadTouchBegan = 0;
+            }
+            if (changed) {
+                controller.trackpadMouseAccumulatedX = controller.trackpadMouseAccumulatedY = 0;
+                controller.trackpadScrollAccumulatedX = controller.trackpadScrollAccumulatedY = 0;
+            }
+            FlushControllerTrackpad(current, controller);
+        } else {
+            controller.primaryTouchActive = SendControllerTouch(current, controller,
+                controller.playerIndex * 2, controller.primaryTouchActive, x[0], y[0]);
+            controller.secondaryTouchActive = SendControllerTouch(current, controller,
+                controller.playerIndex * 2 + 1, controller.secondaryTouchActive, x[1], y[1]);
+        }
+    });
+}
+
+static void RegisterPhysicalTouchpad(ControllerSupport *support, Controller *controller,
+                                     GCControllerTouchpad *touchpad, BOOL secondary) {
+    touchpad.reportsAbsoluteTouchSurfaceValues = YES;
+    GCControllerTouchpadHandler down = ^(GCControllerTouchpad *pad, float x, float y, float button, BOOL pressed) {
+        (void)pad; (void)button; (void)pressed;
+        BOOL active = secondary ? controller.secondaryTouchActive : controller.primaryTouchActive;
+        BOOL current = SendControllerTouchWithContact(support, controller, controller.playerIndex * 2 + (secondary ? 1 : 0), active, x, y, YES);
+        if (secondary) controller.secondaryTouchActive = current; else controller.primaryTouchActive = current;
+    };
+    touchpad.touchDown = down;
+    touchpad.touchMoved = down;
+    touchpad.touchUp = ^(GCControllerTouchpad *pad, float x, float y, float button, BOOL pressed) {
+        (void)pad; (void)button; (void)pressed;
+        BOOL active = secondary ? controller.secondaryTouchActive : controller.primaryTouchActive;
+        BOOL current = SendControllerTouchWithContact(support, controller, controller.playerIndex * 2 + (secondary ? 1 : 0), active, x, y, NO);
+        if (secondary) controller.secondaryTouchActive = current; else controller.primaryTouchActive = current;
+    };
 }
 
 static void ApplyDualSenseTriggerEffect(GCDualSenseAdaptiveTrigger *trigger,
@@ -494,6 +588,54 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     NSTimer *_mouseTimer;
 
     NSMutableDictionary<NSNumber * /* key flag */, NSMutableDictionary<NSNumber * /* player index */, ButtonDebouncer *> *> *_debouncers;
+    Ds5HapticsAudioRenderer *_ds5HapticsAudioRenderer;
+    NSObject *_hapticsMailboxLock;
+    NSMutableDictionary<NSNumber *, NSData *> *_pendingHaptics;
+    BOOL _hapticsDrainScheduled;
+    id _touchpadSettingsObserver;
+    NSTimer *_controllerMaintenanceTimer;
+    NSUInteger _maintenanceTicks;
+
+}
+
+@synthesize shouldSendInputEvents = _shouldSendInputEvents;
+
+- (void)setShouldSendInputEvents:(BOOL)enabled {
+    BOOL wasEnabled = _shouldSendInputEvents;
+    _shouldSendInputEvents = enabled;
+    if (wasEnabled && !enabled) {
+        PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+        if (input != NULL && LiInputContextIsInitialized(input)) {
+            [_controllerStreamLock lock];
+            for (Controller *controller in _controllers.allValues) {
+                LiSendMultiControllerEventCtx(input, _multiController ? controller.playerIndex : 0,
+                    _multiController ? (unsigned char)_controllerNumbers : 1, 0, 0, 0, 0, 0, 0, 0);
+                if (controller.trackpadMouseButton != 0)
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
+                controller.hasSentGamepadState = NO;
+                ResetControllerTrackpadMouseState(controller);
+            }
+            [_controllerStreamLock unlock];
+            Log(LOG_I, @"[controller] Neutral input sent before pausing controller delivery");
+        }
+    } else if (!wasEnabled && enabled) {
+        for (Controller *controller in _controllers.allValues) {
+            controller.hasSentGamepadState = NO;
+            [self updateFinished:controller];
+        }
+    }
+}
+
++ (BOOL)hasDualSenseController
+{
+    if (@available(macOS 11.0, *)) {
+        for (GCController *controller in GCController.controllers) {
+            if ([controller.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+                return YES;
+            }
+        }
+    }
+    return NO;
 }
 
 - (void)setGamepadMouseModeLongPressMenuEnabled:(BOOL)enabled {
@@ -501,6 +643,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     if (!enabled) {
         for (Controller *controller in [_controllers allValues]) {
             controller.startButtonDownTime = nil;
+            controller.optionsHoldBegan = 0;
+            controller.optionsLongPressConsumed = NO;
         }
     }
 }
@@ -511,9 +655,14 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 -(void) rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor
 {
-    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+    if (![NSThread isMainThread]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (weakSelf.shouldSendInputEvents) [weakSelf rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
+        });
         return;
     }
+    if (!ControllerIsFeedbackTarget(self, controllerNumber)) return;
     Controller* controller = [_controllers objectForKey:[NSNumber numberWithInteger:controllerNumber]];
     if (controller == nil && controllerNumber == 0 && _oscEnabled) {
         // No physical controller, but we have on-screen controls
@@ -524,8 +673,169 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         return;
     }
     
-    [controller.lowFreqMotor setMotorAmplitude:lowFreqMotor];
-    [controller.highFreqMotor setMotorAmplitude:highFreqMotor];
+    if (controller.lastAuthoredHapticsTime != 0 &&
+        CFAbsoluteTimeGetCurrent() - controller.lastAuthoredHapticsTime < 0.25) return;
+    BOOL left = [controller.lowFreqMotor setIntensity:lowFreqMotor / 65535.0f sharpness:0.5f];
+    BOOL right = [controller.highFreqMotor setIntensity:highFreqMotor / 65535.0f sharpness:0.5f];
+    if (!(left && right) && [_presenceDelegate respondsToSelector:@selector(controllerRumbleFallback:low:high:)]) {
+        [_presenceDelegate controllerRumbleFallback:controllerNumber low:lowFreqMotor high:highFreqMotor];
+    }
+}
+
+// The control receive thread only copies into a bounded, per-player mailbox.
+// Controller ownership, engines and light state remain on the main queue.
+- (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame {
+    if (!frame || !self.shouldSendInputEvents || frame->controllerNumber >= 16) return;
+    BOOL schedule = NO;
+    @synchronized(_hapticsMailboxLock) {
+        _pendingHaptics[@(frame->controllerNumber)] = [NSData dataWithBytes:frame length:sizeof(*frame)];
+        if (!_hapticsDrainScheduled) { _hapticsDrainScheduled = YES; schedule = YES; }
+    }
+    if (schedule) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf drainAuthoredHaptics]; });
+    }
+}
+
+- (void)drainAuthoredHaptics {
+    NSDictionary<NSNumber *, NSData *> *frames;
+    @synchronized(_hapticsMailboxLock) {
+        frames = [_pendingHaptics copy];
+        [_pendingHaptics removeAllObjects];
+        _hapticsDrainScheduled = NO;
+    }
+    if (!self.shouldSendInputEvents) return;
+    for (NSNumber *number in frames) {
+        LI_DS5_HAPTICS_IR_FRAME_V2 frame;
+        [frames[number] getBytes:&frame length:sizeof(frame)];
+        if (!ControllerIsFeedbackTarget(self, frame.controllerNumber)) continue;
+        Controller *controller = _controllers[number];
+        if (!controller) continue;
+        if (!(frame.flags & LI_DS5_HAPTICS_IR_FLAG_DISCONTINUITY) &&
+            controller.hasHapticsSequence &&
+            (int32_t)(frame.sourceSequenceNumber - controller.lastHapticsSequence) <= 0) continue;
+        controller.hasHapticsSequence = YES;
+        controller.lastHapticsSequence = frame.sourceSequenceNumber;
+        const BOOL silent = (frame.flags & (LI_DS5_HAPTICS_IR_FLAG_SILENT | LI_DS5_HAPTICS_IR_FLAG_STREAM_END)) != 0;
+        controller.lastAuthoredHapticsTime = silent ? 0 : CFAbsoluteTimeGetCurrent();
+        const BOOL compatibility = self.controllerHapticsMode == 2;
+        if (frame.flags & LI_DS5_HAPTICS_IR_FLAG_DISCONTINUITY) controller.authoredHapticsFallback = NO;
+        BOOL native = !compatibility && !controller.authoredHapticsFallback && controller.lowFreqMotor.available && controller.highFreqMotor.available;
+        // GPL integration adapter: unpack the Foundation wire fields here.
+        // The standalone policy accepts scalars and never imports this type.
+        ControllerActuatorEnvelope envelopes[2];
+        for (int lane = 0; lane < 2; ++lane) {
+            envelopes[lane] = (ControllerActuatorEnvelope){
+                frame.lanes[lane].rmsAmplitude, frame.lanes[lane].peakAmplitude,
+                frame.lanes[lane].transientStrength, frame.lanes[lane].lowBandRatio};
+        }
+        if (native) {
+            ControllerActuatorParameters left = ControllerFeedbackProject(envelopes[0], silent);
+            ControllerActuatorParameters right = ControllerFeedbackProject(envelopes[1], silent);
+            BOOL leftAccepted = [controller.lowFreqMotor setIntensity:left.intensity sharpness:left.sharpness];
+            BOOL rightAccepted = [controller.highFreqMotor setIntensity:right.intensity sharpness:right.sharpness];
+            native = leftAccepted && rightAccepted;
+        }
+        if (!native) {
+            [controller.lowFreqMotor setMotorAmplitude:0];
+            [controller.highFreqMotor setMotorAmplitude:0];
+            float low, high;
+            ControllerFeedbackReduceBands(envelopes, silent, &low, &high);
+            if ([_presenceDelegate respondsToSelector:@selector(controllerRumbleFallback:low:high:)]) {
+                [_presenceDelegate controllerRumbleFallback:frame.controllerNumber
+                    low:(unsigned short)lrintf(low * 65535.0f)
+                    high:(unsigned short)lrintf(high * 65535.0f)];
+            }
+        }
+        if (!controller.authoredHapticsLogged || controller.authoredHapticsFallback == native) {
+            Log(LOG_I, @"[controller-haptics] Foundation IR v2 player=%hu path=%@ sequence=%u",
+                frame.controllerNumber, native ? @"CoreHaptics-stereo-intensity-sharpness" : @"HID-spectral-fallback",
+                frame.sourceSequenceNumber);
+            controller.authoredHapticsLogged = YES;
+        }
+        controller.authoredHapticsFallback = !native;
+    }
+}
+
+- (void)controllerMaintenance:(NSTimer *)timer {
+    (void)timer;
+    if (!self.shouldSendInputEvents) return;
+    const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    BOOL batteryTick = (++_maintenanceTicks % 50) == 0;
+    for (Controller *controller in _controllers.allValues) {
+        if (!controller.controllerAnnounced) [self updateFinished:controller];
+        if (controller.lastAuthoredHapticsTime != 0 && now - controller.lastAuthoredHapticsTime >= 0.25) {
+            [controller.lowFreqMotor setMotorAmplitude:0];
+            [controller.highFreqMotor setMotorAmplitude:0];
+            if (controller.authoredHapticsFallback &&
+                [_presenceDelegate respondsToSelector:@selector(controllerRumbleFallback:low:high:)]) {
+                [_presenceDelegate controllerRumbleFallback:(unsigned short)controller.playerIndex low:0 high:0];
+            }
+            controller.lastAuthoredHapticsTime = 0;
+            Log(LOG_I, @"[controller-haptics] Lost-frame watchdog stopped player=%d", controller.playerIndex);
+        }
+        if (batteryTick && controller.controllerAnnounced && controller.gamepad.battery != nil) {
+            GCDeviceBattery *battery = controller.gamepad.battery;
+            uint8_t state = LI_BATTERY_STATE_UNKNOWN;
+            switch (battery.batteryState) {
+                case GCDeviceBatteryStateDischarging: state = LI_BATTERY_STATE_DISCHARGING; break;
+                case GCDeviceBatteryStateCharging: state = LI_BATTERY_STATE_CHARGING; break;
+                case GCDeviceBatteryStateFull: state = LI_BATTERY_STATE_FULL; break;
+                default: break;
+            }
+            uint8_t percent = battery.batteryLevel >= 0 && battery.batteryLevel <= 1
+                ? (uint8_t)lrintf(battery.batteryLevel * 100) : LI_BATTERY_PERCENTAGE_UNKNOWN;
+            PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+            if (input) LiSendControllerBatteryEventCtx(input, (uint8_t)controller.playerIndex, state, percent);
+        }
+    }
+}
+
+- (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame
+{
+    if (frame == NULL || !ControllerIsFeedbackTarget(self, frame->controllerNumber) ||
+        frame->sampleRate != 48000 || frame->channelCount != 2 ||
+        frame->bitsPerSample != 16 || frame->frameCount > 480 ||
+        frame->pcmDataLength != (uint32_t)frame->frameCount * 4 ||
+        (frame->pcmDataLength != 0 && frame->pcmData == NULL)) {
+        return;
+    }
+
+    Controller *controller = [_controllers objectForKey:@(frame->controllerNumber)];
+    if (controller != nil) {
+        if (@available(macOS 11.0, *)) {
+            if ([controller.gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]] &&
+                [_ds5HapticsAudioRenderer submitPCMFrame:frame]) {
+                return;
+            }
+        }
+    }
+
+    // Apple Game Controller does not expose authored PCM. When macOS does not
+    // expose the physical four-channel DualSense endpoint, preserve useful
+    // feedback with an RMS reduction into the public haptics localities.
+    if ((frame->flags & LI_DS5_HAPTICS_PCM_FLAG_STREAM_END) != 0 ||
+        frame->frameCount == 0) {
+        [self rumble:frame->controllerNumber lowFreqMotor:0 highFreqMotor:0];
+        return;
+    }
+
+    double leftEnergy = 0.0;
+    double rightEnergy = 0.0;
+    const int16_t *samples = (const int16_t *)frame->pcmData;
+    for (uint16_t index = 0; index < frame->frameCount; index++) {
+        const double left = (double)samples[index * 2] / 32768.0;
+        const double right = (double)samples[index * 2 + 1] / 32768.0;
+        leftEnergy += left * left;
+        rightEnergy += right * right;
+    }
+
+    const double divisor = (double)MAX(frame->frameCount, 1);
+    const double leftAmplitude = MIN(1.0, sqrt(leftEnergy / divisor) * 1.5);
+    const double rightAmplitude = MIN(1.0, sqrt(rightEnergy / divisor) * 1.5);
+    [self rumble:frame->controllerNumber
+      lowFreqMotor:(unsigned short)lrint(leftAmplitude * 65535.0)
+     highFreqMotor:(unsigned short)lrint(rightAmplitude * 65535.0)];
 }
 
 -(void) rumbleTriggers:(unsigned short)controllerNumber
@@ -553,17 +863,23 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                      green:(unsigned char)green
                       blue:(unsigned char)blue
 {
-    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+    if (![NSThread isMainThread]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (weakSelf.shouldSendInputEvents) [weakSelf setControllerLED:controllerNumber red:red green:green blue:blue];
+        });
         return;
     }
+    if (!ControllerIsFeedbackTarget(self, controllerNumber)) return;
     Controller *controller = [_controllers objectForKey:@(controllerNumber)];
     GCController *gamepad = controller.gamepad;
     if (gamepad == nil) {
         return;
     }
 
-    if (@available(macOS 10.15, *)) {
+    if (@available(macOS 11.0, *)) {
         if (gamepad.light != nil) {
+            Log(LOG_I, @"[controller-led] Output player=%hu rgb=%u,%u,%u path=GameController", controllerNumber, red, green, blue);
             gamepad.light.color = [[GCColor alloc] initWithRed:red / 255.0
                                                          green:green / 255.0
                                                           blue:blue / 255.0];
@@ -799,7 +1115,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             }
             BOOL allowsPlayStationExtensions = controllerType != LI_CTYPE_XBOX;
             if (hasTouchpad && allowsPlayStationExtensions) {
-                capabilities |= LI_CCAP_TOUCHPAD | LI_CCAP_TRIGGER_RUMBLE;
+                capabilities |= LI_CCAP_TOUCHPAD;
+                if ([extended isKindOfClass:GCDualSenseGamepad.class] &&
+                    self.controllerHapticsMode == 0 && [Ds5HapticsAudioRenderer hasPhysicalEndpoint]) {
+                    capabilities |= LI_CCAP_DS5_HAPTICS_PCM;
+                }
                 supportedButtonFlags |= TOUCHPAD_FLAG;
             }
             if (controller.gamepad.motion != nil && allowsPlayStationExtensions) {
@@ -834,6 +1154,19 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             }
         }
         
+        ControllerGamepadState state = {
+            .buttons = (uint32_t)controller.lastButtonFlags,
+            .leftTrigger = controller.lastLeftTrigger, .rightTrigger = controller.lastRightTrigger,
+            .leftX = controller.lastLeftStickX, .leftY = controller.lastLeftStickY,
+            .rightX = controller.lastRightStickX, .rightY = controller.lastRightStickY
+        };
+        if (controller.hasSentGamepadState && ControllerGamepadStateEqual(controller.sentGamepadState, state)) {
+            [_controllerStreamLock unlock];
+            return;
+        }
+        if (!_shouldSendInputEvents) { [_controllerStreamLock unlock]; return; }
+        controller.sentGamepadState = state;
+        controller.hasSentGamepadState = YES;
         if (_multiController) {
             LiSendMultiControllerEventCtx(inputCtx,
                                           controller.playerIndex,
@@ -894,10 +1227,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     dualShock.touchpadSecondary.valueChangedHandler = nil;
                     dualShock.touchpadButton.pressedChangedHandler = nil;
                 }
-                GCControllerTouchpad *physicalTouchpad = PhysicalControllerTouchpad(controller);
-                physicalTouchpad.touchDown = nil;
-                physicalTouchpad.touchMoved = nil;
-                physicalTouchpad.touchUp = nil;
+                for (GCControllerTouchpad *touchpad in controller.physicalInputProfile.allTouchpads) {
+                    touchpad.touchDown = nil;
+                    touchpad.touchMoved = nil;
+                    touchpad.touchUp = nil;
+                }
             }
         }
         else if (controller.gamepad != NULL) {
@@ -1019,7 +1353,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
                     // For older MFi gamepads, the menu button will already be handled by
                     // the controllerPausedHandler.
-                    UPDATE_BUTTON_FLAG(limeController, PLAY_FLAG, gamepad.buttonMenu.pressed);
+                    UPDATE_BUTTON_FLAG(limeController, PLAY_FLAG, gamepad.buttonMenu.pressed && !limeController.optionsLongPressConsumed);
                     
                     // Options button is optional (only present on Xbox One S and PS4 gamepads)
                     if (gamepad.buttonOptions != nil) {
@@ -1060,58 +1394,32 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     primary = dualShock.touchpadPrimary;
                     secondary = dualShock.touchpadSecondary;
                 }
-                GCControllerTouchpad *physicalTouchpad = PhysicalControllerTouchpad(controller);
+                GCControllerTouchpad *physicalTouchpad = PhysicalControllerTouchpadForSurface(controller, primary);
+                GCControllerTouchpad *secondaryTouchpad = PhysicalControllerTouchpadForSurface(controller, secondary);
+                Log(LOG_I, @"[controller] Touchpad callbacks: player=%ld physical=%d primary=%d secondary=%d native=%d",
+                    (long)controller.playerIndex,
+                    physicalTouchpad != nil,
+                    primary != nil,
+                    secondary != nil,
+                    self.nativeTouchpadEnabled);
                 if (physicalTouchpad != nil) {
-                    if (primary != nil) {
-                        primary.valueChangedHandler = nil;
-                    }
-                    Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
-                    physicalTouchpad.touchDown = ^(GCControllerTouchpad *touchpad,
-                                                   float xValue, float yValue,
-                                                   float buttonValue, BOOL buttonPressed) {
-                        (void)touchpad;
-                        (void)buttonValue;
-                        (void)buttonPressed;
-                        touchController.primaryTouchActive = SendControllerTouchWithContact(
-                            self, touchController, (uint32_t)touchController.playerIndex * 2,
-                            touchController.primaryTouchActive, xValue, yValue, YES);
-                    };
-                    physicalTouchpad.touchMoved = ^(GCControllerTouchpad *touchpad,
-                                                    float xValue, float yValue,
-                                                    float buttonValue, BOOL buttonPressed) {
-                        (void)touchpad;
-                        (void)buttonValue;
-                        (void)buttonPressed;
-                        touchController.primaryTouchActive = SendControllerTouchWithContact(
-                            self, touchController, (uint32_t)touchController.playerIndex * 2,
-                            touchController.primaryTouchActive, xValue, yValue, YES);
-                    };
-                    physicalTouchpad.touchUp = ^(GCControllerTouchpad *touchpad,
-                                                 float xValue, float yValue,
-                                                 float buttonValue, BOOL buttonPressed) {
-                        (void)touchpad;
-                        (void)buttonValue;
-                        (void)buttonPressed;
-                        touchController.primaryTouchActive = SendControllerTouchWithContact(
-                            self, touchController, (uint32_t)touchController.playerIndex * 2,
-                            touchController.primaryTouchActive, xValue, yValue, NO);
-                    };
+                    primary.valueChangedHandler = nil;
+                    RegisterPhysicalTouchpad(self, _controllers[@(controller.playerIndex)], physicalTouchpad, NO);
                 } else if (primary != nil) {
                     Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
                     primary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
-                        (void)pad;
-                        touchController.primaryTouchActive = SendControllerTouch(
-                            self, touchController, (uint32_t)touchController.playerIndex * 2,
-                            touchController.primaryTouchActive, xValue, yValue);
+                        (void)pad; (void)xValue; (void)yValue;
+                        QueueControllerTouchSnapshot(self, touchController, primary, secondary);
                     };
                 }
-                if (secondary != nil) {
+                if (secondaryTouchpad != nil) {
+                    secondary.valueChangedHandler = nil;
+                    RegisterPhysicalTouchpad(self, _controllers[@(controller.playerIndex)], secondaryTouchpad, YES);
+                } else if (secondary != nil) {
                     Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
                     secondary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
-                        (void)pad;
-                        touchController.secondaryTouchActive = SendControllerTouch(
-                            self, touchController, (uint32_t)touchController.playerIndex * 2 + 1,
-                            touchController.secondaryTouchActive, xValue, yValue);
+                        (void)pad; (void)xValue; (void)yValue;
+                        QueueControllerTouchSnapshot(self, touchController, primary, secondary);
                     };
                 }
 
@@ -1128,16 +1436,22 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                         (void)value;
                         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
                         if (inputCtx != NULL) {
-                            if (touchController.isMouseMode || !self.nativeTouchpadEnabled) {
+                            if (ControllerTouchpadUsesMouse(self, touchController)) {
                                 if (pressed) {
+                                    touchController.trackpadPhysicalClickConsumed = YES;
+                                    // Mechanical press deflection must not move the
+                                    // cursor away from the button being clicked.
+                                    touchController.trackpadClickMovementSuppressedUntil = NSProcessInfo.processInfo.systemUptime + 0.05;
                                     // A physical click with the second
                                     // contact down behaves like a secondary
                                     // click, matching the usual trackpad
                                     // convention. Remember the selected
                                     // button until release in case the
                                     // contact is lifted first.
+                                    BOOL secondaryContact = secondary != nil &&
+                                        (fabsf(secondary.xAxis.value) > 0.001f || fabsf(secondary.yAxis.value) > 0.001f);
                                     touchController.trackpadMouseButton =
-                                        touchController.secondaryTouchActive ? BUTTON_RIGHT : BUTTON_LEFT;
+                                        (touchController.secondaryTouchActive || secondaryContact) ? BUTTON_RIGHT : BUTTON_LEFT;
                                 }
                                 int buttonCode = touchController.trackpadMouseButton != 0
                                     ? touchController.trackpadMouseButton : BUTTON_LEFT;
@@ -1148,10 +1462,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                                     touchController.trackpadMouseButton = 0;
                                 }
                             } else {
-                                LiSendControllerTouchEventCtx(inputCtx, (uint8_t)touchController.playerIndex,
-                                                              LI_TOUCH_EVENT_BUTTON_ONLY,
-                                                              (uint32_t)touchController.playerIndex * 2,
-                                                              0.0f, 0.0f, pressed ? 1.0f : 0.0f);
+                                UPDATE_BUTTON_FLAG(touchController, TOUCHPAD_FLAG, pressed);
+                                [self updateFinished:touchController];
                             }
                         }
                     };
@@ -1350,6 +1662,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 limeController.playerIndex = i;
             }
             
+            controller.handlerQueue = dispatch_get_main_queue();
             limeController.gamepad = controller;
             limeController.controllerAnnounced = NO;
             limeController.primaryTouchActive = NO;
@@ -1433,6 +1746,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     self = [super init];
     
     _controllerStreamLock = [[NSLock alloc] init];
+    _hapticsMailboxLock = [[NSObject alloc] init];
+    _pendingHaptics = [[NSMutableDictionary alloc] init];
+
+    _ds5HapticsAudioRenderer = [[Ds5HapticsAudioRenderer alloc] init];
     _controllers = [[NSMutableDictionary alloc] init];
     _controllerNumbers = 0;
     _multiController = streamConfig.multiController;
@@ -1461,14 +1778,44 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         (double)_controllerRightCenterX, (double)_controllerRightCenterY,
         (double)_controllerLeftGain, (double)_controllerRightGain);
     _presenceDelegate = delegate;
+    __weak typeof(self) weakSettingsSelf = self;
+    NSString *sessionHostId = [streamConfig.hostUUID copy];
+    _touchpadSettingsObserver = [[NSNotificationCenter defaultCenter]
+        addObserverForName:@"ControllerTouchpadModeDidChange" object:nil queue:NSOperationQueue.mainQueue
+        usingBlock:^(NSNotification *note) {
+            ControllerSupport *me = weakSettingsSelf;
+            NSString *host = note.userInfo[@"hostId"];
+            if (!me || (![host isEqualToString:sessionHostId] && ![host isEqualToString:@"__global__"])) return;
+            PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(me);
+            for (Controller *controller in me->_controllers.allValues) {
+                if (input && ControllerTouchpadUsesMouse(me, controller) && controller.trackpadMouseButton)
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
+                if (input && !ControllerTouchpadUsesMouse(me, controller)) {
+                    if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, controller.playerIndex,
+                        LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
+                    if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, controller.playerIndex,
+                        LI_TOUCH_EVENT_UP, controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0);
+                    [me clearButtonFlag:controller flags:TOUCHPAD_FLAG];
+                    [me updateFinished:controller];
+                }
+                controller.hasTouchpadModeOverride = NO;
+                ResetControllerTrackpadMouseState(controller);
+            }
+            me.nativeTouchpadEnabled = [note.userInfo[@"native"] boolValue];
+            Log(LOG_I, @"[controller-touch] Live setting native=%d", me.nativeTouchpadEnabled);
+        }];
+
+    _controllerMaintenanceTimer = [NSTimer timerWithTimeInterval:0.1 target:self
+        selector:@selector(controllerMaintenance:) userInfo:nil repeats:YES];
+    [[NSRunLoop mainRunLoop] addTimer:_controllerMaintenanceTimer forMode:NSRunLoopCommonModes];
+
 
     _debouncers = [[NSMutableDictionary alloc] init];
     _debouncers[@(PLAY_FLAG)] = [[NSMutableDictionary alloc] init];
     _debouncers[@(BACK_FLAG)] = [[NSMutableDictionary alloc] init];
 
-    if (_gamepadMouseModeEnabled) {
-        _mouseTimer = [NSTimer scheduledTimerWithTimeInterval:0.016 target:self selector:@selector(mouseTimerCallback:) userInfo:nil repeats:YES];
-    }
+    _mouseTimer = [NSTimer timerWithTimeInterval:0.016 target:self selector:@selector(mouseTimerCallback:) userInfo:nil repeats:YES];
+    [[NSRunLoop mainRunLoop] addTimer:_mouseTimer forMode:NSRunLoopCommonModes];
 
     _player0osc = [[Controller alloc] init];
     _player0osc.playerIndex = 0;
@@ -1617,6 +1964,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 -(void) cleanup
 {
+    [[NSNotificationCenter defaultCenter] removeObserver:_touchpadSettingsObserver];
+    _touchpadSettingsObserver = nil;
+    [_controllerMaintenanceTimer invalidate];
+    _controllerMaintenanceTimer = nil;
+    @synchronized(_hapticsMailboxLock) { [_pendingHaptics removeAllObjects]; }
+
     [[NSNotificationCenter defaultCenter] removeObserver:_controllerConnectObserver];
     [[NSNotificationCenter defaultCenter] removeObserver:_controllerDisconnectObserver];
 #if TARGET_OS_IPHONE
@@ -1640,6 +1993,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     for (Controller* controller in [_controllers allValues]) {
         [self cleanupControllerHaptics:controller];
     }
+    [_ds5HapticsAudioRenderer reset];
+    _ds5HapticsAudioRenderer = nil;
     [_controllers removeAllObjects];
     
     for (GCController* controller in [GCController controllers]) {
@@ -1663,55 +2018,55 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 }
 
 -(void) mouseTimerCallback:(NSTimer*)timer {
+    if (!self.shouldSendInputEvents || !ControllerInputContext(self)) return;
     for (Controller* controller in [_controllers allValues]) {
         if (controller.gamepad == nil) continue;
         
         GCController *gcController = controller.gamepad;
         GCExtendedGamepad *gamepad = gcController.extendedGamepad;
         
-        // 1. Mouse Mode Toggle Logic: Long Press Start (Menu) for > 1.0s, triggered on RELEASE
-        BOOL startPressed = NO;
-        
-        if (gamepad) {
-            if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *)) {
-                startPressed = gamepad.buttonMenu.pressed;
-            }
-        }
-        
-        if (_gamepadMouseModeLongPressMenuEnabled && startPressed) {
-            if (controller.startButtonDownTime == nil) {
-                controller.startButtonDownTime = [NSDate date];
-            }
-        } else if (_gamepadMouseModeLongPressMenuEnabled) {
-            // Start released
-            if (controller.startButtonDownTime != nil) {
-                // Check if it was held long enough
-                if ([controller.startButtonDownTime timeIntervalSinceNow] < -1.0) {
-                    // Toggle
-                    controller.isMouseMode = !controller.isMouseMode;
-                    ResetControllerTrackpadMouseState(controller);
-                    
-                    // Notify delegate
-                    if ([self->_presenceDelegate respondsToSelector:@selector(mouseModeToggled:)]) {
-                        [self->_presenceDelegate mouseModeToggled:controller.isMouseMode];
+        // DualSense Options toggles only the touch surface. Game controls keep
+        // streaming, including while Windows is receiving trackpad gestures.
+        BOOL dualSense = [gamepad isKindOfClass:GCDualSenseGamepad.class];
+        BOOL enabled = _gamepadMouseModeLongPressMenuEnabled && (dualSense || _gamepadMouseModeEnabled);
+        BOOL pressed = gamepad.buttonMenu.pressed;
+        if (enabled && pressed) {
+            if (controller.optionsHoldBegan == 0) controller.optionsHoldBegan = NSProcessInfo.processInfo.systemUptime;
+            if (!controller.optionsLongPressConsumed &&
+                NSProcessInfo.processInfo.systemUptime - controller.optionsHoldBegan >= 2.0) {
+                controller.optionsLongPressConsumed = YES;
+                PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+                BOOL wasMouse = ControllerTouchpadUsesMouse(self, controller);
+                if (input) {
+                    if (!wasMouse) {
+                        if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, (uint8_t)controller.playerIndex,
+                            LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
+                        if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, (uint8_t)controller.playerIndex,
+                            LI_TOUCH_EVENT_UP, controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0);
+                        if ((controller.lastButtonFlags & TOUCHPAD_FLAG) != 0) [self clearButtonFlag:controller flags:TOUCHPAD_FLAG];
+                    } else if (controller.trackpadMouseButton) {
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
                     }
-                    
-                    // Rumble to indicate toggle
-                    [self rumble:controller.playerIndex lowFreqMotor:0xFFFF highFreqMotor:0xFFFF];
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self rumble:controller.playerIndex lowFreqMotor:0 highFreqMotor:0];
-                    });
                 }
-                
-                // Reset
-                controller.startButtonDownTime = nil;
+                if (dualSense) {
+                    controller.touchpadMouseMode = !wasMouse;
+                    controller.hasTouchpadModeOverride = YES;
+                } else controller.isMouseMode = !controller.isMouseMode;
+                ResetControllerTrackpadMouseState(controller);
+                [self clearButtonFlag:controller flags:PLAY_FLAG];
+                [self updateFinished:controller];
+                BOOL nowMouse = ControllerTouchpadUsesMouse(self, controller);
+                Log(LOG_I, @"[controller-touch] Options held player=%d mode=%@", controller.playerIndex,
+                    nowMouse ? @"trackpad-pointer-scroll" : @"host-controller-touch");
+                if ([_presenceDelegate respondsToSelector:@selector(mouseModeToggled:)])
+                    [_presenceDelegate mouseModeToggled:nowMouse];
             }
         } else {
-            // Disabling the gesture while Menu is held must not leave a stale
-            // timestamp that can turn the next short press into a toggle.
             controller.startButtonDownTime = nil;
+            controller.optionsHoldBegan = 0;
+            controller.optionsLongPressConsumed = NO;
         }
-        
+
         // 2. Mouse Movement Logic
         if (controller.isMouseMode) {
             float deltaX = 0;

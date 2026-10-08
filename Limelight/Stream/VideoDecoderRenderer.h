@@ -7,6 +7,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#include "Limelight.h"
 
 #import "StreamConfiguration.h"
 
@@ -54,11 +55,14 @@ typedef struct {
 @interface VideoDecoderRenderer : NSObject
 
 @property(nonatomic, assign) void *depacketizerContext;
+@property(nonatomic) BOOL directSubmission;
 
 @property(nonatomic, readonly) VideoStats videoStats;
+@property(nonatomic, readonly) BOOL hasPresentedVideo;
 @property(nonatomic, readonly) int videoFormat;
 
 - (id)initWithView:(OSView *)view;
+- (void)updateHostHDRMetadata:(const SS_HDR_METADATA *)metadata;
 
 - (void)prewarmPresentationForStreamConfig:(StreamConfiguration *)streamConfig;
 - (void)setupWithVideoFormat:(int)videoFormat

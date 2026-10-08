@@ -288,6 +288,19 @@ NSString *const deviceName = @"roth";
         host = address;
     }
 
+    // This helper is called from stream-window setup on the main thread.
+    // Resolving a Bonjour/WireGuard hostname synchronously can block the UI
+    // for several seconds. Route classification is only advisory, so return
+    // unknown for hostnames and let the actual connection perform resolution.
+    struct in_addr ipv4;
+    struct in6_addr ipv6;
+    BOOL numericAddress = [host cStringUsingEncoding:NSASCIIStringEncoding] != NULL &&
+        (inet_pton(AF_INET, host.UTF8String, &ipv4) == 1 ||
+         inet_pton(AF_INET6, host.UTF8String, &ipv6) == 1);
+    if (!numericAddress) {
+        return nil;
+    }
+
     NSString *probePort = @"47984";
     if (isDecimalPort(port)) {
         NSInteger parsedPort = [port integerValue];

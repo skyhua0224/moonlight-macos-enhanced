@@ -12,6 +12,7 @@
 		4C1F46AA268C6CC7007056FC /* RtpVideoQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C1F46A8268C6CC7007056FC /* RtpVideoQueue.c */; };
 		4C7CB91A2446D19D002B8D4E /* SimpleStun.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C7CB9192446D19D002B8D4E /* SimpleStun.c */; };
 		4C9D1D0B2B3C4D5E6F708193 /* MicrophoneStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C9D1D0A2B3C4D5E6F708192 /* MicrophoneStream.c */; };
+		B10000042F00000000E39078 /* Ds5HapticsStream.c in Sources */ = {isa = PBXBuildFile; fileRef = B10000052F00000000E39078 /* Ds5HapticsStream.c */; };
 		9857AEF01EBE85E10084F99E /* rs.c in Sources */ = {isa = PBXBuildFile; fileRef = 9857AEEE1EBE85E10084F99E /* rs.c */; };
 		98AB2E401CAD425A0089BB98 /* AudioStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1A1CAD423B0089BB98 /* AudioStream.c */; };
 		98AB2E411CAD425A0089BB98 /* ByteBuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1B1CAD423B0089BB98 /* ByteBuffer.c */; };
@@ -109,6 +110,8 @@
 		98AB2E391CAD423B0089BB98 /* RtspConnection.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = RtspConnection.c; sourceTree = "<group>"; };
 		98AB2E3A1CAD423B0089BB98 /* RtspParser.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = RtspParser.c; sourceTree = "<group>"; };
 		98AB2E3B1CAD423B0089BB98 /* SdpGenerator.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = SdpGenerator.c; sourceTree = "<group>"; };
+		B10000052F00000000E39078 /* Ds5HapticsStream.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = Ds5HapticsStream.c; sourceTree = "<group>"; };
+		B10000062F00000000E39078 /* Ds5HapticsStream.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Ds5HapticsStream.h; sourceTree = "<group>"; };
 		98AB2E3C1CAD423B0089BB98 /* Video.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Video.h; sourceTree = "<group>"; };
 		98AB2E3D1CAD423B0089BB98 /* VideoDepacketizer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = VideoDepacketizer.c; sourceTree = "<group>"; };
 		98AB2E3E1CAD423B0089BB98 /* VideoStream.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = VideoStream.c; sourceTree = "<group>"; };
@@ -244,6 +247,8 @@
 				98AB2E391CAD423B0089BB98 /* RtspConnection.c */,
 				98AB2E3A1CAD423B0089BB98 /* RtspParser.c */,
 				98AB2E3B1CAD423B0089BB98 /* SdpGenerator.c */,
+				B10000052F00000000E39078 /* Ds5HapticsStream.c */,
+				B10000062F00000000E39078 /* Ds5HapticsStream.h */,
 				4C7CB9192446D19D002B8D4E /* SimpleStun.c */,
 				98AB2E3C1CAD423B0089BB98 /* Video.h */,
 				98AB2E3D1CAD423B0089BB98 /* VideoDepacketizer.c */,
@@ -327,6 +332,7 @@
 				98AB2E411CAD425A0089BB98 /* ByteBuffer.c in Sources */,
 				98AB2E421CAD425A0089BB98 /* Connection.c in Sources */,
 				98AB2E431CAD425A0089BB98 /* ControlStream.c in Sources */,
+				B10000042F00000000E39078 /* Ds5HapticsStream.c in Sources */,
 				98AB2E441CAD425A0089BB98 /* FakeCallbacks.c in Sources */,
 				98AB2E451CAD425A0089BB98 /* InputStream.c in Sources */,
 				98AB2E461CAD425A0089BB98 /* LinkedBlockingQueue.c in Sources */,

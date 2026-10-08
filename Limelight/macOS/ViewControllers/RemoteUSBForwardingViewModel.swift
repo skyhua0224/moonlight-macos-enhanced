@@ -17,8 +17,7 @@ final class RemoteUSBForwardingViewModel: ObservableObject {
     guard let host, host.id != SettingsModel.globalHostId,
       let temporaryHosts = DataManager().getHosts() as? [TemporaryHost],
       let temporaryHost = temporaryHosts.first(where: { $0.uuid == host.id }),
-      let address = temporaryHost.activeAddress ?? temporaryHost.localAddress
-        ?? temporaryHost.address ?? temporaryHost.externalAddress,
+      let address = Self.reachableAddress(for: temporaryHost),
       !address.isEmpty,
       let certificate = temporaryHost.serverCert
     else {
@@ -43,10 +42,16 @@ final class RemoteUSBForwardingViewModel: ObservableObject {
         self.capability = capability
         self.capabilityAvailable = (capability["enabled"] as? NSNumber)?.boolValue == true
           && (capability["available"] as? NSNumber)?.boolValue == true
-        if let error {
+        if !self.capabilityAvailable {
+          if (capability["statusCode"] as? NSNumber)?.intValue != 200 {
+            self.status = "Unable to read Foundation USB forwarding capability"
+          } else if (capability["enabled"] as? NSNumber)?.boolValue == false {
+            self.status = "Enable USB forwarding in Foundation Sunshine on the host"
+          } else {
+            self.status = "Foundation Sunshine USB forwarding service is unavailable"
+          }
+        } else if let error {
           self.status = error.localizedDescription
-        } else if !self.capabilityAvailable {
-          self.status = (capability["reason"] as? String) ?? "Foundation USB forwarding is unavailable"
         } else if devices.isEmpty {
           self.status = "No claimable USB devices"
         } else {
@@ -78,7 +83,8 @@ final class RemoteUSBForwardingViewModel: ObservableObject {
         self.status = error.localizedDescription
         self.selectedBusID = nil
       } else {
-        self.status = "Forwarding (device.product.isEmpty ? device.busID : device.product)"
+        let name = device.product.isEmpty ? device.busID : device.product
+        self.status = "Forwarding \(name)"
       }
     }
   }
@@ -93,5 +99,13 @@ final class RemoteUSBForwardingViewModel: ObservableObject {
 
   deinit {
     session.stop()
+  }
+
+  private static func reachableAddress(for host: TemporaryHost) -> String? {
+    let candidates = [host.activeAddress].compactMap { $0 }
+      + ConnectionEndpointStore.allEndpoints(for: host)
+    let states = host.addressStates ?? [:]
+    return candidates.first(where: { states[$0]?.intValue == 1 })
+      ?? candidates.first(where: { !$0.isEmpty })
   }
 }

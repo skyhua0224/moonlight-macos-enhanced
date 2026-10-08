@@ -7,6 +7,7 @@
 //
 
 #import "HapticContext.h"
+#include "ControllerTrackpadGesture.h"
 
 @import GameController;
 @import CoreHaptics;
@@ -27,6 +28,15 @@
 
 // Enhanced Sunshine controller state.
 @property(nonatomic) BOOL controllerAnnounced;
+@property(nonatomic) uint32_t lastHapticsSequence;
+@property(nonatomic) BOOL hasHapticsSequence;
+@property(nonatomic) CFAbsoluteTime lastAuthoredHapticsTime;
+@property(nonatomic) BOOL authoredHapticsLogged;
+@property(nonatomic) BOOL authoredHapticsFallback;
+
+@property(nonatomic) BOOL hasTouchpadModeOverride;
+@property(nonatomic) BOOL touchpadMouseMode;
+@property(nonatomic) BOOL optionsLongPressConsumed;
 @property(nonatomic) BOOL primaryTouchActive;
 @property(nonatomic) BOOL secondaryTouchActive;
 @property(nonatomic) float lastPrimaryTouchX;
@@ -36,6 +46,17 @@
 @property(nonatomic) float trackpadMouseAccumulatedX;
 @property(nonatomic) float trackpadMouseAccumulatedY;
 @property(nonatomic) float trackpadScrollAccumulatedY;
+@property(nonatomic) float trackpadScrollAccumulatedX;
+@property(nonatomic) ControllerTrackpadGesture trackpadGesture;
+@property(nonatomic) BOOL trackpadFlushPending;
+@property(nonatomic) BOOL legacyTouchSnapshotPending;
+@property(nonatomic) NSUInteger trackpadGestureGeneration;
+@property(nonatomic) NSTimeInterval trackpadTouchBegan;
+@property(nonatomic) BOOL trackpadPhysicalClickConsumed;
+@property(nonatomic) NSTimeInterval trackpadClickMovementSuppressedUntil;
+@property(nonatomic) BOOL hasSentGamepadState;
+@property(nonatomic) ControllerGamepadState sentGamepadState;
+@property(nonatomic) NSTimeInterval optionsHoldBegan;
 @property(nonatomic) int trackpadMouseButton;
 
 @property(nonatomic) HapticContext *_Nullable lowFreqMotor;

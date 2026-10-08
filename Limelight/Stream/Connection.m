@@ -7,6 +7,7 @@
 //
 
 #import "Connection.h"
+#import "Ds5HapticsAudioRenderer.h"
 #import "LogBuffer.h"
 #import "Utils.h"
 
@@ -26,6 +27,7 @@
 #include <limits.h>
 #include <math.h>
 #include <pthread.h>
+#include <stddef.h>
 
 #include "Limelight.h"
 #include "Limelight-internal.h"
@@ -237,6 +239,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     uint32_t _micPingCount;
 #endif
     dispatch_queue_t _clipboardControlQueue;
+    BOOL _connectionLayoutCompatible;
 }
 
 - (uint64_t)audioUnderrunCount {
@@ -682,6 +685,7 @@ int DrDecoderSetup(int videoFormat, int width, int height, int redrawRate, void*
     if (renderer == nil) {
         return -1;
     }
+    renderer.directSubmission = (conn->_drCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) != 0;
     [renderer setupWithVideoFormat:videoFormat
                          frameRate:redrawRate
                      upscalingMode:conn->_currentUpscalingMode
@@ -2147,6 +2151,15 @@ void ClConnectionStarted(void)
     });
 }
 
+void ClSetHdrMode(bool enabled)
+{
+    Connection *connection = CurrentConnection();
+    if (connection == nil) return;
+    SS_HDR_METADATA metadata = {0};
+    BOOL hasMetadata = enabled && LiGetHdrMetadataCtx(&connection->_connectionContext.controlContext, &metadata);
+    [ConnectionGetRendererSnapshot(connection) updateHostHDRMetadata:hasMetadata ? &metadata : NULL];
+}
+
 void ClConnectionTerminated(int errorCode)
 {
 #if defined(LI_MIC_CONTROL_START)
@@ -2276,6 +2289,24 @@ void ClSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlags, uint8_
     }
 }
 
+void ClDs5HapticsIrV2(const LI_DS5_HAPTICS_IR_FRAME_V2 *frame) {
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (frame != NULL && [callbacks respondsToSelector:@selector(ds5HapticsIrV2:)]) {
+        [callbacks ds5HapticsIrV2:frame];
+    }
+}
+
+void ClDs5HapticsPcm(const LI_DS5_HAPTICS_PCM_FRAME *frame)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks != nil && frame != NULL &&
+        [callbacks respondsToSelector:@selector(ds5HapticsPcm:)]) {
+        [callbacks ds5HapticsPcm:frame];
+    }
+}
+
 void ClSetMotionEventState(uint16_t controllerNumber, uint8_t motionType, uint16_t reportRateHz)
 {
     Connection *conn = CurrentConnection();
@@ -2331,6 +2362,10 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
 -(void) terminate
 {
+    if (!_connectionLayoutCompatible) {
+        UnregisterConnection(&_connectionContext);
+        return;
+    }
     // Interrupt any action blocking LiStartConnection(). This is
     // thread-safe and done outside initLock on purpose, since we
     // won't be able to acquire it if LiStartConnection is in
@@ -2367,6 +2402,15 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 -(id) initWithConfig:(StreamConfiguration*)config renderer:(VideoDecoderRenderer*)myRenderer connectionCallbacks:(id<ConnectionCallbacks>)callbacks
 {
     self = [super init];
+
+    _connectionLayoutCompatible = LiIsConnectionContextLayoutCompatible(
+        sizeof(ML_CONNECTION_CONTEXT), offsetof(ML_CONNECTION_CONTEXT, controlContext),
+        offsetof(ML_CONNECTION_CONTEXT, inputContext), offsetof(ML_CONNECTION_CONTEXT, stage));
+    Log(_connectionLayoutCompatible ? LOG_I : LOG_E,
+        @"[diag] Connection ABI: compatible=%d size=%zu control=%zu input=%zu stage=%zu",
+        _connectionLayoutCompatible, sizeof(ML_CONNECTION_CONTEXT),
+        offsetof(ML_CONNECTION_CONTEXT, controlContext),
+        offsetof(ML_CONNECTION_CONTEXT, inputContext), offsetof(ML_CONNECTION_CONTEXT, stage));
 
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateVolume) name:@"volumeSettingChanged" object:nil];
     
@@ -2426,6 +2470,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     }
 
     ConnectionSetRenderer(self, myRenderer);
+    [myRenderer updateHostHDRMetadata:NULL];
     ConnectionSetCallbacks(self, callbacks);
     _currentUpscalingMode = config.upscalingMode;
     _rendererStreamConfig = config;
@@ -2680,7 +2725,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
             _streamConfig.dynamicHdrCaps = DYNAMIC_HDR_CAPS_HDR10_PLUS;
         }
     }
-    if (MLAppleDolbyVisionDirectSurfaceAvailable()) {
+    if (config.hdrTransferFunction != 0 && MLAppleDolbyVisionDirectSurfaceAvailable()) {
         if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HDR10_PQ) {
             _streamConfig.dynamicHdrCaps |= DYNAMIC_HDR_CAPS_DOLBY_VISION_81;
         } else if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HLG) {
@@ -2706,11 +2751,12 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _drCallbacks.setup = DrDecoderSetup;
     _drCallbacks.start = DrStart;
     _drCallbacks.stop = DrStop;
+    _drCallbacks.submitDecodeUnit = config.videoRendererMode == 2 ? DrSubmitDecodeUnit : NULL;
 
 //#if TARGET_OS_IPHONE
     // RFI doesn't work properly with HEVC on iOS 11 with an iPhone SE (at least)
     // It doesnt work on macOS either, tested with Network Link Conditioner.
-    _drCallbacks.capabilities = CAPABILITY_PULL_RENDERER |
+    _drCallbacks.capabilities = (config.videoRendererMode == 2 ? CAPABILITY_DIRECT_SUBMIT : CAPABILITY_PULL_RENDERER) |
                                 CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC |
                                 CAPABILITY_REFERENCE_FRAME_INVALIDATION_AV1;
 //#endif
@@ -2727,6 +2773,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _clCallbacks.stageComplete = ClStageComplete;
     _clCallbacks.stageFailed = ClStageFailed;
     _clCallbacks.connectionStarted = ClConnectionStarted;
+    _clCallbacks.setHdrMode = ClSetHdrMode;
     _clCallbacks.connectionTerminated = ClConnectionTerminated;
     _clCallbacks.logMessage = ClLogMessage;
     _clCallbacks.rumble = ClRumble;
@@ -2737,6 +2784,13 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _clCallbacks.connectionStatusUpdate = ClConnectionStatusUpdate;
     _clCallbacks.clipboardItemReceived = ClClipboardItemReceived;
     _clCallbacks.clipboardDataReceived = ClClipboardDataReceived;
+    // Foundation prioritizes PCM if both feature flags are set. Bluetooth
+    // must request IR alone or it will never receive the analyzed frames.
+    BOOL physicalDs5Audio = config.controllerHapticsMode == 0 &&
+        [Ds5HapticsAudioRenderer hasPhysicalEndpoint];
+    _clCallbacks.ds5HapticsPcm = physicalDs5Audio ? ClDs5HapticsPcm : NULL;
+    _clCallbacks.ds5HapticsIrV2 = physicalDs5Audio ? NULL : ClDs5HapticsIrV2;
+    Log(LOG_I, @"[controller-haptics] Negotiation mode=%@", physicalDs5Audio ? @"USB-PCM" : @"Bluetooth-IR-v2");
 
     return self;
 }
@@ -3437,6 +3491,11 @@ static void FillOutputBuffer(void *aqData,
 
 -(void) main
 {
+    if (!_connectionLayoutCompatible) {
+        id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(self);
+        [callbacks launchFailed:NSLocalizedString(@"Streaming components are incompatible. Please reinstall the app.", @"Connection component layout mismatch")];
+        return;
+    }
     os_unfair_lock_lock(&gConnectionLifecycleLock);
     LiSetThreadConnectionContext(&_connectionContext);
     Log(LOG_I, @"LiStartConnectionCtx: connCtx=%p globalCtx=%p inputCtx=%p", &_connectionContext, LiGetGlobalConnectionContextPtr(), LiGetInputContextFromConnectionCtx(&_connectionContext));

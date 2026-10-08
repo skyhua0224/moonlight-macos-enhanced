@@ -7,6 +7,7 @@
 //
 
 #import "Controller.h"
+#import "Limelight.h"
 #import "StreamConfiguration.h"
 
 @class OnScreenControls;
@@ -16,6 +17,8 @@
 - (void)gamepadPresenceChanged;
 - (void)mousePresenceChanged;
 - (void)mouseModeToggled:(BOOL)enabled;
+@optional
+- (void)controllerRumbleFallback:(unsigned short)number low:(unsigned short)low high:(unsigned short)high;
 
 @end
 
@@ -84,8 +87,11 @@
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz;
+- (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame;
+- (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame;
 
 + (int)getConnectedGamepadMask:(StreamConfiguration *)streamConfig;
++ (BOOL)hasDualSenseController;
 
 - (NSUInteger)getConnectedGamepadCount;
 

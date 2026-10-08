@@ -315,16 +315,17 @@
 "Gamepad Mouse Emulation (!)" = "手柄模拟鼠标";
 "Gamepad Mouse Hint" = "使用手柄模拟鼠标。右摇杆移动，A 键点击。";
 "DualSense Haptics" = "DualSense 触觉反馈";
-"DualSense Haptics detail" = "使用 Apple 公共 Game Controller 触觉路径。原生 USB 音频触觉需要 USB 转发。";
+"DualSense Haptics detail" = "使用 Apple 公共 Game Controller 触觉路径，并接收 Foundation authored PCM 后提供 RMS 回退。精确的 USB 音频执行器输出需要 USB 转发。";
 "Automatic" = "自动";
 "System Haptics" = "系统触觉";
 "Compatibility Rumble" = "兼容振动";
 "Feedback Controller" = "反馈手柄";
 "Feedback Controller detail" = "选择接收主机反馈的本地手柄。自动模式跟随主机手柄编号。";
 "Host Controller Type" = "主机控制器类型";
-"Host Controller Type detail" = "控制连接建立时向 Foundation 声明的虚拟控制器类型。PlayStation 类型携带触控板和运动能力；当前协议没有独立的 DS5 类型。";
+"Host Controller Type detail" = "选择发送给主机的控制器类型。主机支持时，DualSense 会保留触控板、运动、扳机和反馈能力。";
 "Xbox 360" = "Xbox 360";
 "PlayStation" = "PlayStation";
+"DualSense" = "DualSense";
 "Controller 1" = "手柄 1";
 "Controller 2" = "手柄 2";
 "Controller 3" = "手柄 3";
@@ -362,6 +363,9 @@
 
 /* Connection Method */
 "Connection Method" = "连接方式";
+"Connection Addresses" = "连接地址";
+"Connection Addresses detail" = "管理已保存的地址并选择默认连接路线。";
+"Manage Addresses" = "管理地址";
 "Auto (Recommended)" = "自动 (推荐)";
 "Native Renderer (Recommended)" = "原生渲染器（推荐）";
 "Default Profile" = "默认配置";
@@ -373,6 +377,8 @@
 "Toggle Sidebar" = "折叠侧栏";
 "Offline" = "离线";
 "Settings" = "设置";
+"No Results" = "没有结果";
+"No matching settings" = "没有匹配的设置项";
 "Connection Details" = "连接详情";
 "Edit Connections" = "编辑连接";
 
@@ -648,11 +654,16 @@
 "Display Topology Available" = "Foundation 显示拓扑可用";
 "Display Topology Unavailable" = "Foundation 显示拓扑不可用";
 "HDR10+ Dynamic Metadata" = "HDR10+ 动态元数据";
+"HDR Vivid PQ" = "HDR Vivid PQ";
+"HDR Vivid HLG" = "HDR Vivid HLG";
+"HDR Vivid macOS limitation detail" = "当前显示链路不提供此格式。";
 "Dolby Vision Profile 8.1" = "Dolby Vision Profile 8.1";
 "Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
-"HDR10+ capability detail" = "最新 Foundation 主机会注入 HDR10+ SEI。macOS 13+ 会协商该能力并观察 Core Media 逐帧元数据，但在确认 Metal 输出端实际消费前仍标记为受限。";
-"Dolby Vision 8.1 capability detail" = "当前 Mac 暴露了 Apple Dolby HEVC 解码器和 EDR 显示链路。客户端会为 Foundation Profile 8.1 构造同时包含 hvcC 与 dvcC 的 dvh1 描述，必要时回退到 Apple 公开的逐帧元数据生成器。在当前显示器上完成真实 Foundation RPU 验证前，该能力标记为受限。";
-"Dolby Vision 8.4 capability detail" = "当前 Mac 暴露了 Dolby HEVC 与 HLG 基础层所需能力。客户端会为 Foundation Profile 8.4 构造同时包含 hvcC 与 dvcC 的 dvh1 描述，并提供 Apple 公开的元数据生成回退。在当前显示器上完成真实 Foundation RPU 验证前，该能力标记为受限。";
+"HDR Capabilities" = "HDR 能力";
+"Dolby Vision negotiation detail" = "由主机和显示器自动协商；需要时会回退到兼容 HDR。";
+"HDR10+ capability detail" = "当主机、解码器和显示器支持动态 HDR 元数据时自动协商。";
+"Dolby Vision 8.1 capability detail" = "当主机、解码器和显示器支持 Dolby Vision Profile 8.1 时自动协商。";
+"Dolby Vision 8.4 capability detail" = "当主机、解码器和显示器支持 Dolby Vision Profile 8.4 时自动协商。";
 "Display capability has not been queried" = "刷新主机显示器列表以查询 Foundation 能力。";
 "Loading Foundation display topology" = "正在加载 Foundation 显示拓扑…";
 "Foundation display topology endpoint ready" = "Foundation 显示拓扑端点已就绪。";
@@ -846,6 +857,10 @@
 "Clipboard Sync" = "剪贴板同步";
 "Clipboard Sync detail" = "当当前串流会话持有剪贴板同步控制权时，自动同步文本和单张图片。";
 "Clipboard Sync Foundation detail" = "此功能适用于 Foundation Sunshine 主机。受支持的主机会默认启用自动同步，不支持的主机会直接忽略。";
+"Selected Connection Unavailable" = "当前连接方式不可用";
+"Selected Connection Unavailable Detail" = "当前选择的连接方式 %@ 不可用，但 %@ 可以连接。开始串流前切换连接方式吗？";
+"Switch and Continue" = "切换并继续";
+"Try Selected Route" = "仍尝试当前方式";
 "Auto Sync" = "自动同步";
 "Foundation USB forwarding" = "Foundation USB 转发";
 "Foundation must advertise USB forwarding before a device can be shared." = "Foundation 必须先公布 USB 转发能力，才能共享设备。";
@@ -926,12 +941,12 @@
 "Display & HDR" = "显示与 HDR";
 "Search Settings" = "搜索设置";
 "No matching settings" = "没有匹配的设置";
-"Streaming settings subtitle" = "设置串流分辨率、帧率、码率和主机启动行为。";
-"Display settings subtitle" = "选择主机显示拓扑、虚拟显示器和 HDR 显示档案。";
-"Video settings subtitle" = "选择解码器、HDR 模式、画质和帧节奏行为。";
-"Audio settings subtitle" = "配置播放、音效增强和麦克风输入。";
-"Controller settings subtitle" = "配置控制器、DualSense 反馈、运动传感器和映射。";
-"Keyboard and mouse settings subtitle" = "配置指针行为、键盘翻译和快捷键。";
+"Streaming settings subtitle" = "分辨率、帧率与码率。";
+"Display settings subtitle" = "主机显示器与虚拟显示器。";
+"Video settings subtitle" = "编码、HDR 与画面呈现。";
+"Audio settings subtitle" = "播放、音效与麦克风。";
+"Controller settings subtitle" = "手柄与触控板。";
+"Keyboard and mouse settings subtitle" = "指针、滚动与快捷键。";
 "USB settings subtitle" = "转发 USB 设备并浏览主机文件映射。";
 "App diagnostics settings subtitle" = "配置应用行为、权限、日志和诊断。";
 "Audio & Microphone" = "音频与麦克风";
@@ -998,3 +1013,160 @@
 "Upscaling" = "超分辨率";
 "V-Sync" = "垂直同步";
 "Warn" = "警告";
+
+"Controller Deadzone" = "手柄死区";
+"Media" = "媒体";
+"Native Touchpad detail" = "主机触控板发送游戏触控输入；Mac 风格触控板控制远端指针和双指滚动。串流中长按 Options 可切换。";
+"HDR detail" = "主机协商 HDR 时，使用显示器的 HDR 与扩展动态范围链路。";
+"YUV444 detail" = "在解码器和显示链路支持时请求 4:4:4 色度。";
+"Unlock Maximum Bitrate" = "解锁最高码率";
+"HDR Display Profile" = "HDR 显示档案";
+"Metadata Source" = "元数据来源";
+"Client Display Profile" = "客户端显示档案";
+"Tone Mapping" = "色调映射";
+"Pacing" = "帧节奏";
+"Smoothness / Latency" = "流畅度 / 延迟";
+"Runtime" = "运行状态";
+"Foundation USB forwarding detail" = "通过安全转发通道，将支持的 USB 设备共享给主机。";
+"Diagnostics are written to the application log." = "诊断信息会写入应用日志。";
+"Curated" = "精选日志";
+"Raw" = "原始日志";
+"Maximum Brightness" = "最大亮度";
+"Minimum Brightness" = "最小亮度";
+"Maximum Average Brightness" = "最大平均亮度";
+"DualSense Touchpad as Trackpad" = "将 DualSense 触控板用作触控板";
+"DualSense Touchpad Mode" = "DualSense 触控板模式";
+"Host Touchpad" = "主机触控板";
+"Mac-style Trackpad" = "Mac 风格触控板";
+"Controller Count" = "手柄数量";
+"Haptic Feedback" = "触觉反馈";
+"Motion Sensor" = "动作传感器";
+"Feedback Target" = "反馈目标";
+"Connected Controllers" = "已连接手柄";
+"Keyboard Translation" = "键盘翻译";
+"Capture System Shortcuts" = "捕获系统快捷键";
+"Pointer Speed" = "指针速度";
+"Scroll Mode" = "滚动模式";
+
+"Resolution & Frame Rate" = "分辨率与帧率";
+"Bitrate & Playback" = "码率与播放";
+"Bitrate detail" = "调整串流码率。更高码率需要更稳定的网络带宽。";
+"Audio Enhancement" = "音效增强";
+"Diagnostics" = "诊断";
+"Minimum Log Level" = "最低日志级别";
+"Show Performance Overlay" = "显示性能浮层";
+"Dim Unfocused Artwork" = "降低未选中应用封面亮度";
+"AWDL Stability Helper detail" = "改善部分 Wi‑Fi 网络下的主机发现和连接稳定性。";
+"VSync" = "垂直同步";
+"File Mapping" = "文件映射";
+"Host Files" = "主机文件";
+"Host Files settings subtitle" = "在 Finder 中打开主机共享的只读文件夹。";
+"Host Files Status" = "主机文件状态";
+"Host Files Status detail" = "共享文件夹由 Foundation Sunshine 提供。";
+"Open Host Files" = "打开主机文件";
+"Open in Finder" = "在 Finder 中打开";
+"Host Files purpose detail" = "主机文件会在 Finder 中显示主机共享的文件夹。它不会比较、同步或复制本机文件夹。";
+"Host Files read-only detail" = "文件按需读取，本次会话中为只读。";
+"Host Files ready" = "主机文件已就绪";
+"Checking Host Files…" = "正在检查主机文件…";
+"Invalid Host Files capability response" = "主机文件能力响应无效";
+"Host Files is unavailable" = "主机文件不可用";
+"Access" = "访问";
+"Access Mode" = "访问模式";
+"Read Only" = "只读";
+"Permission" = "权限";
+"Preset" = "预设";
+"Unlocked Maximum Bitrate" = "解锁最高码率";
+"Refresh" = "刷新";
+
+"Sound" = "声音";
+"Sound Effects" = "声音效果";
+"Alert Sound" = "提醒声音";
+"Play Sound Effects Through" = "播放声音效果的设备";
+"Alert Volume" = "提醒音量";
+"Play Sound at Startup" = "启动时播放声音";
+"Play User Interface Sound Effects" = "播放用户界面声音效果";
+"Play Feedback When Volume Changes" = "音量更改时播放反馈";
+"Output & Input" = "输出与输入";
+"Output" = "输出";
+"Name" = "名称";
+"Type" = "类型";
+"Play" = "播放";
+"Output Volume" = "输出音量";
+"Mute" = "静音";
+"AirPlay" = "隔空播放";
+"Built-in" = "内建";
+"Other" = "其他";
+
+"USB Mapping" = "USB 映射";
+
+"USB Mapping Disabled" = "USB 映射已停用";
+"Available Devices" = "可用设备";
+
+"No mapped devices" = "没有已映射设备";
+"Searching…" = "正在搜索…";
+
+"Rumble" = "震动";
+"Swap Buttons" = "交换按键";
+"My Devices" = "我的设备";
+"Nearby Devices" = "附近设备";
+"File Mapping settings subtitle" = "浏览主机提供的只读文件映射。";
+"About" = "关于";
+"About settings subtitle" = "查看应用版本、项目和许可证信息。";
+"Updates" = "更新";
+"Updates settings subtitle" = "查看当前版本并打开发布页面。";
+"Check for Updates" = "检查更新";
+"Current Version" = "当前版本";
+"Version" = "版本";
+"Project" = "项目";
+"License" = "许可证";
+
+"About & Updates" = "关于与更新";
+"Update Sources detail" = "查看新版本、更新内容和下载。";
+"Check Automatically" = "自动检查更新";
+"Not Checked" = "未检查";
+"Checking for Updates" = "正在检查更新";
+"Up to Date" = "已是最新版本";
+"Update Available" = "有可用更新";
+"Update Check Unavailable" = "暂时无法检查更新";
+"Open Download" = "打开下载页面";
+
+"This Mac" = "本机";
+"Choose Folder" = "选择文件夹";
+"No Files" = "没有文件";
+"Choose a local folder to compare files." = "选择本机文件夹以对比文件。";
+"Foundation Sunshine is required for file mapping." = "文件映射需要主机启用 Foundation Sunshine。";
+"Up" = "上一级";
+
+"Host information updated" = "主机信息已更新";
+"Checking file mapping…" = "正在检查文件映射…";
+"Invalid file mapping capability response" = "文件映射能力响应无效";
+"Connecting…" = "正在连接…";
+"File mapping is unavailable" = "文件映射不可用";
+"No shared folders" = "没有共享文件夹";
+"File mapping capability is unavailable" = "文件映射能力不可用";
+"File mapping hello failed" = "文件映射握手失败";
+"Invalid file mapping response" = "文件映射响应无效";
+
+"About hero subtitle" = "为 Mac 提供低延迟、高画质的远程串流体验。";
+
+"Hold Options to Switch Touchpad Mode" = "长按 Options 切换触控板模式";
+"DualSense Options hint" = "按住 Options 两秒，在主机触控和指针／双指滚动之间切换。游戏手柄按键继续正常使用。";
+
+"Advanced Video Settings" = "高级视频设置";
+"Decoding" = "解码能力";
+"Mouse Tuning" = "鼠标调节";
+"View Live Log" = "查看实时日志";
+"Auto Scroll Logs" = "自动滚动日志";
+"Metal tuning is available with the Metal renderer." = "选择 Metal 渲染器后可调节。";
+"Clear Category Filters" = "清除分类筛选";
+
+"Streaming components are incompatible. Please reinstall the app." = "串流组件不兼容，请重新安装应用。";
+
+"Unable to read Foundation USB forwarding capability" = "未能读取主机的 USB 转发能力";
+
+"Enable USB forwarding in Foundation Sunshine on the host" = "请在主机的 Foundation Sunshine 中开启 USB 转发";
+
+"Foundation Sunshine USB forwarding service is unavailable" = "主机的 Foundation Sunshine USB 转发服务未就绪";
+
+"Connecting" = "正在连接";

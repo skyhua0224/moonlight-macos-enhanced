@@ -52,51 +52,25 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     while (!self.cancelled) {
         [self discoverHost];
         if (!self.cancelled) {
-            [NSThread sleepForTimeInterval:POLL_RATE];
+            // Keep cancellation responsive even between discovery cycles.
+            for (float waited = 0; waited < POLL_RATE && !self.cancelled; waited += 0.1f)
+                [NSThread sleepForTimeInterval:0.1];
         }
     }
 }
 
 - (NSArray*) getHostAddressList {
-    NSMutableOrderedSet *orderedSet = [[NSMutableOrderedSet alloc] initWithCapacity:5];
-
-    // Try the active address first if we have one. This prevents
-    // waiting for timeouts on unreachable local addresses when
-    // we're connected remotely.
-    if (_host.activeAddress != nil) {
-        [orderedSet addObject:_host.activeAddress];
-    }
-    if (_host.localAddress != nil) {
-        [orderedSet addObject:_host.localAddress];
-    }
-    if (_host.address != nil) {
-        [orderedSet addObject:_host.address];
-    }
-    if (_host.name.length > 0 && [_host.name hasSuffix:@".local."]) {
-        [orderedSet addObject:_host.name];
-    }
-    if (_host.externalAddress != nil) {
-        [orderedSet addObject:_host.externalAddress];
-    }
-    if (_host.ipv6Address != nil) {
-        [orderedSet addObject:_host.ipv6Address];
-    }
-
-    // Append manual endpoints from editor
-    NSArray<NSString *> *manualEndpoints = [ConnectionEndpointStore manualEndpointsForHost:_host.uuid];
-    for (NSString *endpoint in manualEndpoints) {
-        if (endpoint.length > 0) {
-            [orderedSet addObject:endpoint];
-        }
-    }
-
-    return [orderedSet array];
+    // Use the shared endpoint store so custom HTTP ports are propagated to
+    // bare local/external addresses. A host may advertise 192.168.x.x while
+    // its paired GameStream endpoint is actually 192.168.x.x:57989.
+    return [ConnectionEndpointStore allEndpointsForHost:_host];
 }
 
 - (BOOL)shouldBypassCooldownForAddress:(NSString *)address {
     if (address.length == 0) {
         return NO;
     }
+    if (_host.state != StateOnline) return YES;
     if (_host.activeAddress != nil && [_host.activeAddress isEqualToString:address]) {
         return YES;
     }
@@ -172,7 +146,10 @@ static dispatch_once_t gUnpairedObservationOnceToken;
 
 - (void) discoverHost {
     NSArray *addresses = [self getHostAddressList];
-    NSMutableArray<NSString *> *filteredAddresses = [addresses mutableCopy];
+    // Probe every known endpoint for host liveness even when the user pinned
+    // one connection method. A pinned route controls streaming, but it must
+    // not hide a reachable alternate route from the host status indicator.
+    NSMutableArray<NSString *> *probeAddresses = [addresses mutableCopy];
 
     NSDictionary *hostSettings = nil;
     NSString *selectedConnectionMethod = nil;
@@ -183,12 +160,20 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             selectedConnectionMethod = hostSettings[@"connectionMethod"];
             if (selectedConnectionMethod.length > 0 && ![selectedConnectionMethod isEqualToString:@"Auto"]) {
                 autoConnectionMode = NO;
-                filteredAddresses = [NSMutableArray arrayWithObject:selectedConnectionMethod];
+                if (![probeAddresses containsObject:selectedConnectionMethod]) {
+                    [probeAddresses insertObject:selectedConnectionMethod atIndex:0];
+                } else {
+                    NSUInteger selectedIndex = [probeAddresses indexOfObject:selectedConnectionMethod];
+                    if (selectedIndex != 0) {
+                        [probeAddresses exchangeObjectAtIndex:0 withObjectAtIndex:selectedIndex];
+                    }
+                }
             }
         }
     }
     
-    Log(LOG_D, @"%@ has %d unique addresses", _host.name, [filteredAddresses count]);
+    Log(LOG_D, @"%@ has %d unique addresses (selected=%@)", _host.name, [probeAddresses count],
+        selectedConnectionMethod ?: @"Auto");
     
     dispatch_group_t group = dispatch_group_create();
     NSMutableDictionary *latencies = [[NSMutableDictionary alloc] init];
@@ -196,6 +181,7 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     NSLock *lock = [[NSLock alloc] init];
     
     __block BOOL receivedResponse = NO;
+    __block BOOL publishedOnline = NO;
     __block double minLatency = DBL_MAX;
     __block NSString *bestAddress = nil;
     __block ServerInfoResponse *bestResp = nil;
@@ -203,7 +189,7 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     __block BOOL sawExplicitUnpairedStatus = NO;
 
     __weak typeof(self) weakSelf = self;
-    for (NSString *address in filteredAddresses) {
+    for (NSString *address in probeAddresses) {
         if (self.cancelled) break;
         
         if ([self shouldSkipAddressDueToCooldown:address]) {
@@ -222,6 +208,10 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             NSDate *start = [NSDate date];
             ServerInfoResponse* serverInfoResp = [strongSelf requestInfoAtAddress:address cert:[strongSelf getHost].serverCert];
             NSTimeInterval rtt = -[start timeIntervalSinceNow] * 1000.0;
+            if (strongSelf.cancelled) {
+                dispatch_group_leave(group);
+                return;
+            }
             
             BOOL success = [strongSelf checkResponse:serverInfoResp];
             if (!success) {
@@ -232,6 +222,37 @@ static dispatch_once_t gUnpairedObservationOnceToken;
                     serverInfoResp.statusMessage ?: @"unknown");
             }
             
+            // Host availability must not wait for unrelated dead routes or
+            // ICMP. Only a serverinfo response for the expected UUID qualifies.
+            BOOL publish = NO;
+            NSDictionary *earlyStates = nil;
+            NSDictionary *earlyLatencies = nil;
+            if (success && !strongSelf.cancelled) {
+                [lock lock];
+                if (!publishedOnline) {
+                    publishedOnline = YES;
+                    publish = YES;
+                    states[address] = @1;
+                    latencies[address] = @((int)rtt);
+                    earlyStates = [states copy];
+                    earlyLatencies = [latencies copy];
+                }
+                [lock unlock];
+                if (publish) {
+                    TemporaryHost *host = [strongSelf getHost];
+                    BOOL wasOnline = host.state == StateOnline;
+                    host.state = StateOnline;
+                    host.addressStates = earlyStates;
+                    host.addressLatencies = earlyLatencies;
+                    if (autoConnectionMode && (!wasOnline || host.activeAddress.length == 0) &&
+                        ![[StreamingSessionManager shared] isStreamingHost:host.uuid]) {
+                        host.activeAddress = address;
+                    }
+                    if (!wasOnline && strongSelf.onlineHandler) strongSelf.onlineHandler(host);
+                    Log(LOG_I, @"[discovery] First verified endpoint: host=%@ elapsedMs=%.0f", host.name, rtt);
+                }
+            }
+            NSNumber *pingMs = success ? [LatencyProbe icmpPingMsForAddress:address] : nil;
             [lock lock];
             if (success) {
                 receivedResponse = YES;
@@ -243,7 +264,6 @@ static dispatch_once_t gUnpairedObservationOnceToken;
                         sawExplicitPairedStatus = YES;
                     }
                 }
-                NSNumber *pingMs = [LatencyProbe icmpPingMsForAddress:address];
                 if (pingMs != nil) {
                     [latencies setObject:pingMs forKey:address];
                 } else {
@@ -286,7 +306,7 @@ static dispatch_once_t gUnpairedObservationOnceToken;
 
     NSString *firstOnlineAddress = nil;
     int onlineCount = 0;
-    for (NSString *addr in filteredAddresses) {
+    for (NSString *addr in probeAddresses) {
         NSNumber *state = states[addr];
         if (state && state.intValue == 1) {
             onlineCount++;
@@ -295,9 +315,10 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             }
         }
     }
-    int totalCount = (int)filteredAddresses.count;
+    int totalCount = (int)probeAddresses.count;
     int offlineCount = totalCount - onlineCount;
 
+    NSInteger previousState = _host.state;
     if (receivedResponse) {
         _host.state = StateOnline;
     } else if (isStreamingThisHost) {
@@ -362,13 +383,16 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             }
         }
 
-        if (autoConnectionMode) {
+        if (autoConnectionMode && !isStreamingThisHost) {
             if (firstOnlineAddress != nil) {
                 _host.activeAddress = firstOnlineAddress;
             } else if (bestAddress != nil) {
                 _host.activeAddress = bestAddress;
             }
-        } else if (selectedConnectionMethod.length > 0) {
+        } else if (!autoConnectionMode && !isStreamingThisHost && selectedConnectionMethod.length > 0) {
+            // Keep the user's selected route even when it is currently down.
+            // The host stays online if another endpoint answered; the stream
+            // launch path can then offer to switch routes explicitly.
             _host.activeAddress = selectedConnectionMethod;
         }
 
@@ -432,6 +456,7 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     // Persist state changes (including offline) so UI stays in sync
     DataManager *dataManager = [[DataManager alloc] init];
     [dataManager updateHost:_host];
+    if (_host.state != previousState && self.onlineHandler) self.onlineHandler(_host);
 
     // Broadcast latency update for UI (SettingsModel)
     __weak typeof(self) weakSelf2 = self;
@@ -458,7 +483,7 @@ static dispatch_once_t gUnpairedObservationOnceToken;
         ServerInfoResponse* response = [[ServerInfoResponse alloc] init];
         [hMan executeRequestSynchronously:[HttpRequest requestForResponse:response
                                                            withUrlRequest:[hMan newServerInfoRequest:true]
-                                           fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
+                                           fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest:true]]];
         return response;
     }
 }

@@ -623,7 +623,13 @@ private struct StreamHostRuntimeInfo {
   private static func classifyRouteTier(host: TemporaryHost?, targetAddress: String) -> StreamRiskRouteTier {
     guard !targetAddress.isEmpty else { return .unknown }
 
-    let egressIf = Utils.outboundInterfaceName(forAddress: targetAddress, sourceAddress: nil) ?? ""
+    // This assessment runs while the stream window is being created on the
+    // main thread. Never synchronously resolve a hostname here: mDNS/DNS can
+    // block for several seconds and make the whole app look frozen. Actual
+    // transport setup performs its own asynchronous/network-side validation.
+    let egressIf = Self.isIpLiteral(targetAddress)
+      ? (Utils.outboundInterfaceName(forAddress: targetAddress, sourceAddress: nil) ?? "")
+      : ""
     if !egressIf.isEmpty, Utils.isTunnelInterfaceName(egressIf) {
       return .overlayRemote
     }
@@ -739,7 +745,9 @@ private struct StreamHostRuntimeInfo {
   private static func currentWirelessLinkInfo(forTarget targetAddress: String) -> StreamWirelessLinkInfo? {
     guard !targetAddress.isEmpty else { return nil }
 
-    let egressIf = Utils.outboundInterfaceName(forAddress: targetAddress, sourceAddress: nil) ?? ""
+    let egressIf = Self.isIpLiteral(targetAddress)
+      ? (Utils.outboundInterfaceName(forAddress: targetAddress, sourceAddress: nil) ?? "")
+      : ""
     guard !egressIf.isEmpty else { return nil }
 
     let wifiInterface = CWWiFiClient.shared().interface(withName: egressIf)

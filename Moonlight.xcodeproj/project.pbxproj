@@ -13,12 +13,20 @@
 		D10000020000000000000002 /* FoundationDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000010000000000000001 /* FoundationDisplayView.swift */; };
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		A42858422D5065B800E39078 /* OpenSSL in Frameworks */ = {isa = PBXBuildFile; productRef = A42858412D5065B800E39078 /* OpenSSL */; };
+		B10000012F00000000E39078 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B10000022F00000000E39078 /* Sparkle */; };
 		A42858472D5066A000E39078 /* FFmpeg.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858432D5066A000E39078 /* FFmpeg.xcframework */; };
 		A42858482D5066A000E39078 /* Opus.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858442D5066A000E39078 /* Opus.xcframework */; };
 		A42858492D50682400E39078 /* SDL2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858452D5066A000E39078 /* SDL2.xcframework */; };
 		A428584A2D50682400E39078 /* SDL2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A42858452D5066A000E39078 /* SDL2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A4B1C1002D9F0A1B00C0FF04 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */; };
 		A4B1C1002D9F0A1B00C0FF10 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = A4B1C1002D9F0A1B00C0FF06 /* InfoPlist.strings */; };
+		D20000010000000000000001 /* FileProviderSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000060000000000000006 /* FileProviderSharedState.swift */; };
+		D20000020000000000000002 /* RemoteFileProviderExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000070000000000000007 /* RemoteFileProviderExtension.swift */; };
+		D20000030000000000000003 /* FileProviderSharedState.swift in Extension Sources */ = {isa = PBXBuildFile; fileRef = D20000060000000000000006 /* FileProviderSharedState.swift */; };
+		D20000040000000000000004 /* FileProvider Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = D20000080000000000000008 /* FileProvider Info.plist */; };
+		D20000050000000000000005 /* RemoteFileProvider.appex in PlugIns */ = {isa = PBXBuildFile; fileRef = D20000100000000000000010 /* RemoteFileProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
+		D20000220000000000000022 /* Ds5HapticsAudioRenderer.m in Sources */ = {isa = PBXBuildFile; fileRef = D20000230000000000000023 /* Ds5HapticsAudioRenderer.m */; };
+		D20000240000000000000024 /* FileProviderCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000250000000000000025 /* FileProviderCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +44,13 @@
 			remoteGlobalIDString = FB290E2E19B37A4E004C83CF;
 			remoteInfo = "moonlight-common";
 		};
+		D20000180000000000000018 /* File Provider target proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FB290CE619B2C406004C83CF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D20000140000000000000014;
+			remoteInfo = RemoteFileProvider;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -48,6 +63,17 @@
 				A428584A2D50682400E39078 /* SDL2.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000200000000000000020 /* Embed File Provider */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D20000050000000000000005 /* RemoteFileProvider.appex in PlugIns */,
+			);
+			name = "Embed File Provider";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -65,6 +91,13 @@
 		A4B1C1002D9F0A1B00C0FF07 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Limelight/macOS/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		A4B1C1002D9F0A1B00C0FF09 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "Limelight/macOS/zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		D10000010000000000000001 /* FoundationDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Limelight/macOS/ViewControllers/FoundationDisplayView.swift"; sourceTree = SOURCE_ROOT; };
+		D20000060000000000000006 /* FileProviderSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileProviderSupport/FileProviderSharedState.swift"; sourceTree = SOURCE_ROOT; };
+		D20000070000000000000007 /* RemoteFileProviderExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileProviderExtension/RemoteFileProviderExtension.swift"; sourceTree = SOURCE_ROOT; };
+		D20000080000000000000008 /* FileProvider Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "FileProviderExtension/Info.plist"; sourceTree = SOURCE_ROOT; };
+		D20000090000000000000009 /* FileProvider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "FileProviderExtension/FileProvider.entitlements"; sourceTree = SOURCE_ROOT; };
+		D20000100000000000000010 /* RemoteFileProvider.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = RemoteFileProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D20000230000000000000023 /* Ds5HapticsAudioRenderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Limelight/Input/Ds5HapticsAudioRenderer.m"; sourceTree = SOURCE_ROOT; };
+		D20000250000000000000025 /* FileProviderCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Limelight/macOS/ViewControllers/FileProviderCoordinator.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -114,6 +147,7 @@
 				"macOS/Helpers/NSView+Moonlight.m",
 				"macOS/Helpers/NSWindow+Moonlight.m",
 				macOS/Helpers/NumberOnlyFormatter.swift,
+				macOS/Helpers/SparkleUpdateManager.swift,
 				macOS/Helpers/ViewExtensions.swift,
 				macOS/HostCell.xib,
 				"macOS/Supporting Files/main.m",
@@ -139,6 +173,8 @@
 				macOS/ViewControllers/SettingsAudioPane.swift,
 				macOS/ViewControllers/SettingsHostingController.swift,
 				macOS/ViewControllers/SettingsInputPane.swift,
+				macOS/ViewControllers/SettingsShortcutEditors.swift,
+				macOS/ViewControllers/SettingsLogViewer.swift,
 				macOS/ViewControllers/RemoteUSBForwardingViewModel.swift,
 				macOS/ViewControllers/RemoteFileMappingClient.swift,
 				macOS/ViewControllers/RemoteFileMappingView.swift,
@@ -166,6 +202,7 @@
 				macOS/Views/LinkTextField.m,
 				macOS/Views/NavigatableAlertView.m,
 				macOS/Views/StreamingLockOverlayView.swift,
+				macOS/Views/StreamingStartupOverlay.swift,
 				macOS/Views/StreamViewMac.m,
 				Network/AppAssetManager.m,
 				Network/AppAssetResponse.m,
@@ -212,7 +249,15 @@
 				A42858472D5066A000E39078 /* FFmpeg.xcframework in Frameworks */,
 				A42858482D5066A000E39078 /* Opus.xcframework in Frameworks */,
 				A42858422D5065B800E39078 /* OpenSSL in Frameworks */,
+				B10000012F00000000E39078 /* Sparkle in Frameworks */,
 				4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000120000000000000012 /* File Provider Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -245,6 +290,7 @@
 			isa = PBXGroup;
 			children = (
 				4C7E0A7A1FECBFFD00684411 /* MoonlightEnhanced.app */,
+				D20000100000000000000010 /* RemoteFileProvider.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -272,16 +318,35 @@
 				A4C4E0012E8A100000A1B001 /* Build AWDL Privileged Helper */,
 				B7C4E0012E8A100000A1B002 /* Build Remote USB Helper */,
 				A428584B2D50682400E39078 /* Embed Frameworks */,
+				D20000200000000000000020 /* Embed File Provider */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				4C38E8301FF0C726000425CD /* PBXTargetDependency */,
+				D20000190000000000000019 /* File Provider dependency */,
 			);
 			name = "Moonlight for macOS";
 			productName = "Moonlight for macOS";
 			productReference = 4C7E0A7A1FECBFFD00684411 /* MoonlightEnhanced.app */;
 			productType = "com.apple.product-type.application";
+		};
+		D20000140000000000000014 /* RemoteFileProvider */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D20000150000000000000015 /* Build configuration list for RemoteFileProvider */;
+			buildPhases = (
+				D20000110000000000000011 /* File Provider Sources */,
+				D20000120000000000000012 /* File Provider Frameworks */,
+				D20000130000000000000013 /* File Provider Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RemoteFileProvider;
+			productName = RemoteFileProvider;
+			productReference = D20000100000000000000010 /* RemoteFileProvider.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -294,7 +359,11 @@
 				LastUpgradeCheck = 2600;
 				ORGANIZATIONNAME = "Moonlight Game Streaming Project";
 				TargetAttributes = {
-					4C7E0A791FECBFFD00684411 = {
+					D20000140000000000000014 = {
+					CreatedOnToolsVersion = 27.0;
+					ProvisioningStyle = Automatic;
+				};
+				4C7E0A791FECBFFD00684411 = {
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1020;
 						ProvisioningStyle = Automatic;
@@ -317,6 +386,7 @@
 			mainGroup = FB290CE519B2C406004C83CF;
 			packageReferences = (
 				A42858402D5065B800E39078 /* XCRemoteSwiftPackageReference "OpenSSL-Package" */,
+				B10000032F00000000E39078 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 48;
 			productRefGroup = FB290CEF19B2C406004C83CF /* Products */;
@@ -330,6 +400,7 @@
 			projectRoot = "";
 			targets = (
 				4C7E0A791FECBFFD00684411 /* Moonlight for macOS */,
+				D20000140000000000000014 /* RemoteFileProvider */,
 			);
 		};
 /* End PBXProject section */
@@ -351,6 +422,13 @@
 			files = (
 				A4B1C1002D9F0A1B00C0FF04 /* Localizable.strings in Resources */,
 				A4B1C1002D9F0A1B00C0FF10 /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000130000000000000013 /* File Provider Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -409,9 +487,21 @@
 			buildActionMask = 2147483647;
 			files = (
 				D10000020000000000000002 /* FoundationDisplayView.swift in Sources */,
+				D20000010000000000000001 /* FileProviderSharedState.swift in Sources */,
+				D20000220000000000000022 /* Ds5HapticsAudioRenderer.m in Sources */,
+				D20000240000000000000024 /* FileProviderCoordinator.swift in Sources */,
 				4C38E8011FEE08AA000425CD /* (null) in Sources */,
 				4C38E7FC1FEE0875000425CD /* (null) in Sources */,
 				4C38E7F91FEE085B000425CD /* (null) in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000110000000000000011 /* File Provider Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D20000020000000000000002 /* RemoteFileProviderExtension.swift in Sources */,
+				D20000030000000000000003 /* FileProviderSharedState.swift in Extension Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -422,6 +512,11 @@
 			isa = PBXTargetDependency;
 			name = "moonlight-common";
 			targetProxy = 4C38E82F1FF0C726000425CD /* PBXContainerItemProxy */;
+		};
+		D20000190000000000000019 /* File Provider dependency */ = {
+			isa = PBXTargetDependency;
+			name = RemoteFileProvider;
+			targetProxy = D20000180000000000000018 /* File Provider target proxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -454,6 +549,7 @@
 			buildSettings = {
 				APP_SHORTCUTS_ENABLE_FLEXIBLE_MATCHING = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CURRENT_PROJECT_VERSION = 1;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -501,6 +597,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMacEnhanced;
 				PRODUCT_NAME = MoonlightEnhanced;
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SPARKLE_ED_PUBLIC_KEY = "0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=";
+				SPARKLE_FEED_URL = "https://cnb.cool/AlkaidLab/moonlight-macos-enhanced-release/-/raw/main/appcast.xml";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
@@ -513,6 +611,7 @@
 			buildSettings = {
 				APP_SHORTCUTS_ENABLE_FLEXIBLE_MATCHING = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CURRENT_PROJECT_VERSION = 1;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -561,6 +660,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMacEnhanced;
 				PRODUCT_NAME = MoonlightEnhanced;
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SPARKLE_ED_PUBLIC_KEY = "0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=";
+				SPARKLE_FEED_URL = "https://cnb.cool/AlkaidLab/moonlight-macos-enhanced-release/-/raw/main/appcast.xml";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
@@ -676,6 +777,38 @@
 			};
 			name = Release;
 		};
+		D20000160000000000000016 /* File Provider Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "FileProviderExtension/FileProvider.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = "FileProviderExtension/Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "std.skyhua.MoonlightMacEnhanced.FileProvider";
+				PRODUCT_NAME = RemoteFileProvider;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D20000170000000000000017 /* File Provider Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "FileProviderExtension/FileProvider.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = "FileProviderExtension/Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "std.skyhua.MoonlightMacEnhanced.FileProvider";
+				PRODUCT_NAME = RemoteFileProvider;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -697,6 +830,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D20000150000000000000015 /* Build configuration list for RemoteFileProvider */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D20000160000000000000016 /* File Provider Debug */,
+				D20000170000000000000017 /* File Provider Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -708,6 +850,14 @@
 				minimumVersion = 3.3.2000;
 			};
 		};
+		B10000032F00000000E39078 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -715,6 +865,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A42858402D5065B800E39078 /* XCRemoteSwiftPackageReference "OpenSSL-Package" */;
 			productName = OpenSSL;
+		};
+		B10000022F00000000E39078 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B10000032F00000000E39078 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

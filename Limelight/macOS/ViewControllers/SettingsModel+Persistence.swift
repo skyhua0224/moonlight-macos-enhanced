@@ -348,17 +348,10 @@ extension SettingsModel {
       streamResolutionScaleRatio =
         settings.streamResolutionScaleRatio ?? Self.defaultStreamResolutionScaleRatio
 
-      let effectiveBitrateKbps = settings.customBitrate ?? settings.bitrate
+      let effectiveBitrateKbps = Self.clampedBitrateKbps(
+        settings.customBitrate ?? settings.bitrate, unlocked: unlockMaxBitrate)
       customBitrate = effectiveBitrateKbps
-      let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
-      var bitrateIndex = 0
-      for i in 0..<steps.count {
-        if Float(effectiveBitrateKbps) <= steps[i] * 1000.0 {
-          bitrateIndex = i
-          break
-        }
-      }
-      bitrateSliderValue = Float(bitrateIndex)
+      bitrateSliderValue = Float(Self.bitrateIndex(forKbps: effectiveBitrateKbps, unlocked: unlockMaxBitrate))
 
       applyAutoBitrateIfNeeded(force: true)
 
@@ -614,10 +607,6 @@ extension SettingsModel {
 
     let hostId = selectedHost?.id ?? Self.globalHostId
 
-    // Ensure customBitrate is nil if it matches the slider value to keep it clean,
-    // but if user typed it, we prefer customBitrate.
-    // Actually, logic: use customBitrate if not nil, else use slider.
-
     let matchDisplayResolution = selectedResolution == Self.matchDisplayResolutionSentinel
 
     var customResolution: CGSize? = nil
@@ -701,17 +690,16 @@ extension SettingsModel {
     let persistedSunshineMaxAverageBrightness =
       sunshineHdrBrightnessOverride ? sunshineMaxAverageBrightness : nil
 
-    let steps = Self.bitrateSteps(unlocked: unlockMaxBitrate)
-    let index = max(0, min(Int(bitrateSliderValue), steps.count - 1))
-    let effectiveBitrate = customBitrate ?? Int(steps[index] * 1000)
+    let effectiveBitrate = Self.clampedBitrateKbps(effectiveBitrateKbps, unlocked: unlockMaxBitrate)
 
     // If enabled, recompute bitrate using the moonlight-qt algorithm.
     let bitrate: Int
     if autoAdjustBitrate {
       let res = effectiveResolutionForBitrate()
       let fps = effectiveFpsForBitrate()
-      bitrate = Self.getDefaultBitrateKbps(
-        width: Int(res.width), height: Int(res.height), fps: fps, yuv444: enableYUV444)
+      bitrate = Self.clampedBitrateKbps(Self.getDefaultBitrateKbps(
+        width: Int(res.width), height: Int(res.height), fps: fps, yuv444: enableYUV444),
+        unlocked: unlockMaxBitrate)
     } else {
       bitrate = effectiveBitrate
     }

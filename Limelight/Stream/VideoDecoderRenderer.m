@@ -9,6 +9,8 @@
 #import "VideoDecoderRenderer.h"
 #include "Limelight-internal.h"
 #include "DynamicHdr.h"
+#include "DolbyVisionConfiguration.h"
+#include <stdatomic.h>
 #import "RendererLayerContainer.h"
 
 #include "Limelight.h"
@@ -230,49 +232,6 @@ static NSString *MLVideoRuntimeSummaryKey(MLActiveVideoRendererMode mode)
     }
 }
 
-static CFTypeRef MLCreateDolbyVisionMetadataSession(float frameRate)
-{
-#if TARGET_OS_OSX
-    if (@available(macOS 15.0, *)) {
-        const void *dolbyVision = kVTHDRPerFrameMetadataGenerationHDRFormatType_DolbyVision;
-        CFArrayRef formats = CFArrayCreate(kCFAllocatorDefault,
-                                           &dolbyVision,
-                                           1,
-                                           &kCFTypeArrayCallBacks);
-        if (formats == NULL) {
-            return NULL;
-        }
-
-        const void *keys[] = { kVTHDRPerFrameMetadataGenerationOptionsKey_HDRFormats };
-        const void *values[] = { formats };
-        CFDictionaryRef options = CFDictionaryCreate(kCFAllocatorDefault,
-                                                     keys,
-                                                     values,
-                                                     1,
-                                                     &kCFTypeDictionaryKeyCallBacks,
-                                                     &kCFTypeDictionaryValueCallBacks);
-        CFRelease(formats);
-        if (options == NULL) {
-            return NULL;
-        }
-
-        VTHDRPerFrameMetadataGenerationSessionRef session = NULL;
-        OSStatus status = VTHDRPerFrameMetadataGenerationSessionCreate(
-            kCFAllocatorDefault,
-            MAX(frameRate, 1.0f),
-            options,
-            &session);
-        CFRelease(options);
-        if (status == noErr) {
-            return session;
-        }
-
-        Log(LOG_W, @"[hdr] Apple Dolby Vision per-frame metadata session unavailable: %d", (int)status);
-    }
-#endif
-    return NULL;
-}
-
 static NSString *MLVideoEnhancementEngineName(MLActiveVideoEnhancementEngine engine)
 {
     switch (engine) {
@@ -478,9 +437,9 @@ static MLHDRTransferMode MLResolveHDRTransferMode(BOOL hdrEnabled, NSInteger hdr
             return MLHDRTransferModeHLG;
         case 0:
         default:
-            return MLHDRTransferColorSpaceSupported(MLHDRTransferModeHLG)
-                ? MLHDRTransferModeHLG
-                : MLHDRTransferModePQ;
+            // Match automatic negotiation in Connection.m. Output support for
+            // HLG does not mean the incoming signal is HLG.
+            return MLHDRTransferModePQ;
     }
 }
 
@@ -606,16 +565,6 @@ static BOOL MLBoolForDrawableTimeoutMode(MLAllowDrawableTimeoutMode mode,
 static BOOL MLEnhancedHDRPresentationIsSupported(void)
 {
     return MLSharedMetalDevice() != nil;
-}
-
-static BOOL MLGetHostHdrMetadataSnapshot(PSS_HDR_METADATA metadata)
-{
-    if (metadata == NULL) {
-        return NO;
-    }
-
-    memset(metadata, 0, sizeof(*metadata));
-    return LiGetHdrMetadata(metadata);
 }
 
 static CFDataRef MLCreateMasteringDisplayColorVolumeData(const SS_HDR_METADATA *hdrMetadata)
@@ -1187,6 +1136,8 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     CGColorSpaceRef _hdrTransferColorSpace;
     CGColorSpaceRef _hdrSDROutputColorSpace;
     CGColorSpaceRef _nativeDisplayColorSpace;
+    NSInteger _nativeColorSpaceKind;
+    BOOL _loggedNativeColorTags;
     CFDataRef _nativeMasteringDisplayColorVolume;
     CFDataRef _nativeContentLightLevelInfo;
 
@@ -1292,6 +1243,9 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     MLHDREDRStrategy _hdrEdrStrategy;
     MLHDRToneMappingPolicy _hdrToneMappingPolicy;
     BOOL _hdrBrightnessOverrideEnabled;
+    SS_HDR_METADATA _hostHDRMetadata;
+    BOOL _hasHostHDRMetadata;
+    atomic_bool _hostHDRMetadataChanged;
     MLHDRTransferMode _hdrTransferMode;
     float _hdrOpticalOutputScale;
     float _hdrMinLuminance;
@@ -1314,6 +1268,9 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     BOOL _hdr10PlusMetadataOutputObserved;
     BOOL _dolbyMetadataObserved;
     BOOL _dynamicDolbyVision;
+    BOOL _dolbyVisionBaseLayerFallback;
+    atomic_int _decompressionOutputError;
+    int _streamBitrateKbps;
     int _dynamicDolbyVisionProfile;
     BOOL _dolbyVisionGeneratedMetadata;
     CFTypeRef _dolbyVisionMetadataSession;
@@ -1335,6 +1292,15 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
 }
 
 @synthesize videoFormat;
+
+- (BOOL)hasPresentedVideo
+{
+    if (_activeRendererMode == MLActiveVideoRendererModeEnhanced) {
+        return _videoStats.renderedFrames > 0;
+    }
+    return displayLayer != nil && displayLayer.readyForDisplay &&
+        [self sampleBufferRenderingStatus] != AVQueuedSampleBufferRenderingStatusFailed;
+}
 
 - (AVQueuedSampleBufferRenderingStatus)sampleBufferRenderingStatus
 {
@@ -1431,6 +1397,8 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 {
     self = [super init];
 
+    atomic_init(&_decompressionOutputError, noErr);
+    atomic_init(&_hostHDRMetadataChanged, false);
     _view = view;
     [self resetVideoParameterSetState];
     _device = MLSharedMetalDevice();
@@ -1440,6 +1408,28 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _vtWarmupQueue = dispatch_queue_create("std.skyhua.moonlight.video.vt-warmup", DISPATCH_QUEUE_SERIAL);
 
     return self;
+}
+
+- (void)updateHostHDRMetadata:(const SS_HDR_METADATA *)metadata
+{
+    @synchronized (self) {
+        _hasHostHDRMetadata = metadata != NULL;
+        _hostHDRMetadata = metadata != NULL ? *metadata : (SS_HDR_METADATA){0};
+    }
+    atomic_store(&_hostHDRMetadataChanged, true);
+    if (metadata != NULL) {
+        Log(LOG_I, @"[hdr] Session mastering metadata received: max=%u minScaled=%u MaxCLL=%u MaxFALL=%u",
+            metadata->maxDisplayLuminance, metadata->minDisplayLuminance,
+            metadata->maxContentLightLevel, metadata->maxFrameAverageLightLevel);
+    }
+}
+
+- (BOOL)copyHostHDRMetadata:(SS_HDR_METADATA *)metadata
+{
+    @synchronized (self) {
+        *metadata = _hostHDRMetadata;
+        return _hasHostHDRMetadata;
+    }
 }
 
 - (void)prewarmPresentationForStreamConfig:(StreamConfiguration *)streamConfig
@@ -1512,14 +1502,14 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 
 - (BOOL)usesDecompressionSession
 {
-    // A negotiated Dolby stream must remain on AVSampleBufferDisplayLayer so
-    // Apple's display pipeline can own the Dolby output. Metal post-processing
-    // would turn this into ordinary base-layer HDR and lose the point of DV.
+    // Decode explicitly so unsupported Dolby samples cannot silently queue
+    // forever. Present the decoded IOSurface and propagated HDR metadata on
+    // Apple's sample-buffer display surface.
     if (_dolbyVisionGeneratedMetadata) {
         return YES;
     }
     if (_dynamicDolbyVision) {
-        return NO;
+        return YES;
     }
     return _activeRendererMode == MLActiveVideoRendererModeEnhanced ||
            _activeRendererMode == MLActiveVideoRendererModeNative;
@@ -1603,6 +1593,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 - (void)recordRenderedFrameSampleAtTimeMs:(uint64_t)renderSampleNowMs
                             enqueueTimeMs:(uint64_t)enqueueTimeMs
 {
+    @synchronized (self) {
     if (_lastRenderedSampleTimeMs != 0 && renderSampleNowMs > _lastRenderedSampleTimeMs) {
         uint64_t frameIntervalMs = renderSampleNowMs - _lastRenderedSampleTimeMs;
         if (frameIntervalMs > UINT16_MAX) {
@@ -1629,6 +1620,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
                                                                                   _renderIntervalSampleCount);
     snapshotStats.lastUpdatedTimestamp = renderSampleNowMs;
     _videoStats = snapshotStats;
+    }
 }
 
 - (void)releasePreviousEnhancedFrames
@@ -1770,6 +1762,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     [self teardownNativePresentationResources];
 
     _nativeDisplayColorSpace = MLCreateTransferColorSpace(_enableHdr ? _hdrTransferMode : MLHDRTransferModeSDR);
+    _nativeColorSpaceKind = !_enableHdr ? 3 : (_hdrTransferMode == MLHDRTransferModeHLG ? 2 : 1);
     if (_nativeDisplayColorSpace == NULL && _enableHdr) {
         _nativeDisplayColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2020);
     }
@@ -1782,10 +1775,14 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     }
 
     SS_HDR_METADATA hostHdrMetadata;
-    BOOL hasHostHdrMetadata = MLGetHostHdrMetadataSnapshot(&hostHdrMetadata);
+    BOOL hasHostHdrMetadata = [self copyHostHDRMetadata:&hostHdrMetadata];
     float resolvedMinLuminance = _hdrMinLuminance;
     float resolvedMaxLuminance = _hdrMaxLuminance;
     float resolvedMaxAverageLuminance = _hdrMaxAverageLuminance;
+    // Native output must describe source content, not invent a mastering
+    // display from the destination screen. Overrides remain explicit.
+    if (!hasHostHdrMetadata && !_hdrBrightnessOverrideEnabled &&
+        _hdrMetadataSourceMode != MLHDRMetadataSourceModeClientOverride) return;
     [self copyResolvedHDRStaticMetadataWithHostMetadata:&hostHdrMetadata
                                         hasHostMetadata:hasHostHdrMetadata
                                          displayInfoOut:&_nativeMasteringDisplayColorVolume
@@ -1801,11 +1798,37 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
         return;
     }
 
-    if (_nativeDisplayColorSpace == NULL) {
+    if (_nativeDisplayColorSpace == NULL || atomic_exchange(&_hostHDRMetadataChanged, false)) {
         [self prepareNativePresentationResources];
     }
 
-    if (_nativeDisplayColorSpace != NULL) {
+    CFDictionaryRef source = CVBufferCopyAttachments(imageBuffer, kCVAttachmentMode_ShouldPropagate);
+    CFTypeRef transfer = source ? CFDictionaryGetValue(source, kCVImageBufferTransferFunctionKey) : NULL;
+    CFTypeRef primaries = source ? CFDictionaryGetValue(source, kCVImageBufferColorPrimariesKey) : NULL;
+    CFTypeRef matrix = source ? CFDictionaryGetValue(source, kCVImageBufferYCbCrMatrixKey) : NULL;
+    CFTypeRef sourceSpace = source ? CFDictionaryGetValue(source, kCVImageBufferCGColorSpaceKey) : NULL;
+    NSInteger sourceKind = 0;
+    if (transfer && CFEqual(transfer, kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ)) sourceKind = 1;
+    else if (transfer && CFEqual(transfer, kCVImageBufferTransferFunction_ITU_R_2100_HLG)) sourceKind = 2;
+    else if ((primaries && CFEqual(primaries, kCVImageBufferColorPrimaries_ITU_R_709_2)) ||
+             (transfer && CFEqual(transfer, kCVImageBufferTransferFunction_ITU_R_709_2))) sourceKind = 3;
+    if (_hdrTransferFunctionPreference != 0 && _enableHdr) sourceKind = _hdrTransferMode == MLHDRTransferModeHLG ? 2 : 1;
+    if (sourceKind != 0 && sourceKind != _nativeColorSpaceKind) {
+        CGColorSpaceRef resolved = MLCreateTransferColorSpace(sourceKind == 1 ? MLHDRTransferModePQ :
+            sourceKind == 2 ? MLHDRTransferModeHLG : MLHDRTransferModeSDR);
+        if (resolved != NULL) {
+            if (_nativeDisplayColorSpace != NULL) CGColorSpaceRelease(_nativeDisplayColorSpace);
+            _nativeDisplayColorSpace = resolved;
+            _nativeColorSpaceKind = sourceKind;
+        }
+    }
+    if (!_loggedNativeColorTags) {
+        _loggedNativeColorTags = YES;
+        Log(LOG_I, @"[hdr] Native decoded color tags: primaries=%@ transfer=%@ matrix=%@ sourceKind=%ld hostMetadata=%d",
+            primaries ? (__bridge id)primaries : @"missing", transfer ? (__bridge id)transfer : @"missing",
+            matrix ? (__bridge id)matrix : @"missing", (long)sourceKind, _hasHostHDRMetadata);
+    }
+    if (_nativeDisplayColorSpace != NULL && (sourceKind != 0 || sourceSpace == NULL)) {
         CVBufferSetAttachment(imageBuffer,
                               kCVImageBufferCGColorSpaceKey,
                               _nativeDisplayColorSpace,
@@ -1813,23 +1836,30 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     }
 
     if (!_enableHdr) {
+        if (source != NULL) CFRelease(source);
         return;
     }
 
+    if (primaries == NULL) {
     CVBufferSetAttachment(imageBuffer,
                           kCVImageBufferColorPrimariesKey,
                           kCVImageBufferColorPrimaries_ITU_R_2020,
                           kCVAttachmentMode_ShouldPropagate);
+    }
+    if (matrix == NULL) {
     CVBufferSetAttachment(imageBuffer,
                           kCVImageBufferYCbCrMatrixKey,
-                          kCVImageBufferYCbCrMatrix_ITU_R_2020,
+                          sourceKind == 3 ? kCVImageBufferYCbCrMatrix_ITU_R_709_2 : kCVImageBufferYCbCrMatrix_ITU_R_2020,
                           kCVAttachmentMode_ShouldPropagate);
+    }
+    if (transfer == NULL || _hdrTransferFunctionPreference != 0) {
     CVBufferSetAttachment(imageBuffer,
                           kCVImageBufferTransferFunctionKey,
                           _hdrTransferMode == MLHDRTransferModeHLG
                             ? kCVImageBufferTransferFunction_ITU_R_2100_HLG
                             : kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ,
                           kCVAttachmentMode_ShouldPropagate);
+    }
 
     if (_nativeMasteringDisplayColorVolume != NULL) {
         CVBufferSetAttachment(imageBuffer,
@@ -1843,6 +1873,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
                               _nativeContentLightLevelInfo,
                               kCVAttachmentMode_ShouldPropagate);
     }
+    if (source != NULL) CFRelease(source);
 }
 
 - (BOOL)prepareHDRPresentationResources
@@ -1854,7 +1885,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     }
 
     SS_HDR_METADATA hostHdrMetadata;
-    BOOL hasHostHdrMetadata = MLGetHostHdrMetadataSnapshot(&hostHdrMetadata);
+    BOOL hasHostHdrMetadata = [self copyHostHDRMetadata:&hostHdrMetadata];
     CFDataRef resolvedDisplayInfo = NULL;
     CFDataRef resolvedContentInfo = NULL;
     [self copyResolvedHDRStaticMetadataWithHostMetadata:&hostHdrMetadata
@@ -2545,6 +2576,10 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     self.frameRate = frameRate;
     _streamWidth = streamConfig ? streamConfig.width : 0;
     _streamHeight = streamConfig ? streamConfig.height : 0;
+    _streamBitrateKbps = streamConfig ? streamConfig.bitRate : 0;
+    _loggedNativeColorTags = NO;
+    _dolbyVisionBaseLayerFallback = NO;
+    atomic_store(&_decompressionOutputError, noErr);
     _framePacingMode = streamConfig ? streamConfig.framePacingMode : 1;
     _smoothnessLatencyMode = streamConfig ? streamConfig.smoothnessLatencyMode : 1;
     _timingBufferLevel = streamConfig ? streamConfig.timingBufferLevel : 1;
@@ -2987,10 +3022,13 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     VideoDecoderRenderer *self = (__bridge VideoDecoderRenderer *)decompressionOutputRefCon;
     MLDecodeFrameContext *frameContext = (MLDecodeFrameContext *)sourceFrameRefCon;
     if (status == noErr && imageBuffer) {
+        @synchronized (self) { self->_activeWndVideoStats.decodedFrames++; }
         [self handleDecompressionOutput:imageBuffer
                    presentationTimeStamp:presentationTimeStamp
                                 duration:presentationDuration
                             frameContext:frameContext];
+    } else if (status != noErr) {
+        atomic_store(&self->_decompressionOutputError, status);
     }
     if (frameContext != NULL) {
         free(frameContext);
@@ -3089,6 +3127,10 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     }
 
     [self enqueueSampleBufferForDisplay:sampleBuffer];
+    if (displayLayer.readyForDisplay && [self sampleBufferRenderingStatus] != AVQueuedSampleBufferRenderingStatusFailed) {
+        [self recordRenderedFrameSampleAtTimeMs:LiGetMillis()
+                                 enqueueTimeMs:frameContext != NULL ? frameContext->enqueueTimeMs : 0];
+    }
 
     CFRelease(sampleBuffer);
 }
@@ -3183,6 +3225,18 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     [self requestEnhancedDraw];
 }
 
+- (BOOL)useDolbyVisionBaseLayerWithReason:(NSString *)reason {
+    if (_baseHEVCFormatDesc == NULL) return NO;
+    if (formatDesc != NULL) CFRelease(formatDesc);
+    formatDesc = (CMVideoFormatDescriptionRef)CFRetain(_baseHEVCFormatDesc);
+    _dynamicDolbyVision = NO;
+    _dynamicDolbyVisionProfile = 0;
+    _dolbyVisionBaseLayerFallback = YES;
+    [self teardownDolbyVisionMetadataSession];
+    Log(LOG_W, @"[video] Dolby Vision output unavailable (%@); using compatible HEVC HDR base layer", reason);
+    return YES;
+}
+
 - (BOOL)createDecompressionSession {
     [self teardownDecompressionSession];
 
@@ -3218,6 +3272,9 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
                                                    &callbackRecord,
                                                    &_decompressionSession);
     if (status != noErr) {
+        if (_dynamicDolbyVision && [self useDolbyVisionBaseLayerWithReason:[NSString stringWithFormat:@"decoder creation %d", (int)status]]) {
+            return [self createDecompressionSession];
+        }
         Log(LOG_E, @"VTDecompressionSessionCreate failed: %d", (int)status);
         return NO;
     }
@@ -3235,14 +3292,6 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
                                       kCFBooleanTrue);
         if (status != noErr) {
             Log(LOG_W, @"Failed to enable per-frame HDR metadata propagation: %d", (int)status);
-        }
-    }
-    if (@available(macOS 14.0, *)) {
-        status = VTSessionSetProperty(_decompressionSession,
-                                      kVTDecompressionPropertyKey_GeneratePerFrameHDRDisplayMetadata,
-                                      kCFBooleanTrue);
-        if (status != noErr) {
-            Log(LOG_W, @"Failed to enable per-frame HDR metadata generation: %d", (int)status);
         }
     }
 
@@ -4756,6 +4805,12 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     _enhancedStartupPacingUntilMs = _rendererStartTimeMs + kMLEnhancedStartupPacingWindowMs;
     _enhancedStartupPresentedFrameCount = 0;
     _didLogEnhancedStartupPacing = NO;
+    if (self.directSubmission) {
+        // common-c owns the receive-thread lifecycle. VideoToolbox decodes
+        // asynchronously and AVSampleBufferDisplayLayer owns presentation.
+        Log(LOG_I, @"[video] Native direct submission enabled; frames no longer wait for the display-link decode tick");
+        return;
+    }
 
     void (^startBlock)(void) = ^{
         NSScreen *screen = self->_view.window.screen;
@@ -4922,9 +4977,9 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
         if (ret == DR_OK) {
             uint64_t renderSampleNowMs = LiGetMillis();
-            self->_activeWndVideoStats.decodedFrames++;
+            if (![self usesDecompressionSession]) self->_activeWndVideoStats.decodedFrames++;
             self->_activeWndVideoStats.totalDecodeTime += LiGetMillis() - decodeStart;
-            if (self->_activeRendererMode != MLActiveVideoRendererModeEnhanced) {
+            if (self->_activeRendererMode == MLActiveVideoRendererModeCompatibility && self->displayLayer.readyForDisplay) {
                 [self recordRenderedFrameSampleAtTimeMs:renderSampleNowMs
                                           enqueueTimeMs:enqueueTimeMs];
             }
@@ -5237,7 +5292,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 {
     OSStatus status;
 
-    if (_dolbyVisionGeneratedMetadata && (videoFormat & VIDEO_FORMAT_MASK_H265)) {
+    if ((_dolbyVisionGeneratedMetadata || _dolbyVisionBaseLayerFallback) && (videoFormat & VIDEO_FORMAT_MASK_H265)) {
         // Profile 8.x RPU is an HEVC UNSPEC 62 NAL. The base HEVC decoder
         // must not be handed that NAL when Apple is generating metadata from
         // the decoded IOSurface instead of consuming the compressed dvh1 path.
@@ -5284,6 +5339,58 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 }
 
 - (int)submitDecodeUnit:(void *)du_void {
+    PDECODE_UNIT unit = (PDECODE_UNIT)du_void;
+    if (!self.directSubmission || unit == NULL) return [self submitDecodeUnitPayload:du_void];
+    const uint64_t now = LiGetMillis();
+    @synchronized (self) {
+        if (_activeWndVideoStats.measurementStartTimestamp == 0) _activeWndVideoStats.measurementStartTimestamp = now;
+        if (now - _activeWndVideoStats.measurementStartTimestamp >= 1000) {
+            double seconds = (double)(now - _activeWndVideoStats.measurementStartTimestamp) / 1000.0;
+            _activeWndVideoStats.totalFps = _activeWndVideoStats.totalFrames / seconds;
+            _activeWndVideoStats.receivedFps = _activeWndVideoStats.receivedFrames / seconds;
+            _activeWndVideoStats.decodedFps = _activeWndVideoStats.decodedFrames / seconds;
+            _activeWndVideoStats.renderedFps = _activeWndVideoStats.renderedFrames / seconds;
+            _activeWndVideoStats.jitterMs = _jitterMsEstimate;
+            _activeWndVideoStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(_renderIntervalSamples, _renderIntervalSampleCount);
+            _activeWndVideoStats.renderFramePacingJitterMs = MLComputeRenderFramePacingJitterMs(_renderIntervalSamples, _renderIntervalSampleCount);
+            _activeWndVideoStats.lastUpdatedTimestamp = now;
+            _videoStats = _activeWndVideoStats;
+            memset(&_activeWndVideoStats, 0, sizeof(_activeWndVideoStats));
+            _activeWndVideoStats.measurementStartTimestamp = now;
+        }
+        if (_lastFrameNumber != 0 && unit->frameNumber > _lastFrameNumber + 1) {
+            unsigned missing = unit->frameNumber - _lastFrameNumber - 1;
+            _activeWndVideoStats.networkDroppedFrames += missing;
+            _activeWndVideoStats.totalFrames += missing;
+        }
+        _lastFrameNumber = unit->frameNumber;
+        _activeWndVideoStats.receivedFrames++;
+        _activeWndVideoStats.totalFrames++;
+        _activeWndVideoStats.receivedBytes += unit->fullLength > 0 ? unit->fullLength : 0;
+        if (_lastFrameReceiveTimeMs != 0 && _lastFramePresentationTimeMs != 0) {
+            int64_t arrival = (int64_t)(unit->receiveTimeMs - _lastFrameReceiveTimeMs);
+            int64_t nominal = (int64_t)unit->presentationTimeMs - (int64_t)_lastFramePresentationTimeMs;
+            _jitterMsEstimate += ((float)llabs(arrival - nominal) - _jitterMsEstimate) / 16.0f;
+        }
+        _lastFrameReceiveTimeMs = unit->receiveTimeMs;
+        _lastFramePresentationTimeMs = unit->presentationTimeMs;
+        if (unit->frameHostProcessingLatency != 0) {
+            _activeWndVideoStats.totalHostProcessingLatency += unit->frameHostProcessingLatency;
+            _activeWndVideoStats.framesWithHostProcessingLatency++;
+        }
+    }
+    int result = [self submitDecodeUnitPayload:du_void];
+    @synchronized (self) {
+        _activeWndVideoStats.totalDecodeTime += LiGetMillis() - now;
+        if (result == DR_OK && ![self usesDecompressionSession]) {
+            _activeWndVideoStats.decodedFrames++;
+            if (displayLayer.readyForDisplay) [self recordRenderedFrameSampleAtTimeMs:LiGetMillis() enqueueTimeMs:unit->enqueueTimeMs];
+        }
+    }
+    return result;
+}
+
+- (int)submitDecodeUnitPayload:(void *)du_void {
     PDECODE_UNIT decodeUnit = (PDECODE_UNIT)du_void;
     int offset = 0;
     int ret;
@@ -5449,7 +5556,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                 int negotiatedDynamicHdr = LiGetNegotiatedDynamicHdrFormat();
                 BOOL wantsDolbyVision = negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_81 ||
                                         negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84;
-                if (formatDesc != NULL && wantsDolbyVision) {
+                if (formatDesc != NULL && wantsDolbyVision && !_dolbyVisionBaseLayerFallback) {
                     if (@available(macOS 15.0, *)) {
                         // The dvcC record identifies the single-layer profile:
                         // 8.1 uses a PQ base layer and 8.4 uses an HLG base
@@ -5461,12 +5568,12 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                             ? CFDictionaryGetValue(baseExtensions, kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms)
                             : NULL;
                         CFTypeRef hvcC = baseAtoms ? CFDictionaryGetValue(baseAtoms, CFSTR("hvcC")) : NULL;
-                        if (hvcC != NULL) {
-                            const uint8_t dvcCBytes[] = {
-                                0x01, 0x00, 0x10, 0xF5,
-                                negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84
-                                    ? 0x40 : 0x10
-                            };
+                        CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(_baseHEVCFormatDesc);
+                        uint8_t dvcCBytes[24];
+                        uint8_t compatibility = negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84 ? 4 : 1;
+                        if (hvcC != NULL && DVBuildProfile8Configuration(dimensions.width, dimensions.height,
+                                                                        self.frameRate, _streamBitrateKbps,
+                                                                        compatibility, dvcCBytes)) {
                             NSDictionary *sampleDescriptionAtoms = @{
                                 @"hvcC": (__bridge id)hvcC,
                                 @"dvcC": [NSData dataWithBytes:dvcCBytes length:sizeof(dvcCBytes)]
@@ -5497,8 +5604,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                             status = CMVideoFormatDescriptionCreate(
                                 kCFAllocatorDefault,
                                 kCMVideoCodecType_DolbyVisionHEVC,
-                                (int)_streamWidth,
-                                (int)_streamHeight,
+                                dimensions.width,
+                                dimensions.height,
                                 (__bridge CFDictionaryRef)extensions,
                                 &dolbyFormatDesc);
                             if (status == noErr && dolbyFormatDesc != NULL) {
@@ -5506,7 +5613,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                                 formatDesc = dolbyFormatDesc;
                                 _dynamicDolbyVision = YES;
                                 _dynamicDolbyVisionProfile = negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84 ? 84 : 81;
-                                Log(LOG_I, @"[video] Dolby Vision direct output format armed: profile=%d hvcC=present dvcC=present", _dynamicDolbyVisionProfile);
+                                Log(LOG_I, @"[video] Dolby Vision decoder format: profile=%d level=%d configurationBytes=%zu dimensions=%dx%d",
+                                    _dynamicDolbyVisionProfile, dvcCBytes[3] >> 3, sizeof(dvcCBytes), dimensions.width, dimensions.height);
                             } else {
                                 Log(LOG_W, @"[video] Dolby Vision dvh1 format unavailable: status=%d; retaining HEVC base layer", (int)status);
                                 if (dolbyFormatDesc != NULL) {
@@ -5519,19 +5627,9 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                     }
                 }
                 if (formatDesc != NULL && wantsDolbyVision && !_dynamicDolbyVision) {
-                    // Public macOS 15+ metadata generation is a safe fallback
-                    // for systems that can analyze and present Dolby metadata
-                    // but reject the compressed dvh1 wrapper. This path decodes
-                    // the HEVC base layer, strips the RPU NAL, and lets Apple's
-                    // documented generator attach per-frame Dolby metadata to
-                    // the IOSurface before direct display.
-                    _dolbyVisionMetadataSession = MLCreateDolbyVisionMetadataSession((float)self.frameRate);
-                    _dolbyVisionGeneratedMetadata = _dolbyVisionMetadataSession != NULL;
-                    if (_dolbyVisionGeneratedMetadata) {
-                        Log(LOG_I, @"[video] Dolby Vision generated-metadata fallback armed: profile=%d", negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84 ? 84 : 81);
-                    } else {
-                        Log(LOG_W, @"[video] Dolby Vision generated-metadata fallback unavailable; using base HEVC");
-                    }
+                    // Generated metadata does not preserve Foundation's authored
+                    // RPU. Report and present the compatible base HDR honestly.
+                    [self useDolbyVisionBaseLayerWithReason:@"Dolby configuration unsupported"];
                 }
                 if (status != noErr) {
                     // A failed Dolby wrapper must never discard the valid base
@@ -5576,6 +5674,20 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     if (formatDesc == NULL) {
         // Can't decode if we haven't gotten our parameter sets yet
         free(data);
+        return DR_NEED_IDR;
+    }
+
+    OSStatus outputError = atomic_exchange(&_decompressionOutputError, noErr);
+    if (outputError != noErr) {
+        Log(LOG_W, @"[video] Asynchronous video decoder error: %d", (int)outputError);
+        if (_dynamicDolbyVision && [self useDolbyVisionBaseLayerWithReason:[NSString stringWithFormat:@"decode %d", (int)outputError]]) {
+            if (![self createDecompressionSession]) [self fallbackToCompatibilityRenderer];
+        }
+        if (blockSource != NULL && blockSource->FreeBlock != NULL) {
+            blockSource->FreeBlock(blockSource->refCon, data, length);
+        } else {
+            free(data);
+        }
         return DR_NEED_IDR;
     }
 
@@ -5713,7 +5825,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                                              kVTDecodeFrame_1xRealTimePlayback;
             VTDecodeInfoFlags infoFlags = 0;
             MLDecodeFrameContext *frameContext = NULL;
-            if (_activeRendererMode == MLActiveVideoRendererModeEnhanced) {
+            if (_activeRendererMode == MLActiveVideoRendererModeEnhanced || _activeRendererMode == MLActiveVideoRendererModeNative) {
                 frameContext = malloc(sizeof(*frameContext));
                 if (frameContext != NULL) {
                     frameContext->enqueueTimeMs = enqueueTimeMs;
@@ -5729,11 +5841,17 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                 if (frameContext != NULL) {
                     free(frameContext);
                 }
-                Log(LOG_W, @"VTDecompressionSessionDecodeFrame failed: %d infoFlags=0x%x. Falling back to Compatibility.",
+                Log(LOG_W, @"VTDecompressionSessionDecodeFrame failed: %d infoFlags=0x%x",
                     (int)status,
                     (unsigned int)infoFlags);
-                [self fallbackToCompatibilityRenderer];
+                if (_dynamicDolbyVision && [self useDolbyVisionBaseLayerWithReason:[NSString stringWithFormat:@"decode submission %d", (int)status]]) {
+                    if (![self createDecompressionSession]) [self fallbackToCompatibilityRenderer];
+                    status = DR_NEED_IDR;
+                } else {
+                    [self fallbackToCompatibilityRenderer];
                     [self enqueueSampleBufferForDisplay:sampleBuffer];
+                    status = noErr;
+                }
             }
         } else {
             [self fallbackToCompatibilityRenderer];
@@ -5748,7 +5866,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     CFRelease(frameBlockBuffer);
     CFRelease(sampleBuffer);
 
-    return DR_OK;
+    return status == DR_NEED_IDR ? DR_NEED_IDR : DR_OK;
 }
 
 @end

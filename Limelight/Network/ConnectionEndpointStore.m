@@ -192,11 +192,44 @@ static const NSString* HTTPS_PORT = @"47984";
     NSArray *disabled = [self disabledEndpointsForHost:host.uuid];
     NSSet *disabledSet = [NSSet setWithArray:disabled];
 
-    for (NSString *addr in candidates) {
+    // Discovery often stores a bare local address while the paired host
+    // advertises a custom HTTP port (for example host.example:57989). The
+    // bare address would make HttpManager fall back to 47984 and look online
+    // to ICMP while every HTTPS capability request fails. Derive the custom
+    // port once and test each bare address with that port first.
+    NSString *customPort = nil;
+    for (NSString *candidate in candidates) {
+        NSString *parsedHost = nil;
+        NSString *parsedPort = nil;
+        [Utils parseAddress:candidate intoHost:&parsedHost andPort:&parsedPort];
+        if (parsedPort.length > 0 &&
+            ![parsedPort isEqualToString:(NSString *)HTTP_PORT] &&
+            ![parsedPort isEqualToString:(NSString *)HTTPS_PORT]) {
+            customPort = parsedPort;
+            break;
+        }
+    }
+
+    void (^appendEndpoint)(NSString *) = ^(NSString *addr) {
         NSString *normalized = [self normalizedAddress:addr];
         if (normalized.length > 0 && ![disabledSet containsObject:normalized]) {
             [ordered addObject:normalized];
         }
+    };
+
+    for (NSString *addr in candidates) {
+        if (customPort.length > 0) {
+            NSString *parsedHost = nil;
+            NSString *parsedPort = nil;
+            [Utils parseAddress:addr intoHost:&parsedHost andPort:&parsedPort];
+            if (parsedHost.length > 0 && parsedPort.length == 0) {
+                NSString *withPort = [parsedHost containsString:@":"] && ![parsedHost hasPrefix:@"["]
+                    ? [NSString stringWithFormat:@"[%@]:%@", parsedHost, customPort]
+                    : [NSString stringWithFormat:@"%@:%@", parsedHost, customPort];
+                appendEndpoint(withPort);
+            }
+        }
+        appendEndpoint(addr);
     }
 
     for (NSString *manual in [self manualEndpointsForHost:host.uuid]) {

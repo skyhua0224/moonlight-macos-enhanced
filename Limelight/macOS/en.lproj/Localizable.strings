@@ -316,16 +316,17 @@
 "Gamepad Mouse Emulation (!)" = "Gamepad Mouse Emulation";
 "Gamepad Mouse Hint" = "Use the gamepad as a mouse. Right stick moves, A clicks.";
 "DualSense Haptics" = "DualSense Haptics";
-"DualSense Haptics detail" = "Uses Apple's public Game Controller haptics path. Native authored USB audio haptics require USB forwarding.";
+"DualSense Haptics detail" = "Uses Apple's public Game Controller haptics path and accepts Foundation authored PCM with an RMS fallback. Exact USB audio actuator output requires USB forwarding.";
 "Automatic" = "Automatic";
 "System Haptics" = "System Haptics";
 "Compatibility Rumble" = "Compatibility Rumble";
 "Feedback Controller" = "Feedback Controller";
 "Feedback Controller detail" = "Choose which local controller receives host feedback. Automatic follows the host controller number.";
 "Host Controller Type" = "Host Controller Type";
-"Host Controller Type detail" = "Controls the Foundation virtual controller type announced at arrival. PlayStation carries touch and motion capabilities; the current protocol has no separate DS5 type.";
+"Host Controller Type detail" = "Choose the controller presented to the host. DualSense preserves touchpad, motion, trigger, and feedback capabilities when the host supports them.";
 "Xbox 360" = "Xbox 360";
 "PlayStation" = "PlayStation";
+"DualSense" = "DualSense";
 "Controller 1" = "Controller 1";
 "Controller 2" = "Controller 2";
 "Controller 3" = "Controller 3";
@@ -363,6 +364,9 @@
 
 /* Connection Method */
 "Connection Method" = "Connection Method";
+"Connection Addresses" = "Connection Addresses";
+"Connection Addresses detail" = "Manage saved addresses and choose the default route.";
+"Manage Addresses" = "Manage Addresses";
 "Auto (Recommended)" = "Auto (Recommended)";
 "Native Renderer (Recommended)" = "Native Renderer (Recommended)";
 "Default Profile" = "Default Profile";
@@ -374,6 +378,8 @@
 "Toggle Sidebar" = "Toggle Sidebar";
 "Offline" = "Offline";
 "Settings" = "Settings";
+"No Results" = "No Results";
+"No matching settings" = "No matching settings";
 "Connection Details" = "Connection Details";
 "Edit Connections" = "Edit Connections";
 
@@ -649,11 +655,16 @@
 "Display Topology Available" = "Foundation topology available";
 "Display Topology Unavailable" = "Foundation topology unavailable";
 "HDR10+ Dynamic Metadata" = "HDR10+ Dynamic Metadata";
+"HDR Vivid PQ" = "HDR Vivid PQ";
+"HDR Vivid HLG" = "HDR Vivid HLG";
+"HDR Vivid macOS limitation detail" = "This format is unavailable through the current display path.";
 "Dolby Vision Profile 8.1" = "Dolby Vision Profile 8.1";
 "Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
-"HDR10+ capability detail" = "The latest Foundation host injects HDR10+ SEI. macOS 13+ negotiates this capability and observes Core Media per-frame metadata, but the Metal path is still reported limited until display consumption is verified.";
-"Dolby Vision 8.1 capability detail" = "This Mac exposes Apple's Dolby HEVC decoder and EDR display path. The client builds a dvh1 description with hvcC and dvcC for Foundation Profile 8.1, and falls back to Apple's public per-frame metadata generator when needed. Availability is limited until a real Foundation RPU stream is verified on the active display.";
-"Dolby Vision 8.4 capability detail" = "This Mac exposes the Dolby HEVC and HLG base-layer prerequisites. The client builds a dvh1 description with hvcC and dvcC for Foundation Profile 8.4, with Apple's public metadata generation fallback. Availability is limited until a real Foundation RPU stream is verified on the active display.";
+"HDR Capabilities" = "HDR Capabilities";
+"Dolby Vision negotiation detail" = "Negotiated automatically with the host and display; the stream falls back to compatible HDR when needed.";
+"HDR10+ capability detail" = "Negotiated automatically when the host, decoder, and display support dynamic HDR metadata.";
+"Dolby Vision 8.1 capability detail" = "Negotiated automatically when the host, decoder, and display support Dolby Vision Profile 8.1.";
+"Dolby Vision 8.4 capability detail" = "Negotiated automatically when the host, decoder, and display support Dolby Vision Profile 8.4.";
 "Display capability has not been queried" = "Refresh the host display list to query Foundation capabilities.";
 "Loading Foundation display topology" = "Loading Foundation display topology…";
 "Foundation display topology endpoint ready" = "The Foundation display topology endpoint is ready.";
@@ -847,6 +858,10 @@
 "Clipboard Sync" = "Clipboard Sync";
 "Clipboard Sync detail" = "Automatically syncs text and one image while this stream owns clipboard sync.";
 "Clipboard Sync Foundation detail" = "Available for Foundation Sunshine hosts. Supported hosts default to Auto Sync, and unsupported hosts simply ignore it.";
+"Selected Connection Unavailable" = "Selected connection is unavailable";
+"Selected Connection Unavailable Detail" = "The selected route %@ is unavailable, but %@ is reachable. Switch routes before starting the stream?";
+"Switch and Continue" = "Switch and Continue";
+"Try Selected Route" = "Try Selected Route";
 "Auto Sync" = "Auto Sync";
 "Foundation USB forwarding" = "Foundation USB forwarding";
 "Foundation must advertise USB forwarding before a device can be shared." = "Foundation must advertise USB forwarding before a device can be shared.";
@@ -861,12 +876,12 @@
 "Display & HDR" = "Display & HDR";
 "Search Settings" = "Search Settings";
 "No matching settings" = "No matching settings";
-"Streaming settings subtitle" = "Set stream resolution, frame rate, bitrate, and host launch behavior.";
-"Display settings subtitle" = "Choose the host display topology, virtual display, and HDR display profile.";
-"Video settings subtitle" = "Choose the decoder, HDR mode, image quality, and frame timing behavior.";
-"Audio settings subtitle" = "Configure playback, audio enhancement, and microphone input.";
-"Controller settings subtitle" = "Configure controllers, DualSense feedback, motion, and mapping.";
-"Keyboard and mouse settings subtitle" = "Configure pointer behavior, keyboard translation, and shortcuts.";
+"Streaming settings subtitle" = "Resolution, frame rate, and bitrate.";
+"Display settings subtitle" = "Host displays and virtual displays.";
+"Video settings subtitle" = "Codec, HDR, and presentation.";
+"Audio settings subtitle" = "Playback, effects, and microphone.";
+"Controller settings subtitle" = "Controllers and touchpad.";
+"Keyboard and mouse settings subtitle" = "Pointer, scrolling, and shortcuts.";
 "USB settings subtitle" = "Forward USB devices and browse host file mappings.";
 "App diagnostics settings subtitle" = "Configure application behavior, permissions, logs, and diagnostics.";
 "Audio & Microphone" = "Audio & Microphone";
@@ -932,3 +947,160 @@
 "Upscaling" = "Upscaling";
 "V-Sync" = "V-Sync";
 "Warn" = "Warn";
+
+"Controller Deadzone" = "Controller Deadzone";
+"Media" = "Media";
+"Native Touchpad detail" = "Host Touchpad sends game touch input. Mac-style Trackpad moves and scrolls the remote cursor. Hold Options to switch during a stream.";
+"HDR detail" = "Use the display's HDR and extended dynamic range path when the host negotiates HDR.";
+"YUV444 detail" = "Request 4:4:4 chroma when the selected decoder and display path support it.";
+"Unlock Maximum Bitrate" = "Unlock Maximum Bitrate";
+"HDR Display Profile" = "HDR Display Profile";
+"Metadata Source" = "Metadata Source";
+"Client Display Profile" = "Client Display Profile";
+"Tone Mapping" = "Tone Mapping";
+"Pacing" = "Pacing";
+"Smoothness / Latency" = "Smoothness / Latency";
+"Runtime" = "Runtime";
+"Foundation USB forwarding detail" = "Share a supported USB device with the host through the secure forwarding channel.";
+"Diagnostics are written to the application log." = "Diagnostics are written to the application log.";
+"Curated" = "Curated";
+"Raw" = "Raw";
+"Maximum Brightness" = "Maximum Brightness";
+"Minimum Brightness" = "Minimum Brightness";
+"Maximum Average Brightness" = "Maximum Average Brightness";
+"DualSense Touchpad as Trackpad" = "DualSense Touchpad as Trackpad";
+"DualSense Touchpad Mode" = "DualSense Touchpad Mode";
+"Host Touchpad" = "Host Touchpad";
+"Mac-style Trackpad" = "Mac-style Trackpad";
+"Controller Count" = "Controller Count";
+"Haptic Feedback" = "Haptic Feedback";
+"Motion Sensor" = "Motion Sensor";
+"Feedback Target" = "Feedback Target";
+"Connected Controllers" = "Connected Controllers";
+"Keyboard Translation" = "Keyboard Translation";
+"Capture System Shortcuts" = "Capture System Shortcuts";
+"Pointer Speed" = "Pointer Speed";
+"Scroll Mode" = "Scroll Mode";
+
+"Resolution & Frame Rate" = "Resolution & Frame Rate";
+"Bitrate & Playback" = "Bitrate & Playback";
+"Bitrate detail" = "Bitrate detail";
+"Audio Enhancement" = "Audio Enhancement";
+"Diagnostics" = "Diagnostics";
+"Minimum Log Level" = "Minimum Log Level";
+"Show Performance Overlay" = "Show Performance Overlay";
+"Dim Unfocused Artwork" = "Dim Unfocused Artwork";
+"AWDL Stability Helper detail" = "AWDL Stability Helper detail";
+"VSync" = "VSync";
+"File Mapping" = "File Mapping";
+"Host Files" = "Host Files";
+"Host Files settings subtitle" = "Open read-only shared folders from the host in Finder.";
+"Host Files Status" = "Host Files Status";
+"Host Files Status detail" = "The shared folders are provided by Foundation Sunshine.";
+"Open Host Files" = "Open Host Files";
+"Open in Finder" = "Open in Finder";
+"Host Files purpose detail" = "Host Files shows folders shared by the host in Finder. It does not compare, synchronize, or copy your local folders.";
+"Host Files read-only detail" = "Files are fetched on demand and are read-only during this session.";
+"Host Files ready" = "Host Files ready";
+"Checking Host Files…" = "Checking Host Files…";
+"Invalid Host Files capability response" = "Invalid Host Files capability response";
+"Host Files is unavailable" = "Host Files is unavailable";
+"Access" = "Access";
+"Access Mode" = "Access Mode";
+"Read Only" = "Read Only";
+"Permission" = "Permission";
+"Preset" = "Preset";
+"Unlocked Maximum Bitrate" = "Unlocked Maximum Bitrate";
+"Refresh" = "Refresh";
+
+"Sound" = "Sound";
+"Sound Effects" = "Sound Effects";
+"Alert Sound" = "Alert Sound";
+"Play Sound Effects Through" = "Play Sound Effects Through";
+"Alert Volume" = "Alert Volume";
+"Play Sound at Startup" = "Play Sound at Startup";
+"Play User Interface Sound Effects" = "Play User Interface Sound Effects";
+"Play Feedback When Volume Changes" = "Play Feedback When Volume Changes";
+"Output & Input" = "Output & Input";
+"Output" = "Output";
+"Name" = "Name";
+"Type" = "Type";
+"Play" = "Play";
+"Output Volume" = "Output Volume";
+"Mute" = "Mute";
+"AirPlay" = "AirPlay";
+"Built-in" = "Built-in";
+"Other" = "Other";
+
+"USB Mapping" = "USB Mapping";
+
+"USB Mapping Disabled" = "USB Mapping Disabled";
+"Available Devices" = "Available Devices";
+
+"No mapped devices" = "No mapped devices";
+"Searching…" = "Searching…";
+
+"Rumble" = "Rumble";
+"Swap Buttons" = "Swap Buttons";
+"My Devices" = "My Devices";
+"Nearby Devices" = "Nearby Devices";
+"File Mapping settings subtitle" = "File Mapping settings subtitle";
+"About" = "About";
+"About settings subtitle" = "About settings subtitle";
+"Updates" = "Updates";
+"Updates settings subtitle" = "Updates settings subtitle";
+"Check for Updates" = "Check for Updates";
+"Current Version" = "Current Version";
+"Version" = "Version";
+"Project" = "Project";
+"License" = "License";
+
+"About & Updates" = "About & Updates";
+"Update Sources detail" = "Check for new versions, release notes, and downloads.";
+"Check Automatically" = "Check Automatically";
+"Not Checked" = "Not Checked";
+"Checking for Updates" = "Checking for Updates";
+"Up to Date" = "Up to Date";
+"Update Available" = "Update Available";
+"Update Check Unavailable" = "Update Check Unavailable";
+"Open Download" = "Open Download";
+
+"This Mac" = "This Mac";
+"Choose Folder" = "Choose Folder";
+"No Files" = "No Files";
+"Choose a local folder to compare files." = "Choose a local folder to compare files.";
+"Foundation Sunshine is required for file mapping." = "Foundation Sunshine is required for file mapping.";
+"Up" = "Up";
+
+"Host information updated" = "Host information updated";
+"Checking file mapping…" = "Checking file mapping…";
+"Invalid file mapping capability response" = "Invalid file mapping capability response";
+"Connecting…" = "Connecting…";
+"File mapping is unavailable" = "File mapping is unavailable";
+"No shared folders" = "No shared folders";
+"File mapping capability is unavailable" = "File mapping capability is unavailable";
+"File mapping hello failed" = "File mapping hello failed";
+"Invalid file mapping response" = "Invalid file mapping response";
+
+"About hero subtitle" = "A native macOS client for low-latency, high-quality remote streaming.";
+
+"Hold Options to Switch Touchpad Mode" = "Hold Options to Switch Touchpad Mode";
+"DualSense Options hint" = "Hold Options for two seconds to switch the touchpad between host touch and pointer/scroll mode. Gamepad buttons remain active.";
+
+"Advanced Video Settings" = "Advanced Video Settings";
+"Decoding" = "Decoding";
+"Mouse Tuning" = "Mouse Tuning";
+"View Live Log" = "View Live Log";
+"Auto Scroll Logs" = "Auto Scroll Logs";
+"Metal tuning is available with the Metal renderer." = "Available with the Metal renderer.";
+"Clear Category Filters" = "Clear Category Filters";
+
+"Streaming components are incompatible. Please reinstall the app." = "Streaming components are incompatible. Please reinstall the app.";
+
+"Unable to read Foundation USB forwarding capability" = "Unable to read Foundation USB forwarding capability";
+
+"Enable USB forwarding in Foundation Sunshine on the host" = "Enable USB forwarding in Foundation Sunshine on the host";
+
+"Foundation Sunshine USB forwarding service is unavailable" = "Foundation Sunshine USB forwarding service is unavailable";
+
+"Connecting" = "Connecting";

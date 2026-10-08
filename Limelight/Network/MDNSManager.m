@@ -16,6 +16,7 @@
 @implementation MDNSManager {
     NSNetServiceBrowser* mDNSBrowser;
     NSMutableArray* services;
+    NSMutableDictionary<NSString *, NSDate *> *failedResolveUntil;
     BOOL scanActive;
     BOOL timerPending;
 }
@@ -33,6 +34,7 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
     [mDNSBrowser setDelegate:self];
     
     services = [[NSMutableArray alloc] init];
+    failedResolveUntil = [[NSMutableDictionary alloc] init];
     
     return self;
 }
@@ -189,6 +191,8 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
 }
 
 - (void)netServiceDidResolveAddress:(NSNetService *)service {
+    NSString *serviceKey = [NSString stringWithFormat:@"%@|%@|%@", service.name ?: @"", service.type ?: @"", service.domain ?: @""];
+    [failedResolveUntil removeObjectForKey:serviceKey];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSArray<NSData*>* addresses = [service addresses];
         
@@ -254,19 +258,35 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
 
 - (void)netService:(NSNetService *)sender didNotResolve:(NSDictionary *)errorDict {
     Log(LOG_W, @"Did not resolve address for: %@\n%@", sender, [errorDict description]);
-    
-    // Schedule a retry in 2 seconds
-    [NSTimer scheduledTimerWithTimeInterval:2.0
-                                     target:self
-                                   selector:@selector(retryResolveTimerCallback:)
-                                   userInfo:nil
-                                    repeats:NO];
+
+    // Keep the failed service cached. The browser may return a fresh
+    // NSNetService instance on every search cycle; removing it here caused the
+    // same unresolved service to be resolved again every five seconds.
+    // Bonjour will call didRemoveService when it truly disappears.
+    NSString *serviceKey = [NSString stringWithFormat:@"%@|%@|%@", sender.name ?: @"", sender.type ?: @"", sender.domain ?: @""];
+    failedResolveUntil[serviceKey] = [NSDate dateWithTimeIntervalSinceNow:60.0];
 }
 
 - (void)netServiceBrowser:(NSNetServiceBrowser *)aNetServiceBrowser didFindService:(NSNetService *)aNetService moreComing:(BOOL)moreComing {
     Log(LOG_D, @"Found service: %@", aNetService);
     
-    if (![services containsObject:aNetService]) {
+    NSString *serviceKey = [NSString stringWithFormat:@"%@|%@|%@", aNetService.name ?: @"", aNetService.type ?: @"", aNetService.domain ?: @""];
+    NSDate *cooldown = failedResolveUntil[serviceKey];
+    if (cooldown != nil && [cooldown timeIntervalSinceNow] > 0) {
+        return;
+    }
+    [failedResolveUntil removeObjectForKey:serviceKey];
+
+    BOOL knownService = NO;
+    for (NSNetService *known in services) {
+        if ([known.name isEqualToString:aNetService.name] &&
+            [known.type isEqualToString:aNetService.type] &&
+            [known.domain isEqualToString:aNetService.domain]) {
+            knownService = YES;
+            break;
+        }
+    }
+    if (!knownService) {
         Log(LOG_I, @"Found new host: %@", aNetService.name);
         [aNetService setDelegate:self];
         [aNetService resolveWithTimeout:5];
@@ -308,18 +328,8 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
 }
 
 - (void)retryResolveTimerCallback:(NSTimer *)timer {
-    // Check if we've been stopped since this was queued
-    if (!scanActive) {
-        return;
-    }
-    
-    Log(LOG_I, @"Retrying mDNS resolution");
-    for (NSNetService* service in services) {
-        if (service.hostName == nil) {
-            [service setDelegate:self];
-            [service resolveWithTimeout:5];
-        }
-    }
+    // Kept for ABI/source compatibility with older callers. Failed services
+    // are retried by the next browser search rather than by a timer storm.
 }
 
 @end

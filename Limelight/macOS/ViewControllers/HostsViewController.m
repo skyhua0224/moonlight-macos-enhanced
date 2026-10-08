@@ -45,6 +45,7 @@
 
 @property (nonatomic, strong) NSArray *hostList;
 @property (nonatomic) NSSearchField *getSearchField;
+@property (nonatomic, strong) NSSearchField *contentSearchField;
 
 @property (nonatomic, strong) NSOperationQueue *opQueue;
 @property (nonatomic, strong) DiscoveryManager *discMan;
@@ -61,6 +62,8 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+
+    [self installContentSearchField];
     
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
@@ -71,9 +74,20 @@
     [self prepareDiscovery];
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(mainSearchTextChanged:) name:@"MoonlightMainSearchTextChanged" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refreshHostDiscovery:) name:@"MoonlightRequestHostDiscovery" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleDiscoveryPreferencesChanged:) name:@"MoonlightDiscoveryPreferencesChanged" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleHostAutoAddressSwitched:) name:@"HostAutoAddressSwitched" object:nil];
+}
+
+- (void)installContentSearchField {
+    // Search is rendered by the SwiftUI toolbar view.
+}
+
+- (void)mainSearchTextChanged:(NSNotification *)note {
+    NSString *text = note.userInfo[@"text"] ?: @"";
+    [self filterHostsByString:text];
+    [self.collectionView reloadData];
 }
 
 - (void)dealloc {
@@ -190,8 +204,12 @@
 #pragma clang diagnostic pop
     [self.parentViewController.view.window moonlight_toolbarItemForIdentifier:@"SidebarToggleToolbarItem"].enabled = NO;
     
-    self.getSearchField.delegate = self;
-    self.getSearchField.placeholderString = NSLocalizedString(@"Search Hosts", @"Search Hosts");
+    [self installContentSearchField];
+    self.contentSearchField.delegate = self;
+    self.contentSearchField.placeholderString = NSLocalizedString(@"Search Hosts", @"Search Hosts");
+    NSSearchField *toolbarSearchField = [self.parentViewController.view.window moonlight_searchFieldInToolbar];
+    toolbarSearchField.delegate = self;
+    toolbarSearchField.placeholderString = self.contentSearchField.placeholderString;
 }
 
 - (void)viewDidAppear {
@@ -512,7 +530,7 @@
 #pragma mark - Helpers
 
 - (NSSearchField *)getSearchField {
-    return [self.parentViewController.view.window moonlight_searchFieldInToolbar];
+    return self.contentSearchField ?: [self.parentViewController.view.window moonlight_searchFieldInToolbar];
 }
 
 - (TemporaryHost *)getHostFromMenuItem:(NSMenuItem *)item {

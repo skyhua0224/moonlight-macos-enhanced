@@ -1,546 +1,279 @@
-//
-//  SettingsView.swift
-//  Moonlight for macOS
-//
-//  Created by Michael Kenny on 15/1/2024.
-//  Copyright © 2024 Moonlight Game Streaming Project. All rights reserved.
-//
-
-import AVFoundation
 import AppKit
-import Carbon.HIToolbox
-import CoreGraphics
 import SwiftUI
 
 struct StreamView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
-  @ObservedObject var languageManager = LanguageManager.shared
+  @ObservedObject private var languageManager = LanguageManager.shared
+  @State private var isAddressEditorPresented = false
 
-  @SwiftUI.State private var showCustomResolutionGroup = false
-  @SwiftUI.State private var showCustomFpsGroup = false
-  @SwiftUI.State private var showRemoteCustomResolutionGroup = false
-  @SwiftUI.State private var showRemoteCustomFpsGroup = false
-
-  private func nativeDisplayPixelSize() -> CGSize? {
-    guard let screen = NSScreen.main else { return nil }
-    guard
-      let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-        as? NSNumber
-    else { return nil }
-
-    let displayID = CGDirectDisplayID(screenNumber.uint32Value)
-    guard let mode = CGDisplayCopyDisplayMode(displayID) else { return nil }
-
-    return CGSize(width: mode.pixelWidth, height: mode.pixelHeight)
-  }
-
-  private func safeDisplayPixelSize() -> CGSize? {
-    guard let screen = NSScreen.main else { return nil }
-    guard #available(macOS 12.0, *) else { return nil }
-
-    let insets = screen.safeAreaInsets
-    let safeFrame = NSRect(
-      x: screen.frame.origin.x + insets.left,
-      y: screen.frame.origin.y + insets.bottom,
-      width: max(0.0, screen.frame.size.width - insets.left - insets.right),
-      height: max(0.0, screen.frame.size.height - insets.top - insets.bottom)
-    )
-    guard safeFrame.size.width > 0.0, safeFrame.size.height > 0.0 else { return nil }
-
-    let scale = max(1.0, screen.backingScaleFactor)
-    func even(_ v: CGFloat) -> CGFloat {
-      let i = Int(v.rounded(.down))
-      return CGFloat(i - (i % 2))
-    }
-
-    return CGSize(width: even(safeFrame.width * scale), height: even(safeFrame.height * scale))
-  }
-
-  private func matchDisplayLabel() -> String {
-    let base = languageManager.localize("Match Display")
-    let displayMode = settingsModel.selectedDisplayMode
-    let native = nativeDisplayPixelSize()
-    let safe = safeDisplayPixelSize()
-
-    if displayMode == "Fullscreen", let safe {
-      return "\(base) (\(Int(safe.width))×\(Int(safe.height)))"
-    }
-
-    if let native {
-      return "\(base) (\(Int(native.width))×\(Int(native.height)))"
-    }
-
-    return base
-  }
-
-  private func displayResolutionModeHint() -> String {
-    return languageManager.localize("Match Display Resolution hint")
-  }
-
-  private func statusDotImage(state: Int) -> Image {
-    let color: NSColor = (state == 1) ? .systemGreen : (state == 0 ? .systemRed : .systemGray)
-    let size = NSSize(width: 8, height: 8)
-    let image = NSImage(size: size)
-    image.lockFocus()
-    color.setFill()
-    let rect = NSRect(origin: .zero, size: size)
-    NSBezierPath(ovalIn: rect).fill()
-    image.unlockFocus()
-    return Image(nsImage: image)
+  private var selectedHostName: String {
+    guard let host = settingsModel.selectedHost else { return languageManager.localize("Default Profile") }
+    return host.id == SettingsModel.globalHostId
+      ? languageManager.localize("Default Profile") : host.name
   }
 
   var body: some View {
-    ScrollView {
-      LazyVStack {
-        FormSection(title: "General") {
-          if let hosts = SettingsModel.hosts {
-            FormCell(title: "Profile:", contentWidth: 150) {
-              Picker("", selection: $settingsModel.selectedHost) {
-                ForEach(hosts, id: \.self) { host in
-                  if let host {
-                    let name =
-                      host.id == SettingsModel.globalHostId
-                      ? languageManager.localize("Default Profile") : host.name
-                    Text(name).tag(Optional(host))
-                  }
-                }
-              }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            }
+    SettingsContent {
+      SettingsPageHero(
+        title: "Streaming",
+        subtitle: "Streaming settings subtitle",
+        symbol: "rectangle.inset.filled.and.person.filled",
+        tint: .cyan
+      )
 
-            HStack {
-              Spacer()
-              Text(
-                settingsModel.selectedHost?.id == SettingsModel.globalHostId
-                  ? languageManager.localize("Default Profile Scope")
-                  : String(
-                    format: languageManager.localize("Host Profile Scope (%@)"),
-                    settingsModel.selectedHost?.name ?? "")
-              )
-              .font(.footnote)
-              .foregroundColor(.secondary)
-              .multilineTextAlignment(.trailing)
-            }
-
-            Divider()
-          }
-
-          if settingsModel.selectedHost?.id == SettingsModel.globalHostId {
-            FormCell(title: "Connection Method", contentWidth: 0) {
-              Text(languageManager.localize("Connection Method Default Profile Hint"))
-                .font(.footnote)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-          } else {
-            FormCell(title: "Connection Method", contentWidth: 250) {
-              HStack {
-                Picker("", selection: $settingsModel.selectedConnectionMethod) {
-                  ForEach(settingsModel.connectionCandidates) { candidate in
-                    HStack {
-                      if candidate.id != "Auto" {
-                        statusDotImage(state: candidate.state)
-                          .padding(.trailing, 4)
-                      }
-                      Text(candidate.label)
-                    }
-                    .tag(candidate.id)
-                  }
-                }
-                .labelsHidden()
-
-                Button(action: {
-                  guard let uuid = settingsModel.selectedHost?.id,
-                    uuid != SettingsModel.globalHostId,
-                    let hosts = DataManager().getHosts() as? [TemporaryHost],
-                    let host = hosts.first(where: { !$0.uuid.isEmpty && $0.uuid == uuid })
-                  else { return }
-
-                  let editor = ConnectionEditorViewController(host: host)
-                  NSApp.keyWindow?.contentViewController?.presentAsSheet(editor)
-                }) {
-                  Image(systemName: "gearshape")
-                }
-                .buttonStyle(.plain)
-
-                Button(action: {
-                  if let uuid = settingsModel.selectedHost?.id, uuid != SettingsModel.globalHostId {
-                    settingsModel.refreshConnectionCandidates()
-                    NotificationCenter.default.post(
-                      name: NSNotification.Name("MoonlightRequestHostDiscovery"), object: nil,
-                      userInfo: ["uuid": uuid])
-                  }
-                }) {
-                  Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.plain)
-              }
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .onAppear {
-              settingsModel.refreshConnectionCandidates()
-            }
-            .onChange(of: settingsModel.selectedHost?.id) { newValue in
-              if let newValue, newValue != SettingsModel.globalHostId {
-                settingsModel.refreshConnectionCandidates()
-              }
-            }
-          }
-
-          Divider()
-
-          FormCell(
-            title: "Default Display Mode", contentWidth: 150,
-            content: {
-              Picker("", selection: $settingsModel.selectedDisplayMode) {
-                ForEach(SettingsModel.displayModes, id: \.self) { mode in
-                  Text(languageManager.localize(mode))
-                }
-              }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            })
-
-          Divider()
-
-          FormCell(title: "Language", contentWidth: 150) {
-            Picker("", selection: $languageManager.currentLanguage) {
-              ForEach(AppLanguage.allCases) { lang in
-                Text(languageManager.localize(lang.rawValue)).tag(lang)
-              }
-            }
-            .labelsHidden()
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .onChange(of: languageManager.currentLanguage) { _ in
-              languageManager.applyAppLanguage()
-            }
-          }
-
-          Divider()
-
-          ToggleCell(title: "Ignore Aspect Ratio", boolBinding: $settingsModel.ignoreAspectRatio)
+      FormSection(title: "General") {
+        SettingsRow(title: "Profile") {
+          Text(selectedHostName)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
 
-        Spacer()
-          .frame(height: 32)
 
-        FormSection(title: "Resolution & Scaling") {
-          FormCell(
-            title: "Resolution", contentWidth: 220,
-            content: {
-              Picker("", selection: $settingsModel.selectedResolution) {
-                ForEach(SettingsModel.resolutions, id: \.self) { resolution in
-                  if resolution == SettingsModel.matchDisplayResolutionSentinel {
-                    Text(matchDisplayLabel())
-                  } else if resolution == .zero {
-                    Text(languageManager.localize("Custom"))
-                  } else {
-                    Text(verbatim: "\(Int(resolution.width))x\(Int(resolution.height))")
-                  }
-                }
-              }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            })
-
-          Text(displayResolutionModeHint())
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-          if showCustomResolutionGroup {
-            Divider()
-
-            FormCell(
-              title: "Custom Resolution", contentWidth: 0,
-              content: {
-                DimensionsInputView(
-                  widthBinding: $settingsModel.customResWidth,
-                  heightBinding: $settingsModel.customResHeight,
-                  placeholderDimensions: CGSize(width: 3440, height: 1440))
-              })
+        SettingsRow(title: "Connection Method") {
+          Picker("", selection: $settingsModel.selectedConnectionMethod) {
+            ForEach(settingsModel.connectionCandidates) { candidate in
+              Text(candidate.label).tag(candidate.id)
+            }
           }
+          .labelsHidden()
+          .pickerStyle(.menu)
+          .frame(width: 220, alignment: .trailing)
+        }
 
-          Divider()
+        SettingsRow(title: "Connection Addresses", detail: "Connection Addresses detail") {
+          Button(languageManager.localize("Manage Addresses")) {
+            isAddressEditorPresented = true
+          }
+          .disabled(selectedTemporaryHost == nil)
+        }
 
-          ToggleCell(
-            title: "Resolution Scale",
-            hintKey: "Resolution Scale hint",
-            boolBinding: $settingsModel.streamResolutionScale
-          )
 
-          Divider()
+        SettingsRow(title: "Default Display Mode") {
+          Picker("", selection: $settingsModel.selectedDisplayMode) {
+            ForEach(SettingsModel.displayModes, id: \.self) { mode in
+              Text(languageManager.localize(mode)).tag(mode)
+            }
+          }
+          .labelsHidden()
+          .frame(width: 220, alignment: .trailing)
+        }
 
-          FormCell(title: "Resolution Scale Ratio", contentWidth: 120) {
+
+        SettingsRow(title: "Language") {
+          Picker("", selection: $languageManager.currentLanguage) {
+            ForEach(AppLanguage.allCases) { language in
+              Text(languageManager.localize(language.rawValue)).tag(language)
+            }
+          }
+          .labelsHidden()
+          .frame(width: 160, alignment: .trailing)
+          .onChange(of: languageManager.currentLanguage) { _ in
+            languageManager.applyAppLanguage()
+          }
+        }
+      }
+
+      FormSection(title: "Clipboard") {
+        SettingsRow(title: "Clipboard Sync", detail: "Clipboard Sync detail") {
+          Picker("", selection: $settingsModel.selectedClipboardSyncMode) {
+            ForEach(SettingsModel.clipboardSyncModes, id: \.self) { mode in
+              Text(languageManager.localize(mode)).tag(mode)
+            }
+          }
+          .labelsHidden()
+          .pickerStyle(.menu)
+          .frame(width: 170, alignment: .trailing)
+        }
+
+        SettingDescriptionRow(textKey: "Clipboard Sync Foundation detail")
+      }
+
+      FormSection(title: "Resolution & Frame Rate") {
+        SettingsRow(title: "Resolution") {
+          Picker("", selection: $settingsModel.selectedResolution) {
+            ForEach(SettingsModel.resolutions, id: \.self) { resolution in
+              if resolution == SettingsModel.matchDisplayResolutionSentinel {
+                Text(languageManager.localize("Match Display")).tag(resolution)
+              } else if resolution == .zero {
+                Text(languageManager.localize("Custom")).tag(resolution)
+              } else {
+                Text("\(Int(resolution.width)) × \(Int(resolution.height))").tag(resolution)
+              }
+            }
+          }
+          .labelsHidden()
+          .frame(width: 220, alignment: .trailing)
+        }
+
+        if settingsModel.selectedResolution == .zero {
+          SettingsRow(title: "Custom Resolution") {
+            DimensionsInputView(
+              widthBinding: $settingsModel.customResWidth,
+              heightBinding: $settingsModel.customResHeight,
+              placeholderDimensions: CGSize(width: 1920, height: 1080)
+            )
+          }
+        }
+
+
+        SettingsRow(title: "Frame Rate") {
+          Picker("", selection: $settingsModel.selectedFps) {
+            ForEach(SettingsModel.fpss, id: \.self) { fps in
+              Text(fps == 0 ? languageManager.localize("Custom") : "\(fps) Hz").tag(fps)
+            }
+          }
+          .labelsHidden()
+          .frame(width: 150, alignment: .trailing)
+        }
+
+        if settingsModel.selectedFps == 0 {
+          SettingsRow(title: "Custom FPS") {
+            TextField("60", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
+              .multilineTextAlignment(.trailing)
+              .textFieldStyle(.roundedBorder)
+              .frame(width: 90)
+          }
+        }
+
+
+        ToggleCell(title: "Resolution Scale", hintKey: "Resolution Scale hint", boolBinding: $settingsModel.streamResolutionScale)
+
+        if settingsModel.streamResolutionScale {
+          SettingsRow(title: "Resolution Scale Ratio") {
             Picker("", selection: $settingsModel.streamResolutionScaleRatio) {
               Text("50%").tag(50)
               Text("75%").tag(75)
               Text("100%").tag(100)
             }
             .labelsHidden()
-            .frame(maxWidth: .infinity, alignment: .trailing)
-          }
-          .disabled(!settingsModel.streamResolutionScale)
-          .opacity(settingsModel.streamResolutionScale ? 1.0 : 0.55)
-
-          Divider()
-
-          ToggleCell(
-            title: "Remote Resolution",
-            hintKey: "Remote overrides hint",
-            boolBinding: $settingsModel.remoteResolutionEnabled
-          )
-
-          if settingsModel.remoteResolutionEnabled {
-            Divider()
-
-            FormCell(
-              title: "Remote Resolution Value", contentWidth: 220,
-              content: {
-                Picker("", selection: $settingsModel.selectedRemoteResolution) {
-                  ForEach(SettingsModel.remoteResolutions, id: \.self) { resolution in
-                    if resolution == .zero {
-                      Text(languageManager.localize("Custom"))
-                    } else {
-                      Text(
-                        verbatim: "\(Int(resolution.width))x\(Int(resolution.height))")
-                    }
-                  }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .trailing)
-              })
-
-            if showRemoteCustomResolutionGroup {
-              Divider()
-
-              FormCell(
-                title: "Remote Custom Resolution", contentWidth: 0,
-                content: {
-                  DimensionsInputView(
-                    widthBinding: $settingsModel.remoteCustomResWidth,
-                    heightBinding: $settingsModel.remoteCustomResHeight,
-                    placeholderDimensions: CGSize(width: 1920, height: 1080))
-                })
-            }
+            .frame(width: 130, alignment: .trailing)
           }
         }
 
-        Spacer()
-          .frame(height: 32)
-
-        FormSection(title: "Frame Rate") {
-          FormCell(
-            title: "FPS", contentWidth: 100,
-            content: {
-              Picker("", selection: $settingsModel.selectedFps) {
-                ForEach(SettingsModel.fpss, id: \.self) { fps in
-                  if fps == .zero {
-                    Text(languageManager.localize("Custom"))
-                  } else {
-                    Text("\(fps)")
-                  }
-                }
+        ToggleCell(title: "Remote Resolution", hintKey: "Remote overrides hint", boolBinding: $settingsModel.remoteResolutionEnabled)
+        if settingsModel.remoteResolutionEnabled {
+          SettingsRow(title: "Remote Resolution") {
+            Picker("", selection: $settingsModel.selectedRemoteResolution) {
+              ForEach(SettingsModel.remoteResolutions, id: \.self) { resolution in
+                Text(resolution == .zero ? languageManager.localize("Custom") : "\(Int(resolution.width)) × \(Int(resolution.height))")
+                  .tag(resolution)
               }
-              .labelsHidden()
-              .frame(maxWidth: .infinity, alignment: .trailing)
-            })
-
-          if showCustomFpsGroup {
-            Divider()
-
-            FormCell(
-              title: "Custom FPS", contentWidth: 0,
-              content: {
-                TextField("40", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
-                  .multilineTextAlignment(.trailing)
-                  .textFieldStyle(.plain)
-                  .fixedSize()
-              })
+            }
+            .labelsHidden()
+            .frame(width: 220, alignment: .trailing)
           }
 
-          Divider()
-
-          ToggleCell(
-            title: "Remote FPS",
-            hintKey: "Remote overrides hint",
-            boolBinding: $settingsModel.remoteFpsEnabled
-          )
-
-          if settingsModel.remoteFpsEnabled {
-            Divider()
-
-            FormCell(
-              title: "Remote FPS Value", contentWidth: 120,
-              content: {
-                Picker("", selection: $settingsModel.selectedRemoteFps) {
-                  ForEach(SettingsModel.fpss, id: \.self) { fps in
-                    if fps == .zero {
-                      Text(languageManager.localize("Custom"))
-                    } else {
-                      Text("\(fps)")
-                    }
-                  }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .trailing)
-              })
-
-            if showRemoteCustomFpsGroup {
-              Divider()
-
-              FormCell(
-                title: "Remote Custom FPS", contentWidth: 0,
-                content: {
-                  TextField(
-                    "60", value: $settingsModel.remoteCustomFps, formatter: NumberOnlyFormatter()
-                  )
-                  .multilineTextAlignment(.trailing)
-                  .textFieldStyle(.plain)
-                  .fixedSize()
-                })
-            }
-          }
-        }
-
-        Spacer()
-          .frame(height: 32)
-
-        Spacer()
-          .frame(height: 32)
-
-        FormSection(title: "Bitrate") {
-          VStack(alignment: .leading, spacing: 10) {
-            Toggle(isOn: $settingsModel.autoAdjustBitrate) {
-              Text(languageManager.localize("Auto Adjust Bitrate"))
-            }
-            .toggleStyle(.switch)
-            .controlSize(.small)
-
-            Toggle(isOn: $settingsModel.unlockMaxBitrate) {
-              Text(languageManager.localize("Unlock max bitrate (1000 Mbps)"))
-            }
-            .toggleStyle(.switch)
-            .controlSize(.small)
-
-            let steps = SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate)
-            let index = max(0, min(Int(settingsModel.bitrateSliderValue), steps.count - 1))
-            let stepKbps = Int(steps[index] * 1000.0)
-            let bitrateKbps = settingsModel.customBitrate ?? stepKbps
-            let bitrateMbps = max(0, bitrateKbps / 1000)
-
-            if settingsModel.autoAdjustBitrate {
-              HStack {
-                Text(languageManager.localize("Target Bitrate"))
-                Spacer()
-                Text(verbatim: "\(bitrateMbps) Mbps")
-                  .availableMonospacedDigit()
-              }
-              Text(languageManager.localize("Auto bitrate hint"))
-                .font(.footnote)
-                .foregroundColor(.secondary)
-            } else {
-              HStack {
-                Text(verbatim: "\(bitrateMbps) Mbps")
-                  .availableMonospacedDigit()
-
-                Spacer()
-
-                let customBitrateMbpsBinding = Binding<Int?>(
-                  get: {
-                    guard let kbps = settingsModel.customBitrate else { return nil }
-                    return kbps / 1000
-                  },
-                  set: { newMbps in
-                    if let newMbps {
-                      settingsModel.customBitrate = max(0, newMbps) * 1000
-                    } else {
-                      settingsModel.customBitrate = nil
-                    }
-                  }
-                )
-
-                TextField("Mbps", value: customBitrateMbpsBinding, formatter: NumberOnlyFormatter())
-                  .multilineTextAlignment(.trailing)
-                  .textFieldStyle(.roundedBorder)
-                  .frame(width: 80)
-              }
-
-              Slider(
-                value: $settingsModel.bitrateSliderValue,
-                in:
-                  0...Float(
-                    max(
-                      0,
-                      SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate).count - 1
-                    )),
-                step: 1
+          if settingsModel.selectedRemoteResolution == .zero {
+            SettingsRow(title: "Remote Custom Resolution") {
+              DimensionsInputView(
+                widthBinding: $settingsModel.remoteCustomResWidth,
+                heightBinding: $settingsModel.remoteCustomResHeight,
+                placeholderDimensions: CGSize(width: 1920, height: 1080)
               )
             }
           }
         }
-
       }
-      .padding()
-      .onAppear {
-        func updateCustomResolutionGroup() {
-          showCustomResolutionGroup = settingsModel.selectedResolution == .zero
-        }
-        func updateCustomFpsGroup() {
-          showCustomFpsGroup = settingsModel.selectedFps == .zero
-        }
-        func updateRemoteCustomResolutionGroup() {
-          showRemoteCustomResolutionGroup =
-            settingsModel.remoteResolutionEnabled && settingsModel.selectedRemoteResolution == .zero
-        }
-        func updateRemoteCustomFpsGroup() {
-          showRemoteCustomFpsGroup =
-            settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
-        }
 
-        updateCustomResolutionGroup()
-        updateCustomFpsGroup()
-        updateRemoteCustomResolutionGroup()
-        updateRemoteCustomFpsGroup()
-        settingsModel.resolutionChangedCallback = {
-          withAnimation {
-            updateCustomResolutionGroup()
+      RemoteFrameRateSection()
+
+      FormSection(title: "Bitrate & Playback") {
+        BitrateSettingsSection()
+
+        ToggleCell(title: "Play Sound on Host", boolBinding: $settingsModel.audioOnPC)
+        ToggleCell(title: "Ignore Aspect Ratio", boolBinding: $settingsModel.ignoreAspectRatio)
+        ToggleCell(title: "Show Local Cursor", boolBinding: $settingsModel.showLocalCursor)
+      }
+    }
+    .onAppear {
+      settingsModel.refreshConnectionCandidates()
+    }
+    .onChange(of: settingsModel.selectedHost?.id) { _ in
+      settingsModel.refreshConnectionCandidates()
+    }
+    .sheet(isPresented: $isAddressEditorPresented) {
+      if let host = selectedTemporaryHost {
+        ConnectionEditorSheet(host: host)
+          .frame(minWidth: 620, minHeight: 520)
+      }
+    }
+  }
+
+  private var selectedTemporaryHost: TemporaryHost? {
+    guard let hostID = settingsModel.selectedHost?.id,
+      hostID != SettingsModel.globalHostId,
+      let hosts = DataManager().getHosts() as? [TemporaryHost]
+    else { return nil }
+    return hosts.first(where: { $0.uuid == hostID })
+  }
+}
+
+private struct ConnectionEditorSheet: NSViewControllerRepresentable {
+  let host: TemporaryHost
+
+  func makeNSViewController(context: Context) -> ConnectionEditorViewController {
+    ConnectionEditorViewController(host: host)
+  }
+
+  func updateNSViewController(_ nsViewController: ConnectionEditorViewController, context: Context) {}
+}
+
+
+private struct BitrateSettingsSection: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  @Environment(\.locale) private var locale
+  private var mbps: Binding<Double> {
+    Binding(get: { Double(settingsModel.effectiveBitrateKbps) / 1000 }, set: { value in
+      guard value.isFinite else { return }
+      let maxMbps = Double(SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate).last!)
+      settingsModel.customBitrate = Int((min(maxMbps, max(0.5, value)) * 1000).rounded())
+    })
+  }
+  var body: some View {
+    ToggleCell(title: "Auto Adjust Bitrate", hintKey: "Auto bitrate hint", boolBinding: $settingsModel.autoAdjustBitrate)
+    ToggleCell(title: "Unlock max bitrate (1000 Mbps)", boolBinding: $settingsModel.unlockMaxBitrate)
+    SettingsRow(title: settingsModel.autoAdjustBitrate ? "Target Bitrate" : "Bitrate") {
+      HStack(spacing: 5) {
+        TextField("Bitrate", value: mbps, format: .number.precision(.fractionLength(0...3)).locale(locale))
+          .labelsHidden()
+          .multilineTextAlignment(.trailing)
+          .textFieldStyle(.roundedBorder)
+          .frame(width: 90)
+          .disabled(settingsModel.autoAdjustBitrate)
+        Text("Mbps").foregroundStyle(.secondary)
+      }
+    }
+    if !settingsModel.autoAdjustBitrate {
+      SettingsRow(title: "Bitrate") {
+        Slider(value: $settingsModel.bitrateSliderValue,
+          in: 0...Float(SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate).count - 1), step: 1)
+          .frame(width: 250)
+          .accessibilityLabel(Text("Bitrate"))
+          .accessibilityValue(Text("\(Double(settingsModel.effectiveBitrateKbps) / 1000, format: .number.precision(.fractionLength(0...3))) Mbps"))
+      }
+    }
+  }
+}
+
+private struct RemoteFrameRateSection: View {
+  @EnvironmentObject private var settingsModel: SettingsModel
+  var body: some View {
+    FormSection(title: "Remote FPS") {
+      ToggleCell(title: "Remote FPS", hintKey: "Remote overrides hint", boolBinding: $settingsModel.remoteFpsEnabled)
+      if settingsModel.remoteFpsEnabled {
+        SettingsRow(title: "Remote FPS Value") {
+          Picker("", selection: $settingsModel.selectedRemoteFps) {
+            ForEach(SettingsModel.fpss, id: \.self) { value in
+              Text(value == 0 ? NSLocalizedString("Custom", comment: "") : "\(value) Hz").tag(value)
+            }
+          }.labelsHidden().frame(width: 190)
+        }
+        if settingsModel.selectedRemoteFps == 0 {
+          SettingsRow(title: "Custom FPS") {
+            TextField("60", value: $settingsModel.remoteCustomFps, formatter: NumberOnlyFormatter())
+              .multilineTextAlignment(.trailing).frame(width: 90)
           }
         }
-        settingsModel.fpsChangedCallback = {
-          withAnimation {
-            updateCustomFpsGroup()
-          }
-        }
-      }
-      .onChange(of: settingsModel.remoteResolutionEnabled) { _ in
-        withAnimation {
-          showRemoteCustomResolutionGroup =
-            settingsModel.remoteResolutionEnabled && settingsModel.selectedRemoteResolution == .zero
-        }
-      }
-      .onChange(of: settingsModel.selectedRemoteResolution) { _ in
-        withAnimation {
-          showRemoteCustomResolutionGroup =
-            settingsModel.remoteResolutionEnabled && settingsModel.selectedRemoteResolution == .zero
-        }
-      }
-      .onChange(of: settingsModel.remoteFpsEnabled) { _ in
-        withAnimation {
-          showRemoteCustomFpsGroup =
-            settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
-        }
-      }
-      .onChange(of: settingsModel.selectedRemoteFps) { _ in
-        withAnimation {
-          showRemoteCustomFpsGroup =
-            settingsModel.remoteFpsEnabled && settingsModel.selectedRemoteFps == .zero
-        }
-      }
-      .onAppear {
-        settingsModel.refreshSunshineDisplays(force: false)
       }
     }
   }
