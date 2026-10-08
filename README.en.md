@@ -82,6 +82,8 @@
 
 ## 📦 Downloads
 
+1.3.9 RC1 is a prerelease. Install it manually from the release page while the in-app update feed is being prepared.
+
 - Get the latest build from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases)
 - Each release provides `universal`, `arm64`, and `x86_64` packages
 - If you are not sure which one to choose, start with `universal`
