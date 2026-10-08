@@ -119,7 +119,8 @@ These screenshots are from 1.3.8; settings have been redesigned in 1.3.9.
 
 ### HDR, Color, and Enhancement
 - Request 10-bit SDR directly in `Settings → Video → 10-bit SDR`, without enabling HDR as a workaround; host and decoder support are required
-- HDR10+ and Dolby Vision 8.1/8.4 provide capability probing, integration, and safe fallback; output depends on the system, hardware, and display path. HDR Vivid is unavailable
+- HDR10+ support on macOS is limited: the current public APIs and presentation path do not guarantee preservation of all dynamic metadata; output may use base HDR instead
+- Dolby Vision 8.1/8.4 provide capability probing, integration, and safe fallback; output depends on the system, hardware, and display path. HDR Vivid is unavailable
 - HDR transfer functions support `HLG / PQ / Auto`, with presentation tuned to the current display path
 - `Metal Renderer` exposes HDR metadata source, client HDR profile, luminance parameters, optical output scale, HLG viewing environment, EDR strategy, and tone-mapping policy
 - The enhancement stack supports `VT Low-Latency Super Resolution`, `VT Quality Super Resolution`, `MetalFX`, and `Basic Scaling`
