@@ -8,6 +8,7 @@
 
 #import "HapticContext.h"
 #include "ControllerTrackpadGesture.h"
+#include "ControllerMenuGesture.h"
 
 @import GameController;
 @import CoreHaptics;
@@ -36,7 +37,7 @@
 
 @property(nonatomic) BOOL hasTouchpadModeOverride;
 @property(nonatomic) BOOL touchpadMouseMode;
-@property(nonatomic) BOOL optionsLongPressConsumed;
+@property(nonatomic) ControllerMenuGesture menuGesture;
 @property(nonatomic) BOOL primaryTouchActive;
 @property(nonatomic) BOOL secondaryTouchActive;
 @property(nonatomic) float lastPrimaryTouchX;
@@ -56,7 +57,6 @@
 @property(nonatomic) NSTimeInterval trackpadClickMovementSuppressedUntil;
 @property(nonatomic) BOOL hasSentGamepadState;
 @property(nonatomic) ControllerGamepadState sentGamepadState;
-@property(nonatomic) NSTimeInterval optionsHoldBegan;
 @property(nonatomic) int trackpadMouseButton;
 
 @property(nonatomic) HapticContext *_Nullable lowFreqMotor;
@@ -65,6 +65,5 @@
 // Gamepad Mouse Emulation State
 @property(nonatomic) BOOL isMouseMode;
 @property(nonatomic) int lastMouseModeButtonFlags;
-@property(nonatomic, strong) NSDate *_Nullable startButtonDownTime;
 
 @end

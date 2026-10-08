@@ -1034,6 +1034,7 @@ class SettingsModel: ObservableObject {
     didSet {
       guard !isLoading else { return }
       saveSettings()
+      postMouseSettingsChanged("gamepadMouseMode")
     }
   }
   @Published var nativeTouchpad: Bool {

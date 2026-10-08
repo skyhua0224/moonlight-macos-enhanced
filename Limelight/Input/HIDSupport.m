@@ -752,6 +752,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
         [self rumbleSync];
 
         self.controller = [[Controller alloc] init];
+        [self refreshGamepadMouseModeConfiguration];
         
         for (GCMouse *mouse in GCMouse.mice) {
             [self registerMouseCallbacks:mouse];
@@ -778,6 +779,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 }
 
 - (void)dealloc {
+    [self.gamepadMenuTimer invalidate];
     [self tearDownCoreHIDMouseDriver];
     NSLog(@"HIDSupport dealloc");
 }
@@ -1978,6 +1980,10 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
                                 IOHIDDeviceRef          device) {
     HIDSupport *self = (__bridge HIDSupport *)context;
 
+    [self.gamepadMenuTimer invalidate];
+    self.gamepadMenuTimer = nil;
+    self.gamepadMenuPressed = NO;
+    self.controller.menuGesture = (ControllerMenuGesture){0};
     if (self.controllerDriver == 0) {
         self.controller.lastButtonFlags = 0;
         self.controller.lastLeftTrigger = 0;
@@ -1992,53 +1998,94 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 }
 
 
+- (void)refreshGamepadMouseModeConfiguration {
+    BOOL mouseEnabled = [SettingsClass gamepadMouseModeFor:self.host.uuid];
+    BOOL gestureEnabled = [SettingsClass gamepadMouseModeLongPressMenuFor:self.host.uuid];
+    if (mouseEnabled != self.gamepadMouseModeEnabled ||
+        gestureEnabled != self.gamepadMouseModeLongPressMenuEnabled) {
+        ControllerMenuGesture gesture = self.controller.menuGesture;
+        ControllerMenuGestureInterrupt(&gesture, self.gamepadMenuPressed);
+        self.controller.menuGesture = gesture;
+        [self.gamepadMenuTimer invalidate];
+        self.gamepadMenuTimer = nil;
+    }
+    self.gamepadMouseModeEnabled = mouseEnabled;
+    self.gamepadMouseModeLongPressMenuEnabled = gestureEnabled;
+    if (!mouseEnabled) [self setGamepadMouseModeActive:NO];
+}
+
+- (void)setGamepadMouseModeActive:(BOOL)active {
+    if (self.controller.isMouseMode == active) return;
+    PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+    int heldMouseButtons = self.controller.lastMouseModeButtonFlags;
+    if (input && self.shouldSendInputEvents) {
+        int player = self.controller.playerIndex;
+        HIDDispatchInput(self, input, ^{
+            if (heldMouseButtons & A_FLAG)
+                LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+            if (heldMouseButtons & B_FLAG)
+                LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+            if (active)
+                LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
+        });
+    }
+    self.controller.isMouseMode = active;
+    self.controller.lastMouseModeButtonFlags = 0;
+    if (!active) self.controller.lastButtonFlags |= heldMouseButtons & (A_FLAG | B_FLAG);
+    self.controller.primaryTouchActive = NO;
+    self.controller.secondaryTouchActive = NO;
+    self.controller.trackpadMouseAccumulatedX = 0;
+    self.controller.trackpadMouseAccumulatedY = 0;
+    self.controller.trackpadScrollAccumulatedY = 0;
+    self.controller.trackpadMouseButton = 0;
+    [[NSNotificationCenter defaultCenter] postNotificationName:HIDMouseModeToggledNotification
+        object:nil userInfo:@{@"enabled": @(active)}];
+    if (!active && self.controllerDriver == 0) [self sendControllerEvent];
+}
+
+- (void)updateGamepadMenuGesture {
+    BOOL enabled = self.gamepadMouseModeEnabled && self.gamepadMouseModeLongPressMenuEnabled &&
+        self.controllerDriver == 0 && self.shouldSendInputEvents;
+    ControllerMenuGesture gesture = self.controller.menuGesture;
+    double now = NSProcessInfo.processInfo.systemUptime;
+    BOOL toggle = ControllerMenuGestureUpdate(&gesture, enabled, self.gamepadMenuPressed, now);
+    self.controller.menuGesture = gesture;
+    if (!gesture.tracking || gesture.consumed || gesture.blockedUntilRelease) {
+        [self.gamepadMenuTimer invalidate];
+        self.gamepadMenuTimer = nil;
+    } else if (self.gamepadMenuTimer == nil) {
+        // Some HID devices send only button edges. A one-shot timer also
+        // completes their hold without requiring another device report.
+        __weak HIDSupport *weakSelf = self;
+        self.gamepadMenuTimer = [NSTimer timerWithTimeInterval:MAX(0.001, 2.0 - (now - gesture.began))
+            repeats:NO block:^(NSTimer *timer) {
+                HIDSupport *strongSelf = weakSelf;
+                strongSelf.gamepadMenuTimer = nil;
+                [strongSelf updateGamepadMenuGesture];
+            }];
+        [[NSRunLoop mainRunLoop] addTimer:self.gamepadMenuTimer forMode:NSRunLoopCommonModes];
+    }
+    if (toggle) {
+        self.controller.lastButtonFlags &= ~PLAY_FLAG;
+        [self setGamepadMouseModeActive:!self.controller.isMouseMode];
+    }
+}
+
 - (void)updateButtonFlags:(int)flag state:(BOOL)set {
-    // Mouse Mode Toggle Logic (Long Press Start)
-    if (flag == PLAY_FLAG &&
-        self.controllerDriver == 0 &&
-        [SettingsClass gamepadMouseModeFor:self.host.uuid] &&
-        [SettingsClass gamepadMouseModeLongPressMenuFor:self.host.uuid]) {
-        if (set) {
-            if (self.controller.startButtonDownTime == nil) {
-                self.controller.startButtonDownTime = [NSDate date];
-            }
-        } else {
-            // Released
-            if (self.controller.startButtonDownTime != nil) {
-                if ([self.controller.startButtonDownTime timeIntervalSinceNow] < -1.0) {
-                    // Toggle
-                    self.controller.isMouseMode = !self.controller.isMouseMode;
-                    self.controller.primaryTouchActive = NO;
-                    self.controller.secondaryTouchActive = NO;
-                    self.controller.lastPrimaryTouchX = 0.0f;
-                    self.controller.lastPrimaryTouchY = 0.0f;
-                    self.controller.lastSecondaryTouchX = 0.0f;
-                    self.controller.lastSecondaryTouchY = 0.0f;
-                    self.controller.trackpadMouseAccumulatedX = 0.0f;
-                    self.controller.trackpadMouseAccumulatedY = 0.0f;
-                    self.controller.trackpadScrollAccumulatedY = 0.0f;
-                    self.controller.trackpadMouseButton = 0;
-                    
-                    // Notify UI
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [[NSNotificationCenter defaultCenter] postNotificationName:HIDMouseModeToggledNotification object:nil userInfo:@{@"enabled": @(self.controller.isMouseMode)}];
-                    });
-                    
-                    // Rumble
-                    [self rumbleLowFreqMotor:0xFFFF highFreqMotor:0xFFFF];
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self rumbleLowFreqMotor:0 highFreqMotor:0];
-                    });
-                }
-                self.controller.startButtonDownTime = nil;
-            }
-        }
+    if (flag == PLAY_FLAG) {
+        self.gamepadMenuPressed = set;
+        [self updateGamepadMenuGesture];
+        set = set && !self.controller.menuGesture.consumed;
     }
     
     // Mouse Click Logic
     if (self.controller.isMouseMode) {
         if (flag == A_FLAG) {
             // Left Click
+            BOOL wasPressed = (self.controller.lastMouseModeButtonFlags & A_FLAG) != 0;
+            if (set == wasPressed) return;
+            if (set) self.controller.lastMouseModeButtonFlags |= A_FLAG;
+            else self.controller.lastMouseModeButtonFlags &= ~A_FLAG;
             if (set) {
                  PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                  if (!inputCtx) {
@@ -2056,6 +2103,10 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
         }
         if (flag == B_FLAG) {
             // Right Click
+            BOOL wasPressed = (self.controller.lastMouseModeButtonFlags & B_FLAG) != 0;
+            if (set == wasPressed) return;
+            if (set) self.controller.lastMouseModeButtonFlags |= B_FLAG;
+            else self.controller.lastMouseModeButtonFlags &= ~B_FLAG;
             if (set) {
                  PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                  if (!inputCtx) {
@@ -2143,6 +2194,10 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 }
 
 - (void)tearDownHidManagerOnMainThread {
+    [self.gamepadMenuTimer invalidate];
+    self.gamepadMenuTimer = nil;
+    self.gamepadMenuPressed = NO;
+    self.controller.menuGesture = (ControllerMenuGesture){0};
     [self tearDownCoreHIDMouseDriver];
 
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseConnectObserver];
