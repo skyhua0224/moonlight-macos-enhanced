@@ -785,6 +785,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  *
  * A changed context clears deferred removals under the stream lock, invalidates each controller's
  * arrival announcement, and stops motion timers. Reassigning the same pointer is a no-op.
+ * Keeps the connected slot-zero owner in single-controller mode while clearing session sensor
+ * rates; unrelated hot-plug must not reinitialize that owner's motion. Multi-controller mode
+ * has no shared motion owner. Owner lookup rejects disconnected physical controllers.
  * Pointer invalidation is synchronous under the stream lock; timer/button cleanup is dispatched
  * to main during native-thread teardown and rejects superseded generations.
  * @param inputContext Borrowed native input context, or NULL to detach; ownership is not transferred.
@@ -806,7 +809,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         [self->_controllerStreamLock unlock];
         if (!current) return;
         self->_singleControllerGyroRateHz = self->_singleControllerAccelRateHz = 0;
-        self->_singleControllerMotionOwner = nil;
+        self->_singleControllerMotionOwner = self->_multiController ? nil : [self controllerForRemoteNumber:0];
         for (Controller *controller in self->_controllers.allValues) {
             controller.controllerAnnounced = NO;
             controller.hasSentGamepadState = NO;
