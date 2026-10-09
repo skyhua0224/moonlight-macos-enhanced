@@ -373,11 +373,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {
-    [self forwardIfCurrentNamed:@"setMotionEventState" block:^(id<MLStreamScopedCallbackOwner> owner) {
-        if ([owner respondsToSelector:@selector(setMotionEventState:motionType:reportRateHz:)]) {
-            [owner setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
-        }
-    }];
+    // Recheck the stream generation after queueing, before choosing a backend.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self forwardIfCurrentNamed:@"setMotionEventState" block:^(id<MLStreamScopedCallbackOwner> owner) {
+            if ([owner respondsToSelector:@selector(setMotionEventState:motionType:reportRateHz:)]) {
+                [owner setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+            }
+        }];
+    });
 }
 
 - (void)connectionStatusUpdate:(int)status {
@@ -2427,9 +2430,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {
-    if (!self.hidSupport.shouldSendControllerEvents) {
-        return;
-    }
+    // Store host requests even while delivery is paused; backends gate samples.
     if (self.controllerSupport != nil) {
         [self.controllerSupport setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
     } else {
