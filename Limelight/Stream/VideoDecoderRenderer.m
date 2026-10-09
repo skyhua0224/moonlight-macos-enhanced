@@ -16,6 +16,7 @@
 #include "Limelight.h"
 #include <math.h>
 #include <pthread.h>
+#include <dlfcn.h>
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdocumentation"
 #include <libavcodec/avcodec.h>
@@ -53,7 +54,10 @@ typedef struct MLDecodeFrameContext MLDecodeFrameContext;
 - (BOOL)currentDisplaySupportsEDRPresentation;
 - (void)prewarmEnhancedDrawableIfNeeded;
 - (void)refreshEnhancedHDRPresentationIfNeeded;
+- (BOOL)applyPendingHostHDRModeIfNeeded;
+- (void)resolveHDRTransferState;
 - (BOOL)updateDecompressionSessionForFormatChange;
+- (void)noteHDR10PlusMetadataForImageBuffer:(CVImageBufferRef)imageBuffer;
 - (void)handleDecompressionOutput:(CVImageBufferRef)imageBuffer
             presentationTimeStamp:(CMTime)presentationTimeStamp
                          duration:(CMTime)duration
@@ -334,6 +338,22 @@ static void MLLogDynamicHDRImageAttachments(CVImageBufferRef imageBuffer,
     }
     free(keys);
     free(values);
+}
+
+// VideoToolbox parses HDR10+ T.35 SEI NAL units and publishes the result as an
+// image buffer attachment. The key is not in the public headers, so resolve it
+// once and fall back to the name scan above when it is unavailable.
+static CFStringRef MLHDR10PlusImageBufferKey(void)
+{
+    static CFStringRef key = NULL;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        CFStringRef *symbol = (CFStringRef *)dlsym(RTLD_DEFAULT, "kCVImageBufferHDR10PlusDataKey");
+        if (symbol != NULL && *symbol != NULL) {
+            key = *symbol;
+        }
+    });
+    return key;
 }
 
 typedef struct {
@@ -1326,7 +1346,14 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     NSInteger _frameQueueTargetOverride;
     NSInteger _timingResponsivenessBias;
     MLAllowDrawableTimeoutMode _allowDrawableTimeoutMode;
+    // _requestedHdr is the stream configuration; _enableHdr is what the host
+    // is actually delivering. The host can switch the encode colorspace
+    // mid-stream (display HDR toggle), so _enableHdr follows _hostHdrState.
+    BOOL _requestedHdr;
     BOOL _enableHdr;
+    float _hdrRequestedOpticalOutputScale;
+    atomic_int _hostHdrState; // -1 unknown, 0 SDR, 1 HDR
+    atomic_bool _hostHdrModeChanged;
     BOOL _enable10BitSdr;
     NSInteger _hdrTransferFunctionPreference;
     MLHDRMetadataSourceMode _hdrMetadataSourceMode;
@@ -1359,6 +1386,11 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     size_t _lastLoggedDecodedPlaneCount;
     BOOL _hdr10PlusMetadataObserved;
     BOOL _hdr10PlusMetadataOutputObserved;
+    uint64_t _hdr10PlusFramesWithMetadata;
+    uint64_t _hdr10PlusFramesDecoded;
+    uint64_t _hdr10PlusLoggedFrames;
+    uint64_t _hdr10PlusLastLogMs;
+    BOOL _hdr10PlusMissingLogged;
     BOOL _dolbyMetadataObserved;
     BOOL _dynamicDolbyVision;
     BOOL _dolbyVisionBaseLayerFallback;
@@ -1492,6 +1524,8 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 
     atomic_init(&_decompressionOutputError, noErr);
     atomic_init(&_hostHDRMetadataChanged, false);
+    atomic_init(&_hostHdrState, -1);
+    atomic_init(&_hostHdrModeChanged, false);
     atomic_init(&_enhancedHDRMetadataChanged, false);
     _view = view;
     [self resetVideoParameterSetState];
@@ -1517,6 +1551,98 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
             metadata->maxDisplayLuminance, metadata->minDisplayLuminance,
             metadata->maxContentLightLevel, metadata->maxFrameAverageLightLevel);
     }
+}
+
+- (void)updateHostHDRMode:(BOOL)enabled metadata:(const SS_HDR_METADATA *)metadata
+{
+    int previous = atomic_exchange(&_hostHdrState, enabled ? 1 : 0);
+    Log(LOG_I, @"[hdr] Host HDR mode update: enabled=%d previous=%@ requested=%d metadata=%d",
+        enabled ? 1 : 0,
+        previous < 0 ? @"unknown" : (previous ? @"hdr" : @"sdr"),
+        _requestedHdr ? 1 : 0,
+        metadata != NULL ? 1 : 0);
+    [self updateHostHDRMetadata:enabled ? metadata : NULL];
+    if (_requestedHdr && previous != (enabled ? 1 : 0)) {
+        atomic_store(&_hostHdrModeChanged, true);
+    }
+}
+
+- (BOOL)applyPendingHostHDRModeIfNeeded
+{
+    if (!atomic_exchange(&_hostHdrModeChanged, false)) {
+        return NO;
+    }
+
+    BOOL effective = _requestedHdr && atomic_load(&_hostHdrState) != 0;
+    if (effective == _enableHdr) {
+        return NO;
+    }
+
+    BOOL wasHdr = _enableHdr;
+    _enableHdr = effective;
+    [self resolveHDRTransferState];
+    _loggedNativeColorTags = NO;
+    _hdrColorConversionContext = nil;
+    atomic_store(&_hostHDRMetadataChanged, true);
+    atomic_store(&_enhancedHDRMetadataChanged, true);
+    Log(LOG_I, @"[hdr] Renderer HDR state changed: %@ -> %@ transfer=%@ renderer=%@ scale=%.1f",
+        wasHdr ? @"hdr" : @"sdr",
+        effective ? @"hdr" : @"sdr",
+        MLHDRTransferModeName(_hdrTransferMode),
+        [self activeRendererModeName:_activeRendererMode],
+        _hdrOpticalOutputScale);
+    return YES;
+}
+
+- (void)resolveHDRTransferState
+{
+    _hdrTransferMode = MLResolveHDRTransferMode(_enableHdr, _hdrTransferFunctionPreference);
+    float scale = _hdrRequestedOpticalOutputScale;
+    if (_hdrTransferMode == MLHDRTransferModePQ &&
+        _hdrEdrStrategy == MLHDREDRStrategyAuto &&
+        _hdrToneMappingPolicy == MLHDRToneMappingPolicyAuto &&
+        fabsf(scale - 100.0f) < 0.001f) {
+        scale = MLSystemPQReferenceWhite();
+    }
+    _hdrOpticalOutputScale = MLResolvedOpticalOutputScaleForTransfer(_hdrTransferMode,
+                                                                     _hdrHlgViewingEnvironment,
+                                                                     scale);
+}
+
+// macOS does not expose absolute display luminance, but extended-linear 1.0 is
+// pinned to the display's SDR white. The presenter maps _hdrOpticalOutputScale
+// nits (203 for PQ unless overridden, scaled by the HLG viewing environment) to
+// that 1.0, so this value is the SDR white the stream is actually shown at.
+// Screens without EDR capability are tone mapped to SDR and use the Rec.709
+// reference of 100 nits. The EDR headroom is reported so the caller can
+// re-evaluate when the window moves between displays or the headroom changes.
+- (BOOL)copyClientSdrWhite:(MLClientSdrWhite *)sdrWhite
+{
+    if (sdrWhite == NULL || !_enableHdr) {
+        return NO;
+    }
+
+    NSScreen *screen = _view.window.screen ?: NSScreen.mainScreen;
+    CGFloat currentEDR = 1.0;
+    CGFloat potentialEDR = 1.0;
+    if (screen != nil) {
+        if (@available(macOS 10.15, *)) {
+            currentEDR = screen.maximumExtendedDynamicRangeColorComponentValue;
+            potentialEDR = screen.maximumPotentialExtendedDynamicRangeColorComponentValue;
+        } else if (@available(macOS 10.11, *)) {
+            currentEDR = screen.maximumExtendedDynamicRangeColorComponentValue;
+            potentialEDR = currentEDR;
+        }
+    }
+
+    BOOL edrCapable = [self currentDisplaySupportsEDRPresentation];
+    float nits = edrCapable ? _hdrOpticalOutputScale : 100.0f;
+    sdrWhite->nits = fminf(fmaxf(nits, 50.0f), 1000.0f);
+    sdrWhite->displayId = screen != nil ? (uint32_t)getDisplayID(screen) : 0;
+    sdrWhite->currentEDR = (float)currentEDR;
+    sdrWhite->potentialEDR = (float)potentialEDR;
+    sdrWhite->edrCapable = edrCapable;
+    return YES;
 }
 
 - (BOOL)copyHostHDRMetadata:(SS_HDR_METADATA *)metadata
@@ -2736,7 +2862,9 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _frameQueueTargetOverride = streamConfig ? streamConfig.frameQueueTarget : -1;
     _timingResponsivenessBias = streamConfig ? streamConfig.timingResponsivenessBias : (_timingPrioritizeResponsiveness ? 1 : 0);
     _allowDrawableTimeoutMode = streamConfig ? (MLAllowDrawableTimeoutMode)streamConfig.allowDrawableTimeoutMode : MLAllowDrawableTimeoutModeAuto;
-    _enableHdr = streamConfig ? streamConfig.enableHdr : NO;
+    _requestedHdr = streamConfig ? streamConfig.enableHdr : NO;
+    _enableHdr = _requestedHdr && atomic_load(&_hostHdrState) != 0;
+    atomic_store(&_hostHdrModeChanged, false);
     _enable10BitSdr = streamConfig ? streamConfig.enable10BitSdr : NO;
     _hdrTransferFunctionPreference = streamConfig ? streamConfig.hdrTransferFunction : 0;
     _hdrMetadataSourceMode = streamConfig ? (MLHDRMetadataSourceMode)streamConfig.hdrMetadataSource : MLHDRMetadataSourceModeHybrid;
@@ -2746,6 +2874,11 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _hdrToneMappingPolicy = streamConfig ? (MLHDRToneMappingPolicy)streamConfig.hdrToneMappingPolicy : MLHDRToneMappingPolicyAuto;
     _hdr10PlusMetadataObserved = NO;
     _hdr10PlusMetadataOutputObserved = NO;
+    _hdr10PlusFramesWithMetadata = 0;
+    _hdr10PlusFramesDecoded = 0;
+    _hdr10PlusLoggedFrames = 0;
+    _hdr10PlusLastLogMs = 0;
+    _hdr10PlusMissingLogged = NO;
     _dolbyMetadataObserved = NO;
     _dynamicDolbyVision = NO;
     _dynamicDolbyVisionProfile = 0;
@@ -2757,20 +2890,11 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _hdrBrightnessOverrideEnabled = streamConfig
         ? streamConfig.hdrClientDisplayProfile == MLHDRClientDisplayProfileModeManual
         : NO;
-    _hdrTransferMode = MLResolveHDRTransferMode(_enableHdr, _hdrTransferFunctionPreference);
-    _hdrOpticalOutputScale = streamConfig ? fmaxf((float)streamConfig.hdrOpticalOutputScale, 1.0f) : 100.0f;
-    if (_hdrTransferMode == MLHDRTransferModePQ &&
-        _hdrEdrStrategy == MLHDREDRStrategyAuto &&
-        _hdrToneMappingPolicy == MLHDRToneMappingPolicyAuto &&
-        fabsf(_hdrOpticalOutputScale - 100.0f) < 0.001f) {
-        _hdrOpticalOutputScale = MLSystemPQReferenceWhite();
-    }
+    _hdrRequestedOpticalOutputScale = streamConfig ? fmaxf((float)streamConfig.hdrOpticalOutputScale, 1.0f) : 100.0f;
     _hdrMinLuminance = streamConfig ? fmaxf((float)streamConfig.hdrManualMinBrightness, 0.0001f) : 0.001f;
     _hdrMaxLuminance = streamConfig ? fmaxf((float)streamConfig.hdrManualMaxBrightness, 100.0f) : 1000.0f;
     _hdrMaxAverageLuminance = streamConfig ? fmaxf((float)streamConfig.hdrManualMaxAverageBrightness, 1.0f) : 1000.0f;
-    _hdrOpticalOutputScale = MLResolvedOpticalOutputScaleForTransfer(_hdrTransferMode,
-                                                                     _hdrHlgViewingEnvironment,
-                                                                     _hdrOpticalOutputScale);
+    [self resolveHDRTransferState];
     _lastLoggedPendingTarget = NSIntegerMin;
     _metalDrawScheduled = NO;
     _lastLoggedDrawableWidth = 0;
@@ -3295,6 +3419,39 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     CFRelease(sampleBuffer);
 }
 
+- (void)noteHDR10PlusMetadataForImageBuffer:(CVImageBufferRef)imageBuffer
+{
+    if (!_enableHdr || _configuredDynamicHdr != DYNAMIC_HDR_FORMAT_HDR10_PLUS) {
+        return;
+    }
+
+    _hdr10PlusFramesDecoded++;
+    CFStringRef key = MLHDR10PlusImageBufferKey();
+    CFTypeRef metadata = key != NULL ? CVBufferGetAttachment(imageBuffer, key, NULL) : NULL;
+    size_t payloadBytes = 0;
+    if (metadata != NULL) {
+        _hdr10PlusFramesWithMetadata++;
+        if (CFGetTypeID(metadata) == CFDataGetTypeID()) {
+            payloadBytes = (size_t)CFDataGetLength((CFDataRef)metadata);
+        }
+    }
+
+    uint64_t nowMs = LiGetMillis();
+    if (_hdr10PlusFramesWithMetadata > _hdr10PlusLoggedFrames && nowMs - _hdr10PlusLastLogMs >= 5000) {
+        Log(LOG_I, @"[hdr] HDR10+ dynamic metadata observed frames=%llu/%llu payload=%zuB",
+            (unsigned long long)_hdr10PlusFramesWithMetadata,
+            (unsigned long long)_hdr10PlusFramesDecoded,
+            payloadBytes);
+        _hdr10PlusLoggedFrames = _hdr10PlusFramesWithMetadata;
+        _hdr10PlusLastLogMs = nowMs;
+    } else if (!_hdr10PlusMissingLogged && _hdr10PlusFramesWithMetadata == 0 && _hdr10PlusFramesDecoded >= 600) {
+        _hdr10PlusMissingLogged = YES;
+        Log(LOG_I, @"[hdr] HDR10+ negotiated but no per-frame metadata reached the decoder output after %llu frames (key=%@, host may not be sending T.35 SEI)",
+            (unsigned long long)_hdr10PlusFramesDecoded,
+            key != NULL ? @"resolved" : @"unavailable");
+    }
+}
+
 - (void)handleDecompressionOutput:(CVImageBufferRef)imageBuffer
              presentationTimeStamp:(CMTime)presentationTimeStamp
                           duration:(CMTime)duration
@@ -3330,6 +3487,12 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     MLLogDynamicHDRImageAttachments(imageBuffer,
                                     &_hdr10PlusMetadataOutputObserved,
                                     &_dolbyMetadataObserved);
+    [self noteHDR10PlusMetadataForImageBuffer:imageBuffer];
+    if (_activeRendererMode != MLActiveVideoRendererModeEnhanced) {
+        // The Metal presenter applies host HDR mode changes on its draw
+        // thread; the native presenter has no draw loop, so do it here.
+        [self applyPendingHostHDRModeIfNeeded];
+    }
 
     if (_activeRendererMode == MLActiveVideoRendererModeNative || _dolbyVisionGeneratedMetadata) {
         [self enqueueDecodedImageBuffer:imageBuffer
@@ -4637,6 +4800,11 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
         return;
     }
 
+    if ([self applyPendingHostHDRModeIfNeeded]) {
+        // The host switched the encode colorspace; rebuild the layer, pixel
+        // format and EDR metadata for the new state before drawing.
+        [self setupMetalRenderer];
+    }
     if (_enableHdr) {
         [self refreshEnhancedHDRPresentationIfNeeded];
     }

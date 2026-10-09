@@ -1555,6 +1555,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         streamConfig.enableVsync = [SettingsClass enableVsyncFor:self.app.host.uuid];
         streamConfig.displaySyncMode = prefs[@"displaySyncMode"] != nil ? [prefs[@"displaySyncMode"] intValue] : 0;
         streamConfig.frameQueueTarget = prefs[@"frameQueueTarget"] != nil ? [prefs[@"frameQueueTarget"] intValue] : -1;
+        streamConfig.videoFecPercentage = prefs[@"videoFecPercentage"] != nil ? [prefs[@"videoFecPercentage"] intValue] : -2;
         streamConfig.timingResponsivenessBias = prefs[@"timingResponsivenessBias"] != nil ? [prefs[@"timingResponsivenessBias"] intValue] : (streamConfig.timingPrioritizeResponsiveness ? 1 : 0);
         streamConfig.allowDrawableTimeoutMode = prefs[@"allowDrawableTimeoutMode"] != nil ? [prefs[@"allowDrawableTimeoutMode"] intValue] : 0;
     streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
@@ -1839,6 +1840,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
         Log(LOG_I, @"[hdr] Foundation dynamic HDR result: format=%d fallback=%d",
             LiGetNegotiatedDynamicHdrFormat(),
             LiGetNegotiatedDynamicHdrFallback());
+        PML_CONTROL_STREAM_CONTEXT fecControlCtx = self.streamMan.connection
+            ? (PML_CONTROL_STREAM_CONTEXT)[self.streamMan.connection controlStreamContext] : NULL;
+        if (fecControlCtx != NULL) {
+            NSDictionary *fecPrefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+            Log(LOG_I, @"[fec] Host RS FEC control active=%d (client preference %d, -2 host default)",
+                fecControlCtx->videoFecControlSupported ? 1 : 0,
+                fecPrefs[@"videoFecPercentage"] != nil ? [fecPrefs[@"videoFecPercentage"] intValue] : -2);
+        }
         if (self.reconnectInProgress) {
             self.reconnectInProgress = NO;
             [self hideReconnectOverlay];

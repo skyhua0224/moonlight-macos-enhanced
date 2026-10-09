@@ -58,6 +58,16 @@ typedef struct {
   uint32_t renderSourceGapCount;  // frames that arrived late (host idle / network)
 } VideoStats;
 
+// Client SDR reference white as seen by the HDR presenter, plus the display
+// state it was derived from so callers can tell when to re-evaluate it.
+typedef struct {
+  float nits;
+  uint32_t displayId;
+  float currentEDR;
+  float potentialEDR;
+  BOOL edrCapable;
+} MLClientSdrWhite;
+
 @interface VideoDecoderRenderer : NSObject
 
 @property(nonatomic, assign) void *depacketizerContext;
@@ -70,6 +80,9 @@ typedef struct {
 
 - (id)initWithView:(OSView *)view;
 - (void)updateHostHDRMetadata:(const SS_HDR_METADATA *)metadata;
+- (void)updateHostHDRMode:(BOOL)enabled metadata:(const SS_HDR_METADATA *)metadata;
+// Main thread only. Returns NO while the stream is not presenting HDR.
+- (BOOL)copyClientSdrWhite:(MLClientSdrWhite *)sdrWhite;
 
 - (void)prewarmPresentationForStreamConfig:(StreamConfiguration *)streamConfig;
 - (void)setupWithVideoFormat:(int)videoFormat

@@ -66,6 +66,26 @@ typedef struct {
     uint32_t videoNextContiguousSequenceNumber;
 } MLVideoDiagnosticSnapshot;
 
+// Cumulative RTP video counters plus the network frame loss rate common-c
+// derives over its 3 second sampling window. Counters reset with the stream.
+typedef struct {
+    uint32_t videoPackets;
+    uint32_t fecPackets;
+    uint32_t fecRecovered;
+    uint32_t fecFailed;
+    uint32_t outOfSequence;
+    uint32_t invalidPackets;
+    uint64_t videoBytesReceived;
+    double networkFrameLossPercent;
+    // Parity share of the RS block currently being assembled (0 when idle).
+    uint32_t blockParityPercent;
+    // 0x5510 aggregate feedback; valid only when the host accepted FEC control.
+    BOOL fecFeedbackActive;
+    uint32_t fecFeedbackSequence;
+    uint32_t fecFeedbackDataPackets;
+    uint32_t fecFeedbackMissingPackets;
+} MLNetworkStatsSnapshot;
+
 @interface Connection : NSOperation <NSStreamDelegate>
 
 // Returns the connection bound to the current thread context, if any.
@@ -93,6 +113,11 @@ typedef struct {
                  contentHash:(uint64_t)contentHash;
 - (int)sendClipboardRawData:(NSData *)data;
 - (BOOL)getVideoDiagnosticSnapshot:(MLVideoDiagnosticSnapshot *)snapshot;
+- (BOOL)getNetworkStatsSnapshot:(MLNetworkStatsSnapshot *)snapshot;
+// Host extended feature flags (LI_FF_*); 0 until the control stream is up.
+- (uint32_t)hostFeatureFlags;
+// Sends the client SDR reference white. Returns an LI_DYNAMIC_SDR_WHITE_* code.
+- (int)sendClientSdrWhiteNits:(float)nits;
 - (uint64_t)audioUnderrunCount;
 - (void)terminate;
 - (void)main;

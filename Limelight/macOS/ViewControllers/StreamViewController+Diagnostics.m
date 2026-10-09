@@ -809,6 +809,12 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     self.streamHealthConnectionStartedMs = 0;
     self.streamHealthMitigationStep = 0;
     self.runtimeAutoBitrateStableStreak = 0;
+    self.clientSdrWhiteLastNits = 0.0f;
+    self.clientSdrWhiteLastDisplayId = 0;
+    self.clientSdrWhiteLastEdrCapable = NO;
+    self.clientSdrWhiteLastSendMs = 0;
+    self.clientSdrWhiteHostUnsupportedLogged = NO;
+    self.lastPerfNetStats = (MLNetworkStatsSnapshot){0};
 }
 
 - (void)stopStreamHealthDiagnostics {
@@ -968,8 +974,29 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     // One line per second so pacing can be analysed from logs after the fact.
     if (nowStatsMs >= self.lastPerfLogMs + 1000 && (stats.receivedFrames > 0 || stats.renderedFrames > 0)) {
         self.lastPerfLogMs = nowStatsMs;
+        // RTP and FEC counters are cumulative; log the per-second delta so the
+        // line shows what the network did in the last interval.
+        MLNetworkStatsSnapshot net = {0};
+        MLNetworkStatsSnapshot prevNet = self.lastPerfNetStats;
+        BOOL haveNet = [self.streamMan.connection getNetworkStatsSnapshot:&net];
+        NSString *netFields = @"";
+        if (haveNet) {
+            netFields = [NSString stringWithFormat:@" rtp=%u fecRec=%u fecFail=%u oos=%u netLoss=%.2f",
+                         net.videoPackets - prevNet.videoPackets,
+                         net.fecRecovered - prevNet.fecRecovered,
+                         net.fecFailed - prevNet.fecFailed,
+                         net.outOfSequence - prevNet.outOfSequence,
+                         net.networkFrameLossPercent];
+            if (net.fecFeedbackActive) {
+                netFields = [netFields stringByAppendingFormat:@" fecPar=%u%% fecFb=%u/%u",
+                             net.blockParityPercent,
+                             net.fecFeedbackMissingPackets,
+                             net.fecFeedbackDataPackets];
+            }
+            self.lastPerfNetStats = net;
+        }
         Log(LOG_I, @"[perf] fps rx=%.1f de=%.1f rd=%.1f low1=%.1f pace=%.2f p99=%.1f max=%.1f stalls=%u srcGaps=%u "
-            "decode=%.2f queue=%.2f host=%.1f netDrop=%u pacerDrop=%u jit=%.1f br=%.1f audioUnderruns=%llu",
+            "decode=%.2f queue=%.2f host=%.1f netDrop=%u pacerDrop=%u jit=%.1f br=%.1f audioUnderruns=%llu%@",
             displayedFps(stats.receivedFps, stats.receivedFrames),
             displayedFps(stats.decodedFps, stats.decodedFrames),
             displayedFps(stats.renderedFps, stats.renderedFrames),
@@ -982,8 +1009,59 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
                 ? (float)stats.totalHostProcessingLatency / 10.0f / stats.framesWithHostProcessingLatency : 0.0f,
             stats.networkDroppedFrames, stats.pacerDroppedFrames, stats.jitterMs,
             (double)stats.receivedBytes * 8.0 / 1000.0 / 1000.0,
-            (unsigned long long)[self.streamMan.connection audioUnderrunCount]);
+            (unsigned long long)[self.streamMan.connection audioUnderrunCount],
+            netFields);
     }
+}
+
+// Tells the host which SDR white the client displays so its HDR conversion can
+// match. Only sent while HDR is being presented and the host advertises
+// LI_FF_DYNAMIC_SDR_WHITE; polled with the stream health timer (1 Hz), sent on
+// the first evaluation and then only when the value moved by 2% or more, the
+// window changed displays, or EDR capability flipped, at most every 2 seconds.
+- (void)pollClientSdrWhite {
+    Connection *connection = self.streamMan.connection;
+    VideoDecoderRenderer *renderer = connection.renderer;
+    if (connection == nil || renderer == nil) {
+        return;
+    }
+
+    MLClientSdrWhite white;
+    if (![renderer copyClientSdrWhite:&white]) {
+        return;
+    }
+
+    if ((connection.hostFeatureFlags & LI_FF_DYNAMIC_SDR_WHITE) == 0) {
+        if (!self.clientSdrWhiteHostUnsupportedLogged) {
+            self.clientSdrWhiteHostUnsupportedLogged = YES;
+            Log(LOG_I, @"[hdr] SDR white update not sent: host does not advertise dynamic SDR white (local value %.1f nits)", white.nits);
+        }
+        return;
+    }
+
+    uint64_t nowMs = LiGetMillis();
+    BOOL first = self.clientSdrWhiteLastSendMs == 0;
+    if (!first && nowMs - self.clientSdrWhiteLastSendMs < 2000) {
+        return;
+    }
+
+    float last = self.clientSdrWhiteLastNits;
+    BOOL valueChanged = last <= 0.0f || fabsf(white.nits - last) / last >= 0.02f;
+    BOOL displayChanged = white.displayId != self.clientSdrWhiteLastDisplayId ||
+                          white.edrCapable != self.clientSdrWhiteLastEdrCapable;
+    if (!first && !valueChanged && !displayChanged) {
+        return;
+    }
+
+    int result = [connection sendClientSdrWhiteNits:white.nits];
+    self.clientSdrWhiteLastSendMs = nowMs;
+    if (result == LI_DYNAMIC_SDR_WHITE_OK) {
+        self.clientSdrWhiteLastNits = white.nits;
+        self.clientSdrWhiteLastDisplayId = white.displayId;
+        self.clientSdrWhiteLastEdrCapable = white.edrCapable;
+    }
+    Log(LOG_I, @"[hdr] SDR white update nits=%.1f result=%d display=%u edr=%d headroom=%.2f/%.2f",
+        white.nits, result, white.displayId, white.edrCapable ? 1 : 0, white.currentEDR, white.potentialEDR);
 }
 
 - (void)pollStreamHealthDiagnostics:(NSTimer *)timer {
@@ -993,6 +1071,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     }
 
     [self publishPerformanceDiagnosticsSnapshot];
+    [self pollClientSdrWhite];
     VideoStats stats = self.streamMan.connection.renderer.videoStats;
     uint64_t nowMs = [self nowMs];
     uint64_t nowStatsMs = LiGetMillis();
@@ -2773,6 +2852,27 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     }
     append(@"  Loss ", labelAttrs);
     append([NSString stringWithFormat:@"%.2f%%", loss], valueAttrs);
+
+    // Network-side loss from common-c (3 s window, excludes decoder drops) and
+    // cumulative RS FEC outcomes. The feedback pair is what this client last
+    // reported to the host; it only exists when the host accepted FEC control.
+    MLNetworkStatsSnapshot net = {0};
+    if ([self.streamMan.connection getNetworkStatsSnapshot:&net]) {
+        append(@"  Net ", labelAttrs);
+        append([NSString stringWithFormat:@"%.2f%%", net.networkFrameLossPercent], valueAttrs);
+        if (net.fecRecovered > 0 || net.fecFailed > 0) {
+            append(@"  FEC ", labelAttrs);
+            append([NSString stringWithFormat:@"+%u", net.fecRecovered], valueAttrs);
+            append(@"/", labelAttrs);
+            append([NSString stringWithFormat:@"-%u", net.fecFailed], valueAttrs);
+        }
+        if (net.fecFeedbackActive) {
+            append(@"  Par ", labelAttrs);
+            append([NSString stringWithFormat:@"%u%%", net.blockParityPercent], valueAttrs);
+            append(@" Fb ", labelAttrs);
+            append([NSString stringWithFormat:@"%u/%u", net.fecFeedbackMissingPackets, net.fecFeedbackDataPackets], valueAttrs);
+        }
+    }
 
     append(@"  Jit ", labelAttrs);
     append([NSString stringWithFormat:@"%.1f", jitter], valueAttrs);

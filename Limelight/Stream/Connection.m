@@ -2159,7 +2159,7 @@ void ClSetHdrMode(bool enabled, void *hdrMetadata)
     if (connection == nil) return;
     SS_HDR_METADATA metadata = {0};
     BOOL hasMetadata = enabled && LiGetHdrMetadataCtx(&connection->_connectionContext.controlContext, &metadata);
-    [ConnectionGetRendererSnapshot(connection) updateHostHDRMetadata:hasMetadata ? &metadata : NULL];
+    [ConnectionGetRendererSnapshot(connection) updateHostHDRMode:enabled metadata:hasMetadata ? &metadata : NULL];
 }
 
 void ClConnectionTerminated(int errorCode)
@@ -2503,6 +2503,13 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _streamConfig.audioConfiguration = config.audioConfiguration;
     _streamConfig.disableHighQualitySurround = config.disableHighQualitySurround;
     _streamConfig.colorSpace = COLORSPACE_REC_709;
+    // -2 keeps the host default. Anything else is only sent when the host
+    // advertises FEC control; common-c ignores the preference otherwise.
+    _streamConfig.videoFecPercentage = (config.videoFecPercentage >= -2 && config.videoFecPercentage <= 100)
+        ? config.videoFecPercentage : -2;
+    if (_streamConfig.videoFecPercentage != -2) {
+        Log(LOG_I, @"[fec] Client FEC preference requested: %d (-1 automatic)", _streamConfig.videoFecPercentage);
+    }
 
 #if defined(LI_MIC_CONTROL_START)
     // Enable microphone streaming only if requested in settings. The host may ignore it.
@@ -2765,6 +2772,14 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
                                 CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC |
                                 CAPABILITY_REFERENCE_FRAME_INVALIDATION_AV1;
 //#endif
+    if ((_streamConfig.dynamicHdrCaps & DYNAMIC_HDR_CAPS_HDR10_PLUS) != 0) {
+        // HDR10+ travels as a T.35 prefix SEI NAL unit. Without this flag the
+        // depacketizer strips every prefix SEI, so VideoToolbox never sees the
+        // per-frame metadata. The flag only affects HEVC; H.264 and AV1 are
+        // unchanged, and the RPU NAL unit used by Dolby Vision is not an SEI.
+        _drCallbacks.capabilities |= CAPABILITY_PRESERVE_HEVC_SEI;
+        Log(LOG_I, @"[hdr] HEVC prefix SEI preservation enabled for HDR10+ dynamic metadata");
+    }
 
     LiInitializeAudioCallbacks(&_arCallbacks);
     _arCallbacks.init = ArInit;
@@ -3023,6 +3038,52 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     snapshot->videoNextContiguousSequenceNumber = _connectionContext.videoContext.rtpQueue.nextContiguousSequenceNumber;
 
     return YES;
+}
+
+- (BOOL)getNetworkStatsSnapshot:(MLNetworkStatsSnapshot *)snapshot {
+    if (snapshot == NULL) {
+        return NO;
+    }
+
+    memset(snapshot, 0, sizeof(*snapshot));
+    [self ensureControlContextBacklink];
+
+    // These are the per-context equivalents of LiGetRTPVideoStats(),
+    // LiGetRTPVideoBytesReceived() and LiGetEstimatedVideoFrameLossPercentage();
+    // the process-wide accessors would follow whichever connection is current.
+    const RTP_VIDEO_STATS *rtp = &_connectionContext.videoContext.rtpQueue.stats;
+    snapshot->videoPackets = rtp->packetCountVideo;
+    snapshot->fecPackets = rtp->packetCountFec;
+    snapshot->fecRecovered = rtp->packetCountFecRecovered;
+    snapshot->fecFailed = rtp->packetCountFecFailed;
+    snapshot->outOfSequence = rtp->packetCountOOS;
+    snapshot->invalidPackets = rtp->packetCountInvalid + rtp->packetCountFecInvalid;
+    snapshot->videoBytesReceived = atomic_load_explicit(&_connectionContext.videoContext.rtpVideoBytesReceived,
+                                                        memory_order_relaxed);
+    snapshot->networkFrameLossPercent = atomic_load_explicit(&_connectionContext.controlContext.lastIntervalLossBasisPoints,
+                                                             memory_order_relaxed) / 100.0;
+
+    uint32_t dataPackets = _connectionContext.videoContext.rtpQueue.bufferDataPackets;
+    uint32_t parityPackets = _connectionContext.videoContext.rtpQueue.bufferParityPackets;
+    if (dataPackets > 0) {
+        snapshot->blockParityPercent = (parityPackets * 100 + dataPackets / 2) / dataPackets;
+    }
+
+    snapshot->fecFeedbackActive = LiGetFecFeedbackStatsCtx(&_connectionContext.controlContext,
+                                                           &snapshot->fecFeedbackSequence,
+                                                           &snapshot->fecFeedbackDataPackets,
+                                                           &snapshot->fecFeedbackMissingPackets);
+    return YES;
+}
+
+- (uint32_t)hostFeatureFlags {
+    [self ensureControlContextBacklink];
+    return LiGetHostFeatureFlagsCtx(&_connectionContext);
+}
+
+- (int)sendClientSdrWhiteNits:(float)nits {
+    [self ensureControlContextBacklink];
+    return LiSendClientSdrWhiteNitsCtx(&_connectionContext.controlContext, nits);
 }
 
 #if defined(LI_MIC_CONTROL_START)
