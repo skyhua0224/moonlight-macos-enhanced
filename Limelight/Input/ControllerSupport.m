@@ -585,6 +585,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     
     bool _oscEnabled;
     char _controllerNumbers;
+    unsigned char _pendingControllerRemovalMask;
     bool _multiController;
     BOOL _gamepadMouseModeEnabled;
     BOOL _gamepadMouseModeLongPressMenuEnabled;
@@ -625,7 +626,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         return;
     }
 
+    [_controllerStreamLock lock];
     _inputContext = inputContext;
+    _pendingControllerRemovalMask = 0;
+    [_controllerStreamLock unlock];
     for (Controller *controller in _controllers.allValues) {
         controller.controllerAnnounced = NO;
         [self cleanupControllerMotion:controller];
@@ -685,6 +689,20 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             controller.hasSentGamepadState = NO;
             [self updateFinished:controller];
         }
+        // Report removals deferred during pause, even if no gamepads remain.
+        // Use an absent slot so the neutral event cannot clear a resumed player.
+        [_controllerStreamLock lock];
+        PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+        if (_multiController && input && LiInputContextIsInitialized(input)) {
+            for (int player = 0; player < 4; player++) {
+                if ((_pendingControllerRemovalMask & ~_controllerNumbers) & (1 << player)) {
+                    LiSendMultiControllerEventCtx(input, player, (unsigned char)_controllerNumbers,
+                                                  0, 0, 0, 0, 0, 0, 0);
+                }
+            }
+            _pendingControllerRemovalMask = 0;
+        }
+        [_controllerStreamLock unlock];
     }
 }
 
@@ -1290,7 +1308,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             if (controller.gamepad.light != nil && allowsPlayStationExtensions) {
                 capabilities |= LI_CCAP_RGB_LED;
             }
-            int arrivalResult = LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
+            // Use assigned slots rather than a count or the launch-time mask:
+            // hot-plug can leave holes or add slots during the streaming session.
+            int arrivalResult = LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)(_multiController ? controller.playerIndex : 0),
                                             (uint16_t)(_multiController ? (unsigned char)_controllerNumbers : 1),
                                             controllerType, supportedButtonFlags, capabilities);
             if (arrivalResult != 0) {
@@ -2053,9 +2073,26 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         
         limeController.gamepad = nil;
         
-        // Inform the server of the updated active gamepads before removing this controller
-        [self updateFinished:limeController];
+        // Removal must bypass ordinary-state deduplication and mouse mode.
+        // The protocol mask tracks assigned slots, including holes after hot-unplug.
+        [self->_controllerStreamLock lock];
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+        if (self.shouldSendInputEvents && inputCtx && LiInputContextIsInitialized(inputCtx)) {
+            LiSendMultiControllerEventCtx(inputCtx, self->_multiController ? controller.playerIndex : 0,
+                self->_multiController ? (unsigned char)self->_controllerNumbers : 1,
+                0, 0, 0, 0, 0, 0, 0);
+        } else if (self->_multiController) {
+            self->_pendingControllerRemovalMask |= 1 << controller.playerIndex;
+        }
+        [self->_controllerStreamLock unlock];
         [self->_controllers removeObjectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+        if (!self->_multiController && self.shouldSendInputEvents) {
+            // All physical controllers share remote slot zero in single-controller mode.
+            for (Controller *remaining in self->_controllers.allValues) {
+                remaining.hasSentGamepadState = NO;
+                [self updateFinished:remaining];
+            }
+        }
 
         // Re-evaluate the on-screen control mode
         [self updateAutoOnScreenControlMode];

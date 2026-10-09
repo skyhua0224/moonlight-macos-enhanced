@@ -495,29 +495,31 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 }
 
 - (void)setInputContext:(void *)inputContext {
-    if (_inputContext == inputContext) {
-        return;
-    }
+    @synchronized (self) {
+        if (_inputContext == inputContext) {
+            return;
+        }
 
-    _inputContext = inputContext;
-    self.reportedPlayStationArrival = NO;
-    self.requestedGyroRateHz = 0;
-    self.requestedAccelRateHz = 0;
-    self.lastGyroReportUs = 0;
-    self.lastAccelReportUs = 0;
-    self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
-    self.ps4GyroRateWindowStartUs = 0;
-    self.ps4GyroRateWindowSamples = 0;
-    self.hasLastPS4GyroSample = NO;
-    self.ps4GyroAtRest = YES;
-    self.ps4GyroStationarySinceUs = 0;
-    self.ps4GyroMovingSinceUs = 0;
-    self.remainingPS4MotionDiagnosticSamples = 0;
-    self.remainingPS4GyroFilterDiagnosticLogs = 0;
-    self.remainingPS4GyroRestDiagnosticLogs = 0;
-    self.ps4PrimaryTouchActive = NO;
-    self.ps4SecondaryTouchActive = NO;
-    [self syncScrollTraceDiagnosticsPreferenceToInputContext];
+        _inputContext = inputContext;
+        self.reportedPlayStationArrival = NO;
+        self.requestedGyroRateHz = 0;
+        self.requestedAccelRateHz = 0;
+        self.lastGyroReportUs = 0;
+        self.lastAccelReportUs = 0;
+        self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
+        self.ps4GyroRateWindowStartUs = 0;
+        self.ps4GyroRateWindowSamples = 0;
+        self.hasLastPS4GyroSample = NO;
+        self.ps4GyroAtRest = YES;
+        self.ps4GyroStationarySinceUs = 0;
+        self.ps4GyroMovingSinceUs = 0;
+        self.remainingPS4MotionDiagnosticSamples = 0;
+        self.remainingPS4GyroFilterDiagnosticLogs = 0;
+        self.remainingPS4GyroRestDiagnosticLogs = 0;
+        self.ps4PrimaryTouchActive = NO;
+        self.ps4SecondaryTouchActive = NO;
+        [self syncScrollTraceDiagnosticsPreferenceToInputContext];
+    }
 }
 
 - (void)refreshInputDiagnosticsPreference {
@@ -989,37 +991,47 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 - (void)setMotionEventState:(uint16_t)controllerNumber
                  motionType:(uint8_t)motionType
                reportRateHz:(uint16_t)reportRateHz {
-    if (controllerNumber != 0) {
-        return;
+    void *requestedInputContext;
+    @synchronized (self) {
+        requestedInputContext = _inputContext;
     }
-
-    if (motionType == LI_MOTION_TYPE_GYRO) {
-        BOOL wasReporting = self.requestedGyroRateHz > 0;
-        self.requestedGyroRateHz = reportRateHz;
-        self.lastGyroReportUs = 0;
-        self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
-        self.ps4GyroRateWindowStartUs = 0;
-        self.ps4GyroRateWindowSamples = 0;
-        self.hasLastPS4GyroSample = NO;
-        self.ps4GyroAtRest = YES;
-        self.ps4GyroStationarySinceUs = 0;
-        self.ps4GyroMovingSinceUs = 0;
-        self.remainingPS4MotionDiagnosticSamples = reportRateHz > 0 ? 3 : 0;
-        self.remainingPS4GyroFilterDiagnosticLogs = reportRateHz > 0 ? 8 : 0;
-        self.remainingPS4GyroRestDiagnosticLogs = reportRateHz > 0 ? 12 : 0;
-        if (wasReporting && reportRateHz == 0) {
-            PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-            if (inputCtx && [self reportPlayStationControllerArrival]) {
-                LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_GYRO,
-                                               0.0f, 0.0f, 0.0f);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // Context replacement also resets motion state. Reject queued old requests.
+        @synchronized (self) {
+            if (controllerNumber != 0 || requestedInputContext == NULL ||
+                self.inputContext != requestedInputContext) {
+                return;
             }
-        }
-    } else if (motionType == LI_MOTION_TYPE_ACCEL) {
-        self.requestedAccelRateHz = reportRateHz;
-        self.lastAccelReportUs = 0;
-    }
 
-    Log(LOG_I, @"HID controller motion request: type=%u rate=%u Hz", motionType, reportRateHz);
+            if (motionType == LI_MOTION_TYPE_GYRO) {
+                BOOL wasReporting = self.requestedGyroRateHz > 0;
+                self.requestedGyroRateHz = reportRateHz;
+                self.lastGyroReportUs = 0;
+                self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
+                self.ps4GyroRateWindowStartUs = 0;
+                self.ps4GyroRateWindowSamples = 0;
+                self.hasLastPS4GyroSample = NO;
+                self.ps4GyroAtRest = YES;
+                self.ps4GyroStationarySinceUs = 0;
+                self.ps4GyroMovingSinceUs = 0;
+                self.remainingPS4MotionDiagnosticSamples = reportRateHz > 0 ? 3 : 0;
+                self.remainingPS4GyroFilterDiagnosticLogs = reportRateHz > 0 ? 8 : 0;
+                self.remainingPS4GyroRestDiagnosticLogs = reportRateHz > 0 ? 12 : 0;
+                if (wasReporting && reportRateHz == 0) {
+                    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                    if (inputCtx && [self reportPlayStationControllerArrival]) {
+                        LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_GYRO,
+                                                       0.0f, 0.0f, 0.0f);
+                    }
+                }
+            } else if (motionType == LI_MOTION_TYPE_ACCEL) {
+                self.requestedAccelRateHz = reportRateHz;
+                self.lastAccelReportUs = 0;
+            }
+
+            Log(LOG_I, @"HID controller motion request: type=%u rate=%u Hz", motionType, reportRateHz);
+        }
+    });
 }
 
 static inline int16_t PS4ReadS16(const UInt8 bytes[2]) {
@@ -1195,6 +1207,13 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 }
 
 - (void)handlePS4MotionState:(PS4StatePacket_t *)state {
+    // Context invalidation may run on the connection callback thread.
+    @synchronized (self) {
+        [self processPS4MotionState:state];
+    }
+}
+
+- (void)processPS4MotionState:(PS4StatePacket_t *)state {
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
     if (!inputCtx || ![self reportPlayStationControllerArrival]) {
         return;
@@ -2538,35 +2557,37 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.gamepadMenuTimer = nil;
     self.gamepadMenuPressed = NO;
     self.controller.menuGesture = (ControllerMenuGesture){0};
-    if (self.controllerDriver == 0) {
-        self.reportedPlayStationArrival = NO;
-        // Sunshine generally sends motion report rates only once per virtual
-        // controller session. Preserve them across a physical HID reconnect;
-        // setInputContext resets them when the streaming session changes.
-        self.lastGyroReportUs = 0;
-        self.lastAccelReportUs = 0;
-        self.ps4MotionCalibration = (PS4MotionCalibration){};
-        self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
-        self.ps4GyroRateWindowStartUs = 0;
-        self.ps4GyroRateWindowSamples = 0;
-        self.hasLastPS4GyroSample = NO;
-        self.ps4GyroAtRest = YES;
-        self.ps4GyroStationarySinceUs = 0;
-        self.ps4GyroMovingSinceUs = 0;
-        self.remainingPS4MotionDiagnosticSamples = self.requestedGyroRateHz > 0 ? 3 : 0;
-        self.remainingPS4GyroFilterDiagnosticLogs = self.requestedGyroRateHz > 0 ? 8 : 0;
-        self.remainingPS4GyroRestDiagnosticLogs = self.requestedGyroRateHz > 0 ? 12 : 0;
-        self.ps4PrimaryTouchActive = NO;
-        self.ps4SecondaryTouchActive = NO;
-        self.controller.lastButtonFlags = 0;
-        self.controller.lastLeftTrigger = 0;
-        self.controller.lastRightTrigger = 0;
-        self.controller.lastLeftStickX = 0;
-        self.controller.lastLeftStickY = 0;
-        self.controller.lastRightStickX = 0;
-        self.controller.lastRightStickY = 0;
-        
-        [self sendControllerEvent];
+    @synchronized (self) {
+        if (self.controllerDriver == 0) {
+            self.reportedPlayStationArrival = NO;
+            // Sunshine generally sends motion report rates only once per virtual
+            // controller session. Preserve them across a physical HID reconnect;
+            // setInputContext resets them when the streaming session changes.
+            self.lastGyroReportUs = 0;
+            self.lastAccelReportUs = 0;
+            self.ps4MotionCalibration = (PS4MotionCalibration){};
+            self.ps4GyroMedianFilter = (PS4GyroMedianFilter){};
+            self.ps4GyroRateWindowStartUs = 0;
+            self.ps4GyroRateWindowSamples = 0;
+            self.hasLastPS4GyroSample = NO;
+            self.ps4GyroAtRest = YES;
+            self.ps4GyroStationarySinceUs = 0;
+            self.ps4GyroMovingSinceUs = 0;
+            self.remainingPS4MotionDiagnosticSamples = self.requestedGyroRateHz > 0 ? 3 : 0;
+            self.remainingPS4GyroFilterDiagnosticLogs = self.requestedGyroRateHz > 0 ? 8 : 0;
+            self.remainingPS4GyroRestDiagnosticLogs = self.requestedGyroRateHz > 0 ? 12 : 0;
+            self.ps4PrimaryTouchActive = NO;
+            self.ps4SecondaryTouchActive = NO;
+            self.controller.lastButtonFlags = 0;
+            self.controller.lastLeftTrigger = 0;
+            self.controller.lastRightTrigger = 0;
+            self.controller.lastLeftStickX = 0;
+            self.controller.lastLeftStickY = 0;
+            self.controller.lastRightStickX = 0;
+            self.controller.lastRightStickY = 0;
+
+            [self sendControllerEvent];
+        }
     }
 }
 
