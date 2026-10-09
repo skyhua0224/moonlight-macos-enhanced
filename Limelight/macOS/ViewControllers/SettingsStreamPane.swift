@@ -183,6 +183,9 @@ struct StreamView: View {
         ToggleCell(title: "Play Sound on Host", boolBinding: $settingsModel.audioOnPC)
         ToggleCell(title: "Ignore Aspect Ratio", boolBinding: $settingsModel.ignoreAspectRatio)
         ToggleCell(title: "Show Local Cursor", boolBinding: $settingsModel.showLocalCursor)
+        SettingsChoiceRow(title: "Video FEC", selection: $settingsModel.selectedVideoFecPercentage,
+          options: SettingsModel.videoFecPercentages)
+        Text("Video FEC hint").font(.footnote).foregroundStyle(.secondary)
       }
     }
     .onAppear {

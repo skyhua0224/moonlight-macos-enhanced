@@ -991,6 +991,8 @@
 
 "Resolution & Frame Rate" = "Resolution & Frame Rate";
 "Bitrate & Playback" = "Bitrate & Playback";
+"Video FEC" = "Video FEC";
+"Video FEC hint" = "Forward error correction for the video stream. Host Default keeps the host's setting. Other choices only apply when the host supports client FEC control; otherwise the host default is used.";
 "Bitrate detail" = "Bitrate detail";
 "Audio Enhancement" = "Audio Enhancement";
 "Diagnostics" = "Diagnostics";

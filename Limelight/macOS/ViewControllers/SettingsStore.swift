@@ -129,6 +129,7 @@ struct Settings: Encodable, Decodable {
   let timingPrioritizeResponsiveness: Bool?
   var displaySyncMode: Int? = nil
   var frameQueueTarget: Int? = nil
+  var videoFecPercentage: Int? = nil
   var timingResponsivenessBias: Int? = nil
   var allowDrawableTimeoutMode: Int? = nil
   let timingCompatibilityMode: Bool?
@@ -275,6 +276,7 @@ struct Settings: Encodable, Decodable {
       timingPrioritizeResponsiveness: timingPrioritizeResponsiveness,
       displaySyncMode: displaySyncMode,
       frameQueueTarget: frameQueueTarget,
+      videoFecPercentage: videoFecPercentage,
       timingResponsivenessBias: timingResponsivenessBias,
       allowDrawableTimeoutMode: allowDrawableTimeoutMode,
       timingCompatibilityMode: timingCompatibilityMode,
@@ -527,6 +529,7 @@ extension SettingsClass {
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,
       displaySyncMode: settings.displaySyncMode,
       frameQueueTarget: settings.frameQueueTarget,
+      videoFecPercentage: settings.videoFecPercentage,
       timingResponsivenessBias: settings.timingResponsivenessBias,
       allowDrawableTimeoutMode: settings.allowDrawableTimeoutMode,
       timingCompatibilityMode: settings.timingCompatibilityMode,

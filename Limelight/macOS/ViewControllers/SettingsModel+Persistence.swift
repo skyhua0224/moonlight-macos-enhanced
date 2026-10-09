@@ -222,6 +222,7 @@ extension SettingsModel {
     selectedSmoothnessLatencyMode = Self.defaultSmoothnessLatencyMode
     selectedDisplaySyncMode = Self.defaultDisplaySyncMode
     selectedFrameQueueTarget = Self.defaultFrameQueueTarget
+    selectedVideoFecPercentage = Self.defaultVideoFecPercentage
     selectedResponsivenessBias = Self.defaultResponsivenessBias
     selectedAllowDrawableTimeoutMode = Self.defaultAllowDrawableTimeoutMode
 
@@ -586,6 +587,7 @@ extension SettingsModel {
         for: SettingsClass.clipboardSyncMode(for: hostId))
       selectedDisplaySyncMode = Self.displaySyncModeSelection(for: settings.displaySyncMode)
       selectedFrameQueueTarget = Self.frameQueueTargetSelection(for: settings.frameQueueTarget)
+      selectedVideoFecPercentage = Self.videoFecPercentageSelection(for: settings.videoFecPercentage)
       let legacyResponsivenessBias = (settings.timingPrioritizeResponsiveness ?? false) ? 1 : 0
       selectedResponsivenessBias = Self.responsivenessBiasSelection(
         for: settings.timingResponsivenessBias ?? legacyResponsivenessBias)
@@ -685,6 +687,7 @@ extension SettingsModel {
     let dynamicHdrPreference = Self.dynamicHdrPreferenceRawValue(for: selectedDynamicHdrPreference)
     let displaySyncMode = Self.displaySyncModeRawValue(for: selectedDisplaySyncMode)
     let frameQueueTarget = Self.frameQueueTargetRawValue(for: selectedFrameQueueTarget)
+    let videoFecPercentage = Self.videoFecPercentageRawValue(for: selectedVideoFecPercentage)
     let timingResponsivenessBias = Self.responsivenessBiasRawValue(
       for: selectedResponsivenessBias)
     let allowDrawableTimeoutMode = Self.allowDrawableTimeoutRawValue(
@@ -862,6 +865,7 @@ extension SettingsModel {
       timingPrioritizeResponsiveness: timingPrioritizeResponsiveness,
       displaySyncMode: displaySyncMode,
       frameQueueTarget: frameQueueTarget,
+      videoFecPercentage: videoFecPercentage,
       timingResponsivenessBias: timingResponsivenessBias,
       allowDrawableTimeoutMode: allowDrawableTimeoutMode,
       timingCompatibilityMode: timingCompatibilityMode,

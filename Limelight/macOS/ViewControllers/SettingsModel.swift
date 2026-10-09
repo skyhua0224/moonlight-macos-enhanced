@@ -794,6 +794,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var selectedVideoFecPercentage: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var selectedResponsivenessBias: String {
     didSet {
       guard !isLoading else { return }
@@ -1509,6 +1515,7 @@ class SettingsModel: ObservableObject {
     selectedSmoothnessLatencyMode = Self.defaultSmoothnessLatencyMode
     selectedDisplaySyncMode = Self.defaultDisplaySyncMode
     selectedFrameQueueTarget = Self.defaultFrameQueueTarget
+    selectedVideoFecPercentage = Self.defaultVideoFecPercentage
     selectedResponsivenessBias = Self.defaultResponsivenessBias
     selectedAllowDrawableTimeoutMode = Self.defaultAllowDrawableTimeoutMode
 

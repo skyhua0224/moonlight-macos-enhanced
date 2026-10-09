@@ -1075,6 +1075,32 @@ extension SettingsModel {
       ?? defaultFrameQueueTarget
   }
 
+  // RS FEC preference sent to hosts that advertise FEC control. -2 keeps the
+  // host's own setting, which is also what hosts without support always use.
+  static let videoFecPercentageOptions: [(title: String, value: Int)] = [
+    ("Host Default", -2),
+    ("Automatic", -1),
+    ("10%", 10),
+    ("20%", 20),
+    ("30%", 30),
+    ("40%", 40),
+    ("50%", 50),
+  ]
+  static var videoFecPercentages: [String] {
+    videoFecPercentageOptions.map(\.title)
+  }
+  static let defaultVideoFecPercentage = "Host Default"
+
+  static func videoFecPercentageRawValue(for selection: String) -> Int {
+    videoFecPercentageOptions.first(where: { $0.title == selection })?.value ?? -2
+  }
+
+  static func videoFecPercentageSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultVideoFecPercentage }
+    return videoFecPercentageOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultVideoFecPercentage
+  }
+
   static let responsivenessBiasOptions: [(title: String, value: Int)] = [
     ("Off", 0),
     ("Mild", 1),

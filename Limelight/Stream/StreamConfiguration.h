@@ -76,6 +76,9 @@
 @property(nonatomic) BOOL timingPrioritizeResponsiveness;
 @property(nonatomic) int displaySyncMode;
 @property(nonatomic) int frameQueueTarget;
+// RS FEC preference: -2 host default, -1 automatic, 0...100 fixed percentage.
+// Only takes effect when the host advertises FEC control.
+@property(nonatomic) int videoFecPercentage;
 @property(nonatomic) int timingResponsivenessBias;
 @property(nonatomic) int allowDrawableTimeoutMode;
 @property(nonatomic) BOOL timingCompatibilityMode;

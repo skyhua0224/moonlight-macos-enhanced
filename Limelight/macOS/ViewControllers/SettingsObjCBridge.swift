@@ -246,6 +246,9 @@ class SettingsClass: NSObject {
         "frameQueueTarget": settings.frameQueueTarget
           ?? SettingsModel.frameQueueTargetRawValue(
             for: SettingsModel.defaultFrameQueueTarget),
+        "videoFecPercentage": settings.videoFecPercentage
+          ?? SettingsModel.videoFecPercentageRawValue(
+            for: SettingsModel.defaultVideoFecPercentage),
         "timingResponsivenessBias": settings.timingResponsivenessBias
           ?? SettingsModel.responsivenessBiasRawValue(
             for: SettingsModel.defaultResponsivenessBias),
@@ -404,6 +407,7 @@ class SettingsClass: NSObject {
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,
+      videoFecPercentage: settings.videoFecPercentage,
       timingCompatibilityMode: settings.timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
       enableAdaptiveBitrate: settings.enableAdaptiveBitrate
@@ -509,6 +513,7 @@ class SettingsClass: NSObject {
         smoothnessLatencyMode: updated.smoothnessLatencyMode,
         timingBufferLevel: updated.timingBufferLevel,
         timingPrioritizeResponsiveness: updated.timingPrioritizeResponsiveness,
+        videoFecPercentage: updated.videoFecPercentage,
         timingCompatibilityMode: updated.timingCompatibilityMode,
         timingSdrCompatibilityWorkaround: updated.timingSdrCompatibilityWorkaround,
         enableAdaptiveBitrate: updated.enableAdaptiveBitrate
@@ -622,6 +627,7 @@ class SettingsClass: NSObject {
       smoothnessLatencyMode: settings.smoothnessLatencyMode,
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,
+      videoFecPercentage: settings.videoFecPercentage,
       timingCompatibilityMode: settings.timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
       enableAdaptiveBitrate: settings.enableAdaptiveBitrate
