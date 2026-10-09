@@ -72,9 +72,11 @@
 }
 
 - (NSView *)hitTest:(NSPoint)point {
+    // hitTest: receives the point in the superview's coordinate space.
+    NSPoint localPoint = [self convertPoint:point fromView:self.superview];
     CGFloat radius = MIN(self.bounds.size.width, self.bounds.size.height) * 0.33;
     NSBezierPath *hitPath = [NSBezierPath bezierPathWithRoundedRect:self.bounds xRadius:radius yRadius:radius];
-    return [hitPath containsPoint:point] ? self : nil;
+    return [hitPath containsPoint:localPoint] ? self : nil;
 }
 
 - (void)setActiveAppearance:(BOOL)activeAppearance {
@@ -119,7 +121,7 @@
     _curveLayerB.path = curvePathBRef;
     CGPathRelease(curvePathBRef);
 
-    CGFloat plateSize = MIN(self.bounds.size.width, self.bounds.size.height) * 0.58;
+    CGFloat plateSize = MIN(self.bounds.size.width, self.bounds.size.height) * MLEdgeMenuPlateRatio;
     NSRect plateFrame = NSMakeRect((NSWidth(self.bounds) - plateSize) / 2.0,
                                    (NSHeight(self.bounds) - plateSize) / 2.0,
                                    plateSize,
@@ -271,18 +273,6 @@
     }
 
     return path;
-}
-
-@end
-
-@implementation MLEdgeMenuPanel
-
-- (BOOL)canBecomeKeyWindow {
-    return NO;
-}
-
-- (BOOL)canBecomeMainWindow {
-    return NO;
 }
 
 @end

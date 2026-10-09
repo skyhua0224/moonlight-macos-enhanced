@@ -399,6 +399,56 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 }
 
 
+- (void)submitAuthoredRumbleLow:(unsigned short)low high:(unsigned short)high
+                     sequence:(uint32_t)sequence discontinuity:(BOOL)discontinuity {
+    // A bounded mailbox separates the receive thread from device output.
+    BOOL schedule = NO;
+    @synchronized (self) {
+        if (!discontinuity && self.hasAuthoredRumbleSequence &&
+            (int32_t)(sequence - self.authoredRumbleSequence) <= 0) return;
+        self.hasAuthoredRumbleSequence = YES;
+        self.authoredRumbleSequence = sequence;
+        self.authoredRumbleLow = low;
+        self.authoredRumbleHigh = high;
+        self.authoredRumbleUpdatedAt = NSProcessInfo.processInfo.systemUptime;
+        if (!self.authoredRumbleDeliveryScheduled) {
+            self.authoredRumbleDeliveryScheduled = YES;
+            schedule = YES;
+        }
+    }
+    if (!schedule) return;
+    __weak HIDSupport *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        HIDSupport *support = weakSelf;
+        if (!support) return;
+        unsigned short low, high;
+        @synchronized (support) {
+            low = support.authoredRumbleLow;
+            high = support.authoredRumbleHigh;
+            support.authoredRumbleDeliveryScheduled = NO;
+        }
+        if (!support.shouldSendInputEvents) low = high = 0;
+        [support rumbleLowFreqMotor:low highFreqMotor:high];
+        if (support.authoredRumbleTimer == nil && (low || high)) {
+            support.authoredRumbleTimer = [NSTimer timerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
+                HIDSupport *current = weakSelf;
+                if (!current) { [timer invalidate]; return; }
+                BOOL expired;
+                @synchronized (current) {
+                    expired = !current.shouldSendInputEvents ||
+                        NSProcessInfo.processInfo.systemUptime - current.authoredRumbleUpdatedAt >= 0.25;
+                }
+                if (expired) {
+                    [current rumbleLowFreqMotor:0 highFreqMotor:0];
+                    [timer invalidate];
+                    current.authoredRumbleTimer = nil;
+                }
+            }];
+            [[NSRunLoop mainRunLoop] addTimer:support.authoredRumbleTimer forMode:NSRunLoopCommonModes];
+        }
+    });
+}
+
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
     self.nextLowFreqMotor = lowFreqMotor;
     self.nextHighFreqMotor = highFreqMotor;

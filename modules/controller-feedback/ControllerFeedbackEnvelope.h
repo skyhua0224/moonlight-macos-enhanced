@@ -3,6 +3,8 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
 
 // New, transport-independent arithmetic policy. No Qt/SDL/Moonlight types,
 // packets, callbacks, headers or libraries belong in this module.
@@ -53,6 +55,24 @@ static inline void ControllerFeedbackReduceBands(
         *low = fmaxf(*low, output.intensity * lowFraction);
         *high = fmaxf(*high, output.intensity * (1.0f - lowFraction));
     }
+}
+
+static inline void ControllerFeedbackReducePCM16LE(const uint8_t *bytes,
+    uint32_t frames, float *low, float *high) {
+    *low = *high = 0.0f;
+    if (bytes == NULL || frames == 0) return;
+    double energy[2] = {0.0, 0.0};
+    for (uint32_t frame = 0; frame < frames; frame++) {
+        for (unsigned lane = 0; lane < 2; lane++) {
+            const uint8_t *p = bytes + frame * 4 + lane * 2;
+            int32_t sample = p[0] | ((uint32_t)p[1] << 8);
+            if (sample >= 32768) sample -= 65536;
+            double amplitude = sample / 32768.0;
+            energy[lane] += amplitude * amplitude;
+        }
+    }
+    *low = (float)fmin(1.0, sqrt(energy[0] / frames) * 1.5);
+    *high = (float)fmin(1.0, sqrt(energy[1] / frames) * 1.5);
 }
 
 #endif

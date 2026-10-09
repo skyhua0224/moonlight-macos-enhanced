@@ -35,13 +35,13 @@
 @property (nonatomic) NSInteger count;
 @end
 
-@interface MLSunshineUSBForwardingResponse : NSObject <Response>
+@interface MLSunshineJSONResponse : NSObject <Response>
 @property (nonatomic) NSInteger statusCode;
 @property (nonatomic, strong) NSString *statusMessage;
 @property (nonatomic, strong) NSData *data;
 @end
 
-@implementation MLSunshineUSBForwardingResponse
+@implementation MLSunshineJSONResponse
 
 - (instancetype)init {
     self = [super init];
@@ -59,7 +59,7 @@
         ? [NSJSONSerialization JSONObjectWithData:self.data options:0 error:&error] : nil;
     if (![object isKindOfClass:[NSDictionary class]]) {
         self.statusCode = 500;
-        self.statusMessage = error.localizedDescription ?: @"Invalid USB forwarding response";
+        self.statusMessage = error.localizedDescription ?: @"Invalid JSON response";
     } else {
         NSDictionary *json = (NSDictionary *)object;
         self.statusCode = [json[@"status_code"] respondsToSelector:@selector(integerValue)]
@@ -487,7 +487,7 @@ static const NSString* HTTPS_PORT = @"47984";
     NSString *urlString = [NSString stringWithFormat:@"%@/api/v1/usb-forwarding?uniqueid=%@",
                            _baseHTTPSURL, _clientUniqueId];
     NSURLRequest *requestURL = [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
-    MLSunshineUSBForwardingResponse *response = [[MLSunshineUSBForwardingResponse alloc] init];
+    MLSunshineJSONResponse *response = [[MLSunshineJSONResponse alloc] init];
     HttpRequest *request = [HttpRequest requestForResponse:response withUrlRequest:requestURL];
     [self executeRequestSynchronously:request];
 
@@ -504,7 +504,7 @@ static const NSString* HTTPS_PORT = @"47984";
     NSError *error = nil;
     id object = [NSJSONSerialization JSONObjectWithData:response.data options:0 error:&error];
     if (![object isKindOfClass:[NSDictionary class]]) {
-        result[@"statusMessage"] = error.localizedDescription ?: @"Invalid USB forwarding response";
+        result[@"statusMessage"] = error.localizedDescription ?: @"Invalid JSON response";
         return result;
     }
 
@@ -556,7 +556,8 @@ static const NSString* HTTPS_PORT = @"47984";
                            [_clientUniqueId stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet] ?: @""];
     NSMutableURLRequest *requestURL = [[self createRequestFromString:urlString timeout:FILE_MAPPING_TIMEOUT_SEC] mutableCopy];
     [requestURL setValue:_clientUniqueId forHTTPHeaderField:@"X-File-Mapping-Client-UUID"];
-    HttpResponse *response = [[HttpResponse alloc] init];
+    // The capability endpoint returns JSON; the XML HttpResponse left statusCode at 0.
+    MLSunshineJSONResponse *response = [[MLSunshineJSONResponse alloc] init];
     HttpRequest *request = [HttpRequest requestForResponse:response withUrlRequest:requestURL];
     [self executeRequestSynchronously:request];
 

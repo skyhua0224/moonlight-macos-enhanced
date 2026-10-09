@@ -154,6 +154,7 @@ struct ToggleCell: View {
         Toggle("", isOn: $boolBinding)
           .labelsHidden()
           .toggleStyle(.switch)
+          .focusable()
           .controlSize(.small)
       }
     }
@@ -212,7 +213,7 @@ struct InfoHintButton: View {
       Image(systemName: "info.circle")
         .foregroundStyle(.secondary)
     }
-    .buttonStyle(.plain)
+    .controllerButtonStyle(.plain)
     .popover(isPresented: $isPresented) {
       Text(languageManager.localize(hintKey))
         .font(.callout)
@@ -305,7 +306,7 @@ struct SettingsSliderRow: View {
           .font(.callout.monospacedDigit())
           .foregroundStyle(.secondary)
       }
-      Slider(value: $value, in: range)
+      Slider(value: $value, in: range).focusable()
     }
     .padding(.vertical, 8)
   }
@@ -327,6 +328,7 @@ struct SettingsChoiceRow: View {
       }
       .labelsHidden()
       .pickerStyle(.menu)
+      .focusable()
       .frame(width: 190, alignment: .trailing)
     }
   }
@@ -343,7 +345,7 @@ struct SettingsValueSliderRow: View {
   var body: some View {
     SettingsRow(title: title) {
       HStack(spacing: 8) {
-        Slider(value: $value, in: range, step: step)
+        Slider(value: $value, in: range, step: step).focusable()
           .frame(width: 190)
         Text(Double(value * multiplier).formatted(.number.precision(.fractionLength(0...2))) + suffix)
           .monospacedDigit()

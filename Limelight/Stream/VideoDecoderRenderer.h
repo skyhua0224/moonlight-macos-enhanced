@@ -43,19 +43,26 @@ typedef struct {
   // receiveTimeMs and presentationTimeMs deltas.
   float jitterMs;
 
-  // Rolling 1% low FPS derived from recent rendered frame intervals.
+  // Rolling 1% low FPS over frames that arrived on cadence (~30 s window);
+  // frames already late on arrival are counted in renderSourceGapCount.
   float renderedFpsOnePercentLow;
 
-  // Population standard deviation of recent rendered frame intervals (ms).
-  // This is a display-side frame pacing metric and is separate from the
-  // RFC3550-style network inter-arrival jitter above.
+  // Standard deviation (ms) of render interval minus arrival interval: the
+  // pacing jitter the client adds. Separate from network jitterMs above.
   float renderFramePacingJitterMs;
+
+  // Raw rendered intervals over the same window, as the viewer saw them.
+  float renderIntervalP99Ms;
+  float renderIntervalMaxMs;
+  uint32_t renderStallCount;      // intervals over 100 ms
+  uint32_t renderSourceGapCount;  // frames that arrived late (host idle / network)
 } VideoStats;
 
 @interface VideoDecoderRenderer : NSObject
 
 @property(nonatomic, assign) void *depacketizerContext;
 @property(nonatomic) BOOL directSubmission;
+@property(nonatomic) BOOL presentationSuspended;
 
 @property(nonatomic, readonly) VideoStats videoStats;
 @property(nonatomic, readonly) BOOL hasPresentedVideo;

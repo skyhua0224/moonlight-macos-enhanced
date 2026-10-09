@@ -254,9 +254,11 @@
     NSWindow *window = self.view.window;
     NSString *screenFrame = window.screen ? NSStringFromRect(window.screen.frame) : @"(nil)";
     NSString *windowFrame = window ? NSStringFromRect(window.frame) : @"(nil)";
-    Log(LOG_D, @"[diag] %@: window=%p key=%d main=%d visible=%d occlusion=%lu fullscreen=%d borderless=%d style=%llu level=%ld pending=%ld screenFrame=%@ windowFrame=%@",
+    Log(LOG_I, @"[diag] %@: window=%p class=%@ canBecomeKey=%d key=%d main=%d visible=%d occlusion=%lu fullscreen=%d borderless=%d style=%llu level=%ld pending=%ld screenFrame=%@ windowFrame=%@",
         context ?: @"window-state",
         window,
+        NSStringFromClass(window.class),
+        window.canBecomeKeyWindow ? 1 : 0,
         window.isKeyWindow ? 1 : 0,
         window.isMainWindow ? 1 : 0,
         window.isVisible ? 1 : 0,
@@ -514,23 +516,10 @@
 }
 
 - (BOOL)isWindowInCurrentSpace {
-    if (!self.view.window) {
-        return NO;
-    }
-    BOOL found = NO;
-    CFArrayRef windowsInSpace = CGWindowListCopyWindowInfo(kCGWindowListOptionAll | kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
-    if (windowsInSpace == NULL) {
-        return NO;
-    }
-    for (NSDictionary *thisWindow in (__bridge NSArray *)windowsInSpace) {
-        NSNumber *thisWindowNumber = (NSNumber *)thisWindow[(__bridge NSString *)kCGWindowNumber];
-        if (self.view.window.windowNumber == thisWindowNumber.integerValue) {
-            found = YES;
-            break;
-        }
-    }
-    CFRelease(windowsInSpace);
-    return found;
+    // Same answer as an on-screen window-list lookup without scanning every
+    // window during input: minimized or hidden windows are not visible.
+    NSWindow *window = self.view.window;
+    return window != nil && window.isOnActiveSpace && window.isVisible;
 }
 
 - (BOOL)isWindowFullscreen {
@@ -594,17 +583,11 @@
 }
 
 - (void)teardownStreamMenuEntrypointsForClosingWindow:(NSWindow *)window {
-    if (self.edgeMenuPanel.parentWindow == window) {
-        [window removeChildWindow:self.edgeMenuPanel];
-    }
     [self.edgeMenuAutoCollapseTimer invalidate];
     self.edgeMenuAutoCollapseTimer = nil;
     self.edgeMenuButtonTrackingArea = nil;
-    [self.edgeMenuPanel orderOut:nil];
     [self.edgeMenuButton removeFromSuperview];
-    [self.edgeMenuPanel close];
     self.edgeMenuButton = nil;
-    self.edgeMenuPanel = nil;
     self.edgeMenuTemporaryReleaseActive = NO;
     self.edgeMenuDragging = NO;
     self.edgeMenuMenuVisible = NO;

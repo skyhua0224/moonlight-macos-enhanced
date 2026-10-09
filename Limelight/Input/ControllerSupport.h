@@ -24,6 +24,9 @@
 
 @interface ControllerSupport : NSObject
 @property(nonatomic) BOOL shouldSendInputEvents;
+@property(nonatomic, copy) uint64_t (^controllerShortcutHandler)(unsigned short, uint32_t);
+- (void)refreshControllerShortcutOutputForPlayer:(unsigned short)player;
+- (void)toggleControllerMouseModeForPlayer:(unsigned short)player;
 @property(nonatomic) BOOL gamepadMouseModeEnabled;
 @property(nonatomic) BOOL gamepadMouseModeLongPressMenuEnabled;
 @property(nonatomic) BOOL nativeTouchpadEnabled;
@@ -35,6 +38,9 @@
 @property(nonatomic) NSInteger controllerMotionMode;
 @property(nonatomic) NSInteger controllerFeedbackTarget;
 @property(nonatomic) NSInteger controllerVirtualType;
+// A shortcut maps buttons to the touchpad, so controllers without one still
+// announce it and the host emulates a pad that has a touchpad.
+@property(nonatomic) BOOL advertiseTouchpadForShortcut;
 @property(nonatomic) CGFloat controllerLeftCenterX;
 @property(nonatomic) CGFloat controllerLeftCenterY;
 @property(nonatomic) CGFloat controllerRightCenterX;

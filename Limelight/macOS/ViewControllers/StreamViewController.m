@@ -8,6 +8,42 @@
 
 #import "StreamViewController_Internal.h"
 #import "RemoteUSBForwardingSession.h"
+#include "../../../modules/controller-feedback/ControllerFeedbackEnvelope.h"
+#include "../../Input/ControllerShortcutAdapter.h"
+
+// AppKit requires a window subclass to retain key eligibility after the
+// title bar is removed. The stream presentation segue creates this window.
+@interface ClientWindow : NSWindow
+@end
+
+@interface StreamWindowSegue : NSStoryboardSegue
+@end
+
+@implementation StreamWindowSegue
+- (void)perform {
+    StreamViewController *controller = self.destinationController;
+    // prepareForSegue: supplies the host/app before the view is loaded here.
+    // The implicit "show" segue would instead create an ordinary NSWindow.
+    NSRect contentRect = NSMakeRect(0, 0, controller.view.frame.size.width, controller.view.frame.size.height);
+    ClientWindow *window = [[ClientWindow alloc] initWithContentRect:contentRect
+        styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+            NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
+        backing:NSBackingStoreBuffered defer:NO];
+    window.contentViewController = controller;
+    window.identifier = @"ClientStreamWindow";
+    window.releasedWhenClosed = NO;
+    window.tabbingMode = NSWindowTabbingModeDisallowed;
+    NSWindowController *windowController = [[NSWindowController alloc] initWithWindow:window];
+    controller.presentationWindowController = windowController;
+    [windowController showWindow:self];
+    [window makeKeyAndOrderFront:self];
+}
+@end
+
+@implementation ClientWindow
+- (BOOL)canBecomeKeyWindow { return YES; }
+- (BOOL)canBecomeMainWindow { return YES; }
+@end
 
 static NSScreen *MLScreenContainingMouseLocation(void) {
     NSPoint mouseLocation = [NSEvent mouseLocation];
@@ -29,6 +65,9 @@ static const uint64_t MLClipboardFNVPrime = 1099511628211ULL;
 static const uint8_t MLClipboardAgentWireVersion = 1;
 static const NSUInteger MLClipboardAgentFrameHeaderSize = 10;
 static const NSUInteger MLClipboardAgentInlinePayloadLimit = 60000;
+// common-c carries control payload lengths as a signed 16-bit value, so an
+// outgoing frame must stay below INT16_MAX; anything larger goes via blob upload.
+static const NSUInteger MLClipboardAgentOutgoingInlinePayloadLimit = 32000;
 
 static __weak StreamViewController *MLActiveClipboardController = nil;
 
@@ -80,7 +119,7 @@ static uint64_t MLGenerateClipboardItemId(void) {
 }
 
 static NSData *MLClipboardAgentEncodeFrame(uint8_t kind, uint32_t token, NSData *payload) {
-    if (payload == nil || payload.length > MLClipboardAgentInlinePayloadLimit) {
+    if (payload == nil || payload.length > MLClipboardAgentOutgoingInlinePayloadLimit) {
         return nil;
     }
 
@@ -349,6 +388,19 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    __weak StreamViewController *shortcutOwner = self;
+    self.controllerShortcutRuntime = [[ControllerShortcutRuntime alloc] initWithHostId:self.app.host.uuid
+        actionHandler:^(NSString *action, uint16_t player) {
+            [shortcutOwner handleControllerShortcutAction:action player:player];
+        } outputHandler:^(uint16_t player) {
+            // Only the backend that owns this player may send its gamepad state.
+            if (player >= CONTROLLER_SHORTCUT_HID_PLAYER_BASE) {
+                [shortcutOwner.hidSupport refreshControllerShortcutOutput];
+            } else {
+                [shortcutOwner.controllerSupport refreshControllerShortcutOutputForPlayer:player];
+            }
+        }];
+
     
     self.cursorHiddenCounter = 0;
     self.isMouseCaptured = NO;
@@ -386,10 +438,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.suppressFreeMouseEdgeUncaptureUntilMs = 0;
 
     self.hideFullscreenControlBall = [[NSUserDefaults standardUserDefaults] boolForKey:[self fullscreenControlBallDefaultsKey]];
-    self.edgeMenuDockEdge = [self defaultEdgeMenuDockEdge];
-    self.edgeMenuButtonEdgeRatio = 0.5;
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:[self fullscreenControlBallDockSideDefaultsKey]];
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:[self fullscreenControlBallVerticalRatioDefaultsKey]];
+    [self loadPersistedFullscreenControlBallPlacement];
     
     [self prepareForStreaming];
 
@@ -427,7 +476,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
             weakSelf.fullscreenTransitionInProgress = NO;
             [weakSelf logCurrentWindowStateWithContext:@"window-did-enter-fullscreen"];
             [weakSelf requestStreamMenuEntrypointsVisibilityUpdate];
-            [weakSelf scheduleDeferredStreamMenuEntrypointsVisibilityRetries];
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf isWindowFullscreen]) {
                     if ([weakSelf.view.window isKeyWindow]) {
@@ -443,6 +491,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
     
     self.windowDidResignKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf refreshControllerShortcutContext];
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             [weakSelf logKeyLossDiagnosticsForStage:@"received" code:@"MUC003" reason:@"window-resigned-key"];
             if ([weakSelf shouldSuppressTransientKeyLossUncaptureForCode:@"MUC003" reason:@"window-resigned-key"]) {
@@ -455,6 +504,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         }
     }];
     self.windowDidBecomeKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf refreshControllerShortcutContext];
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf.view.window isKeyWindow]) {
@@ -482,18 +532,30 @@ highFreqMotor:(unsigned short)highFreqMotor {
             [weakSelf requestMouseUncaptureWhenSafeWithReason:@"other-window-became-key" code:@"MUC005"];
         }
     }];
+    self.presentationVisibilityObserver = [[NSNotificationCenter defaultCenter]
+        addObserverForName:NSWindowDidChangeOcclusionStateNotification object:nil
+        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+            if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+                NSWindow *window = weakSelf.view.window;
+                weakSelf.streamMan.connection.renderer.presentationSuspended =
+                    !window.isVisible || !(window.occlusionState & NSWindowOcclusionStateVisible);
+            }
+        }];
     
     self.windowWillCloseNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowWillCloseNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             [weakSelf beginStopStreamIfNeededWithReason:@"window-will-close"]; 
+            weakSelf.presentationWindowController = nil;
         }
     }];
 
     self.appDidResignActiveObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidResignActiveNotification object:NSApp queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf refreshControllerShortcutContext];
         weakSelf.globalInactivePointerInsideStreamView = NO;
         [weakSelf requestMouseUncaptureWhenSafeWithReason:@"app-resigned-active" code:@"MUC006"];
     }];
     self.appDidBecomeActiveObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidBecomeActiveNotification object:NSApp queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf refreshControllerShortcutContext];
         weakSelf.globalInactivePointerInsideStreamView = NO;
         if ([weakSelf isWindowInCurrentSpace] && [weakSelf isCurrentPointerInsideStreamView]) {
             [weakSelf ensureStreamWindowKeyIfPossible];
@@ -557,7 +619,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 return;
             }
             [strongSelf requestStreamMenuEntrypointsVisibilityUpdate];
-            [strongSelf scheduleDeferredStreamMenuEntrypointsVisibilityRetries];
             if ([strongSelf isWindowInCurrentSpace] && strongSelf.view.window.isKeyWindow) {
                     [strongSelf rearmMouseCaptureIfPossibleWithReason:@"space-transition-finished"];
                     [strongSelf scheduleDeferredMouseCaptureRearmWithReason:@"space-transition-finished" delay:0.12];
@@ -574,6 +635,37 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleSessionDisconnectRequest:) name:@"StreamingSessionRequestDisconnect" object:nil];
 
     [self installStreamMenuEntrypoints];
+    self.controllerMenuBeginObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSMenuDidBeginTrackingNotification
+        object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+            weakSelf.controllerMenuDepth++;
+            [weakSelf refreshControllerShortcutContext];
+        }];
+    self.controllerMenuEndObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSMenuDidEndTrackingNotification
+        object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+            if (weakSelf.controllerMenuDepth > 0) weakSelf.controllerMenuDepth--;
+            [weakSelf refreshControllerShortcutContext];
+        }];
+}
+
+- (void)refreshControllerShortcutContext {
+    self.controllerShortcutRuntime.active = NSApp.isActive && self.view.window.isKeyWindow &&
+        self.controllerMenuDepth == 0 && !self.controllerControlCenterVisible && !self.stopStreamInProgress;
+}
+- (void)handleControllerShortcutAction:(NSString *)action player:(unsigned short)player {
+    if (!self.controllerShortcutRuntime.active || self.stopStreamInProgress) return;
+    if ([action isEqualToString:@"toggleGamepadMouseMode"]) {
+        if (player >= CONTROLLER_SHORTCUT_HID_PLAYER_BASE || self.controllerSupport == nil) [self.hidSupport toggleControllerMouseMode];
+        else [self.controllerSupport toggleControllerMouseModeForPlayer:player];
+    } else if ([action isEqualToString:@"toggleFullscreen"]) {
+        if ([self isWindowFullscreen]) [self switchToWindowedMode:nil];
+        else [self switchToFullscreenMode:nil];
+    } else if ([action isEqualToString:@"captureMouse"]) {
+        [self captureMouse];
+    } else if ([action isEqualToString:KeyboardTranslationProfile.localActionOpenControlCenter]) {
+        [self presentControllerControlCenter];
+    } else {
+        [self performKeyboardTranslationLocalAction:action];
+    }
 }
 
 - (void)handleSessionDisconnectRequest:(NSNotification *)note {
@@ -707,6 +799,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)viewDidAppear {
     [super viewDidAppear];
+    [self refreshControllerShortcutContext];
     
     self.streamView.keyboardNotifiable = self;
     self.streamView.appName = self.app.name;
@@ -765,8 +858,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
 
     NSInteger displayMode = [SettingsClass displayModeFor:self.app.host.uuid];
-    if (displayMode == 1 && ![self isWindowFullscreen] && !self.fullscreenTransitionInProgress) {
-        Log(LOG_I, @"[diag] Priming startup fullscreen before connection handshake");
+    BOOL primeFullscreen = displayMode == 1 && ![self isWindowFullscreen] && !self.fullscreenTransitionInProgress;
+    BOOL primeBorderless = displayMode == 2 && ![self isWindowBorderlessMode];
+    if (primeFullscreen || primeBorderless) {
+        Log(LOG_I, @"[diag] Priming startup display mode before connection handshake: mode=%ld", (long)displayMode);
         [self applyStartupDisplayMode:displayMode];
     }
 
@@ -917,12 +1012,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.edgeMenuButtonTrackingArea = nil;
     }
 
-    if (self.edgeMenuPanel.parentWindow) {
-        [self.edgeMenuPanel.parentWindow removeChildWindow:self.edgeMenuPanel];
-    }
-    [self.edgeMenuPanel orderOut:nil];
-    [self.edgeMenuPanel close];
-    self.edgeMenuPanel = nil;
+    [self.edgeMenuButton removeFromSuperview];
+    self.edgeMenuButton = nil;
 
     [self stopInputDiagnosticsTimer];
     [self tearDownControllerSupportOnMainThreadIfNeeded];
@@ -965,6 +1056,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [defaultCenter removeObserver:self.windowDidBecomeKeyNotification];
         self.windowDidBecomeKeyNotification = nil;
     }
+    if (self.presentationVisibilityObserver != nil) {
+        [defaultCenter removeObserver:self.presentationVisibilityObserver];
+        self.presentationVisibilityObserver = nil;
+    }
+    self.controllerShortcutRuntime.active = NO;
+    [defaultCenter removeObserver:self.controllerMenuBeginObserver];
+    [defaultCenter removeObserver:self.controllerMenuEndObserver];
+    self.controllerMenuBeginObserver = self.controllerMenuEndObserver = nil;
     if (self.windowWillCloseNotification != nil) {
         [defaultCenter removeObserver:self.windowWillCloseNotification];
         self.windowWillCloseNotification = nil;
@@ -1458,6 +1557,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
         }
     }
     self.hidSupport = [[HIDSupport alloc] init:self.app.host];
+    __weak StreamViewController *shortcutOwner = self;
+    uint64_t (^shortcutHandler)(unsigned short, uint32_t) = ^uint64_t(unsigned short player, uint32_t buttons) {
+        return [shortcutOwner.controllerShortcutRuntime processButtons:buttons player:player];
+    };
+    self.hidSupport.controllerShortcutHandler = shortcutHandler;
+    self.controllerSupport.controllerShortcutHandler = shortcutHandler;
+    self.controllerSupport.advertiseTouchpadForShortcut = self.controllerShortcutRuntime.mapsTouchpadButton;
     __weak typeof(self) weakSelf = self;
     self.hidSupport.freeMouseAbsoluteSyncHandler = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -1681,7 +1787,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
         BOOL wasReconnect = self.reconnectInProgress;
         [self publishSunshineDisplayRuntimeState:wasReconnect ? @"reconnected" : @"active"];
-        Log(LOG_I, @"[hdr] Foundation dynamic HDR result: format=%d fallback=%d clientDolbyDirectSurface=0",
+        // format: 0 none, 1 HDR10+, 2/3 Vivid, 4 DV 8.1, 5 DV 8.4 (host's choice).
+        Log(LOG_I, @"[hdr] Foundation dynamic HDR result: format=%d fallback=%d",
             LiGetNegotiatedDynamicHdrFormat(),
             LiGetNegotiatedDynamicHdrFallback());
         if (self.reconnectInProgress) {
@@ -1731,7 +1838,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
         NSInteger startupDisplayMode = displayMode;
         BOOL startupModeAlreadyPrimed =
-            (startupDisplayMode == 1 && ([self isWindowFullscreen] || self.fullscreenTransitionInProgress));
+            (startupDisplayMode == 1 && ([self isWindowFullscreen] || self.fullscreenTransitionInProgress)) ||
+            (startupDisplayMode == 2 && [self isWindowBorderlessMode]);
         NSTimeInterval startupDisplayDelay = (startupDisplayMode == 0 || startupModeAlreadyPrimed) ? 0.0 : 0.12;
         Log(LOG_I, @"[diag] Scheduling startup display mode apply: mode=%ld (%@) delay=%.2fs",
             (long)startupDisplayMode,
@@ -1812,9 +1920,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
             self.mouseModeContainer = nil;
             self.mouseModeLabel = nil;
         }
-        if (self.edgeMenuPanel) {
-            [self.edgeMenuPanel orderOut:nil];
-        }
+        self.edgeMenuButton.hidden = YES;
 
         if (self.reconnectInProgress) {
             return;
@@ -1922,8 +2028,23 @@ highFreqMotor:(unsigned short)highFreqMotor {
 }
 
 - (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame {
-    if ([SettingsClass rumbleFor:self.app.host.uuid] && self.controllerSupport.shouldSendInputEvents) {
+    if (frame == NULL || ![SettingsClass rumbleFor:self.app.host.uuid] ||
+        !self.hidSupport.shouldSendInputEvents) return;
+    if (self.controllerSupport != nil) {
         [self.controllerSupport ds5HapticsIrV2:frame];
+    } else if (frame->controllerNumber == 0) {
+        ControllerActuatorEnvelope envelopes[2];
+        for (unsigned lane = 0; lane < 2; lane++) {
+            envelopes[lane] = (ControllerActuatorEnvelope){
+                frame->lanes[lane].rmsAmplitude, frame->lanes[lane].peakAmplitude,
+                frame->lanes[lane].transientStrength, frame->lanes[lane].lowBandRatio};
+        }
+        BOOL silent = (frame->flags & (LI_DS5_HAPTICS_IR_FLAG_SILENT | LI_DS5_HAPTICS_IR_FLAG_STREAM_END)) != 0;
+        float low, high;
+        ControllerFeedbackReduceBands(envelopes, silent, &low, &high);
+        [self.hidSupport submitAuthoredRumbleLow:(unsigned short)lrintf(low * 65535.0f)
+            high:(unsigned short)lrintf(high * 65535.0f) sequence:frame->sourceSequenceNumber
+            discontinuity:(frame->flags & LI_DS5_HAPTICS_IR_FLAG_DISCONTINUITY) != 0];
     }
 }
 
@@ -1935,10 +2056,23 @@ highFreqMotor:(unsigned short)highFreqMotor {
 }
 
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame {
-    if (!self.hidSupport.shouldSendInputEvents) {
+    if (frame == NULL || !self.hidSupport.shouldSendInputEvents ||
+        ![SettingsClass rumbleFor:self.app.host.uuid]) {
         return;
     }
-    [self.controllerSupport ds5HapticsPcm:frame];
+    if (self.controllerSupport != nil) {
+        [self.controllerSupport ds5HapticsPcm:frame];
+    } else if (frame->controllerNumber == 0 && frame->sampleRate == 48000 &&
+               frame->channelCount == 2 && frame->bitsPerSample == 16 && frame->frameCount <= 480 &&
+               frame->pcmDataLength == (uint32_t)frame->frameCount * 4 &&
+               (frame->pcmDataLength == 0 || frame->pcmData != NULL)) {
+        float low = 0, high = 0;
+        if (!(frame->flags & LI_DS5_HAPTICS_PCM_FLAG_STREAM_END))
+            ControllerFeedbackReducePCM16LE(frame->pcmData, frame->frameCount, &low, &high);
+        [self.hidSupport submitAuthoredRumbleLow:(unsigned short)lrintf(low * 65535.0f)
+            high:(unsigned short)lrintf(high * 65535.0f) sequence:frame->sequenceNumber
+            discontinuity:(frame->flags & (LI_DS5_HAPTICS_PCM_FLAG_STREAM_START | LI_DS5_HAPTICS_PCM_FLAG_DISCONTINUITY)) != 0];
+    }
 }
 
 - (void)setMotionEventState:(unsigned short)controllerNumber
@@ -2369,7 +2503,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     if (foundationRawClipboard && itemType == LI_CLIPBOARD_ITEM_TYPE_IMAGE) {
         NSString *compoundText = MLNormalizeClipboardText([pasteboard stringForType:NSPasteboardTypeString]);
         NSData *textData = [compoundText dataUsingEncoding:NSUTF8StringEncoding];
-        if (textData.length > 0 && textData.length <= MLClipboardAgentInlinePayloadLimit) {
+        if (textData.length > 0 && textData.length <= MLClipboardAgentOutgoingInlinePayloadLimit) {
             compoundTextPayload = textData;
         }
     }
@@ -2387,7 +2521,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSData *rawFrame = nil;
     int err = 0;
     BOOL sentCompoundRawFrame = NO;
-    if (foundationRawClipboard && payload.length > MLClipboardAgentInlinePayloadLimit) {
+    if (foundationRawClipboard && payload.length > MLClipboardAgentOutgoingInlinePayloadLimit) {
         self.clipboardLastChangeCount = changeCount;
         [self uploadClipboardBlob:payload mimeType:mimeType contentHash:contentHash];
         return;

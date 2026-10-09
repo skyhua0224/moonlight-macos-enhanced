@@ -25,6 +25,14 @@
 @import GameController;
 
 @interface HIDSupport () <CoreHIDMouseDriverDelegate>
+@property (nonatomic) unsigned short authoredRumbleLow;
+@property (nonatomic) unsigned short authoredRumbleHigh;
+@property (nonatomic) uint32_t authoredRumbleSequence;
+@property (nonatomic) BOOL hasAuthoredRumbleSequence;
+@property (nonatomic) BOOL authoredRumbleDeliveryScheduled;
+@property (nonatomic) NSTimeInterval authoredRumbleUpdatedAt;
+@property (nonatomic, strong) NSTimer *authoredRumbleTimer;
+@property(nonatomic) uint32_t controllerShortcutPhysicalButtons;
 @property (nonatomic) dispatch_queue_t rumbleQueue;
 @property (nonatomic, strong) NSDictionary *mappings;
 @property (nonatomic) IOHIDManagerRef hidManager;

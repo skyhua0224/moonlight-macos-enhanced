@@ -2719,13 +2719,14 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         _streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HDR10_PQ) {
         if (@available(macOS 13.0, *)) {
             // Core Media exposes the public HDR10+ per-frame metadata
-            // attachment from macOS 13. Dolby Vision is intentionally not
-            // advertised: this renderer has no documented direct-surface
-            // Dolby decoder contract.
+            // attachment from macOS 13.
             _streamConfig.dynamicHdrCaps = DYNAMIC_HDR_CAPS_HDR10_PLUS;
         }
     }
-    if (config.hdrTransferFunction != 0 && MLAppleDolbyVisionDirectSurfaceAvailable()) {
+    // Auto resolves to PQ above, so Dolby Vision follows the resolved mode
+    // rather than requiring an explicit PQ/HLG choice. The host picks DV only
+    // when its encoder can attach an RPU and falls back to HDR10/HDR10+.
+    if (config.enableHdr && MLAppleDolbyVisionDirectSurfaceAvailable()) {
         if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HDR10_PQ) {
             _streamConfig.dynamicHdrCaps |= DYNAMIC_HDR_CAPS_DOLBY_VISION_81;
         } else if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HLG) {
@@ -2979,7 +2980,10 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 }
 
 - (int)sendClipboardRawData:(NSData *)data {
-    if (data == nil || data.length == 0 || data.length > UINT16_MAX) {
+    // The control stream packs payload lengths into a signed 16-bit field;
+    // a longer frame wraps negative and aborts inside enet_malloc.
+    if (data == nil || data.length == 0 || data.length > INT16_MAX - 64) {
+        Log(LOG_W, @"[clipboard] Refusing raw agent frame length=%lu", (unsigned long)data.length);
         return -1;
     }
 

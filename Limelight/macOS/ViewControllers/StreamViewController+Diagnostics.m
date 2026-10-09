@@ -896,6 +896,26 @@
                         @"totalDecodeTimeMs": @(stats.totalDecodeTime),
                         @"audioUnderruns": @([self.streamMan.connection audioUnderrunCount])
                     }];
+
+    // One line per second so pacing can be analysed from logs after the fact.
+    if (nowStatsMs >= self.lastPerfLogMs + 1000 && (stats.receivedFrames > 0 || stats.renderedFrames > 0)) {
+        self.lastPerfLogMs = nowStatsMs;
+        Log(LOG_I, @"[perf] fps rx=%.1f de=%.1f rd=%.1f low1=%.1f pace=%.2f p99=%.1f max=%.1f stalls=%u srcGaps=%u "
+            "decode=%.2f queue=%.2f host=%.1f netDrop=%u pacerDrop=%u jit=%.1f br=%.1f audioUnderruns=%llu",
+            displayedFps(stats.receivedFps, stats.receivedFrames),
+            displayedFps(stats.decodedFps, stats.decodedFrames),
+            displayedFps(stats.renderedFps, stats.renderedFrames),
+            stats.renderedFpsOnePercentLow, stats.renderFramePacingJitterMs,
+            stats.renderIntervalP99Ms, stats.renderIntervalMaxMs,
+            stats.renderStallCount, stats.renderSourceGapCount,
+            stats.decodedFrames > 0 ? (float)stats.totalDecodeTime / stats.decodedFrames : 0.0f,
+            stats.renderedFrames > 0 ? (float)stats.totalRenderTime / stats.renderedFrames : 0.0f,
+            stats.framesWithHostProcessingLatency > 0
+                ? (float)stats.totalHostProcessingLatency / 10.0f / stats.framesWithHostProcessingLatency : 0.0f,
+            stats.networkDroppedFrames, stats.pacerDroppedFrames, stats.jitterMs,
+            (double)stats.receivedBytes * 8.0 / 1000.0 / 1000.0,
+            (unsigned long long)[self.streamMan.connection audioUnderrunCount]);
+    }
 }
 
 - (void)pollStreamHealthDiagnostics:(NSTimer *)timer {
@@ -923,6 +943,9 @@
         self.waitingForFirstRenderedFrame = NO;
         dispatch_async(dispatch_get_main_queue(), ^{
             self.streamView.statusText = nil;
+            // The renderer inserts its views into the stream view; keep controls above them.
+            [self bringStreamControlsToFront];
+            [self requestStreamMenuEntrypointsVisibilityUpdate];
         });
         Log(LOG_I, @"[diag] First rendered frame observed; clearing startup loading indicator");
     }
@@ -2682,7 +2705,13 @@
     append(@" Mbps", labelAttrs);
     append(@"  Pace ", labelAttrs);
     append([NSString stringWithFormat:@"%.1f", framePacingJitter], valueAttrs);
+    append(@" ms · p99 ", labelAttrs);
+    append([NSString stringWithFormat:@"%.1f", stats.renderIntervalP99Ms], valueAttrs);
     append(@" ms", labelAttrs);
+    if (stats.renderStallCount > 0) {
+        append(@" · Stall ", labelAttrs);
+        append([NSString stringWithFormat:@"%u", stats.renderStallCount], valueAttrs);
+    }
     
     // Latency
     append(@"  |  ", labelAttrs);

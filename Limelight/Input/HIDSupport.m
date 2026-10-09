@@ -9,6 +9,7 @@
 
 #import <IOKit/hid/IOHIDElement.h>
 #import <IOKit/hidsystem/IOLLEvent.h>
+#include "ControllerShortcutAdapter.h"
 
 
 NSString *const HIDMouseModeToggledNotification = @"HIDMouseModeToggledNotification";
@@ -378,6 +379,33 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 @end
 
 @implementation HIDSupport
+
+@synthesize shouldSendInputEvents = _shouldSendInputEvents;
+- (BOOL)shouldSendInputEvents {
+    return __atomic_load_n(&_shouldSendInputEvents, __ATOMIC_ACQUIRE);
+}
+- (void)setShouldSendInputEvents:(BOOL)enabled {
+    BOOL wasEnabled = __atomic_load_n(&_shouldSendInputEvents, __ATOMIC_ACQUIRE);
+    if (wasEnabled && !enabled) {
+        [self releaseAllPressedMouseButtons];
+        [self releaseAllModifierKeys];
+        if (self.controllerDriver == 0) {
+            PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+            if (HIDValidateInputContext(input, "pause-controller-input")) {
+                int player = self.controller.playerIndex;
+                HIDDispatchInput(self, input, ^{
+                    LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
+                });
+            }
+        }
+        [self rumbleLowFreqMotor:0 highFreqMotor:0];
+        ControllerMenuGesture gesture = self.controller.menuGesture;
+        ControllerMenuGestureInterrupt(&gesture, self.gamepadMenuPressed);
+        self.controller.menuGesture = gesture;
+    }
+    __atomic_store_n(&_shouldSendInputEvents, enabled, __ATOMIC_RELEASE);
+    if (!wasEnabled && enabled && self.controllerDriver == 0) [self sendControllerEvent];
+}
 
 - (void)setInputContext:(void *)inputContext {
     _inputContext = inputContext;
@@ -779,17 +807,34 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 }
 
 - (void)dealloc {
+    [self.authoredRumbleTimer invalidate];
     [self.gamepadMenuTimer invalidate];
     [self tearDownCoreHIDMouseDriver];
     NSLog(@"HIDSupport dealloc");
 }
 
 
+- (uint64_t)evaluateControllerShortcuts {
+    if (self.controllerShortcutHandler == nil) return 0;
+    uint32_t physical = self.controllerShortcutPhysicalButtons |
+        (self.controller.lastLeftTrigger >= 30 ? CONTROLLER_SHORTCUT_LEFT_TRIGGER_MARKER : 0) |
+        (self.controller.lastRightTrigger >= 30 ? CONTROLLER_SHORTCUT_RIGHT_TRIGGER_MARKER : 0);
+    return self.controllerShortcutHandler(
+        (unsigned short)(CONTROLLER_SHORTCUT_HID_PLAYER_BASE + self.controller.playerIndex),
+        ControllerShortcutNeutralMask(physical));
+}
+
 - (void)sendControllerEvent {
+    uint64_t routing = [self evaluateControllerShortcuts];
     if (self.shouldSendInputEvents) {
         // Capture state
         int playerIndex = self.controller.playerIndex;
         int lastButtonFlags = self.controller.lastButtonFlags;
+        uint32_t consumed = ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(routing));
+        uint32_t replayed = ControllerShortcutProtocolMask(ControllerShortcutRouteReplay(routing));
+        lastButtonFlags &= ~consumed;
+        lastButtonFlags |= replayed & ~(CONTROLLER_SHORTCUT_LEFT_TRIGGER_MARKER | CONTROLLER_SHORTCUT_RIGHT_TRIGGER_MARKER);
+        if (ControllerShortcutRouteTouchpad(routing)) lastButtonFlags |= TOUCHPAD_FLAG;
         
         // Guide Button Emulation (Start + Select)
         // If both Start and Select are pressed, convert to Guide
@@ -800,6 +845,10 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
         
         unsigned char lastLeftTrigger = self.controller.lastLeftTrigger;
         unsigned char lastRightTrigger = self.controller.lastRightTrigger;
+        if (consumed & CONTROLLER_SHORTCUT_LEFT_TRIGGER_MARKER) lastLeftTrigger = 0;
+        if (consumed & CONTROLLER_SHORTCUT_RIGHT_TRIGGER_MARKER) lastRightTrigger = 0;
+        if (replayed & CONTROLLER_SHORTCUT_LEFT_TRIGGER_MARKER) lastLeftTrigger = 0xFF;
+        if (replayed & CONTROLLER_SHORTCUT_RIGHT_TRIGGER_MARKER) lastRightTrigger = 0xFF;
         short lastLeftStickX = self.controller.lastLeftStickX;
         short lastLeftStickY = self.controller.lastLeftStickY;
         short lastRightStickX = self.controller.lastRightStickX;
@@ -2000,6 +2049,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 
 - (void)refreshGamepadMouseModeConfiguration {
     BOOL mouseEnabled = [SettingsClass gamepadMouseModeFor:self.host.uuid];
+    BOOL mouseChanged = mouseEnabled != self.gamepadMouseModeEnabled;
     BOOL gestureEnabled = [SettingsClass gamepadMouseModeLongPressMenuFor:self.host.uuid];
     if (mouseEnabled != self.gamepadMouseModeEnabled ||
         gestureEnabled != self.gamepadMouseModeLongPressMenuEnabled) {
@@ -2011,8 +2061,17 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
     self.gamepadMouseModeEnabled = mouseEnabled;
     self.gamepadMouseModeLongPressMenuEnabled = gestureEnabled;
-    if (!mouseEnabled) [self setGamepadMouseModeActive:NO];
+    if (mouseChanged && !mouseEnabled) [self setGamepadMouseModeActive:NO];
+    if (self.controllerDriver == 0) [self sendControllerEvent];
 }
+
+- (void)refreshControllerShortcutOutput {
+    // HIDSupport also lives alongside the GameController backend; it must not
+    // send gamepad packets unless HID owns gamepad input.
+    if (self.controllerDriver == 0) [self sendControllerEvent];
+}
+- (void)toggleControllerMouseMode { [self setGamepadMouseModeActive:!self.controller.isMouseMode]; }
+
 
 - (void)setGamepadMouseModeActive:(BOOL)active {
     if (self.controller.isMouseMode == active) return;
@@ -2044,7 +2103,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 }
 
 - (void)updateGamepadMenuGesture {
-    BOOL enabled = self.gamepadMouseModeEnabled && self.gamepadMouseModeLongPressMenuEnabled &&
+    // With the shortcut runtime attached, Menu long-press is one of its bindings.
+    BOOL enabled = self.controllerShortcutHandler == nil && self.gamepadMouseModeLongPressMenuEnabled &&
         self.controllerDriver == 0 && self.shouldSendInputEvents;
     ControllerMenuGesture gesture = self.controller.menuGesture;
     double now = NSProcessInfo.processInfo.systemUptime;
@@ -2072,6 +2132,10 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 }
 
 - (void)updateButtonFlags:(int)flag state:(BOOL)set {
+    if (set) self.controllerShortcutPhysicalButtons |= flag;
+    else self.controllerShortcutPhysicalButtons &= ~flag;
+    uint64_t routing = [self evaluateControllerShortcuts];
+    if (ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(routing)) & flag) set = NO;
     if (flag == PLAY_FLAG) {
         self.gamepadMenuPressed = set;
         [self updateGamepadMenuGesture];
@@ -2132,7 +2196,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     
     // Gamepad Quit Combo (Start + Select + LB + RB)
     int quitCombo = PLAY_FLAG | BACK_FLAG | LB_FLAG | RB_FLAG;
-    if ((self.controller.lastButtonFlags & quitCombo) == quitCombo) {
+    if (self.controllerShortcutHandler == nil && (self.controller.lastButtonFlags & quitCombo) == quitCombo) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [[NSNotificationCenter defaultCenter] postNotificationName:HIDGamepadQuitNotification object:nil];
         });

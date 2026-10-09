@@ -19,3 +19,5 @@
 #import "AppDelegateForAppKit.h"
 #import "AwdlAuthorizationHelper.h"
 #import "Logger.h"
+
+#include "../modules/controller-feedback/ControllerShortcut.h"

@@ -8,31 +8,46 @@
 
 #import "ControllerNavigation.h"
 #import "NSResponder+Moonlight.h"
+#import "NSWindow+Moonlight.h"
+#import "MoonlightEnhanced-Swift.h"
 
 @import GameController;
 
+// Navigation reads Apple's profile state without replacing the streaming
+// callbacks. Each device has its own edge/repeat state, scoped to the key UI.
 typedef struct {
-    struct {
-        BOOL up;
-        BOOL down;
-        BOOL left;
-        BOOL right;
-    } dpad;
-    struct {
-        BOOL up;
-        BOOL down;
-        BOOL left;
-        BOOL right;
-    } leftThumbstick;
-    BOOL buttonA;
-    BOOL buttonB;
-    BOOL buttonX;
-} ControllerState;
+    uint32_t buttons;
+    double repeatAt;
+} ControllerUIState;
+
+enum {
+    UIUp = 1 << 0,
+    UIDown = 1 << 1,
+    UILeft = 1 << 2,
+    UIRight = 1 << 3,
+    UIA = 1 << 4,
+    UIB = 1 << 5,
+    UIX = 1 << 6,
+    UIMenu = 1 << 7,
+    UIViewButton = 1 << 8,
+    UILB = 1 << 9,
+    UIRB = 1 << 10,
+};
+
+static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
 
 @interface ControllerNavigation ()
-@property (nonatomic) id controllerConnectObserver;
-@property (nonatomic) id controllerDisconnectObserver;
-@property (nonatomic) ControllerState lastGamepadState;
+@property (nonatomic, strong) NSTimer *timer;
+@property (nonatomic, strong) NSMapTable<GCController *, NSValue *> *states;
+@property (nonatomic, weak) NSWindow *navigationWindow;
+@property (nonatomic) BOOL menuTracking;
+@property (nonatomic) BOOL suspended;
+@property (nonatomic, strong) NSArray<id> *observers;
+@property (nonatomic, strong) id pointerMonitor;
+@property (nonatomic, strong) ControllerHintPresenter *hints;
+@property (nonatomic, strong) ControllerFocusNavigator *focusNavigator;
+// The legend follows whichever input was used last: controller or pointer.
+@property (nonatomic) BOOL controllerInUse;
 @end
 
 @implementation ControllerNavigation
@@ -40,84 +55,294 @@ typedef struct {
 - (instancetype)init {
     self = [super init];
     if (self) {
-        for (GCController *controller in GCController.controllers) {
-            [self registerControllerCallbacks:controller];
-        }
-        
+        self.states = [NSMapTable weakToStrongObjectsMapTable];
+        self.hints = [[ControllerHintPresenter alloc] init];
+        self.focusNavigator = [[ControllerFocusNavigator alloc] init];
+        self.controllerInUse = YES;
+
         __weak typeof(self) weakSelf = self;
-        self.controllerConnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidConnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-            [weakSelf registerControllerCallbacks:note.object];
+        NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+        NSOperationQueue *main = NSOperationQueue.mainQueue;
+        void (^refresh)(NSNotification *) = ^(NSNotification *note) {
+            [weakSelf updatePollingTimer];
+        };
+        self.observers = @[
+            [center addObserverForName:NSMenuDidBeginTrackingNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+                weakSelf.menuTracking = YES;
+            }],
+            [center addObserverForName:NSMenuDidEndTrackingNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+                weakSelf.menuTracking = NO;
+            }],
+            // Poll only while a controller is connected and the app is in front.
+            [center addObserverForName:GCControllerDidConnectNotification object:nil queue:main usingBlock:refresh],
+            [center addObserverForName:GCControllerDidDisconnectNotification object:nil queue:main usingBlock:refresh],
+            [center addObserverForName:NSApplicationDidBecomeActiveNotification object:nil queue:main usingBlock:refresh],
+            [center addObserverForName:NSApplicationDidResignActiveNotification object:nil queue:main usingBlock:refresh],
+            // A shortcut capture sheet reads the controller directly.
+            [center addObserverForName:@"ControllerNavigationSuspended" object:nil queue:main usingBlock:^(NSNotification *note) {
+                weakSelf.suspended = [note.userInfo[@"suspended"] boolValue];
+            }],
+        ];
+        self.pointerMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown | NSEventMaskScrollWheel | NSEventMaskMouseMoved
+                                                                    handler:^NSEvent *(NSEvent *event) {
+            // Right-stick scrolling is delivered with -sendEvent: and never reaches this monitor.
+            weakSelf.controllerInUse = NO;
+            return event;
         }];
-        self.controllerDisconnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
-            [weakSelf unregisterControllerCallbacks:note.object];
-        }];
+        [self updatePollingTimer];
     }
     return self;
 }
 
-#define COMPARE_STATES(Name) \
-    gamepad.Name.pressed != self.lastGamepadState.Name && gamepad.Name.pressed
+- (void)dealloc {
+    [self.timer invalidate];
+    [self.hints hide];
+    if (self.pointerMonitor) {
+        [NSEvent removeMonitor:self.pointerMonitor];
+    }
+    for (id observer in self.observers) {
+        [NSNotificationCenter.defaultCenter removeObserver:observer];
+    }
+}
 
-- (void)registerControllerCallbacks:(GCController *)controller {
-    controller.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *gamepad, GCControllerElement *element) {
-        MoonlightControllerEvent event;
-        if (COMPARE_STATES(dpad.up)) {
-            event.button = kMCE_UpDpad;
-        } else if (COMPARE_STATES(dpad.down)) {
-            event.button = kMCE_DownDpad;
-        } else if (COMPARE_STATES(dpad.left)) {
-            event.button = kMCE_LeftDpad;
-        } else if (COMPARE_STATES(dpad.right)) {
-            event.button = kMCE_RightDpad;
-//        } else if (COMPARE_STATES(leftThumbstick.up)) {
-//            event.button = kMCE_UpDpad;
-//        } else if (COMPARE_STATES(leftThumbstick.down)) {
-//            event.button = kMCE_DownDpad;
-//        } else if (COMPARE_STATES(leftThumbstick.left)) {
-//            event.button = kMCE_LeftDpad;
-//        } else if (COMPARE_STATES(leftThumbstick.right)) {
-//            event.button = kMCE_RightDpad;
-        } else if (COMPARE_STATES(buttonA)) {
-            event.button = kMCE_AButton;
-        } else if (COMPARE_STATES(buttonB)) {
-            event.button = kMCE_BButton;
-        } else if (COMPARE_STATES(buttonX)) {
-            event.button = kMCE_XButton;
-        } else {
-            event.button = kMCE_Unknown;
+- (void)updatePollingTimer {
+    BOOL wanted = NSApp.active && GCController.controllers.count > 0;
+    if (wanted && self.timer == nil) {
+        __weak typeof(self) weakSelf = self;
+        self.timer = [NSTimer timerWithTimeInterval:1.0 / 60.0 repeats:YES block:^(NSTimer *timer) {
+            [weakSelf pollNavigation];
+        }];
+        [[NSRunLoop mainRunLoop] addTimer:self.timer forMode:NSRunLoopCommonModes];
+    } else if (!wanted && self.timer != nil) {
+        [self.timer invalidate];
+        self.timer = nil;
+        self.navigationWindow = nil;
+        [self.states removeAllObjects];
+        [self.hints hide];
+        [self.focusNavigator reset];
+    }
+}
+
+- (uint32_t)buttonsFor:(GCExtendedGamepad *)pad {
+    return ((pad.dpad.up.pressed || pad.leftThumbstick.yAxis.value > 0.6f) ? UIUp : 0) |
+        ((pad.dpad.down.pressed || pad.leftThumbstick.yAxis.value < -0.6f) ? UIDown : 0) |
+        ((pad.dpad.left.pressed || pad.leftThumbstick.xAxis.value < -0.6f) ? UILeft : 0) |
+        ((pad.dpad.right.pressed || pad.leftThumbstick.xAxis.value > 0.6f) ? UIRight : 0) |
+        (pad.buttonA.pressed ? UIA : 0) |
+        (pad.buttonB.pressed ? UIB : 0) |
+        (pad.buttonX.pressed ? UIX : 0) |
+        (pad.buttonMenu.pressed ? UIMenu : 0) |
+        (pad.buttonOptions.pressed ? UIViewButton : 0) |
+        (pad.leftShoulder.pressed ? UILB : 0) |
+        (pad.rightShoulder.pressed ? UIRB : 0);
+}
+
+- (void)postKey:(unsigned short)code text:(NSString *)text modifiers:(NSEventModifierFlags)modifiers window:(NSWindow *)window {
+    for (NSUInteger i = 0; i < 2; i++) {
+        NSEvent *event = [NSEvent keyEventWithType:i == 0 ? NSEventTypeKeyDown : NSEventTypeKeyUp
+                                          location:NSZeroPoint
+                                     modifierFlags:modifiers
+                                         timestamp:NSProcessInfo.processInfo.systemUptime
+                                      windowNumber:window.windowNumber
+                                           context:nil
+                                        characters:text
+                       charactersIgnoringModifiers:text
+                                         isARepeat:NO
+                                           keyCode:code];
+        // App-local events also work while a native picker menu is tracking.
+        [NSApp postEvent:event atStart:NO];
+    }
+}
+
+- (void)pollNavigation {
+    // The controller menu panel takes every input while it is open.
+    ControllerMenuPanel *menuPanel = ControllerMenuPanel.shared;
+    BOOL overlay = menuPanel.isPresented && menuPanel.parentWindow != nil;
+    NSWindow *window = overlay ? menuPanel.parentWindow : NSApp.keyWindow;
+    NSWindow *root = window;
+    while (root.sheetParent) {
+        root = root.sheetParent;
+    }
+    BOOL main = !overlay && [root.identifier isEqualToString:@"MainWindow"] && root == window;
+    BOOL settings = !overlay && [root.identifier isEqualToString:@"ClientSettingsWindow"];
+    BOOL streamMenu = !overlay && self.menuTracking && [root.identifier isEqualToString:@"ClientStreamWindow"];
+    if (!NSApp.active || !window || (!overlay && !main && !settings && !streamMenu)) {
+        self.navigationWindow = nil;
+        [self.hints hide];
+        [self.focusNavigator updateWithWindow:nil showRing:NO];
+        return;
+    }
+
+    BOOL changed = self.navigationWindow != window;
+    self.navigationWindow = window;
+    double now = NSProcessInfo.processInfo.systemUptime;
+    for (GCController *controller in GCController.controllers) {
+        GCExtendedGamepad *pad = controller.extendedGamepad;
+        if (!pad) {
+            continue;
         }
-        self.lastGamepadState = [self controllerStateFromGamepad:gamepad];
-        
-        NSWindow *window = NSApplication.sharedApplication.keyWindow;
-        if (window != NSApplication.sharedApplication.mainWindow || event.button == kMCE_Unknown) return;
+
+        ControllerUIState state = {0};
+        NSValue *previous = [self.states objectForKey:controller];
+        if (previous) {
+            [previous getValue:&state size:sizeof(state)];
+        }
+        uint32_t buttons = [self buttonsFor:pad];
+        if (self.suspended) {
+            // Keep edge state current so the capture's presses do not fire on resume.
+            state.buttons = buttons;
+            state.repeatAt = 0;
+            [self.states setObject:[NSValue valueWithBytes:&state objCType:@encode(ControllerUIState)] forKey:controller];
+            continue;
+        }
+        if (buttons != 0 || fabsf(pad.rightThumbstick.yAxis.value) > 0.3f) {
+            self.controllerInUse = YES;
+        }
+        // A window change swallows the press that caused it.
+        uint32_t pressed = (changed || !previous) ? 0 : buttons & ~state.buttons;
+        uint32_t directions = buttons & UIDirections;
+        if (pressed & directions) {
+            state.repeatAt = now + 0.35;
+        } else if (directions && state.repeatAt > 0 && now >= state.repeatAt && !changed) {
+            pressed |= directions;
+            state.repeatAt = now + 0.10;
+        } else if (!directions || changed) {
+            state.repeatAt = 0;
+        }
+        state.buttons = buttons;
+        [self.states setObject:[NSValue valueWithBytes:&state objCType:@encode(ControllerUIState)] forKey:controller];
+
+        if (overlay) {
+            [self sendPressed:pressed toHandler:^(ControllerFocusInput input) {
+                [menuPanel handleInput:input];
+            }];
+            continue;
+        }
+
+        if (pressed & UIViewButton) {
+            NSSearchField *search = main ? [window moonlight_searchFieldInToolbar] : nil;
+            if (search) {
+                [window makeFirstResponder:search];
+            } else if (!window.sheetParent) {
+                [NSNotificationCenter.defaultCenter postNotificationName:@"ControllerFocusSettingsSearch" object:window];
+                if (settings) {
+                    [self.focusNavigator focusSearchFieldInWindow:window];
+                }
+            }
+            continue;
+        }
+        if (main && (pressed & UIMenu)) {
+            [NSApp sendAction:@selector(showPreferences:) to:nil from:window];
+            continue;
+        }
+
         NSResponder *responder = window.firstResponder;
-        while (responder != nil && ![responder isKindOfClass:NSCollectionView.class]) responder = responder.nextResponder;
-        if (responder != nil) [responder controllerEvent:event];
+        while (responder && ![responder isKindOfClass:NSCollectionView.class]) {
+            responder = responder.nextResponder;
+        }
+        if (main && responder && !self.menuTracking) {
+            const uint32_t masks[] = {UIUp, UIDown, UILeft, UIRight, UIA, UIB, UIX};
+            const unsigned short actions[] = {kMCE_UpDpad, kMCE_DownDpad, kMCE_LeftDpad, kMCE_RightDpad,
+                                              kMCE_AButton, kMCE_BButton, kMCE_XButton};
+            for (NSUInteger i = 0; i < 7; i++) {
+                if (pressed & masks[i]) {
+                    [responder controllerEvent:(MoonlightControllerEvent){.button = actions[i]}];
+                }
+            }
+            continue;
+        }
+
+        // Settings: a focus ring over every control, LB/RB pick the column.
+        if (settings && !self.menuTracking) {
+            ControllerFocusNavigator *navigator = self.focusNavigator;
+            [self sendPressed:pressed & ~UIB toHandler:^(ControllerFocusInput input) {
+                [navigator handleInput:input window:window];
+            }];
+            if ((pressed & UIB) && ![navigator handleInput:ControllerFocusInputBack window:window]) {
+                if (window.sheetParent) {
+                    [self postKey:53 text:@"\033" modifiers:0 window:window];
+                } else {
+                    [window performClose:nil];
+                }
+            }
+            if (fabsf(pad.rightThumbstick.yAxis.value) > 0.3f) {
+                [self scrollWindow:window amount:pad.rightThumbstick.yAxis.value];
+            }
+            continue;
+        }
+
+        // Menus: move with arrows, confirm with Return.
+        if (pressed & (UIUp | UILB)) {
+            if (self.menuTracking) {
+                [self postKey:126 text:@"" modifiers:0 window:window];
+            } else {
+                [self postKey:48 text:@"\t" modifiers:NSEventModifierFlagShift window:window];
+            }
+        }
+        if (pressed & (UIDown | UIRB)) {
+            if (self.menuTracking) {
+                [self postKey:125 text:@"" modifiers:0 window:window];
+            } else {
+                [self postKey:48 text:@"\t" modifiers:0 window:window];
+            }
+        }
+        if (pressed & UILeft) {
+            [self postKey:123 text:@"" modifiers:0 window:window];
+        }
+        if (pressed & UIRight) {
+            [self postKey:124 text:@"" modifiers:0 window:window];
+        }
+        if (pressed & UIA) {
+            BOOL field = [window.firstResponder isKindOfClass:NSTextView.class] &&
+                [(NSTextView *)window.firstResponder isFieldEditor];
+            if (field || self.menuTracking) {
+                [self postKey:36 text:@"\r" modifiers:0 window:window];
+            } else {
+                [self postKey:49 text:@" " modifiers:0 window:window];
+            }
+        }
+        if (pressed & UIB) {
+            if (self.menuTracking || window.sheetParent) {
+                [self postKey:53 text:@"\033" modifiers:0 window:window];
+            } else if (settings) {
+                [window performClose:nil];
+            }
+        }
+    }
+
+    BOOL showRing = settings && !self.suspended && !self.menuTracking && self.controllerInUse;
+    [self.focusNavigator updateWithWindow:(settings ? window : nil) showRing:showRing];
+
+    if (self.suspended || !self.controllerInUse) {
+        [self.hints hide];
+    } else {
+        ControllerHintContext context = (overlay || self.menuTracking) ? ControllerHintContextMenu
+            : (settings ? ControllerHintContextSettings : ControllerHintContextLibrary);
+        [self.hints updateWithWindow:root context:context];
+    }
+}
+
+- (void)sendPressed:(uint32_t)pressed toHandler:(void (^)(ControllerFocusInput input))handler {
+    const uint32_t masks[] = {UIUp, UIDown, UILeft, UIRight, UIA, UIB, UILB, UIRB};
+    const ControllerFocusInput inputs[] = {
+        ControllerFocusInputUp, ControllerFocusInputDown, ControllerFocusInputLeft, ControllerFocusInputRight,
+        ControllerFocusInputAccept, ControllerFocusInputBack, ControllerFocusInputPreviousColumn,
+        ControllerFocusInputNextColumn,
     };
+    for (NSUInteger i = 0; i < sizeof(masks) / sizeof(masks[0]); i++) {
+        if (pressed & masks[i]) {
+            handler(inputs[i]);
+        }
+    }
 }
 
-- (void)unregisterControllerCallbacks:(GCController *)controller {
-    controller.extendedGamepad.valueChangedHandler = nil;
-}
-
-#define COPY_STATE(Name) \
-    state.Name = gamepad.Name.pressed
-
-- (ControllerState)controllerStateFromGamepad:(GCExtendedGamepad *)gamepad {
-    ControllerState state;
-    COPY_STATE(dpad.up);
-    COPY_STATE(dpad.down);
-    COPY_STATE(dpad.left);
-    COPY_STATE(dpad.right);
-//    COPY_STATE(leftThumbstick.up);
-//    COPY_STATE(leftThumbstick.down);
-//    COPY_STATE(leftThumbstick.left);
-//    COPY_STATE(leftThumbstick.right);
-    COPY_STATE(buttonA);
-    COPY_STATE(buttonB);
-    COPY_STATE(buttonX);
-
-    return state;
+- (void)scrollWindow:(NSWindow *)window amount:(float)amount {
+    CGEventRef scroll = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitPixel, 1, (int32_t)lrintf(amount * 8.0f));
+    NSPoint center = [window convertPointToScreen:NSMakePoint(NSMidX(window.contentView.bounds),
+                                                              NSMidY(window.contentView.bounds))];
+    CGEventSetLocation(scroll, CGPointMake(center.x, NSScreen.screens.firstObject.frame.size.height - center.y));
+    [window sendEvent:[NSEvent eventWithCGEvent:scroll]];
+    CFRelease(scroll);
 }
 
 @end

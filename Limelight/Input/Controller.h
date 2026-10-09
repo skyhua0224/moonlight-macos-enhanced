@@ -38,6 +38,7 @@
 @property(nonatomic) BOOL hasTouchpadModeOverride;
 @property(nonatomic) BOOL touchpadMouseMode;
 @property(nonatomic) ControllerMenuGesture menuGesture;
+@property(nonatomic) uint64_t clientShortcutRouting;
 @property(nonatomic) BOOL primaryTouchActive;
 @property(nonatomic) BOOL secondaryTouchActive;
 @property(nonatomic) float lastPrimaryTouchX;
@@ -53,6 +54,11 @@
 @property(nonatomic) BOOL legacyTouchSnapshotPending;
 @property(nonatomic) NSUInteger trackpadGestureGeneration;
 @property(nonatomic) NSTimeInterval trackpadTouchBegan;
+@property(nonatomic) NSTimeInterval trackpadTouchEnded;
+@property(nonatomic) NSTimeInterval trackpadLastTapEnded;
+@property(nonatomic) float trackpadLastTapX;
+@property(nonatomic) float trackpadLastTapY;
+@property(nonatomic) BOOL trackpadRepeatedTapCandidate;
 @property(nonatomic) BOOL trackpadPhysicalClickConsumed;
 @property(nonatomic) NSTimeInterval trackpadClickMovementSuppressedUntil;
 @property(nonatomic) BOOL hasSentGamepadState;

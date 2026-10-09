@@ -4,11 +4,14 @@ import Combine
 
 /// Mirrors only this product's signed release archives, never arbitrary URLs.
 enum UpdateSourcePolicy {
-  static let githubFeed = "https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml"
+  // The signed appcast ships as an asset of each release; CNB mirrors GitHub
+  // releases, so the same "latest release" path works on both. The feed
+  // branch remains last for builds that predate the release-asset feeds.
+  static let githubFeed = "https://github.com/skyhua0224/moonlight-macos-enhanced/releases/latest/download/appcast.xml"
   static let feeds = [
     githubFeed,
-    "https://www.alkaidlab.com/release-metadata/moonlight-macos-enhanced-appcast.xml",
-    "https://www.alkaidlab.cn/release-metadata/moonlight-macos-enhanced-appcast.xml",
+    "https://cnb.cool/AlkaidLab/moonlight-macos-enhanced-release/-/releases/latest/download/appcast.xml",
+    "https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml",
   ]
 
   static func metadataVersion(_ tag: String) -> String {

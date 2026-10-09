@@ -28,6 +28,7 @@
 
 @import VideoToolbox;
 @import MetalKit;
+@import CoreImage;
 
 #if __has_include(<MetalFX/MetalFX.h>)
 #import <MetalFX/MetalFX.h>
@@ -52,12 +53,16 @@ typedef struct MLDecodeFrameContext MLDecodeFrameContext;
 - (BOOL)currentDisplaySupportsEDRPresentation;
 - (void)prewarmEnhancedDrawableIfNeeded;
 - (void)refreshEnhancedHDRPresentationIfNeeded;
+- (BOOL)updateDecompressionSessionForFormatChange;
 - (void)handleDecompressionOutput:(CVImageBufferRef)imageBuffer
             presentationTimeStamp:(CMTime)presentationTimeStamp
                          duration:(CMTime)duration
                      frameContext:(const MLDecodeFrameContext *)frameContext;
 - (void)recordRenderedFrameSampleAtTimeMs:(uint64_t)renderSampleNowMs
                             enqueueTimeMs:(uint64_t)enqueueTimeMs;
+- (void)recordRenderedFrameSampleAtTimeMs:(uint64_t)renderSampleNowMs
+                            enqueueTimeMs:(uint64_t)enqueueTimeMs
+                 presentationTimeSeconds:(double)presentationTimeSeconds;
 - (NSUInteger)desiredEnhancedDrawableDepth;
 - (void)teardownFrameInterpolationProcessor;
 - (BOOL)ensureFrameInterpolationOutputPoolForConfiguration:(VTLowLatencyFrameInterpolationConfiguration *)configuration
@@ -109,7 +114,8 @@ struct MLDecodeFrameContext {
 };
 
 enum {
-    kMLRenderIntervalSampleCapacity = 900,
+    // About 30 s at 120 fps, so a single slow frame does not swing the lows.
+    kMLRenderIntervalSampleCapacity = 3600,
     kMLEnhancedStartupPacingWindowMs = 350,
     kMLEnhancedStartupPacingPresentThreshold = 8,
 };
@@ -262,10 +268,10 @@ static NSString *MLVideoFrameInterpolationEngineName(MLActiveVideoFrameInterpola
     }
 }
 
-static int MLCompareUInt16Ascending(const void *lhs, const void *rhs)
+static int MLCompareDoubleAscending(const void *lhs, const void *rhs)
 {
-    uint16_t a = *(const uint16_t *)lhs;
-    uint16_t b = *(const uint16_t *)rhs;
+    double a = *(const double *)lhs;
+    double b = *(const double *)rhs;
     if (a < b) {
         return -1;
     }
@@ -330,60 +336,82 @@ static void MLLogDynamicHDRImageAttachments(CVImageBufferRef imageBuffer,
     free(values);
 }
 
-static float MLComputeRenderedOnePercentLowFps(const uint16_t *samples, NSUInteger count)
+typedef struct {
+    float onePercentLowFps;
+    float pacingJitterMs;
+    float p99IntervalMs;
+    float maxIntervalMs;
+    uint32_t stallCount;
+    uint32_t sourceGapCount;
+} MLRenderPacingMetrics;
+
+// Each render interval is paired with the arrival interval of the same frame.
+// Gaps already present on arrival (the host idling on a static screen, or a
+// frame lost on the network) are counted as source gaps and kept out of the
+// client figures: 1% low covers frames that arrived on time, and pacing jitter
+// is the spread of (render interval - arrival interval), i.e. what the client
+// added. p99/max/stalls stay on the raw render intervals the viewer saw.
+static MLRenderPacingMetrics MLComputeRenderPacingMetrics(const double *render,
+                                                          const double *arrival,
+                                                          NSUInteger count,
+                                                          double nominalIntervalMs)
 {
-    if (samples == NULL || count < 30 || count > kMLRenderIntervalSampleCapacity) {
-        return 0.0f;
+    MLRenderPacingMetrics metrics = {0};
+    if (render == NULL || arrival == NULL || count < 100 || count > kMLRenderIntervalSampleCapacity) {
+        return metrics;
     }
 
-    uint16_t sorted[kMLRenderIntervalSampleCapacity];
-    memcpy(sorted, samples, count * sizeof(uint16_t));
-    qsort(sorted, count, sizeof(uint16_t), MLCompareUInt16Ascending);
-
-    NSUInteger worstSampleCount = MAX((NSUInteger)1, (NSUInteger)ceil((double)count * 0.01));
-    if (worstSampleCount > count) {
-        worstSampleCount = count;
+    // Arrival times have 1 ms resolution, hence the absolute floor.
+    double sourceGapThresholdMs = MAX(nominalIntervalMs * 1.5, nominalIntervalMs + 2.0);
+    double *clientIntervals = malloc(count * sizeof(double));
+    double *sortedIntervals = malloc(count * sizeof(double));
+    if (clientIntervals == NULL || sortedIntervals == NULL) {
+        free(clientIntervals);
+        free(sortedIntervals);
+        return metrics;
     }
-
-    NSUInteger startIndex = count - worstSampleCount;
-    uint64_t worstFrameTimeTotalMs = 0;
-    for (NSUInteger idx = startIndex; idx < count; idx++) {
-        worstFrameTimeTotalMs += sorted[idx];
-    }
-
-    if (worstFrameTimeTotalMs == 0) {
-        return 0.0f;
-    }
-
-    double averageWorstFrameTimeMs = (double)worstFrameTimeTotalMs / (double)worstSampleCount;
-    if (averageWorstFrameTimeMs <= 0.0) {
-        return 0.0f;
-    }
-
-    return 1000.0f / (float)averageWorstFrameTimeMs;
-}
-
-static float MLComputeRenderFramePacingJitterMs(const uint16_t *samples, NSUInteger count)
-{
-    if (samples == NULL || count < 2 || count > kMLRenderIntervalSampleCapacity) {
-        return 0.0f;
-    }
-
-    double sum = 0.0;
+    NSUInteger clientCount = 0;
+    double errorSum = 0.0;
     for (NSUInteger idx = 0; idx < count; idx++) {
-        sum += samples[idx];
-    }
-    double mean = sum / (double)count;
-    if (mean <= 0.0) {
-        return 0.0f;
+        double interval = render[idx];
+        sortedIntervals[idx] = interval;
+        errorSum += interval - arrival[idx];
+        if (interval > 100.0) {
+            metrics.stallCount++;
+        }
+        if (arrival[idx] > sourceGapThresholdMs) {
+            metrics.sourceGapCount++;
+        } else {
+            clientIntervals[clientCount++] = interval;
+        }
     }
 
+    double errorMean = errorSum / (double)count;
     double squaredError = 0.0;
     for (NSUInteger idx = 0; idx < count; idx++) {
-        double delta = (double)samples[idx] - mean;
+        double delta = (render[idx] - arrival[idx]) - errorMean;
         squaredError += delta * delta;
     }
-    return (float)sqrt(squaredError / (double)count);
+    metrics.pacingJitterMs = (float)sqrt(squaredError / (double)count);
+
+    qsort(sortedIntervals, count, sizeof(double), MLCompareDoubleAscending);
+    metrics.p99IntervalMs = (float)sortedIntervals[MIN(count - 1, (NSUInteger)ceil((double)count * 0.99) - 1)];
+    metrics.maxIntervalMs = (float)sortedIntervals[count - 1];
+
+    if (clientCount >= 100) {
+        qsort(clientIntervals, clientCount, sizeof(double), MLCompareDoubleAscending);
+        NSUInteger worstCount = MAX((NSUInteger)1, (NSUInteger)ceil((double)clientCount * 0.01));
+        double worstTotalMs = 0.0;
+        for (NSUInteger idx = clientCount - worstCount; idx < clientCount; idx++) {
+            worstTotalMs += clientIntervals[idx];
+        }
+        if (worstTotalMs > 0.0) {
+            metrics.onePercentLowFps = (float)(1000.0 * (double)worstCount / worstTotalMs);
+        }
+    }
+    free(clientIntervals);
+    free(sortedIntervals);
+    return metrics;
 }
 
 static BOOL MLMetalFXIsSupported(void)
@@ -508,6 +536,37 @@ static float MLResolvedOpticalOutputScaleForTransfer(MLHDRTransferMode transferM
     }
 
     return resolved;
+}
+
+static float MLSystemPQReferenceWhite(void)
+{
+    static float referenceWhite = 203.0f;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // Ask ColorSync for the reference of Apple's extended-linear BT.2020,
+        // using a known 100-nit ST 2084 neutral sample. This is a unit conversion,
+        // not a display-brightness heuristic or a per-frame exposure adjustment.
+        double l = pow(100.0 / 10000.0, 2610.0 / 16384.0);
+        CGFloat pqValue = pow((3424.0 / 4096.0 + (2413.0 / 128.0) * l) /
+                              (1.0 + (2392.0 / 128.0) * l), 2523.0 / 32.0);
+        CGColorSpaceRef pq = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
+        CGColorSpaceRef linear = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearITUR_2020);
+        if (pq != NULL && linear != NULL) {
+            CGFloat components[] = {pqValue, pqValue, pqValue, 1.0};
+            CGColorRef input = CGColorCreate(pq, components);
+            CGColorRef output = input != NULL ? CGColorCreateCopyByMatchingToColorSpace(
+                linear, kCGRenderingIntentAbsoluteColorimetric, input, NULL) : NULL;
+            if (output != NULL) {
+                CGFloat value = CGColorGetComponents(output)[0];
+                if (isfinite(value) && value > 0.0) referenceWhite = (float)(100.0 / value);
+                CGColorRelease(output);
+            }
+            if (input != NULL) CGColorRelease(input);
+        }
+        if (pq != NULL) CGColorSpaceRelease(pq);
+        if (linear != NULL) CGColorSpaceRelease(linear);
+    });
+    return referenceWhite;
 }
 
 static float MLResolvedEDRHeadroomForStrategy(MLHDREDRStrategy strategy,
@@ -1124,6 +1183,7 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     MTKView *_metalView;
     id<MTLDevice> _device;
     id<MTLCommandQueue> _commandQueue;
+    CIContext *_hdrColorConversionContext;
     CVMetalTextureCacheRef _textureCache;
     id _spatialScaler;
     id<MTLTexture> _upscaledTexture;
@@ -1149,6 +1209,8 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     NSInteger _streamHeight;
 
     NSData *spsData, *ppsData, *vpsData;
+    NSData *_configuredVPSData, *_configuredSPSData, *_configuredPPSData;
+    int _configuredVideoFormat, _configuredDynamicHdr;
     CMVideoFormatDescriptionRef _imageFormatDesc;
     CMVideoFormatDescriptionRef formatDesc;
     CMVideoFormatDescriptionRef _baseHEVCFormatDesc;
@@ -1215,10 +1277,15 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     uint64_t _lastFrameReceiveTimeMs;
     unsigned int _lastFramePresentationTimeMs;
     float _jitterMsEstimate;
-    uint16_t _renderIntervalSamples[kMLRenderIntervalSampleCapacity];
+    double _renderIntervalSamples[kMLRenderIntervalSampleCapacity];
+    double _arrivalIntervalSamples[kMLRenderIntervalSampleCapacity];
     NSUInteger _renderIntervalSampleCount;
     NSUInteger _renderIntervalSampleIndex;
-    uint64_t _lastRenderedSampleTimeMs;
+    uint64_t _lastRenderedEnqueueTimeMs;
+    MLRenderPacingMetrics _cachedPacingMetrics;
+    double _cachedPacingMetricsAtMs;
+    double _lastRenderedSampleTimeMs;
+    BOOL _presentationSuspended;
     uint64_t _lastDequeuedFrameMs;
     uint64_t _lastIdleLogMs;
     NSUInteger _remainingDequeuedFrameLogCount;
@@ -1246,6 +1313,7 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     SS_HDR_METADATA _hostHDRMetadata;
     BOOL _hasHostHDRMetadata;
     atomic_bool _hostHDRMetadataChanged;
+    atomic_bool _enhancedHDRMetadataChanged;
     MLHDRTransferMode _hdrTransferMode;
     float _hdrOpticalOutputScale;
     float _hdrMinLuminance;
@@ -1399,6 +1467,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 
     atomic_init(&_decompressionOutputError, noErr);
     atomic_init(&_hostHDRMetadataChanged, false);
+    atomic_init(&_enhancedHDRMetadataChanged, false);
     _view = view;
     [self resetVideoParameterSetState];
     _device = MLSharedMetalDevice();
@@ -1417,6 +1486,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
         _hostHDRMetadata = metadata != NULL ? *metadata : (SS_HDR_METADATA){0};
     }
     atomic_store(&_hostHDRMetadataChanged, true);
+    atomic_store(&_enhancedHDRMetadataChanged, true);
     if (metadata != NULL) {
         Log(LOG_I, @"[hdr] Session mastering metadata received: max=%u minScaled=%u MaxCLL=%u MaxFALL=%u",
             metadata->maxDisplayLuminance, metadata->minDisplayLuminance,
@@ -1593,19 +1663,69 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 - (void)recordRenderedFrameSampleAtTimeMs:(uint64_t)renderSampleNowMs
                             enqueueTimeMs:(uint64_t)enqueueTimeMs
 {
+    [self recordRenderedFrameSampleAtTimeMs:renderSampleNowMs enqueueTimeMs:enqueueTimeMs
+                     presentationTimeSeconds:CACurrentMediaTime()];
+}
+
+- (void)setPresentationSuspended:(BOOL)suspended {
     @synchronized (self) {
-    if (_lastRenderedSampleTimeMs != 0 && renderSampleNowMs > _lastRenderedSampleTimeMs) {
-        uint64_t frameIntervalMs = renderSampleNowMs - _lastRenderedSampleTimeMs;
-        if (frameIntervalMs > UINT16_MAX) {
-            frameIntervalMs = UINT16_MAX;
-        }
-        _renderIntervalSamples[_renderIntervalSampleIndex] = (uint16_t)frameIntervalMs;
-        _renderIntervalSampleIndex = (_renderIntervalSampleIndex + 1) % kMLRenderIntervalSampleCapacity;
-        if (_renderIntervalSampleCount < kMLRenderIntervalSampleCapacity) {
-            _renderIntervalSampleCount++;
-        }
+        if (_presentationSuspended == suspended) return;
+        _presentationSuspended = suspended;
+        _lastRenderedSampleTimeMs = 0;
+        _lastRenderedEnqueueTimeMs = 0;
+        _renderIntervalSampleCount = _renderIntervalSampleIndex = 0;
+        _cachedPacingMetrics = (MLRenderPacingMetrics){0};
+        _cachedPacingMetricsAtMs = 0;
     }
-    _lastRenderedSampleTimeMs = renderSampleNowMs;
+}
+
+// Sorting the window on every frame is wasteful at 120 fps; four refreshes a
+// second are plenty for the overlay and the [perf] log.
+- (MLRenderPacingMetrics)renderPacingMetricsAtMs:(double)nowMs {
+    @synchronized (self) {
+        if (_cachedPacingMetricsAtMs == 0 || nowMs - _cachedPacingMetricsAtMs >= 250.0 || nowMs < _cachedPacingMetricsAtMs) {
+            double nominal = self.frameRate > 0 ? 1000.0 / (double)self.frameRate : 1000.0 / 60.0;
+            _cachedPacingMetrics = MLComputeRenderPacingMetrics(_renderIntervalSamples, _arrivalIntervalSamples,
+                                                                _renderIntervalSampleCount, nominal);
+            _cachedPacingMetricsAtMs = nowMs;
+        }
+        return _cachedPacingMetrics;
+    }
+}
+
+- (void)applyRenderPacingMetricsToStats:(VideoStats *)stats {
+    MLRenderPacingMetrics metrics = [self renderPacingMetricsAtMs:CACurrentMediaTime() * 1000.0];
+    stats->renderedFpsOnePercentLow = metrics.onePercentLowFps;
+    stats->renderFramePacingJitterMs = metrics.pacingJitterMs;
+    stats->renderIntervalP99Ms = metrics.p99IntervalMs;
+    stats->renderIntervalMaxMs = metrics.maxIntervalMs;
+    stats->renderStallCount = metrics.stallCount;
+    stats->renderSourceGapCount = metrics.sourceGapCount;
+}
+- (BOOL)presentationSuspended {
+    @synchronized (self) { return _presentationSuspended; }
+}
+
+- (void)recordRenderedFrameSampleAtTimeMs:(uint64_t)renderSampleNowMs
+                            enqueueTimeMs:(uint64_t)enqueueTimeMs
+                 presentationTimeSeconds:(double)presentationTimeSeconds
+{
+    @synchronized (self) {
+    if (_presentationSuspended || !isfinite(presentationTimeSeconds) || presentationTimeSeconds <= 0) return;
+    double preciseNowMs = presentationTimeSeconds * 1000.0;
+    if (_lastRenderedSampleTimeMs != 0 && preciseNowMs > _lastRenderedSampleTimeMs) {
+        double renderInterval = preciseNowMs - _lastRenderedSampleTimeMs;
+        // Without both arrival times, treat the frame as arriving on cadence.
+        double arrivalInterval = (enqueueTimeMs != 0 && _lastRenderedEnqueueTimeMs != 0 &&
+                                  enqueueTimeMs >= _lastRenderedEnqueueTimeMs)
+            ? (double)(enqueueTimeMs - _lastRenderedEnqueueTimeMs) : renderInterval;
+        _renderIntervalSamples[_renderIntervalSampleIndex] = renderInterval;
+        _arrivalIntervalSamples[_renderIntervalSampleIndex] = arrivalInterval;
+        _renderIntervalSampleIndex = (_renderIntervalSampleIndex + 1) % kMLRenderIntervalSampleCapacity;
+        if (_renderIntervalSampleCount < kMLRenderIntervalSampleCapacity) _renderIntervalSampleCount++;
+    }
+    if (preciseNowMs > _lastRenderedSampleTimeMs) _lastRenderedSampleTimeMs = preciseNowMs;
+    if (enqueueTimeMs != 0) _lastRenderedEnqueueTimeMs = enqueueTimeMs;
 
     _activeWndVideoStats.renderedFrames++;
     if (enqueueTimeMs != 0 && renderSampleNowMs >= enqueueTimeMs) {
@@ -1614,10 +1734,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 
     VideoStats snapshotStats = _activeWndVideoStats;
     snapshotStats.jitterMs = _jitterMsEstimate;
-    snapshotStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(_renderIntervalSamples,
-                                                                               _renderIntervalSampleCount);
-    snapshotStats.renderFramePacingJitterMs = MLComputeRenderFramePacingJitterMs(_renderIntervalSamples,
-                                                                                  _renderIntervalSampleCount);
+    [self applyRenderPacingMetricsToStats:&snapshotStats];
     snapshotStats.lastUpdatedTimestamp = renderSampleNowMs;
     _videoStats = snapshotStats;
     }
@@ -1969,7 +2086,9 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     }
 
     if (_hdrUsesTransferMetadataPresentation) {
-        Log(LOG_I, @"[video] Enhanced HDR output is using transfer-colorspace + metadata presentation: screen=%@ potentialEDR=%.2f currentEDR=%.2f referenceEDR=%.2f transfer=%@",
+        if (resolvedDisplayInfo != NULL) CFRelease(resolvedDisplayInfo);
+        if (resolvedContentInfo != NULL) CFRelease(resolvedContentInfo);
+        Log(LOG_I, @"[video] Enhanced HDR output is using system-managed normalized transfer presentation: screen=%@ potentialEDR=%.2f currentEDR=%.2f referenceEDR=%.2f transfer=%@",
             screen.localizedName ?: @"Unknown",
             potentialEDR,
             currentEDR,
@@ -2100,9 +2219,11 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     if (@available(macOS 26.0, *)) {
         if (_enableHdr && _hdrOutputUsesEDR) {
             metalLayer.preferredDynamicRange = CADynamicRangeHigh;
-            metalLayer.contentsHeadroom = MAX(_hdrDisplayHeadroom, 1.0f);
+            // CAEDRMetadata describes the absolute luminance. Display capacity
+            // is not content headroom; do not tag it as the drawable's peak.
+            metalLayer.contentsHeadroom = 0.0f;
         } else if (_enableHdr && _hdrUsesTransferMetadataPresentation) {
-            metalLayer.preferredDynamicRange = CADynamicRangeAutomatic;
+            metalLayer.preferredDynamicRange = CADynamicRangeHigh;
             metalLayer.contentsHeadroom = 0.0f;
         } else {
             metalLayer.preferredDynamicRange = CADynamicRangeStandard;
@@ -2111,9 +2232,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     }
 
     if (@available(macOS 15.0, *)) {
-        metalLayer.toneMapMode = (_enableHdr && (_hdrUsesTransferMetadataPresentation || _hdrOutputUsesEDR))
-            ? CAToneMapModeIfSupported
-            : CAToneMapModeAutomatic;
+        metalLayer.toneMapMode = CAToneMapModeAutomatic;
     }
 
     if (_enableHdr && _hdrToneMapToSDR) {
@@ -2123,7 +2242,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
             metalLayer.EDRMetadata = nil;
         }
     } else if (_enableHdr && _hdrUsesTransferMetadataPresentation) {
-        metalLayer.wantsExtendedDynamicRangeContent = NO;
+        metalLayer.wantsExtendedDynamicRangeContent = YES;
         metalLayer.colorspace = _hdrTransferColorSpace;
         if (@available(macOS 10.15, *)) {
             metalLayer.EDRMetadata = _hdrEDRMetadata;
@@ -2614,6 +2733,12 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
         : NO;
     _hdrTransferMode = MLResolveHDRTransferMode(_enableHdr, _hdrTransferFunctionPreference);
     _hdrOpticalOutputScale = streamConfig ? fmaxf((float)streamConfig.hdrOpticalOutputScale, 1.0f) : 100.0f;
+    if (_hdrTransferMode == MLHDRTransferModePQ &&
+        _hdrEdrStrategy == MLHDREDRStrategyAuto &&
+        _hdrToneMappingPolicy == MLHDRToneMappingPolicyAuto &&
+        fabsf(_hdrOpticalOutputScale - 100.0f) < 0.001f) {
+        _hdrOpticalOutputScale = MLSystemPQReferenceWhite();
+    }
     _hdrMinLuminance = streamConfig ? fmaxf((float)streamConfig.hdrManualMinBrightness, 0.0001f) : 0.001f;
     _hdrMaxLuminance = streamConfig ? fmaxf((float)streamConfig.hdrManualMaxBrightness, 100.0f) : 1000.0f;
     _hdrMaxAverageLuminance = streamConfig ? fmaxf((float)streamConfig.hdrManualMaxAverageBrightness, 1.0f) : 1000.0f;
@@ -2647,10 +2772,14 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _renderIntervalSampleCount = 0;
     _renderIntervalSampleIndex = 0;
     _lastRenderedSampleTimeMs = 0;
+    _lastRenderedEnqueueTimeMs = 0;
+    _cachedPacingMetrics = (MLRenderPacingMetrics){0};
+    _cachedPacingMetricsAtMs = 0;
     _lastDequeuedFrameMs = 0;
     _lastIdleLogMs = 0;
     _remainingDequeuedFrameLogCount = 8;
     memset(_renderIntervalSamples, 0, sizeof(_renderIntervalSamples));
+    memset(_arrivalIntervalSamples, 0, sizeof(_arrivalIntervalSamples));
     _requestedRendererMode = MLRequestedVideoRendererModeAuto;
     _activeRendererMode = MLActiveVideoRendererModeUnknown;
     _lastLoggedDecodedPixelFormat = 0;
@@ -2955,9 +3084,14 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     NSScreen *screen = _view.window.screen ?: NSScreen.mainScreen;
     CGDirectDisplayID displayId = screen != nil ? getDisplayID(screen) : 0;
     BOOL screenSupportsEDRPresentation = [self currentDisplaySupportsEDRPresentation];
+    BOOL metadataChanged = atomic_exchange(&_enhancedHDRMetadataChanged, false);
     if (_preparedHDRDisplayStateValid &&
         screenSupportsEDRPresentation == _preparedHDRDisplayHasEDRHeadroom &&
         displayId == _preparedHDRDisplayID) {
+        if (metadataChanged) {
+            [self prepareHDRPresentationResources];
+            [self applyHDRPresentationStateToMetalLayer:(CAMetalLayer *)_metalView.layer];
+        }
         return;
     }
 
@@ -3180,6 +3314,9 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     }
 
     CVImageBufferRef previousInterpolationSourceFrame = NULL;
+    if (_enableHdr && _hdrTransferMode == MLHDRTransferModePQ) {
+        [self applyNativePresentationAttachmentsToImageBuffer:imageBuffer];
+    }
     uint64_t sourceSequence = 0;
     @synchronized(self) {
         if (_currentFrame) {
@@ -3235,6 +3372,13 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     [self teardownDolbyVisionMetadataSession];
     Log(LOG_W, @"[video] Dolby Vision output unavailable (%@); using compatible HEVC HDR base layer", reason);
     return YES;
+}
+
+- (BOOL)updateDecompressionSessionForFormatChange {
+    // Error recovery deliberately still calls createDecompressionSession.
+    if (_decompressionSession != NULL && formatDesc != NULL &&
+        VTDecompressionSessionCanAcceptFormatDescription(_decompressionSession, formatDesc)) return YES;
+    return [self createDecompressionSession];
 }
 
 - (BOOL)createDecompressionSession {
@@ -4563,10 +4707,43 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     }
 
     id<MTLTexture> sourceRGBTexture = nil;
+    BOOL nativePQConversion = _enableHdr && _hdrOutputUsesEDR &&
+        _hdrTransferMode == MLHDRTransferModePQ && planeCount >= 2;
     CVMetalTextureRef primaryTextureRef = NULL;
     CVMetalTextureRef secondaryTextureRef = NULL;
 
-    if (planeCount >= 2) {
+    if (nativePQConversion) {
+        // Apple's GPU color management interprets the CV plane packing and
+        // color attachments. Share the existing queue/buffer: no CPU readback,
+        // second GPU submission, or intermediate 8/10-bit RGB quantization.
+        if (_hdrColorConversionContext == nil) {
+            _hdrColorConversionContext = [CIContext contextWithMTLCommandQueue:_commandQueue options:@{
+                kCIContextWorkingColorSpace: (__bridge id)_hdrLinearColorSpace,
+                kCIContextWorkingFormat: @(kCIFormatRGBAh),
+                kCIContextCacheIntermediates: @NO
+            }];
+        }
+        CIImage *image = [CIImage imageWithCVPixelBuffer:workingFrame options:@{
+            kCIImageColorSpace: (__bridge id)_hdrTransferColorSpace
+        }];
+        float scale = MLSystemPQReferenceWhite() / _hdrOpticalOutputScale;
+        if (fabsf(scale - 1.0f) > 0.001f) {
+            image = [image imageByApplyingFilter:@"CIColorMatrix" withInputParameters:@{
+                @"inputRVector": [CIVector vectorWithX:scale Y:0 Z:0 W:0],
+                @"inputGVector": [CIVector vectorWithX:0 Y:scale Z:0 W:0],
+                @"inputBVector": [CIVector vectorWithX:0 Y:0 Z:scale W:0]
+            }];
+        }
+        // CI uses a bottom-left image origin; the existing Metal presenter
+        // samples row zero as the video's top row. Fuse the origin conversion.
+        image = [image imageByApplyingTransform:CGAffineTransformMake(1, 0, 0, -1, 0, workingHeight)];
+        sourceRGBTexture = [self intermediateTextureForWidth:workingWidth height:workingHeight
+                                                pixelFormat:MTLPixelFormatRGBA16Float];
+        [_hdrColorConversionContext render:image toMTLTexture:sourceRGBTexture
+                             commandBuffer:commandBuffer
+                                    bounds:CGRectMake(0, 0, workingWidth, workingHeight)
+                                colorSpace:_hdrLinearColorSpace];
+    } else if (planeCount >= 2) {
         const size_t lumaWidth = CVPixelBufferGetWidthOfPlane(workingFrame, 0);
         const size_t lumaHeight = CVPixelBufferGetHeightOfPlane(workingFrame, 0);
         const size_t chromaWidth = CVPixelBufferGetWidthOfPlane(workingFrame, 1);
@@ -4652,7 +4829,12 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
 
         BOOL acquiredInflightSlot = NO;
         if (_metalInflightSemaphore != nil) {
-            if (dispatch_semaphore_wait(_metalInflightSemaphore, DISPATCH_TIME_NOW) != 0) {
+            // The in-flight limit is the latency budget, so it stays. When the
+            // GPU is only slightly late, wait up to half a frame for its slot
+            // instead of discarding a frame that has already been decoded.
+            double frameIntervalMs = self.frameRate > 0 ? 1000.0 / (double)self.frameRate : 1000.0 / 60.0;
+            int64_t waitNs = (int64_t)(MIN(4.0, frameIntervalMs * 0.5) * NSEC_PER_MSEC);
+            if (dispatch_semaphore_wait(_metalInflightSemaphore, dispatch_time(DISPATCH_TIME_NOW, waitNs)) != 0) {
                 _inflightBackpressureCount += 1;
                 uint64_t nowMs = LiGetMillis();
                 if (_lastInflightBackpressureLogMs == 0 || nowMs - _lastInflightBackpressureLogMs >= 1000) {
@@ -4742,6 +4924,22 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
             }
         }
 
+        if (nativePQConversion) {
+            CVImageBufferRef retainedBuffer = CVBufferRetain(workingFrame);
+            [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completed) {
+                CVBufferRelease(retainedBuffer);
+            }];
+        }
+        if (presentedCount > 0) {
+            __weak VideoDecoderRenderer *weakSelf = self;
+            [drawable addPresentedHandler:^(id<MTLDrawable> presentedDrawable) {
+                VideoDecoderRenderer *renderer = weakSelf;
+                if (presentedDrawable.presentedTime > 0) {
+                    [renderer recordRenderedFrameSampleAtTimeMs:LiGetMillis() enqueueTimeMs:frameEnqueueTimeMs
+                                       presentationTimeSeconds:presentedDrawable.presentedTime];
+                }
+            }];
+        }
         [commandBuffer presentDrawable:drawable];
         [commandBuffer commit];
 
@@ -4770,7 +4968,6 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
 
         if (presentedCount > 0) {
             uint64_t presentMs = LiGetMillis();
-            [self recordRenderedFrameSampleAtTimeMs:presentMs enqueueTimeMs:frameEnqueueTimeMs];
             if (presentedCount == 1) {
                 unsigned long long startupMs = (_rendererStartTimeMs != 0 && presentMs >= _rendererStartTimeMs)
                     ? (unsigned long long)(presentMs - _rendererStartTimeMs)
@@ -4935,10 +5132,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             self->_activeWndVideoStats.renderedFps = (float)self->_activeWndVideoStats.renderedFrames;
 
             self->_activeWndVideoStats.jitterMs = self->_jitterMsEstimate;
-            self->_activeWndVideoStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(self->_renderIntervalSamples,
-                                                                                                   self->_renderIntervalSampleCount);
-            self->_activeWndVideoStats.renderFramePacingJitterMs = MLComputeRenderFramePacingJitterMs(self->_renderIntervalSamples,
-                                                                                                      self->_renderIntervalSampleCount);
+            [self applyRenderPacingMetricsToStats:&self->_activeWndVideoStats];
 
             VideoStats completedStats = self->_activeWndVideoStats;
             completedStats.lastUpdatedTimestamp = now;
@@ -5019,10 +5213,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
         VideoStats snapshotStats = self->_activeWndVideoStats;
         snapshotStats.jitterMs = self->_jitterMsEstimate;
-        snapshotStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(self->_renderIntervalSamples,
-                                                                                   self->_renderIntervalSampleCount);
-        snapshotStats.renderFramePacingJitterMs = MLComputeRenderFramePacingJitterMs(self->_renderIntervalSamples,
-                                                                                      self->_renderIntervalSampleCount);
+        [self applyRenderPacingMetricsToStats:&snapshotStats];
         snapshotStats.lastUpdatedTimestamp = LiGetMillis();
         self->_videoStats = snapshotStats;
 
@@ -5351,8 +5542,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             _activeWndVideoStats.decodedFps = _activeWndVideoStats.decodedFrames / seconds;
             _activeWndVideoStats.renderedFps = _activeWndVideoStats.renderedFrames / seconds;
             _activeWndVideoStats.jitterMs = _jitterMsEstimate;
-            _activeWndVideoStats.renderedFpsOnePercentLow = MLComputeRenderedOnePercentLowFps(_renderIntervalSamples, _renderIntervalSampleCount);
-            _activeWndVideoStats.renderFramePacingJitterMs = MLComputeRenderFramePacingJitterMs(_renderIntervalSamples, _renderIntervalSampleCount);
+            [self applyRenderPacingMetricsToStats:&_activeWndVideoStats];
             _activeWndVideoStats.lastUpdatedTimestamp = now;
             _videoStats = _activeWndVideoStats;
             memset(&_activeWndVideoStats, 0, sizeof(_activeWndVideoStats));
@@ -5500,6 +5690,10 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
         // See if we've got all the parameter sets we need for our video format
         if ([self readyForPictureData]) {
+            int dynamicHdr = LiGetNegotiatedDynamicHdrFormat();
+            if (formatDesc != NULL && videoFormat == _configuredVideoFormat && dynamicHdr == _configuredDynamicHdr &&
+                (_configuredVPSData == vpsData || [_configuredVPSData isEqualToData:vpsData]) &&
+                [_configuredSPSData isEqualToData:spsData] && [_configuredPPSData isEqualToData:ppsData]) return DR_OK;
 
             if (formatDesc != nil) {
                 CFRelease(formatDesc);
@@ -5642,9 +5836,16 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             }
 
             if ([self usesDecompressionSession]) {
-                if (![self createDecompressionSession]) {
+                if (![self updateDecompressionSessionForFormatChange]) {
                     [self fallbackToCompatibilityRenderer];
                 }
+            }
+            if (formatDesc != NULL) {
+                _configuredVPSData = vpsData;
+                _configuredSPSData = spsData;
+                _configuredPPSData = ppsData;
+                _configuredVideoFormat = videoFormat;
+                _configuredDynamicHdr = dynamicHdr;
             }
         }
 
@@ -5665,7 +5866,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         formatDesc = [self createAV1FormatDescriptionForIDRFrame:fullFrameData];
 
         if ([self usesDecompressionSession] && formatDesc != NULL) {
-            if (![self createDecompressionSession]) {
+            if (![self updateDecompressionSessionForFormatChange]) {
                 [self fallbackToCompatibilityRenderer];
             }
         }

@@ -1416,6 +1416,15 @@ class SettingsClass: NSObject {
         : defaults.object(forKey: SettingsModel.controllerDeadzoneKeyPrefix + SettingsModel.globalHostId) as? NSNumber)
     return CGFloat(min(0.30, max(0.0, value?.doubleValue ?? SettingsModel.defaultControllerDeadzone)))
   }
+  static func controllerShortcutProfile(for key: String) -> ControllerShortcutProfile {
+    let defaults = UserDefaults.standard
+    let profileData = defaults.data(forKey: SettingsModel.controllerShortcutProfileKeyPrefix + key)
+      ?? defaults.data(forKey: SettingsModel.controllerShortcutProfileKeyPrefix + SettingsModel.globalHostId)
+    if let data = profileData, let profile = try? PropertyListDecoder().decode(ControllerShortcutProfile.self, from: data) {
+      return profile.addingNewDefaults(menuEnabled: gamepadMouseModeLongPressMenu(for: key))
+    }
+    return ControllerShortcutProfile.defaults(menuEnabled: gamepadMouseModeLongPressMenu(for: key))
+  }
 
   @objc static func controllerHapticsMode(for key: String) -> Int {
     let value = UserDefaults.standard.string(

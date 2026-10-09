@@ -221,8 +221,9 @@ private struct AudioCompactSliderRow: View {
         .frame(width: 84, alignment: .leading)
       Image(systemName: "speaker.wave.1.fill")
         .foregroundStyle(.secondary)
+      // Fills the row like the system Sound output volume.
       Slider(value: $value, in: 0...1)
-        .frame(width: 190)
+        .frame(maxWidth: .infinity)
       Image(systemName: "speaker.wave.3.fill")
         .foregroundStyle(.secondary)
     }

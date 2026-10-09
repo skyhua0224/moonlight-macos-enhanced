@@ -48,45 +48,67 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
     [self performNavigationForControllerEvent:event];
 }
 
-- (void)selectItemAtIndex:(NSInteger)index atPosition:(NSCollectionViewScrollPosition)position {
-    if ([self numberOfItemsInSection:0] == 0) {
+- (nullable NSIndexPath *)edgeItemIndexPathFirst:(BOOL)first {
+    // Apps are split into pinned and unpinned sections; either can be empty.
+    NSInteger sections = self.numberOfSections;
+    for (NSInteger i = 0; i < sections; i++) {
+        NSInteger section = first ? i : sections - 1 - i;
+        NSInteger count = [self numberOfItemsInSection:section];
+        if (count > 0) {
+            return [NSIndexPath indexPathForItem:first ? 0 : count - 1 inSection:section];
+        }
+    }
+    return nil;
+}
+
+- (void)selectEdgeItemFirst:(BOOL)first {
+    NSIndexPath *path = [self edgeItemIndexPathFirst:first];
+    if (path == nil) {
         return;
     }
-    NSIndexPath *path = [NSIndexPath indexPathForItem:index inSection:0];
-    NSSet<NSIndexPath *> *set = [NSSet setWithObject:path];
-    [self selectItemsAtIndexPaths:set scrollPosition:position];
+    NSCollectionViewScrollPosition position;
+    if (first) {
+        position = self.enclosingScrollView.contentView.bounds.origin.y >= -10
+            ? NSCollectionViewScrollPositionTop : NSCollectionViewScrollPositionNone;
+    } else {
+        position = self.enclosingScrollView.contentView.bounds.origin.y <= 29
+            ? NSCollectionViewScrollPositionBottom : NSCollectionViewScrollPositionNone;
+    }
+    [self selectItemsAtIndexPaths:[NSSet setWithObject:path] scrollPosition:position];
+}
+
+- (void)selectFirstItemForControllerIfNeeded {
+    if (self.selectionIndexPaths.count == 0 && GCController.controllers.count > 0 &&
+        self.window.isKeyWindow) {
+        [self selectEdgeItemFirst:YES];
+    }
+}
+
+- (void)reloadData {
+    [super reloadData];
+    // A controller has no pointer: keep one item selected so A can open it.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self selectFirstItemForControllerIfNeeded];
+    });
 }
 
 - (void)performNavigationForControllerEvent:(MoonlightControllerEvent)event {
     if (self.selectionIndexPaths.count == 0) {
         switch (event.button) {
             case kMCE_UpDpad:
-            case kMCE_LeftDpad: {
-                NSCollectionViewScrollPosition scrollPosition;
-                if (self.enclosingScrollView.contentView.bounds.origin.y <= 29) {
-                    scrollPosition = NSCollectionViewScrollPositionBottom;
-                } else {
-                    scrollPosition = NSCollectionViewScrollPositionNone;
-                }
-                [self selectItemAtIndex:[self numberOfItemsInSection:0] - 1 atPosition:scrollPosition];
-            }
+            case kMCE_LeftDpad:
+                [self selectEdgeItemFirst:NO];
                 break;
             case kMCE_DownDpad:
-            case kMCE_RightDpad: {
-                NSCollectionViewScrollPosition scrollPosition;
-                if (self.enclosingScrollView.contentView.bounds.origin.y >= -10) {
-                    scrollPosition = NSCollectionViewScrollPositionTop;
-                } else {
-                    scrollPosition = NSCollectionViewScrollPositionNone;
-                }
-                [self selectItemAtIndex:0 atPosition:scrollPosition];
-            }
+            case kMCE_RightDpad:
+            case kMCE_AButton:
+                [self selectEdgeItemFirst:YES];
                 break;
             case kMCE_BButton:
                 [self sendKeyDown:kVK_Delete];
                 break;
                 
-            case kMCE_Unknown:
+            default:
                 break;
         }
     } else {
@@ -110,7 +132,7 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
                 [self sendKeyDown:kVK_Delete];
                 break;
 
-            case kMCE_Unknown:
+            default:
                 break;
         }
     }
@@ -127,27 +149,13 @@ const NSEventModifierFlags modifierFlagsMask = NSEventModifierFlagShift | NSEven
     if (self.selectionIndexPaths.count == 0) {
         switch (event.keyCode) {
             case kVK_UpArrow:
-            case kVK_LeftArrow: {
-                NSCollectionViewScrollPosition scrollPosition;
-                if (self.enclosingScrollView.contentView.bounds.origin.y <= 29) {
-                    scrollPosition = NSCollectionViewScrollPositionBottom;
-                } else {
-                    scrollPosition = NSCollectionViewScrollPositionNone;
-                }
-                [self selectItemAtIndex:[self numberOfItemsInSection:0] - 1 atPosition:scrollPosition];
-            }
+            case kVK_LeftArrow:
+                [self selectEdgeItemFirst:NO];
                 break;
                 
             case kVK_DownArrow:
-            case kVK_RightArrow: {
-                NSCollectionViewScrollPosition scrollPosition;
-                if (self.enclosingScrollView.contentView.bounds.origin.y >= -10) {
-                    scrollPosition = NSCollectionViewScrollPositionTop;
-                } else {
-                    scrollPosition = NSCollectionViewScrollPositionNone;
-                }
-                [self selectItemAtIndex:0 atPosition:scrollPosition];
-            }
+            case kVK_RightArrow:
+                [self selectEdgeItemFirst:YES];
                 break;
                 
             default:

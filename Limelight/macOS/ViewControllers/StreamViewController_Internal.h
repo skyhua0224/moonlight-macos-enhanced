@@ -63,11 +63,20 @@ static NSString * const MLShortcutActionToggleBorderlessWindowed = @"toggleBorde
 static CGFloat const MLEdgeMenuButtonWidth = 78.0;
 static CGFloat const MLEdgeMenuButtonHeight = 78.0;
 static CGFloat const MLEdgeMenuButtonInsetY = 88.0;
-static CGFloat const MLEdgeMenuButtonVisiblePeek = 30.0;
+// The visible plate is this fraction of the ball view; the rest is shadow room.
+static CGFloat const MLEdgeMenuPlateRatio = 0.58;
+// Gap between the visible plate and the stream edge when docked.
+static CGFloat const MLEdgeMenuPlateEdgeGap = 4.0;
+// While idle, only this fraction of the plate stays on screen.
+static CGFloat const MLEdgeMenuCollapsedPlateFraction = 0.25;
+static NSTimeInterval const MLEdgeMenuSnapDuration = 0.22;
 static CGFloat const MLEdgeMenuInteractionOutwardPadding = 18.0;
 static CGFloat const MLEdgeMenuInteractionInwardPadding = 26.0;
 static CGFloat const MLEdgeMenuInteractionVerticalPadding = 28.0;
 static NSTimeInterval const MLEdgeMenuAutoCollapseDelay = 0.82;
+// How long the ball stays expanded after it appears, and after a drag ends.
+static NSTimeInterval const MLEdgeMenuRevealDuration = 2.0;
+static NSTimeInterval const MLEdgeMenuDropRevealDuration = 1.5;
 static CGFloat const MLFreeMouseReentryDelayMs = 140.0;
 static CGFloat const MLFreeMouseReentryInset = 32.0;
 static BOOL const MLUseOnScreenControlCenterEntrypoints = YES;
@@ -237,9 +246,6 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) MLFreeMouseExitEdge dockEdge;
 @end
 
-@interface MLEdgeMenuPanel : NSPanel
-@end
-
 @interface StreamViewController ()
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
@@ -253,6 +259,15 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) id windowDidEnterFullScreenNotification;
 @property (nonatomic, strong) id windowDidResignKeyNotification;
 @property (nonatomic, strong) id windowDidBecomeKeyNotification;
+@property (nonatomic, strong) id presentationVisibilityObserver;
+@property (nonatomic, strong) NSWindowController *presentationWindowController;
+@property (nonatomic, strong) ControllerShortcutRuntime *controllerShortcutRuntime;
+@property (nonatomic, strong) id controllerMenuBeginObserver;
+@property (nonatomic, strong) id controllerMenuEndObserver;
+@property (nonatomic) NSUInteger controllerMenuDepth;
+@property (nonatomic) BOOL controllerControlCenterVisible;
+- (void)refreshControllerShortcutContext;
+- (void)handleControllerShortcutAction:(NSString *)action player:(unsigned short)player;
 @property (nonatomic, strong) id windowWillCloseNotification;
 @property (nonatomic, strong) id appDidBecomeActiveObserver;
 @property (nonatomic, strong) id appDidResignActiveObserver;
@@ -350,7 +365,6 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 
 @property (nonatomic, strong) NSTitlebarAccessoryViewController *menuTitlebarAccessory;
 @property (nonatomic, strong) NSButton *menuTitlebarButton;
-@property (nonatomic, strong) MLEdgeMenuPanel *edgeMenuPanel;
 @property (nonatomic, strong) MLEdgeMenuHandleView *edgeMenuButton;
 @property (nonatomic, strong) NSPanGestureRecognizer *edgeMenuButtonPanGesture;
 @property (nonatomic) NSPoint edgeMenuButtonPanStartOrigin;
@@ -358,6 +372,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) MLFreeMouseExitEdge edgeMenuDockEdge;
 @property (nonatomic) CGFloat edgeMenuButtonEdgeRatio;
 @property (nonatomic, strong) NSTrackingArea *edgeMenuButtonTrackingArea;
+@property (nonatomic) uint64_t lastPerfLogMs;
 @property (nonatomic, strong) NSTimer *edgeMenuAutoCollapseTimer;
 @property (nonatomic) BOOL edgeMenuButtonExpanded;
 @property (nonatomic) BOOL edgeMenuPointerInside;
@@ -545,7 +560,6 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (NSString *)releaseMouseHintText;
 - (NSString *)openControlCenterHintText;
 - (void)updateControlCenterEntrypointHints;
-- (void)scheduleDeferredStreamMenuEntrypointsVisibilityRetries;
 - (NSView *)preferredControlCenterSourceView;
 - (void)presentControlCenterFromShortcut;
 - (StreamShortcut *)streamShortcutForAction:(NSString *)action;
@@ -568,16 +582,11 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (BOOL)edgeMenuDockEdgeUsesVerticalAxis;
 - (CGFloat)resolvedEdgeMenuCoordinateInRect:(NSRect)rect;
 - (NSRect)edgeMenuFrameInRect:(NSRect)rect expanded:(BOOL)expanded;
+- (void)loadPersistedFullscreenControlBallPlacement;
 - (void)persistFullscreenControlBallPlacement;
 - (void)resetEdgeMenuPlacementForNewStreamSession;
 - (void)hideEdgeMenuForInactiveSpaceIfNeeded;
-- (void)attachEdgeMenuPanelToWindowIfNeeded;
-- (NSRect)edgeMenuAnchorRectInScreen;
-- (NSRect)collapsedFrameForEdgeMenuPanelInScreenRect:(NSRect)screenRect;
-- (NSRect)expandedFrameForEdgeMenuPanelInScreenRect:(NSRect)screenRect;
 - (NSRect)frameForCurrentEdgeMenuPanelStateInScreenRect:(NSRect)screenRect;
-- (BOOL)edgeMenuMatchesExitEdge:(MLFreeMouseExitEdge)exitEdge;
-- (NSRect)collapsedFrameForEdgeMenuButtonInBounds:(NSRect)bounds;
 - (NSRect)expandedFrameForEdgeMenuButtonInBounds:(NSRect)bounds;
 - (NSRect)edgeMenuInteractionRectInBounds:(NSRect)bounds;
 - (BOOL)isPointInsideEdgeMenuInteractionRect:(NSPoint)point;
@@ -589,7 +598,9 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)setEdgeMenuButtonExpanded:(BOOL)expanded animated:(BOOL)animated;
 - (void)deactivateEdgeMenuTemporaryReleaseAndRecaptureIfNeeded:(BOOL)shouldRecapture;
 - (void)scheduleEdgeMenuAutoCollapse;
-- (void)activateEdgeMenuDockForExitEdge:(MLFreeMouseExitEdge)exitEdge;
+- (void)scheduleEdgeMenuAutoCollapseAfterDelay:(NSTimeInterval)delay;
+- (void)presentControllerControlCenter;
+- (void)revealEdgeMenuTemporarilyAnimated:(BOOL)animated;
 - (BOOL)handleEdgeMenuTemporaryReleaseForEvent:(NSEvent *)event;
 - (void)updateEdgeMenuButtonAppearance;
 - (void)handleEdgeMenuButtonDragWithState:(NSGestureRecognizerState)state translation:(NSPoint)translation;

@@ -18,7 +18,7 @@ jobs:
       # a missing optional secret cannot silently disable Sparkle in release
       # artifacts. The private signing key remains outside Git.
       SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY || '0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=' }}
-      SPARKLE_FEED_URL: https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml
+      SPARKLE_FEED_URL: https://github.com/skyhua0224/moonlight-macos-enhanced/releases/latest/download/appcast.xml
 
     strategy:
       fail-fast: false

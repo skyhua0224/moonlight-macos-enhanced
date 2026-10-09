@@ -697,14 +697,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
                                     semanticViewPoint:semanticViewPoint
                                                reason:reason];
     [self uncaptureMouseWithCode:code reason:reason];
-
-    if ([self edgeMenuMatchesExitEdge:exitEdge] &&
-        [self edgeMenuShouldBeVisible] &&
-        [self edgeMenuReleaseExitEdgeForEvent:event point:semanticViewPoint] == exitEdge) {
-        [self activateEdgeMenuDockForExitEdge:exitEdge];
-    } else {
-        [self beginFreeMouseEdgeReentryForExitEdge:exitEdge];
-    }
+    [self beginFreeMouseEdgeReentryForExitEdge:exitEdge];
 }
 
 - (void)uncaptureFreeMouseForExitEdge:(MLFreeMouseExitEdge)exitEdge
@@ -1051,6 +1044,17 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)requestMouseUncaptureWhenSafeWithReason:(NSString *)reason code:(NSString *)code {
     [self logMouseUncaptureStage:@"request-safe" code:code reason:reason];
+    BOOL lostFocus = ([code isEqualToString:@"MUC003"] ||
+                      [code isEqualToString:@"MUC005"] ||
+                      [code isEqualToString:@"MUC006"]) &&
+        (![NSApp isActive] || !self.view.window.isKeyWindow);
+    if (lostFocus) {
+        // The release may now go to another app/window. Waiting for its mouse-up
+        // here can leave a remote button held and input capture deferred forever.
+        [self.hidSupport releaseAllModifierKeys];
+        [self uncaptureMouseWithCode:code reason:reason];
+        return;
+    }
     if (!self.isMouseCaptured) {
         self.pendingMouseUncaptureAfterButtonsReleased = NO;
         self.pendingMouseUncaptureRecheckScheduled = NO;
@@ -1386,38 +1390,6 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     return YES;
 }
 
-- (MLFreeMouseExitEdge)edgeMenuReleaseExitEdgeForEvent:(NSEvent *)event point:(NSPoint)point {
-    if (![self edgeMenuShouldBeVisible] ||
-        self.edgeMenuButton == nil ||
-        self.edgeMenuButton.hidden ||
-        event == nil) {
-        return MLFreeMouseExitEdgeNone;
-    }
-
-    if ([self shouldUseCoreHIDTightFreeMouseHandoff]) {
-        point = [self boundaryInteractionViewPointForMouseEvent:event];
-    }
-
-    NSRect triggerRect = [self edgeMenuInteractionRectInBounds:self.view.bounds];
-    if (!NSPointInRect(point, triggerRect)) {
-        return MLFreeMouseExitEdgeNone;
-    }
-
-    switch (self.edgeMenuDockEdge) {
-        case MLFreeMouseExitEdgeLeft:
-            return event.deltaX < 0.0 ? MLFreeMouseExitEdgeLeft : MLFreeMouseExitEdgeNone;
-        case MLFreeMouseExitEdgeRight:
-            return event.deltaX > 0.0 ? MLFreeMouseExitEdgeRight : MLFreeMouseExitEdgeNone;
-        case MLFreeMouseExitEdgeTop:
-            return event.deltaY > 0.0 ? MLFreeMouseExitEdgeTop : MLFreeMouseExitEdgeNone;
-        case MLFreeMouseExitEdgeBottom:
-            return event.deltaY < 0.0 ? MLFreeMouseExitEdgeBottom : MLFreeMouseExitEdgeNone;
-        case MLFreeMouseExitEdgeNone:
-        default:
-            return MLFreeMouseExitEdgeNone;
-    }
-}
-
 - (MLFreeMouseExitEdge)freeMouseExitEdgeForOutsideViewPoint:(NSPoint)point {
     NSRect bounds = self.view.bounds;
     if (NSIsEmptyRect(bounds) || NSPointInRect(point, bounds)) {
@@ -1473,11 +1445,6 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         ? currentPoint
         : [self boundaryInteractionViewPointForMouseEvent:event];
     CGFloat threshold = tightHandoff ? MLCoreHIDFreeMouseExitThreshold : 2.0;
-    MLFreeMouseExitEdge edgeMenuExitEdge = [self edgeMenuReleaseExitEdgeForEvent:event point:point];
-    if (edgeMenuExitEdge != MLFreeMouseExitEdgeNone) {
-        return edgeMenuExitEdge;
-    }
-
     MLFreeMouseExitEdge currentPointerExitEdge = [self freeMouseExitEdgeForOutsideViewPoint:currentPoint];
     if (currentPointerExitEdge != MLFreeMouseExitEdgeNone) {
         return currentPointerExitEdge;
@@ -1842,7 +1809,9 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     if ([setting isEqualToString:@"gamepadMouseModeLongPressMenu"] ||
-        [setting isEqualToString:@"gamepadMouseMode"]) {
+        [setting isEqualToString:@"gamepadMouseMode"] ||
+        [setting isEqualToString:@"controllerShortcuts"]) {
+        [self.controllerShortcutRuntime reload];
         self.controllerSupport.gamepadMouseModeLongPressMenuEnabled =
             [SettingsClass gamepadMouseModeLongPressMenuFor:self.app.host.uuid];
         self.controllerSupport.gamepadMouseModeEnabled =
@@ -2074,6 +2043,12 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         }
 
         NSPoint viewPoint = [strongSelf viewPointForMouseEvent:event];
+        if (event.window == window &&
+            (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeRightMouseDown || event.type == NSEventTypeOtherMouseDown)) {
+            // An explicit click may restore focus; hovering must never steal it.
+            [strongSelf ensureStreamWindowKeyIfPossible];
+            [window makeFirstResponder:strongSelf];
+        }
         if (!NSPointInRect(viewPoint, strongSelf.view.bounds)) {
             [strongSelf logMouseClickDiagnosticsForPhase:[strongSelf mouseClickDiagnosticPhaseForMonitoredEvent:event] event:event];
         }
@@ -2286,6 +2261,13 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 
 - (void)mouseDown:(NSEvent *)event {
+    [self ensureStreamWindowKeyIfPossible];
+    [self.view.window makeFirstResponder:self];
+    if (!self.isMouseCaptured) {
+        // A click starts a new engagement, independent of a previous edge exit.
+        self.pendingFreeMouseReentryEdge = MLFreeMouseExitEdgeNone;
+        self.pendingMouseExitedRecapture = NO;
+    }
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
     [self reassertHiddenLocalCursorIfNeededWithReason:@"left-down"];
     [self logMouseClickDiagnosticsForPhase:@"left-down" event:event];
@@ -2941,6 +2923,8 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return;
     }
     if (!self.isMouseCaptured && self.cursorHiddenCounter == 0 && !self.hidSupport.shouldSendInputEvents) {
+        [self.hidSupport releaseAllPressedMouseButtons];
+        [self.hidSupport releaseAllModifierKeys];
         [self logMouseUncaptureStage:@"skip-already-released" code:code reason:reason];
         return;
     }

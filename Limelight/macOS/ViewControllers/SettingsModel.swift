@@ -182,6 +182,7 @@ class SettingsModel: ObservableObject {
   static let controllerFeedbackTargetKeyPrefix = "settings.controller.feedbackTarget."
   static let controllerVirtualTypeKeyPrefix = "settings.controller.virtualType."
   static let controllerCalibrationKeyPrefix = "settings.controller.calibration."
+  static let controllerShortcutProfileKeyPrefix = "settings.controller.shortcuts."
   static let sunshineVddCapabilityKeyPrefix = "settings.sunshine.vddCapability."
   static let sunshineVddStateKeyPrefix = "settings.sunshine.vddState."
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
@@ -1052,6 +1053,13 @@ class SettingsModel: ObservableObject {
     didSet {
       guard !isLoading else { return }
       persistControllerSettings()
+    }
+  }
+  @Published var controllerShortcuts: ControllerShortcutProfile = .defaults() {
+    didSet {
+      guard !isLoading else { return }
+      persistControllerSettings()
+      postMouseSettingsChanged("controllerShortcuts")
     }
   }
   @Published var selectedControllerHapticsMode: String {

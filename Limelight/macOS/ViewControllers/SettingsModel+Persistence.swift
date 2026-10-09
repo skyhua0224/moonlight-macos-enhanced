@@ -66,6 +66,9 @@ extension SettingsModel {
   func persistControllerSettings() {
     let hostId = selectedHost?.id ?? Self.globalHostId
     let defaults = UserDefaults.standard
+    if let data = try? PropertyListEncoder().encode(controllerShortcuts) {
+      defaults.set(data, forKey: Self.controllerShortcutProfileKeyPrefix + hostId)
+    }
     defaults.set(
       min(0.30, max(0.0, controllerDeadzone)),
       forKey: Self.controllerDeadzoneKeyPrefix + hostId)
@@ -87,6 +90,7 @@ extension SettingsModel {
   }
 
   func loadControllerSettings(for hostId: String) {
+    controllerShortcuts = SettingsClass.controllerShortcutProfile(for: hostId)
     controllerDeadzone = min(
       0.30,
       max(
@@ -263,6 +267,7 @@ extension SettingsModel {
     selectedControllerHapticsMode = Self.defaultControllerHapticsMode
     selectedControllerMotionMode = Self.defaultControllerMotionMode
     selectedControllerFeedbackTarget = Self.defaultControllerFeedbackTarget
+    controllerShortcuts = .defaults()
     selectedControllerVirtualType = Self.defaultControllerVirtualType
     controllerCalibration = .default
     selectedMouseDriver = Self.defaultMouseDriver

@@ -47,6 +47,7 @@ class SettingsHostingController<RootView: View>: NSWindowController {
 
     let window = NSWindow(contentViewController: SettingsControllerInputBoundary(contentController: hostingController))
     window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+    window.identifier = NSUserInterfaceItemIdentifier("ClientSettingsWindow")
     window.collectionBehavior = [.fullScreenNone]
     window.tabbingMode = .disallowed
     window.isOpaque = true

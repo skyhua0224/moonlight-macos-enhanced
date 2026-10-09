@@ -70,13 +70,13 @@ struct AppView: View {
           Button(languageManager.localize("Open Settings")) {
             InputMonitoringPermissionManager.sharedManager.openSystemPreferences()
           }
-          .buttonStyle(.bordered)
+          .controllerButtonStyle(.bordered)
         }
         SettingsRow(title: "Microphone") {
           Button(languageManager.localize("Open Settings")) {
             MicrophoneManager.shared.openSystemPreferences()
           }
-          .buttonStyle(.bordered)
+          .controllerButtonStyle(.bordered)
         }
       }
 
@@ -177,7 +177,7 @@ struct UpdatesSettingsPage: View {
           Button(languageManager.localize("Check for Updates")) {
             NSWorkspace.shared.open(URL(string: "https://github.com/skyhua0224/moonlight-macos-enhanced/releases")!)
           }
-          .buttonStyle(.borderedProminent)
+          .controllerButtonStyle(.borderedProminent)
           .controlSize(.small)
         }
         .frame(minHeight: 40)
@@ -498,13 +498,13 @@ private struct AboutUpdateCard: View {
               Button(languageManager.localize("Install Update")) {
                 installUpdate()
               }
-              .buttonStyle(.borderedProminent)
+              .controllerButtonStyle(.borderedProminent)
               .disabled(!sparkle.canCheckUpdates)
             } else if let url = preferredDownloadURL(release) {
               Button(languageManager.localize("Download Update")) {
                 openURL(url)
               }
-              .buttonStyle(.borderedProminent)
+              .controllerButtonStyle(.borderedProminent)
             }
           }
         }
@@ -521,7 +521,7 @@ private struct AboutUpdateCard: View {
         Button(languageManager.localize("Check for Updates")) {
           installUpdate()
         }
-        .buttonStyle(.bordered)
+        .controllerButtonStyle(.bordered)
         .controlSize(.small)
         .disabled(sparkle.isConfigured ? !sparkle.canCheckUpdates : checker.state == .checking)
       }

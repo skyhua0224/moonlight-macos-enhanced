@@ -172,6 +172,22 @@ final class StreamShortcutProfile: NSObject {
     flags.intersection([.control, .option, .shift, .command, .function])
   }
 
+  @objc static func actionTitleKey(for action: String) -> String {
+    switch action {
+    case releaseMouseCaptureAction: "Release mouse capture"
+    case togglePerformanceOverlayAction: "Toggle performance overlay"
+    case toggleMouseModeAction: "Toggle mouse mode"
+    case toggleFullscreenControlBallAction: "Toggle fullscreen control ball"
+    case showDisconnectOptionsAction: "Show Disconnect Options"
+    case disconnectStreamAction: "Disconnect from Stream"
+    case closeAndQuitAppAction: "Close and Quit App"
+    case reconnectStreamAction: "Reconnect Stream"
+    case openControlCenterAction: "Open control center"
+    case toggleBorderlessWindowedAction: "Toggle borderless / windowed (advanced)"
+    default: action
+    }
+  }
+
   @objc static func actionOrder() -> [String] {
     orderedActions
   }

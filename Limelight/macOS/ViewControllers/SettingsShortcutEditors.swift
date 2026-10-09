@@ -1,6 +1,7 @@
 // Restored from this project's v1.3.8 settings (existing GPL application code).
 import AppKit
 import Carbon.HIToolbox
+import GameController
 import SwiftUI
 
 private struct ShortcutReferenceItem: Hashable, Identifiable {
@@ -15,18 +16,11 @@ struct ShortcutReferenceView: View {
   @ObservedObject var languageManager = LanguageManager.shared
   @SwiftUI.State private var editingItem: ShortcutReferenceItem?
 
-  private let items: [ShortcutReferenceItem] = [
-    ShortcutReferenceItem(action: StreamShortcutProfile.releaseMouseCaptureAction, actionKey: "Release mouse capture"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.togglePerformanceOverlayAction, actionKey: "Toggle performance overlay"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.toggleMouseModeAction, actionKey: "Toggle mouse mode"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.toggleFullscreenControlBallAction, actionKey: "Toggle fullscreen control ball"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.showDisconnectOptionsAction, actionKey: "Show Disconnect Options"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.disconnectStreamAction, actionKey: "Disconnect from Stream"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.closeAndQuitAppAction, actionKey: "Close and Quit App"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.reconnectStreamAction, actionKey: "Reconnect Stream"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.openControlCenterAction, actionKey: "Open control center"),
-    ShortcutReferenceItem(action: StreamShortcutProfile.toggleBorderlessWindowedAction, actionKey: "Toggle borderless / windowed (advanced)"),
-  ]
+  private var items: [ShortcutReferenceItem] {
+    StreamShortcutProfile.actionOrder().map {
+      ShortcutReferenceItem(action: $0, actionKey: StreamShortcutProfile.actionTitleKey(for: $0))
+    }
+  }
 
   init(settingsModel: SettingsModel) {
     _settingsModel = ObservedObject(wrappedValue: settingsModel)
@@ -94,7 +88,7 @@ private struct ShortcutReferenceCard: View {
           .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
       )
     }
-    .buttonStyle(.plain)
+    .controllerButtonStyle(.plain)
   }
 }
 
@@ -227,6 +221,333 @@ private struct ShortcutCaptureSheet: View {
   }
 }
 
+private struct ControllerShortcutItem: Hashable, Identifiable {
+  let action: String
+  var id: String { action }
+}
+
+/// Controller counterpart of ShortcutReferenceView: same cards, same capture flow.
+struct ControllerShortcutReferenceView: View {
+  @ObservedObject var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
+  @SwiftUI.State private var editingItem: ControllerShortcutItem?
+  @SwiftUI.State private var restoringDefaults = false
+
+  init(settingsModel: SettingsModel) {
+    _settingsModel = ObservedObject(wrappedValue: settingsModel)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text(languageManager.localize("Controller Shortcuts"))
+        .font(.subheadline.weight(.medium))
+
+      LazyVGrid(
+        columns: [GridItem(.adaptive(minimum: 280), spacing: 12, alignment: .top)],
+        alignment: .leading,
+        spacing: 12
+      ) {
+        ForEach(ControllerShortcutProfile.actions, id: \.self) { action in
+          ControllerShortcutCard(
+            action: action,
+            trigger: settingsModel.controllerShortcuts.bindings[action] ?? .disabled,
+            onEdit: { editingItem = ControllerShortcutItem(action: action) })
+        }
+      }
+
+      HStack {
+        Spacer()
+        Button(languageManager.localize("Restore Default Controller Shortcuts")) {
+          restoringDefaults = true
+        }
+      }
+    }
+    .padding(.top, 2)
+    .sheet(item: $editingItem) { item in
+      ControllerShortcutCaptureSheet(settingsModel: settingsModel, action: item.action)
+    }
+    .confirmationDialog(
+      languageManager.localize("Restore Default Controller Shortcuts"), isPresented: $restoringDefaults
+    ) {
+      Button(languageManager.localize("Restore Defaults"), role: .destructive) {
+        settingsModel.controllerShortcuts = .defaults()
+      }
+    }
+  }
+}
+
+private struct ControllerShortcutCard: View {
+  @ObservedObject var languageManager = LanguageManager.shared
+  let action: String
+  let trigger: ControllerTouchpadShortcut
+  let onEdit: () -> Void
+
+  var body: some View {
+    Button(action: onEdit) {
+      VStack(alignment: .leading, spacing: 12) {
+        ControllerShortcutTokenRowView(trigger: trigger)
+
+        Text(languageManager.localize(ControllerShortcutProfile.titleKey(for: action)))
+          .font(.callout.weight(.medium))
+          .foregroundColor(.primary)
+          .multilineTextAlignment(.leading)
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+        if action == ControllerShortcutProfile.touchpadAction {
+          Text(languageManager.localize("Touchpad Button Shortcut hint"))
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        HStack(spacing: 6) {
+          Text(languageManager.localize("Change Shortcut"))
+            .font(.footnote.weight(.medium))
+          Image(systemName: "chevron.right")
+            .font(.system(size: 10, weight: .semibold))
+        }
+        .foregroundColor(.secondary)
+      }
+      .padding(14)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(Color(NSColor.controlBackgroundColor))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+      )
+    }
+    .controllerButtonStyle(.plain)
+  }
+}
+
+private struct ControllerShortcutCaptureSheet: View {
+  @Environment(\.dismiss) private var dismiss
+  @ObservedObject var settingsModel: SettingsModel
+  @ObservedObject var languageManager = LanguageManager.shared
+
+  let action: String
+
+  @SwiftUI.State private var draft: ControllerTouchpadShortcut
+  @SwiftUI.State private var recording: Set<ControllerTouchpadShortcut.Button> = []
+  @SwiftUI.State private var pollTimer: Timer?
+  @SwiftUI.State private var resolvingConflict = false
+
+  init(settingsModel: SettingsModel, action: String) {
+    _settingsModel = ObservedObject(wrappedValue: settingsModel)
+    self.action = action
+    _draft = SwiftUI.State(initialValue: settingsModel.controllerShortcuts.bindings[action] ?? .disabled)
+  }
+
+  private var defaultTrigger: ControllerTouchpadShortcut {
+    ControllerShortcutProfile.defaults().bindings[action] ?? .disabled
+  }
+
+  private var conflicts: [String] {
+    settingsModel.controllerShortcuts.conflicts(for: action, with: draft)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text(languageManager.localize("Change Shortcut"))
+        .font(.title3.weight(.semibold))
+
+      Text(languageManager.localize(ControllerShortcutProfile.titleKey(for: action)))
+        .font(.headline)
+
+      Text(languageManager.localize("Press controller buttons to record"))
+        .font(.callout)
+        .foregroundColor(.secondary)
+
+      ControllerShortcutTokenRowView(
+        trigger: recording.isEmpty ? draft : ControllerTouchpadShortcut(buttons: Array(recording)).normalized)
+
+      Text(languageManager.localize("Controller shortcut capture note"))
+        .font(.footnote)
+        .foregroundColor(.secondary)
+
+      Picker(languageManager.localize("Shortcut Activation"), selection: Binding(
+        get: { draft.holdSeconds > 0 },
+        set: { draft.holdSeconds = $0 ? max(draft.holdSeconds, 0.5) : 0 })
+      ) {
+        Text(languageManager.localize("Shortcut Immediate")).tag(false)
+        Text(languageManager.localize("Shortcut Long Hold")).tag(true)
+      }
+      .pickerStyle(.segmented)
+
+      if draft.holdSeconds > 0 {
+        Stepper(value: $draft.holdSeconds, in: 0.2...5, step: 0.1) {
+          Text(String(format: languageManager.localize("Shortcut Hold Format"), draft.holdSeconds))
+        }
+      }
+
+      VStack(alignment: .leading, spacing: 4) {
+        Toggle(languageManager.localize("Shortcut Preserve Original"), isOn: $draft.preserveOriginal)
+        Text(languageManager.localize("Shortcut Preserve Original hint"))
+          .font(.footnote)
+          .foregroundColor(.secondary)
+      }
+
+      if !conflicts.isEmpty {
+        Text(String(format: languageManager.localize("Controller shortcut conflict format"),
+                    conflicts.map { languageManager.localize(ControllerShortcutProfile.titleKey(for: $0)) }
+                      .formatted(.list(type: .and))))
+          .font(.footnote)
+          .foregroundColor(.orange)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+
+      HStack {
+        Button(languageManager.localize("Cancel")) {
+          dismiss()
+        }
+        .keyboardShortcut(.cancelAction)
+
+        Spacer()
+
+        if draft.normalized != defaultTrigger {
+          Button(languageManager.localize("Restore Default Shortcut")) {
+            draft = defaultTrigger
+          }
+        }
+        Button(languageManager.localize("Shortcut Clear")) {
+          draft = .disabled
+        }
+        Button(languageManager.localize("Save")) {
+          if conflicts.isEmpty { save(replacing: []) } else { resolvingConflict = true }
+        }
+        .keyboardShortcut(.defaultAction)
+      }
+    }
+    .padding(20)
+    .frame(width: 460)
+    .onAppear(perform: startCapture)
+    .onDisappear(perform: stopCapture)
+    .confirmationDialog(
+      languageManager.localize("Controller Shortcut Conflict"), isPresented: $resolvingConflict,
+      titleVisibility: .visible
+    ) {
+      Button(languageManager.localize("Replace Conflicting Shortcuts"), role: .destructive) {
+        save(replacing: conflicts)
+      }
+      Button(languageManager.localize("Keep Both Prefer New")) { save(replacing: []) }
+      Button(languageManager.localize("Keep Existing Shortcuts"), role: .cancel) {}
+    } message: {
+      Text(conflicts.map { languageManager.localize(ControllerShortcutProfile.titleKey(for: $0)) }
+        .formatted(.list(type: .and)))
+    }
+  }
+
+  private func save(replacing replaced: [String]) {
+    var profile = settingsModel.controllerShortcuts
+    profile.assign(draft, to: action, replacing: replaced)
+    settingsModel.controllerShortcuts = profile
+    dismiss()
+  }
+
+  // Records the largest chord held on any controller; releasing every button
+  // commits it. Interface navigation is paused so the presses do not act on the sheet.
+  private func startCapture() {
+    guard pollTimer == nil else { return }
+    ControllerNavigationSuspension.set(true)
+    let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { _ in
+      var held: Set<ControllerTouchpadShortcut.Button> = []
+      for controller in GCController.controllers() {
+        guard let pad = controller.extendedGamepad else { continue }
+        for button in ControllerTouchpadShortcut.Button.allCases where button.isPressed(in: pad) {
+          held.insert(button)
+        }
+      }
+      if held.isEmpty {
+        if !recording.isEmpty {
+          draft.buttons = Array(recording)
+          draft = draft.normalized
+          recording = []
+        }
+      } else {
+        recording.formUnion(held)
+      }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    pollTimer = timer
+  }
+
+  private func stopCapture() {
+    pollTimer?.invalidate()
+    pollTimer = nil
+    ControllerNavigationSuspension.set(false)
+  }
+}
+
+/// Lets a capture sheet take the controller away from interface navigation.
+enum ControllerNavigationSuspension {
+  static let notification = Notification.Name("ControllerNavigationSuspended")
+
+  static func set(_ suspended: Bool) {
+    NotificationCenter.default.post(name: notification, object: nil, userInfo: ["suspended": suspended])
+  }
+}
+
+private struct ControllerShortcutTokenRowView: View {
+  @ObservedObject var languageManager = LanguageManager.shared
+  let trigger: ControllerTouchpadShortcut
+
+  var body: some View {
+    let family = ControllerGlyphFamily.current
+    HStack(spacing: 6) {
+      if trigger.buttons.isEmpty {
+        ShortcutKeycapView(key: languageManager.localize("Shortcut Not Mapped"))
+      }
+      ForEach(Array(trigger.buttons.enumerated()), id: \.offset) { index, button in
+        if index > 0 {
+          Text("+")
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundColor(.secondary)
+        }
+        ControllerButtonKeycapView(button: button, family: family)
+      }
+      if trigger.holdSeconds > 0 && !trigger.buttons.isEmpty {
+        Text(String(format: languageManager.localize("Shortcut Hold Format"), trigger.holdSeconds))
+          .font(.footnote.weight(.medium))
+          .foregroundColor(.secondary)
+          .padding(.leading, 4)
+      }
+    }
+  }
+}
+
+private struct ControllerButtonKeycapView: View {
+  let button: ControllerTouchpadShortcut.Button
+  let family: ControllerGlyphFamily
+
+  var body: some View {
+    Group {
+      if let symbol = button.symbolName(family) {
+        Image(systemName: symbol)
+          .font(.system(size: 15, weight: .medium))
+          .accessibilityLabel(button.displayName(family))
+      } else {
+        Text(button.displayName(family))
+          .font(.system(size: 13, weight: .semibold, design: .rounded))
+      }
+    }
+    .foregroundColor(.primary)
+    .help(button.displayName(family))
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .fill(Color(NSColor.windowBackgroundColor))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+    )
+  }
+}
+
 private struct KeyboardTranslationEditorRequest: Identifiable {
   let id = UUID()
   let rule: KeyboardTranslationRule?
@@ -327,12 +648,12 @@ private struct KeyboardTranslationRuleCard: View {
 
       HStack(spacing: 12) {
         Button(languageManager.localize("Edit Rule"), action: onEdit)
-          .buttonStyle(.link)
+          .controllerButtonStyle(.link)
 
         Spacer()
 
         Button(languageManager.localize("Delete Rule"), role: .destructive, action: onDelete)
-          .buttonStyle(.link)
+          .controllerButtonStyle(.link)
       }
     }
     .padding(14)
@@ -410,7 +731,7 @@ private struct KeyboardTranslationRuleEditorSheet: View {
           tokens: KeyboardTranslationProfile.displayTokens(forTrigger: triggerShortcut),
           isCapturing: captureTarget == .trigger)
       }
-      .buttonStyle(.plain)
+      .controllerButtonStyle(.plain)
 
       VStack(alignment: .leading, spacing: 8) {
         Text(languageManager.localize("Action Type"))
@@ -435,7 +756,7 @@ private struct KeyboardTranslationRuleEditorSheet: View {
             tokens: KeyboardTranslationProfile.displayTokens(forRemoteOutput: remoteOutputShortcut),
             isCapturing: captureTarget == .output)
         }
-        .buttonStyle(.plain)
+        .controllerButtonStyle(.plain)
       } else {
         VStack(alignment: .leading, spacing: 8) {
           Text(languageManager.localize("Moonlight Action"))

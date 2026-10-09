@@ -31,6 +31,9 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 
 @interface HIDSupport : NSObject
 @property(atomic) BOOL shouldSendInputEvents;
+@property(nonatomic, copy) uint64_t (^controllerShortcutHandler)(unsigned short, uint32_t);
+- (void)refreshControllerShortcutOutput;
+- (void)toggleControllerMouseMode;
 @property(atomic) TemporaryHost *host;
 @property(nonatomic, assign) void *inputContext;
 @property(nonatomic, copy) HIDFreeMouseAbsoluteSyncHandler freeMouseAbsoluteSyncHandler;
@@ -104,6 +107,8 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 @end
 
 @interface HIDSupport (RumbleOutput)
+- (void)submitAuthoredRumbleLow:(unsigned short)low high:(unsigned short)high
+                     sequence:(uint32_t)sequence discontinuity:(BOOL)discontinuity;
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor
              highFreqMotor:(unsigned short)highFreqMotor;
 @end

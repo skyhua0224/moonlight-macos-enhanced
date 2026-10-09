@@ -32,6 +32,9 @@ struct InputView: View {
               tint: .purple
             )
             ControllerSettingsSection()
+            FormSection(title: "Controller Shortcuts") {
+              ControllerShortcutReferenceView(settingsModel: settingsModel)
+            }
           }
           if scope == .all || scope == .keyboardMouse {
             SettingsPageHero(
@@ -109,8 +112,6 @@ private struct ControllerSettingsSection: View {
         .labelsHidden()
         .frame(width: 190, alignment: .trailing)
       }
-      ToggleCell(title: "Hold Options to Switch Touchpad Mode", hintKey: "DualSense Options hint",
-                 boolBinding: $settingsModel.gamepadMouseModeLongPressMenu)
       SettingsRow(title: "Haptic Feedback") {
         Picker("", selection: $settingsModel.selectedControllerHapticsMode) {
           ForEach(SettingsModel.controllerHapticsModes, id: \.self) { value in
@@ -345,7 +346,7 @@ private struct USBDeviceGroup: View {
           .foregroundStyle(.secondary)
         Spacer()
         Button(languageManager.localize("Refresh")) { remoteUSB.refresh(host: settingsModel.selectedHost) }
-          .buttonStyle(.borderless)
+          .controllerButtonStyle(.borderless)
           .controlSize(.small)
           .disabled(!enabled)
       }
@@ -404,7 +405,7 @@ private struct USBSettingsSection: View {
           Button(languageManager.localize("Refresh")) {
             remoteUSB.refresh(host: settingsModel.selectedHost)
           }
-          .buttonStyle(.bordered)
+          .controllerButtonStyle(.bordered)
           .disabled(!mappingEnabled)
         }
         .padding(.vertical, 8)
@@ -489,10 +490,10 @@ private struct USBDeviceRow: View {
       Spacer()
       if remoteUSB.selectedBusID == device.busID {
         Button(languageManager.localize("Stop")) { remoteUSB.stop() }
-          .buttonStyle(.bordered)
+          .controllerButtonStyle(.bordered)
       } else {
         Button(languageManager.localize("Forward")) { remoteUSB.start(device: device) }
-          .buttonStyle(.borderedProminent)
+          .controllerButtonStyle(.borderedProminent)
           .disabled(!remoteUSB.capabilityAvailable || !device.isClaimable)
       }
     }

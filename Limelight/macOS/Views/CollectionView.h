@@ -11,6 +11,8 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface CollectionView : NSCollectionView
+// Selects the first item when a game controller is connected and nothing is selected.
+- (void)selectFirstItemForControllerIfNeeded;
 @end
 
 NS_ASSUME_NONNULL_END

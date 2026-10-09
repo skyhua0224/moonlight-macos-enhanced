@@ -195,6 +195,8 @@ struct SettingsView: View {
 
   var body: some View {
     settingsRoot
+    // Default-style buttons become controller focus targets.
+    .controllerButtonStyle(.automatic)
     .environment(\.locale, languageManager.currentLanguage == .system ? .current
       : Locale(identifier: languageManager.currentLanguage == .chinese ? "zh-Hans" : "en"))
     .background(Color(nsColor: .windowBackgroundColor))
@@ -282,6 +284,7 @@ private struct SettingsSidebar: View {
         }
         .listStyle(.sidebar)
         .searchable(text: $query, placement: .sidebar, prompt: languageManager.localize("Search Settings"))
+        .controllerSearchFocus()
       } else {
         List {
           if searchResults.isEmpty {
@@ -308,7 +311,7 @@ private struct SettingsSidebar: View {
                   .frame(maxWidth: .infinity, alignment: .leading)
                   .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .controllerButtonStyle(.plain)
                 .padding(.vertical, 3)
               }
             }
@@ -316,6 +319,7 @@ private struct SettingsSidebar: View {
         }
         .listStyle(.sidebar)
         .searchable(text: $query, placement: .sidebar, prompt: languageManager.localize("Search Settings"))
+        .controllerSearchFocus()
       }
     }
     .background(.thinMaterial)
@@ -415,7 +419,7 @@ private struct AudioSettingsHeader: View {
         Button { } label: { Image(systemName: "chevron.left") }
         Button { } label: { Image(systemName: "chevron.right") }
       }
-      .buttonStyle(.borderless)
+      .controllerButtonStyle(.borderless)
       .font(.title3)
       .padding(.horizontal, 10)
       .padding(.vertical, 6)
@@ -442,7 +446,7 @@ private struct SettingsPageHeader: View {
           Button { } label: { Image(systemName: "chevron.left") }
           Button { } label: { Image(systemName: "chevron.right") }
         }
-        .buttonStyle(.borderless)
+        .controllerButtonStyle(.borderless)
         .font(.title3)
         .padding(.horizontal, 9)
         .padding(.vertical, 6)
@@ -488,5 +492,21 @@ private struct SettingsProfilePicker: View {
     .pickerStyle(.menu)
     .controlSize(.small)
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+
+private extension View {
+  @ViewBuilder func controllerSearchFocus() -> some View {
+    if #available(macOS 15, *) { modifier(ControllerSearchFocusModifier()) }
+    else { self }
+  }
+}
+@available(macOS 15, *)
+private struct ControllerSearchFocusModifier: ViewModifier {
+  @FocusState private var focused: Bool
+  func body(content: Content) -> some View {
+    content.searchFocused($focused)
+      .onReceive(NotificationCenter.default.publisher(for: .init("ControllerFocusSettingsSearch"))) { _ in focused = true }
   }
 }

@@ -7,6 +7,7 @@
 //
 
 #import "AppsViewController.h"
+#import "MLMenuItemImage.h"
 #import "AppsViewControllerDelegate.h" // Restore this import
 #import "AppCell.h"
 #import "AppCellView.h"
@@ -238,6 +239,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 
     [self updateOfflineOverlayForCurrentHost];
     [self refreshSunshineDisplaysIfNeededForce:NO];
+    [self.collectionView selectFirstItemForControllerIfNeeded];
 }
 
 - (void)updateOfflineOverlayForCurrentHost {
@@ -952,21 +954,21 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     NSMenuItem *pinAppMenuItem = [HostsViewController getMenuItemForIdentifier:@"pinAppMenuItem" inMenu:menu];
     if (app.pinned) {
         pinAppMenuItem.title = NSLocalizedString(@"Unpin App", @"Unpin App");
-        pinAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"pin.slash" accessibilityDescription:nil];
+        MLSetMenuItemImage(pinAppMenuItem, [NSImage imageWithSystemSymbolName:@"pin.slash" accessibilityDescription:nil]);
     } else {
         pinAppMenuItem.title = NSLocalizedString(@"Pin App", @"Pin App");
-        pinAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"pin" accessibilityDescription:nil];
+        MLSetMenuItemImage(pinAppMenuItem, [NSImage imageWithSystemSymbolName:@"pin" accessibilityDescription:nil]);
     }
     if (app.hidden) {
         hideAppMenuItem.title = NSLocalizedString(@"Show App", @"Show App");
-        hideAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"eye" accessibilityDescription:nil];
+        MLSetMenuItemImage(hideAppMenuItem, [NSImage imageWithSystemSymbolName:@"eye" accessibilityDescription:nil]);
     } else {
         hideAppMenuItem.title = NSLocalizedString(@"Hide App", @"Hide App");
-        hideAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"eye.slash" accessibilityDescription:nil];
+        MLSetMenuItemImage(hideAppMenuItem, [NSImage imageWithSystemSymbolName:@"eye.slash" accessibilityDescription:nil]);
     }
 
     quitAppMenuItem.title = NSLocalizedString(@"Quit App", @"Quit App");
-    quitAppMenuItem.image = [NSImage imageWithSystemSymbolName:@"xmark.circle" accessibilityDescription:nil];
+    MLSetMenuItemImage(quitAppMenuItem, [NSImage imageWithSystemSymbolName:@"xmark.circle" accessibilityDescription:nil]);
     quitAppMenuItem.representedObject = app;
     quitAppMenuItem.hidden = ![self isAppRunning:app];
     quitAppMenuItem.enabled = [self isAppRunning:app];
@@ -1674,7 +1676,7 @@ static const CGFloat runningAnimationDuration = 1.0;
             [self.collectionView deleteItemsAtIndexPaths:deletions];
             [self.collectionView insertItemsAtIndexPaths:insertions];
         } completionHandler:^(BOOL finished) {
-            
+            [self.collectionView selectFirstItemForControllerIfNeeded];
         }];
     }
 }

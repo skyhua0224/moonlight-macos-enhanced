@@ -173,6 +173,10 @@
 				macOS/ViewControllers/SettingsAudioPane.swift,
 				macOS/ViewControllers/SettingsHostingController.swift,
 				macOS/ViewControllers/SettingsInputPane.swift,
+				macOS/ViewControllers/ControllerTouchpadShortcut.swift,
+				macOS/ViewControllers/ControllerShortcutRuntime.swift,
+				macOS/ViewControllers/ControllerHintOverlay.swift,
+				macOS/ViewControllers/ControllerFocusNavigator.swift,
 				macOS/ViewControllers/SettingsShortcutEditors.swift,
 				macOS/ViewControllers/SettingsLogViewer.swift,
 				macOS/ViewControllers/RemoteUSBForwardingViewModel.swift,
@@ -601,7 +605,7 @@
 				PRODUCT_NAME = MoonlightEnhanced;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SPARKLE_ED_PUBLIC_KEY = "0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=";
-				SPARKLE_FEED_URL = "https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml";
+				SPARKLE_FEED_URL = "https://github.com/skyhua0224/moonlight-macos-enhanced/releases/latest/download/appcast.xml";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
@@ -666,7 +670,7 @@
 				PRODUCT_NAME = MoonlightEnhanced;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SPARKLE_ED_PUBLIC_KEY = "0oUtFGXxgldrfua5x34b0mT6RvUQ6eI+xCJiddymRX4=";
-				SPARKLE_FEED_URL = "https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml";
+				SPARKLE_FEED_URL = "https://github.com/skyhua0224/moonlight-macos-enhanced/releases/latest/download/appcast.xml";
 				SWIFT_OBJC_BRIDGING_HEADER = "Limelight/Moonlight-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};

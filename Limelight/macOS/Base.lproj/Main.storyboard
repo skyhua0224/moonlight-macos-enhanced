@@ -617,7 +617,7 @@ DQ
                     </view>
                     <connections>
                         <outlet property="collectionView" destination="t1H-Tz-zd9" id="Db7-bE-OSY"/>
-                        <segue destination="wJ2-hM-mn7" kind="show" identifier="streamSegue" id="6PX-Cd-n9c"/>
+                        <segue destination="wJ2-hM-mn7" kind="custom" identifier="streamSegue" id="6PX-Cd-n9c" customClass="StreamWindowSegue"/>
                     </connections>
                 </viewController>
                 <customObject id="oRP-9K-X4V" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>

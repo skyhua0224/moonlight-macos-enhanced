@@ -24,12 +24,20 @@ typedef struct {
     unsigned maximumContacts;
     float originX[2], originY[2];
     float maximumTravelSquared;
+    bool pointerMotionStarted;
+    bool scrollMotionStarted;
 } ControllerTrackpadGesture;
 
 typedef struct {
     float dx, dy;
     bool scroll;
 } ControllerTrackpadDelta;
+
+static inline bool ControllerTrackpadSecondaryClick(ControllerTrackpadGesture state,
+                                                     double now, double lastTouchEnded) {
+    return state.maximumContacts == 2 &&
+        (state.contacts != 0 || (lastTouchEnded > 0 && now - lastTouchEnded < 0.12));
+}
 
 static inline bool ControllerTrackpadUpdate(ControllerTrackpadGesture *state, unsigned finger,
                                             bool touching, float x, float y) {
@@ -40,6 +48,8 @@ static inline bool ControllerTrackpadUpdate(ControllerTrackpadGesture *state, un
             state->maximumContacts = 0;
             state->maximumTravelSquared = 0;
             state->scrollAxis = 0;
+            state->pointerMotionStarted = false;
+            state->scrollMotionStarted = false;
         }
         if ((oldContacts & (1u << finger)) == 0) {
             state->originX[finger] = x;
@@ -78,16 +88,22 @@ static inline ControllerTrackpadDelta ControllerTrackpadConsume(ControllerTrackp
     float x = state->scrollGesture ? (state->x[0] + state->x[1]) * 0.5f : state->x[finger];
     float y = state->scrollGesture ? (state->y[0] + state->y[1]) * 0.5f : state->y[finger];
     float dx = x - state->anchorX, dy = y - state->anchorY;
-    float threshold = state->scrollGesture ? 0.001f : 0.0008f;
+    // A small initial slop keeps a resting/tapping finger from moving the
+    // target. Once motion starts, retain the finer slow-movement threshold.
+    float threshold = state->scrollGesture ?
+        (state->scrollMotionStarted ? 0.001f : 0.006f) :
+        (state->pointerMotionStarted ? 0.0008f : 0.006f);
     // Retain the anchor within the noise band so slow intentional movement
     // accumulates rather than being discarded at every callback.
     if (dx * dx + dy * dy < threshold * threshold) return result;
+    if (!state->scrollGesture) state->pointerMotionStarted = true;
     state->anchorX = x;
     state->anchorY = y;
     result.dx = dx;
     result.dy = dy;
     result.scroll = state->scrollGesture;
     if (result.scroll) {
+        state->scrollMotionStarted = true;
         // Lock a clearly vertical/horizontal gesture; small lateral noise
         // must not produce a second wheel stream while scrolling a list.
         if (state->scrollAxis == 0) {
