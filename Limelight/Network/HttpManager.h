@@ -32,6 +32,11 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
 - (NSURLRequest*) newResumeRequest:(StreamConfiguration*)config;
 - (NSURLRequest*) newDisplaysRequest;
 - (NSURLRequest*) newQuitAppRequest;
+- (NSURLRequest*) newSuperCommandRequestWithId:(NSString*)commandId;
+- (NSURLRequest*) newPcSleepRequest;
+// Synchronous conveniences over the two requests above; do not call on the main thread.
+- (BOOL) executeSuperCommandWithId:(NSString*)commandId;
+- (BOOL) requestHostSleep;
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString*)appId;
 - (NSArray<NSDictionary<NSString*, id>*>*) fetchSunshineDisplays;
 - (NSDictionary<NSString*, id>*) fetchSunshineDisplaySnapshot;

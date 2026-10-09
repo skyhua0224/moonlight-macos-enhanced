@@ -82,6 +82,9 @@ static NSUserInterfaceItemIdentifier const MLSunshineThisStreamModeMenuItemIdent
 static NSUserInterfaceItemIdentifier const MLSunshineThisAppVirtualDisplayMenuItemIdentifier = @"sunshineThisAppVirtualDisplayMenuItem";
 static NSUserInterfaceItemIdentifier const MLSunshineRefreshDisplaysMenuItemIdentifier = @"sunshineRefreshDisplaysMenuItem";
 
+static NSUserInterfaceItemIdentifier const MLAppSuperCmdSeparatorMenuItemIdentifier = @"appSuperCmdSeparatorMenuItem";
+static NSString * const MLAppSuperCmdMenuItemIdentifierPrefix = @"appSuperCmdMenuItem.";
+
 static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.SunshinePerAppTopology.";
 
 @implementation AppsViewController
@@ -976,7 +979,77 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     self.sunshineOverrideApp = app;
     [self loadPersistedSunshineTopologyForCurrentApp];
     [self rebuildSunshineOverrideItemsInMenu:menu];
+    [self rebuildSuperCommandItemsInMenu:menu forApp:app];
     [self refreshSunshineDisplaysIfNeededForce:NO];
+}
+
+#pragma mark - Host menu commands (SuperCmds)
+
+- (void)removeSuperCommandItemsFromMenu:(NSMenu *)menu {
+    NSMutableArray<NSMenuItem *> *itemsToRemove = [NSMutableArray array];
+    for (NSMenuItem *item in menu.itemArray) {
+        NSUserInterfaceItemIdentifier identifier = item.identifier;
+        if ([identifier isEqualToString:MLAppSuperCmdSeparatorMenuItemIdentifier] ||
+            [identifier hasPrefix:MLAppSuperCmdMenuItemIdentifierPrefix]) {
+            [itemsToRemove addObject:item];
+        }
+    }
+
+    for (NSMenuItem *item in itemsToRemove) {
+        [menu removeItem:item];
+    }
+}
+
+// The host resolves /supercmd ids against the app it is currently running, so the
+// commands are only offered for the running app.
+- (void)rebuildSuperCommandItemsInMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
+    [self removeSuperCommandItemsFromMenu:menu];
+
+    if (![self isAppRunning:app] || app.superCommands.count == 0) {
+        return;
+    }
+
+    NSInteger insertionIndex = [self indexForSunshineMenuInsertionInMenu:menu];
+
+    NSMenuItem *separator = [NSMenuItem separatorItem];
+    separator.identifier = MLAppSuperCmdSeparatorMenuItemIdentifier;
+    [menu insertItem:separator atIndex:insertionIndex++];
+
+    for (MLAppSuperCommand *command in app.superCommands) {
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:command.name
+                                                      action:@selector(superCommandMenuItemClicked:)
+                                               keyEquivalent:@""];
+        item.target = self;
+        item.identifier = [MLAppSuperCmdMenuItemIdentifierPrefix stringByAppendingString:command.commandId];
+        item.representedObject = command;
+        MLSetMenuItemImage(item, [NSImage imageWithSystemSymbolName:@"terminal" accessibilityDescription:nil]);
+        [menu insertItem:item atIndex:insertionIndex++];
+    }
+}
+
+- (IBAction)superCommandMenuItemClicked:(NSMenuItem *)sender {
+    MLAppSuperCommand *command = sender.representedObject;
+    if (![command isKindOfClass:[MLAppSuperCommand class]]) {
+        return;
+    }
+
+    TemporaryHost *host = self.host;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        HttpManager *hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:[IdManager getUniqueId] serverCert:host.serverCert];
+        BOOL ok = [hMan executeSuperCommandWithId:command.commandId];
+        if (ok) {
+            return;
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *message = [NSString stringWithFormat:NSLocalizedString(@"Host Command Failed Message", @"Host command failed message"), command.name];
+            [AlertPresenter displayAlert:NSAlertStyleWarning
+                                   title:NSLocalizedString(@"Host Command Failed", @"Host command failed")
+                                 message:message
+                                  window:self.view.window
+                       completionHandler:nil];
+        });
+    });
 }
 
 - (NSString *)sunshinePerAppTopologyDefaultsKey {
@@ -1800,6 +1873,7 @@ static const CGFloat runningAnimationDuration = 1.0;
         for (TemporaryApp* savedApp in newHostAppList) {
             if ([app.id isEqualToString:savedApp.id]) {
                 savedApp.name = app.name;
+                savedApp.superCommands = app.superCommands;
                 appAlreadyInList = YES;
                 break;
             }

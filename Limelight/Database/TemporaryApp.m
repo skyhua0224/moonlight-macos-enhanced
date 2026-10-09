@@ -8,6 +8,10 @@
 
 #import "TemporaryApp.h"
 
+@implementation MLAppSuperCommand
+
+@end
+
 @implementation TemporaryApp
 
 - (id) initFromApp:(App*)app withTempHost:(TemporaryHost*)tempHost {
@@ -19,6 +23,7 @@
     self.hidden = app.hidden;
     self.pinned = app.pinned;
     self.host = tempHost;
+    self.superCommands = @[];
     
     return self;
 }

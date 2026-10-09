@@ -1634,6 +1634,21 @@
     networkItem.submenu = networkMenu;
     [self.streamMenu addItem:networkItem];
 
+    // 二级：主机命令（/applist SuperCmds，由主机对当前运行的应用解析）
+    if (self.app.superCommands.count > 0) {
+        NSMenuItem *hostCommandsItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Host Commands", nil) action:nil keyEquivalent:@""];
+        setSymbol(hostCommandsItem, @"terminal");
+        NSMenu *hostCommandsMenu = [[NSMenu alloc] initWithTitle:MLString(@"Host Commands", nil)];
+        for (MLAppSuperCommand *command in self.app.superCommands) {
+            NSMenuItem *commandItem = [[NSMenuItem alloc] initWithTitle:command.name action:@selector(runSuperCommandFromMenu:) keyEquivalent:@""];
+            commandItem.target = self;
+            commandItem.representedObject = command;
+            [hostCommandsMenu addItem:commandItem];
+        }
+        hostCommandsItem.submenu = hostCommandsMenu;
+        [self.streamMenu addItem:hostCommandsItem];
+    }
+
     // 二级：日志（显示/复制）
     NSMenuItem *logsItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Logs", nil) action:nil keyEquivalent:@""];
     setSymbol(logsItem, @"text.justify.left");
@@ -1678,6 +1693,23 @@
 
 - (void)handleToggleFullscreenFromMenu:(id)sender {
     [self.view.window toggleFullScreen:self];
+}
+
+- (void)runSuperCommandFromMenu:(NSMenuItem *)sender {
+    MLAppSuperCommand *command = sender.representedObject;
+    if (![command isKindOfClass:[MLAppSuperCommand class]]) {
+        return;
+    }
+
+    TemporaryHost *host = self.app.host;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        HttpManager *hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:[IdManager getUniqueId] serverCert:host.serverCert];
+        BOOL ok = [hMan executeSuperCommandWithId:command.commandId];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *format = ok ? MLString(@"Host Command Sent: %@", nil) : MLString(@"Host Command Failed: %@", nil);
+            [self showNotification:[NSString stringWithFormat:format, command.name]];
+        });
+    });
 }
 
 - (void)toggleLogOverlayFromMenu:(id)sender {

@@ -844,6 +844,47 @@ static const NSString* HTTPS_PORT = @"47984";
     return [self createRequestFromString:urlString timeout:LONG_TIMEOUT_SEC];
 }
 
+// Runs one of the running app's menu commands (SuperCmds from /applist). The host
+// resolves the id against the currently running app only.
+- (NSURLRequest*) newSuperCommandRequestWithId:(NSString*)commandId {
+    // '&', '+' and '=' are legal in a query component but would split or alter the value.
+    NSMutableCharacterSet* allowed = [[NSCharacterSet URLQueryAllowedCharacterSet] mutableCopy];
+    [allowed removeCharactersInString:@"&+=#"];
+    NSString* encodedId = [commandId stringByAddingPercentEncodingWithAllowedCharacters:allowed] ?: @"";
+    NSString* urlString = [NSString stringWithFormat:@"%@/supercmd?uniqueid=%@&cmdId=%@", _baseHTTPSURL, _clientUniqueId, encodedId];
+    return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
+}
+
+// The host answers only after it resumes from sleep (SetSuspendState blocks), so
+// callers must treat a transport timeout as "command delivered".
+- (NSURLRequest*) newPcSleepRequest {
+    NSString* urlString = [NSString stringWithFormat:@"%@/pcsleep?uniqueid=%@", _baseHTTPSURL, _clientUniqueId];
+    return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
+}
+
+- (BOOL) executeSuperCommandWithId:(NSString*)commandId {
+    HttpResponse* response = [[HttpResponse alloc] init];
+    [self executeRequestSynchronously:[HttpRequest requestForResponse:response withUrlRequest:[self newSuperCommandRequestWithId:commandId]]];
+    NSInteger accepted = 0;
+    BOOL ok = [response isStatusOk] && [response getIntTag:@"supercmd" value:&accepted] && accepted != 0;
+    Log(ok ? LOG_I : LOG_W, @"[supercmd] id=%@ status=%ld accepted=%ld", commandId, (long)response.statusCode, (long)accepted);
+    return ok;
+}
+
+- (BOOL) requestHostSleep {
+    HttpResponse* response = [[HttpResponse alloc] init];
+    [self executeRequestSynchronously:[HttpRequest requestForResponse:response withUrlRequest:[self newPcSleepRequest]]];
+    NSInteger sleeping = 0;
+    BOOL answered = [response isStatusOk] && [response getIntTag:@"pcsleep" value:&sleeping];
+    // A host that suspends mid-request never answers; a timeout or dropped
+    // connection means the command was most likely delivered.
+    BOOL transportError = response.statusCode == NSURLErrorTimedOut ||
+                          response.statusCode == NSURLErrorNetworkConnectionLost;
+    BOOL ok = answered ? sleeping != 0 : transportError;
+    Log(ok ? LOG_I : LOG_W, @"[pcsleep] status=%ld answered=%d sleeping=%ld", (long)response.statusCode, answered, (long)sleeping);
+    return ok;
+}
+
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString *)appId {
     NSString* urlString = [NSString stringWithFormat:@"%@/appasset?uniqueid=%@&appid=%@&AssetType=2&AssetIdx=0", _baseHTTPSURL, _clientUniqueId, appId];
     return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];

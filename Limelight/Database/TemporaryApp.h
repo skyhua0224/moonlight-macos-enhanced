@@ -9,6 +9,14 @@
 #import "TemporaryHost.h"
 #import "App+CoreDataClass.h"
 
+// A host-defined menu command advertised in /applist (SuperCmds) and run via /supercmd.
+@interface MLAppSuperCommand : NSObject
+
+@property (nonatomic, copy) NSString *commandId;
+@property (nonatomic, copy) NSString *name;
+
+@end
+
 @interface TemporaryApp : NSObject
 
 @property (nullable, nonatomic, retain) NSString *id;
@@ -18,6 +26,8 @@
 @property (nonatomic)                   BOOL hidden;
 @property (nonatomic)                   BOOL pinned;
 @property (nullable, nonatomic, retain) TemporaryHost *host;
+// Session-only: refreshed from every /applist response, never persisted.
+@property (nonatomic, copy) NSArray<MLAppSuperCommand *> *superCommands;
 
 NS_ASSUME_NONNULL_BEGIN
 

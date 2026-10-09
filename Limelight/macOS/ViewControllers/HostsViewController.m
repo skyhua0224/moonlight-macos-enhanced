@@ -8,6 +8,7 @@
 
 #import "HostsViewController.h"
 #import "HostCell.h"
+#import "MLMenuItemImage.h"
 #import "HostCellView.h"
 #import "HostsViewControllerDelegate.h"
 #import "AppsViewController.h"
@@ -426,11 +427,22 @@
     }
     showHiddenAppsMenuItem.state = host.showHiddenApps ? NSControlStateValueOn : NSControlStateValueOff;
 
-    for (NSString *identifier in @[ @"renameItem", @"advancedSeparator", @"settingsItem", @"detailsItem", @"connectionsItem" ]) {
+    for (NSString *identifier in @[ @"sleepHostItem", @"renameItem", @"advancedSeparator", @"settingsItem", @"detailsItem", @"connectionsItem" ]) {
         NSMenuItem *existingItem = [HostsViewController getMenuItemForIdentifier:identifier inMenu:menu];
         if (existingItem != nil) {
             [menu removeItem:existingItem];
         }
+    }
+
+    if (wakeMenuItem != nil) {
+        NSMenuItem *sleepItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Sleep Host", @"Sleep Host")
+                                                           action:@selector(sleepHostMenuItemClicked:)
+                                                    keyEquivalent:@""];
+        sleepItem.target = self;
+        sleepItem.identifier = @"sleepHostItem";
+        sleepItem.enabled = (host.state == StateOnline && host.pairState == PairStatePaired);
+        MLSetMenuItemImage(sleepItem, [NSImage imageWithSystemSymbolName:@"moon.zzz" accessibilityDescription:nil]);
+        [menu insertItem:sleepItem atIndex:[menu indexOfItem:wakeMenuItem] + 1];
     }
 
     NSInteger removeHostIndex = removeHostMenuItem ? [menu indexOfItem:removeHostMenuItem] : menu.numberOfItems;
@@ -461,6 +473,41 @@
     [connectionsItem setTarget:self];
     connectionsItem.identifier = @"connectionsItem";
     [menu insertItem:connectionsItem atIndex:insertionIndex];
+}
+
+- (void)sleepHostMenuItemClicked:(NSMenuItem *)sender {
+    TemporaryHost *host = [self getHostFromMenuItem:sender];
+    if (host == nil || self.view.window == nil) {
+        return;
+    }
+
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleWarning;
+    alert.messageText = [NSString stringWithFormat:NSLocalizedString(@"Sleep Host Title", @"Sleep Host Title"), host.displayName];
+    alert.informativeText = NSLocalizedString(@"Sleep Host Info", @"Sleep Host Info");
+    [alert addButtonWithTitle:NSLocalizedString(@"Sleep Host", @"Sleep Host")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
+
+    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode != NSAlertFirstButtonReturn) {
+            return;
+        }
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            HttpManager *hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:[IdManager getUniqueId] serverCert:host.serverCert];
+            if ([hMan requestHostSleep]) {
+                return;
+            }
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [AlertPresenter displayAlert:NSAlertStyleWarning
+                                       title:NSLocalizedString(@"Sleep Host Failed", @"Sleep Host Failed")
+                                     message:NSLocalizedString(@"Sleep Host Failed Info", @"Sleep Host Failed Info")
+                                      window:self.view.window
+                           completionHandler:nil];
+            });
+        });
+    }];
 }
 
 - (void)renameHostMenuItemClicked:(NSMenuItem *)sender {

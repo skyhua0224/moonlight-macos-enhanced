@@ -1200,3 +1200,13 @@
 "The host file name is not safe to save" = "The host file name is not safe to save";
 "File mapping request failed" = "File mapping request failed";
 "Download" = "Download";
+"Sleep Host" = "Sleep Host";
+"Sleep Host Title" = "Put %@ to sleep?";
+"Sleep Host Info" = "The host will suspend and any stream will end. Use Wake PC to wake it again.";
+"Sleep Host Failed" = "Couldn't Sleep Host";
+"Sleep Host Failed Info" = "The host did not accept the sleep command. Make sure it is online and paired.";
+"Host Commands" = "Host Commands";
+"Host Command Failed" = "Host Command Failed";
+"Host Command Failed Message" = "The host could not run \"%@\". Make sure the app is still running.";
+"Host Command Sent: %@" = "Sent: %@";
+"Host Command Failed: %@" = "Host command failed: %@";

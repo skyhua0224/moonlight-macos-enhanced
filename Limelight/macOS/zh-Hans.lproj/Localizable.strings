@@ -1266,3 +1266,13 @@
 "The host file name is not safe to save" = "主机文件名不安全，无法保存";
 "File mapping request failed" = "文件映射请求失败";
 "Download" = "下载";
+"Sleep Host" = "休眠主机";
+"Sleep Host Title" = "让“%@”进入休眠？";
+"Sleep Host Info" = "主机将进入休眠，正在进行的串流会中断。可使用“唤醒主机”重新唤醒。";
+"Sleep Host Failed" = "无法休眠主机";
+"Sleep Host Failed Info" = "主机未接受休眠命令。请确认主机在线并已配对。";
+"Host Commands" = "主机命令";
+"Host Command Failed" = "主机命令执行失败";
+"Host Command Failed Message" = "主机无法执行“%@”。请确认该应用仍在运行。";
+"Host Command Sent: %@" = "已发送：%@";
+"Host Command Failed: %@" = "主机命令失败：%@";
