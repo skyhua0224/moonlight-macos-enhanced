@@ -87,6 +87,12 @@ class SettingsClass: NSObject {
     return SettingsModel.clipboardSyncModeRawValue(for: "Auto Sync")
   }
 
+  /// Returns effective profile settings as an Objective-C-compatible dictionary.
+  ///
+  /// Resolves host/global inheritance and supplies compatibility defaults for optional fields,
+  /// including disabled background controller input. Omits entries whose values remain nil.
+  /// - Parameter key: Host UUID or the global profile identifier.
+  /// - Returns: Bridged settings, or nil if neither a host nor global profile can be loaded.
   @objc static func getSettings(for key: String) -> [String: Any]? {
     if let settings = Settings.getSettings(for: key) {
       let objcSettings: [String: Any?] = [
@@ -291,10 +297,17 @@ class SettingsClass: NSObject {
     persist(updated, for: key)
   }
 
-  // Menu-driven resolution/fps choice.
-  // - resolution=MatchDisplayResolutionSentinel means match local display.
-  // - resolution=0x0 means custom (not supported via this quick helper yet).
-  // - fps=0 means custom (not supported via this quick helper yet).
+  /// Persists a menu-selected resolution and frame rate while preserving unrelated settings.
+  ///
+  /// Does nothing when no effective profile exists. Preserves stored custom values and controller
+  /// preferences, including background input. Recalculates bitrate when automatic bitrate is
+  /// enabled, using 1920x1080 for display matching or zero dimensions.
+  /// - Parameters:
+  ///   - width: Selected width in pixels, used when `matchDisplay` is false.
+  ///   - height: Selected height in pixels, used when `matchDisplay` is false.
+  ///   - fps: Frame-rate selection; zero denotes the existing custom-rate setting.
+  ///   - matchDisplay: Whether to store the local-display resolution sentinel.
+  ///   - key: Host UUID or global profile identifier to update.
   @objc static func setResolutionAndFps(
     _ width: Int, _ height: Int, _ fps: Int, matchDisplay: Bool, for key: String
   ) {
@@ -516,6 +529,15 @@ class SettingsClass: NSObject {
     persist(updated, for: key)
   }
 
+  /// Persists custom resolution and frame rate while preserving all other profile settings.
+  ///
+  /// Sets the custom-selection sentinels and disables display-resolution matching. Does nothing
+  /// when no effective profile exists; dimensions and frame rate are stored without validation.
+  /// - Parameters:
+  ///   - width: Custom stream width in pixels.
+  ///   - height: Custom stream height in pixels.
+  ///   - fps: Custom stream frame rate.
+  ///   - key: Host UUID or global profile identifier to update.
   @objc static func setCustomResolution(
     _ width: Int, _ height: Int, _ fps: Int, for key: String
   ) {
@@ -866,6 +888,11 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultRumble
   }
 
+  /// Resolves whether a profile allows controller delivery while the stream is unfocused.
+  ///
+  /// Uses host/global profile inheritance and defaults to false for missing or legacy values.
+  /// - Parameter key: Host UUID or the global profile identifier.
+  /// - Returns: Effective background-controller preference; does not change the delivery gate.
   @objc static func backgroundControllerInput(for key: String) -> Bool {
     if let settings = Settings.getSettings(for: key) {
       return settings.backgroundControllerInput ?? SettingsModel.defaultBackgroundControllerInput

@@ -302,6 +302,15 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
 }
 
+/**
+ * Queues a host motion request on main and revalidates the stream generation there.
+ *
+ * The stream-scoped proxy forwards only to its still-current owner, preventing requests from
+ * a superseded stream from configuring the replacement backend. Safe for native callback threads.
+ * @param controllerNumber Host controller slot.
+ * @param motionType Protocol sensor type.
+ * @param reportRateHz Requested sensor frequency in Hz, or zero to stop reporting.
+ */
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {
@@ -609,6 +618,16 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self beginStopStreamIfNeededWithReason:reason completion:nil];
 }
 
+/**
+ * Begins one stream teardown, disabling input and invalidating stream-scoped callbacks.
+ *
+ * Clears input contexts after releasing controller state, removes lifecycle observers/timers,
+ * and stops native streaming on a background queue with controller cleanup on main. Call from
+ * main-thread lifecycle handling. A repeated call schedules its completion immediately rather
+ * than waiting for the first teardown to finish.
+ * @param reason Diagnostic teardown reason; nil uses fallback diagnostic labels.
+ * @param completion Optional block dispatched to main after this stop, or immediately if already stopping.
+ */
 - (void)beginStopStreamIfNeededWithReason:(NSString *)reason completion:(void (^)(void))completion {
     @synchronized (self) {
         if (self.stopStreamInProgress) {
@@ -709,6 +728,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     });
 }
 
+/**
+ * Initializes the visible stream view and installs session settings/lifecycle observers.
+ *
+ * AppKit calls this on main. Creates input backends, subscribes to live controller preference
+ * changes for the active/global profile, and starts stream/window setup. Teardown must remove
+ * these observers and timers before replacing or closing the session.
+ */
 - (void)viewDidAppear {
     [super viewDidAppear];
     
@@ -965,6 +991,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.controllerSupport = nil;
 }
 
+/**
+ * Resolves controller delivery for both backends from stream readiness and capture policy.
+ *
+ * Delivery requires a ready context with neither stop nor reconnect in progress, plus captured
+ * keyboard/mouse input or the profile's background preference. Updates both controller gates
+ * and logs the decision. Off-main calls asynchronously reschedule themselves on main.
+ */
 - (void)refreshControllerInputSendingState {
     if (![NSThread isMainThread]) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -991,6 +1024,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
         streamCanSendInput ? 1 : 0);
 }
 
+/**
+ * Removes stream lifecycle/settings observers and invalidates session timers.
+ *
+ * Includes the controller-settings observer so a closed stream cannot react to live preference
+ * changes. Clears observer references for repeated teardown; call on main for UI-owned timers.
+ */
 - (void)tearDownStreamLifecycleObserversAndTimers {
     NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
 
@@ -1556,6 +1595,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     });
 }
 
+/**
+ * Binds input backends when the native input-stream establishment stage completes.
+ *
+ * Queues context binding, controller-policy refresh, microphone readiness and pointer rearming
+ * on main after checking the available context. Other stages and a NULL name are ignored.
+ * @param stageName Borrowed, NUL-terminated native stage name, inspected synchronously.
+ */
 - (void)stageComplete:(const char *)stageName {
     if (stageName == NULL) {
         return;
@@ -1648,6 +1694,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
         (long)screenMode);
 }
 
+/**
+ * Handles successful stream startup and schedules input/UI activation on main.
+ *
+ * Binds both input backends, retries briefly if initialization is delayed, refreshes controller
+ * delivery after binding and reconnect completion, and starts rendering/overlay diagnostics.
+ * May be invoked from the native connection callback thread.
+ */
 - (void)connectionStarted {
     Log(LOG_I, @"[diag] StreamViewController connectionStarted received: main=%d activeGen=%lu",
         [NSThread isMainThread] ? 1 : 0,
@@ -1929,6 +1982,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self closeWindowFromMainQueueWithMessage:message];
 }
 
+/**
+ * Forwards controller rumble to the active backend when profile and delivery gates allow it.
+ * @param controllerNumber Host controller slot for GameController; direct HID targets its single device.
+ * @param lowFreqMotor Low-frequency motor intensity in the protocol's 16-bit range.
+ * @param highFreqMotor High-frequency motor intensity in the protocol's 16-bit range.
+ */
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
     if ([SettingsClass rumbleFor:self.app.host.uuid]) {
         if (self.hidSupport.shouldSendControllerEvents) {
@@ -1941,6 +2000,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 }
 
+/**
+ * Forwards trigger rumble to GameController when rumble and controller delivery are enabled.
+ * @param controllerNumber Host controller slot.
+ * @param leftTriggerMotor Left-trigger motor intensity in the protocol's 16-bit range.
+ * @param rightTriggerMotor Right-trigger motor intensity in the protocol's 16-bit range.
+ */
 - (void)rumbleTriggers:(unsigned short)controllerNumber
       leftTriggerMotor:(unsigned short)leftTriggerMotor
      rightTriggerMotor:(unsigned short)rightTriggerMotor {
@@ -1950,6 +2015,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self.controllerSupport rumbleTriggers:controllerNumber leftTriggerMotor:leftTriggerMotor rightTriggerMotor:rightTriggerMotor];
 }
 
+/**
+ * Forwards controller LED output to GameController only while controller delivery is enabled.
+ * @param controllerNumber Host controller slot.
+ * @param red Red channel intensity, zero through 255.
+ * @param green Green channel intensity, zero through 255.
+ * @param blue Blue channel intensity, zero through 255.
+ */
 - (void)setControllerLED:(unsigned short)controllerNumber
                        red:(unsigned char)red
                      green:(unsigned char)green
@@ -1960,6 +2032,17 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self.controllerSupport setControllerLED:controllerNumber red:red green:green blue:blue];
 }
 
+/**
+ * Forwards adaptive-trigger output to GameController while controller delivery is enabled.
+ *
+ * The backend consumes the borrowed effect buffers synchronously; this method does not retain them.
+ * @param controllerNumber Host controller slot.
+ * @param eventFlags Protocol flags identifying the trigger effects to apply.
+ * @param typeLeft Protocol left-trigger effect type.
+ * @param typeRight Protocol right-trigger effect type.
+ * @param left Borrowed left-trigger effect payload in the protocol-defined format.
+ * @param right Borrowed right-trigger effect payload in the protocol-defined format.
+ */
 - (void)setAdaptiveTriggers:(unsigned short)controllerNumber
                  eventFlags:(unsigned char)eventFlags
                    typeLeft:(unsigned char)typeLeft
@@ -1978,6 +2061,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 }
 
+/**
+ * Applies legacy direct-HID rumble only for slot zero while controller delivery is enabled.
+ * @param number Host controller slot; all nonzero slots are ignored.
+ * @param low Low-frequency motor intensity in the protocol's 16-bit range.
+ * @param high High-frequency motor intensity in the protocol's 16-bit range.
+ */
 - (void)controllerRumbleFallback:(unsigned short)number low:(unsigned short)low high:(unsigned short)high {
     // Legacy HID backend is single-device. Never misroute another player's output.
     if (number == 0 && self.hidSupport.shouldSendControllerEvents) {
@@ -1985,6 +2074,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 }
 
+/**
+ * Forwards DualSense PCM haptics to GameController while controller delivery is enabled.
+ * @param frame Borrowed protocol PCM frame consumed by the backend during this call.
+ */
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame {
     if (!self.hidSupport.shouldSendControllerEvents) {
         return;
@@ -1992,6 +2085,15 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self.controllerSupport ds5HapticsPcm:frame];
 }
 
+/**
+ * Passes a host motion request to the selected controller backend even while input is paused.
+ *
+ * Called on main by the stream-scoped proxy. The backend retains requested rates, rejects stale
+ * contexts and separately gates outgoing samples, allowing motion to resume after focus returns.
+ * @param controllerNumber Host controller slot; direct HID supports only zero.
+ * @param motionType Protocol gyro or accelerometer sensor type.
+ * @param reportRateHz Requested sensor frequency in Hz, or zero to stop reporting.
+ */
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {

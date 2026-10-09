@@ -74,6 +74,8 @@ private struct ControllerSettingsSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
 
+  /// Builds controller settings bound to the active profile, including background input.
+  /// Preference edits flow through SettingsModel persistence and live-change notifications.
   var body: some View {
     FormSection(title: "Controller") {
       SettingsRow(title: "Controller Driver") {

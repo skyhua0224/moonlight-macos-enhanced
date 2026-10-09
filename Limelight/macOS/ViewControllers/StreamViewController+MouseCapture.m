@@ -2818,6 +2818,13 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 #pragma mark - Actions
 
+/**
+ * Captures stream mouse input and updates focus-dependent input delivery.
+ *
+ * Runs on main, installs capture/tracking state, enables keyboard/mouse delivery, and resolves
+ * controller delivery against stream readiness and the background-input preference. Maintains
+ * cursor, display-sleep and input-diagnostic state for the selected pointer mode.
+ */
 - (void)captureMouse {
     if (![NSThread isMainThread]) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -2932,6 +2939,15 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     [self uncaptureMouseWithCode:@"MUC000" reason:@"legacy-direct-call"];
 }
 
+/**
+ * Releases stream mouse capture and recomputes controller delivery policy.
+ *
+ * Runs on main, cancels pointer transitions, restores local cursor/tracking state and permits
+ * display sleep. Disables physical keyboard/mouse delivery; controller delivery may remain
+ * active when the stream is ready and background input is enabled.
+ * @param code Diagnostic code identifying the release path.
+ * @param reason Human-readable diagnostic reason for releasing capture.
+ */
 - (void)uncaptureMouseWithCode:(NSString *)code reason:(NSString *)reason {
     [self logMouseUncaptureStage:@"requested" code:code reason:reason];
     if (![NSThread isMainThread]) {

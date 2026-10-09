@@ -172,6 +172,11 @@ struct Settings: Encodable, Decodable {
     cachedSettingsLock.unlock()
   }
 
+  /// Creates a host-inherited copy of this profile with its connection method unset.
+  ///
+  /// Copies controller preferences, including optional background input, without persisting any
+  /// changes. Clearing the connection method lets the host choose its own connection behavior.
+  /// - Returns: Settings values suitable for a host inheriting the global profile.
   private func inheritedSettingsForHostProfile() -> Self {
     return Settings(
       resolution: resolution,
@@ -317,6 +322,13 @@ extension SettingsClass {
     }
   }
 
+  /// Returns a settings copy with only the supplied overrides applied, without persisting it.
+  ///
+  /// Background controller input and fields without an override parameter are preserved.
+  /// A nil override keeps the original value; for doubly optional overrides, `.some(nil)` clears
+  /// an optional field and `.some(.some(value))` replaces it.
+  /// - Parameter settings: Source profile whose unmodified values are retained.
+  /// - Returns: New profile combining the source values and the named overrides.
   static func copy(
     _ settings: Settings,
     resolution: CGSize? = nil,

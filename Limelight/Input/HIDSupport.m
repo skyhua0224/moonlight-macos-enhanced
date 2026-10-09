@@ -26,6 +26,11 @@ static const uint64_t kHIDGyroRestEnterDurationUs = 30000;
 static const uint64_t kHIDGyroRestExitDurationUs = 25000;
 static const float kHIDGyroFilterDiagnosticDeltaDps = 80.0f;
 
+/**
+ * Returns the median of five samples without changing the input array.
+ * @param values Non-NULL array containing five floating-point samples.
+ * @return Middle value of a sorted local copy.
+ */
 static inline float HIDMedianOfFive(const float values[5]) {
     float sorted[5];
     memcpy(sorted, values, sizeof(sorted));
@@ -41,6 +46,16 @@ static inline float HIDMedianOfFive(const float values[5]) {
     return sorted[2];
 }
 
+/**
+ * Updates each gyro axis through a five-sample rolling median.
+ *
+ * The first four samples pass through unchanged. Mutates filter history and replaces the three
+ * axis values once the window is full; callers must serialize access to the filter.
+ * @param filter Non-NULL mutable filter state, initially zeroed.
+ * @param x Non-NULL input/output X sample in degrees/s.
+ * @param y Non-NULL input/output Y sample in degrees/s.
+ * @param z Non-NULL input/output Z sample in degrees/s.
+ */
 static inline void HIDApplyPS4GyroMedianFilter(PS4GyroMedianFilter *filter,
                                                float *x, float *y, float *z) {
     NSUInteger index = filter->nextIndex;
@@ -429,12 +444,25 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 
 @synthesize shouldSendControllerEvents = _shouldSendControllerEvents;
 
+/**
+ * Reads the controller-delivery gate under the HID object's monitor.
+ * @return Whether controller events may be sent independently of keyboard/mouse capture.
+ */
 - (BOOL)shouldSendControllerEvents {
     @synchronized (self) {
         return _shouldSendControllerEvents;
     }
 }
 
+/**
+ * Changes the HID controller-delivery gate and resets motion filtering state.
+ *
+ * Pausing synchronously drains the input queue and sends neutral gamepad, touch, gyro and mouse
+ * releases when a direct-HID context is initialized. Resuming advertises DS4 capabilities before
+ * resending physical state. Host motion rates survive this transition. Call on main for menu
+ * timers, never from inputQueue because disabling performs dispatch_sync onto that queue.
+ * @param enabled Whether controller input may be delivered to the current stream.
+ */
 - (void)setShouldSendControllerEvents:(BOOL)enabled {
     @synchronized (self) {
         if (_shouldSendControllerEvents == enabled) return;
@@ -494,6 +522,14 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     }
 }
 
+/**
+ * Replaces the borrowed stream context and resets all session-specific DS4 input state.
+ *
+ * A changed pointer clears arrival, requested motion rates, filter history and active contacts,
+ * then synchronizes scroll diagnostics. The HID monitor serializes this reset with motion
+ * processing and requests, including context invalidation on the connection callback thread.
+ * @param inputContext Native input context, or NULL to detach; the pointer is not retained or freed.
+ */
 - (void)setInputContext:(void *)inputContext {
     @synchronized (self) {
         if (_inputContext == inputContext) {
@@ -923,6 +959,13 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 }
 
 
+/**
+ * Queues the current physical gamepad state when controller delivery is enabled.
+ *
+ * Skips mouse mode or a missing context and translates Start+Select to the Guide button.
+ * Captures state before dispatching to the serial input queue; call from the serialized HID
+ * state-update path.
+ */
 - (void)sendControllerEvent {
     if (self.shouldSendControllerEvents) {
         // Capture state
@@ -957,6 +1000,14 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     }
 }
 
+/**
+ * Advertises direct-HID PlayStation buttons and motion/touch capabilities once per session.
+ *
+ * Requires the direct driver, enabled controller delivery and a valid context. Marks arrival
+ * only after a successful protocol call so failures may be retried. Call from the serialized
+ * HID controller path before sending extended input.
+ * @return YES if arrival was already advertised or was successfully sent; otherwise NO.
+ */
 - (BOOL)reportPlayStationControllerArrival {
     if (self.controllerDriver != 0) {
         return NO;
@@ -988,6 +1039,16 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     return YES;
 }
 
+/**
+ * Queues a host motion request on main and rejects requests for a replaced stream context.
+ *
+ * Only slot zero is supported. Under the HID monitor, updates sensor rates even while delivery
+ * is paused and resets gyro filters when its rate changes. Stopping an active gyro sends a
+ * zero only when controller arrival and delivery permit it. May be called from a native callback.
+ * @param controllerNumber Host controller slot; nonzero slots are ignored.
+ * @param motionType LI_MOTION_TYPE_GYRO or LI_MOTION_TYPE_ACCEL.
+ * @param reportRateHz Requested maximum outgoing frequency in Hz, or zero to stop that sensor.
+ */
 - (void)setMotionEventState:(uint16_t)controllerNumber
                  motionType:(uint8_t)motionType
                reportRateHz:(uint16_t)reportRateHz {
@@ -1034,10 +1095,24 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     });
 }
 
+/**
+ * Decodes a signed little-endian 16-bit DS4 sensor or calibration value.
+ * @param bytes Non-NULL buffer containing at least two bytes.
+ * @return Signed value represented by the two bytes.
+ */
 static inline int16_t PS4ReadS16(const UInt8 bytes[2]) {
     return (int16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
 }
 
+/**
+ * Maps an unsigned DS4 stick sample to the protocol's signed 16-bit axis range.
+ *
+ * Applies a three-count center deadzone and rescales the remaining travel before optional
+ * inversion and saturation. Does not alter trigger values.
+ * @param value Raw stick sample in the range 0 through 255.
+ * @param inverted Whether to negate the mapped axis.
+ * @return Normalized and saturated stick value.
+ */
 static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
     // DualShock 4 sticks commonly fluctuate by one or two raw counts while
     // untouched. Comparing the raw bytes causes a reliable controller packet
@@ -1062,6 +1137,14 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
     return (short)MAX(MIN(output, INT16_MAX), INT16_MIN);
 }
 
+/**
+ * Loads and validates factory gyro and accelerometer calibration for a DS4 device.
+ *
+ * Reads the transport-specific USB/Bluetooth feature report synchronously; truncated, empty or
+ * implausible calibration clears validity so motion processing uses nominal scaling. Non-DS4
+ * devices are ignored. Call during device matching on the HID manager's main run loop.
+ * @param device Connected HID device from which calibration is read.
+ */
 - (void)loadPS4MotionCalibrationForDevice:(IOHIDDeviceRef)device {
     if (!isPS4(device)) {
         return;
@@ -1157,6 +1240,19 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
                             @"Ignoring invalid DualShock 4 motion calibration");
 }
 
+/**
+ * Sends a DS4 contact transition after ensuring controller arrival is advertised.
+ *
+ * Unchanged contacts generate no packet; releases use the last delivered position. Requires a
+ * valid context and permitted arrival/delivery. Call from serialized HID touch processing.
+ * @param active Whether the current contact is down.
+ * @param x Current normalized horizontal coordinate.
+ * @param y Current normalized vertical coordinate.
+ * @param wasActive Whether the previous contact was down.
+ * @param lastX Previous normalized horizontal coordinate, used for release.
+ * @param lastY Previous normalized vertical coordinate, used for release.
+ * @param pointerId Stable protocol contact identifier, zero or one for DS4 fingers.
+ */
 - (void)sendPS4TouchWithActive:(BOOL)active
                              x:(float)x
                              y:(float)y
@@ -1180,6 +1276,13 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
     LiSendControllerTouchEventCtx(inputCtx, 0, eventType, pointerId, eventX, eventY, active ? 1.0f : 0.0f);
 }
 
+/**
+ * Decodes both DS4 contacts, sends their transitions and updates stored touch positions.
+ *
+ * Coordinates are normalized from the device's touch surface; stable pointer IDs are zero and
+ * one. Call on the serialized HID report path after validating the packet's size.
+ * @param state Non-NULL complete DS4 state packet, borrowed for the duration of the call.
+ */
 - (void)handlePS4TouchpadState:(PS4StatePacket_t *)state {
     BOOL primaryActive = (state->ucTouchpadCounter1 & 0x80) == 0;
     float primaryX = MIN(1.0f, (state->rgucTouchpadData1[0] |
@@ -1206,6 +1309,13 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
     self.ps4SecondaryTouchY = secondaryY;
 }
 
+/**
+ * Processes a DS4 motion report while holding the HID object's monitor.
+ *
+ * Serializes filtering and outgoing samples with host requests, gate resets and context
+ * invalidation, which can occur on the native connection callback thread.
+ * @param state Non-NULL validated DS4 state packet; consumed synchronously and not retained.
+ */
 - (void)handlePS4MotionState:(PS4StatePacket_t *)state {
     // Context invalidation may run on the connection callback thread.
     @synchronized (self) {
@@ -1213,6 +1323,15 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
     }
 }
 
+/**
+ * Calibrates, filters and sends requested DS4 gyro and accelerometer samples.
+ *
+ * Processes gyro filtering and rest hysteresis at native report rate while limiting outgoing
+ * samples to host-requested rates. Converts axes to protocol coordinates, gyro to degrees/s and
+ * acceleration to m/s²; uses nominal scaling if factory calibration is invalid. Requires permitted
+ * controller arrival and a valid context. Caller must hold the HID object's monitor.
+ * @param state Non-NULL complete DS4 state packet whose motion bytes are read synchronously.
+ */
 - (void)processPS4MotionState:(PS4StatePacket_t *)state {
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
     if (!inputCtx || ![self reportPlayStationControllerArrival]) {
@@ -2227,6 +2346,21 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
     }
 }
 
+/**
+ * Parses supported PlayStation/Nintendo HID reports and updates controller input state.
+ *
+ * Rejects missing, truncated and unsupported DS4 reports before accessing their fields.
+ * DS4 processing normalizes sticks, ignores report-counter-only changes and forwards touch/motion
+ * through their delivery gates. Runs on the HID manager's main run loop; ordinary state is queued
+ * on the serial input queue.
+ * @param context Borrowed HIDSupport callback context.
+ * @param result IOKit report status; not inspected by this callback.
+ * @param sender HID device that produced the report.
+ * @param type IOKit report type; parsing uses the report's first byte instead.
+ * @param reportID IOKit report identifier; parsing uses the report's first byte instead.
+ * @param report Borrowed report bytes, valid only for this callback.
+ * @param reportLength Number of available bytes in report.
+ */
 void myHIDReportCallback (
                           void * _Nullable        context,
                           IOReturn                result,
@@ -2537,6 +2671,15 @@ void myHIDReportCallback (
     }
 }
 
+/**
+ * Initializes DS4 motion calibration and synchronizes rumble for a newly matched device.
+ *
+ * Called on the HID manager's main run loop; calibration feature-report reads are synchronous.
+ * @param context Borrowed HIDSupport callback context.
+ * @param result IOKit matching status; unused.
+ * @param sender IOKit callback sender; unused.
+ * @param device Newly matched HID device.
+ */
 void myHIDDeviceMatchingCallback(void * _Nullable        context,
                                 IOReturn                result,
                                 void * _Nullable        sender,
@@ -2547,6 +2690,17 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
     [self rumbleSync];
 }
 
+/**
+ * Clears physical direct-HID controller state when a device is removed.
+ *
+ * Cancels menu tracking and resets arrival, calibration, filters and contacts under the HID
+ * monitor, preserving host motion rates across physical reconnects. Attempts to send neutral
+ * ordinary state through the existing gate. Runs on the HID manager's main run loop.
+ * @param context Borrowed HIDSupport callback context.
+ * @param result IOKit removal status; unused.
+ * @param sender IOKit callback sender; unused.
+ * @param device Removed HID device; state reset is backend-wide rather than device-specific.
+ */
 void myHIDDeviceRemovalCallback(void * _Nullable        context,
                                 IOReturn                result,
                                 void * _Nullable        sender,
@@ -2608,6 +2762,14 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     if (!mouseEnabled) [self setGamepadMouseModeActive:NO];
 }
 
+/**
+ * Switches direct-HID gamepad mouse mode, releasing delivered mouse buttons as needed.
+ *
+ * Entering mouse mode sends neutral gamepad state; leaving restores held A/B bits and flushes
+ * ordinary state. Resets touch/mouse accumulators and posts HIDMouseModeToggledNotification.
+ * Call on main, where mode and menu gesture state are managed.
+ * @param active Whether stick/button mouse emulation should be active.
+ */
 - (void)setGamepadMouseModeActive:(BOOL)active {
     if (self.controller.isMouseMode == active) return;
     PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
@@ -2637,6 +2799,13 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     if (!active && self.controllerDriver == 0) [self sendControllerEvent];
 }
 
+/**
+ * Advances the direct-HID menu-hold gesture and toggles mouse mode when consumed.
+ *
+ * Requires the direct driver, mouse/hold settings and enabled controller delivery. Installs a
+ * one-shot main-run-loop timer for devices that report only button edges; cancellation clears
+ * the timer and a consumed hold removes the menu bit. Call on the main thread.
+ */
 - (void)updateGamepadMenuGesture {
     BOOL enabled = self.gamepadMouseModeEnabled && self.gamepadMouseModeLongPressMenuEnabled &&
         self.controllerDriver == 0 && self.shouldSendControllerEvents;
@@ -2665,6 +2834,15 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
 }
 
+/**
+ * Updates a direct-HID button or sends its mouse-mode equivalent through the controller gate.
+ *
+ * Tracks menu-hold consumption and deduplicates A/B mouse-button transitions while mouse mode
+ * is active. Physical gamepad state can still update while remote delivery is paused. Call from
+ * the main-run-loop HID input path; remote mouse events are queued on inputQueue.
+ * @param flag Button flag being updated.
+ * @param set YES for a press, NO for a release.
+ */
 - (void)updateButtonFlags:(int)flag state:(BOOL)set {
     if (flag == PLAY_FLAG) {
         self.gamepadMenuPressed = set;

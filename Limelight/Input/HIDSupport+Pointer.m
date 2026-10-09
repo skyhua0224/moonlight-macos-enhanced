@@ -514,6 +514,20 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
     }
 }
 
+/**
+ * Flushes accumulated physical mouse motion and controller mouse emulation on display ticks.
+ *
+ * Runs on the Core Video display-link thread and queues protocol events through inputQueue.
+ * Physical motion uses the keyboard/mouse gate and pointer-path settings; emulated motion uses
+ * the independent controller gate. Consumes accumulated physical deltas even when delivery is off.
+ * @param displayLink Display link invoking the callback; unused.
+ * @param now Current display timestamp; unused.
+ * @param vsyncTime Upcoming display timestamp; unused.
+ * @param flagsIn Core Video input flags; unused.
+ * @param flagsOut Output flags pointer; left unchanged.
+ * @param displayLinkContext Borrowed HIDSupport instance.
+ * @return kCVReturnError for a missing instance, otherwise kCVReturnSuccess.
+ */
 static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                                           const CVTimeStamp *now,
                                           const CVTimeStamp *vsyncTime,

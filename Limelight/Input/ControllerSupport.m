@@ -606,6 +606,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 }
 
+/**
+ * Stops both motion sampling timers and deactivates sensors requiring manual activation.
+ *
+ * Call on the main thread, where the sampling timers run. Does not send a final motion packet.
+ * @param controller Controller whose timer references are cleared.
+ */
 -(void) cleanupControllerMotion:(Controller*)controller
 {
     [controller.gyroTimer invalidate];
@@ -620,6 +626,14 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Binds the system-controller backend to a stream input context.
+ *
+ * A changed context clears deferred removals under the stream lock, invalidates each controller's
+ * arrival announcement, and stops motion timers. Reassigning the same pointer is a no-op.
+ * Call on the main thread when binding; teardown must serialize access to controller timers.
+ * @param inputContext Borrowed native input context, or NULL to detach; ownership is not transferred.
+ */
 -(void)setInputContext:(void *)inputContext
 {
     if (_inputContext == inputContext) {
@@ -638,6 +652,15 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 @synthesize shouldSendInputEvents = _shouldSendInputEvents;
 
+/**
+ * Pauses or resumes remote controller delivery without discarding physical input state.
+ *
+ * Pausing releases gamepad, mouse and native touch state and neutralizes active gyro reporting
+ * when the context is initialized, then clears delivered-state caches. Resuming republishes
+ * current controller state and deferred removals for slots that remain absent. Motion timers
+ * remain installed but gate sample delivery. Call on the main thread for timer and touch state.
+ * @param enabled Whether controller input may be delivered to the current stream.
+ */
 - (void)setShouldSendInputEvents:(BOOL)enabled {
     BOOL wasEnabled = _shouldSendInputEvents;
     _shouldSendInputEvents = enabled;
@@ -1040,6 +1063,17 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Schedules a host motion-reporting request on the main queue for the current stream.
+ *
+ * Requests queued for a replaced context, disabled motion mode, or an ineligible controller
+ * are ignored. Each sensor has its own timer; samples require enabled delivery and an announced
+ * controller. Acceleration is converted to m/s²; gyro axes are remapped to degrees/s with rest
+ * hysteresis and duplicate suppression. Stopping an active gyro sends a gated zero sample.
+ * @param controllerNumber Controller slot requested by the host.
+ * @param motionType LI_MOTION_TYPE_ACCEL or LI_MOTION_TYPE_GYRO; other types change no timer.
+ * @param reportRateHz Sampling frequency in Hz, or zero to stop the selected sensor.
+ */
 -(void)setMotionEventState:(uint16_t)controllerNumber
                  motionType:(uint8_t)motionType
                reportRateHz:(uint16_t)reportRateHz
@@ -1201,6 +1235,14 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }];
 }
 
+/**
+ * Replaces a controller's button mask and processes only actual press/release transitions.
+ *
+ * The controller monitor protects the update; releases are processed before presses because
+ * special-combo handling may rewrite the stored mask. Does not itself flush an ordinary packet.
+ * @param controller Controller whose physical button state is being updated.
+ * @param flags Complete new button mask.
+ */
 -(void) updateButtonFlags:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
@@ -1218,6 +1260,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Sets button bits and processes special combos only for newly pressed buttons.
+ *
+ * Serializes mask updates with the controller monitor; packet delivery occurs in updateFinished:.
+ * @param controller Controller receiving the press.
+ * @param flags Button bits to set without clearing other buttons.
+ */
 -(void) setButtonFlag:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
@@ -1229,6 +1278,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Clears button bits and processes special combos only for buttons previously pressed.
+ *
+ * Serializes mask updates with the controller monitor; packet delivery occurs in updateFinished:.
+ * @param controller Controller receiving the release.
+ * @param flags Button bits to clear without changing other buttons.
+ */
 -(void) clearButtonFlag:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
@@ -1240,6 +1296,15 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Advertises capabilities and flushes changed gamepad state to the active stream.
+ *
+ * Requires enabled delivery and a valid context, and skips ordinary packets in mouse mode.
+ * Uses the controller monitor and stream lock, suppresses duplicate states, and sends the live
+ * assigned-slot mask; single-controller mode uses remote slot zero. The quit chord posts its
+ * notification asynchronously on main and clears the outgoing buttons.
+ * @param controller Controller whose accumulated state is ready for delivery.
+ */
 -(void) updateFinished:(Controller*)controller
 {
     if (!_shouldSendInputEvents) {
@@ -1439,6 +1504,15 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     [controller.highFreqMotor cleanup];
 }
 
+/**
+ * Installs GameController handlers for button, axis and supported touchpad input.
+ *
+ * Handlers update the assigned controller and flush state through the delivery gate; physical
+ * touchpad clicks also require a context and enabled delivery. Touch surfaces may produce
+ * native contacts or mouse gestures according to settings. Call during main-thread controller
+ * setup; cleanup must unregister these handlers before releasing the backend.
+ * @param controller Physical controller whose supported input profile is registered.
+ */
 -(void) registerControllerCallbacks:(GCController*) controller
 {
     if (controller != NULL) {
@@ -1924,6 +1998,16 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     return _controllers.count;
 }
 
+/**
+ * Creates the system-controller backend and registers device observers and input timers.
+ *
+ * Applies stream controller settings, assigns existing gamepads, and installs connection/removal
+ * handlers that maintain the live slot mask and clear motion state on removal. Call on the main
+ * thread; cleanup must later remove observers, handlers and timers.
+ * @param streamConfig Stream configuration supplying controller behavior and player policy.
+ * @param delegate Recipient of input-device presence changes.
+ * @return Initialized controller support instance.
+ */
 -(id) initWithConfig:(StreamConfiguration*)streamConfig presenceDelegate:(id<InputPresenceDelegate>)delegate
 {
     self = [super init];
@@ -2163,6 +2247,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Releases stream controller resources, observers, handlers and sampling timers.
+ *
+ * Clears controller slot bookkeeping and pending haptics, tears down haptic output and motion
+ * sampling, and unregisters physical input callbacks. Call on the main thread after disabling
+ * delivery and detaching the stream context; this method does not stop the native connection.
+ */
 -(void) cleanup
 {
     [[NSNotificationCenter defaultCenter] removeObserver:_touchpadSettingsObserver];
@@ -2219,6 +2310,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Polls controller mouse emulation and menu-hold gestures while delivery is enabled.
+ *
+ * Runs on the main run loop, releasing the previous touch/mouse state when modes change and
+ * sending stick-derived movement or scroll events through the current context.
+ * @param timer Mouse-emulation polling timer; its value is not used.
+ */
 -(void) mouseTimerCallback:(NSTimer*)timer {
     if (!self.shouldSendInputEvents || !ControllerInputContext(self)) return;
     for (Controller* controller in [_controllers allValues]) {
