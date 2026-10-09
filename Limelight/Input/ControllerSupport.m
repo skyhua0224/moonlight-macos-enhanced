@@ -24,6 +24,12 @@
 
 #import <math.h>
 
+@interface ControllerSupport ()
+- (void)handleSpecialCombosPressed:(Controller *)controller pressedButtons:(int)pressedButtons;
+- (uint8_t)remoteControllerNumber:(Controller *)controller;
+- (void)setMouseButtons:(int)flags trackpadButton:(int)button forController:(Controller *)controller;
+@end
+
 // Exact zero gyro samples are reliable protocol packets. Use hysteresis and a
 // settling period so sensor noise cannot repeatedly enqueue reliable zeros on
 // a slow connection.
@@ -283,7 +289,7 @@ static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controlle
         return active;
     }
 
-    int result = LiSendControllerTouchEventCtx(inputCtx, (uint8_t)controller.playerIndex, eventType,
+    int result = LiSendControllerTouchEventCtx(inputCtx, [support remoteControllerNumber:controller], eventType,
                                   pointerId, normalizedX, normalizedY, hasContact ? 1.0f : 0.0f);
     if (eventType != LI_TOUCH_EVENT_MOVE)
         Log(LOG_I, @"[controller-touch] Host event player=%d contact=%u kind=%u result=%d", controller.playerIndex, pointerId, eventType, result);
@@ -342,8 +348,17 @@ static void QueueControllerTouchSnapshot(ControllerSupport *support, Controller 
                     PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(current);
                     if (input != NULL) {
                         int button = state.maximumContacts == 2 ? BUTTON_RIGHT : BUTTON_LEFT;
-                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_PRESS, button);
-                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, button);
+                        int flag = button == BUTTON_LEFT ? A_FLAG : B_FLAG;
+                        int held = 0;
+                        // Pulse through the same ownership path as A/B and physical clicks.
+                        // Preserve this pad's existing sources around the synthetic tap.
+                        if (button == controller.trackpadMouseButton) held = flag;
+                        held |= controller.lastMouseModeButtonFlags;
+                        if (!(held & flag) && LiInputContextIsInitialized(input)) {
+                            int saved = controller.lastMouseModeButtonFlags;
+                            [current setMouseButtons:saved | flag trackpadButton:controller.trackpadMouseButton forController:controller];
+                            [current setMouseButtons:saved trackpadButton:controller.trackpadMouseButton forController:controller];
+                        }
                     }
                 }
                 controller.trackpadTouchBegan = 0;
@@ -415,6 +430,7 @@ static void ApplyDualSenseTriggerEffect(GCDualSenseAdaptiveTrigger *trigger,
     }
 }
 
+
 enum ButtonDebouncerState {
     BDS_none,
     BDS_initialPress,
@@ -426,7 +442,7 @@ enum ButtonDebouncerState {
 @interface ButtonDebouncer : NSObject
 @property (nonatomic) unsigned int button;
 @property (nonatomic, strong) GCControllerButtonInput *input;
-@property (nonatomic, strong) ControllerSupport *support;
+@property (nonatomic, weak) ControllerSupport *support;
 @property (nonatomic) unsigned int chordButton;
 
 @property (nonatomic, weak) ButtonDebouncer *other;
@@ -451,101 +467,87 @@ enum ButtonDebouncerState {
     return self;
 }
 
+/** Processes physical edges; delayed output never changes the physical mask. */
 - (void)handlePress:(Controller *)controller pressedButtons:(int)pressedButtons {
-    if (controller.lastButtonFlags & self.button) {
-        if (self.state == BDS_none) {
-            
-            // If we are 2nd button and 1st button is in initialPress state, then:
-            //   turn on chord button
-            //   put 1st and 2nd buttons into special chord state
-            if (self.other.state == BDS_initialPress) {
-                
-                [self transitionToChordState];
-                [self.other transitionToChordState];
-
-                [self updateLastButtonFlagsForChordState:controller];
-            } else {
-
-                self.state = BDS_initialPress;
-                self.buttonDownTime = [[NSDate alloc] init];
-                controller.lastButtonFlags &= ~self.button;
-                
-                [self.buttonDebounceTimer invalidate];
-                self.buttonDebounceTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:NO block:^(NSTimer * _Nonnull timer) {
-                    [self initialPressTimeout:controller];
-                }];
-            }
-        } else if (self.state == BDS_initialPress) {
-            controller.lastButtonFlags &= ~self.button;
-        } else if (self.state == BDS_chord) {
-            [self updateLastButtonFlagsForChordState:controller];
-        }
+    if (!(pressedButtons & self.button)) return;
+    if (!self.support.shouldSendInputEvents) {
+        [self transitionToNoneState];
+        self.state = BDS_down;
+        return;
     }
-}
-
-- (void)handleRelease:(Controller *)controller releasedButtons:(int)releasedButtons {
-    if (releasedButtons & self.button) {
-        
-        if (self.state == BDS_down && !self.input.pressed) {
-            self.state = BDS_none;
-            
-        } else if (self.state == BDS_initialPress && !self.input.pressed) {
-            
-            controller.lastButtonFlags |= self.button;
-            [self.support updateFinished:controller];
-            
-            self.state = BDS_replicatedPress;
-            
-            NSTimeInterval pressDuration = -[self.buttonDownTime timeIntervalSinceNow];
-            
-            [self.buttonDebounceTimer invalidate];
-            [self.replicatedButtonTimeTimer invalidate];
-            self.replicatedButtonTimeTimer = [NSTimer scheduledTimerWithTimeInterval:pressDuration repeats:NO block:^(NSTimer * _Nonnull timer) {
-                
-                controller.lastButtonFlags &= ~self.button;
+    // A second tap can arrive before the replicated release timer expires.
+    if (self.state == BDS_replicatedPress) {
+        [self transitionToNoneState];
+        controller.lastButtonFlags &= ~self.button;
+        [self.support updateFinished:controller];
+    }
+    if (self.state != BDS_none) return;
+    if (self.other.state == BDS_initialPress) {
+        [self transitionToChordState];
+        [self.other transitionToChordState];
+    } else {
+        self.state = BDS_initialPress;
+        self.buttonDownTime = [NSDate date];
+        self.buttonDebounceTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:NO block:^(NSTimer *timer) {
+            @synchronized(controller) {
+                if (self.state != BDS_initialPress) return;
+                self.state = BDS_down;
+                [self.support handleSpecialCombosPressed:controller pressedButtons:0];
                 [self.support updateFinished:controller];
-
-                self.state = BDS_none;
-            }];
-
-        } else if (self.state == BDS_chord && !self.input.pressed) {
-            if (self.other.state == BDS_chord && !self.other.input.pressed) {
-
-                controller.lastButtonFlags &= ~self.chordButton;
-
-                [self transitionToNoneState];
-                [self.other transitionToNoneState];
-            } else if (self.other.state == BDS_chord && self.other.input.pressed) {
-                
-                [self updateLastButtonFlagsForChordState:controller];
             }
-        }
+        }];
     }
 }
 
-- (void)initialPressTimeout:(Controller *)controller {
+/** Replicates a short tap, or releases Guide once both physical chord buttons are up. */
+- (void)handleRelease:(Controller *)controller releasedButtons:(int)releasedButtons {
+    if (!(releasedButtons & self.button)) return;
     if (self.state == BDS_initialPress) {
-        if (self.input.pressed) {
-            self.state = BDS_down;
-            controller.lastButtonFlags |= self.button;
-            [self.support updateFinished:controller];
-        }
+        [self.buttonDebounceTimer invalidate];
+        self.buttonDebounceTimer = nil;
+        self.state = BDS_replicatedPress;
+        // The caller projects and flushes this press after processing the entire
+        // physical batch, so a simultaneous new button cannot bypass debounce.
+        NSTimeInterval duration = MAX(0.001, -[self.buttonDownTime timeIntervalSinceNow]);
+        self.replicatedButtonTimeTimer = [NSTimer scheduledTimerWithTimeInterval:duration repeats:NO block:^(NSTimer *timer) {
+            @synchronized(controller) {
+                if (self.state != BDS_replicatedPress) return;
+                [self transitionToNoneState];
+                [self.support handleSpecialCombosPressed:controller pressedButtons:0];
+                [self.support updateFinished:controller];
+            }
+        }];
+    } else if (self.state == BDS_down) {
+        [self transitionToNoneState];
+    } else if (self.state == BDS_chord &&
+               !(controller.physicalButtonFlags & (self.button | self.other.button))) {
+        [self transitionToNoneState];
+        [self.other transitionToNoneState];
     }
 }
 
 - (void)transitionToChordState {
+    [self transitionToNoneState];
     self.state = BDS_chord;
 }
 
 - (void)transitionToNoneState {
+    [self.buttonDebounceTimer invalidate];
+    [self.replicatedButtonTimeTimer invalidate];
+    self.buttonDebounceTimer = nil;
+    self.replicatedButtonTimeTimer = nil;
+    self.buttonDownTime = nil;
     self.state = BDS_none;
 }
 
-- (void)updateLastButtonFlagsForChordState:(Controller *)controller {
-    controller.lastButtonFlags |= self.chordButton;
-    
-    controller.lastButtonFlags &= ~self.button;
-    controller.lastButtonFlags &= ~self.other.button;
+/** Projects this debouncer onto the logical mask after all physical edges are processed. */
+- (void)applyToController:(Controller *)controller {
+    if (self.state == BDS_initialPress || self.state == BDS_chord)
+        controller.lastButtonFlags &= ~self.button;
+    else if (self.state == BDS_replicatedPress)
+        controller.lastButtonFlags |= self.button;
+    if (self.state == BDS_chord)
+        controller.lastButtonFlags |= self.chordButton;
 }
 
 @end
@@ -587,6 +589,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     char _controllerNumbers;
     unsigned char _pendingControllerRemovalMask;
     bool _multiController;
+    NSUInteger _inputContextGeneration;
+    uint16_t _singleControllerGyroRateHz;
+    uint16_t _singleControllerAccelRateHz;
     BOOL _gamepadMouseModeEnabled;
     BOOL _gamepadMouseModeLongPressMenuEnabled;
     bool _isMouseModeActive;
@@ -604,6 +609,73 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     NSTimer *_controllerMaintenanceTimer;
     NSUInteger _maintenanceTicks;
 
+}
+
+/** All physical pads share slot zero in single-controller mode, including extensions. */
+- (uint8_t)remoteControllerNumber:(Controller *)controller {
+    return _multiController ? controller.playerIndex : 0;
+}
+
+/** Resolves server feedback to a stable physical owner when remote slot zero is shared. */
+- (Controller *)controllerForRemoteNumber:(uint16_t)number {
+    @synchronized(_controllers) {
+        if (_multiController) return _controllers[@(number)];
+        if (number != 0) return nil;
+        for (int player = 0; player < 4; player++) {
+            Controller *controller = _controllers[@(player)];
+            if (controller != nil) return controller;
+        }
+        return nil;
+    }
+}
+
+/** Rebinds shared-slot sensor requests after hot-plug; other slots retain their timers. */
+- (void)refreshSingleControllerMotion {
+    if (_multiController) return;
+    for (Controller *controller in _controllers.allValues) [self cleanupControllerMotion:controller];
+    Controller *owner = [self controllerForRemoteNumber:0];
+    [self configureMotionForController:owner motionType:LI_MOTION_TYPE_GYRO reportRateHz:_singleControllerGyroRateHz];
+    [self configureMotionForController:owner motionType:LI_MOTION_TYPE_ACCEL reportRateHz:_singleControllerAccelRateHz];
+}
+
+/** Changes controller-owned mouse state; emit only aggregate edges across all pads/sources. */
+- (void)setMouseButtons:(int)flags trackpadButton:(int)button forController:(Controller *)controller {
+    [_controllerStreamLock lock];
+    int before = 0, after = 0;
+    for (Controller *pad in _controllers.allValues) {
+        int old = pad.lastMouseModeButtonFlags;
+        if (pad.trackpadMouseButton == BUTTON_LEFT) old |= A_FLAG;
+        if (pad.trackpadMouseButton == BUTTON_RIGHT) old |= B_FLAG;
+        before |= old;
+        int current = pad == controller ? flags : pad.lastMouseModeButtonFlags;
+        int click = pad == controller ? button : pad.trackpadMouseButton;
+        if (click == BUTTON_LEFT) current |= A_FLAG;
+        if (click == BUTTON_RIGHT) current |= B_FLAG;
+        after |= current;
+    }
+    PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+    if (input && LiInputContextIsInitialized(input)) {
+        if ((before ^ after) & A_FLAG)
+            LiSendMouseButtonEventCtx(input, after & A_FLAG ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        if ((before ^ after) & B_FLAG)
+            LiSendMouseButtonEventCtx(input, after & B_FLAG ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+    }
+    controller.lastMouseModeButtonFlags = flags;
+    controller.trackpadMouseButton = button;
+    [_controllerStreamLock unlock];
+}
+
+/** Cancels delayed output on suspension/removal; held physical buttons resume without new taps. */
+- (void)resetDebouncersForController:(Controller *)controller remove:(BOOL)remove {
+    @synchronized(controller) {
+        for (NSMutableDictionary *debouncers in _debouncers.allValues) {
+            ButtonDebouncer *debouncer = debouncers[@(controller.playerIndex)];
+            [debouncer transitionToNoneState];
+            if (remove) [debouncers removeObjectForKey:@(controller.playerIndex)];
+            else if (controller.physicalButtonFlags & debouncer.button) debouncer.state = BDS_down;
+        }
+        controller.lastButtonFlags = controller.physicalButtonFlags;
+    }
 }
 
 /**
@@ -631,23 +703,38 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  *
  * A changed context clears deferred removals under the stream lock, invalidates each controller's
  * arrival announcement, and stops motion timers. Reassigning the same pointer is a no-op.
- * Call on the main thread when binding; teardown must serialize access to controller timers.
+ * Pointer invalidation is synchronous under the stream lock; timer/button cleanup is dispatched
+ * to main during native-thread teardown and rejects superseded generations.
  * @param inputContext Borrowed native input context, or NULL to detach; ownership is not transferred.
  */
 -(void)setInputContext:(void *)inputContext
 {
+    [_controllerStreamLock lock];
     if (_inputContext == inputContext) {
+        [_controllerStreamLock unlock];
         return;
     }
-
-    [_controllerStreamLock lock];
     _inputContext = inputContext;
+    NSUInteger generation = ++_inputContextGeneration;
     _pendingControllerRemovalMask = 0;
     [_controllerStreamLock unlock];
-    for (Controller *controller in _controllers.allValues) {
-        controller.controllerAnnounced = NO;
-        [self cleanupControllerMotion:controller];
-    }
+    void (^resetState)(void) = ^{
+        [self->_controllerStreamLock lock];
+        BOOL current = self->_inputContextGeneration == generation;
+        [self->_controllerStreamLock unlock];
+        if (!current) return;
+        self->_singleControllerGyroRateHz = self->_singleControllerAccelRateHz = 0;
+        for (Controller *controller in self->_controllers.allValues) {
+            controller.controllerAnnounced = NO;
+            controller.hasSentGamepadState = NO;
+            controller.lastMouseModeButtonFlags = 0;
+            ResetControllerTrackpadMouseState(controller);
+            [self resetDebouncersForController:controller remove:NO];
+            [self cleanupControllerMotion:controller];
+        }
+    };
+    if ([NSThread isMainThread]) resetState();
+    else dispatch_async(dispatch_get_main_queue(), resetState);
 }
 
 @synthesize shouldSendInputEvents = _shouldSendInputEvents;
@@ -670,41 +757,41 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             ControllerMenuGestureInterrupt(&gesture, controller.gamepad.extendedGamepad.buttonMenu.pressed);
             controller.menuGesture = gesture;
         }
+        for (Controller *controller in _controllers.allValues) {
+            [self setMouseButtons:0 trackpadButton:0 forController:controller];
+            [self resetDebouncersForController:controller remove:NO];
+        }
+        [_controllerStreamLock lock];
         PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
         if (input != NULL && LiInputContextIsInitialized(input)) {
-            [_controllerStreamLock lock];
             for (Controller *controller in _controllers.allValues) {
-                LiSendMultiControllerEventCtx(input, _multiController ? controller.playerIndex : 0,
+                LiSendMultiControllerEventCtx(input, [self remoteControllerNumber:controller],
                     _multiController ? (unsigned char)_controllerNumbers : 1, 0, 0, 0, 0, 0, 0, 0);
-                if (controller.trackpadMouseButton != 0)
-                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
                 // Release native contacts before resetting their last delivered positions.
                 if (!ControllerTouchpadUsesMouse(self, controller)) {
                     if (controller.primaryTouchActive)
-                        LiSendControllerTouchEventCtx(input, controller.playerIndex, LI_TOUCH_EVENT_UP,
+                        LiSendControllerTouchEventCtx(input, [self remoteControllerNumber:controller], LI_TOUCH_EVENT_UP,
                             controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0.0f);
                     if (controller.secondaryTouchActive)
-                        LiSendControllerTouchEventCtx(input, controller.playerIndex, LI_TOUCH_EVENT_UP,
+                        LiSendControllerTouchEventCtx(input, [self remoteControllerNumber:controller], LI_TOUCH_EVENT_UP,
                             controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0.0f);
                 }
                 if (controller.gyroTimer != nil) {
-                    LiSendControllerMotionEventCtx(input, controller.playerIndex,
+                    LiSendControllerMotionEventCtx(input, [self remoteControllerNumber:controller],
                                                    LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
                 }
                 controller.lastGyroSample = (GCRotationRate){};
                 controller.lastAccelSample = (GCAcceleration){};
-                if (controller.lastMouseModeButtonFlags & A_FLAG)
-                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
-                if (controller.lastMouseModeButtonFlags & B_FLAG)
-                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
             }
-            [_controllerStreamLock unlock];
             Log(LOG_I, @"[controller] Neutral input sent before pausing controller delivery");
         }
+        [_controllerStreamLock unlock];
         // Clear delivered mouse state even if the stream is already unavailable.
         for (Controller *controller in _controllers.allValues) {
             controller.lastMouseModeButtonFlags = 0;
             controller.hasSentGamepadState = NO;
+            controller.lastGyroSample = (GCRotationRate){};
+            controller.lastAccelSample = (GCAcceleration){};
             ResetControllerTrackpadMouseState(controller);
         }
     } else if (!wasEnabled && enabled) {
@@ -753,14 +840,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 - (void)setGamepadMouseModeActive:(BOOL)active forController:(Controller *)controller {
     if (controller.isMouseMode == active) return;
-    PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
-    if (input) {
-        if (controller.lastMouseModeButtonFlags & A_FLAG)
-            LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
-        if (controller.lastMouseModeButtonFlags & B_FLAG)
-            LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
-    }
-    controller.lastMouseModeButtonFlags = 0;
+    [self setMouseButtons:0 trackpadButton:controller.trackpadMouseButton forController:controller];
     controller.isMouseMode = active;
     _accumulatedMouseX = 0;
     _accumulatedMouseY = 0;
@@ -768,9 +848,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     // Restore only controls affected by mouse emulation. Calling the complete
     // input handler here would also feed a held Menu into its debouncer.
     @synchronized(controller) {
-        controller.lastButtonFlags &= ~(A_FLAG | B_FLAG);
-        if (!active && gamepad.buttonA.pressed) controller.lastButtonFlags |= A_FLAG;
-        if (!active && gamepad.buttonB.pressed) controller.lastButtonFlags |= B_FLAG;
+        controller.physicalButtonFlags &= ~(A_FLAG | B_FLAG);
+        if (!active && gamepad.buttonA.pressed) controller.physicalButtonFlags |= A_FLAG;
+        if (!active && gamepad.buttonB.pressed) controller.physicalButtonFlags |= B_FLAG;
+        [self handleSpecialCombosPressed:controller pressedButtons:0];
     }
     [self updateRightStick:controller
         x:active ? 0 : (short)(gamepad.rightThumbstick.xAxis.value * 0x7FFE)
@@ -809,7 +890,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         return;
     }
     if (!ControllerIsFeedbackTarget(self, controllerNumber)) return;
-    Controller* controller = [_controllers objectForKey:[NSNumber numberWithInteger:controllerNumber]];
+    Controller* controller = [self controllerForRemoteNumber:controllerNumber];
     if (controller == nil && controllerNumber == 0 && _oscEnabled) {
         // No physical controller, but we have on-screen controls
         controller = _player0osc;
@@ -855,7 +936,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         LI_DS5_HAPTICS_IR_FRAME_V2 frame;
         [frames[number] getBytes:&frame length:sizeof(frame)];
         if (!ControllerIsFeedbackTarget(self, frame.controllerNumber)) continue;
-        Controller *controller = _controllers[number];
+        Controller *controller = [self controllerForRemoteNumber:number.unsignedShortValue];
         if (!controller) continue;
         if (!(frame.flags & LI_DS5_HAPTICS_IR_FLAG_DISCONTINUITY) &&
             controller.hasHapticsSequence &&
@@ -932,7 +1013,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             uint8_t percent = battery.batteryLevel >= 0 && battery.batteryLevel <= 1
                 ? (uint8_t)lrintf(battery.batteryLevel * 100) : LI_BATTERY_PERCENTAGE_UNKNOWN;
             PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
-            if (input) LiSendControllerBatteryEventCtx(input, (uint8_t)controller.playerIndex, state, percent);
+            if (input) LiSendControllerBatteryEventCtx(input, [self remoteControllerNumber:controller], state, percent);
         }
     }
 }
@@ -947,7 +1028,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         return;
     }
 
-    Controller *controller = [_controllers objectForKey:@(frame->controllerNumber)];
+    Controller *controller = [self controllerForRemoteNumber:frame->controllerNumber];
     if (controller != nil) {
         if (@available(macOS 11.0, *)) {
             if ([controller.gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]] &&
@@ -991,7 +1072,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
         return;
     }
-    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    Controller *controller = [self controllerForRemoteNumber:controllerNumber];
     if (controller == nil) {
         return;
     }
@@ -1017,7 +1098,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         return;
     }
     if (!ControllerIsFeedbackTarget(self, controllerNumber)) return;
-    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    Controller *controller = [self controllerForRemoteNumber:controllerNumber];
     GCController *gamepad = controller.gamepad;
     if (gamepad == nil) {
         return;
@@ -1046,7 +1127,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
         return;
     }
-    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    Controller *controller = [self controllerForRemoteNumber:controllerNumber];
     GCController *gamepad = controller.gamepad;
     if (gamepad == nil || ![gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
         return;
@@ -1066,7 +1147,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 /**
  * Schedules a host motion-reporting request on the main queue for the current stream.
  *
- * Requests queued for a replaced context, disabled motion mode, or an ineligible controller
+ * Remote slot zero resolves to the lowest connected physical index in single-controller mode;
+ * cached shared-slot rates follow that owner across hot-plug. Samples use the same remote mapping
+ * as ordinary input and touch. Requests queued for a replaced context or disabled motion mode
  * are ignored. Each sensor has its own timer; samples require enabled delivery and an announced
  * controller. Acceleration is converted to m/s²; gyro axes are remapped to degrees/s with rest
  * hysteresis and duplicate suppression. Stopping an active gyro sends a gated zero sample.
@@ -1078,99 +1161,129 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                  motionType:(uint8_t)motionType
                reportRateHz:(uint16_t)reportRateHz
 {
+    [_controllerStreamLock lock];
     void *requestedInputContext = self.inputContext;
+    NSUInteger generation = _inputContextGeneration;
+    [_controllerStreamLock unlock];
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.inputContext != requestedInputContext || requestedInputContext == NULL ||
-            self.controllerMotionMode == 2 || !ControllerIsFeedbackTarget(self, controllerNumber)) {
+        [self->_controllerStreamLock lock];
+        BOOL current = self->_inputContextGeneration == generation && self.inputContext == requestedInputContext;
+        [self->_controllerStreamLock unlock];
+        if (!current || requestedInputContext == NULL || self.controllerMotionMode == 2 ||
+            !ControllerIsFeedbackTarget(self, controllerNumber)) {
             return;
         }
-        Controller *controller = [self->_controllers objectForKey:@(controllerNumber)];
+        if (!self->_multiController) {
+            if (controllerNumber != 0) return;
+            if (motionType == LI_MOTION_TYPE_GYRO) self->_singleControllerGyroRateHz = reportRateHz;
+            else if (motionType == LI_MOTION_TYPE_ACCEL) self->_singleControllerAccelRateHz = reportRateHz;
+        }
+        Controller *controller = [self controllerForRemoteNumber:controllerNumber];
         if (controller.gamepad.motion == nil) {
             return;
         }
 
-        NSTimeInterval interval = reportRateHz > 0 ? 1.0 / reportRateHz : 0;
-        if (motionType == LI_MOTION_TYPE_ACCEL) {
-            [controller.accelTimer invalidate];
-            controller.accelTimer = nil;
-            controller.lastAccelSample = (GCAcceleration){};
-            if (reportRateHz > 0 && controller.gamepad.motion.hasGravityAndUserAcceleration) {
-                controller.accelTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
-                    if (!self.shouldSendInputEvents || !controller.controllerAnnounced) return;
-                    GCAcceleration sample = controller.gamepad.motion.acceleration;
-                    GCAcceleration previousSample = controller.lastAccelSample;
-                    if (memcmp(&sample, &previousSample, sizeof(sample)) == 0) return;
-                    controller.lastAccelSample = sample;
-                    PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-                    if (inputCtx && (self.shouldSendInputEvents && controller.controllerAnnounced)) {
-                        LiSendControllerMotionEventCtx(inputCtx, controller.playerIndex, LI_MOTION_TYPE_ACCEL,
-                                                       sample.x * -9.80665f,
-                                                       sample.y * -9.80665f,
-                                                       sample.z * -9.80665f);
-                    }
-                }];
-            }
-        } else if (motionType == LI_MOTION_TYPE_GYRO) {
-            BOOL wasReporting = controller.gyroTimer != nil;
-            [controller.gyroTimer invalidate];
-            controller.gyroTimer = nil;
-            controller.lastGyroSample = (GCRotationRate){};
-            controller.gyroAtRest = YES;
-            controller.gyroStationarySampleCount = 0;
-            if (reportRateHz > 0 && controller.gamepad.motion.hasRotationRate) {
-                controller.gyroTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
-                    if (!self.shouldSendInputEvents || !controller.controllerAnnounced) return;
-                    GCRotationRate sample = controller.gamepad.motion.rotationRate;
-                    GCRotationRate filteredSample = {
-                        sample.x * 57.2957795,
-                        sample.z * 57.2957795,
-                        sample.y * -57.2957795,
-                    };
-                    double magnitude = sqrt(filteredSample.x * filteredSample.x +
-                                            filteredSample.y * filteredSample.y +
-                                            filteredSample.z * filteredSample.z);
-                    if (controller.gyroAtRest) {
-                        if (magnitude <= kControllerGyroRestExitDps) {
-                            filteredSample = (GCRotationRate){};
-                        } else {
-                            controller.gyroAtRest = NO;
-                        }
-                    } else if (magnitude <= kControllerGyroRestEnterDps) {
-                        controller.gyroStationarySampleCount += 1;
-                        if (controller.gyroStationarySampleCount >= kControllerGyroRestSamples) {
-                            controller.gyroAtRest = YES;
-                            controller.gyroStationarySampleCount = 0;
-                            filteredSample = (GCRotationRate){};
-                        }
-                    } else {
-                        controller.gyroStationarySampleCount = 0;
-                    }
-                    GCRotationRate previousSample = controller.lastGyroSample;
-                    if (memcmp(&filteredSample, &previousSample, sizeof(filteredSample)) == 0) return;
-                    controller.lastGyroSample = filteredSample;
-                    PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-                    if (inputCtx && (self.shouldSendInputEvents && controller.controllerAnnounced)) {
-                        LiSendControllerMotionEventCtx(inputCtx, controller.playerIndex, LI_MOTION_TYPE_GYRO,
-                                                       (float)filteredSample.x,
-                                                       (float)filteredSample.y,
-                                                       (float)filteredSample.z);
-                    }
-                }];
-            } else if (wasReporting) {
-                PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-                if (inputCtx && (self.shouldSendInputEvents && controller.controllerAnnounced)) {
-                    LiSendControllerMotionEventCtx(inputCtx, controller.playerIndex,
-                                                   LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
-                }
-            }
-        }
-
-        if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *)) {
-            if (controller.gamepad.motion.sensorsRequireManualActivation) {
-                controller.gamepad.motion.sensorsActive = controller.gyroTimer != nil || controller.accelTimer != nil;
-            }
-        }
+        [self configureMotionForController:controller motionType:motionType reportRateHz:reportRateHz];
     });
+}
+
+/** Installs sampling for the current physical owner on the main queue. */
+- (void)configureMotionForController:(Controller *)controller motionType:(uint8_t)motionType reportRateHz:(uint16_t)reportRateHz {
+    if (controller.gamepad.motion == nil) return;
+    [_controllerStreamLock lock];
+    NSUInteger generation = _inputContextGeneration;
+    BOOL hasContext = _inputContext != NULL;
+    [_controllerStreamLock unlock];
+    if (!hasContext || self.controllerMotionMode == 2) return;
+    NSTimeInterval interval = reportRateHz > 0 ? 1.0 / reportRateHz : 0;
+    if (motionType == LI_MOTION_TYPE_ACCEL) {
+        [controller.accelTimer invalidate];
+        controller.accelTimer = nil;
+        controller.lastAccelSample = (GCAcceleration){};
+        if (reportRateHz > 0 && controller.gamepad.motion.hasGravityAndUserAcceleration) {
+            controller.accelTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
+                if (!self.shouldSendInputEvents || !controller.controllerAnnounced) return;
+                GCAcceleration sample = controller.gamepad.motion.acceleration;
+                GCAcceleration previousSample = controller.lastAccelSample;
+                if (memcmp(&sample, &previousSample, sizeof(sample)) == 0) return;
+                controller.lastAccelSample = sample;
+                [self->_controllerStreamLock lock];
+                PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                if (self->_inputContextGeneration == generation && inputCtx && LiInputContextIsInitialized(inputCtx) &&
+                    self.shouldSendInputEvents && controller.controllerAnnounced) {
+                    LiSendControllerMotionEventCtx(inputCtx, [self remoteControllerNumber:controller], LI_MOTION_TYPE_ACCEL,
+                                                   sample.x * -9.80665f,
+                                                   sample.y * -9.80665f,
+                                                   sample.z * -9.80665f);
+                }
+                [self->_controllerStreamLock unlock];
+            }];
+        }
+    } else if (motionType == LI_MOTION_TYPE_GYRO) {
+        BOOL wasReporting = controller.gyroTimer != nil;
+        [controller.gyroTimer invalidate];
+        controller.gyroTimer = nil;
+        controller.lastGyroSample = (GCRotationRate){};
+        controller.gyroAtRest = YES;
+        controller.gyroStationarySampleCount = 0;
+        if (reportRateHz > 0 && controller.gamepad.motion.hasRotationRate) {
+            controller.gyroTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
+                if (!self.shouldSendInputEvents || !controller.controllerAnnounced) return;
+                GCRotationRate sample = controller.gamepad.motion.rotationRate;
+                GCRotationRate filteredSample = {
+                    sample.x * 57.2957795,
+                    sample.z * 57.2957795,
+                    sample.y * -57.2957795,
+                };
+                double magnitude = sqrt(filteredSample.x * filteredSample.x +
+                                        filteredSample.y * filteredSample.y +
+                                        filteredSample.z * filteredSample.z);
+                if (controller.gyroAtRest) {
+                    if (magnitude <= kControllerGyroRestExitDps) {
+                        filteredSample = (GCRotationRate){};
+                    } else {
+                        controller.gyroAtRest = NO;
+                    }
+                } else if (magnitude <= kControllerGyroRestEnterDps) {
+                    controller.gyroStationarySampleCount += 1;
+                    if (controller.gyroStationarySampleCount >= kControllerGyroRestSamples) {
+                        controller.gyroAtRest = YES;
+                        controller.gyroStationarySampleCount = 0;
+                        filteredSample = (GCRotationRate){};
+                    }
+                } else {
+                    controller.gyroStationarySampleCount = 0;
+                }
+                GCRotationRate previousSample = controller.lastGyroSample;
+                if (memcmp(&filteredSample, &previousSample, sizeof(filteredSample)) == 0) return;
+                controller.lastGyroSample = filteredSample;
+                [self->_controllerStreamLock lock];
+                PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+                if (self->_inputContextGeneration == generation && inputCtx && LiInputContextIsInitialized(inputCtx) &&
+                    self.shouldSendInputEvents && controller.controllerAnnounced) {
+                    LiSendControllerMotionEventCtx(inputCtx, [self remoteControllerNumber:controller], LI_MOTION_TYPE_GYRO,
+                                                   (float)filteredSample.x,
+                                                   (float)filteredSample.y,
+                                                   (float)filteredSample.z);
+                }
+                [self->_controllerStreamLock unlock];
+            }];
+        } else if (wasReporting) {
+            [_controllerStreamLock lock];
+            PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+            if (inputCtx && LiInputContextIsInitialized(inputCtx) && self.shouldSendInputEvents && controller.controllerAnnounced) {
+                LiSendControllerMotionEventCtx(inputCtx, [self remoteControllerNumber:controller],
+                                               LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
+            }
+            [_controllerStreamLock unlock];
+        }
+    }
+
+    if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *)) {
+        if (controller.gamepad.motion.sensorsRequireManualActivation) {
+            controller.gamepad.motion.sensorsActive = controller.gyroTimer != nil || controller.accelTimer != nil;
+        }
+    }
 }
 
 -(void) updateLeftStick:(Controller*)controller x:(short)x y:(short)y
@@ -1233,66 +1346,84 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         ButtonDebouncer *debouncer = debouncers[@(controller.playerIndex)];
         [debouncer handlePress:controller pressedButtons:pressedButtons];
     }];
+    controller.lastButtonFlags = controller.physicalButtonFlags;
+    for (NSMutableDictionary *debouncers in _debouncers.allValues) {
+        [debouncers[@(controller.playerIndex)] applyToController:controller];
+    }
+}
+
+/** Flushes a short tap only after every release/press in the physical batch has been projected. */
+- (void)flushReplicatedPresses:(Controller *)controller releasedButtons:(int)releasedButtons {
+    for (NSMutableDictionary *debouncers in _debouncers.allValues) {
+        ButtonDebouncer *debouncer = debouncers[@(controller.playerIndex)];
+        if ((releasedButtons & debouncer.button) && debouncer.state == BDS_replicatedPress) {
+            [self updateFinished:controller];
+            break;
+        }
+    }
 }
 
 /**
  * Replaces a controller's button mask and processes only actual press/release transitions.
  *
  * The controller monitor protects the update; releases are processed before presses because
- * special-combo handling may rewrite the stored mask. Does not itself flush an ordinary packet.
+ * special-combo handling projects a separate logical mask from the physical state.
+ * Does not itself flush an ordinary packet.
  * @param controller Controller whose physical button state is being updated.
  * @param flags Complete new button mask.
  */
 -(void) updateButtonFlags:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
-        int previousFlags = controller.lastButtonFlags;
-        controller.lastButtonFlags = flags;
+        int previousFlags = controller.physicalButtonFlags;
+        controller.physicalButtonFlags = flags;
         
-        // This must be called before handleSpecialCombosPressed
-        // because we clear the original button flags there
+        // Finish releases before new presses can start a different chord.
         int releasedButtons = (previousFlags ^ flags) & ~flags;
         int pressedButtons = (previousFlags ^ flags) & flags;
         
         [self handleSpecialCombosReleased:controller releasedButtons:releasedButtons];
         
         [self handleSpecialCombosPressed:controller pressedButtons:pressedButtons];
+        [self flushReplicatedPresses:controller releasedButtons:releasedButtons];
     }
 }
 
 /**
  * Sets button bits and processes special combos only for newly pressed buttons.
  *
- * Serializes mask updates with the controller monitor; packet delivery occurs in updateFinished:.
+ * Tracks physical edges under the controller monitor, then projects debounced/chord output.
+ * Packet delivery occurs in updateFinished:.
  * @param controller Controller receiving the press.
  * @param flags Button bits to set without clearing other buttons.
  */
 -(void) setButtonFlag:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
-        int pressedButtons = flags & ~controller.lastButtonFlags;
-        controller.lastButtonFlags |= flags;
-        if (pressedButtons != 0) {
-            [self handleSpecialCombosPressed:controller pressedButtons:pressedButtons];
-        }
+        int pressedButtons = flags & ~controller.physicalButtonFlags;
+        controller.physicalButtonFlags |= flags;
+        [self handleSpecialCombosPressed:controller pressedButtons:pressedButtons];
     }
 }
 
 /**
  * Clears button bits and processes special combos only for buttons previously pressed.
  *
- * Serializes mask updates with the controller monitor; packet delivery occurs in updateFinished:.
+ * Tracks physical edges under the controller monitor, then projects debounced/chord output.
+ * Packet delivery occurs in updateFinished:.
  * @param controller Controller receiving the release.
  * @param flags Button bits to clear without changing other buttons.
  */
 -(void) clearButtonFlag:(Controller*)controller flags:(int)flags
 {
     @synchronized(controller) {
-        int releasedButtons = flags & controller.lastButtonFlags;
-        controller.lastButtonFlags &= ~flags;
+        int releasedButtons = flags & controller.physicalButtonFlags;
+        controller.physicalButtonFlags &= ~flags;
         if (releasedButtons != 0) {
             [self handleSpecialCombosReleased:controller releasedButtons:releasedButtons];
         }
+        [self handleSpecialCombosPressed:controller pressedButtons:0];
+        [self flushReplicatedPresses:controller releasedButtons:releasedButtons];
     }
 }
 
@@ -1375,7 +1506,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             }
             // Use assigned slots rather than a count or the launch-time mask:
             // hot-plug can leave holes or add slots during the streaming session.
-            int arrivalResult = LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)(_multiController ? controller.playerIndex : 0),
+            int arrivalResult = LiSendControllerArrivalEventCtx(inputCtx, [self remoteControllerNumber:controller],
                                             (uint16_t)(_multiController ? (unsigned char)_controllerNumbers : 1),
                                             controllerType, supportedButtonFlags, capabilities);
             if (arrivalResult != 0) {
@@ -1397,7 +1528,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 uint8_t percentage = battery.batteryLevel >= 0.0f && battery.batteryLevel <= 1.0f
                     ? (uint8_t)lrintf(battery.batteryLevel * 100.0f)
                     : LI_BATTERY_PERCENTAGE_UNKNOWN;
-                LiSendControllerBatteryEventCtx(inputCtx, (uint8_t)controller.playerIndex,
+                LiSendControllerBatteryEventCtx(inputCtx, [self remoteControllerNumber:controller],
                                                 batteryState, percentage);
             }
         }
@@ -1417,7 +1548,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         controller.hasSentGamepadState = YES;
         if (_multiController) {
             LiSendMultiControllerEventCtx(inputCtx,
-                                          controller.playerIndex,
+                                          [self remoteControllerNumber:controller],
                                           (uint16_t)(_multiController ? (unsigned char)_controllerNumbers : 1),
                                           controller.lastButtonFlags,
                                           controller.lastLeftTrigger,
@@ -1552,6 +1683,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         if (controller.extendedGamepad != NULL) {
             controller.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *gamepad, GCControllerElement *element) {
                 Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:weakController.playerIndex]];
+                if (limeController == nil || limeController.gamepad != weakController) return;
                 short leftStickX, leftStickY;
                 short rightStickX, rightStickY;
                 unsigned char leftTrigger, rightTrigger;
@@ -1559,26 +1691,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 if (limeController.isMouseMode && self->_shouldSendInputEvents) {
                     // Mouse Toggle and Movement are handled by timer
                     
-                    // Mouse Clicks (A = Left, B = Right)
-                    BOOL currentA = gamepad.buttonA.pressed;
-                    BOOL currentB = gamepad.buttonB.pressed;
-                    BOOL lastA = (limeController.lastMouseModeButtonFlags & A_FLAG) != 0;
-                    BOOL lastB = (limeController.lastMouseModeButtonFlags & B_FLAG) != 0;
                     PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-                    
-                    if (currentA != lastA) {
-                        if (inputCtx) {
-                            LiSendMouseButtonEventCtx(inputCtx, currentA ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
-                        }
-                        if (currentA) limeController.lastMouseModeButtonFlags |= A_FLAG;
-                        else limeController.lastMouseModeButtonFlags &= ~A_FLAG;
-                    }
-                    if (currentB != lastB) {
-                        if (inputCtx) {
-                            LiSendMouseButtonEventCtx(inputCtx, currentB ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
-                        }
-                        if (currentB) limeController.lastMouseModeButtonFlags |= B_FLAG;
-                        else limeController.lastMouseModeButtonFlags &= ~B_FLAG;
+                    if (inputCtx && LiInputContextIsInitialized(inputCtx)) {
+                        int flags = (gamepad.buttonA.pressed ? A_FLAG : 0) | (gamepad.buttonB.pressed ? B_FLAG : 0);
+                        [self setMouseButtons:flags trackpadButton:limeController.trackpadMouseButton forController:limeController];
                     }
                 }
                 
@@ -1691,8 +1807,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     touchButton.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
                         (void)button;
                         (void)value;
+                        if (touchController.gamepad == nil || touchController.gamepad != weakController) return;
                         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-                        if (inputCtx != NULL && self.shouldSendInputEvents) {
+                        if (inputCtx != NULL && LiInputContextIsInitialized(inputCtx) && self.shouldSendInputEvents) {
                             if (ControllerTouchpadUsesMouse(self, touchController)) {
                                 if (pressed) {
                                     touchController.trackpadPhysicalClickConsumed = YES;
@@ -1707,16 +1824,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                                     // contact is lifted first.
                                     BOOL secondaryContact = secondary != nil &&
                                         (fabsf(secondary.xAxis.value) > 0.001f || fabsf(secondary.yAxis.value) > 0.001f);
-                                    touchController.trackpadMouseButton =
-                                        (touchController.secondaryTouchActive || secondaryContact) ? BUTTON_RIGHT : BUTTON_LEFT;
+                                    int click = (touchController.secondaryTouchActive || secondaryContact) ? BUTTON_RIGHT : BUTTON_LEFT;
+                                    [self setMouseButtons:touchController.lastMouseModeButtonFlags trackpadButton:click forController:touchController];
                                 }
-                                int buttonCode = touchController.trackpadMouseButton != 0
-                                    ? touchController.trackpadMouseButton : BUTTON_LEFT;
-                                LiSendMouseButtonEventCtx(inputCtx,
-                                                          pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE,
-                                                          buttonCode);
                                 if (!pressed) {
-                                    touchController.trackpadMouseButton = 0;
+                                    [self setMouseButtons:touchController.lastMouseModeButtonFlags trackpadButton:0 forController:touchController];
                                 }
                             } else {
                                 UPDATE_BUTTON_FLAG(touchController, TOUCHPAD_FLAG, pressed);
@@ -1928,7 +2040,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             // Prepare controller haptics for use
             [self initializeControllerHaptics:limeController];
 
-            [_controllers setObject:limeController forKey:[NSNumber numberWithInteger:controller.playerIndex]];
+            @synchronized(_controllers) {
+                [_controllers setObject:limeController forKey:[NSNumber numberWithInteger:controller.playerIndex]];
+            }
+            [self refreshSingleControllerMotion];
             
             Log(LOG_I, @"Assigning controller index: %d", i);
             break;
@@ -2056,11 +2171,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(me);
             for (Controller *controller in me->_controllers.allValues) {
                 if (input && ControllerTouchpadUsesMouse(me, controller) && controller.trackpadMouseButton)
-                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
+                    [me setMouseButtons:controller.lastMouseModeButtonFlags trackpadButton:0 forController:controller];
                 if (input && !ControllerTouchpadUsesMouse(me, controller)) {
-                    if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, controller.playerIndex,
+                    if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, [me remoteControllerNumber:controller],
                         LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
-                    if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, controller.playerIndex,
+                    if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, [me remoteControllerNumber:controller],
                         LI_TOUCH_EVENT_UP, controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0);
                     [me clearButtonFlag:controller flags:TOUCHPAD_FLAG];
                     [me updateFinished:controller];
@@ -2151,6 +2266,25 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         // Unset the GCController on this object (in case it is the OSC, which will persist)
         Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
         
+        [self->_controllerStreamLock lock];
+        PML_INPUT_STREAM_CONTEXT removalInput = ControllerInputContext(self);
+        if (self.shouldSendInputEvents && removalInput && LiInputContextIsInitialized(removalInput)) {
+            if (!ControllerTouchpadUsesMouse(self, limeController)) {
+                if (limeController.primaryTouchActive) LiSendControllerTouchEventCtx(removalInput,
+                    [self remoteControllerNumber:limeController], LI_TOUCH_EVENT_UP,
+                    limeController.playerIndex * 2, limeController.lastPrimaryTouchX, limeController.lastPrimaryTouchY, 0);
+                if (limeController.secondaryTouchActive) LiSendControllerTouchEventCtx(removalInput,
+                    [self remoteControllerNumber:limeController], LI_TOUCH_EVENT_UP,
+                    limeController.playerIndex * 2 + 1, limeController.lastSecondaryTouchX, limeController.lastSecondaryTouchY, 0);
+            }
+            if (limeController.gyroTimer) LiSendControllerMotionEventCtx(removalInput,
+                [self remoteControllerNumber:limeController], LI_MOTION_TYPE_GYRO, 0, 0, 0);
+        }
+        [self->_controllerStreamLock unlock];
+        [self setMouseButtons:0 trackpadButton:0 forController:limeController];
+        ResetControllerTrackpadMouseState(limeController);
+        [self resetDebouncersForController:limeController remove:YES];
+
         // Stop haptics on this controller
         [self cleanupControllerHaptics:limeController];
         [self cleanupControllerMotion:limeController];
@@ -2162,14 +2296,18 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         [self->_controllerStreamLock lock];
         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
         if (self.shouldSendInputEvents && inputCtx && LiInputContextIsInitialized(inputCtx)) {
-            LiSendMultiControllerEventCtx(inputCtx, self->_multiController ? controller.playerIndex : 0,
+            LiSendMultiControllerEventCtx(inputCtx, [self remoteControllerNumber:limeController],
                 self->_multiController ? (unsigned char)self->_controllerNumbers : 1,
                 0, 0, 0, 0, 0, 0, 0);
         } else if (self->_multiController) {
             self->_pendingControllerRemovalMask |= 1 << controller.playerIndex;
         }
         [self->_controllerStreamLock unlock];
-        [self->_controllers removeObjectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+        @synchronized(self->_controllers) {
+            [self->_controllers removeObjectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+        }
+        limeController.physicalButtonFlags = limeController.lastButtonFlags = 0;
+        [self refreshSingleControllerMotion];
         if (!self->_multiController && self.shouldSendInputEvents) {
             // All physical controllers share remote slot zero in single-controller mode.
             for (Controller *remaining in self->_controllers.allValues) {
@@ -2285,10 +2423,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     for (Controller* controller in [_controllers allValues]) {
         [self cleanupControllerHaptics:controller];
         [self cleanupControllerMotion:controller];
+        [self resetDebouncersForController:controller remove:YES];
     }
     [_ds5HapticsAudioRenderer reset];
     _ds5HapticsAudioRenderer = nil;
-    [_controllers removeAllObjects];
+    @synchronized(_controllers) { [_controllers removeAllObjects]; }
     
     for (GCController* controller in [GCController controllers]) {
         if ([ControllerSupport isSupportedGamepad:controller]) {
@@ -2338,13 +2477,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             BOOL wasMouse = ControllerTouchpadUsesMouse(self, controller);
             if (input) {
                 if (!wasMouse) {
-                    if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, (uint8_t)controller.playerIndex,
+                    if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, [self remoteControllerNumber:controller],
                         LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
-                    if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, (uint8_t)controller.playerIndex,
+                    if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, [self remoteControllerNumber:controller],
                         LI_TOUCH_EVENT_UP, controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0);
                     if ((controller.lastButtonFlags & TOUCHPAD_FLAG) != 0) [self clearButtonFlag:controller flags:TOUCHPAD_FLAG];
                 } else if (controller.trackpadMouseButton) {
-                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
+                    [self setMouseButtons:controller.lastMouseModeButtonFlags trackpadButton:0 forController:controller];
                 }
             }
             if (dualSense) {

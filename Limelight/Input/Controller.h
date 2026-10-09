@@ -17,6 +17,8 @@
 
 @property(nullable, nonatomic, retain) GCController *gamepad;
 @property(nonatomic) int playerIndex;
+// Physical transitions are independent of the debounce/chord output mask.
+@property(nonatomic) int physicalButtonFlags;
 @property(nonatomic) int lastButtonFlags;
 @property(nonatomic) int emulatingButtonFlags;
 @property(nonatomic) int supportedEmulationFlags;
