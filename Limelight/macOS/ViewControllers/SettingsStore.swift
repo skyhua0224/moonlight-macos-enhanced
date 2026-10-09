@@ -110,6 +110,8 @@ struct Settings: Encodable, Decodable {
   let touchscreenMode: Int?
   let gamepadMouseMode: Bool?
   let gamepadMouseModeLongPressMenu: Bool?
+  let hostPrecisionTouchpad: Bool?
+  let imeTextInput: Bool?
   let mouseMode: Int?
   let pointerSensitivity: CGFloat?
   let wheelScrollSpeed: CGFloat?
@@ -257,6 +259,8 @@ struct Settings: Encodable, Decodable {
       touchscreenMode: touchscreenMode,
       gamepadMouseMode: gamepadMouseMode,
       gamepadMouseModeLongPressMenu: gamepadMouseModeLongPressMenu,
+      hostPrecisionTouchpad: hostPrecisionTouchpad,
+      imeTextInput: imeTextInput,
       mouseMode: mouseMode,
       pointerSensitivity: pointerSensitivity,
       wheelScrollSpeed: wheelScrollSpeed,
@@ -510,6 +514,8 @@ extension SettingsClass {
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
       gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
+      hostPrecisionTouchpad: settings.hostPrecisionTouchpad,
+      imeTextInput: settings.imeTextInput,
       mouseMode: resolvedMouseMode,
       pointerSensitivity: settings.pointerSensitivity,
       wheelScrollSpeed: settings.wheelScrollSpeed,

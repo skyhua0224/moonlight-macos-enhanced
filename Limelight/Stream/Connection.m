@@ -169,6 +169,8 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 
     ML_CONNECTION_CONTEXT _connectionContext;
     NSLock *_initLock;
+    BOOL _foundationHost;
+    BOOL _wantsRemoteTextContext;
 
     VideoDecoderRenderer *_renderer;
     id<ConnectionCallbacks> _callbacks;
@@ -2346,6 +2348,27 @@ void ClClipboardItemReceived(const LI_CLIPBOARD_ITEM *item)
     }
 }
 
+void ClResolutionChanged(uint32_t width, uint32_t height)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    Log(LOG_I, @"[live] Host resolution changed: %ux%u", width, height);
+    if (callbacks != nil &&
+        [callbacks respondsToSelector:@selector(streamResolutionChanged:height:)]) {
+        [callbacks streamResolutionChanged:width height:height];
+    }
+}
+
+void ClRemoteTextContext(const LI_REMOTE_TEXT_CONTEXT *context)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks != nil && context != NULL &&
+        [callbacks respondsToSelector:@selector(remoteTextContextUpdated:)]) {
+        [callbacks remoteTextContextUpdated:context];
+    }
+}
+
 void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 {
     Connection *conn = CurrentConnection();
@@ -2804,6 +2827,9 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _clCallbacks.connectionStatusUpdate = ClConnectionStatusUpdate;
     _clCallbacks.clipboardItemReceived = ClClipboardItemReceived;
     _clCallbacks.clipboardDataReceived = ClClipboardDataReceived;
+    _clCallbacks.resolutionChanged = ClResolutionChanged;
+    _foundationHost = config.foundationHost;
+    _wantsRemoteTextContext = config.wantsRemoteTextContext;
     // Foundation prioritizes PCM if both feature flags are set. Bluetooth
     // must request IR alone or it will never receive the analyzed frames.
     BOOL physicalDs5Audio = config.controllerHapticsMode == 0 &&
@@ -2886,6 +2912,31 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 - (uint32_t)clipboardHostFeatureFlags {
     [self ensureControlContextBacklink];
     return LiGetHostFeatureFlagsCtx(&_connectionContext);
+}
+
+- (BOOL)supportsLiveStreamChanges {
+    return _foundationHost;
+}
+
+- (int)sendLiveStreamBitrateKbps:(int)kbps {
+    [self ensureControlContextBacklink];
+    int err = LiSendStreamBitrateCtx(&_connectionContext.controlContext, kbps);
+    Log(LOG_I, @"[live] bitrate %d kbps -> result=%d", kbps, err);
+    return err;
+}
+
+- (int)sendLiveStreamFramerate:(int)fps {
+    [self ensureControlContextBacklink];
+    int err = LiSendStreamFramerateCtx(&_connectionContext.controlContext, (float)fps);
+    Log(LOG_I, @"[live] framerate %d fps -> result=%d", fps, err);
+    return err;
+}
+
+- (int)sendLiveStreamResolutionWidth:(int)width height:(int)height {
+    [self ensureControlContextBacklink];
+    int err = LiSendStreamResolutionCtx(&_connectionContext.controlContext, width, height);
+    Log(LOG_I, @"[live] resolution %dx%d -> result=%d", width, height, err);
+    return err;
 }
 
 - (NSString *)clipboardControlDebugSummary {
@@ -3506,6 +3557,9 @@ static void FillOutputBuffer(void *aqData,
     }
     os_unfair_lock_lock(&gConnectionLifecycleLock);
     LiSetThreadConnectionContext(&_connectionContext);
+    // Advertising the remote text context makes the host stream caret updates,
+    // so it is only requested when the local input method wants them.
+    LiSetRemoteTextContextCallbackCtx(&_connectionContext, _wantsRemoteTextContext ? ClRemoteTextContext : NULL);
     Log(LOG_I, @"LiStartConnectionCtx: connCtx=%p globalCtx=%p inputCtx=%p", &_connectionContext, LiGetGlobalConnectionContextPtr(), LiGetInputContextFromConnectionCtx(&_connectionContext));
     LiStartConnectionCtx(&_connectionContext,
                          &_serverInfo,

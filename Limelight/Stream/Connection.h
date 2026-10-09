@@ -44,6 +44,10 @@
 - (void)clipboardDataReceived:(const uint8_t *)data length:(uint32_t)length;
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame;
 - (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame;
+// The host reconfigured the stream resolution (display rotation or a runtime resolution change).
+- (void)streamResolutionChanged:(uint32_t)width height:(uint32_t)height;
+// Host text focus / caret updates, only delivered when wantsRemoteTextContext is set.
+- (void)remoteTextContextUpdated:(const LI_REMOTE_TEXT_CONTEXT *)context;
 
 @end
 
@@ -101,6 +105,12 @@ typedef struct {
 - (BOOL)isClipboardControlReady;
 - (NSString *)clipboardControlReadinessReason;
 - (uint32_t)clipboardHostFeatureFlags;
+// YES when the running session can take bitrate / frame rate / resolution changes without a reconnect.
+- (BOOL)supportsLiveStreamChanges;
+// These return LI_DYNAMIC_SDR_WHITE_OK (0) when the host was sent the change.
+- (int)sendLiveStreamBitrateKbps:(int)kbps;
+- (int)sendLiveStreamFramerate:(int)fps;
+- (int)sendLiveStreamResolutionWidth:(int)width height:(int)height;
 - (NSString *)clipboardControlDebugSummary;
 - (int)bindClipboardSession;
 - (int)unbindClipboardSession;

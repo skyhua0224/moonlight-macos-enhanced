@@ -480,6 +480,11 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL savedContentAspectRatioValid;
 @property (nonatomic) NSSize savedContentAspectRatio;
 
+// Stream size reported by the host after a runtime resolution change (0 until one happens).
+@property (nonatomic) int liveStreamWidth;
+@property (nonatomic) int liveStreamHeight;
+@property (nonatomic) NSUInteger liveBitrateDebounceToken;
+
 @property (nonatomic, strong) NSTrackingArea *mouseTrackingArea;
 @property (nonatomic) BOOL isMouseInsideView;
 @property (nonatomic) BOOL globalInactivePointerInsideStreamView;
@@ -648,6 +653,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)handleBitrateSliderChanged:(NSSlider *)sender;
 - (void)handleBitrateInputChanged:(NSTextField *)sender;
 - (void)handleBitrateApplyClicked:(NSButton *)sender;
+- (void)scheduleLiveBitrateApplyKbps:(NSInteger)kbps;
 - (void)toggleFullscreenControlBallFromMenu:(NSMenuItem *)sender;
 - (void)toggleFullscreenControlBallVisibility;
 - (void)toggleMouseMode;
@@ -855,6 +861,18 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)showNotification:(NSString *)message;
 - (void)showNotification:(NSString *)message forSeconds:(NSTimeInterval)seconds;
 - (CGPathRef)CGPathFromNSBezierPath:(NSBezierPath *)bezierPath;
+@end
+
+@interface StreamViewController (LiveStream)
++ (int)automaticBitrateKbpsForWidth:(int)width height:(int)height fps:(int)fps yuv444:(BOOL)yuv444;
+- (struct Resolution)effectiveStreamResolution;
+- (NSInteger)automaticBitrateKbpsForRunningStream;
+// These return YES when the host accepted the change in place; NO means the caller should reconnect.
+- (BOOL)applyLiveBitrateKbps:(NSInteger)kbps;
+- (BOOL)applyLiveFramerate:(int)fps;
+- (BOOL)applyLiveResolutionWidth:(int)width height:(int)height;
+- (void)streamResolutionChanged:(uint32_t)width height:(uint32_t)height;
+- (void)applyHostStreamResolutionWidth:(int)width height:(int)height;
 @end
 
 @interface StreamViewController (InternalTeardown)

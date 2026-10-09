@@ -198,6 +198,7 @@
 				macOS/ViewControllers/StreamRiskAssessment.swift,
 				macOS/ViewControllers/StreamViewController.m,
 				"macOS/ViewControllers/StreamViewController+Diagnostics.m",
+				"macOS/ViewControllers/StreamViewController+LiveStream.m",
 				"macOS/ViewControllers/StreamViewController+MenuUI.m",
 				"macOS/ViewControllers/StreamViewController+MouseCapture.m",
 				"macOS/ViewControllers/StreamViewController+WindowModes.m",

@@ -213,6 +213,8 @@ class SettingsClass: NSObject {
         "reverseScrollDirection": settings.reverseScrollDirection,
         "gamepadMouseMode": settings.gamepadMouseMode,
         "gamepadMouseModeLongPressMenu": settings.gamepadMouseModeLongPressMenu,
+        "hostPrecisionTouchpad": settings.hostPrecisionTouchpad,
+        "imeTextInput": settings.imeTextInput,
         "mouseMode": settings.mouseMode,
         "touchscreenMode": settings.touchscreenMode,
         "pointerSensitivity": settings.pointerSensitivity ?? SettingsModel.defaultPointerSensitivity,
@@ -390,6 +392,8 @@ class SettingsClass: NSObject {
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
       gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
+      hostPrecisionTouchpad: settings.hostPrecisionTouchpad,
+      imeTextInput: settings.imeTextInput,
       mouseMode: settings.mouseMode,
       pointerSensitivity: settings.pointerSensitivity,
       wheelScrollSpeed: settings.wheelScrollSpeed,
@@ -496,6 +500,8 @@ class SettingsClass: NSObject {
         touchscreenMode: updated.touchscreenMode,
         gamepadMouseMode: updated.gamepadMouseMode,
         gamepadMouseModeLongPressMenu: updated.gamepadMouseModeLongPressMenu,
+        hostPrecisionTouchpad: updated.hostPrecisionTouchpad,
+        imeTextInput: updated.imeTextInput,
         mouseMode: updated.mouseMode,
         pointerSensitivity: updated.pointerSensitivity,
         wheelScrollSpeed: updated.wheelScrollSpeed,
@@ -610,6 +616,8 @@ class SettingsClass: NSObject {
       touchscreenMode: settings.touchscreenMode,
       gamepadMouseMode: settings.gamepadMouseMode,
       gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
+      hostPrecisionTouchpad: settings.hostPrecisionTouchpad,
+      imeTextInput: settings.imeTextInput,
       mouseMode: settings.mouseMode,
       pointerSensitivity: settings.pointerSensitivity,
       wheelScrollSpeed: settings.wheelScrollSpeed,
@@ -1513,6 +1521,14 @@ class SettingsClass: NSObject {
       return settings.gamepadMouseModeLongPressMenu ?? SettingsModel.defaultGamepadMouseModeLongPressMenu
     }
     return SettingsModel.defaultGamepadMouseModeLongPressMenu
+  }
+
+  @objc static func hostPrecisionTouchpad(for key: String) -> Bool {
+    Settings.getSettings(for: key)?.hostPrecisionTouchpad ?? SettingsModel.defaultHostPrecisionTouchpad
+  }
+
+  @objc static func imeTextInput(for key: String) -> Bool {
+    Settings.getSettings(for: key)?.imeTextInput ?? SettingsModel.defaultImeTextInput
   }
 
   @objc static func enable10BitSdr(for key: String) -> Bool {

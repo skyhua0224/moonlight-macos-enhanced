@@ -211,6 +211,8 @@ private struct KeyboardMouseSettingsSection: View {
       ToggleCell(title: "Absolute Mouse Mode", boolBinding: $settingsModel.absoluteMouseMode)
       ToggleCell(title: "Swap Mouse Buttons", boolBinding: $settingsModel.swapMouseButtons)
       ToggleCell(title: "Reverse Scroll Direction", boolBinding: $settingsModel.reverseScrollDirection)
+      ToggleCell(title: "Precision Touchpad", hintKey: "Precision Touchpad Hint", boolBinding: $settingsModel.hostPrecisionTouchpad)
+      ToggleCell(title: "Input Method Text", hintKey: "Input Method Text Hint", boolBinding: $settingsModel.imeTextInput)
       SettingsRow(title: "Pointer Speed") {
         Slider(value: $settingsModel.pointerSensitivity, in: 0.25...3.0)
           .frame(width: 190)

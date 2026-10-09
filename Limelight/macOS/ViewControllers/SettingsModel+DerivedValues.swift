@@ -1305,6 +1305,8 @@ extension SettingsModel {
   static let defaultTouchscreenMode = 0
   static let defaultGamepadMouseMode = false
   static let defaultGamepadMouseModeLongPressMenu = true
+  static let defaultHostPrecisionTouchpad = false
+  static let defaultImeTextInput = false
   static let defaultControllerDeadzone = 0.0
   static let defaultControllerHapticsMode = ControllerHapticsMode.automatic.displayKey
   static let defaultControllerMotionMode = ControllerMotionMode.hostRequested.displayKey

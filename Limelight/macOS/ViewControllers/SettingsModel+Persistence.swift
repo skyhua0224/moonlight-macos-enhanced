@@ -290,6 +290,8 @@ extension SettingsModel {
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
     gamepadMouseModeLongPressMenu = Self.defaultGamepadMouseModeLongPressMenu
+    hostPrecisionTouchpad = Self.defaultHostPrecisionTouchpad
+    imeTextInput = Self.defaultImeTextInput
     mouseMode = Self.defaultMouseMode
     selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)
     selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(
@@ -502,6 +504,8 @@ extension SettingsModel {
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
       gamepadMouseModeLongPressMenu = settings.gamepadMouseModeLongPressMenu ?? Self.defaultGamepadMouseModeLongPressMenu
+      hostPrecisionTouchpad = settings.hostPrecisionTouchpad ?? Self.defaultHostPrecisionTouchpad
+      imeTextInput = settings.imeTextInput ?? Self.defaultImeTextInput
       mouseMode = Self.getString(from: settings.mouseMode ?? (Self.defaultMouseMode == "game" ? 0 : 1), in: Self.mouseModes)
       selectedUpscalingMode = Self.upscalingModeTitle(
         for: settings.upscalingMode ?? Self.defaultUpscalingMode)
@@ -846,6 +850,8 @@ extension SettingsModel {
       touchscreenMode: touchscreenMode,
       gamepadMouseMode: gamepadMouseMode,
       gamepadMouseModeLongPressMenu: gamepadMouseModeLongPressMenu,
+      hostPrecisionTouchpad: hostPrecisionTouchpad,
+      imeTextInput: imeTextInput,
       mouseMode: mouseModeVal,
       pointerSensitivity: pointerSensitivity,
       wheelScrollSpeed: wheelScrollSpeed,

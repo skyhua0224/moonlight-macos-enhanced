@@ -2837,6 +2837,16 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     [self fallbackToCompatibilityRendererWithReason:nil];
 }
 
+- (void)updateLiveStreamFrameRate:(int)frameRate bitrateKbps:(int)bitrateKbps
+{
+    if (frameRate > 0) {
+        self.frameRate = frameRate;
+    }
+    if (bitrateKbps > 0) {
+        _streamBitrateKbps = bitrateKbps;
+    }
+}
+
 - (void)setupWithVideoFormat:(int)videoFormat
                    frameRate:(int)frameRate
                upscalingMode:(int)upscalingMode

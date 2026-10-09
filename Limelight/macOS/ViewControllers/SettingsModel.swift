@@ -1118,6 +1118,22 @@ class SettingsModel: ObservableObject {
       postMouseSettingsChanged("gamepadMouseModeLongPressMenu")
     }
   }
+  // Send the trackpad's raw multi-finger contacts so Windows sees a precision touchpad.
+  @Published var hostPrecisionTouchpad: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+      postMouseSettingsChanged("hostPrecisionTouchpad")
+    }
+  }
+  // Compose text with the Mac input method and send the committed text as UTF-8.
+  @Published var imeTextInput: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+      postMouseSettingsChanged("imeTextInput")
+    }
+  }
   @Published var mouseMode: String {
     didSet {
       guard !isLoading else { return }
@@ -1583,6 +1599,8 @@ class SettingsModel: ObservableObject {
     selectedControllerVirtualType = Self.defaultControllerVirtualType
     controllerCalibration = .default
     gamepadMouseModeLongPressMenu = Self.defaultGamepadMouseModeLongPressMenu
+    hostPrecisionTouchpad = Self.defaultHostPrecisionTouchpad
+    imeTextInput = Self.defaultImeTextInput
     mouseMode = Self.defaultMouseMode
     selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)
     selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(

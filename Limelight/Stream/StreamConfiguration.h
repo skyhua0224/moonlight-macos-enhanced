@@ -88,6 +88,10 @@
 @property(nonatomic) BOOL allowHevc;
 @property(nonatomic) int videoCodecPreference;
 @property(nonatomic, copy) NSData *serverCert;
+/// The host is a Foundation Sunshine build (reports Foundation-only serverinfo tags).
+@property(nonatomic) BOOL foundationHost;
+/// Ask the host for remote text context updates (caret position for the local input method).
+@property(nonatomic) BOOL wantsRemoteTextContext;
 @property(nonatomic) int serverCodecModeSupport;
 @property(nonatomic, copy) NSString *sessionUrl;
 @property(nonatomic, copy) NSString *hostUUID;

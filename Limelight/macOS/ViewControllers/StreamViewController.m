@@ -394,6 +394,24 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
 }
 
+- (void)streamResolutionChanged:(uint32_t)width height:(uint32_t)height {
+    [self forwardIfCurrentNamed:@"streamResolutionChanged" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(streamResolutionChanged:height:)]) {
+            [owner streamResolutionChanged:width height:height];
+        }
+    }];
+}
+
+- (void)remoteTextContextUpdated:(const LI_REMOTE_TEXT_CONTEXT *)context {
+    // The context is only valid during the callback, so hand over a copy.
+    NSData *snapshot = context != NULL ? [NSData dataWithBytes:context length:sizeof(*context)] : nil;
+    [self forwardIfCurrentNamed:@"remoteTextContextUpdated" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if (snapshot != nil && [owner respondsToSelector:@selector(remoteTextContextUpdated:)]) {
+            [owner remoteTextContextUpdated:(const LI_REMOTE_TEXT_CONTEXT *)snapshot.bytes];
+        }
+    }];
+}
+
 - (void)clipboardDataReceived:(const uint8_t *)data length:(uint32_t)length {
     NSData *frame = data != NULL && length > 0 ? [NSData dataWithBytes:data length:length] : nil;
     [self forwardIfCurrentNamed:@"clipboardDataReceived" block:^(id<MLStreamScopedCallbackOwner> owner) {
@@ -1297,6 +1315,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
+    self.liveStreamWidth = 0;
+    self.liveStreamHeight = 0;
     streamConfig.width = [self.class getResolution].width;
     streamConfig.height = [self.class getResolution].height;
 
@@ -1393,44 +1413,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.runtimeAutoBitrateLastRaiseMs = 0;
     }
     if (autoAdjustBitrate) {
-        // Copied from moonlight-qt (StreamingPreferences::getDefaultBitrate)
-        float frameRateFactor = (modeFps <= 60 ? (float)modeFps : (sqrtf((float)modeFps / 60.f) * 60.f)) / 30.f;
-
-        struct ResEntry { int pixels; int factor; };
-        static const struct ResEntry resTable[] = {
-            { 640 * 360, 1 },
-            { 854 * 480, 2 },
-            { 1280 * 720, 5 },
-            { 1920 * 1080, 10 },
-            { 2560 * 1440, 20 },
-            { 3840 * 2160, 40 },
-            { -1, -1 },
-        };
-
-        int pixels = modeWidth * modeHeight;
-        float resolutionFactor = 10.f;
-        for (int i = 0;; i++) {
-            if (pixels == resTable[i].pixels) {
-                resolutionFactor = (float)resTable[i].factor;
-                break;
-            } else if (pixels < resTable[i].pixels) {
-                if (i == 0) {
-                    resolutionFactor = (float)resTable[i].factor;
-                } else {
-                    resolutionFactor = ((float)(pixels - resTable[i-1].pixels) / (resTable[i].pixels - resTable[i-1].pixels)) * (resTable[i].factor - resTable[i-1].factor) + resTable[i-1].factor;
-                }
-                break;
-            } else if (resTable[i].pixels == -1) {
-                resolutionFactor = (float)resTable[i-1].factor;
-                break;
-            }
-        }
-
-        if (enableYuv444) {
-            resolutionFactor *= 2.f;
-        }
-
-        int defaultKbps = (int)lroundf(resolutionFactor * frameRateFactor) * 1000;
+        int defaultKbps = [StreamViewController automaticBitrateKbpsForWidth:modeWidth
+                                                                       height:modeHeight
+                                                                          fps:modeFps
+                                                                       yuv444:enableYuv444];
         streamConfig.bitRate = defaultKbps;
         self.runtimeAutoBitrateBaselineKbps = streamConfig.bitRate;
         if (self.runtimeAutoBitrateCapKbps > 0 && self.runtimeAutoBitrateCapKbps > streamConfig.bitRate) {

@@ -1820,6 +1820,18 @@
             
             [SettingsClass setCustomResolution:w :h :f for:self.app.host.uuid];
             [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+            // Zero means "let the host decide", which only a new session can do.
+            BOOL appliedLive = w > 0 && h > 0 && f > 0;
+            if (appliedLive && (w != res.width || h != res.height)) {
+                appliedLive = [self applyLiveResolutionWidth:w height:h];
+            }
+            if (appliedLive && f != currentFps) {
+                appliedLive = [self applyLiveFramerate:f];
+            }
+            if (appliedLive) {
+                [self rebuildStreamMenu];
+                return;
+            }
             [self attemptReconnectWithReason:@"custom-resolution"];
         }
     }];
@@ -1855,6 +1867,10 @@
     [SettingsClass setResolutionAndFps:(int)size.width :(int)size.height :currentFps matchDisplay:NO for:self.app.host.uuid];
 
     [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    if ([self applyLiveResolutionWidth:(int)size.width height:(int)size.height]) {
+        [self rebuildStreamMenu];
+        return;
+    }
     [self attemptReconnectWithReason:@"resolution-changed"];
 }
 
@@ -1878,6 +1894,10 @@
     [SettingsClass setResolutionAndFps:currentRes.width :currentRes.height :newFps matchDisplay:matchDisplay for:self.app.host.uuid];
     
     [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    if ([self applyLiveFramerate:newFps]) {
+        [self rebuildStreamMenu];
+        return;
+    }
     [self attemptReconnectWithReason:@"framerate-changed"];
 }
 
@@ -1923,6 +1943,10 @@
             [SettingsClass setResolutionAndFps:currentRes.width :currentRes.height :f matchDisplay:matchDisplay for:self.app.host.uuid];
             
             [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+            if (f > 0 && [self applyLiveFramerate:f]) {
+                [self rebuildStreamMenu];
+                return;
+            }
             [self attemptReconnectWithReason:@"framerate-changed"];
         }
     }];
@@ -1951,6 +1975,12 @@
     }
 
     [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    NSInteger liveKbps = [rep isKindOfClass:[NSNumber class]] ? [(NSNumber *)rep integerValue]
+                                                                : [self automaticBitrateKbpsForRunningStream];
+    if ([self applyLiveBitrateKbps:liveKbps]) {
+        [self rebuildStreamMenu];
+        return;
+    }
     [self attemptReconnectWithReason:@"bitrate-changed"]; 
 }
 
@@ -2013,6 +2043,18 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     // 保存设置（关闭自动模式，设置自定义码率）
     [SettingsClass setBitrateMode:NO customBitrateKbps:@(kbps) for:self.app.host.uuid];
     [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    [self scheduleLiveBitrateApplyKbps:kbps];
+}
+
+// Dragging the slider emits many values; only the last one is sent to the host.
+- (void)scheduleLiveBitrateApplyKbps:(NSInteger)kbps {
+    NSUInteger token = ++self.liveBitrateDebounceToken;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (token != self.liveBitrateDebounceToken) {
+            return;
+        }
+        [self applyLiveBitrateKbps:kbps];
+    });
 }
 
 - (void)handleBitrateInputChanged:(NSTextField *)sender {
@@ -2035,10 +2077,18 @@ static NSArray<NSNumber *> *bitrateStepsArray(void) {
     // 保存设置
     [SettingsClass setBitrateMode:NO customBitrateKbps:@(kbps) for:self.app.host.uuid];
     [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    [self scheduleLiveBitrateApplyKbps:kbps];
 }
 
 - (void)handleBitrateApplyClicked:(NSButton *)sender {
-    // 触发重连以应用新码率
+    // 优先在线调整，主机不支持时再重连以应用新码率
+    ++self.liveBitrateDebounceToken;
+    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    NSInteger customKbps = [prefs[@"customBitrate"] integerValue];
+    if (customKbps > 0 && [self applyLiveBitrateKbps:customKbps]) {
+        [self rebuildStreamMenu];
+        return;
+    }
     [self rebuildStreamMenu];
     [self attemptReconnectWithReason:@"bitrate-changed"];
 }

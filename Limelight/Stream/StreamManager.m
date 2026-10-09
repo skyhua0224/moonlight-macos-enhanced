@@ -140,6 +140,10 @@
     // Populate the config's version fields from serverinfo
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
+    // VddCapabilityVersion only exists in Foundation Sunshine serverinfo. Runtime
+    // stream changes (0x5506) are a Foundation protocol extension.
+    _config.foundationHost = [serverInfoResp getStringTag:@"VddCapabilityVersion"] != nil;
+    Log(LOG_I, @"[live] Foundation host=%d", _config.foundationHost ? 1 : 0);
     Log(LOG_I, @"[startup] Network prep crypto=%llums serverInfo=%llums hostLaunch=%llums total=%llums",
         (unsigned long long)(cryptoEndMs - cryptoStartMs),
         (unsigned long long)(serverInfoEndMs - serverInfoStartMs),

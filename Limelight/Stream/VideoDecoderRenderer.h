@@ -89,6 +89,8 @@ typedef struct {
                    frameRate:(int)frameRate
                upscalingMode:(int)upscalingMode
                 streamConfig:(StreamConfiguration *)streamConfig;
+// The host accepted a runtime frame rate / bitrate change; keep pacing and stats in step.
+- (void)updateLiveStreamFrameRate:(int)frameRate bitrateKbps:(int)bitrateKbps;
 - (void)start;
 - (void)stop;
 
