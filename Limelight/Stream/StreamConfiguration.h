@@ -59,6 +59,12 @@
 @property(nonatomic) CGFloat sunshineMaxBrightness;
 @property(nonatomic) CGFloat sunshineMinBrightness;
 @property(nonatomic) CGFloat sunshineMaxAverageBrightness;
+// Display luminance estimated from the target screen's EDR capability. Only
+// sent when HDR is on and the manual override above is off.
+@property(nonatomic) BOOL hdrAutoLuminanceAvailable;
+@property(nonatomic) CGFloat hdrAutoMaxBrightness;
+@property(nonatomic) CGFloat hdrAutoMinBrightness;
+@property(nonatomic) CGFloat hdrAutoMaxAverageBrightness;
 @property(nonatomic) BOOL enableVsync;
 @property(nonatomic) int framePacingMode;
 @property(nonatomic) int smoothnessLatencyMode;

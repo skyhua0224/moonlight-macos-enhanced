@@ -645,10 +645,39 @@ static const NSString* HTTPS_PORT = @"47984";
     // value so a host-side opt-in cannot override the user's client setting.
     [extraParams appendFormat:@"&touchKeyboard=%d", config.sunshineTouchKeyboardAutoInvoke ? 1 : 0];
 
+    // Report all three luminance values or none: the host drops an incomplete
+    // or inconsistent report and falls back to its safe defaults.
+    const char *luminanceSource = "none";
+    double maxNits = 0.0, minNits = 0.0, avgNits = 0.0;
     if (config.sunshineHdrBrightnessOverride) {
-        [extraParams appendFormat:@"&maxBrightness=%.3f", config.sunshineMaxBrightness];
-        [extraParams appendFormat:@"&minBrightness=%.6f", config.sunshineMinBrightness];
-        [extraParams appendFormat:@"&maxAverageBrightness=%.3f", config.sunshineMaxAverageBrightness];
+        luminanceSource = "override";
+        maxNits = config.sunshineMaxBrightness;
+        minNits = config.sunshineMinBrightness;
+        avgNits = config.sunshineMaxAverageBrightness;
+    } else if (config.enableHdr && config.hdrAutoLuminanceAvailable) {
+        luminanceSource = "auto";
+        maxNits = config.hdrAutoMaxBrightness;
+        minNits = config.hdrAutoMinBrightness;
+        avgNits = config.hdrAutoMaxAverageBrightness;
+    }
+    if (luminanceSource[0] != 'n') {
+        // Mirrors the host's valid_luminance_values().
+        BOOL valid = isfinite(maxNits) && isfinite(minNits) && isfinite(avgNits) &&
+                     maxNits >= 1.0 && maxNits <= 10000.0 &&
+                     minNits >= 0.0 && minNits <= 100.0 &&
+                     avgNits >= 1.0 && avgNits <= maxNits && minNits <= avgNits;
+        if (valid) {
+            [extraParams appendFormat:@"&maxBrightness=%.3f", maxNits];
+            [extraParams appendFormat:@"&minBrightness=%.6f", minNits];
+            [extraParams appendFormat:@"&maxAverageBrightness=%.3f", avgNits];
+        } else {
+            Log(LOG_W, @"[hdr] Display luminance report rejected as invalid for the host: source=%s", luminanceSource);
+            luminanceSource = "none";
+        }
+    }
+    if (config.enableHdr || config.sunshineHdrBrightnessOverride) {
+        Log(LOG_I, @"[hdr] display luminance report source=%s max=%.3f min=%.6f avg=%.3f",
+            luminanceSource, maxNits, minNits, avgNits);
     }
 
     if (config.clientGamepad.length > 0) {

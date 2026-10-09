@@ -55,6 +55,35 @@ static NSScreen *MLScreenContainingMouseLocation(void) {
     return [NSScreen mainScreen];
 }
 
+// Estimates the display's HDR luminance (nits) from its EDR capability. macOS
+// exposes no panel nits, so the headroom ratio is scaled by the 100-nit SDR
+// reference white. Returns NO when the screen has no HDR headroom.
+static BOOL MLEstimateScreenHdrLuminance(NSScreen *screen, double *maxNits, double *minNits, double *avgNits) {
+    if (screen == nil) {
+        return NO;
+    }
+    CGFloat potential = screen.maximumPotentialExtendedDynamicRangeColorComponentValue;
+    CGFloat reference = screen.maximumReferenceExtendedDynamicRangeColorComponentValue;
+    CGFloat current = screen.maximumExtendedDynamicRangeColorComponentValue;
+    // Reference modes pin the headroom to the mastering peak; otherwise take
+    // the best of what the system reports.
+    CGFloat headroom = reference > 1.0 ? reference : MAX(potential, current);
+    if (!(headroom > 1.05)) {
+        return NO;
+    }
+    const double sdrReferenceWhiteNits = 100.0;
+    double peak = MIN(MAX(headroom * sdrReferenceWhiteNits, 100.0), 10000.0);
+    NSNumber *screenNumber = screen.deviceDescription[@"NSScreenNumber"];
+    if (screenNumber != nil && CGDisplayIsBuiltin((CGDirectDisplayID)screenNumber.unsignedIntValue)) {
+        // The built-in XDR panel peaks at 1600 nits whatever the SDR brightness.
+        peak = MIN(peak, 1600.0);
+    }
+    *maxNits = peak;
+    *minNits = 0.001;
+    *avgNits = MAX(1.0, peak * 0.5);
+    return YES;
+}
+
 static const NSTimeInterval MLClipboardMonitorInterval = 0.25;
 static const NSUInteger MLClipboardImageSizeLimit = 4 * 1024 * 1024;
 static const NSUInteger MLClipboardBlobSizeLimit = 64 * 1024 * 1024;
@@ -1436,6 +1465,23 @@ highFreqMotor:(unsigned short)highFreqMotor {
                                   !streamConfig.enableHdr &&
                                   streamConfig.videoCodecPreference != 0 &&
                                   (streamConfig.videoCodecPreference == 2 ? av1DecodeSupported : hevcDecodeSupported);
+
+    if (streamConfig.enableHdr && !streamConfig.sunshineHdrBrightnessOverride) {
+        NSScreen *targetScreen = self.view.window.screen ?: MLScreenContainingMouseLocation();
+        double autoMax = 0, autoMin = 0, autoAvg = 0;
+        if (MLEstimateScreenHdrLuminance(targetScreen, &autoMax, &autoMin, &autoAvg)) {
+            streamConfig.hdrAutoLuminanceAvailable = YES;
+            streamConfig.hdrAutoMaxBrightness = autoMax;
+            streamConfig.hdrAutoMinBrightness = autoMin;
+            streamConfig.hdrAutoMaxAverageBrightness = autoAvg;
+        }
+        Log(LOG_I, @"[hdr] Display luminance estimate: screen=%@ potentialEDR=%.2f referenceEDR=%.2f currentEDR=%.2f available=%d",
+            targetScreen.localizedName ?: @"Unknown",
+            targetScreen.maximumPotentialExtendedDynamicRangeColorComponentValue,
+            targetScreen.maximumReferenceExtendedDynamicRangeColorComponentValue,
+            targetScreen.maximumExtendedDynamicRangeColorComponentValue,
+            streamConfig.hdrAutoLuminanceAvailable ? 1 : 0);
+    }
 
     NSString *codecName = @"H.264";
     if (streamConfig.videoCodecPreference == 2) {
