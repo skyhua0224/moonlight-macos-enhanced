@@ -731,14 +731,6 @@ static const NSString* HTTPS_PORT = @"47984";
                     modeFps = rfps;
                 }
             }
-
-            // Optional Sunshine protocol extensions (best-effort)
-            if ([settings[@"yuv444"] boolValue]) {
-                [extraParams appendString:@"&yuv444=1"];
-            }
-            if ([settings[@"microphone"] boolValue]) {
-                [extraParams appendString:@"&microphone=1"];
-            }
         }
     } @catch (NSException* exception) {
         // Best-effort only; keep defaults on any failure.
@@ -815,14 +807,6 @@ static const NSString* HTTPS_PORT = @"47984";
                 if (rfps > 0) {
                     modeFps = rfps;
                 }
-            }
-
-            // Optional Sunshine protocol extensions (best-effort)
-            if ([settings[@"yuv444"] boolValue]) {
-                [extraParams appendString:@"&yuv444=1"];
-            }
-            if ([settings[@"microphone"] boolValue]) {
-                [extraParams appendString:@"&microphone=1"];
             }
         }
     } @catch (NSException* exception) {

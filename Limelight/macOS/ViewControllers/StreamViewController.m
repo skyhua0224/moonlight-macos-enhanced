@@ -1680,7 +1680,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 self.controllerSupport.inputContext = inputContext;
                 self.hidSupport.shouldSendInputEvents = YES;
                 self.controllerSupport.shouldSendInputEvents = YES;
-                [self.streamMan.connection notifyInputStreamReadyForMicrophoneControlIfNeeded];
                 [self rearmMouseCaptureIfPossibleWithReason:@"input-stream-established"];
             }
         });
