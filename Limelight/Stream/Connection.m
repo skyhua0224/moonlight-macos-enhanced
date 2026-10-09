@@ -2151,8 +2151,11 @@ void ClConnectionStarted(void)
     });
 }
 
-void ClSetHdrMode(bool enabled)
+void ClSetHdrMode(bool enabled, void *hdrMetadata)
 {
+    // The metadata also arrives with the callback, but it is read from the
+    // control context so every update goes through the same accessor.
+    (void)hdrMetadata;
     Connection *connection = CurrentConnection();
     if (connection == nil) return;
     SS_HDR_METADATA metadata = {0};
