@@ -230,6 +230,10 @@ extension SettingsModel {
     }
   }
 
+  /// Resets the observable settings to project defaults, including disabled background input.
+  ///
+  /// Run on the main thread. Uses `isLoading` to suppress property-triggered saves and notifications,
+  /// then marks settings loaded; this method alone does not persist the resulting profile.
   func loadDefaultSettings() {
     isLoading = true
     defer {
@@ -384,6 +388,11 @@ extension SettingsModel {
     persistAudioCodecSettings()
   }
 
+  /// Loads the selected host or global profile into the observable settings model.
+  ///
+  /// Resolves profile inheritance and optional legacy fields, including default-off background
+  /// controller input. Suppresses property-triggered saves while loading, persists supported
+  /// migrations afterward, and creates default settings when no profile exists. Run on main.
   func loadSettings() {
     var shouldPersistMigratedMouseSettings = false
     var shouldPersistMigratedShortcutSettings = false
@@ -738,6 +747,11 @@ extension SettingsModel {
       (EnhancedAudioSpatialMode(rawValue: extras.spatialMode) ?? .automatic).title
   }
 
+  /// Persists the selected host or global profile and updates the decoded settings cache.
+  ///
+  /// Normalizes UI selections, stores auxiliary preferences and controller settings, and writes
+  /// an encoded profile including background controller input. Returns while `isLoading` is set;
+  /// encoding failure leaves the stored profile unchanged. Run on the main thread.
   func saveSettings() {
     guard !isLoading else { return }
 
