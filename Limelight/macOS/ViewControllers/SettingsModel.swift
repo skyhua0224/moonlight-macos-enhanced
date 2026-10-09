@@ -509,6 +509,12 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  @Published var selectedDynamicHdrPreference: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
   @Published var customFps: CGFloat? {
     didSet {
       guard !isLoading else { return }
@@ -1471,6 +1477,7 @@ class SettingsModel: ObservableObject {
     selectedHdrHlgViewingEnvironment = Self.defaultHdrHlgViewingEnvironment
     selectedHdrEdrStrategy = Self.defaultHdrEdrStrategy
     selectedHdrToneMappingPolicy = Self.defaultHdrToneMappingPolicy
+    selectedDynamicHdrPreference = Self.defaultDynamicHdrPreference
 
     bitrateSliderValue = Self.defaultBitrateSliderValue
     customBitrate = Int(

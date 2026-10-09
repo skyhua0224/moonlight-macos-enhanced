@@ -124,6 +124,16 @@ struct VideoView: View {
           .frame(width: 230, alignment: .trailing)
         }
 
+        SettingsRow(title: "Dynamic HDR Preference") {
+          Picker("", selection: $settingsModel.selectedDynamicHdrPreference) {
+            ForEach(SettingsModel.dynamicHdrPreferences, id: \.self) { value in
+              Text(languageManager.localize(value)).tag(value)
+            }
+          }
+          .labelsHidden()
+          .frame(width: 190, alignment: .trailing)
+        }
+
         SettingsStatusRow(
           title: "Display Capability",
           value: settingsModel.videoCapabilityMatrix.displayName.isEmpty

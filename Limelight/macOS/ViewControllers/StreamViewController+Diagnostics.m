@@ -4,6 +4,43 @@
 //
 
 #import "StreamViewController_Internal.h"
+#include "DynamicHdr.h"
+
+// Host-selected dynamic HDR format (X-SS-Dynamic-HDR) as overlay text.
+static NSString *MLDynamicHdrFormatDisplayName(int format) {
+    switch (format) {
+        case DYNAMIC_HDR_FORMAT_NONE:
+            return MLString(@"Static HDR", nil);
+        case DYNAMIC_HDR_FORMAT_HDR10_PLUS:
+            return @"HDR10+";
+        case DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_81:
+            return @"Dolby Vision 8.1";
+        case DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84:
+            return @"Dolby Vision 8.4";
+        default:
+            return [NSString stringWithFormat:@"#%d", format];
+    }
+}
+
+// Why the host did not pick Dolby Vision (X-SS-Dynamic-HDR-Fallback), or nil.
+static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
+    switch (fallback) {
+        case DYNAMIC_HDR_FALLBACK_NONE:
+            return nil;
+        case DYNAMIC_HDR_FALLBACK_CODEC_UNSUPPORTED:
+            return MLString(@"Dolby Vision needs HEVC", nil);
+        case DYNAMIC_HDR_FALLBACK_COLORSPACE_UNSUPPORTED:
+            return MLString(@"Color space not supported for Dolby Vision", nil);
+        case DYNAMIC_HDR_FALLBACK_CLIENT_CAPS_MISSING:
+            return MLString(@"Dolby Vision not available on this display", nil);
+        case DYNAMIC_HDR_FALLBACK_DIRECT_SURFACE_MISSING:
+            return MLString(@"No direct surface path for Dolby Vision", nil);
+        case DYNAMIC_HDR_FALLBACK_PREFERENCE:
+            return MLString(@"Set by Dynamic HDR Preference", nil);
+        default:
+            return [NSString stringWithFormat:@"#%d", fallback];
+    }
+}
 
 @implementation StreamViewController (Diagnostics)
 
@@ -2666,6 +2703,14 @@
     append(codecString, valueAttrs);
     append(@"  ", labelAttrs);
     append(chromaString, valueAttrs);
+    if ((videoFormat & VIDEO_FORMAT_MASK_10BIT) && LiGetCurrentHostDisplayHdrMode()) {
+        append(@"  HDR ", labelAttrs);
+        append(MLDynamicHdrFormatDisplayName(LiGetNegotiatedDynamicHdrFormat()), valueAttrs);
+        NSString *hdrFallback = MLDynamicHdrFallbackDisplayName(LiGetNegotiatedDynamicHdrFallback());
+        if (hdrFallback.length > 0) {
+            append([NSString stringWithFormat:@" (%@)", hdrFallback], labelAttrs);
+        }
+    }
     append(@"  FPS ", labelAttrs);
     append([NSString stringWithFormat:@"%.1f", receivedFps], valueAttrs);
     append(@" Rx · ", labelAttrs);

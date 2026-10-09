@@ -655,9 +655,6 @@
 "Display Topology Available" = "Foundation topology available";
 "Display Topology Unavailable" = "Foundation topology unavailable";
 "HDR10+ Dynamic Metadata" = "HDR10+ Dynamic Metadata";
-"HDR Vivid PQ" = "HDR Vivid PQ";
-"HDR Vivid HLG" = "HDR Vivid HLG";
-"HDR Vivid macOS limitation detail" = "This format is unavailable through the current display path.";
 "Dolby Vision Profile 8.1" = "Dolby Vision Profile 8.1";
 "Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
 "HDR Capabilities" = "HDR Capabilities";
@@ -958,6 +955,16 @@
 "Metadata Source" = "Metadata Source";
 "Client Display Profile" = "Client Display Profile";
 "Tone Mapping" = "Tone Mapping";
+"Dynamic HDR Preference" = "Dynamic HDR Preference";
+"Dolby Vision" = "Dolby Vision";
+"HDR10+" = "HDR10+";
+"HDR10 Only" = "HDR10 Only";
+"Static HDR" = "Static HDR";
+"Dolby Vision needs HEVC" = "Dolby Vision needs HEVC";
+"Color space not supported for Dolby Vision" = "Color space not supported for Dolby Vision";
+"Dolby Vision not available on this display" = "Dolby Vision not available on this display";
+"No direct surface path for Dolby Vision" = "No direct surface path for Dolby Vision";
+"Set by Dynamic HDR Preference" = "Set by Dynamic HDR Preference";
 "Pacing" = "Pacing";
 "Smoothness / Latency" = "Smoothness / Latency";
 "Runtime" = "Runtime";

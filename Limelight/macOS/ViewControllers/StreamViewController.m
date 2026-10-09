@@ -1349,6 +1349,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         streamConfig.hdrHlgViewingEnvironment = prefs[@"hdrHlgViewingEnvironment"] != nil ? [prefs[@"hdrHlgViewingEnvironment"] intValue] : 0;
         streamConfig.hdrEdrStrategy = prefs[@"hdrEdrStrategy"] != nil ? [prefs[@"hdrEdrStrategy"] intValue] : 0;
         streamConfig.hdrToneMappingPolicy = prefs[@"hdrToneMappingPolicy"] != nil ? [prefs[@"hdrToneMappingPolicy"] intValue] : 0;
+        streamConfig.dynamicHdrPreference = prefs[@"dynamicHdrPreference"] != nil ? [prefs[@"dynamicHdrPreference"] intValue] : 0;
 
         if (self.hasSessionSunshineTargetDisplayOverride) {
             streamConfig.sunshineTargetDisplayName = self.sessionSunshineTargetDisplayNameOverride ?: @"";

@@ -745,18 +745,6 @@ extension SettingsModel {
           detailKey: "HDR10+ capability detail"
         ),
         VideoCapabilityItem(
-          id: "display.hdrVividPQ",
-          titleKey: "HDR Vivid PQ",
-          availability: .unavailable,
-          detailKey: "HDR Vivid macOS limitation detail"
-        ),
-        VideoCapabilityItem(
-          id: "display.hdrVividHLG",
-          titleKey: "HDR Vivid HLG",
-          availability: .unavailable,
-          detailKey: "HDR Vivid macOS limitation detail"
-        ),
-        VideoCapabilityItem(
           id: "display.dolbyVision81",
           titleKey: "Dolby Vision Profile 8.1",
           availability: dolbyVisionAvailability,
@@ -1021,6 +1009,28 @@ extension SettingsModel {
     guard let rawValue else { return defaultHdrToneMappingPolicy }
     return hdrToneMappingPolicyOptions.first(where: { $0.value == rawValue })?.title
       ?? defaultHdrToneMappingPolicy
+  }
+
+  // Values match the host's dynamic_hdr_preference_e.
+  static let dynamicHdrPreferenceOptions: [(title: String, value: Int)] = [
+    ("Automatic", 0),
+    ("Dolby Vision", 1),
+    ("HDR10+", 2),
+    ("HDR10 Only", 3),
+  ]
+  static var dynamicHdrPreferences: [String] {
+    dynamicHdrPreferenceOptions.map(\.title)
+  }
+  static let defaultDynamicHdrPreference = "Automatic"
+
+  static func dynamicHdrPreferenceRawValue(for selection: String) -> Int {
+    dynamicHdrPreferenceOptions.first(where: { $0.title == selection })?.value ?? 0
+  }
+
+  static func dynamicHdrPreferenceSelection(for rawValue: Int?) -> String {
+    guard let rawValue else { return defaultDynamicHdrPreference }
+    return dynamicHdrPreferenceOptions.first(where: { $0.value == rawValue })?.title
+      ?? defaultDynamicHdrPreference
   }
 
   static let displaySyncModeOptions: [(title: String, value: Int)] = [

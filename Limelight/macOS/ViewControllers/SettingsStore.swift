@@ -49,6 +49,7 @@ struct Settings: Encodable, Decodable {
   var hdrHlgViewingEnvironment: Int? = nil
   var hdrEdrStrategy: Int? = nil
   var hdrToneMappingPolicy: Int? = nil
+  var dynamicHdrPreference: Int? = nil
   let sunshineTargetDisplayName: String?
   let sunshineUseVirtualDisplay: Bool?
   let sunshineScreenMode: Int?
@@ -200,6 +201,7 @@ struct Settings: Encodable, Decodable {
       hdrHlgViewingEnvironment: hdrHlgViewingEnvironment,
       hdrEdrStrategy: hdrEdrStrategy,
       hdrToneMappingPolicy: hdrToneMappingPolicy,
+      dynamicHdrPreference: dynamicHdrPreference,
       sunshineTargetDisplayName: sunshineTargetDisplayName,
       sunshineUseVirtualDisplay: sunshineUseVirtualDisplay,
       sunshineScreenMode: sunshineScreenMode,
@@ -445,6 +447,7 @@ extension SettingsClass {
       hdrHlgViewingEnvironment: settings.hdrHlgViewingEnvironment,
       hdrEdrStrategy: settings.hdrEdrStrategy,
       hdrToneMappingPolicy: settings.hdrToneMappingPolicy,
+      dynamicHdrPreference: settings.dynamicHdrPreference,
       sunshineTargetDisplayName: resolvedSunshineTargetDisplayName,
       sunshineUseVirtualDisplay: resolvedSunshineUseVirtualDisplay,
       sunshineScreenMode: resolvedSunshineScreenMode,

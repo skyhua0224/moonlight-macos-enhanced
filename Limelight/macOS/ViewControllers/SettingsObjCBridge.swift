@@ -134,6 +134,9 @@ class SettingsClass: NSObject {
         "hdrToneMappingPolicy": settings.hdrToneMappingPolicy
           ?? SettingsModel.hdrToneMappingPolicyRawValue(
             for: SettingsModel.defaultHdrToneMappingPolicy),
+        "dynamicHdrPreference": settings.dynamicHdrPreference
+          ?? SettingsModel.dynamicHdrPreferenceRawValue(
+            for: SettingsModel.defaultDynamicHdrPreference),
         "sunshineTargetDisplayName":
           settings.sunshineTargetDisplayName ?? SettingsModel.defaultSunshineTargetDisplayName,
         "sunshineUseVirtualDisplay":

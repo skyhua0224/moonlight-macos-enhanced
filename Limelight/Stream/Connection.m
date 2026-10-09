@@ -2717,7 +2717,9 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         MLResolvedDynamicRangeModeForPreference(config.enableHdr, config.hdrTransferFunction);
     _streamConfig.dynamicHdrCaps = 0;
     _streamConfig.dolbyVisionDirectSurface = 0;
-    _streamConfig.dynamicHdrPreference = 0;
+    // 0 automatic, 1 Dolby Vision, 2 HDR10+, 3 HDR10 only (host's dynamic_hdr_preference_e).
+    _streamConfig.dynamicHdrPreference =
+        (config.dynamicHdrPreference >= 0 && config.dynamicHdrPreference <= 3) ? config.dynamicHdrPreference : 0;
     if (config.enableHdr &&
         _streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HDR10_PQ) {
         if (@available(macOS 13.0, *)) {

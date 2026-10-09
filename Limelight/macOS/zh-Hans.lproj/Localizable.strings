@@ -654,9 +654,6 @@
 "Display Topology Available" = "Foundation 显示拓扑可用";
 "Display Topology Unavailable" = "Foundation 显示拓扑不可用";
 "HDR10+ Dynamic Metadata" = "HDR10+ 动态元数据";
-"HDR Vivid PQ" = "HDR Vivid PQ";
-"HDR Vivid HLG" = "HDR Vivid HLG";
-"HDR Vivid macOS limitation detail" = "当前显示链路不提供此格式。";
 "Dolby Vision Profile 8.1" = "Dolby Vision Profile 8.1";
 "Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
 "HDR Capabilities" = "HDR 能力";
@@ -1024,6 +1021,16 @@
 "Metadata Source" = "元数据来源";
 "Client Display Profile" = "客户端显示档案";
 "Tone Mapping" = "色调映射";
+"Dynamic HDR Preference" = "动态 HDR 偏好";
+"Dolby Vision" = "Dolby Vision";
+"HDR10+" = "HDR10+";
+"HDR10 Only" = "仅 HDR10";
+"Static HDR" = "静态 HDR";
+"Dolby Vision needs HEVC" = "Dolby Vision 需要 HEVC";
+"Color space not supported for Dolby Vision" = "色彩空间不支持 Dolby Vision";
+"Dolby Vision not available on this display" = "此显示器不支持 Dolby Vision";
+"No direct surface path for Dolby Vision" = "无 Dolby Vision 直通显示路径";
+"Set by Dynamic HDR Preference" = "由动态 HDR 偏好决定";
 "Pacing" = "帧节奏";
 "Smoothness / Latency" = "流畅度 / 延迟";
 "Runtime" = "运行状态";

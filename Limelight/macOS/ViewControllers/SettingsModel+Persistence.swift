@@ -197,6 +197,7 @@ extension SettingsModel {
     selectedHdrHlgViewingEnvironment = Self.defaultHdrHlgViewingEnvironment
     selectedHdrEdrStrategy = Self.defaultHdrEdrStrategy
     selectedHdrToneMappingPolicy = Self.defaultHdrToneMappingPolicy
+    selectedDynamicHdrPreference = Self.defaultDynamicHdrPreference
 
     bitrateSliderValue = Self.defaultBitrateSliderValue
     customBitrate = Int(
@@ -575,6 +576,8 @@ extension SettingsModel {
       selectedHdrEdrStrategy = Self.hdrEdrStrategySelection(for: settings.hdrEdrStrategy)
       selectedHdrToneMappingPolicy = Self.hdrToneMappingPolicySelection(
         for: settings.hdrToneMappingPolicy)
+      selectedDynamicHdrPreference = Self.dynamicHdrPreferenceSelection(
+        for: settings.dynamicHdrPreference)
       selectedFrameInterpolationMode = Self.frameInterpolationModeSelection(
         for: settings.frameInterpolationMode)
       selectedClipboardSyncMode = Self.clipboardSyncModeSelection(
@@ -677,6 +680,7 @@ extension SettingsModel {
     let hdrEdrStrategy = Self.hdrEdrStrategyRawValue(for: selectedHdrEdrStrategy)
     let hdrToneMappingPolicy = Self.hdrToneMappingPolicyRawValue(
       for: selectedHdrToneMappingPolicy)
+    let dynamicHdrPreference = Self.dynamicHdrPreferenceRawValue(for: selectedDynamicHdrPreference)
     let displaySyncMode = Self.displaySyncModeRawValue(for: selectedDisplaySyncMode)
     let frameQueueTarget = Self.frameQueueTargetRawValue(for: selectedFrameQueueTarget)
     let timingResponsivenessBias = Self.responsivenessBiasRawValue(
@@ -778,6 +782,7 @@ extension SettingsModel {
       hdrHlgViewingEnvironment: hdrHlgViewingEnvironment,
       hdrEdrStrategy: hdrEdrStrategy,
       hdrToneMappingPolicy: hdrToneMappingPolicy,
+      dynamicHdrPreference: dynamicHdrPreference,
       sunshineTargetDisplayName: sunshineTargetDisplayName,
       sunshineUseVirtualDisplay: sunshineUseVirtualDisplay,
       sunshineScreenMode: sunshineScreenMode,
