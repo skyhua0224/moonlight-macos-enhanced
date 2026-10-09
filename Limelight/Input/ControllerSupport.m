@@ -27,6 +27,7 @@
 @interface ControllerSupport ()
 - (void)handleSpecialCombosPressed:(Controller *)controller pressedButtons:(int)pressedButtons;
 - (uint8_t)remoteControllerNumber:(Controller *)controller;
+- (BOOL)controllerOwnsRemoteSlot:(Controller *)controller;
 - (void)setMouseButtons:(int)flags trackpadButton:(int)button forController:(Controller *)controller;
 @end
 
@@ -187,12 +188,17 @@ static BOOL ControllerTouchpadUsesMouse(ControllerSupport *support, Controller *
         ? controller.touchpadMouseMode : !support.nativeTouchpadEnabled);
 }
 
+/**
+ * Flushes accumulated mouse/scroll deltas on main only for the connected slot owner.
+ * @param support Backend supplying context and delivery/ownership gates.
+ * @param controller Source whose pending gesture deltas are consumed.
+ */
 static void FlushControllerTrackpad(ControllerSupport *support, Controller *controller) {
     PML_INPUT_STREAM_CONTEXT ctx = ControllerInputContext(support);
     ControllerTrackpadGesture state = controller.trackpadGesture;
     ControllerTrackpadDelta delta = ControllerTrackpadConsume(&state);
     controller.trackpadGesture = state;
-    if (ctx == NULL || !support.shouldSendInputEvents || !ControllerTouchpadUsesMouse(support, controller)) {
+    if (ctx == NULL || !support.shouldSendInputEvents || !ControllerTouchpadUsesMouse(support, controller) || ![support controllerOwnsRemoteSlot:controller]) {
         controller.trackpadMouseAccumulatedX = controller.trackpadMouseAccumulatedY = 0;
         controller.trackpadScrollAccumulatedX = controller.trackpadScrollAccumulatedY = 0;
         return;
@@ -231,7 +237,7 @@ static void FlushControllerTrackpad(ControllerSupport *support, Controller *cont
 
 /**
  * Updates one native touch contact or its mouse/scroll gesture on the main handler queue.
- * Delivery requires the controller gate and context; coordinates are converted to top-left origin.
+ * Delivery requires slot ownership, the controller gate and context; coordinates are converted to top-left origin.
  * @param support Backend providing delivery policy and the borrowed input context.
  * @param controller Physical pad whose delivered contact/gesture state is updated.
  * @param pointerId Stable contact ID; its low bit identifies the primary or secondary finger.
@@ -245,7 +251,7 @@ static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controlle
                                            uint32_t pointerId, BOOL active,
                                            float x, float y, BOOL hasContact) {
     PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(support);
-    if (controller == nil || !support.shouldSendInputEvents || inputCtx == NULL) {
+    if (controller == nil || ![support controllerOwnsRemoteSlot:controller] || !support.shouldSendInputEvents || inputCtx == NULL) {
         return active;
     }
 
@@ -317,7 +323,7 @@ static BOOL SendControllerTouch(ControllerSupport *support, Controller *controll
 
 /**
  * Coalesces legacy axis callbacks into one main-queue snapshot of both touch surfaces.
- * Gesture generations discard snapshots after reset; native contacts and mouse taps share gates.
+ * Gesture generations discard snapshots after reset; native contacts and mouse taps require slot ownership.
  * @param support Backend whose delivery policy and mouse-button ownership apply.
  * @param controller Physical pad holding contact state and the pending-snapshot marker.
  * @param primary Primary legacy touch surface, or nil.
@@ -334,7 +340,7 @@ static void QueueControllerTouchSnapshot(ControllerSupport *support, Controller 
         if (controller.trackpadGestureGeneration != generation) return;
         controller.legacyTouchSnapshotPending = NO;
         ControllerSupport *current = weakSupport;
-        if (current == nil) return;
+        if (current == nil || !current.shouldSendInputEvents || ![current controllerOwnsRemoteSlot:controller]) return;
         float x[2] = {primary.xAxis.value, secondary.xAxis.value};
         float y[2] = {primary.yAxis.value, secondary.yAxis.value};
         BOOL touching[2] = {fabsf(x[0]) > 0.001f || fabsf(y[0]) > 0.001f,
@@ -397,11 +403,20 @@ static void QueueControllerTouchSnapshot(ControllerSupport *support, Controller 
     });
 }
 
+/**
+ * Installs native contact handlers on main, rejecting callbacks from a removed physical pad.
+ * @param support Backend supplying remote slot ownership and delivery gates.
+ * @param controller Assigned physical source; the shared player-zero object may later be reused.
+ * @param touchpad Physical touch surface to register.
+ * @param secondary Whether this surface represents the second contact.
+ */
 static void RegisterPhysicalTouchpad(ControllerSupport *support, Controller *controller,
                                      GCControllerTouchpad *touchpad, BOOL secondary) {
+    __weak GCController *physicalController = controller.gamepad;
     touchpad.reportsAbsoluteTouchSurfaceValues = YES;
     GCControllerTouchpadHandler down = ^(GCControllerTouchpad *pad, float x, float y, float button, BOOL pressed) {
         (void)pad; (void)button; (void)pressed;
+        if (physicalController == nil || controller.gamepad != physicalController) return;
         BOOL active = secondary ? controller.secondaryTouchActive : controller.primaryTouchActive;
         BOOL current = SendControllerTouchWithContact(support, controller, controller.playerIndex * 2 + (secondary ? 1 : 0), active, x, y, YES);
         if (secondary) controller.secondaryTouchActive = current; else controller.primaryTouchActive = current;
@@ -410,6 +425,7 @@ static void RegisterPhysicalTouchpad(ControllerSupport *support, Controller *con
     touchpad.touchMoved = down;
     touchpad.touchUp = ^(GCControllerTouchpad *pad, float x, float y, float button, BOOL pressed) {
         (void)pad; (void)button; (void)pressed;
+        if (physicalController == nil || controller.gamepad != physicalController) return;
         BOOL active = secondary ? controller.secondaryTouchActive : controller.primaryTouchActive;
         BOOL current = SendControllerTouchWithContact(support, controller, controller.playerIndex * 2 + (secondary ? 1 : 0), active, x, y, NO);
         if (secondary) controller.secondaryTouchActive = current; else controller.primaryTouchActive = current;
@@ -611,6 +627,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     char _controllerNumbers;
     unsigned char _pendingControllerRemovalMask;
     bool _multiController;
+    Controller *_singleControllerOwner;
+    Controller *_singleControllerMotionOwner;
     NSUInteger _inputContextGeneration;
     uint16_t _singleControllerGyroRateHz;
     uint16_t _singleControllerAccelRateHz;
@@ -633,48 +651,77 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 }
 
-/** All physical pads share slot zero in single-controller mode, including extensions. */
+/** Maps physical identity to protocol identity; only the selected owner may send to slot zero. */
 - (uint8_t)remoteControllerNumber:(Controller *)controller {
     return _multiController ? controller.playerIndex : 0;
 }
 
-/** Resolves server feedback to a stable physical owner when remote slot zero is shared. */
+/**
+ * Resolves a remote slot to its connected physical owner under the dictionary monitor.
+ * Single-controller selection persists until removal; the lowest physical index wins vacancies.
+ * The returned object is retained by ARC; callers touching devices serialize with removal.
+ * @param number Remote protocol slot, never a physical index in single-controller mode.
+ * @return Connected owner, or nil for an absent/invalid remote slot.
+ */
 - (Controller *)controllerForRemoteNumber:(uint16_t)number {
     @synchronized(_controllers) {
         if (_multiController) return _controllers[@(number)];
         if (number != 0) return nil;
+        if (_singleControllerOwner != nil &&
+            _controllers[@(_singleControllerOwner.playerIndex)] == _singleControllerOwner &&
+            _singleControllerOwner.gamepad != nil) return _singleControllerOwner;
+        _singleControllerOwner = nil;
         for (int player = 0; player < 4; player++) {
             Controller *controller = _controllers[@(player)];
-            if (controller != nil) return controller;
+            if (controller.gamepad != nil) {
+                _singleControllerOwner = controller;
+                break;
+            }
         }
-        return nil;
+        return _singleControllerOwner;
     }
 }
 
 /**
- * Rebinds shared-slot sensor requests after hot-plug on the main thread.
- * Neutralizes the previous gyro before cancelling its timers, so a stationary replacement
- * cannot leave a nonzero sample on the host. Multi-controller timers are unchanged.
+ * Gates controller-derived output by physical identity, rejecting removed or unselected pads.
+ * OSC delivery is allowed only without a physical owner. Callbacks and timers run on main;
+ * the dictionary monitor also protects lookup against native feedback callbacks.
+ * @param controller Physical source (or the shared on-screen controller).
+ * @return Whether this source may alter its remote slot or emulated mouse state.
+ */
+- (BOOL)controllerOwnsRemoteSlot:(Controller *)controller {
+    if (controller == nil) return NO;
+    @synchronized(_controllers) {
+        if (_multiController) return _controllers[@(controller.playerIndex)] == controller ||
+            (_oscEnabled && controller == _player0osc);
+        Controller *owner = [self controllerForRemoteNumber:0];
+        return owner == controller || (owner == nil && _oscEnabled && controller == _player0osc);
+    }
+}
+
+/**
+ * Applies cached slot-zero sensor rates after owner removal/initial assignment on main.
+ * Removal releases the previous owner's remote state before this call. Existing owners and
+ * their timers/caches survive unrelated hot-plug; multi-controller configuration is unchanged.
  */
 - (void)refreshSingleControllerMotion {
     if (_multiController) return;
-    [_controllerStreamLock lock];
-    PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
-    if (self.shouldSendInputEvents && input && LiInputContextIsInitialized(input)) {
-        for (Controller *controller in _controllers.allValues) {
-            if (controller.gyroTimer && controller.controllerAnnounced)
-                LiSendControllerMotionEventCtx(input, 0, LI_MOTION_TYPE_GYRO, 0, 0, 0);
-        }
-    }
-    [_controllerStreamLock unlock];
-    for (Controller *controller in _controllers.allValues) [self cleanupControllerMotion:controller];
     Controller *owner = [self controllerForRemoteNumber:0];
+    if (owner == _singleControllerMotionOwner) return;
+    _singleControllerMotionOwner = owner;
+    if (owner == nil) return;
+    owner.controllerAnnounced = NO;
+    owner.hasSentGamepadState = NO;
+    ResetControllerTrackpadMouseState(owner);
+    [self resetDebouncersForController:owner remove:NO];
+    [self updateFinished:owner];
     [self configureMotionForController:owner motionType:LI_MOTION_TYPE_GYRO reportRateHz:_singleControllerGyroRateHz];
     [self configureMotionForController:owner motionType:LI_MOTION_TYPE_ACCEL reportRateHz:_singleControllerAccelRateHz];
 }
 
-/** Changes controller-owned mouse state; emit only aggregate edges across all pads/sources. */
+/** Changes mouse state only for slot owners; emits aggregate edges across their button/click sources. */
 - (void)setMouseButtons:(int)flags trackpadButton:(int)button forController:(Controller *)controller {
+    if (![self controllerOwnsRemoteSlot:controller]) return;
     [_controllerStreamLock lock];
     int before = 0, after = 0;
     for (Controller *pad in _controllers.allValues) {
@@ -759,6 +806,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         [self->_controllerStreamLock unlock];
         if (!current) return;
         self->_singleControllerGyroRateHz = self->_singleControllerAccelRateHz = 0;
+        self->_singleControllerMotionOwner = nil;
         for (Controller *controller in self->_controllers.allValues) {
             controller.controllerAnnounced = NO;
             controller.hasSentGamepadState = NO;
@@ -800,6 +848,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
         if (input != NULL && LiInputContextIsInitialized(input)) {
             for (Controller *controller in _controllers.allValues) {
+                if (![self controllerOwnsRemoteSlot:controller]) continue;
                 LiSendMultiControllerEventCtx(input, [self remoteControllerNumber:controller],
                     _multiController ? (unsigned char)_controllerNumbers : 1, 0, 0, 0, 0, 0, 0, 0);
                 // Release native contacts before resetting their last delivered positions.
@@ -1039,7 +1088,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 /**
  * Maintains arrival, authored-haptics timeout and battery reporting on the main run loop.
- * Runs only while delivery is enabled; battery reporting occurs every fiftieth maintenance tick.
+ * Visits only remote slot owners while delivery is enabled; battery reporting occurs every fiftieth maintenance tick.
  * @param timer Repeating maintenance timer; its value is unused.
  */
 - (void)controllerMaintenance:(NSTimer *)timer {
@@ -1048,6 +1097,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
     BOOL batteryTick = (++_maintenanceTicks % 50) == 0;
     for (Controller *controller in _controllers.allValues) {
+        if (![self controllerOwnsRemoteSlot:controller]) continue;
         if (!controller.controllerAnnounced) [self updateFinished:controller];
         if (controller.lastAuthoredHapticsTime != 0 && now - controller.lastAuthoredHapticsTime >= 0.25) {
             [controller.lowFreqMotor setMotorAmplitude:0];
@@ -1079,59 +1129,63 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 /**
  * Validates a borrowed DualSense PCM frame and routes it to the mapped feedback owner.
  * Uses a physical PCM endpoint when supported, otherwise reduces stereo samples to rumble RMS.
- * The native callback may invoke this method; the payload is consumed or copied during the call.
+ * The native callback may invoke this method; the dictionary monitor serializes device output
+ * with owner removal. The payload is consumed or copied during the call.
  * @param frame Borrowed 48 kHz stereo 16-bit protocol frame; NULL or invalid frames are ignored.
  */
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame
 {
-    if (frame == NULL || !ControllerIsFeedbackTarget(self, frame->controllerNumber) ||
-        frame->sampleRate != 48000 || frame->channelCount != 2 ||
-        frame->bitsPerSample != 16 || frame->frameCount > 480 ||
-        frame->pcmDataLength != (uint32_t)frame->frameCount * 4 ||
-        (frame->pcmDataLength != 0 && frame->pcmData == NULL)) {
-        return;
-    }
+    @synchronized(_controllers) {
+        if (frame == NULL || !ControllerIsFeedbackTarget(self, frame->controllerNumber) ||
+            frame->sampleRate != 48000 || frame->channelCount != 2 ||
+            frame->bitsPerSample != 16 || frame->frameCount > 480 ||
+            frame->pcmDataLength != (uint32_t)frame->frameCount * 4 ||
+            (frame->pcmDataLength != 0 && frame->pcmData == NULL)) {
+            return;
+        }
 
-    Controller *controller = [self controllerForRemoteNumber:frame->controllerNumber];
-    if (controller != nil) {
-        if (@available(macOS 11.0, *)) {
-            if ([controller.gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]] &&
-                [_ds5HapticsAudioRenderer submitPCMFrame:frame]) {
-                return;
+        Controller *controller = [self controllerForRemoteNumber:frame->controllerNumber];
+        if (controller != nil) {
+            if (@available(macOS 11.0, *)) {
+                if ([controller.gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]] &&
+                    [_ds5HapticsAudioRenderer submitPCMFrame:frame]) {
+                    return;
+                }
             }
         }
-    }
 
-    // Apple Game Controller does not expose authored PCM. When macOS does not
-    // expose the physical four-channel DualSense endpoint, preserve useful
-    // feedback with an RMS reduction into the public haptics localities.
-    if ((frame->flags & LI_DS5_HAPTICS_PCM_FLAG_STREAM_END) != 0 ||
-        frame->frameCount == 0) {
-        [self rumble:frame->controllerNumber lowFreqMotor:0 highFreqMotor:0];
-        return;
-    }
+        // Apple Game Controller does not expose authored PCM. When macOS does not
+        // expose the physical four-channel DualSense endpoint, preserve useful
+        // feedback with an RMS reduction into the public haptics localities.
+        if ((frame->flags & LI_DS5_HAPTICS_PCM_FLAG_STREAM_END) != 0 ||
+            frame->frameCount == 0) {
+            [self rumble:frame->controllerNumber lowFreqMotor:0 highFreqMotor:0];
+            return;
+        }
 
-    double leftEnergy = 0.0;
-    double rightEnergy = 0.0;
-    const int16_t *samples = (const int16_t *)frame->pcmData;
-    for (uint16_t index = 0; index < frame->frameCount; index++) {
-        const double left = (double)samples[index * 2] / 32768.0;
-        const double right = (double)samples[index * 2 + 1] / 32768.0;
-        leftEnergy += left * left;
-        rightEnergy += right * right;
-    }
+        double leftEnergy = 0.0;
+        double rightEnergy = 0.0;
+        const int16_t *samples = (const int16_t *)frame->pcmData;
+        for (uint16_t index = 0; index < frame->frameCount; index++) {
+            const double left = (double)samples[index * 2] / 32768.0;
+            const double right = (double)samples[index * 2 + 1] / 32768.0;
+            leftEnergy += left * left;
+            rightEnergy += right * right;
+        }
 
-    const double divisor = (double)MAX(frame->frameCount, 1);
-    const double leftAmplitude = MIN(1.0, sqrt(leftEnergy / divisor) * 1.5);
-    const double rightAmplitude = MIN(1.0, sqrt(rightEnergy / divisor) * 1.5);
-    [self rumble:frame->controllerNumber
-      lowFreqMotor:(unsigned short)lrint(leftAmplitude * 65535.0)
-     highFreqMotor:(unsigned short)lrint(rightAmplitude * 65535.0)];
+        const double divisor = (double)MAX(frame->frameCount, 1);
+        const double leftAmplitude = MIN(1.0, sqrt(leftEnergy / divisor) * 1.5);
+        const double rightAmplitude = MIN(1.0, sqrt(rightEnergy / divisor) * 1.5);
+        [self rumble:frame->controllerNumber
+          lowFreqMotor:(unsigned short)lrint(leftAmplitude * 65535.0)
+         highFreqMotor:(unsigned short)lrint(rightAmplitude * 65535.0)];
+    }
 }
 
 /**
  * Maps trigger rumble to public left/right haptic localities for the selected feedback owner.
  * macOS exposes no public trigger-motor API, so these localities provide the compatibility path.
+ * The dictionary monitor serializes native-thread output with owner removal.
  * @param controllerNumber Remote slot filtered by the feedback preference.
  * @param leftTriggerMotor Left-trigger intensity from zero through 65535.
  * @param rightTriggerMotor Right-trigger intensity from zero through 65535.
@@ -1140,20 +1194,22 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
       leftTriggerMotor:(unsigned short)leftTriggerMotor
      rightTriggerMotor:(unsigned short)rightTriggerMotor
 {
-    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
-        return;
-    }
-    Controller *controller = [self controllerForRemoteNumber:controllerNumber];
-    if (controller == nil) {
-        return;
-    }
+    @synchronized(_controllers) {
+        if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+            return;
+        }
+        Controller *controller = [self controllerForRemoteNumber:controllerNumber];
+        if (controller == nil) {
+            return;
+        }
 
-    // GameController exposes left/right haptic localities, but macOS has no
-    // public trigger-motor API. Mapping the two trigger channels to those
-    // localities preserves independent feedback on DualSense and provides a
-    // documented fallback on other controllers.
-    [controller.lowFreqMotor setMotorAmplitude:leftTriggerMotor];
-    [controller.highFreqMotor setMotorAmplitude:rightTriggerMotor];
+        // GameController exposes left/right haptic localities, but macOS has no
+        // public trigger-motor API. Mapping the two trigger channels to those
+        // localities preserves independent feedback on DualSense and provides a
+        // documented fallback on other controllers.
+        [controller.lowFreqMotor setMotorAmplitude:leftTriggerMotor];
+        [controller.highFreqMotor setMotorAmplitude:rightTriggerMotor];
+    }
 }
 
 /**
@@ -1198,7 +1254,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 /**
  * Applies supported adaptive-trigger effects to the mapped DualSense feedback owner.
- * Consumes borrowed effect buffers synchronously; unsupported controllers or effects are ignored.
+ * Consumes borrowed effect buffers synchronously under the dictionary monitor to serialize
+ * native-thread device output with owner removal; unsupported controllers or effects are ignored.
  * @param controllerNumber Remote slot filtered by the feedback preference.
  * @param eventFlags Protocol flags selecting left and/or right trigger output.
  * @param typeLeft Protocol left-trigger effect type.
@@ -1213,22 +1270,24 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                        left:(const unsigned char *)left
                       right:(const unsigned char *)right
 {
-    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
-        return;
-    }
-    Controller *controller = [self controllerForRemoteNumber:controllerNumber];
-    GCController *gamepad = controller.gamepad;
-    if (gamepad == nil || ![gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
-        return;
-    }
-
-    if (@available(macOS 11.3, *)) {
-        GCDualSenseGamepad *dualSense = (GCDualSenseGamepad *)gamepad.extendedGamepad;
-        if ((eventFlags & DS_EFFECT_LEFT_TRIGGER) != 0) {
-            ApplyDualSenseTriggerEffect(dualSense.leftTrigger, typeLeft, left);
+    @synchronized(_controllers) {
+        if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+            return;
         }
-        if ((eventFlags & DS_EFFECT_RIGHT_TRIGGER) != 0) {
-            ApplyDualSenseTriggerEffect(dualSense.rightTrigger, typeRight, right);
+        Controller *controller = [self controllerForRemoteNumber:controllerNumber];
+        GCController *gamepad = controller.gamepad;
+        if (gamepad == nil || ![gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+            return;
+        }
+
+        if (@available(macOS 11.3, *)) {
+            GCDualSenseGamepad *dualSense = (GCDualSenseGamepad *)gamepad.extendedGamepad;
+            if ((eventFlags & DS_EFFECT_LEFT_TRIGGER) != 0) {
+                ApplyDualSenseTriggerEffect(dualSense.leftTrigger, typeLeft, left);
+            }
+            if ((eventFlags & DS_EFFECT_RIGHT_TRIGGER) != 0) {
+                ApplyDualSenseTriggerEffect(dualSense.rightTrigger, typeRight, right);
+            }
         }
     }
 }
@@ -1236,7 +1295,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 /**
  * Schedules a host motion-reporting request on the main queue for the current stream.
  *
- * Remote slot zero resolves to the lowest connected physical index in single-controller mode;
+ * Remote slot zero resolves to the persistent selected owner in single-controller mode;
  * cached shared-slot rates follow that owner across hot-plug. Samples use the same remote mapping
  * as ordinary input and touch. Requests queued for a replaced context or disabled motion mode
  * are ignored. Each sensor has its own timer; samples require enabled delivery and an announced
@@ -1258,8 +1317,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         [self->_controllerStreamLock lock];
         BOOL current = self->_inputContextGeneration == generation && self.inputContext == requestedInputContext;
         [self->_controllerStreamLock unlock];
-        if (!current || requestedInputContext == NULL || self.controllerMotionMode == 2 ||
-            !ControllerIsFeedbackTarget(self, controllerNumber)) {
+        if (!current || requestedInputContext == NULL || self.controllerMotionMode == 2) {
             return;
         }
         if (!self->_multiController) {
@@ -1276,9 +1334,16 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     });
 }
 
-/** Installs sampling for the current physical owner on the main queue. */
+/**
+ * Installs the requested sensor timer for the selected physical owner on main.
+ * Active gyro rate changes preserve the last delivered sample and rest hysteresis; start/stop
+ * clears the cache, and stop emits a gated zero. Timers reject stale contexts and removed pads.
+ * @param controller Connected owner supporting GameController motion.
+ * @param motionType Sensor to configure (gyro or acceleration).
+ * @param reportRateHz Nonzero frequency, or zero to stop.
+ */
 - (void)configureMotionForController:(Controller *)controller motionType:(uint8_t)motionType reportRateHz:(uint16_t)reportRateHz {
-    if (controller.gamepad.motion == nil) return;
+    if (controller.gamepad.motion == nil || ![self controllerOwnsRemoteSlot:controller]) return;
     [_controllerStreamLock lock];
     NSUInteger generation = _inputContextGeneration;
     BOOL hasContext = _inputContext != NULL;
@@ -1291,7 +1356,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         controller.lastAccelSample = (GCAcceleration){};
         if (reportRateHz > 0 && controller.gamepad.motion.hasGravityAndUserAcceleration) {
             controller.accelTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
-                if (!self.shouldSendInputEvents || !controller.controllerAnnounced) return;
+                if (!self.shouldSendInputEvents || !controller.controllerAnnounced || ![self controllerOwnsRemoteSlot:controller]) return;
                 GCAcceleration sample = controller.gamepad.motion.acceleration;
                 GCAcceleration previousSample = controller.lastAccelSample;
                 if (memcmp(&sample, &previousSample, sizeof(sample)) == 0) return;
@@ -1312,12 +1377,14 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         BOOL wasReporting = controller.gyroTimer != nil;
         [controller.gyroTimer invalidate];
         controller.gyroTimer = nil;
-        controller.lastGyroSample = (GCRotationRate){};
-        controller.gyroAtRest = YES;
-        controller.gyroStationarySampleCount = 0;
+        if (!wasReporting || reportRateHz == 0) {
+            controller.lastGyroSample = (GCRotationRate){};
+            controller.gyroAtRest = YES;
+            controller.gyroStationarySampleCount = 0;
+        }
         if (reportRateHz > 0 && controller.gamepad.motion.hasRotationRate) {
             controller.gyroTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
-                if (!self.shouldSendInputEvents || !controller.controllerAnnounced) return;
+                if (!self.shouldSendInputEvents || !controller.controllerAnnounced || ![self controllerOwnsRemoteSlot:controller]) return;
                 GCRotationRate sample = controller.gamepad.motion.rotationRate;
                 GCRotationRate filteredSample = {
                     sample.x * 57.2957795,
@@ -1525,7 +1592,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 /**
  * Advertises capabilities and flushes changed gamepad state to the active stream.
  *
- * Requires enabled delivery and a valid context, and skips ordinary packets in mouse mode.
+ * Requires slot ownership, enabled delivery and a valid context, and skips ordinary packets in mouse mode.
  * Uses the controller monitor and stream lock, suppresses duplicate states, and sends the live
  * assigned-slot mask; single-controller mode uses remote slot zero. The quit chord posts its
  * notification asynchronously on main and clears the outgoing buttons.
@@ -1533,7 +1600,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  */
 -(void) updateFinished:(Controller*)controller
 {
-    if (!_shouldSendInputEvents) {
+    if (!_shouldSendInputEvents || ![self controllerOwnsRemoteSlot:controller]) {
         return;
     }
     
@@ -1638,7 +1705,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             [_controllerStreamLock unlock];
             return;
         }
-        if (!_shouldSendInputEvents) { [_controllerStreamLock unlock]; return; }
+        if (!_shouldSendInputEvents || ![self controllerOwnsRemoteSlot:controller]) { [_controllerStreamLock unlock]; return; }
         controller.sentGamepadState = state;
         controller.hasSentGamepadState = YES;
         if (_multiController) {
@@ -1734,7 +1801,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * Installs GameController handlers for button, axis and supported touchpad input.
  *
  * Handlers update the assigned controller and flush state through the delivery gate; physical
- * touchpad clicks also require a context and enabled delivery. Touch surfaces may produce
+ * touchpad clicks also require slot ownership, a context and enabled delivery. Removed-device
+ * callbacks are rejected, including delayed legacy Menu releases on the main queue. Touch surfaces may produce
  * native contacts or mouse gestures according to settings. Call during main-thread controller
  * setup; cleanup must unregister these handlers before releasing the backend.
  * @param controller Physical controller whose supported input profile is registered.
@@ -1760,14 +1828,19 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             controller.controllerPausedHandler = ^(GCController *controller) {
                 Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
                 
-                // Get off the main thread
-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-                    [self setButtonFlag:limeController flags:PLAY_FLAG];
-                    [self updateFinished:limeController];
-                    
-                    // Pause for 100 ms
-                    usleep(100 * 1000);
-                    
+                if (limeController == nil || limeController.gamepad != controller) return;
+                [self->_controllerStreamLock lock];
+                NSUInteger generation = self->_inputContextGeneration;
+                [self->_controllerStreamLock unlock];
+                [self setButtonFlag:limeController flags:PLAY_FLAG];
+                [self updateFinished:limeController];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+                    if (limeController.gamepad != controller ||
+                        self->_controllers[@(controller.playerIndex)] != limeController) return;
+                    [self->_controllerStreamLock lock];
+                    BOOL current = self->_inputContextGeneration == generation;
+                    [self->_controllerStreamLock unlock];
+                    if (!current) return;
                     [self clearButtonFlag:limeController flags:PLAY_FLAG];
                     [self updateFinished:limeController];
                 });
@@ -1877,6 +1950,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
                     primary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
                         (void)pad; (void)xValue; (void)yValue;
+                        if (weakController == nil || touchController.gamepad != weakController) return;
                         QueueControllerTouchSnapshot(self, touchController, primary, secondary);
                     };
                 }
@@ -1887,6 +1961,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
                     secondary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
                         (void)pad; (void)xValue; (void)yValue;
+                        if (weakController == nil || touchController.gamepad != weakController) return;
                         QueueControllerTouchSnapshot(self, touchController, primary, secondary);
                     };
                 }
@@ -1904,7 +1979,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                         (void)value;
                         if (touchController.gamepad == nil || touchController.gamepad != weakController) return;
                         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-                        if (inputCtx != NULL && LiInputContextIsInitialized(inputCtx) && self.shouldSendInputEvents) {
+                        if (inputCtx != NULL && LiInputContextIsInitialized(inputCtx) && self.shouldSendInputEvents && [self controllerOwnsRemoteSlot:touchController]) {
                             if (ControllerTouchpadUsesMouse(self, touchController)) {
                                 if (pressed) {
                                     touchController.trackpadPhysicalClickConsumed = YES;
@@ -1937,6 +2012,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         else if (controller.gamepad != NULL) {
             controller.gamepad.valueChangedHandler = ^(GCGamepad *gamepad, GCControllerElement *element) {
                 Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:weakController.playerIndex]];
+                if (limeController == nil || limeController.gamepad != weakController) return;
                 UPDATE_BUTTON_FLAG(limeController, A_FLAG, gamepad.buttonA.pressed);
                 UPDATE_BUTTON_FLAG(limeController, B_FLAG, gamepad.buttonB.pressed);
                 UPDATE_BUTTON_FLAG(limeController, X_FLAG, gamepad.buttonX.pressed);
@@ -2218,7 +2294,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * Creates the system-controller backend and registers device observers and input timers.
  *
  * Applies stream controller settings, assigns existing gamepads, and installs connection/removal
- * handlers that maintain the live slot mask and clear motion state on removal. Call on the main
+ * handlers that maintain the live slot mask and transfer persistent slot-zero ownership on removal.
+ * Removal releases delivered touch, mouse, gamepad and sensor state before advertising a replacement;
+ * native feedback device access shares the dictionary monitor with removal. Call on the main
  * thread; cleanup must later remove observers, handlers and timers.
  * @param streamConfig Stream configuration supplying controller behavior and player policy.
  * @param delegate Recipient of input-device presence changes.
@@ -2273,7 +2351,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             for (Controller *controller in me->_controllers.allValues) {
                 if (input && ControllerTouchpadUsesMouse(me, controller) && controller.trackpadMouseButton)
                     [me setMouseButtons:controller.lastMouseModeButtonFlags trackpadButton:0 forController:controller];
-                if (input && !ControllerTouchpadUsesMouse(me, controller)) {
+                if (input && [me controllerOwnsRemoteSlot:controller] && !ControllerTouchpadUsesMouse(me, controller)) {
                     if (controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, [me remoteControllerNumber:controller],
                         LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
                     if (controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, [me remoteControllerNumber:controller],
@@ -2360,61 +2438,75 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             return;
         }
         
-        [self unregisterControllerCallbacks:controller];
-        self->_controllerNumbers &= ~(1 << controller.playerIndex);
-        Log(LOG_I, @"Unassigning controller index: %ld", (long)controller.playerIndex);
-        
-        // Unset the GCController on this object (in case it is the OSC, which will persist)
-        Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
-        
-        [self->_controllerStreamLock lock];
-        PML_INPUT_STREAM_CONTEXT removalInput = ControllerInputContext(self);
-        if (self.shouldSendInputEvents && removalInput && LiInputContextIsInitialized(removalInput)) {
-            if (!ControllerTouchpadUsesMouse(self, limeController)) {
-                if (limeController.primaryTouchActive) LiSendControllerTouchEventCtx(removalInput,
-                    [self remoteControllerNumber:limeController], LI_TOUCH_EVENT_UP,
-                    limeController.playerIndex * 2, limeController.lastPrimaryTouchX, limeController.lastPrimaryTouchY, 0);
-                if (limeController.secondaryTouchActive) LiSendControllerTouchEventCtx(removalInput,
-                    [self remoteControllerNumber:limeController], LI_TOUCH_EVENT_UP,
-                    limeController.playerIndex * 2 + 1, limeController.lastSecondaryTouchX, limeController.lastSecondaryTouchY, 0);
-            }
-            if (limeController.gyroTimer) LiSendControllerMotionEventCtx(removalInput,
-                [self remoteControllerNumber:limeController], LI_MOTION_TYPE_GYRO, 0, 0, 0);
-        }
-        [self->_controllerStreamLock unlock];
-        [self setMouseButtons:0 trackpadButton:0 forController:limeController];
-        ResetControllerTrackpadMouseState(limeController);
-        [self resetDebouncersForController:limeController remove:YES];
-
-        // Stop haptics on this controller
-        [self cleanupControllerHaptics:limeController];
-        [self cleanupControllerMotion:limeController];
-        
-        limeController.gamepad = nil;
-        
-        // Removal must bypass ordinary-state deduplication and mouse mode.
-        // The protocol mask tracks assigned slots, including holes after hot-unplug.
-        [self->_controllerStreamLock lock];
-        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-        if (self.shouldSendInputEvents && inputCtx && LiInputContextIsInitialized(inputCtx)) {
-            LiSendMultiControllerEventCtx(inputCtx, [self remoteControllerNumber:limeController],
-                self->_multiController ? (unsigned char)self->_controllerNumbers : 1,
-                0, 0, 0, 0, 0, 0, 0);
-        } else if (self->_multiController) {
-            self->_pendingControllerRemovalMask |= 1 << controller.playerIndex;
-        }
-        [self->_controllerStreamLock unlock];
         @synchronized(self->_controllers) {
-            [self->_controllers removeObjectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
-        }
-        limeController.physicalButtonFlags = limeController.lastButtonFlags = 0;
-        [self refreshSingleControllerMotion];
-        if (!self->_multiController && self.shouldSendInputEvents) {
-            // All physical controllers share remote slot zero in single-controller mode.
-            for (Controller *remaining in self->_controllers.allValues) {
-                remaining.hasSentGamepadState = NO;
-                [self updateFinished:remaining];
+            Controller *assigned = self->_controllers[@(controller.playerIndex)];
+            if (assigned == nil || assigned.gamepad != controller) return;
+            [self unregisterControllerCallbacks:controller];
+            self->_controllerNumbers &= ~(1 << controller.playerIndex);
+            Log(LOG_I, @"Unassigning controller index: %ld", (long)controller.playerIndex);
+
+            // Unset the GCController on this object (in case it is the OSC, which will persist)
+            Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+
+            BOOL ownedRemoteSlot = [self controllerOwnsRemoteSlot:limeController];
+            [self->_controllerStreamLock lock];
+            PML_INPUT_STREAM_CONTEXT removalInput = ControllerInputContext(self);
+            if (ownedRemoteSlot && self.shouldSendInputEvents && removalInput && LiInputContextIsInitialized(removalInput)) {
+                if (!ControllerTouchpadUsesMouse(self, limeController)) {
+                    if (limeController.primaryTouchActive) LiSendControllerTouchEventCtx(removalInput,
+                        [self remoteControllerNumber:limeController], LI_TOUCH_EVENT_UP,
+                        limeController.playerIndex * 2, limeController.lastPrimaryTouchX, limeController.lastPrimaryTouchY, 0);
+                    if (limeController.secondaryTouchActive) LiSendControllerTouchEventCtx(removalInput,
+                        [self remoteControllerNumber:limeController], LI_TOUCH_EVENT_UP,
+                        limeController.playerIndex * 2 + 1, limeController.lastSecondaryTouchX, limeController.lastSecondaryTouchY, 0);
+                }
+                if (limeController.accelTimer) LiSendControllerMotionEventCtx(removalInput,
+                    [self remoteControllerNumber:limeController], LI_MOTION_TYPE_ACCEL, 0, 0, 0);
+                if (limeController.gyroTimer) LiSendControllerMotionEventCtx(removalInput,
+                    [self remoteControllerNumber:limeController], LI_MOTION_TYPE_GYRO, 0, 0, 0);
             }
+            [self->_controllerStreamLock unlock];
+            [self setMouseButtons:0 trackpadButton:0 forController:limeController];
+            ResetControllerTrackpadMouseState(limeController);
+            [self resetDebouncersForController:limeController remove:YES];
+
+            if (ownedRemoteSlot && !self->_multiController) {
+                [self->_ds5HapticsAudioRenderer reset];
+                @synchronized(self->_hapticsMailboxLock) { [self->_pendingHaptics removeObjectForKey:@0]; }
+                limeController.lastAuthoredHapticsTime = 0;
+                limeController.hasHapticsSequence = NO;
+            }
+            // Stop the old physical fallback before selecting a replacement for remote slot zero.
+            if (ownedRemoteSlot && !self->_multiController &&
+                [self->_presenceDelegate respondsToSelector:@selector(controllerRumbleFallback:low:high:)])
+                [self->_presenceDelegate controllerRumbleFallback:0 low:0 high:0];
+            // Stop haptics on this controller
+            [self cleanupControllerHaptics:limeController];
+            [self cleanupControllerMotion:limeController];
+
+            limeController.gamepad = nil;
+
+            // Removal must bypass ordinary-state deduplication and mouse mode.
+            // The protocol mask tracks assigned slots, including holes after hot-unplug.
+            [self->_controllerStreamLock lock];
+            PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+            if (ownedRemoteSlot && self.shouldSendInputEvents && inputCtx && LiInputContextIsInitialized(inputCtx)) {
+                LiSendMultiControllerEventCtx(inputCtx, [self remoteControllerNumber:limeController],
+                    self->_multiController ? (unsigned char)self->_controllerNumbers : 1,
+                    0, 0, 0, 0, 0, 0, 0);
+            } else if (self->_multiController) {
+                self->_pendingControllerRemovalMask |= 1 << controller.playerIndex;
+            }
+            [self->_controllerStreamLock unlock];
+            @synchronized(self->_controllers) {
+                [self->_controllers removeObjectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+            }
+            limeController.physicalButtonFlags = limeController.lastButtonFlags = 0;
+            limeController.lastLeftTrigger = limeController.lastRightTrigger = 0;
+            limeController.lastLeftStickX = limeController.lastLeftStickY = 0;
+            limeController.lastRightStickX = limeController.lastRightStickY = 0;
+            limeController.hasSentGamepadState = NO;
+            [self refreshSingleControllerMotion];
         }
 
         // Re-evaluate the on-screen control mode
@@ -2490,7 +2582,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * Releases stream controller resources, observers, handlers and sampling timers.
  *
  * Clears controller slot bookkeeping and pending haptics, tears down haptic output and motion
- * sampling, and unregisters physical input callbacks. Call on the main thread after disabling
+ * sampling, and unregisters physical input callbacks. Device cleanup uses the dictionary monitor
+ * to serialize with native feedback; both slot-zero owner references are released. Call on the main thread after disabling
  * delivery and detaching the stream context; this method does not stop the native connection.
  */
 -(void) cleanup
@@ -2521,15 +2614,18 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     
     _controllerNumbers = 0;
     
-    for (Controller* controller in [_controllers allValues]) {
-        [self cleanupControllerHaptics:controller];
-        [self cleanupControllerMotion:controller];
-        [self resetDebouncersForController:controller remove:YES];
+    @synchronized(_controllers) {
+        for (Controller* controller in [_controllers allValues]) {
+            [self cleanupControllerHaptics:controller];
+            [self cleanupControllerMotion:controller];
+            [self resetDebouncersForController:controller remove:YES];
+        }
+        [_ds5HapticsAudioRenderer reset];
+        _ds5HapticsAudioRenderer = nil;
+        [_controllers removeAllObjects];
+        _singleControllerOwner = _singleControllerMotionOwner = nil;
     }
-    [_ds5HapticsAudioRenderer reset];
-    _ds5HapticsAudioRenderer = nil;
-    @synchronized(_controllers) { [_controllers removeAllObjects]; }
-    
+
     for (GCController* controller in [GCController controllers]) {
         if ([ControllerSupport isSupportedGamepad:controller]) {
             [self unregisterControllerCallbacks:controller];
@@ -2554,13 +2650,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * Polls controller mouse emulation and menu-hold gestures while delivery is enabled.
  *
  * Runs on the main run loop, releasing the previous touch/mouse state when modes change and
- * sending stick-derived movement or scroll events through the current context.
+ * sending stick-derived movement or scroll events only for connected remote slot owners.
  * @param timer Mouse-emulation polling timer; its value is not used.
  */
 -(void) mouseTimerCallback:(NSTimer*)timer {
     if (!self.shouldSendInputEvents || !ControllerInputContext(self)) return;
     for (Controller* controller in [_controllers allValues]) {
-        if (controller.gamepad == nil) continue;
+        if (controller.gamepad == nil || ![self controllerOwnsRemoteSlot:controller]) continue;
         
         GCController *gcController = controller.gamepad;
         GCExtendedGamepad *gamepad = gcController.extendedGamepad;
