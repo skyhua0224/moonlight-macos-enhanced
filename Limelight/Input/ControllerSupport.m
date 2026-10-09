@@ -1054,7 +1054,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             [controller.highFreqMotor setMotorAmplitude:0];
             if (controller.authoredHapticsFallback &&
                 [_presenceDelegate respondsToSelector:@selector(controllerRumbleFallback:low:high:)]) {
-                [_presenceDelegate controllerRumbleFallback:(unsigned short)controller.playerIndex low:0 high:0];
+                [_presenceDelegate controllerRumbleFallback:[self remoteControllerNumber:controller] low:0 high:0];
             }
             controller.lastAuthoredHapticsTime = 0;
             Log(LOG_I, @"[controller-haptics] Lost-frame watchdog stopped player=%d", controller.playerIndex);
