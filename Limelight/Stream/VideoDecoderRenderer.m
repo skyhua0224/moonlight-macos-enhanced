@@ -736,6 +736,24 @@ static CGColorSpaceRef MLCreateTransferColorSpace(MLHDRTransferMode mode)
     }
 }
 
+// Colorspace the SDR Metal drawable is tagged with. The native renderer tags
+// its pixel buffers as Rec.709 (see prepareNativePresentationResources), so
+// ColorSync maps both renderers' SDR output through the same transform. An
+// untagged layer skips colour matching and shows the Rec.709-encoded values
+// through the display's own curve, which renders darker midtones.
+static CGColorSpaceRef MLSDRPresentationColorSpace(void)
+{
+    static CGColorSpaceRef colorSpace = NULL;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        colorSpace = MLCreateTransferColorSpace(MLHDRTransferModeSDR);
+        if (colorSpace == NULL) {
+            colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+        }
+    });
+    return colorSpace;
+}
+
 static CFDataRef MLCreateHLGAmbientViewingEnvironmentData(MLHDRHLGViewingEnvironment viewingEnvironment)
 {
     uint32_t ambientIlluminanceScaled = 3140000;
@@ -816,10 +834,16 @@ static MLYCbCrConversionParameters MLYCbCrConversionParametersForPixelFormat(OST
         case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
         case kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange:
         case kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange:
-            if (videoRange) {
-                offset = (vector_float4){ 64.0f / 1023.0f, 512.0f / 1023.0f, 512.0f / 1023.0f, 0.0f };
-                scale = (vector_float4){ 1023.0f / 876.0f, 1023.0f / 896.0f, 1023.0f / 896.0f, 1.0f };
-            }
+            // 10-bit samples sit in the top bits of 16-bit words, so a code
+            // value c reads back from the R16/RG16 views as c * 64 / 65535.
+            offset = (vector_float4){ 64.0f * 64.0f / 65535.0f, 512.0f * 64.0f / 65535.0f, 512.0f * 64.0f / 65535.0f, 0.0f };
+            scale = (vector_float4){ 65535.0f / (876.0f * 64.0f), 65535.0f / (896.0f * 64.0f), 65535.0f / (896.0f * 64.0f), 1.0f };
+            break;
+        case kCVPixelFormatType_420YpCbCr10BiPlanarFullRange:
+        case kCVPixelFormatType_422YpCbCr10BiPlanarFullRange:
+        case kCVPixelFormatType_444YpCbCr10BiPlanarFullRange:
+            offset = (vector_float4){ 0.0f, 512.0f * 64.0f / 65535.0f, 512.0f * 64.0f / 65535.0f, 0.0f };
+            scale = (vector_float4){ 65535.0f / (1023.0f * 64.0f), 65535.0f / (1023.0f * 64.0f), 65535.0f / (1023.0f * 64.0f), 1.0f };
             break;
         case kCVPixelFormatType_444YpCbCr16BiPlanarVideoRange:
             offset = (vector_float4){ 4096.0f / 65535.0f, 32768.0f / 65535.0f, 32768.0f / 65535.0f, 0.0f };
@@ -1198,6 +1222,7 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     CGColorSpaceRef _nativeDisplayColorSpace;
     NSInteger _nativeColorSpaceKind;
     BOOL _loggedNativeColorTags;
+    BOOL _loggedMetalColorTags;
     CFDataRef _nativeMasteringDisplayColorVolume;
     CFDataRef _nativeContentLightLevelInfo;
 
@@ -2263,7 +2288,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
         }
     } else {
         metalLayer.wantsExtendedDynamicRangeContent = NO;
-        metalLayer.colorspace = nil;
+        metalLayer.colorspace = MLSDRPresentationColorSpace();
         if (@available(macOS 10.15, *)) {
             metalLayer.EDRMetadata = nil;
         }
@@ -2697,6 +2722,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _streamHeight = streamConfig ? streamConfig.height : 0;
     _streamBitrateKbps = streamConfig ? streamConfig.bitRate : 0;
     _loggedNativeColorTags = NO;
+    _loggedMetalColorTags = NO;
     _dolbyVisionBaseLayerFallback = NO;
     atomic_store(&_decompressionOutputError, noErr);
     _framePacingMode = streamConfig ? streamConfig.framePacingMode : 1;
@@ -2953,7 +2979,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
         ? _hdrSDROutputColorSpace
         : ((_enableHdr && _hdrOutputUsesEDR)
             ? _hdrLinearColorSpace
-            : (_enableHdr ? _hdrTransferColorSpace : nil));
+            : (_enableHdr ? _hdrTransferColorSpace : MLSDRPresentationColorSpace()));
 
     CAMetalLayer *metalLayer = (CAMetalLayer *)_metalView.layer;
     if ([metalLayer isKindOfClass:[CAMetalLayer class]]) {
@@ -3394,19 +3420,29 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     } mutableCopy];
 
     if (_activeRendererMode == MLActiveVideoRendererModeEnhanced) {
+        // Ask for the range the bitstream signals so VT does not rescale it;
+        // the Metal shader derives offsets from the delivered pixel format.
+        CFTypeRef fullRangeExtension = formatDesc != NULL
+            ? CMFormatDescriptionGetExtension(formatDesc, kCMFormatDescriptionExtension_FullRangeVideo)
+            : NULL;
+        const BOOL signalsFullRange = fullRangeExtension != NULL &&
+            CFGetTypeID(fullRangeExtension) == CFBooleanGetTypeID() &&
+            CFBooleanGetValue((CFBooleanRef)fullRangeExtension);
+        OSType requestedFormat;
         if ((videoFormat & VIDEO_FORMAT_MASK_YUV444) && (videoFormat & VIDEO_FORMAT_MASK_10BIT)) {
-            destinationImageBufferAttributes[(id)kCVPixelBufferPixelFormatTypeKey] =
-                @(kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange);
+            requestedFormat = signalsFullRange ? kCVPixelFormatType_444YpCbCr10BiPlanarFullRange
+                                               : kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange;
         } else if (videoFormat & VIDEO_FORMAT_MASK_YUV444) {
-            destinationImageBufferAttributes[(id)kCVPixelBufferPixelFormatTypeKey] =
-                @(kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange);
+            requestedFormat = signalsFullRange ? kCVPixelFormatType_444YpCbCr8BiPlanarFullRange
+                                               : kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange;
         } else if (videoFormat & VIDEO_FORMAT_MASK_10BIT) {
-            destinationImageBufferAttributes[(id)kCVPixelBufferPixelFormatTypeKey] =
-                @(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange);
+            requestedFormat = signalsFullRange ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+                                               : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange;
         } else {
-            destinationImageBufferAttributes[(id)kCVPixelBufferPixelFormatTypeKey] =
-                @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
+            requestedFormat = signalsFullRange ? kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+                                               : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
         }
+        destinationImageBufferAttributes[(id)kCVPixelBufferPixelFormatTypeKey] = @(requestedFormat);
     }
 
     OSStatus status = VTDecompressionSessionCreate(kCFAllocatorDefault,
@@ -4689,6 +4725,23 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     CVImageBufferRef workingFrame = processedFrame != NULL ? processedFrame : presentationFrame;
     const OSType pixelFormat = CVPixelBufferGetPixelFormatType(workingFrame);
     const size_t workingWidth = CVPixelBufferGetWidth(workingFrame);
+    if (!_loggedMetalColorTags) {
+        _loggedMetalColorTags = YES;
+        CFTypeRef tagMatrix = CVBufferCopyAttachment(workingFrame, kCVImageBufferYCbCrMatrixKey, NULL);
+        CFTypeRef tagTransfer = CVBufferCopyAttachment(workingFrame, kCVImageBufferTransferFunctionKey, NULL);
+        CFTypeRef tagPrimaries = CVBufferCopyAttachment(workingFrame, kCVImageBufferColorPrimariesKey, NULL);
+        Log(LOG_I, @"[hdr] Metal decoded color tags: pixelFormat=0x%x videoRange=%d primaries=%@ transfer=%@ matrix=%@ shaderMatrix=%@ sdrTagged=%d",
+            (unsigned)pixelFormat,
+            MLPixelFormatIsVideoRange(pixelFormat) ? 1 : 0,
+            tagPrimaries ? (__bridge id)tagPrimaries : @"missing",
+            tagTransfer ? (__bridge id)tagTransfer : @"missing",
+            tagMatrix ? (__bridge id)tagMatrix : @"missing",
+            _hdrTransferMode != MLHDRTransferModeSDR ? @"BT.2020" : @"BT.709",
+            (!_enableHdr && MLSDRPresentationColorSpace() != NULL) ? 1 : 0);
+        if (tagMatrix) CFRelease(tagMatrix);
+        if (tagTransfer) CFRelease(tagTransfer);
+        if (tagPrimaries) CFRelease(tagPrimaries);
+    }
     const size_t workingHeight = CVPixelBufferGetHeight(workingFrame);
     const size_t planeCount = CVPixelBufferGetPlaneCount(workingFrame);
 
