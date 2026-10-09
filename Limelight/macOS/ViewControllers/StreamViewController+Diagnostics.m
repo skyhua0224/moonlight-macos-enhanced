@@ -890,6 +890,26 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     [self attemptReconnectWithReason:@"adaptive-drop-mitigation"];
 }
 
+- (void)startAdaptiveBitrateIfEnabled {
+    [self stopAdaptiveBitrate];
+
+    StreamConfiguration *config = self.streamMan.streamConfiguration;
+    if (config == nil || !config.enableAdaptiveBitrate) {
+        return;
+    }
+
+    HttpManager *hMan = [[HttpManager alloc] initWithHost:config.host uniqueId:[IdManager getUniqueId] serverCert:config.serverCert];
+    self.adaptiveBitrateController = [[MLAdaptiveBitrateController alloc] initWithHttpManager:hMan
+                                                                           initialBitrateKbps:config.bitRate
+                                                                                  ceilingKbps:config.probedBitrateCeilingKbps];
+    [self.adaptiveBitrateController start];
+}
+
+- (void)stopAdaptiveBitrate {
+    [self.adaptiveBitrateController stop];
+    self.adaptiveBitrateController = nil;
+}
+
 - (void)publishPerformanceDiagnosticsSnapshot {
     if (!self.streamMan || !self.streamMan.connection || !self.streamMan.connection.renderer) {
         return;
@@ -911,6 +931,17 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
         }
         return (float)((double)frameCount / MAX(0.001, (double)elapsedMs / 1000.0));
     };
+
+    if (self.adaptiveBitrateController != nil) {
+        uint32_t abrRtt = 0;
+        PML_CONTROL_STREAM_CONTEXT abrControlCtx = (PML_CONTROL_STREAM_CONTEXT)[self.streamMan.connection controlStreamContext];
+        MLGetUsableRttInfo(abrControlCtx, &abrRtt, NULL);
+        double abrLoss = stats.totalFrames > 0 ? (double)stats.networkDroppedFrames * 100.0 / stats.totalFrames : 0.0;
+        [self.adaptiveBitrateController updatePacketLossPercent:abrLoss
+                                                          rttMs:abrRtt
+                                                      decodeFps:displayedFps(stats.decodedFps, stats.decodedFrames)
+                                                  droppedFrames:(int)(stats.networkDroppedFrames + stats.pacerDroppedFrames)];
+    }
 
     [[NSNotificationCenter defaultCenter]
         postNotificationName:@"MoonlightPerformanceDiagnosticsDidUpdate"

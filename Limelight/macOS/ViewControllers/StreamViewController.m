@@ -1545,6 +1545,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         Log(LOG_I, @"[diag] Using 7.1.4 compatibility audio topology for Enhanced mode");
     }
     
+    streamConfig.enableAdaptiveBitrate = prefs[@"enableAdaptiveBitrate"] != nil ? [prefs[@"enableAdaptiveBitrate"] boolValue] : NO;
     streamConfig.framePacingMode = (int)[SettingsClass framePacingFor:self.app.host.uuid];
     streamConfig.smoothnessLatencyMode = (int)[SettingsClass smoothnessLatencyModeFor:self.app.host.uuid];
         streamConfig.timingBufferLevel = (int)[SettingsClass timingBufferLevelFor:self.app.host.uuid];
@@ -1825,6 +1826,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.waitingForFirstRenderedFrame = YES;
         self.pendingDisconnectSource = nil;
         [self startStreamHealthDiagnostics];
+        [self startAdaptiveBitrateIfEnabled];
         self.streamHealthConnectionStartedMs = [self nowMs];
         [self refreshInputDiagnosticsPreference];
         [self scheduleInitialRenderedFrameCheckForGeneration:self.activeStreamGeneration remainingAttempts:80];
@@ -1935,6 +1937,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.clipboardRuntimeConnection = nil;
     self.waitingForFirstRenderedFrame = NO;
     [self stopStreamHealthDiagnostics];
+    [self stopAdaptiveBitrate];
     [[MLRemoteUSBForwardingSession sharedSession] stop];
     [self finalizeInputDiagnosticsWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
     self.streamHealthConnectionStartedMs = 0;

@@ -231,6 +231,7 @@ private struct BitrateSettingsSection: View {
   }
   var body: some View {
     ToggleCell(title: "Auto Adjust Bitrate", hintKey: "Auto bitrate hint", boolBinding: $settingsModel.autoAdjustBitrate)
+    ToggleCell(title: "Adaptive Bitrate", hintKey: "Adaptive Bitrate hint", boolBinding: $settingsModel.enableAdaptiveBitrate)
     ToggleCell(title: "Unlock max bitrate (1000 Mbps)", boolBinding: $settingsModel.unlockMaxBitrate)
     SettingsRow(title: settingsModel.autoAdjustBitrate ? "Target Bitrate" : "Bitrate") {
       HStack(spacing: 5) {

@@ -20,6 +20,10 @@
 @property(nonatomic) int frameRate;
 @property(nonatomic) int bitRate;
 @property(nonatomic) BOOL autoAdjustBitrate;
+// Foundation Sunshine only: probe bandwidth before launch and let the host adapt the bitrate.
+@property(nonatomic) BOOL enableAdaptiveBitrate;
+// Set by the pre-stream probe; 0 when no usable measurement exists.
+@property(nonatomic) int probedBitrateCeilingKbps;
 @property(nonatomic) int riKeyId;
 @property(nonatomic) BOOL streamingRemotely;
 @property(nonatomic, copy) NSData *riKey;

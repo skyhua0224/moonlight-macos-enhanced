@@ -44,6 +44,20 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
 - (NSDictionary<NSString*, id>*) fetchSunshineFileMappingCapability;
 - (void) executeRequestSynchronously:(HttpRequest*)request;
 - (NSURLRequest *)newClipboardRequestWithPath:(NSString *)path;
+// Foundation Sunshine JSON API (/api/abr/*) over a persistent mTLS session so a 1 Hz
+// feedback loop does not repeat the handshake. Synchronous; do not call on the main
+// thread. Returns the parsed JSON object (empty on failure) and the HTTP status, or a
+// negative NSURLError code on transport failure.
+- (NSDictionary<NSString*, id>*) sunshineAPIRequestWithPath:(NSString*)path
+                                                     method:(NSString*)method
+                                                       body:(NSDictionary<NSString*, id>*)body
+                                                    timeout:(NSTimeInterval)timeout
+                                                 httpStatus:(NSInteger*)httpStatus;
+- (void) invalidateSunshineAPISession;
+// Foundation Sunshine pre-stream bandwidth probe (/api/network/*). Synchronous.
+// Keys: ok, error (reason), retryAfterMs, bandwidthMbps, latencyMs, jitterMs, bytes,
+// partial (host cut the transfer short; bandwidth is then a lower bound).
+- (NSDictionary<NSString*, id>*) runSunshineBandwidthProbe;
 - (void)executeDataRequest:(NSURLRequest *)request completion:(MLHttpDataCompletion)completion;
 
 @end

@@ -1210,3 +1210,5 @@
 "Host Command Failed Message" = "The host could not run \"%@\". Make sure the app is still running.";
 "Host Command Sent: %@" = "Sent: %@";
 "Host Command Failed: %@" = "Host command failed: %@";
+"Adaptive Bitrate" = "Adaptive Bitrate";
+"Adaptive Bitrate hint" = "Measures bandwidth before the stream starts to cap the bitrate, then lets the host adjust it during the stream based on packet loss and latency. Requires Foundation Sunshine.";

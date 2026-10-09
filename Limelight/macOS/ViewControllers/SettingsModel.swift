@@ -568,6 +568,13 @@ class SettingsModel: ObservableObject {
     }
   }
 
+  @Published var enableAdaptiveBitrate: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
   @Published var enableMicrophone: Bool {
     didSet {
       guard !isLoading else { return }
@@ -1490,6 +1497,7 @@ class SettingsModel: ObservableObject {
     ignoreAspectRatio = Self.defaultIgnoreAspectRatio
     showLocalCursor = Self.defaultShowLocalCursor
     enableMicrophone = Self.defaultEnableMicrophone
+    enableAdaptiveBitrate = Self.defaultEnableAdaptiveBitrate
     streamResolutionScale = Self.defaultStreamResolutionScale
     streamResolutionScaleRatio = Self.defaultStreamResolutionScaleRatio
 

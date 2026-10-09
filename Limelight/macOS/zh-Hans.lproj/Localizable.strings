@@ -1276,3 +1276,5 @@
 "Host Command Failed Message" = "主机无法执行“%@”。请确认该应用仍在运行。";
 "Host Command Sent: %@" = "已发送：%@";
 "Host Command Failed: %@" = "主机命令失败：%@";
+"Adaptive Bitrate" = "自适应码率";
+"Adaptive Bitrate hint" = "串流开始前测量带宽并据此限制码率，串流过程中由主机根据丢包与延迟调整码率。需要 Foundation Sunshine 主机。";

@@ -152,6 +152,73 @@
 
 @end
 
+// Streams the probe body so the transfer can be timed from the first response byte,
+// excluding connection setup. Challenges are answered by the owning HttpManager.
+@interface MLSunshineProbeCollector : NSObject <NSURLSessionDataDelegate>
+@property (nonatomic, weak) HttpManager *manager;
+@property (nonatomic, copy) NSString *expectedNonce;
+@property (nonatomic) NSInteger statusCode;
+@property (nonatomic, copy) NSString *failure;
+@property (nonatomic) uint64_t receivedBytes;
+@property (nonatomic) uint64_t startNs;
+@property (nonatomic) uint64_t endNs;
+@property (nonatomic, strong) NSMutableData *errorBody;
+@property (nonatomic, strong) NSError *transportError;
+@property (nonatomic, strong) dispatch_semaphore_t done;
+@end
+
+@implementation MLSunshineProbeCollector
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _done = dispatch_semaphore_create(0);
+        _errorBody = [NSMutableData data];
+    }
+    return self;
+}
+
+- (void)URLSession:(NSURLSession *)session didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler {
+    HttpManager *manager = self.manager;
+    if (manager == nil) {
+        completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
+        return;
+    }
+    [manager URLSession:session didReceiveChallenge:challenge completionHandler:completionHandler];
+}
+
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveResponse:(NSURLResponse *)response completionHandler:(void (^)(NSURLSessionResponseDisposition))completionHandler {
+    NSHTTPURLResponse *http = [response isKindOfClass:[NSHTTPURLResponse class]] ? (NSHTTPURLResponse *)response : nil;
+    self.statusCode = http.statusCode;
+    if (http.statusCode == 200) {
+        NSString *nonce = http.allHeaderFields[@"X-Bandwidth-Probe-Nonce"];
+        NSString *version = http.allHeaderFields[@"X-Bandwidth-Probe-Version"];
+        if (![version isEqualToString:@"1"] || ![nonce isEqualToString:self.expectedNonce]) {
+            self.failure = @"invalid_response";
+            completionHandler(NSURLSessionResponseCancel);
+            return;
+        }
+        self.startNs = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    }
+    completionHandler(NSURLSessionResponseAllow);
+}
+
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data {
+    if (self.statusCode == 200) {
+        self.receivedBytes += data.length;
+        self.endNs = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    } else if (self.errorBody.length < 4096) {
+        [self.errorBody appendData:data];
+    }
+}
+
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
+    self.transportError = error;
+    dispatch_semaphore_signal(self.done);
+}
+
+@end
+
 @implementation HttpManager {
     NSString* _baseHTTPURL;
     NSString* _baseHTTPSURL;
@@ -161,6 +228,7 @@
     NSData* _serverCert;
     
     NSError* _error;
+    NSURLSession* _apiSession;
 }
 
 static uint64_t gLastServerInfoErrorLogMs = 0;
@@ -883,6 +951,178 @@ static const NSString* HTTPS_PORT = @"47984";
     BOOL ok = answered ? sleeping != 0 : transportError;
     Log(ok ? LOG_I : LOG_W, @"[pcsleep] status=%ld answered=%d sleeping=%ld", (long)response.statusCode, answered, (long)sleeping);
     return ok;
+}
+
+#pragma mark - Foundation Sunshine ABR and bandwidth probe
+
+- (NSURLSession*) sunshineAPISession {
+    @synchronized (self) {
+        if (_apiSession == nil) {
+            NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+            _apiSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+        }
+        return _apiSession;
+    }
+}
+
+- (void) invalidateSunshineAPISession {
+    NSURLSession* session = nil;
+    @synchronized (self) {
+        session = _apiSession;
+        _apiSession = nil;
+    }
+    [session finishTasksAndInvalidate];
+}
+
+- (NSDictionary<NSString*, id>*) sunshineAPIRequestWithPath:(NSString*)path
+                                                     method:(NSString*)method
+                                                       body:(NSDictionary<NSString*, id>*)body
+                                                    timeout:(NSTimeInterval)timeout
+                                                 httpStatus:(NSInteger*)httpStatus {
+    NSString* urlString = [NSString stringWithFormat:@"%@%@", _baseHTTPSURL, path];
+    NSMutableURLRequest* request = [[self createRequestFromString:urlString timeout:(int)timeout] mutableCopy];
+    request.HTTPMethod = method;
+    if (body != nil) {
+        request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    }
+
+    __block NSData* respData = nil;
+    __block NSInteger status = 0;
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    NSURLSessionDataTask* task = [[self sunshineAPISession] dataTaskWithRequest:request completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+        if (error != nil) {
+            status = error.code < 0 ? error.code : -error.code;
+        } else {
+            status = [(NSHTTPURLResponse*)response statusCode];
+            respData = data;
+        }
+        dispatch_semaphore_signal(done);
+    }];
+    [task resume];
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 2.0) * NSEC_PER_SEC))) != 0) {
+        [task cancel];
+        status = NSURLErrorTimedOut;
+    }
+
+    if (httpStatus != NULL) {
+        *httpStatus = status;
+    }
+    id object = respData.length > 0 ? [NSJSONSerialization JSONObjectWithData:respData options:0 error:nil] : nil;
+    return [object isKindOfClass:[NSDictionary class]] ? object : @{};
+}
+
+static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
+    NSString* reason = [json[@"error"] isKindOfClass:[NSString class]] ? json[@"error"] : nil;
+    if (reason.length > 0) {
+        return reason;
+    }
+    return status == 404 ? @"unsupported" : [NSString stringWithFormat:@"http_%ld", (long)status];
+}
+
+- (NSDictionary<NSString*, id>*) runSunshineBandwidthProbe {
+    static const uint64_t kMaxProbeBytes = 4ull * 1024 * 1024;
+    static const int kLatencySamples = 4;
+
+    MLSunshineProbeCollector* collector = [[MLSunshineProbeCollector alloc] init];
+    collector.manager = self;
+    NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    config.timeoutIntervalForRequest = NORMAL_TIMEOUT_SEC;
+    NSURLSession* session = [NSURLSession sessionWithConfiguration:config delegate:collector delegateQueue:nil];
+
+    NSDictionary* (^fail)(NSString*, NSInteger) = ^NSDictionary*(NSString* reason, NSInteger retryAfterMs) {
+        [session invalidateAndCancel];
+        return @{ @"ok": @NO, @"error": reason ?: @"failed", @"retryAfterMs": @(retryAfterMs) };
+    };
+
+    // Round-trip samples against the capabilities endpoint; the first one pays for
+    // the TLS handshake and is dropped from the latency estimate.
+    NSMutableArray<NSNumber*>* latencies = [NSMutableArray array];
+    uint64_t minBytes = 0, maxBytes = 0;
+    NSURL* capsURL = [NSURL URLWithString:[NSString stringWithFormat:@"%@/api/network/capabilities", _baseHTTPSURL]];
+    for (int i = 0; i < kLatencySamples; i++) {
+        __block NSData* body = nil;
+        __block NSInteger status = 0;
+        dispatch_semaphore_t done = dispatch_semaphore_create(0);
+        uint64_t startNs = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+        NSURLRequest* request = [NSURLRequest requestWithURL:capsURL cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:NORMAL_TIMEOUT_SEC];
+        [[session dataTaskWithRequest:request completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+            status = error != nil ? -1 : [(NSHTTPURLResponse*)response statusCode];
+            body = data;
+            dispatch_semaphore_signal(done);
+        }] resume];
+        if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)((NORMAL_TIMEOUT_SEC + 2) * NSEC_PER_SEC))) != 0) {
+            return fail(@"timeout", 0);
+        }
+        double elapsedMs = (double)(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - startNs) / 1e6;
+
+        id json = body.length > 0 ? [NSJSONSerialization JSONObjectWithData:body options:0 error:nil] : nil;
+        NSDictionary* root = [json isKindOfClass:[NSDictionary class]] ? json : @{};
+        if (status != 200) {
+            return fail(status < 0 ? @"network_error" : ProbeErrorReason(status, root), 0);
+        }
+        if (i == 0) {
+            NSDictionary* probe = [root[@"bandwidthProbe"] isKindOfClass:[NSDictionary class]] ? root[@"bandwidthProbe"] : nil;
+            if ([root[@"version"] integerValue] < 1 || [probe[@"version"] integerValue] < 1) {
+                return fail(@"unsupported_version", 0);
+            }
+            minBytes = [probe[@"minBytes"] unsignedLongLongValue];
+            maxBytes = [probe[@"maxBytes"] unsignedLongLongValue];
+            if (![probe[@"endpoint"] isEqualToString:@"/api/network/probe"] || minBytes == 0 || maxBytes < minBytes || minBytes > kMaxProbeBytes) {
+                return fail(@"invalid_capabilities", 0);
+            }
+        }
+        [latencies addObject:@(elapsedMs)];
+    }
+
+    NSArray<NSNumber*>* steady = latencies.count > 1 ? [latencies subarrayWithRange:NSMakeRange(1, latencies.count - 1)] : latencies;
+    double latencySum = 0, jitterSum = 0;
+    for (NSUInteger i = 0; i < steady.count; i++) {
+        latencySum += steady[i].doubleValue;
+        if (i > 0) {
+            jitterSum += fabs(steady[i].doubleValue - steady[i - 1].doubleValue);
+        }
+    }
+    double latencyMs = latencySum / steady.count;
+    double jitterMs = steady.count > 1 ? jitterSum / (steady.count - 1) : 0;
+
+    uint64_t sampleBytes = MIN(maxBytes, kMaxProbeBytes);
+    NSString* nonce = [[NSUUID UUID] UUIDString];
+    collector.expectedNonce = nonce;
+    NSURL* probeURL = [NSURL URLWithString:[NSString stringWithFormat:@"%@/api/network/probe?bytes=%llu&nonce=%@", _baseHTTPSURL, sampleBytes, nonce]];
+    NSURLRequest* probeRequest = [NSURLRequest requestWithURL:probeURL cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:NORMAL_TIMEOUT_SEC];
+    [[session dataTaskWithRequest:probeRequest] resume];
+    // The host aborts transfers after 3 s; leave generous slack for slow links.
+    if (dispatch_semaphore_wait(collector.done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC))) != 0) {
+        return fail(@"timeout", 0);
+    }
+    [session finishTasksAndInvalidate];
+
+    if (collector.failure != nil) {
+        return fail(collector.failure, 0);
+    }
+    if (collector.statusCode != 200) {
+        id json = collector.errorBody.length > 0 ? [NSJSONSerialization JSONObjectWithData:collector.errorBody options:0 error:nil] : nil;
+        NSDictionary* root = [json isKindOfClass:[NSDictionary class]] ? json : @{};
+        return fail(collector.statusCode == 0 ? @"network_error" : ProbeErrorReason(collector.statusCode, root),
+                    [root[@"retryAfterMs"] integerValue]);
+    }
+
+    double seconds = collector.endNs > collector.startNs ? (double)(collector.endNs - collector.startNs) / 1e9 : 0;
+    BOOL complete = collector.receivedBytes == sampleBytes;
+    // A transfer the host cut short still yields a usable lower bound.
+    if (seconds <= 0 || collector.receivedBytes < minBytes) {
+        return fail(complete ? @"invalid_duration" : @"incomplete_response", 0);
+    }
+
+    return @{
+        @"ok": @YES,
+        @"partial": @(!complete),
+        @"bandwidthMbps": @((double)collector.receivedBytes * 8.0 / seconds / 1e6),
+        @"latencyMs": @(latencyMs),
+        @"jitterMs": @(jitterMs),
+        @"bytes": @(collector.receivedBytes),
+    };
 }
 
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString *)appId {

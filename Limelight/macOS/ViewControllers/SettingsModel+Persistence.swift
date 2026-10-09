@@ -210,6 +210,7 @@ extension SettingsModel {
     ignoreAspectRatio = Self.defaultIgnoreAspectRatio
     showLocalCursor = Self.defaultShowLocalCursor
     enableMicrophone = Self.defaultEnableMicrophone
+    enableAdaptiveBitrate = Self.defaultEnableAdaptiveBitrate
     streamResolutionScale = Self.defaultStreamResolutionScale
     streamResolutionScaleRatio = Self.defaultStreamResolutionScaleRatio
 
@@ -350,6 +351,7 @@ extension SettingsModel {
       ignoreAspectRatio = settings.ignoreAspectRatio ?? Self.defaultIgnoreAspectRatio
       showLocalCursor = settings.showLocalCursor ?? Self.defaultShowLocalCursor
       enableMicrophone = settings.enableMicrophone ?? Self.defaultEnableMicrophone
+      enableAdaptiveBitrate = settings.enableAdaptiveBitrate ?? Self.defaultEnableAdaptiveBitrate
       streamResolutionScale = settings.streamResolutionScale ?? Self.defaultStreamResolutionScale
       streamResolutionScaleRatio =
         settings.streamResolutionScaleRatio ?? Self.defaultStreamResolutionScaleRatio
@@ -863,7 +865,8 @@ extension SettingsModel {
       timingResponsivenessBias: timingResponsivenessBias,
       allowDrawableTimeoutMode: allowDrawableTimeoutMode,
       timingCompatibilityMode: timingCompatibilityMode,
-      timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround
+      timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround,
+      enableAdaptiveBitrate: enableAdaptiveBitrate
     )
 
     let profileKey = SettingsClass.profileKey(for: hostId)

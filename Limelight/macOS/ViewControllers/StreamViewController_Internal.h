@@ -13,6 +13,7 @@
 #import "NSWindow+Moonlight.h"
 #import "AlertPresenter.h"
 #import "Connection.h"
+#import "MLAdaptiveBitrateController.h"
 #import "HttpManager.h"
 #import "IdManager.h"
 #import "StreamConfiguration.h"
@@ -480,6 +481,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) id activeSpaceDidChangeObserver;
 @property (nonatomic, strong) NSTimer *clipboardMonitorTimer;
 @property (nonatomic, strong) Connection *clipboardRuntimeConnection;
+@property (nonatomic, strong) MLAdaptiveBitrateController *adaptiveBitrateController;
 @property (nonatomic) NSInteger clipboardLastChangeCount;
 @property (nonatomic) NSInteger clipboardLastActivationDiagnosticState;
 @property (nonatomic) uint64_t clipboardLastActivationDiagnosticLogMs;
@@ -824,6 +826,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)appendLogLineToOverlay:(NSString *)line;
 - (void)copyAllLogsToPasteboard;
 - (void)showReconnectOverlayWithMessage:(NSString *)message;
+- (void)startAdaptiveBitrateIfEnabled;
+- (void)stopAdaptiveBitrate;
 - (void)hideReconnectOverlay;
 - (void)attemptReconnectWithReason:(NSString *)reason;
 - (void)setupOverlay;

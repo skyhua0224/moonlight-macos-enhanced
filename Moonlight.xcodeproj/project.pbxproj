@@ -123,6 +123,7 @@
 				"Input/HIDSupport+Rumble.m",
 				"Input/HIDSupport+Scroll.m",
 				Input/Ticks.m,
+				Stream/MLAdaptiveBitrateController.m,
 				Limelight.xcdatamodeld,
 				macOS/AppCell.xib,
 				macOS/AppDelegateForAppKit.m,

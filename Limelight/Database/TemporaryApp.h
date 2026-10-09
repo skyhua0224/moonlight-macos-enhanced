@@ -12,8 +12,8 @@
 // A host-defined menu command advertised in /applist (SuperCmds) and run via /supercmd.
 @interface MLAppSuperCommand : NSObject
 
-@property (nonatomic, copy) NSString *commandId;
-@property (nonatomic, copy) NSString *name;
+@property (nonatomic, copy, nonnull) NSString *commandId;
+@property (nonatomic, copy, nonnull) NSString *name;
 
 @end
 
@@ -27,7 +27,7 @@
 @property (nonatomic)                   BOOL pinned;
 @property (nullable, nonatomic, retain) TemporaryHost *host;
 // Session-only: refreshed from every /applist response, never persisted.
-@property (nonatomic, copy) NSArray<MLAppSuperCommand *> *superCommands;
+@property (nonatomic, copy, nonnull) NSArray<MLAppSuperCommand *> *superCommands;
 
 NS_ASSUME_NONNULL_BEGIN
 

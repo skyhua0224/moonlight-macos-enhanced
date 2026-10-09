@@ -100,6 +100,7 @@ class SettingsClass: NSObject {
         "ignoreAspectRatio": settings.ignoreAspectRatio ?? true,
         "showLocalCursor": settings.showLocalCursor ?? false,
         "microphone": settings.enableMicrophone ?? false,
+        "enableAdaptiveBitrate": settings.enableAdaptiveBitrate ?? SettingsModel.defaultEnableAdaptiveBitrate,
         "streamResolutionScale": settings.streamResolutionScale ?? false,
         "streamResolutionScaleRatio": settings.streamResolutionScaleRatio ?? 100,
         "remoteResolution": settings.remoteResolution ?? false,
@@ -404,7 +405,8 @@ class SettingsClass: NSObject {
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,
       timingCompatibilityMode: settings.timingCompatibilityMode,
-      timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround
+      timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
+      enableAdaptiveBitrate: settings.enableAdaptiveBitrate
     )
 
     // Recalculate bitrate if auto is enabled, since resolution changed
@@ -508,7 +510,8 @@ class SettingsClass: NSObject {
         timingBufferLevel: updated.timingBufferLevel,
         timingPrioritizeResponsiveness: updated.timingPrioritizeResponsiveness,
         timingCompatibilityMode: updated.timingCompatibilityMode,
-        timingSdrCompatibilityWorkaround: updated.timingSdrCompatibilityWorkaround
+        timingSdrCompatibilityWorkaround: updated.timingSdrCompatibilityWorkaround,
+        enableAdaptiveBitrate: updated.enableAdaptiveBitrate
       )
     }
 
@@ -620,7 +623,8 @@ class SettingsClass: NSObject {
       timingBufferLevel: settings.timingBufferLevel,
       timingPrioritizeResponsiveness: settings.timingPrioritizeResponsiveness,
       timingCompatibilityMode: settings.timingCompatibilityMode,
-      timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround
+      timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
+      enableAdaptiveBitrate: settings.enableAdaptiveBitrate
     )
 
     // Recalculate bitrate if auto is enabled

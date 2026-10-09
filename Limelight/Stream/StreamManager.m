@@ -30,6 +30,10 @@
 
 @synthesize connection = _connection;
 
+- (StreamConfiguration *)streamConfiguration {
+    return _config;
+}
+
 - (id) initWithConfig:(StreamConfiguration*)config renderView:(OSView*)view connectionCallbacks:(id<ConnectionCallbacks>)callbacks {
     self = [super init];
     _config = config;
@@ -98,6 +102,14 @@
         return;
     }
     
+    if (_config.enableAdaptiveBitrate) {
+        // The host refuses the probe once a video session exists, so it must precede launch/resume.
+        [self applyBandwidthProbe:hMan];
+        if (self.isCancelled || _callbacks == nil) {
+            return;
+        }
+    }
+
     // resumeApp and launchApp handle calling launchFailed
     const uint64_t hostLaunchStartMs = LiGetMillis();
     if ([serverState hasSuffix:@"_SERVER_BUSY"]) {
@@ -172,6 +184,40 @@
     _connectionQueue = nil;
     [_connection terminate];
     _callbacks = nil;
+}
+
+// Fraction of the measured throughput treated as sustainable for a video stream.
+static const double kProbeSafeBandwidthFraction = 0.65;
+static const int kProbeMaxBitrateKbps = 150000;
+static const int kProbeBitrateStepKbps = 500;
+// Only intervene when the configured bitrate clearly exceeds what the link carried.
+static const double kProbeCapTolerance = 1.15;
+
+- (void) applyBandwidthProbe:(HttpManager*)hMan {
+    const uint64_t probeStartMs = LiGetMillis();
+    NSDictionary* result = [hMan runSunshineBandwidthProbe];
+    const uint64_t elapsedMs = LiGetMillis() - probeStartMs;
+    if (![result[@"ok"] boolValue]) {
+        Log(LOG_W, @"[netprobe] skipped reason=%@ retryAfterMs=%@ elapsed=%llums",
+            result[@"error"], result[@"retryAfterMs"], (unsigned long long)elapsedMs);
+        return;
+    }
+
+    double mbps = [result[@"bandwidthMbps"] doubleValue];
+    int safeKbps = (int)floor(mbps * 1000.0 * kProbeSafeBandwidthFraction);
+    safeKbps = MIN(safeKbps, kProbeMaxBitrateKbps) / kProbeBitrateStepKbps * kProbeBitrateStepKbps;
+    Log(LOG_I, @"[netprobe] bandwidth=%.1fMbps latency=%.1fms jitter=%.1fms bytes=%@ partial=%d safeBitrate=%dkbps configured=%dkbps elapsed=%llums",
+        mbps, [result[@"latencyMs"] doubleValue], [result[@"jitterMs"] doubleValue],
+        result[@"bytes"], [result[@"partial"] boolValue], safeKbps, _config.bitRate, (unsigned long long)elapsedMs);
+    if (safeKbps < kProbeBitrateStepKbps) {
+        return;
+    }
+
+    _config.probedBitrateCeilingKbps = safeKbps;
+    if (_config.bitRate > safeKbps * kProbeCapTolerance) {
+        Log(LOG_I, @"[netprobe] capping bitrate %d -> %dkbps", _config.bitRate, safeKbps);
+        _config.bitRate = safeKbps;
+    }
 }
 
 - (BOOL) launchApp:(HttpManager*)hMan {

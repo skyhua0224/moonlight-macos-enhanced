@@ -12,6 +12,7 @@
 @interface StreamManager : NSOperation
 
 @property(nonatomic, readonly) Connection *connection;
+@property(nonatomic, readonly) StreamConfiguration *streamConfiguration;
 
 - (id)initWithConfig:(StreamConfiguration *)config
              renderView:(OSView *)view

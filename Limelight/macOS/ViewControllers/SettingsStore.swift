@@ -133,6 +133,7 @@ struct Settings: Encodable, Decodable {
   var allowDrawableTimeoutMode: Int? = nil
   let timingCompatibilityMode: Bool?
   let timingSdrCompatibilityWorkaround: Bool?
+  var enableAdaptiveBitrate: Bool? = nil
 
   private static func globalProfileKey() -> String {
     SettingsClass.profileKey(for: SettingsModel.globalHostId)
@@ -277,7 +278,8 @@ struct Settings: Encodable, Decodable {
       timingResponsivenessBias: timingResponsivenessBias,
       allowDrawableTimeoutMode: allowDrawableTimeoutMode,
       timingCompatibilityMode: timingCompatibilityMode,
-      timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround
+      timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround,
+      enableAdaptiveBitrate: enableAdaptiveBitrate
     )
   }
 
@@ -528,7 +530,8 @@ extension SettingsClass {
       timingResponsivenessBias: settings.timingResponsivenessBias,
       allowDrawableTimeoutMode: settings.allowDrawableTimeoutMode,
       timingCompatibilityMode: settings.timingCompatibilityMode,
-      timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround
+      timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
+      enableAdaptiveBitrate: settings.enableAdaptiveBitrate
     )
   }
 

@@ -1295,6 +1295,7 @@ extension SettingsModel {
   static let defaultIgnoreAspectRatio = false
   static let defaultShowLocalCursor = false
   static let defaultEnableMicrophone = false
+  static let defaultEnableAdaptiveBitrate = false
   static let defaultStreamResolutionScale = false
   static let defaultStreamResolutionScaleRatio = 100
   static let defaultDebugLogMode = "default"
