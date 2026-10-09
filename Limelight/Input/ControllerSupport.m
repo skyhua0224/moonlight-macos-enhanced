@@ -229,6 +229,18 @@ static void FlushControllerTrackpad(ControllerSupport *support, Controller *cont
     }
 }
 
+/**
+ * Updates one native touch contact or its mouse/scroll gesture on the main handler queue.
+ * Delivery requires the controller gate and context; coordinates are converted to top-left origin.
+ * @param support Backend providing delivery policy and the borrowed input context.
+ * @param controller Physical pad whose delivered contact/gesture state is updated.
+ * @param pointerId Stable contact ID; its low bit identifies the primary or secondary finger.
+ * @param active Previous contact state.
+ * @param x Current GameController horizontal coordinate in [-1, 1].
+ * @param y Current GameController vertical coordinate in [-1, 1].
+ * @param hasContact Whether this sample contains a contact, including at the surface center.
+ * @return Contact activity to store for the next sample.
+ */
 static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controller *controller,
                                            uint32_t pointerId, BOOL active,
                                            float x, float y, BOOL hasContact) {
@@ -303,6 +315,14 @@ static BOOL SendControllerTouch(ControllerSupport *support, Controller *controll
                                           x, y, hasContact);
 }
 
+/**
+ * Coalesces legacy axis callbacks into one main-queue snapshot of both touch surfaces.
+ * Gesture generations discard snapshots after reset; native contacts and mouse taps share gates.
+ * @param support Backend whose delivery policy and mouse-button ownership apply.
+ * @param controller Physical pad holding contact state and the pending-snapshot marker.
+ * @param primary Primary legacy touch surface, or nil.
+ * @param secondary Secondary legacy touch surface, or nil.
+ */
 static void QueueControllerTouchSnapshot(ControllerSupport *support, Controller *controller,
                                          GCControllerDirectionPad *primary,
                                          GCControllerDirectionPad *secondary) {
@@ -526,11 +546,13 @@ enum ButtonDebouncerState {
     }
 }
 
+/** Enters Guide-chord state after cancelling this button's delayed press/release timers. */
 - (void)transitionToChordState {
     [self transitionToNoneState];
     self.state = BDS_chord;
 }
 
+/** Clears debounce state and invalidates both timers; does not emit remote input. */
 - (void)transitionToNoneState {
     [self.buttonDebounceTimer invalidate];
     [self.replicatedButtonTimeTimer invalidate];
@@ -629,9 +651,22 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
-/** Rebinds shared-slot sensor requests after hot-plug; other slots retain their timers. */
+/**
+ * Rebinds shared-slot sensor requests after hot-plug on the main thread.
+ * Neutralizes the previous gyro before cancelling its timers, so a stationary replacement
+ * cannot leave a nonzero sample on the host. Multi-controller timers are unchanged.
+ */
 - (void)refreshSingleControllerMotion {
     if (_multiController) return;
+    [_controllerStreamLock lock];
+    PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+    if (self.shouldSendInputEvents && input && LiInputContextIsInitialized(input)) {
+        for (Controller *controller in _controllers.allValues) {
+            if (controller.gyroTimer && controller.controllerAnnounced)
+                LiSendControllerMotionEventCtx(input, 0, LI_MOTION_TYPE_GYRO, 0, 0, 0);
+        }
+    }
+    [_controllerStreamLock unlock];
     for (Controller *controller in _controllers.allValues) [self cleanupControllerMotion:controller];
     Controller *owner = [self controllerForRemoteNumber:0];
     [self configureMotionForController:owner motionType:LI_MOTION_TYPE_GYRO reportRateHz:_singleControllerGyroRateHz];
@@ -838,6 +873,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Changes mouse emulation on main, releasing this pad's A/B mouse sources and restoring controls.
+ * Keeps physical touch-click ownership separate and projects held buttons without new debounce taps.
+ * @param active Whether stick/button mouse emulation should be active.
+ * @param controller Physical pad whose mode and ordinary input are refreshed.
+ */
 - (void)setGamepadMouseModeActive:(BOOL)active forController:(Controller *)controller {
     if (controller.isMouseMode == active) return;
     [self setMouseButtons:0 trackpadButton:controller.trackpadMouseButton forController:controller];
@@ -880,6 +921,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 #define UPDATE_BUTTON_FLAG(controller, x, y) \
 ((y) ? [self setButtonFlag:controller flags:x] : [self clearButtonFlag:controller flags:x])
 
+/**
+ * Applies conventional rumble to the mapped feedback owner, deferring off-main calls to main.
+ * Recent authored haptics take priority; unavailable motors use the delegate's HID fallback.
+ * @param controllerNumber Remote slot filtered by the selected feedback target.
+ * @param lowFreqMotor Low-frequency intensity from zero through 65535.
+ * @param highFreqMotor High-frequency intensity from zero through 65535.
+ */
 -(void) rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor
 {
     if (![NSThread isMainThread]) {
@@ -924,6 +972,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Drains the bounded authored-haptics mailbox on main while controller delivery is enabled.
+ * Resolves remote slots to physical owners, rejects stale sequences, and projects stereo envelopes
+ * onto Core Haptics or the delegate's HID fallback. Consumes copied frames without retaining pointers.
+ */
 - (void)drainAuthoredHaptics {
     NSDictionary<NSNumber *, NSData *> *frames;
     @synchronized(_hapticsMailboxLock) {
@@ -984,6 +1037,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Maintains arrival, authored-haptics timeout and battery reporting on the main run loop.
+ * Runs only while delivery is enabled; battery reporting occurs every fiftieth maintenance tick.
+ * @param timer Repeating maintenance timer; its value is unused.
+ */
 - (void)controllerMaintenance:(NSTimer *)timer {
     (void)timer;
     if (!self.shouldSendInputEvents) return;
@@ -1018,6 +1076,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Validates a borrowed DualSense PCM frame and routes it to the mapped feedback owner.
+ * Uses a physical PCM endpoint when supported, otherwise reduces stereo samples to rumble RMS.
+ * The native callback may invoke this method; the payload is consumed or copied during the call.
+ * @param frame Borrowed 48 kHz stereo 16-bit protocol frame; NULL or invalid frames are ignored.
+ */
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame
 {
     if (frame == NULL || !ControllerIsFeedbackTarget(self, frame->controllerNumber) ||
@@ -1065,6 +1129,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
      highFreqMotor:(unsigned short)lrint(rightAmplitude * 65535.0)];
 }
 
+/**
+ * Maps trigger rumble to public left/right haptic localities for the selected feedback owner.
+ * macOS exposes no public trigger-motor API, so these localities provide the compatibility path.
+ * @param controllerNumber Remote slot filtered by the feedback preference.
+ * @param leftTriggerMotor Left-trigger intensity from zero through 65535.
+ * @param rightTriggerMotor Right-trigger intensity from zero through 65535.
+ */
 -(void) rumbleTriggers:(unsigned short)controllerNumber
       leftTriggerMotor:(unsigned short)leftTriggerMotor
      rightTriggerMotor:(unsigned short)rightTriggerMotor
@@ -1085,6 +1156,14 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     [controller.highFreqMotor setMotorAmplitude:rightTriggerMotor];
 }
 
+/**
+ * Applies RGB LED output to the mapped physical owner with a public GameController light.
+ * Off-main calls defer to main and recheck delivery; unsupported lights are only logged.
+ * @param controllerNumber Remote slot filtered by the feedback preference.
+ * @param red Red channel from zero through 255.
+ * @param green Green channel from zero through 255.
+ * @param blue Blue channel from zero through 255.
+ */
 -(void) setControllerLED:(unsigned short)controllerNumber
                        red:(unsigned char)red
                      green:(unsigned char)green
@@ -1117,6 +1196,16 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     Log(LOG_I, @"Controller %hu does not expose a public RGB LED API on this macOS driver", controllerNumber);
 }
 
+/**
+ * Applies supported adaptive-trigger effects to the mapped DualSense feedback owner.
+ * Consumes borrowed effect buffers synchronously; unsupported controllers or effects are ignored.
+ * @param controllerNumber Remote slot filtered by the feedback preference.
+ * @param eventFlags Protocol flags selecting left and/or right trigger output.
+ * @param typeLeft Protocol left-trigger effect type.
+ * @param typeRight Protocol right-trigger effect type.
+ * @param left Borrowed protocol left-trigger effect payload.
+ * @param right Borrowed protocol right-trigger effect payload.
+ */
 -(void) setAdaptiveTriggers:(unsigned short)controllerNumber
                  eventFlags:(unsigned char)eventFlags
                    typeLeft:(unsigned char)typeLeft
@@ -1340,6 +1429,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }];
 }
 
+/**
+ * Processes physical presses and projects all debouncers onto the logical button mask.
+ * Caller holds the controller monitor; timer callbacks pass zero to reproject without new edges.
+ * @param controller Pad whose physical and logical masks are reconciled.
+ * @param pressedButtons Newly pressed physical bits, or zero for projection only.
+ */
 -(void) handleSpecialCombosPressed:(Controller*)controller pressedButtons:(int)pressedButtons
 {
     [self->_debouncers enumerateKeysAndObjectsUsingBlock:^(NSNumber * _Nonnull keyFlag, NSMutableDictionary<NSNumber *,ButtonDebouncer *> * _Nonnull debouncers, BOOL * _Nonnull stop) {
@@ -2015,6 +2110,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     [self updateAutoOnScreenControlMode];
 }
 
+/**
+ * Assigns a supported pad to the first free physical slot on the main thread.
+ * Sets the main handler queue, initializes haptics, and rebinds shared-slot motion after hot-plug.
+ * Does nothing when all four physical slots are occupied; handlers are registered separately.
+ * @param controller Connected physical GameController device to assign.
+ */
 -(void) assignController:(GCController*)controller {
     for (int i = 0; i < 4; i++) {
         if (!(_controllerNumbers & (1 << i))) {

@@ -60,6 +60,7 @@ typedef struct {
 @property (nonatomic) PS4StatePacket_t lastPS4State;
 @property (nonatomic) PS5StatePacket_t lastPS5State;
 @property (nonatomic) NSInteger controllerDriver;
+@property (nonatomic) NSInteger controllerMotionMode;
 @property (nonatomic) BOOL isPS5Bluetooth;
 @property (nonatomic) uint8_t ds5OutputSequence;
 @property (atomic) BOOL reportedPlayStationArrival;

@@ -903,10 +903,17 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     }
 }
 
+/**
+ * Creates the HID input backend and snapshots the effective host/global motion preference.
+ * Registers device observers and input queues on main; cleanup must unregister them.
+ * @param host Host profile whose input settings apply to this stream.
+ * @return Initialized input backend.
+ */
 - (instancetype)init:(TemporaryHost *)host {
     self = [super init];
     if (self) {
         self.host = host;
+        self.controllerMotionMode = [SettingsClass controllerMotionModeFor:host.uuid];
         self.inputQueue = dispatch_queue_create("com.moonlight.input", DISPATCH_QUEUE_SERIAL);
         self.freeMouseVirtualCursorLock = [[NSObject alloc] init];
         self.freeMouseVirtualCursorGainX = 1.0;
@@ -1005,7 +1012,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
  *
  * Requires the direct driver, enabled controller delivery and a valid context. Marks arrival
  * only after a successful protocol call so failures may be retried. Call from the serialized
- * HID controller path before sending extended input.
+ * HID controller path before sending extended input. Disabled motion omits sensor capabilities.
  * @return YES if arrival was already advertised or was successfully sent; otherwise NO.
  */
 - (BOOL)reportPlayStationControllerArrival {
@@ -1027,8 +1034,10 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     uint32_t buttons = PLAY_FLAG | BACK_FLAG | UP_FLAG | DOWN_FLAG | LEFT_FLAG | RIGHT_FLAG |
                        LB_FLAG | RB_FLAG | LS_CLK_FLAG | RS_CLK_FLAG | SPECIAL_FLAG |
                        A_FLAG | B_FLAG | X_FLAG | Y_FLAG | TOUCHPAD_FLAG;
-    uint16_t capabilities = LI_CCAP_ANALOG_TRIGGERS | LI_CCAP_RUMBLE | LI_CCAP_TOUCHPAD |
-                            LI_CCAP_ACCEL | LI_CCAP_GYRO;
+    uint16_t capabilities = LI_CCAP_ANALOG_TRIGGERS | LI_CCAP_RUMBLE | LI_CCAP_TOUCHPAD;
+    if (self.controllerMotionMode != 2) {
+        capabilities |= LI_CCAP_ACCEL | LI_CCAP_GYRO;
+    }
     int err = LiSendControllerArrivalEventCtx(inputCtx, 0, 1, LI_CTYPE_PS, buttons, capabilities);
     if (err != 0) {
         return NO;
@@ -1044,7 +1053,8 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
  *
  * Only slot zero is supported. Under the HID monitor, updates sensor rates even while delivery
  * is paused and resets gyro filters when its rate changes. Stopping an active gyro sends a
- * zero only when controller arrival and delivery permit it. May be called from a native callback.
+ * zero only when controller arrival and delivery permit it. Disabled motion ignores requests.
+ * May be called from a native callback.
  * @param controllerNumber Host controller slot; nonzero slots are ignored.
  * @param motionType LI_MOTION_TYPE_GYRO or LI_MOTION_TYPE_ACCEL.
  * @param reportRateHz Requested maximum outgoing frequency in Hz, or zero to stop that sensor.
@@ -1059,7 +1069,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     dispatch_async(dispatch_get_main_queue(), ^{
         // Context replacement also resets motion state. Reject queued old requests.
         @synchronized (self) {
-            if (controllerNumber != 0 || requestedInputContext == NULL ||
+            if (self.controllerMotionMode == 2 || controllerNumber != 0 || requestedInputContext == NULL ||
                 self.inputContext != requestedInputContext) {
                 return;
             }
@@ -1329,10 +1339,13 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
  * Processes gyro filtering and rest hysteresis at native report rate while limiting outgoing
  * samples to host-requested rates. Converts axes to protocol coordinates, gyro to degrees/s and
  * acceleration to m/s²; uses nominal scaling if factory calibration is invalid. Requires permitted
- * controller arrival and a valid context. Caller must hold the HID object's monitor.
+ * controller arrival, enabled motion and a valid context. Caller must hold the HID object's monitor.
  * @param state Non-NULL complete DS4 state packet whose motion bytes are read synchronously.
  */
 - (void)processPS4MotionState:(PS4StatePacket_t *)state {
+    if (self.controllerMotionMode == 2) {
+        return;
+    }
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
     if (!inputCtx || ![self reportPlayStationControllerArrival]) {
         return;
@@ -2694,8 +2707,9 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
  * Clears physical direct-HID controller state when a device is removed.
  *
  * Cancels menu tracking and resets arrival, calibration, filters and contacts under the HID
- * monitor, preserving host motion rates across physical reconnects. Attempts to send neutral
- * ordinary state through the existing gate. Runs on the HID manager's main run loop.
+ * monitor, preserving host motion rates across physical reconnects. Drains queued input and
+ * releases delivered gamepad, mouse, touch and gyro state before clearing local caches.
+ * Runs on the HID manager's main run loop, never on inputQueue.
  * @param context Borrowed HIDSupport callback context.
  * @param result IOKit removal status; unused.
  * @param sender IOKit callback sender; unused.
@@ -2713,6 +2727,29 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.controller.menuGesture = (ControllerMenuGesture){0};
     @synchronized (self) {
         if (self.controllerDriver == 0) {
+            PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+            if (self.shouldSendControllerEvents && input && LiInputContextIsInitialized(input)) {
+                int player = self.controller.playerIndex;
+                BOOL primary = self.ps4PrimaryTouchActive, secondary = self.ps4SecondaryTouchActive;
+                float primaryX = self.ps4PrimaryTouchX, primaryY = self.ps4PrimaryTouchY;
+                float secondaryX = self.ps4SecondaryTouchX, secondaryY = self.ps4SecondaryTouchY;
+                BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
+                int mouseButtons = self.controller.lastMouseModeButtonFlags;
+                dispatch_sync(self.inputQueue, ^{
+                    LiSetThreadConnectionContext(input->connectionContext);
+                    LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
+                    if (primary)
+                        LiSendControllerTouchEventCtx(input, player, LI_TOUCH_EVENT_UP, 0, primaryX, primaryY, 0);
+                    if (secondary)
+                        LiSendControllerTouchEventCtx(input, player, LI_TOUCH_EVENT_UP, 1, secondaryX, secondaryY, 0);
+                    if (stopGyro)
+                        LiSendControllerMotionEventCtx(input, player, LI_MOTION_TYPE_GYRO, 0, 0, 0);
+                    if (mouseButtons & A_FLAG)
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                    if (mouseButtons & B_FLAG)
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                });
+            }
             self.reportedPlayStationArrival = NO;
             // Sunshine generally sends motion report rates only once per virtual
             // controller session. Preserve them across a physical HID reconnect;
@@ -2732,6 +2769,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
             self.remainingPS4GyroRestDiagnosticLogs = self.requestedGyroRateHz > 0 ? 12 : 0;
             self.ps4PrimaryTouchActive = NO;
             self.ps4SecondaryTouchActive = NO;
+            self.controller.lastMouseModeButtonFlags = 0;
+            self.lastPS4State = (PS4StatePacket_t){};
             self.controller.lastButtonFlags = 0;
             self.controller.lastLeftTrigger = 0;
             self.controller.lastRightTrigger = 0;
@@ -2740,7 +2779,6 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
             self.controller.lastRightStickX = 0;
             self.controller.lastRightStickY = 0;
 
-            [self sendControllerEvent];
         }
     }
 }
