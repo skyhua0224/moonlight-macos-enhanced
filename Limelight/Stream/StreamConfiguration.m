@@ -18,5 +18,6 @@
         videoFecPercentage = -2;
     }
     return self;
-}, controllerRightGain;
+}
+
 @end
