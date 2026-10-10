@@ -2821,7 +2821,8 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 /**
  * Captures stream mouse input and updates focus-dependent input delivery.
  *
- * Runs on main, installs capture/tracking state, enables keyboard/mouse delivery, and resolves
+ * Runs on main only while the app is active and the stream window is key, installs
+ * capture/tracking state, enables keyboard/mouse delivery, and resolves
  * controller delivery against stream readiness and the background-input preference. Maintains
  * cursor, display-sleep and input-diagnostic state for the selected pointer mode.
  */
@@ -2855,6 +2856,11 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     if (!window) {
         [self noteInputDiagnosticsCaptureSkipped:@"window-nil"];
         Log(LOG_D, @"[diag] captureMouse skipped: window is nil");
+        return;
+    }
+    if (!window.isKeyWindow) {
+        [self noteInputDiagnosticsCaptureSkipped:@"window-not-key"];
+        Log(LOG_D, @"[diag] captureMouse skipped: window not key");
         return;
     }
     if (![self isWindowInCurrentSpace]) {

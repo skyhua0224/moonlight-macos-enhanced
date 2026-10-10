@@ -1630,7 +1630,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
  * Binds input backends when the native input-stream establishment stage completes.
  *
  * Queues context binding, controller-policy refresh, microphone readiness and pointer rearming
- * on main after checking the available context. Other stages and a NULL name are ignored.
+ * on main after checking the available context. Keyboard/mouse delivery follows the current
+ * key-window and application focus. Other stages and a NULL name are ignored.
  * @param stageName Borrowed, NUL-terminated native stage name, inspected synchronously.
  */
 - (void)stageComplete:(const char *)stageName {
@@ -1651,7 +1652,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
             if (ctx->initialized) {
                 self.hidSupport.inputContext = inputContext;
                 self.controllerSupport.inputContext = inputContext;
-                self.hidSupport.shouldSendInputEvents = YES;
+                self.hidSupport.shouldSendInputEvents = self.view.window.isKeyWindow && [NSApp isActive];
                 [self refreshControllerInputSendingState];
                 [self.streamMan.connection notifyInputStreamReadyForMicrophoneControlIfNeeded];
                 [self rearmMouseCaptureIfPossibleWithReason:@"input-stream-established"];
@@ -1730,6 +1731,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
  *
  * Binds both input backends, retries briefly if initialization is delayed, refreshes controller
  * delivery after binding and reconnect completion, and starts rendering/overlay diagnostics.
+ * Initial and delayed binding sample current key-window/application focus for keyboard/mouse
+ * delivery; background controller delivery remains governed by the profile preference.
  * May be invoked from the native connection callback thread.
  */
 - (void)connectionStarted {
@@ -1768,8 +1771,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
                     Log(LOG_I, @"Binding input context on connection start: ctx=%p initialized=%d libInit=%d libConn=%p", ctx, ctx->initialized, LiInputContextIsInitialized(ctx), LiInputContextGetConnectionCtx(ctx));
                     self.hidSupport.inputContext = inputContext;
                     self.controllerSupport.inputContext = inputContext;
-                    // Ensure input is enabled immediately after stream start
-                    self.hidSupport.shouldSendInputEvents = YES;
+                    // Setup may finish after the stream window loses focus.
+                    self.hidSupport.shouldSendInputEvents = self.view.window.isKeyWindow && [NSApp isActive];
                     [self refreshControllerInputSendingState];
 
                     // If input stream isn't initialized yet, retry briefly to bind after start
@@ -1786,6 +1789,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
                         if (ctx != NULL && LiInputContextIsInitialized(ctx)) {
                             strongSelf.hidSupport.inputContext = inputContext;
                             strongSelf.controllerSupport.inputContext = inputContext;
+                            strongSelf.hidSupport.shouldSendInputEvents = strongSelf.view.window.isKeyWindow && [NSApp isActive];
                             [strongSelf refreshControllerInputSendingState];
                             [strongSelf rearmMouseCaptureIfPossibleWithReason:@"input-context-retry-bound"];
                             return;
