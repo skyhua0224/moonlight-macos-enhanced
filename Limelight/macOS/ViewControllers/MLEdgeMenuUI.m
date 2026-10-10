@@ -7,8 +7,14 @@
 
 @implementation MLEdgeMenuHandleView {
     NSImageView *_iconView;
-    NSPoint _mouseDownPointOnScreen;
+    // Drag distance accumulated from event deltas. Pointer warps (mouse capture
+    // hand-offs, virtual cursor sync) never show up in event deltas, whereas a
+    // screen-position difference would jump by the size of the warp.
+    NSPoint _dragTranslation;
     BOOL _dragStarted;
+    // Set when the controller aborts a press (menu shown, key loss); the rest
+    // of that physical press is ignored until the next mouseDown.
+    BOOL _interactionCancelled;
     NSTrackingArea *_trackingArea;
     CAGradientLayer *_backgroundGradientLayer;
     CAShapeLayer *_curveLayerA;
@@ -201,16 +207,29 @@
 }
 
 - (void)mouseDown:(NSEvent *)event {
-    _mouseDownPointOnScreen = [NSEvent mouseLocation];
+    _dragTranslation = NSZeroPoint;
     _dragStarted = NO;
+    _interactionCancelled = NO;
+}
+
+- (BOOL)dragInProgress {
+    return _dragStarted;
 }
 
 - (void)mouseDragged:(NSEvent *)event {
-    NSPoint screenPoint = [NSEvent mouseLocation];
-    NSPoint translation = NSMakePoint(screenPoint.x - _mouseDownPointOnScreen.x,
-                                      screenPoint.y - _mouseDownPointOnScreen.y);
+    if (_interactionCancelled) {
+        return;
+    }
+    if ((NSEvent.pressedMouseButtons & 1) == 0) {
+        // The button is already up but its mouseUp never reached this view.
+        [self finishInteractionWithEvent:event];
+        return;
+    }
+    const CGFloat maxStep = 240.0;
+    _dragTranslation.x += MIN(MAX(event.deltaX, -maxStep), maxStep);
+    _dragTranslation.y -= MIN(MAX(event.deltaY, -maxStep), maxStep);
     if (!_dragStarted) {
-        if (fabs(translation.x) < 2.0 && fabs(translation.y) < 2.0) {
+        if (fabs(_dragTranslation.x) < 2.0 && fabs(_dragTranslation.y) < 2.0) {
             return;
         }
         _dragStarted = YES;
@@ -220,20 +239,38 @@
     }
 
     if (self.dragHandler) {
-        self.dragHandler(NSGestureRecognizerStateChanged, translation);
+        self.dragHandler(NSGestureRecognizerStateChanged, _dragTranslation);
     }
 }
 
 - (void)mouseUp:(NSEvent *)event {
-    NSPoint screenPoint = [NSEvent mouseLocation];
-    NSPoint translation = NSMakePoint(screenPoint.x - _mouseDownPointOnScreen.x,
-                                      screenPoint.y - _mouseDownPointOnScreen.y);
-    if (_dragStarted) {
+    if (_interactionCancelled) {
+        _interactionCancelled = NO;
+        _dragStarted = NO;
+        return;
+    }
+    [self finishInteractionWithEvent:event];
+}
+
+- (void)finishInteractionWithEvent:(NSEvent *)event {
+    BOOL wasDragging = _dragStarted;
+    _dragStarted = NO;
+    _interactionCancelled = YES;
+    if (wasDragging) {
         if (self.dragHandler) {
-            self.dragHandler(NSGestureRecognizerStateEnded, translation);
+            self.dragHandler(NSGestureRecognizerStateEnded, _dragTranslation);
         }
-    } else if (self.activationHandler) {
+    } else if (self.activationHandler && event.type == NSEventTypeLeftMouseUp) {
         self.activationHandler(event);
+    }
+}
+
+- (void)cancelPendingInteraction {
+    BOOL wasDragging = _dragStarted;
+    _dragStarted = NO;
+    _interactionCancelled = YES;
+    if (wasDragging && self.dragHandler) {
+        self.dragHandler(NSGestureRecognizerStateEnded, _dragTranslation);
     }
 }
 

@@ -245,6 +245,10 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL activeAppearance;
 @property (nonatomic) BOOL compactAppearance;
 @property (nonatomic) MLFreeMouseExitEdge dockEdge;
+@property (nonatomic, readonly) BOOL dragInProgress;
+// Ends a press in progress (finishing a drag if one started) and ignores the
+// remainder of that physical press.
+- (void)cancelPendingInteraction;
 @end
 
 @interface StreamViewController ()
@@ -381,6 +385,12 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) uint64_t clientSdrWhiteLastSendMs;
 @property (nonatomic) BOOL clientSdrWhiteHostUnsupportedLogged;
 @property (nonatomic, strong) NSTimer *edgeMenuAutoCollapseTimer;
+@property (nonatomic, strong) NSTimer *edgeMenuFrameWatchdogTimer;
+@property (nonatomic) CFTimeInterval edgeMenuFrameAnimationDeadline;
+@property (nonatomic) CFTimeInterval edgeMenuFrameLogLastTime;
+@property (nonatomic, copy) NSString *edgeMenuFrameLogLastReason;
+@property (nonatomic) NSUInteger edgeMenuFrameLogSuppressed;
+@property (nonatomic) CFTimeInterval edgeMenuStaleDragSince;
 @property (nonatomic) BOOL edgeMenuButtonExpanded;
 @property (nonatomic) BOOL edgeMenuPointerInside;
 @property (nonatomic) BOOL edgeMenuTemporaryReleaseActive;
@@ -619,6 +629,10 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (BOOL)edgeMenuShouldBeVisible;
 - (void)updateEdgeMenuButtonTrackingArea;
 - (void)setEdgeMenuButtonExpanded:(BOOL)expanded animated:(BOOL)animated;
+- (void)setEdgeMenuButtonFrame:(NSRect)frame animated:(BOOL)animated reason:(NSString *)reason;
+- (void)validateEdgeMenuButtonFrameWithReason:(NSString *)reason;
+- (void)startEdgeMenuFrameWatchdogIfNeeded;
+- (void)stopEdgeMenuFrameWatchdog;
 - (void)deactivateEdgeMenuTemporaryReleaseAndRecaptureIfNeeded:(BOOL)shouldRecapture;
 - (void)scheduleEdgeMenuAutoCollapse;
 - (void)scheduleEdgeMenuAutoCollapseAfterDelay:(NSTimeInterval)delay;

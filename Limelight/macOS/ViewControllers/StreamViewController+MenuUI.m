@@ -569,18 +569,173 @@
     }
 
     NSRect target = [self frameForEdgeMenuButtonInBounds:self.view.bounds];
-    if (NSEqualRects(target, self.edgeMenuButton.frame)) {
+    [self setEdgeMenuButtonFrame:target
+                        animated:animated
+                          reason:expanded ? @"expand" : @"collapse"];
+}
+
+// Every frame the ball receives goes through here so an animation still in
+// flight can never leave the layer showing a position the frame no longer has.
+- (void)setEdgeMenuButtonFrame:(NSRect)frame animated:(BOOL)animated reason:(NSString *)reason {
+    MLEdgeMenuHandleView *button = self.edgeMenuButton;
+    if (!button) {
         return;
     }
-    if (animated) {
+
+    CFTimeInterval now = CACurrentMediaTime();
+    BOOL animationInFlight = now < self.edgeMenuFrameAnimationDeadline;
+    NSRect from = button.frame;
+    NSRect shown = from;
+    CALayer *presentation = button.layer.presentationLayer;
+    if (animationInFlight && presentation != nil) {
+        shown = NSRectFromCGRect(presentation.frame);
+    }
+    if (NSEqualRects(frame, from)) {
+        // Already at (or animating toward) this frame; layout passes land here often.
+        return;
+    }
+
+    [self logEdgeMenuFrameChangeWithReason:reason from:shown to:frame animated:animated];
+
+    // Retarget from where the ball is drawn, not from where the last animation
+    // was heading, then drop whatever is still running.
+    [button.layer removeAllAnimations];
+    self.edgeMenuFrameAnimationDeadline = 0;
+    if (!NSEqualRects(shown, from)) {
+        button.frame = shown;
+    }
+    if (animated && !NSEqualRects(frame, button.frame)) {
+        self.edgeMenuFrameAnimationDeadline = now + MLEdgeMenuSnapDuration + 0.05;
         [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
             context.duration = MLEdgeMenuSnapDuration;
             context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-            self.edgeMenuButton.animator.frame = target;
+            button.animator.frame = frame;
         } completionHandler:nil];
     } else {
-        self.edgeMenuButton.frame = target;
+        button.frame = frame;
     }
+    [self updateEdgeMenuButtonTrackingArea];
+}
+
+- (void)logEdgeMenuFrameChangeWithReason:(NSString *)reason
+                                    from:(NSRect)from
+                                      to:(NSRect)to
+                                animated:(BOOL)animated {
+    // Dragging moves the ball on every mouse event; keep one line per burst.
+    CFTimeInterval now = CACurrentMediaTime();
+    BOOL sameReason = [reason isEqualToString:self.edgeMenuFrameLogLastReason];
+    if (sameReason && now - self.edgeMenuFrameLogLastTime < 0.25) {
+        self.edgeMenuFrameLogSuppressed++;
+        return;
+    }
+    NSUInteger suppressed = self.edgeMenuFrameLogSuppressed;
+    self.edgeMenuFrameLogSuppressed = 0;
+    self.edgeMenuFrameLogLastTime = now;
+    self.edgeMenuFrameLogLastReason = reason;
+    Log(LOG_I, @"[diag] control-orb frame reason=%@ from=%@ to=%@ animated=%d dock=%@ ratio=%.3f bounds=%@ expanded=%d dragging=%d menu=%d%@",
+        reason ?: @"unspecified",
+        NSStringFromRect(from),
+        NSStringFromRect(to),
+        animated ? 1 : 0,
+        [self storedValueForEdgeMenuDockEdge:self.edgeMenuDockEdge],
+        self.edgeMenuButtonEdgeRatio,
+        NSStringFromRect(self.view.bounds),
+        self.edgeMenuButtonExpanded ? 1 : 0,
+        self.edgeMenuDragging ? 1 : 0,
+        self.edgeMenuMenuVisible ? 1 : 0,
+        suppressed > 0 ? [NSString stringWithFormat:@" (+%lu similar)", (unsigned long)suppressed] : @"");
+}
+
+- (void)validateEdgeMenuButtonFrameWithReason:(NSString *)reason {
+    MLEdgeMenuHandleView *button = self.edgeMenuButton;
+    if (!MLUseFloatingControlOrb || !button || button.hidden || !self.view.window ||
+        self.edgeMenuDragging || self.edgeMenuMenuVisible || self.fullscreenTransitionInProgress) {
+        return;
+    }
+    if (CACurrentMediaTime() < self.edgeMenuFrameAnimationDeadline) {
+        return;
+    }
+
+    NSRect expected = [self frameForEdgeMenuButtonInBounds:self.view.bounds];
+    NSRect actual = button.frame;
+    BOOL frameOff = fabs(expected.origin.x - actual.origin.x) > 0.5 ||
+                    fabs(expected.origin.y - actual.origin.y) > 0.5 ||
+                    fabs(expected.size.width - actual.size.width) > 0.5 ||
+                    fabs(expected.size.height - actual.size.height) > 0.5;
+    if (frameOff) {
+        [self setEdgeMenuButtonFrame:expected animated:NO reason:[@"revalidate-" stringByAppendingString:reason ?: @""]];
+        return;
+    }
+
+    CALayer *presentation = button.layer.presentationLayer;
+    if (presentation != nil) {
+        NSRect shown = NSRectFromCGRect(presentation.frame);
+        if (fabs(shown.origin.x - actual.origin.x) > 1.0 || fabs(shown.origin.y - actual.origin.y) > 1.0) {
+            [self logEdgeMenuFrameChangeWithReason:[@"presentation-stale-" stringByAppendingString:reason ?: @""]
+                                              from:shown
+                                                to:actual
+                                          animated:NO];
+            [button.layer removeAllAnimations];
+        }
+    }
+}
+
+- (void)endStaleEdgeMenuDragIfNeeded {
+    if (!self.edgeMenuDragging) {
+        self.edgeMenuStaleDragSince = 0;
+        return;
+    }
+    if (NSEvent.pressedMouseButtons & 1) {
+        self.edgeMenuStaleDragSince = 0;
+        return;
+    }
+    CFTimeInterval now = CACurrentMediaTime();
+    if (self.edgeMenuStaleDragSince == 0) {
+        self.edgeMenuStaleDragSince = now;
+        return;
+    }
+    if (now - self.edgeMenuStaleDragSince < 0.3) {
+        return;
+    }
+    // The mouse-up that should have ended this drag never arrived.
+    self.edgeMenuStaleDragSince = 0;
+    Log(LOG_W, @"[diag] control-orb drag ended by watchdog: button released without mouse-up");
+    if (self.edgeMenuButton.dragInProgress) {
+        [self.edgeMenuButton cancelPendingInteraction];
+    } else {
+        [self handleEdgeMenuButtonDragWithState:NSGestureRecognizerStateEnded translation:NSZeroPoint];
+    }
+}
+
+- (void)startEdgeMenuFrameWatchdogIfNeeded {
+    if (self.edgeMenuFrameWatchdogTimer != nil) {
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    self.edgeMenuFrameWatchdogTimer = [NSTimer timerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf.edgeMenuButton == nil) {
+            [timer invalidate];
+            return;
+        }
+        [strongSelf endStaleEdgeMenuDragIfNeeded];
+        [strongSelf validateEdgeMenuButtonFrameWithReason:@"watchdog"];
+        // An expanded ball with nothing keeping it open and no collapse
+        // pending would otherwise stay on screen indefinitely.
+        if (strongSelf.edgeMenuButtonExpanded && !strongSelf.edgeMenuButton.hidden &&
+            strongSelf.edgeMenuAutoCollapseTimer == nil && !strongSelf.edgeMenuPointerInside &&
+            !strongSelf.edgeMenuTemporaryReleaseActive && !strongSelf.edgeMenuDragging &&
+            !strongSelf.edgeMenuMenuVisible) {
+            [strongSelf scheduleEdgeMenuAutoCollapse];
+        }
+    }];
+    self.edgeMenuFrameWatchdogTimer.tolerance = 0.2;
+    [[NSRunLoop mainRunLoop] addTimer:self.edgeMenuFrameWatchdogTimer forMode:NSRunLoopCommonModes];
+}
+
+- (void)stopEdgeMenuFrameWatchdog {
+    [self.edgeMenuFrameWatchdogTimer invalidate];
+    self.edgeMenuFrameWatchdogTimer = nil;
 }
 
 - (void)deactivateEdgeMenuTemporaryReleaseAndRecaptureIfNeeded:(BOOL)shouldRecapture {
@@ -673,10 +828,12 @@
     NSRect bounds = self.view.bounds;
     switch (state) {
         case NSGestureRecognizerStateBegan:
+            [self cancelEdgeMenuAutoCollapse];
+            // Settle on the expanded frame before the drag flag freezes frame updates.
+            [self setEdgeMenuButtonExpanded:YES animated:NO];
             self.edgeMenuDragging = YES;
             self.edgeMenuPointerInside = YES;
-            [self cancelEdgeMenuAutoCollapse];
-            [self setEdgeMenuButtonExpanded:YES animated:NO];
+            self.edgeMenuStaleDragSince = 0;
             self.edgeMenuButtonPanStartOrigin = self.edgeMenuButton.frame.origin;
             self.edgeMenuButtonSuppressNextClick = NO;
             [self refreshMouseMovedAcceptanceState];
@@ -690,7 +847,7 @@
                                  NSMaxX(bounds) - NSWidth(frame));
             frame.origin.y = MIN(MAX(self.edgeMenuButtonPanStartOrigin.y + translation.y, NSMinY(bounds)),
                                  NSMaxY(bounds) - NSHeight(frame));
-            self.edgeMenuButton.frame = frame;
+            [self setEdgeMenuButtonFrame:frame animated:NO reason:@"drag-move"];
             break;
         }
         case NSGestureRecognizerStateEnded:
@@ -728,11 +885,7 @@
             [self persistFullscreenControlBallPlacement];
 
             NSRect target = [self frameForEdgeMenuButtonInBounds:bounds];
-            [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-                context.duration = MLEdgeMenuSnapDuration;
-                context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-                self.edgeMenuButton.animator.frame = target;
-            } completionHandler:nil];
+            [self setEdgeMenuButtonFrame:target animated:YES reason:@"drag-snap"];
 
             [self updateEdgeMenuPointerInsideForPoint:[self currentMouseLocationInViewCoordinates]];
             [self cancelEdgeMenuAutoCollapse];
@@ -1007,6 +1160,7 @@
         [strongSelf updateEdgeMenuButtonAppearance];
     };
     [self.view addSubview:self.edgeMenuButton positioned:NSWindowAbove relativeTo:nil];
+    [self startEdgeMenuFrameWatchdogIfNeeded];
 
     [self updateEdgeMenuButtonAppearance];
     [self updateControlCenterEntrypointHints];
@@ -1018,10 +1172,8 @@
         return;
     }
     NSRect frame = [self frameForEdgeMenuButtonInBounds:self.view.bounds];
-    if (!NSEqualRects(frame, self.edgeMenuButton.frame)) {
-        self.edgeMenuButton.frame = frame;
-        [self updateEdgeMenuButtonTrackingArea];
-    }
+    // A resize while the ball is mid-animation must retarget it too.
+    [self setEdgeMenuButtonFrame:frame animated:NO reason:@"layout"];
 }
 
 - (void)requestStreamMenuEntrypointsVisibilityUpdate {
@@ -1080,6 +1232,10 @@
         [self updateEdgeMenuButtonAppearance];
         [self bringStreamControlsToFront];
     } else {
+        if (self.edgeMenuDragging) {
+            [self.edgeMenuButton cancelPendingInteraction];
+            self.edgeMenuDragging = NO;
+        }
         self.edgeMenuButtonExpanded = NO;
         self.edgeMenuTemporaryReleaseActive = NO;
         [self cancelEdgeMenuAutoCollapse];
@@ -1141,6 +1297,11 @@
         [menu popUpMenuPositioningItem:nil atLocation:p inView:sourceView];
     }
     self.edgeMenuMenuVisible = NO;
+    // Mouse events that were delivered around the menu's modal tracking belong
+    // to the menu, not to the ball: forget the press that opened it.
+    [self.edgeMenuButton cancelPendingInteraction];
+    self.edgeMenuDragging = NO;
+    [self validateEdgeMenuButtonFrameWithReason:@"menu-dismissed"];
     [self refreshMouseMovedAcceptanceState];
 
     if (self.edgeMenuTemporaryReleaseActive && !self.edgeMenuPointerInside && !self.edgeMenuDragging) {

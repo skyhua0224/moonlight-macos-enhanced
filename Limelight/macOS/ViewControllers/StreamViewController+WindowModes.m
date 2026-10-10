@@ -585,6 +585,7 @@
 - (void)teardownStreamMenuEntrypointsForClosingWindow:(NSWindow *)window {
     [self.edgeMenuAutoCollapseTimer invalidate];
     self.edgeMenuAutoCollapseTimer = nil;
+    [self stopEdgeMenuFrameWatchdog];
     self.edgeMenuButtonTrackingArea = nil;
     [self.edgeMenuButton removeFromSuperview];
     self.edgeMenuButton = nil;

@@ -1025,6 +1025,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     [self.edgeMenuAutoCollapseTimer invalidate];
     self.edgeMenuAutoCollapseTimer = nil;
+    [self stopEdgeMenuFrameWatchdog];
 
     if (self.streamHealthTimer) {
         [self.streamHealthTimer invalidate];
