@@ -1756,6 +1756,8 @@
 "Startup display mode scheduled" = "Startup display mode scheduled";
 "Startup display mode was already prepared" = "Startup display mode was already prepared";
 "Floating control moved" = "Floating control moved";
+"Floating control pointer state changed" = "Floating control pointer state changed";
+"Controller menu navigation" = "Controller menu navigation";
 "Floating control visibility updated" = "Floating control visibility updated";
 "Connection library check" = "Connection library check";
 "Packet configuration chosen" = "Packet configuration chosen";

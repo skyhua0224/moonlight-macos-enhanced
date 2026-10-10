@@ -1811,6 +1811,8 @@
 "Startup display mode scheduled" = "已安排启动显示模式";
 "Startup display mode was already prepared" = "启动显示模式已提前准备好";
 "Floating control moved" = "悬浮球已移动";
+"Floating control pointer state changed" = "悬浮球指针状态变化";
+"Controller menu navigation" = "手柄菜单导航";
 "Floating control visibility updated" = "悬浮球显示状态已更新";
 "Connection library check" = "连接库版本检查";
 "Packet configuration chosen" = "已选定数据包配置";

@@ -2304,6 +2304,8 @@ enum DebugLogParser {
       R("diag", "Startup display mode apply begin:", "Applying the startup display mode", .afterColon),
       R("diag", "Scheduling startup display mode", "Startup display mode scheduled", .afterColon),
       R("diag", "Startup display mode already primed", "Startup display mode was already prepared", .none),
+      R("diag", "control-orb state", "Floating control pointer state changed", .after("control-orb state ")),
+      R("diag", "controller-panel", "Controller menu navigation", .after("controller-panel ")),
       R("diag", "control-orb frame", "Floating control moved", .none),
       R("diag", "control-orb visible=", "Floating control visibility updated", .after("control-orb ")),
       R("diag", "Connection ABI:", "Connection library check", .afterColon),
