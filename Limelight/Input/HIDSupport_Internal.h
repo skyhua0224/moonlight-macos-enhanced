@@ -213,7 +213,9 @@ typedef struct {
                          height:(float)height pressed:(BOOL)pressed;
 - (void)handlePS4TouchpadState:(PS4StatePacket_t *)state;
 - (void)handlePS4MotionState:(PS4StatePacket_t *)state;
-- (void)loadPS4MotionCalibrationForDevice:(IOHIDDeviceRef)device;
+- (void)processPlayStationMotionSamples:(const int16_t *)samples;
+- (void)handlePS5MotionState:(const PS5StatePacket_t *)state;
+- (void)loadPlayStationMotionCalibrationForDevice:(IOHIDDeviceRef)device;
 - (void)tearDownHidManagerOnMainThread;
 - (BOOL)reserveDetailedInputDiagnosticsLogSequence:(NSUInteger *)sequence;
 - (void)syncScrollTraceDiagnosticsPreferenceToInputContext;

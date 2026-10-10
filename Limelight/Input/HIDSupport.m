@@ -1037,7 +1037,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
  *
  * Requires the direct driver, enabled controller delivery and a valid context. Marks arrival
  * only after a successful protocol call so failures may be retried. Call from the serialized
- * HID controller path before sending extended input. Only DS4 advertises motion; Disabled motion omits sensor capabilities.
+ * HID controller path before sending extended input. DS4 and DS5 advertise motion; Disabled motion omits sensor capabilities.
  * @return YES if arrival was already advertised or was successfully sent; otherwise NO.
  */
 - (BOOL)reportPlayStationControllerArrival {
@@ -1047,13 +1047,13 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     if (!self.shouldSendControllerEvents) {
         return NO;
     }
-    if (self.reportedPlayStationArrival) {
-        return YES;
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!inputCtx || !LiInputContextIsInitialized(inputCtx)) {
+        return NO;
     }
 
-    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-    if (!inputCtx) {
-        return NO;
+    if (self.reportedPlayStationArrival) {
+        return YES;
     }
 
     uint32_t buttons = PLAY_FLAG | BACK_FLAG | UP_FLAG | DOWN_FLAG | LEFT_FLAG | RIGHT_FLAG |
@@ -1173,34 +1173,37 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 }
 
 /**
- * Loads and validates factory gyro and accelerometer calibration for a DS4 device.
+ * Loads and validates factory gyro and accelerometer calibration for a DS4 or DS5 device.
  *
  * Reads the transport-specific USB/Bluetooth feature report synchronously; truncated, empty or
- * implausible calibration clears validity so motion processing uses nominal scaling. Non-DS4
- * devices are ignored. Call during device matching on the HID manager's main run loop.
+ * implausible calibration clears validity so motion processing uses nominal scaling. DS5 uses
+ * report 0x05 on both transports with interleaved gyro endpoints; other devices are ignored.
+ * Call during device matching on the HID manager's main run loop.
  * @param device Connected HID device from which calibration is read.
  */
-- (void)loadPS4MotionCalibrationForDevice:(IOHIDDeviceRef)device {
-    if (!isPS4(device)) {
+- (void)loadPlayStationMotionCalibrationForDevice:(IOHIDDeviceRef)device {
+    BOOL dualSense = isPS5(device);
+    if (!isPS4(device) && !dualSense) {
         return;
     }
+    NSString *model = dualSense ? @"DualSense" : @"DualShock 4";
 
     UInt8 data[64] = {};
-    data[0] = k_ePS4FeatureReportIdGyroCalibration_USB;
+    data[0] = dualSense ? 0x05 : k_ePS4FeatureReportIdGyroCalibration_USB;
     int size = [self hidGetFeatureReport:device data:data length:sizeof(data)];
 
     CFTypeRef transportValue = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDTransportKey));
     NSString *transport = (__bridge NSString *)transportValue;
     BOOL isBluetooth = [transport caseInsensitiveCompare:@"Bluetooth"] == NSOrderedSame;
-    if (isBluetooth) {
+    if (isBluetooth && !dualSense) {
         memset(data, 0, sizeof(data));
         data[0] = k_ePS4FeatureReportIdGyroCalibration_BT;
         size = [self hidGetFeatureReport:device data:data length:sizeof(data)];
     }
 
     if (size < 35) {
-        Log(LOG_W, @"Unable to read DualShock 4 motion calibration (transport=%@ size=%d)",
-            transport ?: @"unknown", size);
+        Log(LOG_W, @"Unable to read %@ motion calibration (transport=%@ size=%d)",
+            model, transport ?: @"unknown", size);
         self.ps4MotionCalibration = (PS4MotionCalibration){};
         return;
     }
@@ -1213,7 +1216,7 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
         }
     }
     if (!hasData) {
-        Log(LOG_W, @"DualShock 4 returned empty motion calibration data");
+        Log(LOG_W, @"%@ returned empty motion calibration data", model);
         self.ps4MotionCalibration = (PS4MotionCalibration){};
         return;
     }
@@ -1223,7 +1226,7 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
     };
     int16_t gyroPlus[3];
     int16_t gyroMinus[3];
-    if (isBluetooth) {
+    if (isBluetooth && !dualSense) {
         gyroPlus[0] = PS4ReadS16(&data[7]);
         gyroPlus[1] = PS4ReadS16(&data[9]);
         gyroPlus[2] = PS4ReadS16(&data[11]);
@@ -1246,8 +1249,11 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
     PS4MotionCalibration calibration = {};
     calibration.valid = YES;
     for (int axis = 0; axis < 3; axis++) {
-        float denominator = (float)(abs(gyroPlus[axis] - gyroBias[axis]) +
-                                    abs(gyroMinus[axis] - gyroBias[axis]));
+        // DS5 endpoints define the full signed range. Normalize to the same
+        // 16 raw units per degree/s used by the shared DS4/DS5 pipeline.
+        float denominator = dualSense ? (float)(gyroPlus[axis] - gyroMinus[axis]) :
+            (float)(abs(gyroPlus[axis] - gyroBias[axis]) +
+                    abs(gyroMinus[axis] - gyroBias[axis]));
         calibration.bias[axis] = gyroBias[axis];
         calibration.scale[axis] = denominator != 0.0f ? gyroNumerator / denominator : 0.0f;
         if (abs(calibration.bias[axis]) > 1024 ||
@@ -1271,8 +1277,8 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 
     self.ps4MotionCalibration = calibration.valid ? calibration : (PS4MotionCalibration){};
     Log(calibration.valid ? LOG_I : LOG_W,
-        calibration.valid ? @"Loaded DualShock 4 motion calibration" :
-                            @"Ignoring invalid DualShock 4 motion calibration");
+        calibration.valid ? @"Loaded %@ motion calibration" :
+                            @"Ignoring invalid %@ motion calibration", model);
 }
 
 /**
@@ -1296,7 +1302,7 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
                          lastY:(float)lastY
                      pointerId:(uint32_t)pointerId {
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-    if (!inputCtx || ![self reportPlayStationControllerArrival]) {
+    if (!inputCtx || !LiInputContextIsInitialized(inputCtx) || ![self reportPlayStationControllerArrival]) {
         return;
     }
 
@@ -1513,20 +1519,49 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 }
 
 /**
- * Calibrates, filters and sends requested DS4 gyro and accelerometer samples.
- *
- * Processes gyro filtering and rest hysteresis at native report rate while limiting outgoing
- * samples to host-requested rates. Converts axes to protocol coordinates, gyro to degrees/s and
- * acceleration to m/s²; uses nominal scaling if factory calibration is invalid. Requires permitted
- * controller arrival, enabled motion and a valid context. Caller must hold the HID object's monitor.
+ * Decodes DS4 sensor axes and delegates calibration/filtering to the shared PlayStation processor.
+ * Uses the same raw axis order as DS5. Caller must hold the HID object's monitor through
+ * synchronous processing, which gates and rate-limits outgoing samples.
  * @param state Non-NULL complete DS4 state packet whose motion bytes are read synchronously.
  */
 - (void)processPS4MotionState:(PS4StatePacket_t *)state {
+    const int16_t samples[6] = {
+        PS4ReadS16(state->rgucGyroX), PS4ReadS16(state->rgucGyroY), PS4ReadS16(state->rgucGyroZ),
+        PS4ReadS16(state->rgucAccelX), PS4ReadS16(state->rgucAccelY), PS4ReadS16(state->rgucAccelZ)
+    };
+    [self processPlayStationMotionSamples:samples];
+}
+
+/**
+ * Decodes a complete DS5 sensor block and processes it under the HID object's monitor.
+ * Serializes samples with host requests, delivery resets and native-thread context invalidation.
+ * @param state Non-NULL validated DS5 packet containing all six sensor axes; not retained.
+ */
+- (void)handlePS5MotionState:(const PS5StatePacket_t *)state {
+    const int16_t samples[6] = {
+        PS4ReadS16(state->rgucGyroX), PS4ReadS16(state->rgucGyroY), PS4ReadS16(state->rgucGyroZ),
+        PS4ReadS16(state->rgucAccelX), PS4ReadS16(state->rgucAccelY), PS4ReadS16(state->rgucAccelZ)
+    };
+    @synchronized (self) {
+        [self processPlayStationMotionSamples:samples];
+    }
+}
+
+/**
+ * Calibrates and sends DS4/DS5 samples using the existing native-rate gyro filter and rest hysteresis.
+ * Gyro is degrees/s and acceleration is m/s² in the raw PlayStation/protocol axis convention.
+ * Both devices use nominal 16 gyro units per degree/s and 8192 acceleration units per g.
+ * Requires permitted arrival, enabled motion and an initialized context; outgoing rates follow
+ * host requests. Shared calibration/filter fields retain their historical PS4 names.
+ * @param samples Non-NULL array of gyro XYZ followed by acceleration XYZ; consumed synchronously.
+ * Caller must hold the HID object's monitor through processing and protocol emission.
+ */
+- (void)processPlayStationMotionSamples:(const int16_t *)samples {
     if (self.controllerMotionMode == 2) {
         return;
     }
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-    if (!inputCtx || ![self reportPlayStationControllerArrival]) {
+    if (!inputCtx || !LiInputContextIsInitialized(inputCtx) || ![self reportPlayStationControllerArrival]) {
         return;
     }
 
@@ -1556,9 +1591,9 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
         int calibrationBiasX = calibration.valid ? calibration.bias[0] : 0;
         int calibrationBiasY = calibration.valid ? calibration.bias[1] : 0;
         int calibrationBiasZ = calibration.valid ? calibration.bias[2] : 0;
-        float x = (PS4ReadS16(state->rgucGyroX) - calibrationBiasX) * calibrationScaleX / 16.0f;
-        float y = (PS4ReadS16(state->rgucGyroY) - calibrationBiasY) * calibrationScaleY / 16.0f;
-        float z = (PS4ReadS16(state->rgucGyroZ) - calibrationBiasZ) * calibrationScaleZ / 16.0f;
+        float x = (samples[0] - calibrationBiasX) * calibrationScaleX / 16.0f;
+        float y = (samples[1] - calibrationBiasY) * calibrationScaleY / 16.0f;
+        float z = (samples[2] - calibrationBiasZ) * calibrationScaleZ / 16.0f;
         float unfilteredX = x;
         float unfilteredY = y;
         float unfilteredZ = z;
@@ -1631,8 +1666,8 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
             if (self.remainingPS4MotionDiagnosticSamples > 0) {
                 self.remainingPS4MotionDiagnosticSamples -= 1;
                 Log(LOG_I, @"HID gyro sample: raw=(%d,%d,%d) filtered=(%.3f,%.3f,%.3f) calibrated=%d",
-                    PS4ReadS16(state->rgucGyroX), PS4ReadS16(state->rgucGyroY),
-                    PS4ReadS16(state->rgucGyroZ), x, y, z, calibration.valid);
+                    samples[0], samples[1],
+                    samples[2], x, y, z, calibration.valid);
             }
             if (!self.hasLastPS4GyroSample || x != self.lastPS4GyroX ||
                 y != self.lastPS4GyroY || z != self.lastPS4GyroZ) {
@@ -1656,9 +1691,9 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
         int biasY = calibration.valid ? calibration.bias[4] : 0;
         int biasZ = calibration.valid ? calibration.bias[5] : 0;
         LiSendControllerMotionEventCtx(inputCtx, 0, LI_MOTION_TYPE_ACCEL,
-                                       (PS4ReadS16(state->rgucAccelX) - biasX) * scaleX,
-                                       (PS4ReadS16(state->rgucAccelY) - biasY) * scaleY,
-                                       (PS4ReadS16(state->rgucAccelZ) - biasZ) * scaleZ);
+                                       (samples[3] - biasX) * scaleX,
+                                       (samples[4] - biasY) * scaleY,
+                                       (samples[5] - biasZ) * scaleZ);
     }
 }
 
@@ -2537,8 +2572,8 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
  * Parses supported PlayStation/Nintendo HID reports and updates controller input state.
  *
  * Rejects missing, truncated and unsupported PlayStation reports before accessing their fields.
- * DS5 simple Bluetooth keeps its compact control layout; complete reports also deliver touch.
- * DS5 advertises touch capabilities before ordinary or extended input, retrying failed arrival.
+ * DS5 simple Bluetooth keeps its compact control layout; complete reports also deliver touch and motion.
+ * DS5 advertises touch and motion capabilities before ordinary or extended input, retrying failed arrival.
  * DS4 processing normalizes sticks, ignores report-counter-only changes and forwards touch/motion
  * through their delivery gates. Runs on the HID manager's main run loop; ordinary state is queued
  * on the serial input queue.
@@ -2676,7 +2711,7 @@ void myHIDReportCallback (
             [self handlePS4MotionState:state];
         }
     } else if (isPS5(device)) {
-        self.playStationHasMotion = NO;
+        self.playStationHasMotion = YES;
         NSUInteger stateOffset;
         BOOL simple = report[0] == k_EPS5ReportIdState && reportLength == 10;
         switch (report[0]) {
@@ -2707,6 +2742,8 @@ void myHIDReportCallback (
             memcpy(&decoded, report + stateOffset, MIN(sizeof(decoded), (NSUInteger)reportLength - stateOffset));
         }
         PS5StatePacket_t *state = &decoded;
+        BOOL hasMotion = !simple && (NSUInteger)reportLength >=
+            stateOffset + offsetof(PS5StatePacket_t, rgucTimer1);
         BOOL hasTouchpad = !simple && (NSUInteger)reportLength >=
             stateOffset + offsetof(PS5StatePacket_t, rgucUnknown1);
 
@@ -2755,6 +2792,7 @@ void myHIDReportCallback (
             }
             if (hasTouchpad) [self handlePlayStationTouchpad:&state->ucTouchpadCounter1
                 secondary:&state->ucTouchpadCounter2 height:1070.0f pressed:(state->rgucButtonsAndHat[2] & 0x02) != 0];
+            if (hasMotion) [self handlePS5MotionState:state];
         }
     } else if (isNintendo(device)) {
         if (self.waitingForVibrationEnable) {
@@ -2884,7 +2922,7 @@ void myHIDReportCallback (
 }
 
 /**
- * Initializes DS4 motion calibration, enables direct-HID DS5 extended reports and syncs rumble.
+ * Initializes DS4/DS5 motion calibration, enables direct-HID DS5 extended reports and syncs rumble.
  *
  * Called on the HID manager's main run loop; calibration feature-report reads are synchronous.
  * @param context Borrowed HIDSupport callback context.
@@ -2898,7 +2936,7 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
                                 IOHIDDeviceRef          device) {
     HIDSupport *self = (__bridge HIDSupport *)context;
 
-    self.playStationHasMotion = isPS4(device);
+    self.playStationHasMotion = isPS4(device) || isPS5(device);
     if (self.controllerDriver == 0 && isPS5(device)) {
         // Reading Sony's serial-number feature report enables Bluetooth reports with touch data.
         UInt8 feature[64] = {0x09};
@@ -2907,7 +2945,7 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
         if (status != kIOReturnSuccess)
             Log(LOG_W, @"Unable to enable DS5 extended HID reports: result=0x%x", status);
     }
-    [self loadPS4MotionCalibrationForDevice:device];
+    [self loadPlayStationMotionCalibrationForDevice:device];
     [self rumbleSync];
 }
 
