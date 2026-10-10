@@ -8,9 +8,6 @@
 #import "MLAudioBitstreamOutput.h"
 #import <CoreAudio/CoreAudio.h>
 
-// Tag of the "volume is controlled on the output device" note in the Audio submenu.
-static const NSInteger MLAudioMenuPassthroughNoteTag = 7301;
-
 // Same icon mechanism the control center items use (see the setSymbol block in -rebuildStreamMenu).
 static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     if (@available(macOS 11.0, *)) {
@@ -1832,34 +1829,35 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     volLabel.stringValue = MLString(@"Volume", nil);
     [volView addSubview:volLabel];
 
-    if (!self.menuVolumeSlider) {
-        self.menuVolumeSlider = [[NSSlider alloc] initWithFrame:NSMakeRect(58, 4, 170, 20)];
-        self.menuVolumeSlider.minValue = 0.0;
-        self.menuVolumeSlider.maxValue = 1.0;
-        self.menuVolumeSlider.target = self;
-        self.menuVolumeSlider.action = @selector(handleVolumeSliderChanged:);
-        self.menuVolumeSlider.continuous = YES;
-    }
+    // A new slider for every menu build: the old one belongs to a menu that may still be on screen
+    // (the controller panel keeps the levels it opened), and moving one view between menus took its
+    // tracking state and its place in that menu with it.
+    NSSlider *volumeSlider = [[NSSlider alloc] initWithFrame:NSMakeRect(58, 4, 170, 20)];
+    volumeSlider.minValue = 0.0;
+    volumeSlider.maxValue = 1.0;
+    volumeSlider.target = self;
+    volumeSlider.action = @selector(handleVolumeSliderChanged:);
+    volumeSlider.continuous = YES;
     // A level from a drag that is still waiting to be saved must not be read back as the old one.
     [self flushPendingVolumeLevel];
-    self.menuVolumeSlider.doubleValue = [SettingsClass volumeLevelFor:self.app.host.uuid];
-    [volView addSubview:self.menuVolumeSlider];
+    volumeSlider.doubleValue = [SettingsClass volumeLevelFor:self.app.host.uuid];
+    self.menuVolumeSlider = volumeSlider;
+    [volView addSubview:volumeSlider];
 
     NSMenuItem *volSliderItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
     volSliderItem.view = volView;
     [audioMenu addItem:volSliderItem];
 
     // Bitstream passthrough: the output device applies the volume, the slider only mutes at 0.
-    // Shown only while passthrough runs (kept current in -menuNeedsUpdate:).
-    NSMenuItem *passthroughVolumeNote = [[NSMenuItem alloc] initWithTitle:MLString(@"Volume is controlled on the output device", nil)
-                                                                   action:nil
-                                                            keyEquivalent:@""];
-    passthroughVolumeNote.enabled = NO;
-    passthroughVolumeNote.tag = MLAudioMenuPassthroughNoteTag;
-    passthroughVolumeNote.hidden = ![self.streamMan.connection audioPassthroughActive];
-    [audioMenu addItem:passthroughVolumeNote];
-    audioMenu.delegate = self;
-    self.audioMenu = audioMenu;
+    // Decided when the menu is built (it is rebuilt every time it is opened) instead of hiding and
+    // showing an item while the menu is up.
+    if ([self.streamMan.connection audioPassthroughActive]) {
+        NSMenuItem *passthroughVolumeNote = [[NSMenuItem alloc] initWithTitle:MLString(@"Volume is controlled on the output device", nil)
+                                                                       action:nil
+                                                                keyEquivalent:@""];
+        passthroughVolumeNote.enabled = NO;
+        [audioMenu addItem:passthroughVolumeNote];
+    }
 
     [audioMenu addItem:[NSMenuItem separatorItem]];
 
@@ -2147,8 +2145,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
         [self populateRemoteDisplayScaleMenu:menu];
         [self.remoteDisplayScale refreshOptionsIfStale];
     } else if (menu == self.audioOutputMenu) {
-        [self populateAudioOutputMenu:menu];    } else if (menu == self.audioMenu) {
-        [menu itemWithTag:MLAudioMenuPassthroughNoteTag].hidden = ![self.streamMan.connection audioPassthroughActive];
+        [self populateAudioOutputMenu:menu];
     }
 }
 
@@ -2483,7 +2480,11 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     self.menuVolumeHasPendingLevel = YES;
 
     if (NSApp.currentEvent.type == NSEventTypeLeftMouseUp) {
-        [self flushPendingVolumeLevel];
+        // After the slider's own tracking loop has finished, not inside it.
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf flushPendingVolumeLevel];
+        });
         return;
     }
 
