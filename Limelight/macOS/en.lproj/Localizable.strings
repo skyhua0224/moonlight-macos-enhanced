@@ -1260,10 +1260,10 @@
 "Normal" = "Normal";
 "Detailed" = "Detailed";
 "Remote Display Scale" = "Remote Display Scale";
-"Remote Display Scale detail" = "Sets the Windows display scaling on the host when a stream starts, so a high-resolution Mac display is not left tiny at the default scale. Needs a Foundation Sunshine host.";
+"Remote Display Scale detail" = "Sets the Windows display scaling on the host each time a stream starts, so a high-resolution Mac display is not left tiny at the default scale. A scale chosen in the control center changes the host directly and is kept. Needs a Foundation Sunshine host.";
 "Don't change" = "Don't change";
 "Restore scale after streaming" = "Restore scale after streaming";
-"Restore scale after streaming detail" = "Puts the host display scale back to its previous value when the stream ends, unless it was changed again in the meantime.";
+"Restore scale after streaming detail" = "Puts the scale applied at stream start back to its previous value when the stream ends, unless it was changed again in the meantime. A scale chosen in the control center is never put back.";
 "Display Scale" = "Display Scale";
 "Recommended (%d%%)" = "Recommended (%d%%)";
 "%d%% (Recommended)" = "%d%% (Recommended)";

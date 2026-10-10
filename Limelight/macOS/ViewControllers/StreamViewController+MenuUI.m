@@ -2108,8 +2108,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
                 [specs addObject:@{
                     @"title": percentTitle,
                     @"action": NSStringFromSelector(@selector(selectRemoteDisplayScaleFromMenu:)),
-                    // -1 remembers "Recommended" (follow the host's value) instead of a fixed percentage.
-                    @"rep": isRecommended ? @(-1) : percent,
+                    @"rep": percent,
                     @"state": @(percent.integerValue == current ? NSControlStateValueOn : NSControlStateValueOff),
                 }];
             }
@@ -2149,30 +2148,18 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     }
 }
 
+// A choice here is the user changing the host's scale by hand: it is applied now and stays on the
+// host after the stream. It is neither saved as the per-host setting (that one is applied again at
+// every stream start and put back afterwards) nor restored at the end of the stream.
 - (void)selectRemoteDisplayScaleFromMenu:(NSMenuItem *)sender {
-    NSNumber *setting = [sender.representedObject isKindOfClass:[NSNumber class]] ? sender.representedObject : nil;
+    NSNumber *percent = [sender.representedObject isKindOfClass:[NSNumber class]] ? sender.representedObject : nil;
     MLRemoteDisplayScale *scale = self.remoteDisplayScale;
-    NSString *hostUUID = self.app.host.uuid;
-    if (setting == nil || scale == nil || hostUUID.length == 0) {
+    if (percent == nil || scale == nil || percent.integerValue <= 0) {
         return;
     }
-
-    // -1 is the "Recommended" entry: apply the host's value, remember "Recommended".
-    NSInteger percent = setting.integerValue < 0 ? scale.recommendedPercent : setting.integerValue;
-    if (percent <= 0) {
-        return;
-    }
-    BOOL restore = [SettingsClass restoreRemoteDisplayScaleFor:hostUUID];
     __weak typeof(self) weakSelf = self;
-    [scale applyPercent:percent restoreAfterStream:restore completion:^(NSDictionary<NSString *, id> *outcome) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (strongSelf == nil) {
-            return;
-        }
-        if ([outcome[@"ok"] boolValue]) {
-            [SettingsClass setRemoteDisplayScale:setting.integerValue for:hostUUID];
-        }
-        [strongSelf presentRemoteDisplayScaleOutcome:outcome];
+    [scale applyManualPercent:percent.integerValue completion:^(NSDictionary<NSString *, id> *outcome) {
+        [weakSelf presentRemoteDisplayScaleOutcome:outcome];
     }];
 }
 

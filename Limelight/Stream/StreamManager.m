@@ -819,7 +819,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
         } else if (wanted == self.currentPercent) {
             Log(LOG_I, @"[display-scale] start: scale is already %ld%%", (long)wanted);
         } else {
-            [self applyPercentOnQueue:wanted http:http restore:restore generation:generation source:@"stream-start" completion:completion];
+            [self applyPercentOnQueue:wanted http:http restore:restore manual:NO generation:generation source:@"stream-start" completion:completion];
         }
         [http invalidateSunshineAPISession];
     });
@@ -832,6 +832,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
 - (void)applyPercentOnQueue:(NSInteger)percent
                        http:(HttpManager *)http
                     restore:(BOOL)restore
+                     manual:(BOOL)manual
                  generation:(NSUInteger)generation
                      source:(NSString *)source
                  completion:(MLRemoteDisplayScaleCompletion)completion {
@@ -885,11 +886,19 @@ static void MLScaleClearPending(NSString *hostUUID) {
         }
         NSString *reportedDeviceId = MLScaleString(json[@"device_id"]);
         NSString *reportedDisplayName = MLScaleString(json[@"display_name"]);
-        [self recordPendingPrevious:(previous != nil ? previous.integerValue : before)
-                            applied:resulting
-                            restore:restore
-                           deviceId:(reportedDeviceId.length > 0 ? reportedDeviceId : deviceId)
-                        displayName:(reportedDisplayName.length > 0 ? reportedDisplayName : displayName)];
+        if (manual) {
+            // The user changed the host by hand: it stays like that, exactly as if it had been done in
+            // Windows. A change made at stream start is superseded, and nothing may undo this one later
+            // (stream end or launch-time recovery).
+            MLScaleClearPending(_hostUUID);
+            Log(LOG_I, @"[display-scale] manual change to %ld%% (kept on the host; not restored)", (long)resulting);
+        } else {
+            [self recordPendingPrevious:(previous != nil ? previous.integerValue : before)
+                                applied:resulting
+                                restore:restore
+                               deviceId:(reportedDeviceId.length > 0 ? reportedDeviceId : deviceId)
+                            displayName:(reportedDisplayName.length > 0 ? reportedDisplayName : displayName)];
+        }
     }
 
     [self finishOnMain:completion outcome:@{
@@ -956,9 +965,8 @@ static void MLScaleClearPending(NSString *hostUUID) {
 
 #pragma mark Control center
 
-- (void)applyPercent:(NSInteger)percent
-  restoreAfterStream:(BOOL)restore
-          completion:(MLRemoteDisplayScaleCompletion)completion {
+- (void)applyManualPercent:(NSInteger)percent
+                completion:(MLRemoteDisplayScaleCompletion)completion {
     // Stamped when the action is created: a menu that outlives its stream must not act on a later one.
     NSUInteger generation = [self currentSessionGeneration];
     dispatch_async(MLRemoteDisplayScaleQueue(), ^{
@@ -976,7 +984,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
         if (self.support != MLRemoteDisplayScaleSupportAvailable) {
             [self finishOnMain:completion outcome:@{ @"ok": @NO, @"changed": @NO, @"errorCode": @"unsupported_platform", @"httpStatus": @0 }];
         } else {
-            [self applyPercentOnQueue:percent http:http restore:restore generation:generation source:@"control-center" completion:completion];
+            [self applyPercentOnQueue:percent http:http restore:NO manual:YES generation:generation source:@"control-center" completion:completion];
         }
         [http invalidateSunshineAPISession];
     });

@@ -67,12 +67,13 @@ typedef void (^MLRemoteDisplayScaleCompletion)(NSDictionary<NSString *, id> *out
                    restoreAfterStream:(BOOL)restore
                            completion:(MLRemoteDisplayScaleCompletion)completion;
 
-// Control center: apply a percentage now. Only acts on the session that is live when this is
-// called; if the stream ends (or is replaced) before the request reaches the host it is
-// dropped and the completion is not called.
-- (void)applyPercent:(NSInteger)percent
-  restoreAfterStream:(BOOL)restore
-          completion:(MLRemoteDisplayScaleCompletion)completion;
+// Control center: the user changes the host's scale by hand. Applied now, kept on the host after
+// the stream (nothing is restored, not even a change this session made at stream start, and no
+// leftover record remains for the launch-time recovery) and not saved as a setting. Only acts on
+// the session that is live when this is called; if the stream ends (or is replaced) before the
+// request reaches the host it is dropped and the completion is not called.
+- (void)applyManualPercent:(NSInteger)percent
+                completion:(MLRemoteDisplayScaleCompletion)completion;
 
 // Re-reads the options in the background (throttled); the results show up in the
 // properties above.
