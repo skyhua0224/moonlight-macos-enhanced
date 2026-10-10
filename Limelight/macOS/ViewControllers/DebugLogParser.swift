@@ -820,6 +820,33 @@ struct DebugLogEntry: Identifiable {
   }
 }
 
+/// Which part of a line becomes the detail text under a rule's title.
+private enum DebugLogDetail {
+  case none
+  /// Everything after the tag, as logged (a key=value dump stays readable in the monospace detail).
+  case body
+  /// The text after the first ": ".
+  case afterColon
+  /// The text after the first occurrence of the marker.
+  case after(String)
+  /// The text inside the first pair of parentheses.
+  case parens
+}
+
+private struct DebugLogLineRule {
+  let tag: String
+  let match: String
+  let title: String
+  let detail: DebugLogDetail
+  let contains: Bool
+}
+
+private func R(
+  _ tag: String, _ match: String, _ title: String, _ detail: DebugLogDetail, contains: Bool = false
+) -> DebugLogLineRule {
+  DebugLogLineRule(tag: tag, match: match, title: title, detail: detail, contains: contains)
+}
+
 private struct DebugLogPresentation {
   let title: String
   let detail: String?
@@ -1551,25 +1578,29 @@ enum DebugLogParser {
   /// title and detail goes through `tr`, so the app's own language override applies. Lines
   /// without a rule return nil and stay exactly as logged, instead of being half translated.
   private static func taggedPresentation(message: String) -> DebugLogPresentation? {
-    guard let tagged = splitTag(message) else {
-      return plainLinePresentation(message)
+    let tagged = splitTag(message)
+    let tag = tagged?.tag ?? ""
+    let body = tagged?.body ?? message
+    let special: DebugLogPresentation?
+    switch tag {
+    case "": special = plainLinePresentation(message)
+    case "audio": special = audioPresentation(body)
+    case "display-scale": special = displayScalePresentation(body)
+    case "startup": special = startupPresentation(body)
+    case "hdr": special = hdrPresentation(body)
+    case "video": special = videoPresentation(body)
+    case "keyboard": special = keyboardPresentation(body)
+    case "controller": special = controllerPresentation(body)
+    case "live": special = livePresentation(body)
+    case "netprobe": special = netProbePresentation(body)
+    case "fec": special = fecPresentation(body)
+    case "perf": special = perfPresentation(body)
+    case "sunshine": special = sunshinePresentation(body)
+    case "discovery": special = discoveryTagPresentation(body)
+    case "diag": special = diagPresentation(body)
+    default: special = nil
     }
-    switch tagged.tag {
-    case "audio": return audioPresentation(tagged.body)
-    case "display-scale": return displayScalePresentation(tagged.body)
-    case "startup": return startupPresentation(tagged.body)
-    case "hdr": return hdrPresentation(tagged.body)
-    case "video": return videoPresentation(tagged.body)
-    case "keyboard": return keyboardPresentation(tagged.body)
-    case "controller": return controllerPresentation(tagged.body)
-    case "live": return livePresentation(tagged.body)
-    case "netprobe": return netProbePresentation(tagged.body)
-    case "fec": return fecPresentation(tagged.body)
-    case "perf": return perfPresentation(tagged.body)
-    case "sunshine": return sunshinePresentation(tagged.body)
-    case "discovery": return discoveryTagPresentation(tagged.body)
-    default: return nil
-    }
+    return special ?? tableRulePresentation(tag: tag, body: body)
   }
 
   /// Splits "[tag] body" into its parts. The tag is at most a few characters, so a message
@@ -1577,7 +1608,7 @@ enum DebugLogParser {
   private static func splitTag(_ message: String) -> (tag: String, body: String)? {
     guard message.first == "[", let close = message.firstIndex(of: "]") else { return nil }
     let tag = message[message.index(after: message.startIndex)..<close]
-    guard !tag.isEmpty, tag.count <= 16 else { return nil }
+    guard !tag.isEmpty, tag.count <= 24 else { return nil }
     let body = message[message.index(after: close)...].drop(while: { $0 == " " })
     return (String(tag), String(body))
   }
@@ -1726,6 +1757,25 @@ enum DebugLogParser {
     if body.contains("muted for this session") {
       return pres(tr("Audio is muted for this session"), body)
     }
+    if body.hasPrefix("ring since last report:") {
+      return pres(
+        tr("Audio buffer under pressure"),
+        tr(
+          "Dropped %@ · underruns %@ · rebuffers %@", field("fullDrops", in: body) ?? "-",
+          field("underruns", in: body) ?? "-", field("rebuffers", in: body) ?? "-"))
+    }
+    if body.hasPrefix("continuousAudio=") {
+      return pres(field("continuousAudio", in: body) == "1" ? tr("Continuous audio is on") : tr("Continuous audio is off"))
+    }
+    if body.hasPrefix("bitstream:") {
+      return pres(tr("Audio passthrough device"), body.dropFirst("bitstream:".count).trimmingCharacters(in: .whitespaces))
+    }
+    if body.hasPrefix("Requesting "), body.contains(" fits in one packet") {
+      return pres(tr("Audio bitrate adjusted to fit one packet"), String(body.dropFirst("Requesting ".count)))
+    }
+    if body.hasPrefix("Output device clock is not running") {
+      return pres(tr("The audio device clock is not running"), between(body, "attempt", nil).map { tr("Attempt %@", $0) })
+    }
     return nil
   }
 
@@ -1805,7 +1855,11 @@ enum DebugLogParser {
       return nil
     }
     if body.hasPrefix("restore skipped (") {
-      return pres(tr("Host display scale restore skipped"), between(body, "):", nil))
+      let why = between(body, "):", nil)
+      return pres(
+        tr("Host display scale restore skipped"),
+        why?.hasPrefix("this client did not change the scale") == true
+          ? tr("This client did not change the scale") : why)
     }
     if body.hasPrefix("restore after streaming is off;") {
       return pres(
@@ -1852,6 +1906,14 @@ enum DebugLogParser {
         tr(
           "Total %@ · renderer ready %@ · connection %@", field("total", in: body) ?? "?",
           field("rendererWarmupReady", in: body) ?? "?", field("connectionQueue", in: body) ?? "?"))
+    }
+    if body.hasPrefix("first frame after ") {
+      return pres(
+        tr("First frame shown %@ after start", between(body, "first frame after ", ":") ?? "-"),
+        tr(
+          "Host launch %@ · connect to first video %@ · first video to frame %@",
+          field("hostLaunch", in: body) ?? "-", field("connectToFirstVideo", in: body) ?? "-",
+          field("firstVideoToFrame", in: body) ?? "-"))
     }
     if body.hasPrefix("Enhanced drawable prewarm skipped") {
       return pres(tr("Renderer prewarm skipped"), tr("No drawable is available yet"))
@@ -1999,6 +2061,9 @@ enum DebugLogParser {
   }
 
   private static func livePresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Foundation host=") {
+      return pres(field("Foundation host", in: body) == "1" ? tr("Connected to a Foundation host") : tr("Connected to a standard host"))
+    }
     if body.hasPrefix("Stream resolution is now") {
       return pres(tr("Stream resolution changed"), between(body, "now", nil))
     }
@@ -2098,6 +2163,9 @@ enum DebugLogParser {
 
   /// Untagged lines that only deserve a friendly form because they explain a failed stream.
   private static func plainLinePresentation(_ message: String) -> DebugLogPresentation? {
+    if let step = stepPresentation(message) ?? requestPresentation(message) ?? lossPresentation(message) {
+      return step
+    }
     if message.hasPrefix("Stage "), message.contains(" failed:") {
       let stage = between(message, "Stage ", " failed:") ?? "?"
       return pres(
@@ -2128,6 +2196,479 @@ enum DebugLogParser {
     }
   }
 
+  // MARK: Line rule table
+
+  /// Lines whose title says what they are about, with the logged text kept as the detail when it
+  /// carries the numbers (the key names of a dump are not translated one by one). Rules are
+  /// tried in order, per tag; "" is the group of lines without a tag. Lines that match none stay
+  /// exactly as logged. `scripts/check_log_text_coverage.py` checks that every title has a translation.
+  private static let lineRules: [String: [DebugLogLineRule]] = {
+    let rules: [DebugLogLineRule] = [
+      // Host, address and pairing flow
+      R("", "External IPv4 address (STUN):", "External IPv4 address (STUN)", .afterColon),
+      R("", "External IPv6 address (STUN):", "External IPv6 address (STUN)", .afterColon),
+      R("", "Local address chosen:", "Local address chosen", .afterColon),
+      R("", "IPv6 address chosen:", "IPv6 address chosen", .afterColon),
+      R("", "Ignoring 6to4 address:", "Ignoring a 6to4 address", .afterColon),
+      R("", "Ignoring Teredo address:", "Ignoring a Teredo address", .afterColon),
+      R("", "Auto-switched ", "Switched to a faster address", .body),
+      R("", "Stopping discovery and waiting", "Stopping host discovery", .none),
+      R("", "Discovery failed for ", "Host discovery failed", .body),
+      R("", "Did not resolve address for", "Could not resolve the host address", .afterColon),
+      R("", "Pairing with generation", "Pairing started", .body),
+      R("", "Pairing target resolved:", "Pairing target resolved", .afterColon),
+      R("", "Pairing candidates for", "Pairing candidates found", .afterColon),
+      R("", "Pairing persisted for", "Pairing saved", .afterColon),
+      R("", "PIN:", "Pairing PIN generated", .none),
+      R("", "Accepting Paired->Unpaired", "Host marked as unpaired", .body),
+      R("", "Background pairing time has expired", "Pairing time has expired", .none),
+      R("", "Generating Certificate", "Generating the client certificate", .none),
+      R("", "Certificate created", "Client certificate created", .none),
+      R("", "Client certificate imported with default", "Client certificate imported", .none),
+      R("", "Failed to get applist", "Could not get the app list", .afterColon),
+      R("", "Failed Launch Response", "The host rejected the launch request", .afterColon),
+      R("", "Failed Resume Response", "The host rejected the resume request", .afterColon),
+      R("", "Sending WOL packet returned", "Wake-on-LAN packet sent", .afterColon),
+      R("", "An error occured trying to parse xml", "Could not read the host response", .none),
+      R("", "Controller connected", "Controller connected", .none),
+      R("", "Controller disconnected", "Controller disconnected", .none),
+      // Stream start and stop
+      R("", "done", "Step finished", .none),
+      R("", "RTSP port:", "RTSP port", .afterColon),
+      R("", "Audio port:", "Audio port", .afterColon),
+      R("", "Video port:", "Video port", .afterColon),
+      R("", "Control port:", "Control port", .afterColon),
+      R("", "Negotiated audio codec:", "Audio codec negotiated", .afterColon),
+      R("", "Negotiated video format:", "Video format negotiated", .afterColon),
+      R("", "Dynamic HDR negotiated:", "Dynamic HDR negotiated", .afterColon),
+      R("", "Audio RTSP surround capability summary:", "Audio surround capability", .afterColon),
+      R("", "Audio SDP surround request:", "Audio surround request", .afterColon),
+      R("", "Audio SDP surround HQ disabled", "High-quality surround turned off by your setting", .afterColon),
+      R("", "Audio RTSP normal Opus config:", "Normal Opus layout offered", .afterColon),
+      R("", "Audio RTSP high Opus config:", "High-quality Opus layout offered", .afterColon),
+      R("", "Audio stream chosen Opus config:", "Opus layout chosen", .afterColon),
+      R("", "Audio stream starting:", "Audio stream starting", .afterColon),
+      R("", "Audio renderer init request:", "Audio renderer requested", .afterColon),
+      R("", "Video recv buffer target:", "Video receive buffer", .afterColon),
+      R("", "Received first video packet", "First video packet received", .after("after ")),
+      R("", "Received first audio packet", "First audio packet received", .after("after ")),
+      R("", "Initial audio resync period:", "Initial audio resync period", .afterColon),
+      R("", "Signaling connection started", "Signaling connection started", .none),
+      R("", "Input: starting stream", "Input stream starting", .after("Input: starting stream ")),
+      R("", "Input: initialized", "Input stream initialized", .after("Input: initialized ")),
+      R("", "Input ABI:", "Input library check", .afterColon),
+      R("", "Binding input context", "Input bound to the connection", .afterColon),
+      R("", "ENet wait interrupted", "Waiting for the host was interrupted", .none),
+      R("", "Control stream connection failed", "Control stream connection failed", .afterColon),
+      R("", "Connection interrupted;", "Connection interrupted; disconnecting", .none),
+      R("", "Suppressing connection warnings", "Connection warnings paused", .after("for ")),
+      R("", "performCloseStreamWindow:", "Closing the stream window", .parens),
+      R("", "Audio stream start failed", "Audio stream failed to start", .afterColon),
+      R("", "Error starting queue", "Audio queue failed to start", .afterColon),
+      R("", "No audio traffic was ever received", "No audio ever arrived from the host", .none),
+      R("", "Constructing new HEVC", "Rebuilt HEVC decode format", .none),
+      R("", "Constructing new AV1", "Rebuilt AV1 decode format", .none),
+      R("", "CoreHID mouse setup:", "CoreHID mouse set up", .afterColon),
+      R("", "Failed to enable per-frame HDR", "Could not enable per-frame HDR metadata", .afterColon),
+      R("", "Microphone start skipped", "Microphone start skipped", .none),
+      // Video health
+      R("", "Invalidate reference frame request sent", "Asked the host to refresh the picture", .parens),
+      R("", "Waiting for RFI frame", "Waiting for the refreshed picture", .none),
+      R("", "Waiting for IDR frame", "Waiting for a full key frame", .none),
+      R("", "Requesting IDR frame", "Requested a full key frame", .none),
+      R("", "IDR frame request sent", "Key frame request sent", .none),
+      R("", "Next post-invalidation frame is:", "Next frame after the refresh", .afterColon),
+      // Audio health and renderer
+      R("", "Audio underrun on", "Audio underrun", .after("Audio underrun on ")),
+      R("", "Audio decode thread QoS", "Audio decode thread prioritised", .afterColon),
+      R("", "Audio decode primed:", "Audio decoder primed", .afterColon),
+      R("", "Initialized enhanced audio renderer:", "Enhanced audio renderer ready", .afterColon),
+      R("", "Initialized direct audio renderer:", "Direct audio renderer ready", .afterColon),
+      R("", "Enhanced output target auto-resolved:", "Enhanced audio output chosen", .afterColon),
+      R("", "Enhanced renderer using", "Enhanced audio downmix in use", .afterColon),
+      R("", "Enhanced multichannel virtualization", "Enhanced audio virtualization in use", .afterColon),
+      R("", "Enhanced renderer Core Audio downmix", "Enhanced audio downmix in use", .afterColon),
+      R("", "Direct renderer", "The direct audio renderer failed", .parens),
+      R("", "Direct audio renderer unavailable", "Direct audio renderer unavailable", .none),
+      R("", "Microphone setting:", "Microphone configuration applied", .afterColon),
+
+      // [diag]
+      R("diag", "startup-display-before:", "Window state before the startup display mode", .afterColon),
+      R("diag", "startup-display-after-request:", "Window state after the startup display mode request", .afterColon),
+      R("diag", "window-will-enter-fullscreen:", "Window is about to enter fullscreen", .afterColon),
+      R("diag", "window-will-exit-fullscreen:", "Window is about to exit fullscreen", .afterColon),
+      R("diag", "post-start-checkpoint", "Window state shortly after the stream started", .afterColon),
+      R("diag", "connection-started-before-capture:", "Window state before capturing input", .afterColon),
+      R("diag", "connection-started-after-capture:", "Window state after capturing input", .afterColon),
+      R("diag", "Priming startup display mode", "Preparing the startup display mode", .afterColon),
+      R("diag", "Startup display mode apply begin:", "Applying the startup display mode", .afterColon),
+      R("diag", "Scheduling startup display mode", "Startup display mode scheduled", .afterColon),
+      R("diag", "Startup display mode already primed", "Startup display mode was already prepared", .none),
+      R("diag", "control-orb frame", "Floating control moved", .none),
+      R("diag", "control-orb visible=", "Floating control visibility updated", .after("control-orb ")),
+      R("diag", "Connection ABI:", "Connection library check", .afterColon),
+      R("diag", "Packet config classification:", "Packet configuration chosen", .afterColon),
+      R("diag", "Packet size chosen:", "Packet size chosen", .afterColon),
+      R("diag", "Codec preference resolved:", "Codec preference resolved", .afterColon),
+      R("diag", "Dynamic range resolved:", "Dynamic range resolved", .afterColon),
+      R("diag", "AWDL helper disabled", "Wi-Fi AWDL helper turned off for the stream", .none),
+      R("diag", "Stream health diagnostics started", "Stream health monitoring started", .none),
+      R("diag", "First rendered frame observed", "First frame shown", .none),
+      R("diag", "Using ", "Audio topology chosen", .body),
+      R("diag", "Input summary (", "Input statistics summary", .afterColon),
+      R("diag", "Connection status update:", "Connection status changed", .afterColon),
+      R("diag", "Connect watchdog deferred:", "Still waiting for the host to start the stream", .afterColon),
+      R("diag", "Session disconnect request received:", "Session disconnect requested", .afterColon),
+      R("diag", "Closing stream window after", "Closing the stream window after an error", .afterColon),
+      R("diag", "Reconnect ", "Reconnect request ignored", .afterColon),
+
+      // [clipboard]
+      R("clipboard", "Clipboard activation is paused", "Clipboard sync paused while the stream stops", .none),
+      R("clipboard", "Clipboard activation is waiting for the stream startup", "Clipboard sync waits for the stream to settle", .none),
+      R("clipboard", "Clipboard activation is waiting for the stream connection", "Clipboard sync waits for the stream connection", .none),
+      R("clipboard", "Claimed clipboard sync ownership", "This stream owns clipboard sync", .none),
+      R("clipboard", "Runtime clipboard connection selected", "Clipboard connection selected", .none),
+      R("clipboard", "Activated Foundation", "Clipboard sync active", .afterColon),
+      R("clipboard", "Clipboard session bound locally", "Clipboard session ready; asking the host for its clipboard", .none),
+      R("clipboard", "Applied empty host clipboard", "The host clipboard is empty", .none),
+      R("clipboard", "Clipboard snapshot request was not supported", "The host cannot send its clipboard snapshot", .none),
+      R("clipboard", "Host does not advertise clipboard sync", "The host does not support clipboard sync", .none),
+      R("clipboard", "Initial host clipboard snapshot timed out", "The host clipboard did not arrive in time", .none),
+      R("clipboard", "Host rejected clipboard item", "The host rejected a clipboard item", .none),
+      R("clipboard", "Sent local clipboard item:", "Clipboard item sent to the host", .afterColon),
+      R("clipboard", "Sent blob reference", "Clipboard attachment sent", .body),
+      R("clipboard", "Suppressed echoed local clipboard", "Skipped a clipboard item that came from this Mac", .none),
+      R("clipboard", "send raw agent frame", "Clipboard data sent", .none),
+      R("clipboard", "send-raw result=", "Clipboard data send result", .body),
+      R("clipboard", "send item request", "Clipboard item queued", .none),
+      R("clipboard", "bind request", "Clipboard sync attached to the stream", .none),
+      R("clipboard", "unbind request", "Clipboard sync detached from the stream", .none),
+      R("clipboard", "snapshot request", "Clipboard snapshot requested", .none),
+      R("clipboard", "StreamViewController received item", "Clipboard item received from the host", .afterColon),
+      R("clipboard", "Ignoring ", "Clipboard item ignored", .body),
+      R("clipboard", "Clipboard send failed", "Clipboard send failed; will retry", .parens),
+      R("clipboard", "Failed to send local clipboard item", "Could not send the clipboard item", .afterColon),
+      R("clipboard", "Failed to ", "Clipboard sync failed", .body),
+      R("clipboard", "Blob ", "Clipboard attachment failed", .body),
+      R("clipboard", "Dropping ", "A malformed clipboard message was dropped", .body),
+      R("clipboard", "Refusing raw agent frame", "A clipboard message was refused", .body),
+      R("clipboard", "Initial clipboard snapshot request failed", "Could not request the host clipboard", .afterColon),
+      R("clipboard", "Rejecting image clipboard payload", "The clipboard image is too large", .body),
+
+      // [hdr] / [video]
+      R("hdr", "Dolby Vision sample NAL:", "Dolby Vision frame inspected", .none),
+      R("hdr", "Static HDR metadata:", "HDR static metadata", .afterColon),
+      R("hdr", "Session mastering primaries:", "HDR mastering primaries", .afterColon),
+      R("hdr", "Display luminance estimate:", "Display brightness estimate", .afterColon),
+      R("hdr", "display luminance report", "Display brightness reported to the host", .after("report ")),
+      R("hdr", "Display luminance report rejected", "The host rejected the display brightness report", .afterColon),
+      R("hdr", "Apple Dolby Vision direct-surface", "Dolby Vision direct surface enabled", .afterColon),
+      R("hdr", "Chroma/dynamic HDR decision:", "Chroma and dynamic HDR decision", .afterColon),
+      R("hdr", "Foundation dynamic HDR result:", "Dynamic HDR result", .afterColon),
+      R("hdr", "First decoded buffer from VideoToolbox", "First decoded frame from VideoToolbox", .none),
+      R("hdr", "Native decoded color tags:", "Decoded colour description", .afterColon),
+      R("hdr", "Metal decoded color tags:", "Decoded colour description", .afterColon),
+      R("hdr", "Metal conversion path:", "Colour conversion path", .afterColon),
+      R("video", "Apple propagated HDR10+", "HDR10+ metadata passed on by the system", .none),
+      R("video", "Apple propagated Dolby", "Dolby Vision metadata passed on by the system", .none),
+      R("video", "Presentation prewarm finished", "Presentation prewarm finished", .after("finished in ")),
+      R("video", "Native direct submission enabled", "Direct frame submission enabled", .none),
+      R("video", "Decoded image buffer", "Decoded image format", .after("buffer ")),
+      R("video", "enhancement requested=", "Video enhancement selected", .after("enhancement ")),
+      R("video", "frame interpolation requested=", "Frame interpolation selected", .after("interpolation ")),
+      R("video", "Enhanced HDR output is using", "HDR output mode chosen", .afterColon),
+      R("video", "Enhanced HDR EDR presentation armed", "HDR display output prepared", .afterColon),
+      R("video", "Enhanced drawable unavailable", "No render surface was available", .after("unavailable ")),
+      R("video", "Enhanced drawable", "Render surface updated", .body),
+      R("video", "Enhanced startup pacing enabled", "Startup pacing enabled", .afterColon),
+      R("video", "Display link started", "Display link started", .after("started in ")),
+      R("video", "Presentation ", "Presentation updated", .body),
+      R("video", "Failed to ", "Video setup failed", .body),
+      R("video", "VT ", "Video enhancement problem", .body),
+
+      // Other tags
+      R("touchpad", "host supports precision touchpad", "The host supports the precision touchpad", .parens),
+      R("touchpad", "mode=", "Touchpad mode", .after("mode=")),
+      R("touchpad", "stream view indirect touches disabled", "Indirect touches turned off", .none),
+      R("touchpad", "stream view indirect touches enabled", "Indirect touches turned on", .none),
+      R("touchpad", "trackpad mode changed", "Trackpad mode changed", .after("changed to ")),
+      R("touchpad", "first trackpad touch event", "First trackpad touch received", .none),
+      R("gesture", "block tap not installed", "System gesture blocker not installed", .after("not installed ")),
+      R("text", "input method text enabled", "Input method text entry turned on", .none),
+      R("text", "host text field focused", "A text field on the host is focused", .parens),
+      R("controller-haptics", "Negotiation mode=", "Controller haptics negotiated", .after("mode=")),
+      R("controller-mapping", "", "Controller button mapping", .body),
+      R("keyboard", "Command modifier routed:", "Command key routed", .afterColon),
+      R("sunshine", "Display runtime state:", "Host display state", .afterColon),
+      R("sunshine", "Next stream display override=", "Display chosen for the next stream", .after("override=")),
+      R("sunshine", "Next stream screen mode override=", "Screen mode chosen for the next stream", .after("override=")),
+      R("sunshine", "App display topology override:", "Display layout chosen for this app", .afterColon),
+      R("sunshine", "Ignoring useVdd=1", "Virtual display ignored: the host does not support it", .none),
+      R("fec", "Host RS FEC control", "Host error correction control", .after("control ")),
+    ]
+    var grouped: [String: [DebugLogLineRule]] = [:]
+    for rule in rules {
+      grouped[rule.tag, default: []].append(rule)
+    }
+    return grouped
+  }()
+
+  private static func tableRulePresentation(tag: String, body: String) -> DebugLogPresentation? {
+    guard let rules = lineRules[tag] else { return nil }
+    for rule in rules {
+      let hit = rule.contains ? body.contains(rule.match) : body.hasPrefix(rule.match)
+      if hit {
+        return pres(tr(rule.title), detailText(rule.detail, in: body))
+      }
+    }
+    return nil
+  }
+
+  private static func detailText(_ kind: DebugLogDetail, in body: String) -> String? {
+    var text: String?
+    switch kind {
+    case .none:
+      return nil
+    case .body:
+      text = body
+    case .afterColon:
+      if let found = body.range(of: ": ") { text = String(body[found.upperBound...]) }
+    case .after(let marker):
+      if let found = body.range(of: marker) { text = String(body[found.upperBound...]) }
+    case .parens:
+      if let open = body.firstIndex(of: "("), let close = body[open...].firstIndex(of: ")") {
+        text = String(body[body.index(after: open)..<close])
+      }
+    }
+    guard var value = text?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
+    value = value.replacingOccurrences(of: " -> ", with: " → ")
+    // A dump can be very long; the full text is always in the raw line.
+    if value.count > 400 {
+      value = String(value.prefix(400)) + "…"
+    }
+    return value
+  }
+
+  // MARK: Lines with a built detail
+
+  /// Why the mouse or keyboard capture changed, or why a stream ended: the identifiers the code
+  /// logs, in words. An identifier without an entry is shown as logged.
+  private static func reasonText(_ token: String) -> String {
+    switch token {
+    case "window-became-key": return tr("the window became active")
+    case "other-window-became-key": return tr("another window became active")
+    case "window-resigned-key": return tr("the window lost focus")
+    case "app-resigned-active": return tr("the app moved to the background")
+    case "active-space-changed": return tr("the desktop space changed")
+    case "window-entered-fullscreen": return tr("the window entered fullscreen")
+    case "mouse-exited-view": return tr("the mouse left the stream view")
+    case "request-safe-close-window", "close-window-from-main-queue":
+      return tr("the stream window is closing")
+    case "modifier-only-release-shortcut": return tr("the release shortcut was pressed")
+    case "free-mouse-edge-mouse-moved": return tr("the mouse moved past the screen edge")
+    case "edge-menu-hover-temporary-release": return tr("the pointer is over the edge menu")
+    case "controller-control-center": return tr("the control center was opened with a controller")
+    case "show-error-overlay": return tr("an error message is shown")
+    case "log-overlay": return tr("the log panel was opened")
+    case "keyboard-custom-disconnect": return tr("the disconnect shortcut")
+    case "keyboard-custom-disconnect+after-option-uncapture":
+      return tr("the disconnect shortcut after releasing the mouse")
+    case "timeout-overlay-exit": return tr("exit chosen in the timeout notice")
+    case "disconnect-from-stream": return tr("the stream was disconnected")
+    case "mouse-moved-hybrid-sync": return tr("the mouse moved")
+    case "mouse-exited-view-buttons-down": return tr("the mouse left the view while a button was held")
+    case "mouse-exited-view-still-inside": return tr("the mouse left the view but is still inside")
+    default: return token
+    }
+  }
+
+  /// Why the stream route was classified as it was: comma separated identifiers from the log.
+  private static func routeReasonText(_ reason: String) -> String {
+    reason.split(separator: ",").map { part -> String in
+      let token = String(part)
+      if token.hasPrefix("route-via-") {
+        return tr("route via %@", String(token.dropFirst(10)))
+      }
+      switch token {
+      case "address-private-or-local": return tr("private or local address")
+      case "address-public-or-external": return tr("public address")
+      case "vpn-fallback-no-route": return tr("VPN assumed, no route found")
+      case "route-unknown-no-vpn": return tr("route unknown, no VPN")
+      default: return token
+      }
+    }.joined(separator: " · ")
+  }
+
+  private static func yesNo(_ value: String?) -> String {
+    value == "1" ? tr("yes") : tr("no")
+  }
+
+  /// "[diag]" lines whose detail is built from a few of their fields.
+  private static func diagPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Stream target selection:") {
+      return pres(
+        tr("Stream target selected"),
+        tr(
+          "Using %@ · local %@ · external IP %@", field("active", in: body) ?? "-",
+          field("local", in: body) ?? "-", field("external", in: body) ?? "-"))
+    }
+    if body.hasPrefix("Stream target classification:") {
+      return pres(
+        tr("Stream route classification completed"),
+        tr(
+          "%@ · external IP %@", routeReasonText(field("reason", in: body) ?? "-"),
+          field("external", in: body) ?? "-"))
+    }
+    if body.hasPrefix("Disconnect requested:") {
+      return pres(
+        tr("Received stream disconnect request"),
+        tr("Because %@", reasonText(field("source", in: body) ?? "-")))
+    }
+    if body.hasPrefix("Cancel pending reconnect") {
+      return pres(
+        tr("Pending reconnect cancelled"), tr("Because %@", reasonText(field("reason", in: body) ?? "-")))
+    }
+    if body.hasPrefix("Stream health summary") {
+      if body.contains("connection unavailable") {
+        return pres(tr("Stream health summary"), tr("The connection was no longer available"))
+      }
+      return pres(
+        tr("Stream health summary"),
+        tr(
+          "Received %@ · decoded %@ · rendered %@ · dropped %@", field("rf", in: body) ?? "-",
+          field("df", in: body) ?? "-", field("ren", in: body) ?? "-", field("dropped", in: body) ?? "-"))
+    }
+    if body.hasPrefix("Render stall suspected") {
+      return pres(
+        tr("Video may be frozen"),
+        tr(
+          "For %@ · received %@ · decoded %@ · rendered %@", between(body, "for ", " (") ?? "-",
+          field("rf", in: body) ?? "-", field("df", in: body) ?? "-", field("ren", in: body) ?? "-"))
+    }
+    if body.hasPrefix("startup-overlay") {
+      var status = between(body, "status=", " hidden=") ?? "-"
+      let suffix = " in progress..."
+      if status.hasSuffix(suffix) {
+        let name = String(status.dropLast(suffix.count))
+        let lowered = String(name.prefix(1)).lowercased() + String(name.dropFirst())
+        status = tr("%@ in progress", stageName(lowered))
+      } else if status == "Starting" {
+        status = tr("Stream is starting")
+      }
+      return pres(tr("Loading screen updated"), status)
+    }
+    if body.hasPrefix("Mouse uncapture:") {
+      let skipped = (field("stage", in: body) ?? "").hasPrefix("skip")
+      return pres(
+        skipped ? tr("Mouse release skipped") : tr("Mouse released from the stream"),
+        tr("Because %@", reasonText(field("reason", in: body) ?? "-")))
+    }
+    if body.hasPrefix("Mouse exit event:") {
+      let skipped = (field("stage", in: body) ?? "").hasPrefix("skip")
+      return pres(skipped ? tr("Mouse exit ignored") : tr("Mouse left the stream view"))
+    }
+    if body.hasPrefix("Key loss event:") {
+      return pres(
+        tr("Keyboard focus lost"), tr("Because %@", reasonText(field("reason", in: body) ?? "-")))
+    }
+    if body.hasPrefix("Active space change decision:") {
+      return pres(
+        tr("Desktop space changed"),
+        tr("Mouse released: %@", yesNo(field("release", in: body))))
+    }
+    if body.hasPrefix("CoreHID free mouse handoff:") {
+      return pres(
+        tr("Mouse handed back to macOS"),
+        tr("Because %@", reasonText(field("reason", in: body) ?? "-")))
+    }
+    if body.hasPrefix("Free mouse uncaptured") {
+      return pres(tr("Mouse left through the screen edge"))
+    }
+    if body.hasPrefix("Reasserted hidden local cursor") {
+      return pres(
+        tr("Local cursor hidden again"), tr("Because %@", reasonText(field("reason", in: body) ?? "-")))
+    }
+    if body.hasPrefix("deferred command resolved") {
+      return pres(tr("Command key shortcut resolved"))
+    }
+    return nil
+  }
+
+  /// Stream setup steps the protocol library announces ("Starting RTSP handshake...").
+  private static func stepPresentation(_ message: String) -> DebugLogPresentation? {
+    guard message.hasSuffix("...") else { return nil }
+    let verbs = ["Initializing ", "Starting ", "Stopping ", "Cleaning up ", "Resolving "]
+    for verb in verbs where message.hasPrefix(verb) {
+      let part: String
+      switch String(message.dropFirst(verb.count).dropLast(3)) {
+      case "platform": part = tr("Part platform")
+      case "host name": part = tr("Part host name")
+      case "host name resolution": part = tr("Part host name resolution")
+      case "audio stream": part = tr("Part audio stream")
+      case "control stream": part = tr("Part control stream")
+      case "video stream": part = tr("Part video stream")
+      case "input stream": part = tr("Part input stream")
+      case "RTSP handshake": part = tr("Part RTSP handshake")
+      default: return nil
+      }
+      switch verb {
+      case "Initializing ": return pres(tr("Initializing %@", part))
+      case "Starting ": return pres(tr("Starting %@", part))
+      case "Stopping ": return pres(tr("Stopping %@", part))
+      case "Cleaning up ": return pres(tr("Cleaning up %@", part))
+      default: return pres(tr("Resolving %@", part))
+      }
+    }
+    return nil
+  }
+
+  /// Host requests: the title says what is asked, the address and keys in the URL stay in the raw line.
+  private static func requestPresentation(_ message: String) -> DebugLogPresentation? {
+    guard message.hasPrefix("Requesting:") else { return nil }
+    if message.contains("/resume?") { return pres(tr("Requesting stream session resume")) }
+    if message.contains("/launch?") { return pres(tr("Requesting stream launch")) }
+    if message.contains("/serverinfo") { return pres(tr("Requesting host info")) }
+    if message.contains("/applist") { return pres(tr("Requesting the app list")) }
+    return pres(tr("Sending host request"))
+  }
+
+  /// Frame and audio loss warnings, with the numbers that matter.
+  private static func lossPresentation(_ message: String) -> DebugLogPresentation? {
+    if message.hasPrefix("Unrecoverable frame ") {
+      let frame = between(message, "frame ", ":") ?? "-"
+      return pres(
+        tr("A video frame could not be recovered"),
+        tr(
+          "Frame %@ · received %@ packets · needed %@", frame, between(message, "=", " received") ?? "-",
+          between(message, "< ", " needed") ?? "-"))
+    }
+    if message.hasPrefix("Sending RFI request for unrecoverable frame")
+      || message.hasPrefix("Sending speculative RFI request")
+    {
+      return pres(
+        tr("Asked the host to resend the picture"),
+        tr("Frame %@", message.split(separator: " ").last.map(String.init) ?? "-"))
+    }
+    if message.hasPrefix("Unable to recover audio data block") {
+      return pres(
+        tr("Audio data could not be recovered"),
+        tr(
+          "Blocks %@ · received %@ · needed %@", between(message, "block ", " (") ?? "-",
+          between(message, "=", " received") ?? "-", between(message, "< ", " needed") ?? "-"))
+    }
+    if message.hasPrefix("Network dropped audio data") {
+      return pres(
+        tr("The network dropped audio data"),
+        tr(
+          "Expected %@ · received %@", between(message, "expected ", ",") ?? "-",
+          between(message, "received ", ")") ?? "-"))
+    }
+    if message.hasPrefix("(and "), message.contains(" more dropped frame messages suppressed") {
+      return pres(tr("%@ more dropped-frame warnings hidden", between(message, "(and ", " more") ?? "-"))
+    }
+    return nil
+  }
+
   // MARK: Generated summaries
 
   /// "5.0s" or "5s" as logged, shown as a bare number of seconds.
@@ -2150,10 +2691,18 @@ enum DebugLogParser {
       return tr("Repeated address resolution: %@", between(detail, "resolution:", nil) ?? "?")
     }
     if detail.hasPrefix("primary cause:"), let target = detail.range(of: ", target: ") {
-      let cause = String(detail[detail.index(detail.startIndex, offsetBy: 14)..<target.lowerBound])
+      var cause = String(detail[detail.index(detail.startIndex, offsetBy: 14)..<target.lowerBound])
         .trimmingCharacters(in: .whitespaces)
-      return tr(
-        "Primary cause: %@ · Target: %@", cause, String(detail[target.upperBound...]))
+      if cause.hasPrefix("Error code ") {
+        cause = tr("Error code %@", String(cause.dropFirst("Error code ".count)))
+      } else if cause == "unknown error code" {
+        cause = tr("unknown error code")
+      }
+      var targetText = String(detail[target.upperBound...])
+      if targetText == "unknown target" {
+        targetText = tr("unknown target")
+      }
+      return tr("Primary cause: %@ · Target: %@", cause, targetText)
     }
     let known = [
       "certificate mismatches: ": "Certificate mismatches: %@",
