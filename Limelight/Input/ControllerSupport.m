@@ -676,6 +676,16 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         if (input != NULL && LiInputContextIsInitialized(input)) {
             [_controllerStreamLock lock];
             for (Controller *controller in _controllers.allValues) {
+                // The host holds the last rotation rate it was given. GameController stops reporting
+                // while the app is not active, so without this a game keeps turning on its own.
+                BOOL gyroRequested = NO;
+                @synchronized (controller) {
+                    gyroRequested = controller.gyroReportRateHz > 0;
+                }
+                if (gyroRequested) {
+                    LiSendControllerMotionEventCtx(input, (uint8_t)(_multiController ? controller.playerIndex : 0),
+                                                   LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
+                }
                 LiSendMultiControllerEventCtx(input, _multiController ? controller.playerIndex : 0,
                     _multiController ? (unsigned char)_controllerNumbers : 1, 0, 0, 0, 0, 0, 0, 0);
                 if (controller.trackpadMouseButton != 0)
@@ -1040,44 +1050,93 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     if (gamepad == nil) {
         return;
     }
-    if (@available(macOS 10.15, *)) {
-        if (gamepad.motion == nil) {
-            return;
-        }
-    } else {
+    GCMotion *motion = gamepad.motion;
+    if (motion == nil) {
         return;
     }
 
-    if (reportRateHz == 0) {
-        gamepad.motion.valueChangedHandler = nil;
+    // The host asks for the accelerometer and the gyro separately, so both requests are kept
+    // and one handler serves them; a handler per request would replace the other one.
+    BOOL anyRequested = NO;
+    @synchronized (controller) {
+        if (motionType == LI_MOTION_TYPE_ACCEL) {
+            controller.accelReportRateHz = reportRateHz;
+            controller.lastAccelReportTime = 0;
+        } else if (motionType == LI_MOTION_TYPE_GYRO) {
+            controller.gyroReportRateHz = reportRateHz;
+            controller.lastGyroReportTime = 0;
+        } else {
+            return;
+        }
+        anyRequested = controller.accelReportRateHz > 0 || controller.gyroReportRateHz > 0;
+    }
+
+    if (!anyRequested) {
+        motion.valueChangedHandler = nil;
+        motion.sensorsActive = NO;
         return;
     }
 
     __weak typeof(self) weakSelf = self;
-    gamepad.motion.valueChangedHandler = ^(GCMotion *motion) {
+    __weak Controller *weakController = controller;
+    motion.valueChangedHandler = ^(GCMotion *sample) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (strongSelf == nil) {
+        Controller *strongController = weakController;
+        if (strongSelf == nil || strongController == nil) {
             return;
         }
         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(strongSelf);
-        if (inputCtx == NULL) {
+        // Nothing is sent while controller delivery is paused; the pause itself sends a zero
+        // rotation so the host does not keep turning at the last rate.
+        if (inputCtx == NULL || !strongSelf->_shouldSendInputEvents) {
             return;
         }
 
-        if (motionType == LI_MOTION_TYPE_ACCEL) {
-            GCAcceleration acceleration = motion.userAcceleration;
-            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, motionType,
-                                           acceleration.x * 9.80665f,
-                                           acceleration.y * 9.80665f,
-                                           acceleration.z * 9.80665f);
-        } else if (motionType == LI_MOTION_TYPE_GYRO) {
-            GCRotationRate rotation = motion.rotationRate;
-            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, motionType,
-                                           rotation.x, rotation.y, rotation.z);
+        // Send at about the rate the host asked for. A sample is due once half the interval has
+        // passed: a DualSense over Bluetooth reports every 7.7 ms with some jitter, and anything
+        // stricter skips samples and sends at an uneven rate.
+        NSTimeInterval now = [NSProcessInfo processInfo].systemUptime;
+        BOOL sendAccel = NO;
+        BOOL sendGyro = NO;
+        @synchronized (strongController) {
+            unsigned short accelRate = strongController.accelReportRateHz;
+            if (accelRate > 0 && now - strongController.lastAccelReportTime >= 0.5 / accelRate) {
+                strongController.lastAccelReportTime = now;
+                sendAccel = YES;
+            }
+            unsigned short gyroRate = strongController.gyroReportRateHz;
+            if (gyroRate > 0 && now - strongController.lastGyroReportTime >= 0.5 / gyroRate) {
+                strongController.lastGyroReportTime = now;
+                sendGyro = YES;
+            }
+        }
+
+        // The protocol wants what SDL reports: acceleration in m/s² as the force holding the
+        // controller up (+g on Y when it lies flat) and rotation in deg/s, on SDL's gamepad axes
+        // (X right, Y out of the face, Z toward the player).
+        // GameController reports both sensors on one right-handed frame with X right, Y toward
+        // the top edge and Z out of the face, acceleration as the direction of gravity in g and
+        // rotation in rad/s. Measured on a DualSense: lying flat reads (0, 0, -1), standing on its
+        // grips reads (0, -1, 0), and integrating the rotation rate on these axes reproduces how
+        // the gravity reading moves. So both vectors take the same change of axes, (x, z, -y),
+        // and the acceleration is negated on top of it.
+        if (sendAccel) {
+            GCAcceleration acceleration = sample.acceleration;
+            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, LI_MOTION_TYPE_ACCEL,
+                                           (float)(-acceleration.x * 9.80665),
+                                           (float)(-acceleration.z * 9.80665),
+                                           (float)(acceleration.y * 9.80665));
+        }
+        if (sendGyro && sample.hasRotationRate) {
+            static const double kRadiansToDegrees = 57.29577951308232;
+            GCRotationRate rotation = sample.rotationRate;
+            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, LI_MOTION_TYPE_GYRO,
+                                           (float)(rotation.x * kRadiansToDegrees),
+                                           (float)(rotation.z * kRadiansToDegrees),
+                                           (float)(-rotation.y * kRadiansToDegrees));
         }
     };
-    gamepad.motion.sensorsActive = YES;
-    (void)reportRateHz;
+    motion.sensorsActive = YES;
 }
 
 -(void) updateLeftStick:(Controller*)controller x:(short)x y:(short)y

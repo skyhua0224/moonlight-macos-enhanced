@@ -72,4 +72,11 @@
 @property(nonatomic) BOOL isMouseMode;
 @property(nonatomic) int lastMouseModeButtonFlags;
 
+// Motion sensor reports the host asked for (0 = off) and when each was last sent.
+// Guarded by @synchronized on the controller.
+@property(nonatomic) unsigned short accelReportRateHz;
+@property(nonatomic) unsigned short gyroReportRateHz;
+@property(nonatomic) NSTimeInterval lastAccelReportTime;
+@property(nonatomic) NSTimeInterval lastGyroReportTime;
+
 @end
