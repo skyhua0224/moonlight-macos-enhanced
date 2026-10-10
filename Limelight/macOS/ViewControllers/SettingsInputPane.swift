@@ -283,7 +283,7 @@ private struct KeyboardMouseSettingsSection: View {
           accessibility.offerPermissionIfNeeded()
         }
       }
-      ToggleCell(title: "Input Method Text", hintKey: "Input Method Text Hint", boolBinding: $settingsModel.imeTextInput)
+      ToggleCell(title: "Type Text with the macOS Input Method", hintKey: "Type Text with the macOS Input Method Hint", boolBinding: $settingsModel.imeTextInput)
       SettingsRow(title: "Pointer Speed") {
         Slider(value: $settingsModel.pointerSensitivity, in: 0.25...3.0)
           .controllerSlider(value: $settingsModel.pointerSensitivity, in: 0.25...3.0)

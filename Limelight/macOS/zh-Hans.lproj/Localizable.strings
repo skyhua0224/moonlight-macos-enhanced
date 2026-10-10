@@ -1304,8 +1304,8 @@
 "DualSense Touchpad Output detail" = "“手柄触控板”按上方设置把触控板作为游戏手柄触摸或 Mac 风格触控板发送；“Windows 精确式触控板”则把手指和按压作为精确式触控板发送，需要支持该功能的 Windows 11 主机，不支持时自动使用手柄触控板。DualSense 触控板最多识别两根手指，因此只支持单指和双指手势，不支持三指和四指手势。";
 "DualSense Touchpad Output Controller" = "手柄触控板（默认）";
 "DualSense Touchpad Output Precision" = "Windows 精确式触控板";
-"Input Method Text" = "输入法文字";
-"Input Method Text Hint" = "使用拼音等 Mac 输入法时，在本机完成组字，并把确认后的文字以 UTF-8 发送到主机。普通按键和快捷键仍作为按键事件发送。";
+"Type Text with the macOS Input Method" = "使用 macOS 输入法输入文字";
+"Type Text with the macOS Input Method Hint" = "使用拼音等 Mac 输入法时，在本机完成组字，并把确认后的文字以 UTF-8 发送到主机。普通按键和快捷键仍作为按键事件发送。";
 "Live stream change failed, reconnecting" = "实时调整未生效，正在重新连接";
 "Bitrate set to %@ Mbps" = "码率已设为 %@ Mbps";
 "Frame rate set to %d FPS" = "帧率已设为 %d FPS";
