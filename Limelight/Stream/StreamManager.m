@@ -28,6 +28,14 @@
     Connection* _connection;
     NSOperationQueue* _connectionQueue;
     VideoDecoderRenderer* _renderer;
+    // Built on the main thread while the host launches the app, bound to the launch
+    // reply later. Not exposed as -connection until then: the connect watchdog treats a
+    // visible connection as "RTSP/video startup has begun". Guarded by _preparedLock.
+    Connection* _preparedConnection;
+    // Set once the prepared connection was discarded; an early block still queued on the
+    // main thread must then not build one.
+    BOOL _preparedClosed;
+    NSObject* _preparedLock;
 }
 
 @synthesize connection = _connection;
@@ -43,6 +51,7 @@
     _callbacks = callbacks;
     _config.riKey = [Utils randomBytes:16];
     _config.riKeyId = arc4random();
+    _preparedLock = [[NSObject alloc] init];
     return self;
 }
 
@@ -118,21 +127,70 @@
         }
     }
 
+    // Populate the config's version fields from serverinfo. They do not depend on the
+    // launch/resume reply and the request does not read them, so they are set before it
+    // goes out and let the Connection be built while the host is busy.
+    _config.appVersion = appversion;
+    _config.gfeVersion = gfeVersion;
+    // VddCapabilityVersion only exists in Foundation Sunshine serverinfo. Runtime
+    // stream changes (0x5506) are a Foundation protocol extension.
+    _config.foundationHost = [serverInfoResp getStringTag:@"VddCapabilityVersion"] != nil;
+
+    // Everything the Connection reads from the config is final now (serverinfo fields, and
+    // the bitrate after the optional probe) except the session URL from the reply.
+    __block uint64_t connectionPreparedMs = 0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.isCancelled || self->_callbacks == nil) {
+            return;
+        }
+        @synchronized (self->_preparedLock) {
+            if (self->_preparedClosed) {
+                return;
+            }
+        }
+
+        uint64_t prepareStartMs = LiGetMillis();
+        if (self->_renderer == nil) {
+            self->_renderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView];
+            [self->_renderer prewarmPresentationForStreamConfig:self->_config];
+            rendererWarmupFinishedMs = LiGetMillis();
+        }
+
+        Connection* prepared = [[Connection alloc] initWithConfig:self->_config renderer:self->_renderer connectionCallbacks:self->_callbacks];
+        BOOL abandoned = NO;
+        @synchronized (self->_preparedLock) {
+            // stopStream cancels before it looks for a prepared connection, so either it
+            // sees this one or this check sees the cancellation.
+            abandoned = self.isCancelled || self->_callbacks == nil || self->_preparedClosed;
+            if (!abandoned) {
+                self->_preparedConnection = prepared;
+            }
+        }
+        if (abandoned) {
+            [prepared terminate];
+            return;
+        }
+        connectionPreparedMs = LiGetMillis() - prepareStartMs;
+    });
+
     // resumeApp and launchApp handle calling launchFailed
     const uint64_t hostLaunchStartMs = LiGetMillis();
     if ([serverState hasSuffix:@"_SERVER_BUSY"]) {
         // App already running, resume it
         if (![self resumeApp:hMan]) {
+            [self discardPreparedConnection];
             return;
         }
     } else {
         // Start app
         if (![self launchApp:hMan]) {
+            [self discardPreparedConnection];
             return;
         }
     }
     const uint64_t hostLaunchEndMs = LiGetMillis();
     if (self.isCancelled || _callbacks == nil) {
+        [self discardPreparedConnection];
         return;
     }
     
@@ -145,12 +203,6 @@
                                                    y:_config.height / screenSize.height];
 #endif
     
-    // Populate the config's version fields from serverinfo
-    _config.appVersion = appversion;
-    _config.gfeVersion = gfeVersion;
-    // VddCapabilityVersion only exists in Foundation Sunshine serverinfo. Runtime
-    // stream changes (0x5506) are a Foundation protocol extension.
-    _config.foundationHost = [serverInfoResp getStringTag:@"VddCapabilityVersion"] != nil;
     Log(LOG_I, @"[live] Foundation host=%d", _config.foundationHost ? 1 : 0);
     Log(LOG_I, @"[startup] Network prep crypto=%llums serverInfo=%llums hostLaunch=%llums total=%llums",
         (unsigned long long)(cryptoEndMs - cryptoStartMs),
@@ -165,15 +217,27 @@
         }
 
         uint64_t mainBindStartMs = LiGetMillis();
-        if (self->_renderer == nil) {
-            self->_renderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView];
-            [self->_renderer prewarmPresentationForStreamConfig:self->_config];
-            rendererWarmupFinishedMs = LiGetMillis();
+        Connection* connection = nil;
+        @synchronized (self->_preparedLock) {
+            connection = self->_preparedConnection;
+            self->_preparedConnection = nil;
         }
+        const BOOL preparedEarly = connection != nil;
+        if (!preparedEarly) {
+            // Not prepared ahead (the early block was skipped); build it now.
+            if (self->_renderer == nil) {
+                self->_renderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView];
+                [self->_renderer prewarmPresentationForStreamConfig:self->_config];
+                rendererWarmupFinishedMs = LiGetMillis();
+            }
+            connection = [[Connection alloc] initWithConfig:self->_config renderer:self->_renderer connectionCallbacks:self->_callbacks];
+        }
+        [connection bindLaunchResultWithSessionUrl:self->_config.sessionUrl];
 
-        self->_connection = [[Connection alloc] initWithConfig:self->_config renderer:self->_renderer connectionCallbacks:self->_callbacks];
+        self->_connection = connection;
         if (self.isCancelled || self->_callbacks == nil) {
             self->_connection = nil;
+            [connection terminate];
             return;
         }
 
@@ -181,11 +245,13 @@
         self->_connectionQueue = [[NSOperationQueue alloc] init];
         self->_connectionQueue.maxConcurrentOperationCount = 1;
         [self->_connectionQueue addOperation:self->_connection];
-        Log(LOG_I, @"[startup] Main bind rendererWarmupQueued=%llums rendererWarmupReady=%llums connectionQueue=%llums total=%llums",
+        Log(LOG_I, @"[startup] Main bind rendererWarmupQueued=%llums rendererWarmupReady=%llums connectionQueue=%llums total=%llums connectionPrepared=%llums early=%d",
             rendererWarmupScheduledMs != 0 ? (unsigned long long)(rendererWarmupScheduledMs - startupStartMs) : 0,
             rendererWarmupFinishedMs != 0 ? (unsigned long long)(rendererWarmupFinishedMs - startupStartMs) : 0,
             (unsigned long long)(LiGetMillis() - mainBindStartMs),
-            (unsigned long long)(LiGetMillis() - startupStartMs));
+            (unsigned long long)(LiGetMillis() - startupStartMs),
+            (unsigned long long)connectionPreparedMs,
+            preparedEarly ? 1 : 0);
     });
 }
 
@@ -195,7 +261,21 @@
     [_connectionQueue cancelAllOperations];
     _connectionQueue = nil;
     [_connection terminate];
+    [self discardPreparedConnection];
     _callbacks = nil;
+}
+
+// Tears down a connection that was built ahead of the launch reply but never started.
+// terminate also removes it from the connection registry, which would otherwise keep it alive.
+// Safe from any thread and idempotent.
+- (void)discardPreparedConnection {
+    Connection* prepared = nil;
+    @synchronized (_preparedLock) {
+        prepared = _preparedConnection;
+        _preparedConnection = nil;
+        _preparedClosed = YES;
+    }
+    [prepared terminate];
 }
 
 // Fraction of the measured throughput treated as sustainable for a video stream.

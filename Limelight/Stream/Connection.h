@@ -107,6 +107,10 @@ BOOL MLAppleDolbyVisionDirectSurfaceAvailable(unsigned int targetDisplayID);
 - (id)initWithConfig:(StreamConfiguration *)config
                renderer:(VideoDecoderRenderer *)myRenderer
     connectionCallbacks:(id<ConnectionCallbacks>)callbacks;
+// Completes a connection that was built before the host answered launch/resume: applies the
+// RTSP session URL from the reply (may be nil) and records the host's Foundation flag.
+// Call once, before the connection is started.
+- (void)bindLaunchResultWithSessionUrl:(NSString *)sessionUrl;
 - (void *)inputStreamContext;
 - (void *)controlStreamContext;
 - (BOOL)isClipboardControlReady;

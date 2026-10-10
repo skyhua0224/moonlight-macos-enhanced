@@ -3948,11 +3948,9 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         _serverInfo.serverInfoGfeVersion = _gfeVersionString;
     }
 
-    if (config.sessionUrl != nil) {
-        strncpy(_rtspSessionUrl, [config.sessionUrl UTF8String], sizeof(_rtspSessionUrl) - 1);
-        _rtspSessionUrl[sizeof(_rtspSessionUrl) - 1] = '\0';
-        _serverInfo.rtspSessionUrl = _rtspSessionUrl;
-    }
+    // The RTSP session URL only exists once the host answered launch/resume. It is applied by
+    // -bindLaunchResultWithSessionUrl:, so this object can be built while that request is
+    // still in flight.
 
     ConnectionSetRenderer(self, myRenderer);
     [myRenderer updateHostHDRMetadata:NULL];
@@ -4117,9 +4115,6 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     // the host never acknowledges the codec, so the effective choice is made here
     // and ArInit cross-checks it against what the library actually requests.
     _audioHostKey = [config.hostUUID copy];
-    if (_audioHostKey.length > 0) {
-        [SettingsClass recordFoundationHost:config.foundationHost forHost:_audioHostKey];
-    }
     NSInteger userAudioCodec = _audioHostKey.length > 0 ? [SettingsClass audioCodecFor:_audioHostKey]
                                                         : config.audioCodec;
     BOOL userAudioCodecFailed = _audioHostKey.length > 0 &&
@@ -4355,6 +4350,20 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     Log(LOG_I, @"[controller-haptics] Negotiation mode=%@", physicalDs5Audio ? @"USB-PCM" : @"Bluetooth-IR-v2");
 
     return self;
+}
+
+- (void)bindLaunchResultWithSessionUrl:(NSString *)sessionUrl {
+    // Only a host whose launch/resume succeeded leaves a trace in the settings; building the
+    // connection ahead of the reply must not record anything for a launch that then fails.
+    if (_audioHostKey.length > 0) {
+        [SettingsClass recordFoundationHost:_foundationHost forHost:_audioHostKey];
+    }
+
+    if (sessionUrl != nil) {
+        strncpy(_rtspSessionUrl, [sessionUrl UTF8String], sizeof(_rtspSessionUrl) - 1);
+        _rtspSessionUrl[sizeof(_rtspSessionUrl) - 1] = '\0';
+        _serverInfo.rtspSessionUrl = _rtspSessionUrl;
+    }
 }
 
 - (void *)inputStreamContext {
