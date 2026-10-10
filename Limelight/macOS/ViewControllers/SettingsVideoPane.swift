@@ -243,6 +243,7 @@ private struct HDRCapabilityRow: View {
     .overlay(alignment: .bottom) {
       Divider().opacity(0.45)
     }
+    .settingsSearchRow(title: capability.titleKey)
   }
 }
 

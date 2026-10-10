@@ -377,7 +377,7 @@ struct AboutUpdatesSettingsPage: View {
   }
 
   var body: some View {
-    ScrollView {
+    SettingsSearchScrollView {
       VStack(alignment: .leading, spacing: 20) {
         AboutHeroCard(version: appVersion)
         AboutUpdateCard(
@@ -461,6 +461,7 @@ private struct AboutHeroCard: View {
     .frame(maxWidth: .infinity)
     .padding(.vertical, 24)
     .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    .settingsSearchEntry("Moonlight macOS Enhanced")
   }
 }
 
@@ -541,6 +542,7 @@ private struct AboutUpdateCard: View {
         .disabled(sparkle.isConfigured ? !sparkle.canCheckUpdates : checker.state == .checking)
       }
       .padding(16)
+      .settingsSearchEntry("Check for Updates")
     }
     .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
   }

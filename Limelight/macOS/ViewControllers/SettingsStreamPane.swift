@@ -209,6 +209,8 @@ struct StreamView: View {
               })
             .frame(width: 220, alignment: .trailing)
           }
+          // Same title as the toggle above: the toggle is the search target.
+          .settingsSearchTargetSuppressed()
 
           if settingsModel.selectedRemoteResolution == .zero {
             SettingsRow(title: "Remote Custom Resolution") {
@@ -306,6 +308,8 @@ private struct BitrateSettingsSection: View {
           .accessibilityLabel(Text("Bitrate"))
           .accessibilityValue(Text("\(Double(settingsModel.effectiveBitrateKbps) / 1000, format: .number.precision(.fractionLength(0...3))) Mbps"))
       }
+      // Same title as the numeric row above: that row is the search target.
+      .settingsSearchTargetSuppressed()
     }
   }
 }

@@ -96,9 +96,18 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
   }
 }
 
+/// What a search entry points at: a whole pane, a titled section of a pane, or
+/// one row. Rows and sections can be scrolled to; panes scroll to the top.
+enum SettingsSearchEntryKind: Hashable {
+  case pane
+  case section
+  case row
+}
+
 struct SettingsSearchEntry: Identifiable, Hashable {
   let id: String
   let pane: SettingsPaneType
+  let kind: SettingsSearchEntryKind
   let sectionKey: String
   let titleKey: String
   let detailKey: String?
@@ -126,6 +135,7 @@ enum SettingsSearchIndex {
     return SettingsSearchEntry(
       id: entry.id,
       pane: entry.pane,
+      kind: entry.kind,
       sectionKey: entry.sectionKey,
       titleKey: entry.titleKey,
       detailKey: entry.detailKey,
@@ -295,6 +305,7 @@ private struct SettingsSidebar: View {
               ForEach(searchResults) { result in
                 Button {
                   selection = result.pane
+                  SettingsSearchNavigator.shared.navigate(to: result)
                   query = ""
                 } label: {
                   VStack(alignment: .leading, spacing: 2) {
@@ -407,6 +418,10 @@ private struct SettingsDetail: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
     .environmentObject(settingsModel)
+    // Rows outside any titled section belong to the pane itself, which is how
+    // the search index names them.
+    .environment(\.settingsSearchPane, effectivePane)
+    .environment(\.settingsSearchSection, effectivePane.titleKey)
     .background(Color(nsColor: .windowBackgroundColor).opacity(0.96))
   }
 }

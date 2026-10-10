@@ -29,6 +29,18 @@ Markers in the Swift sources (line comments):
 A row that cannot be attributed to a pane makes the script fail, naming
 file:line, so nothing is dropped silently.
 
+Scrolling to a search result (SettingsSearchScrollID in
+SettingsSharedControls.swift) identifies a row by its section and title and a
+section by its title, the same keys written into the entries. The script keeps
+the two sides in sync:
+
+* Every `entry` marker needs a matching `.settingsSearchEntry("Title")`
+  modifier on the view it describes (inside the same struct).
+* When two rows of one pane share a section and a title, the first one in
+  layout order is the entry (and the scroll target). Each later one must be
+  followed by `.settingsSearchTargetSuppressed()`, otherwise two views would
+  carry the same id.
+
 Usage:
   generate_settings_search_index.py            write the generated Swift file
   generate_settings_search_index.py --check    exit 1 when the file is stale
@@ -635,6 +647,9 @@ def build_capability_index(files):
 # The index builder
 # ---------------------------------------------------------------------------
 
+_SUPPRESS_RE = re.compile(r"\s*\.settingsSearchTargetSuppressed\(\)")
+
+
 class Entry(object):
     def __init__(self, kind, section, title, detail, keywords):
         self.kind = kind
@@ -660,6 +675,7 @@ class Generator(object):
         self.seen = set()
         self.visited = set()
         self.emitted = set()    # (decl uid, position) of rows/markers attributed
+        self.row_sites = {}     # (pane, section, title) -> where the first row was seen
         self.notes = []
 
     # -- loading ----------------------------------------------------------
@@ -877,8 +893,10 @@ class Generator(object):
             elif kind == "marker":
                 title, detail, keywords = extra
                 self.emitted.add((d.uid, pos))
-                self._add(pane, Entry("row", enclosing_section(pos, None) or self.pane_title[pane],
-                                      title, detail, keywords))
+                self._check_marker_modifier(d, pos, title)
+                section = enclosing_section(pos, None) or self.pane_title[pane]
+                self._note_row_site(pane, section, title, f.where(pos), True)
+                self._add(pane, Entry("row", section, title, detail, keywords))
             elif kind == "ref":
                 child_env = self._bind_env(call, env)
                 for child in self.by_name.get(extra, []):
@@ -941,8 +959,28 @@ class Generator(object):
                     detail = values[0]
                     break
         keywords = self._keywords(f, call, items, env)
+        suppressed = _SUPPRESS_RE.match(f.masked, call.end) is not None
         for title in titles:
+            self._note_row_site(pane, section or self.pane_title[pane], title, f.where(call.start), suppressed)
             self._add(pane, Entry("row", section or self.pane_title[pane], title, detail, keywords))
+
+    def _check_marker_modifier(self, d, pos, title):
+        pattern = r'\.settingsSearchEntry\(\s*%s\s*\)' % re.escape(swift_string(title))
+        if not re.search(pattern, d.f.src[d.open:d.close]):
+            raise GenError('%s: the entry marker "%s" needs a matching .settingsSearchEntry(%s) on the view '
+                           "it describes inside %s, so the search result can scroll to it"
+                           % (d.f.where(pos), title, swift_string(title), d.name))
+
+    def _note_row_site(self, pane, section, title, where, suppressed):
+        """Two rows with one section and title would share a scroll id."""
+        key = (pane, section, title)
+        if key not in self.row_sites:
+            self.row_sites[key] = where
+            return
+        if not suppressed:
+            raise GenError('%s: row "%s" in section "%s" repeats the row at %s; add '
+                           ".settingsSearchTargetSuppressed() after it so only the first row is the scroll target"
+                           % (where, title, section, self.row_sites[key]))
 
     def _keywords(self, f, call, items, env):
         nested = self._nested_ranges(call, items)
@@ -1136,8 +1174,8 @@ def render(result):
             detail = "nil" if entry.detail is None else swift_string(entry.detail)
             keywords = "[%s]" % ", ".join(swift_string(w) for w in entry.keywords)
             lines.append(
-                "    SettingsSearchEntry(id: %s, pane: .%s, sectionKey: %s, titleKey: %s, detailKey: %s, keywords: %s),"
-                % (swift_string(entry_id), pane, swift_string(entry.section),
+                "    SettingsSearchEntry(id: %s, pane: .%s, kind: .%s, sectionKey: %s, titleKey: %s, detailKey: %s, keywords: %s),"
+                % (swift_string(entry_id), pane, entry.kind, swift_string(entry.section),
                    swift_string(entry.title), detail, keywords))
         lines.append("  ]")
         lines.append("")

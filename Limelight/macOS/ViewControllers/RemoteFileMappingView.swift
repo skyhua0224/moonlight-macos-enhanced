@@ -61,7 +61,7 @@ struct RemoteFileMappingView: View {
         }
       }
 
-      SettingsFileListSection(title: model.currentPath.isEmpty ? "Files" : model.currentPath) {
+      SettingsFileListSection(title: model.currentPath.isEmpty ? "Files" : model.currentPath, searchKey: "Files") {
         if model.entries.isEmpty {
           SettingsFileListPlaceholder(textKey: model.isListing ? "Loading folder…" : "Folder is empty")
         } else {
@@ -148,12 +148,16 @@ enum HostFileIcon {
 /// the item lists in System Settings (for example Login Items).
 struct SettingsFileListSection<Rows: View, Toolbar: View>: View {
   let title: String
+  /// Stable name used by settings search when `title` changes at runtime
+  /// (the file list is titled with the current path).
+  let searchKey: String
   let rows: Rows
   let toolbar: Toolbar
   private let hasToolbar: Bool
 
-  init(title: String, @ViewBuilder rows: () -> Rows, @ViewBuilder toolbar: () -> Toolbar) {
+  init(title: String, searchKey: String? = nil, @ViewBuilder rows: () -> Rows, @ViewBuilder toolbar: () -> Toolbar) {
     self.title = title
+    self.searchKey = searchKey ?? title
     self.rows = rows()
     self.toolbar = toolbar()
     hasToolbar = true
@@ -181,12 +185,14 @@ struct SettingsFileListSection<Rows: View, Toolbar: View>: View {
       .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
       .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
+    .settingsSearchSection(searchKey)
   }
 }
 
 extension SettingsFileListSection where Toolbar == EmptyView {
-  init(title: String, @ViewBuilder rows: () -> Rows) {
+  init(title: String, searchKey: String? = nil, @ViewBuilder rows: () -> Rows) {
     self.title = title
+    self.searchKey = searchKey ?? title
     self.rows = rows()
     toolbar = EmptyView()
     hasToolbar = false

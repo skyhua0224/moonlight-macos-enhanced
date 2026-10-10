@@ -197,6 +197,7 @@ private struct ControllerDeadzoneRow: View {
         .controllerSlider(value: $value, in: 0...0.30, step: 0.01)
     }
     .padding(.vertical, 8)
+    .settingsSearchEntry("Controller Deadzone")
   }
 }
 
@@ -355,7 +356,7 @@ private struct USBMappingView: View {
   }
 
   var body: some View {
-    ScrollView {
+    SettingsSearchScrollView {
       VStack(alignment: .leading, spacing: 22) {
         USBMappingHeader(
           mappingEnabled: $mappingEnabled,
@@ -479,6 +480,7 @@ private struct USBDeviceGroup: View {
       .padding(.vertical, 3)
       .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
+    .settingsSearchSection(title)
   }
 }
 

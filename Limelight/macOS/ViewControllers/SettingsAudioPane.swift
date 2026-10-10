@@ -7,7 +7,7 @@ struct AudioView: View {
   @ObservedObject private var microphoneManager = MicrophoneManager.shared
 
   var body: some View {
-    ScrollView {
+    SettingsSearchScrollView {
       VStack(alignment: .leading, spacing: 22) {
         SettingsPageHero(
           title: "Audio & Microphone",
@@ -143,6 +143,7 @@ struct AudioView: View {
             .disabled(microphoneManager.permissionStatus != .authorized)
           }
           .frame(minHeight: 36)
+          .settingsSearchEntry("Start Test")
           if microphoneManager.isTesting {
             ProgressView(value: Double(microphoneManager.inputLevel), total: 1)
               .padding(.vertical, 8)
@@ -190,6 +191,7 @@ private struct AudioCompactGroup<Content: View>: View {
       .padding(.vertical, 2)
       .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
+    .settingsSearchSection(title)
   }
 }
 
@@ -216,6 +218,7 @@ private struct AudioCompactRow<Content: View>: View {
         Divider().opacity(0.45)
       }
     }
+    .settingsSearchRow(title: title)
   }
 }
 
@@ -243,6 +246,7 @@ private struct AudioCompactSliderRow: View {
         Divider().opacity(0.45)
       }
     }
+    .settingsSearchRow(title: title)
   }
 }
 
