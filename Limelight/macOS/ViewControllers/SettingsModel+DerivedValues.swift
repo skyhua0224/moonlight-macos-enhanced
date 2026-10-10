@@ -1057,6 +1057,56 @@ extension SettingsModel {
       ?? defaultDynamicHdrPreference
   }
 
+  /// The chroma / Dolby Vision decision a stream started with the current
+  /// settings would get. Same rule and same inputs as the stream start path
+  /// (`StreamChromaDecision`); Dolby Vision counts as usable when the capability
+  /// matrix does not report it unavailable on this Mac.
+  var streamChromaDecision: StreamChromaDecision {
+    let dolbyVisionItem = videoCapabilityMatrix.items.first { $0.id == "display.dolbyVision81" }
+    let dolbyVisionUsable = (dolbyVisionItem?.availability ?? .unavailable) != .unavailable
+    return StreamChromaDecision.resolve(
+      hdrEnabled: hdr,
+      videoCodecPreference: Self.getInt(from: selectedVideoCodec, in: Self.videoCodecs),
+      dynamicHdrPreference: Self.dynamicHdrPreferenceRawValue(for: selectedDynamicHdrPreference),
+      requestedYUV444: enableYUV444,
+      dolbyVisionUsable: dolbyVisionUsable)
+  }
+
+  /// The chroma a stream would request: the YUV 4:4:4 setting, except when an
+  /// explicit Dolby Vision choice drops it for the session.
+  var effectiveStreamYUV444: Bool {
+    streamChromaDecision.effectiveYUV444
+  }
+
+  /// Short note shown under the Dynamic HDR Preference row when the YUV 4:4:4
+  /// setting changes what this preference does; nil when there is nothing to say.
+  var dynamicHdrChromaNoteKey: String? {
+    let decision = streamChromaDecision
+    if decision.droppedYUV444ForDolbyVision {
+      return "Dynamic HDR chroma note dolby vision"
+    }
+    if decision.suppressedDolbyVisionForYUV444 {
+      return "Dynamic HDR chroma note automatic"
+    }
+    return nil
+  }
+
+  /// Adjusts the HDR Capabilities rows for the chroma setting. Dolby Vision is
+  /// reported as limited while Automatic keeps 4:4:4, because Automatic then
+  /// does not offer it. Other rows and other cases pass through unchanged.
+  func capabilityItemsAdjustedForChroma(_ items: [VideoCapabilityItem]) -> [VideoCapabilityItem] {
+    guard streamChromaDecision.suppressedDolbyVisionForYUV444 else { return items }
+    return items.map { item in
+      guard item.id.hasPrefix("display.dolbyVision"), item.availability == .available
+      else { return item }
+      return VideoCapabilityItem(
+        id: item.id,
+        titleKey: item.titleKey,
+        availability: .limited,
+        detailKey: "Dolby Vision capability detail yuv444")
+    }
+  }
+
   static let displaySyncModeOptions: [(title: String, value: Int)] = [
     ("Auto", 0),
     ("On", 1),
@@ -1609,7 +1659,7 @@ extension SettingsModel {
     let res = effectiveResolutionForBitrate()
     let fps = effectiveFpsForBitrate()
     let kbps = Self.getDefaultBitrateKbps(
-      width: Int(res.width), height: Int(res.height), fps: fps, yuv444: enableYUV444)
+      width: Int(res.width), height: Int(res.height), fps: fps, yuv444: effectiveStreamYUV444)
 
     let clamped = Self.clampedBitrateKbps(kbps, unlocked: unlockMaxBitrate)
     isAdjustingBitrate = true

@@ -86,7 +86,7 @@ static int MLResolvedDynamicRangeModeForPreference(BOOL hdrEnabled, int hdrTrans
     }
 }
 
-static BOOL MLAppleDolbyVisionDirectSurfaceAvailable(unsigned int targetDisplayID) {
+BOOL MLAppleDolbyVisionDirectSurfaceAvailable(unsigned int targetDisplayID) {
 #if TARGET_OS_OSX
     if (@available(macOS 15.0, *)) {
         if (!VTIsHardwareDecodeSupported(kCMVideoCodecType_DolbyVisionHEVC) ||
@@ -2688,21 +2688,10 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     // If HDR is requested, at least one 10-bit codec path must be available.
     assert(!(config.enableHdr || config.enable10BitSdr) || hevcSupported || av1Supported);
 
-    BOOL enableYuv444 = NO;
-    @try {
-        NSString* uuid = config.hostUUID;
-        if (uuid == nil && config.host != nil) {
-            uuid = [SettingsClass getHostUUIDFrom:config.host];
-        }
-
-        NSString* settingsKey = uuid != nil ? uuid : @"__global__";
-        NSDictionary* settings = [SettingsClass getSettingsFor:settingsKey];
-        if (settings != nil) {
-            enableYuv444 = [settings[@"yuv444"] boolValue];
-        }
-    } @catch (NSException* exception) {
-        enableYuv444 = NO;
-    }
+    // The chroma decision (including dropping 4:4:4 for an explicit Dolby
+    // Vision choice) is resolved once by the stream start path; see
+    // StreamChromaDecision.
+    BOOL enableYuv444 = config.enableYuv444;
 
     int supportedVideoFormats = VIDEO_FORMAT_H264;
     if (hevcSupported) {
@@ -2772,7 +2761,10 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     // Auto resolves to PQ above, so Dolby Vision follows the resolved mode
     // rather than requiring an explicit PQ/HLG choice. The host picks DV only
     // when its encoder can attach an RPU and falls back to HDR10/HDR10+.
-    if (config.enableHdr && MLAppleDolbyVisionDirectSurfaceAvailable(config.hdrTargetDisplayID)) {
+    // Automatic with 4:4:4 keeps 4:4:4 and withholds Dolby Vision, which is
+    // defined only for 4:2:0 (config.suppressDolbyVision).
+    if (config.enableHdr && !config.suppressDolbyVision &&
+        MLAppleDolbyVisionDirectSurfaceAvailable(config.hdrTargetDisplayID)) {
         if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HDR10_PQ) {
             _streamConfig.dynamicHdrCaps |= DYNAMIC_HDR_CAPS_DOLBY_VISION_81;
         } else if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HLG) {
@@ -2781,6 +2773,20 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         _streamConfig.dolbyVisionDirectSurface = 1;
         Log(LOG_I, @"[hdr] Apple Dolby Vision direct-surface candidate enabled: dynamicRangeMode=%d caps=0x%x",
             _streamConfig.dynamicRangeMode,
+            _streamConfig.dynamicHdrCaps);
+    }
+    {
+        BOOL dolbyVisionOffered = (_streamConfig.dynamicHdrCaps &
+            (DYNAMIC_HDR_CAPS_DOLBY_VISION_81 | DYNAMIC_HDR_CAPS_DOLBY_VISION_84)) != 0;
+        Log(LOG_I, @"[hdr] Chroma/dynamic HDR decision: dynamicHdrPreference=%d hdr=%d codecPref=%d yuv444Requested=%d yuv444Effective=%d dolbyVisionOffered=%d dolbyVisionSuppressedForYuv444=%d yuv444DroppedForDolbyVision=%d dynamicHdrCaps=0x%x",
+            _streamConfig.dynamicHdrPreference,
+            config.enableHdr ? 1 : 0,
+            config.videoCodecPreference,
+            config.requestedYuv444 ? 1 : 0,
+            config.enableYuv444 ? 1 : 0,
+            dolbyVisionOffered ? 1 : 0,
+            config.suppressDolbyVision ? 1 : 0,
+            (config.requestedYuv444 && !config.enableYuv444) ? 1 : 0,
             _streamConfig.dynamicHdrCaps);
     }
     Log(LOG_I, @"[diag] Dynamic range resolved: hdr=%d tenBitSdr=%d tf=%d dynamicRangeMode=%d",

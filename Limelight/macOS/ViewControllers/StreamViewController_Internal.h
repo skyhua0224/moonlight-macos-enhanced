@@ -335,6 +335,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) uint64_t connectionLastIdrRequestMs;
 @property (nonatomic) NSInteger runtimeAutoBitrateCapKbps;
 @property (nonatomic) NSInteger runtimeAutoBitrateBaselineKbps;
+// Chroma the running session requested from the host (4:4:4 can be dropped for an explicit Dolby Vision choice).
+@property (nonatomic) BOOL sessionEffectiveYuv444;
 @property (nonatomic) NSUInteger runtimeAutoBitrateStableStreak;
 @property (nonatomic) uint64_t runtimeAutoBitrateLastRaiseMs;
 

@@ -55,6 +55,13 @@
 @property(nonatomic) int dynamicHdrCaps;
 @property(nonatomic) int dolbyVisionDirectSurface;
 @property(nonatomic) int dynamicHdrPreference;
+// Session chroma decision (StreamChromaDecision), resolved once by the stream
+// start path. enableYuv444 is what this session requests from the host;
+// requestedYuv444 is the stored setting. suppressDolbyVision withholds the
+// Dolby Vision capability bits (Automatic keeps 4:4:4).
+@property(nonatomic) BOOL enableYuv444;
+@property(nonatomic) BOOL requestedYuv444;
+@property(nonatomic) BOOL suppressDolbyVision;
 @property(nonatomic, copy) NSString *sunshineTargetDisplayName;
 @property(nonatomic) BOOL sunshineUseVirtualDisplay;
 @property(nonatomic) int sunshineScreenMode;

@@ -668,6 +668,9 @@
 "Dolby Vision capability detail native" = "The Native renderer passes Dolby Vision metadata straight to the display. It is used when the host sends Dolby Vision.";
 "Dolby Vision capability detail metal" = "The Metal renderer shows only the HDR10 base layer of a Dolby Vision stream. Use the Native renderer for full Dolby Vision.";
 "Dolby Vision capability detail unavailable" = "Needs HEVC hardware decoding, HDR playback, an HDR-capable display and the Native renderer.";
+"Dynamic HDR chroma note dolby vision" = "Dolby Vision uses 4:2:0, so this stream will not use 4:4:4. Your YUV 4:4:4 setting is not changed.";
+"Dynamic HDR chroma note automatic" = "With YUV 4:4:4 on, Automatic uses HDR10+ or HDR10. Select Dolby Vision to use it instead; the stream will then use 4:2:0.";
+"Dolby Vision capability detail yuv444" = "Dolby Vision needs 4:2:0. With YUV 4:4:4 on, Automatic uses HDR10+ or HDR10; select Dolby Vision explicitly to use it.";
 "Display capability has not been queried" = "Refresh the host display list to query Foundation capabilities.";
 "Loading Foundation display topology" = "Loading Foundation display topology…";
 "Foundation display topology endpoint ready" = "The Foundation display topology endpoint is ready.";

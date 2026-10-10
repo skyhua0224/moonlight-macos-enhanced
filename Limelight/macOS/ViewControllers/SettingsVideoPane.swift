@@ -74,6 +74,10 @@ struct VideoView: View {
           .controllerPicker(selection: $settingsModel.selectedDynamicHdrPreference, options: SettingsModel.dynamicHdrPreferences, title: { value in languageManager.localize(value) })
           .frame(width: 190, alignment: .trailing)
         }
+
+        if let chromaNoteKey = settingsModel.dynamicHdrChromaNoteKey {
+          SettingDescriptionRow(textKey: chromaNoteKey)
+        }
       }
 
       if metalSelected {
@@ -163,9 +167,9 @@ struct VideoView: View {
       }
 
       FormSection(title: "HDR Capabilities") {
-        ForEach(settingsModel.videoCapabilityMatrix.items.filter {
+        ForEach(settingsModel.capabilityItemsAdjustedForChroma(settingsModel.videoCapabilityMatrix.items.filter {
           $0.id.hasPrefix("display.")
-        }) { capability in
+        })) { capability in
           HDRCapabilityRow(capability: capability)
         }
       }

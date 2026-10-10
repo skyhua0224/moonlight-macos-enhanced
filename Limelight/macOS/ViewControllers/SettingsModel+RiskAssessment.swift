@@ -28,7 +28,7 @@ extension SettingsModel {
       fps: mode.fps,
       bitrateKbps: bitrateKbps,
       codecName: selectedVideoCodec,
-      enableYUV444: enableYUV444,
+      enableYUV444: effectiveStreamYUV444,
       autoMode: autoAdjustBitrate
     )
   }
@@ -101,7 +101,7 @@ extension SettingsModel {
         width: width,
         height: height,
         fps: fps,
-        yuv444: enableYUV444
+        yuv444: effectiveStreamYUV444
       )
     }
 

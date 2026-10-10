@@ -719,7 +719,7 @@ extension SettingsModel {
       let res = effectiveResolutionForBitrate()
       let fps = effectiveFpsForBitrate()
       bitrate = Self.clampedBitrateKbps(Self.getDefaultBitrateKbps(
-        width: Int(res.width), height: Int(res.height), fps: fps, yuv444: enableYUV444),
+        width: Int(res.width), height: Int(res.height), fps: fps, yuv444: effectiveStreamYUV444),
         unlocked: unlockMaxBitrate)
     } else {
       bitrate = effectiveBitrate

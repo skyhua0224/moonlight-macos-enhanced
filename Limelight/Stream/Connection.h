@@ -90,6 +90,11 @@ typedef struct {
     uint32_t fecFeedbackMissingPackets;
 } MLNetworkStatsSnapshot;
 
+// YES when Dolby Vision can be decoded and shown directly on the given display
+// (0 = the main screen). Used both to decide whether to offer Dolby Vision to
+// the host and, together with the chroma policy, whether 4:4:4 must be dropped.
+BOOL MLAppleDolbyVisionDirectSurfaceAvailable(unsigned int targetDisplayID);
+
 @interface Connection : NSOperation <NSStreamDelegate>
 
 // Returns the connection bound to the current thread context, if any.

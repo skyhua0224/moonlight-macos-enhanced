@@ -1412,6 +1412,55 @@ highFreqMotor:(unsigned short)highFreqMotor {
     modeWidth &= ~1;
     modeHeight &= ~1;
 
+    NSInteger codecPreference = [SettingsClass videoCodecFor:self.app.host.uuid];
+    streamConfig.videoCodecPreference = (int)MAX(0, MIN(codecPreference, 2));
+
+    BOOL hevcDecodeSupported = NO;
+    if (@available(iOS 11.3, tvOS 11.3, macOS 10.14, *)) {
+        hevcDecodeSupported = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
+    }
+    BOOL av1DecodeSupported = VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1);
+
+    streamConfig.allowHevc = streamConfig.videoCodecPreference != 0;
+    if (streamConfig.videoCodecPreference == 2) {
+        streamConfig.enableHdr = streamSettings.enableHdr && av1DecodeSupported;
+    } else if (streamConfig.videoCodecPreference == 1) {
+        streamConfig.enableHdr = streamSettings.enableHdr && hevcDecodeSupported;
+    } else {
+        streamConfig.enableHdr = NO;
+    }
+    streamConfig.enable10BitSdr = [SettingsClass enable10BitSdrFor:self.app.host.uuid] &&
+                                  !streamConfig.enableHdr &&
+                                  streamConfig.videoCodecPreference != 0 &&
+                                  (streamConfig.videoCodecPreference == 2 ? av1DecodeSupported : hevcDecodeSupported);
+
+    if (streamConfig.enableHdr) {
+        NSScreen *displayScreen = self.view.window.screen ?: MLScreenContainingMouseLocation();
+        streamConfig.hdrTargetDisplayID = [displayScreen.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
+    }
+    // Resolve the chroma / Dolby Vision interaction once for this session. Dolby
+    // Vision profile 8 is 4:2:0 only: Automatic keeps 4:4:4 and withholds Dolby
+    // Vision, an explicit Dolby Vision choice requests 4:2:0 instead. The stored
+    // YUV 4:4:4 setting is not modified. Everything below (automatic bitrate,
+    // risk assessment) and Connection use this result.
+    int dynamicHdrPreferenceForChroma = streamConfig.dynamicHdrPreference;
+    if (dynamicHdrPreferenceForChroma < 0 || dynamicHdrPreferenceForChroma > 3) {
+        dynamicHdrPreferenceForChroma = 0;
+    }
+    BOOL dolbyVisionUsable = streamConfig.enableHdr &&
+        MLAppleDolbyVisionDirectSurfaceAvailable(streamConfig.hdrTargetDisplayID);
+    StreamChromaDecision *chromaDecision =
+        [StreamChromaDecision resolveWithHdrEnabled:streamConfig.enableHdr
+                               videoCodecPreference:streamConfig.videoCodecPreference
+                               dynamicHdrPreference:dynamicHdrPreferenceForChroma
+                                    requestedYUV444:enableYuv444
+                                  dolbyVisionUsable:dolbyVisionUsable];
+    streamConfig.requestedYuv444 = chromaDecision.requestedYUV444;
+    streamConfig.enableYuv444 = chromaDecision.effectiveYUV444;
+    streamConfig.suppressDolbyVision = !chromaDecision.offerDolbyVision;
+    enableYuv444 = chromaDecision.effectiveYUV444;
+    self.sessionEffectiveYuv444 = chromaDecision.effectiveYUV444;
+
     // Auto-adjust bitrate (mirrors moonlight-qt default algorithm)
     BOOL autoAdjustBitrate = prefs ? [prefs[@"autoAdjustBitrate"] boolValue] : NO;
     streamConfig.autoAdjustBitrate = autoAdjustBitrate;
@@ -1440,32 +1489,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
     streamConfig.optimizeGameSettings = streamSettings.optimizeGames;
     streamConfig.playAudioOnPC = streamSettings.playAudioOnPC;
-    NSInteger codecPreference = [SettingsClass videoCodecFor:self.app.host.uuid];
-    streamConfig.videoCodecPreference = (int)MAX(0, MIN(codecPreference, 2));
-
-    BOOL hevcDecodeSupported = NO;
-    if (@available(iOS 11.3, tvOS 11.3, macOS 10.14, *)) {
-        hevcDecodeSupported = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
-    }
-    BOOL av1DecodeSupported = VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1);
-
-    streamConfig.allowHevc = streamConfig.videoCodecPreference != 0;
-    if (streamConfig.videoCodecPreference == 2) {
-        streamConfig.enableHdr = streamSettings.enableHdr && av1DecodeSupported;
-    } else if (streamConfig.videoCodecPreference == 1) {
-        streamConfig.enableHdr = streamSettings.enableHdr && hevcDecodeSupported;
-    } else {
-        streamConfig.enableHdr = NO;
-    }
-    streamConfig.enable10BitSdr = [SettingsClass enable10BitSdrFor:self.app.host.uuid] &&
-                                  !streamConfig.enableHdr &&
-                                  streamConfig.videoCodecPreference != 0 &&
-                                  (streamConfig.videoCodecPreference == 2 ? av1DecodeSupported : hevcDecodeSupported);
-
-    if (streamConfig.enableHdr) {
-        NSScreen *displayScreen = self.view.window.screen ?: MLScreenContainingMouseLocation();
-        streamConfig.hdrTargetDisplayID = [displayScreen.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
-    }
     if (streamConfig.enableHdr && !streamConfig.sunshineHdrBrightnessOverride) {
         NSScreen *targetScreen = self.view.window.screen ?: MLScreenContainingMouseLocation();
         double autoMax = 0, autoMin = 0, autoAvg = 0;

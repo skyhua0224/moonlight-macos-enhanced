@@ -667,6 +667,9 @@
 "Dolby Vision capability detail native" = "原生渲染器会把 Dolby Vision 元数据直接交给显示器，主机发送 Dolby Vision 时生效。";
 "Dolby Vision capability detail metal" = "Metal 渲染器只显示 Dolby Vision 流的 HDR10 基础层。要完整的 Dolby Vision，请使用原生渲染器。";
 "Dolby Vision capability detail unavailable" = "需要 HEVC 硬件解码、HDR 播放、支持 HDR 的显示器以及原生渲染器。";
+"Dynamic HDR chroma note dolby vision" = "Dolby Vision 使用 4:2:0，因此本次串流不会使用 4:4:4。你的 YUV 4:4:4 设置不会被修改。";
+"Dynamic HDR chroma note automatic" = "开启 YUV 4:4:4 时，“自动”会使用 HDR10+ 或 HDR10。如需 Dolby Vision，请直接选择它，此时串流将使用 4:2:0。";
+"Dolby Vision capability detail yuv444" = "Dolby Vision 需要 4:2:0。开启 YUV 4:4:4 时，“自动”会使用 HDR10+ 或 HDR10；如需 Dolby Vision，请明确选择它。";
 "Display capability has not been queried" = "刷新主机显示器列表以查询 Foundation 能力。";
 "Loading Foundation display topology" = "正在加载 Foundation 显示拓扑…";
 "Foundation display topology endpoint ready" = "Foundation 显示拓扑端点已就绪。";

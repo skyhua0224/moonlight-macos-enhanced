@@ -907,3 +907,70 @@ private struct StreamHostRuntimeInfo {
     }
   }
 }
+
+/// Chroma format and Dolby Vision decision for one stream session.
+///
+/// Dolby Vision profile 8 is defined only for HEVC Main10 4:2:0, so it cannot
+/// be combined with 4:4:4. This is the single place that resolves the
+/// interaction between the "Dynamic HDR Preference" and "YUV 4:4:4" settings.
+/// The stream start path (`StreamViewController`) calls it once and hands the
+/// result to `Connection`; the settings window calls it with the same inputs so
+/// the explanations it shows match what the stream does.
+///
+/// Rules, when HDR is on, the codec is HEVC and 4:4:4 is requested:
+///   * Automatic: keep 4:4:4 and do not offer Dolby Vision (HDR10+ / HDR10 stay).
+///   * Dolby Vision: the explicit choice wins for this session, so 4:4:4 is
+///     not requested. The stored YUV 4:4:4 setting is never modified.
+///   * HDR10+ / HDR10 Only: unchanged.
+/// Everything else (HDR off, other codecs, 4:4:4 off, Dolby Vision not usable on
+/// this Mac) is unchanged.
+@objcMembers final class StreamChromaDecision: NSObject {
+  /// The stored YUV 4:4:4 setting.
+  let requestedYUV444: Bool
+  /// Whether this session requests 4:4:4 formats from the host.
+  let effectiveYUV444: Bool
+  /// False when the Dolby Vision capability bits must not be offered.
+  let offerDolbyVision: Bool
+  /// 4:4:4 was dropped because Dolby Vision was selected explicitly.
+  let droppedYUV444ForDolbyVision: Bool
+  /// Dolby Vision was withheld because Automatic keeps 4:4:4.
+  let suppressedDolbyVisionForYUV444: Bool
+
+  init(
+    requestedYUV444: Bool,
+    effectiveYUV444: Bool,
+    offerDolbyVision: Bool,
+    droppedYUV444ForDolbyVision: Bool,
+    suppressedDolbyVisionForYUV444: Bool
+  ) {
+    self.requestedYUV444 = requestedYUV444
+    self.effectiveYUV444 = effectiveYUV444
+    self.offerDolbyVision = offerDolbyVision
+    self.droppedYUV444ForDolbyVision = droppedYUV444ForDolbyVision
+    self.suppressedDolbyVisionForYUV444 = suppressedDolbyVisionForYUV444
+    super.init()
+  }
+
+  /// `videoCodecPreference`: 0 H.264, 1 H.265, 2 AV1 (only H.265 carries Dolby Vision).
+  /// `dynamicHdrPreference`: 0 Automatic, 1 Dolby Vision, 2 HDR10+, 3 HDR10 Only.
+  /// `dolbyVisionUsable`: Dolby Vision output can run on this Mac and display.
+  @objc(resolveWithHdrEnabled:videoCodecPreference:dynamicHdrPreference:requestedYUV444:dolbyVisionUsable:)
+  static func resolve(
+    hdrEnabled: Bool,
+    videoCodecPreference: Int,
+    dynamicHdrPreference: Int,
+    requestedYUV444: Bool,
+    dolbyVisionUsable: Bool
+  ) -> StreamChromaDecision {
+    let applies = hdrEnabled && videoCodecPreference == 1 && requestedYUV444 && dolbyVisionUsable
+    let dropped = applies && dynamicHdrPreference == 1
+    let suppressed = applies && dynamicHdrPreference == 0
+    return StreamChromaDecision(
+      requestedYUV444: requestedYUV444,
+      effectiveYUV444: requestedYUV444 && !dropped,
+      offerDolbyVision: !suppressed,
+      droppedYUV444ForDolbyVision: dropped,
+      suppressedDolbyVisionForYUV444: suppressed
+    )
+  }
+}

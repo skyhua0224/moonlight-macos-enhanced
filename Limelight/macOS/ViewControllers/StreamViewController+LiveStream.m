@@ -92,7 +92,7 @@
     return [StreamViewController automaticBitrateKbpsForWidth:width
                                                         height:height
                                                            fps:fps
-                                                        yuv444:[prefs[@"yuv444"] boolValue]];
+                                                        yuv444:self.sessionEffectiveYuv444];
 }
 
 - (Connection *)liveStreamConnectionIfSupported {

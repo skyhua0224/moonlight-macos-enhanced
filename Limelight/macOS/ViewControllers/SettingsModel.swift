@@ -513,6 +513,7 @@ class SettingsModel: ObservableObject {
   @Published var selectedDynamicHdrPreference: String {
     didSet {
       guard !isLoading else { return }
+      applyAutoBitrateIfNeeded(force: true)
       saveSettings()
     }
   }
@@ -648,12 +649,14 @@ class SettingsModel: ObservableObject {
   @Published var selectedVideoCodec: String {
     didSet {
       guard !isLoading else { return }
+      applyAutoBitrateIfNeeded(force: true)
       saveSettings()
     }
   }
   @Published var hdr: Bool {
     didSet {
       guard !isLoading else { return }
+      applyAutoBitrateIfNeeded(force: true)
       saveSettings()
     }
   }
