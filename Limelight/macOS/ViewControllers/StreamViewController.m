@@ -1267,52 +1267,59 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.app.host.externalAddress ?: @"",
         self.app.host.ipv6Address ?: @"");
 
-    BOOL vpnActive = [Utils isActiveNetworkVPN];
-    BOOL remoteByAddress = [self isRemoteStreamTargetAddress:streamConfig.host];
-    NSString *egressSource = nil;
-    NSString *egressIf = [Utils outboundInterfaceNameForAddress:streamConfig.host sourceAddress:&egressSource];
-    BOOL routeKnown = egressIf.length > 0;
-    BOOL remoteByRoute = routeKnown && [Utils isTunnelInterfaceName:egressIf];
-    BOOL remoteByVpnFallback = vpnActive && !routeKnown;
-    streamConfig.streamingRemotely = remoteByAddress || remoteByRoute || remoteByVpnFallback;
+    // The route and VPN probes below (a system proxy settings copy and a routing lookup)
+    // cost tens of milliseconds, yet nothing before Connection setup reads the result:
+    // the launch/resume request does not carry streamingRemotely. They run once the
+    // stream manager is queued, which is still ahead of any Connection setup because
+    // that is dispatched to the main thread, which is busy until this method returns.
+    void (^classifyStreamTarget)(void) = ^{
+        BOOL vpnActive = [Utils isActiveNetworkVPN];
+        BOOL remoteByAddress = [self isRemoteStreamTargetAddress:streamConfig.host];
+        NSString *egressSource = nil;
+        NSString *egressIf = [Utils outboundInterfaceNameForAddress:streamConfig.host sourceAddress:&egressSource];
+        BOOL routeKnown = egressIf.length > 0;
+        BOOL remoteByRoute = routeKnown && [Utils isTunnelInterfaceName:egressIf];
+        BOOL remoteByVpnFallback = vpnActive && !routeKnown;
+        streamConfig.streamingRemotely = remoteByAddress || remoteByRoute || remoteByVpnFallback;
 
-    NSMutableArray<NSString *> *reasonParts = [NSMutableArray array];
-    if (streamConfig.streamingRemotely) {
-        if (remoteByRoute) {
-            [reasonParts addObject:[NSString stringWithFormat:@"route-via-%@", egressIf]];
-        }
-        if (remoteByAddress) {
-            [reasonParts addObject:@"address-public-or-external"];
-        }
-        if (remoteByVpnFallback) {
-            [reasonParts addObject:@"vpn-fallback-no-route"];
-        }
-    } else {
-        if (routeKnown) {
-            [reasonParts addObject:[NSString stringWithFormat:@"route-via-%@", egressIf]];
+        NSMutableArray<NSString *> *reasonParts = [NSMutableArray array];
+        if (streamConfig.streamingRemotely) {
+            if (remoteByRoute) {
+                [reasonParts addObject:[NSString stringWithFormat:@"route-via-%@", egressIf]];
+            }
+            if (remoteByAddress) {
+                [reasonParts addObject:@"address-public-or-external"];
+            }
+            if (remoteByVpnFallback) {
+                [reasonParts addObject:@"vpn-fallback-no-route"];
+            }
         } else {
-            [reasonParts addObject:@"route-unknown-no-vpn"];
+            if (routeKnown) {
+                [reasonParts addObject:[NSString stringWithFormat:@"route-via-%@", egressIf]];
+            } else {
+                [reasonParts addObject:@"route-unknown-no-vpn"];
+            }
+            if (!remoteByAddress) {
+                [reasonParts addObject:@"address-private-or-local"];
+            }
         }
-        if (!remoteByAddress) {
-            [reasonParts addObject:@"address-private-or-local"];
-        }
-    }
-    NSString *classifyReason = reasonParts.count > 0 ? [reasonParts componentsJoinedByString:@","] : @"n/a";
+        NSString *classifyReason = reasonParts.count > 0 ? [reasonParts componentsJoinedByString:@","] : @"n/a";
 
-    Log(LOG_I, @"[diag] Stream target classification: host=%@ remote=%d local=%d vpn=%d byAddress=%d byRoute=%d byVpnFallback=%d egressIf=%@ source=%@ main=%@ ipv6=%@ external=%@ reason=%@",
-        streamConfig.host ?: @"(null)",
-        streamConfig.streamingRemotely ? 1 : 0,
-        streamConfig.streamingRemotely ? 0 : 1,
-        vpnActive ? 1 : 0,
-        remoteByAddress ? 1 : 0,
-        remoteByRoute ? 1 : 0,
-        remoteByVpnFallback ? 1 : 0,
-        egressIf ?: @"(unknown)",
-        egressSource ?: @"",
-        self.app.host.localAddress ?: @"",
-        self.app.host.ipv6Address ?: @"",
-        self.app.host.externalAddress ?: @"",
-        classifyReason);
+        Log(LOG_I, @"[diag] Stream target classification: host=%@ remote=%d local=%d vpn=%d byAddress=%d byRoute=%d byVpnFallback=%d egressIf=%@ source=%@ main=%@ ipv6=%@ external=%@ reason=%@",
+            streamConfig.host ?: @"(null)",
+            streamConfig.streamingRemotely ? 1 : 0,
+            streamConfig.streamingRemotely ? 0 : 1,
+            vpnActive ? 1 : 0,
+            remoteByAddress ? 1 : 0,
+            remoteByRoute ? 1 : 0,
+            remoteByVpnFallback ? 1 : 0,
+            egressIf ?: @"(unknown)",
+            egressSource ?: @"",
+            self.app.host.localAddress ?: @"",
+            self.app.host.ipv6Address ?: @"",
+            self.app.host.externalAddress ?: @"",
+            classifyReason);
+    };
     
     streamConfig.appID = self.app.id;
     streamConfig.appName = self.app.name;
@@ -1556,36 +1563,42 @@ highFreqMotor:(unsigned short)highFreqMotor {
     } else if (streamConfig.videoCodecPreference == 1) {
         codecName = @"H.265";
     }
-    self.currentStreamRiskAssessment = [StreamRiskAssessor assessWithHost:self.app.host
-                                                            targetAddress:streamConfig.host
-                                                         connectionMethod:selectedConnectionMethod
-                                                                    width:modeWidth
-                                                                   height:modeHeight
-                                                                      fps:modeFps
-                                                              bitrateKbps:streamConfig.bitRate
-                                                                codecName:codecName
-                                                             enableYUV444:enableYuv444
-                                                                 autoMode:autoAdjustBitrate
-                                                               audioCodec:audioPlan.effectiveCodec
-                                                              audioChannels:audioPlan.channelCount
-                                                disableHighQualitySurround:streamConfig.disableHighQualitySurround];
-    Log(LOG_I, @"[diag] Stream risk assessment: %@ codec=%@ chroma=%@ decode=%d target=%@",
-        self.currentStreamRiskAssessment.summaryLine ?: @"(none)",
-        self.currentStreamRiskAssessment.codecName ?: codecName,
-        self.currentStreamRiskAssessment.chromaName ?: (enableYuv444 ? @"4:4:4" : @"4:2:0"),
-        self.currentStreamRiskAssessment.decodeSupported ? 1 : 0,
-        self.currentStreamRiskAssessment.targetAddress ?: streamConfig.host ?: @"(null)");
-    if (self.currentStreamRiskAssessment.recommendedFallbacks.count > 0) {
-        StreamRiskRecommendation *firstRecommendation = self.currentStreamRiskAssessment.recommendedFallbacks.firstObject;
-        Log(LOG_I, @"[diag] Recommended fallback: %@", firstRecommendation.summaryLine ?: @"(none)");
-    }
-    if (streamConfig.videoCodecPreference == 2) {
-        Log(LOG_I, @"[diag] AV1 preference: serverAdvertises=%d localDecode=%d hdr=%d yuv444=%d",
-            (self.app.host.serverCodecModeSupport & SCM_MASK_AV1) != 0 ? 1 : 0,
-            av1DecodeSupported ? 1 : 0,
-            streamConfig.enableHdr ? 1 : 0,
-            enableYuv444 ? 1 : 0);
-    }
+    // The assessment only feeds the diagnostics overlay and the log, so it does not have to
+    // delay the host request. It reads the bitrate as configured here: the stream manager
+    // may lower streamConfig.bitRate from its bandwidth probe once it is running.
+    const int riskBitrateKbps = streamConfig.bitRate;
+    void (^assessStreamRisk)(void) = ^{
+        self.currentStreamRiskAssessment = [StreamRiskAssessor assessWithHost:self.app.host
+                                                                targetAddress:streamConfig.host
+                                                             connectionMethod:selectedConnectionMethod
+                                                                        width:modeWidth
+                                                                       height:modeHeight
+                                                                          fps:modeFps
+                                                                  bitrateKbps:riskBitrateKbps
+                                                                    codecName:codecName
+                                                                 enableYUV444:enableYuv444
+                                                                     autoMode:autoAdjustBitrate
+                                                                   audioCodec:audioPlan.effectiveCodec
+                                                                  audioChannels:audioPlan.channelCount
+                                                    disableHighQualitySurround:streamConfig.disableHighQualitySurround];
+        Log(LOG_I, @"[diag] Stream risk assessment: %@ codec=%@ chroma=%@ decode=%d target=%@",
+            self.currentStreamRiskAssessment.summaryLine ?: @"(none)",
+            self.currentStreamRiskAssessment.codecName ?: codecName,
+            self.currentStreamRiskAssessment.chromaName ?: (enableYuv444 ? @"4:4:4" : @"4:2:0"),
+            self.currentStreamRiskAssessment.decodeSupported ? 1 : 0,
+            self.currentStreamRiskAssessment.targetAddress ?: streamConfig.host ?: @"(null)");
+        if (self.currentStreamRiskAssessment.recommendedFallbacks.count > 0) {
+            StreamRiskRecommendation *firstRecommendation = self.currentStreamRiskAssessment.recommendedFallbacks.firstObject;
+            Log(LOG_I, @"[diag] Recommended fallback: %@", firstRecommendation.summaryLine ?: @"(none)");
+        }
+        if (streamConfig.videoCodecPreference == 2) {
+            Log(LOG_I, @"[diag] AV1 preference: serverAdvertises=%d localDecode=%d hdr=%d yuv444=%d",
+                (self.app.host.serverCodecModeSupport & SCM_MASK_AV1) != 0 ? 1 : 0,
+                av1DecodeSupported ? 1 : 0,
+                streamConfig.enableHdr ? 1 : 0,
+                enableYuv444 ? 1 : 0);
+        }
+    };
 
     streamConfig.multiController = streamSettings.multiController;
     streamConfig.gamepadMask = self.useSystemControllerDriver ? (int)[ControllerSupport getConnectedGamepadMask:streamConfig] : 1;
@@ -1705,6 +1718,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.streamOpQueue.maxConcurrentOperationCount = 1;
     }
     [self.streamOpQueue addOperation:self.streamMan];
+
+    // The stream manager now runs on its own thread (key exchange, serverinfo, the host
+    // launch/resume request). Everything that does not feed that request continues here
+    // in parallel instead of delaying it.
+    classifyStreamTarget();
+    assessStreamRisk();
 
     [self startConnectWatchdog];
     
