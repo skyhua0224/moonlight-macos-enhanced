@@ -1780,6 +1780,25 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 }
 
+// Clears the startup loading indicator. Main thread only.
+- (void)finishWaitingForFirstRenderedFrameVia:(NSString *)source {
+    self.waitingForFirstRenderedFrame = NO;
+    self.streamView.statusText = nil;
+    Log(LOG_I, @"[diag] First rendered frame observed via %@; clearing loading indicator", source);
+}
+
+// The renderer reports its first rendered frame the moment it happens, so the indicator does
+// not have to wait for the next tick of the startup poll below (which stays as the fallback).
+- (void)handleFirstFramePresentedForGeneration:(NSUInteger)generation {
+    if (!self.waitingForFirstRenderedFrame || self.activeStreamGeneration != generation) {
+        return;
+    }
+
+    if (self.streamMan.connection.renderer.hasPresentedVideo) {
+        [self finishWaitingForFirstRenderedFrameVia:@"renderer notification"];
+    }
+}
+
 - (void)scheduleInitialRenderedFrameCheckForGeneration:(NSUInteger)generation remainingAttempts:(NSUInteger)remainingAttempts {
     if (!self.waitingForFirstRenderedFrame || self.activeStreamGeneration != generation) {
         return;
@@ -1788,9 +1807,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     VideoDecoderRenderer *renderer = self.streamMan.connection.renderer;
     if (renderer != nil) {
         if (renderer.hasPresentedVideo) {
-            self.waitingForFirstRenderedFrame = NO;
-            self.streamView.statusText = nil;
-            Log(LOG_I, @"[diag] First rendered frame observed via startup poll; clearing loading indicator");
+            [self finishWaitingForFirstRenderedFrameVia:@"startup poll"];
             return;
         }
     }
@@ -1930,7 +1947,17 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [self startRemoteDisplayScaleForCurrentSession];
         self.streamHealthConnectionStartedMs = [self nowMs];
         [self refreshInputDiagnosticsPreference];
-        [self scheduleInitialRenderedFrameCheckForGeneration:self.activeStreamGeneration remainingAttempts:80];
+        NSUInteger startupGeneration = self.activeStreamGeneration;
+        __weak typeof(self) weakStartupSelf = self;
+        self.streamMan.connection.renderer.firstFramePresentedHandler = ^{
+            // Called on the thread that counted the frame; the indicator is main-thread state.
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [weakStartupSelf handleFirstFramePresentedForGeneration:startupGeneration];
+            });
+        };
+        // Checks right away, so a frame presented before the handler was set is not missed,
+        // then keeps polling as the fallback.
+        [self scheduleInitialRenderedFrameCheckForGeneration:startupGeneration remainingAttempts:80];
 
         Log(LOG_I, @"connectionStarted (t=%.0fms) window style=%llu level=%ld", CACurrentMediaTime() * 1000.0, (unsigned long long)self.view.window.styleMask, (long)self.view.window.level);
 

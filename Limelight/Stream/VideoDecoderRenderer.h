@@ -76,6 +76,12 @@ typedef struct {
 
 @property(nonatomic, readonly) VideoStats videoStats;
 @property(nonatomic, readonly) BOOL hasPresentedVideo;
+// LiGetMillis() when the first frame counted as rendered (the moment hasPresentedVideo
+// turns true); 0 until then.
+@property(nonatomic, readonly) uint64_t firstFramePresentedMs;
+// Called once, on an arbitrary thread, when the first frame counts as rendered. Not called
+// when that already happened before it was set; check hasPresentedVideo after setting it.
+@property(copy) void (^firstFramePresentedHandler)(void);
 @property(nonatomic, readonly) int videoFormat;
 
 - (id)initWithView:(OSView *)view;

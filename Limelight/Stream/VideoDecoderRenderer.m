@@ -1956,6 +1956,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
                             enqueueTimeMs:(uint64_t)enqueueTimeMs
                  presentationTimeSeconds:(double)presentationTimeSeconds
 {
+    void (^firstFrameHandler)(void) = nil;
     @synchronized (self) {
     if (_presentationSuspended || !isfinite(presentationTimeSeconds) || presentationTimeSeconds <= 0) return;
     double preciseNowMs = presentationTimeSeconds * 1000.0;
@@ -1983,6 +1984,17 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     [self applyRenderPacingMetricsToStats:&snapshotStats];
     snapshotStats.lastUpdatedTimestamp = renderSampleNowMs;
     _videoStats = snapshotStats;
+
+    if (_firstFramePresentedMs == 0) {
+        // Same moment hasPresentedVideo turns true: the enhanced path counts frames only
+        // once the drawable was presented, the other paths only once the layer is ready.
+        _firstFramePresentedMs = LiGetMillis();
+        firstFrameHandler = self.firstFramePresentedHandler;
+        self.firstFramePresentedHandler = nil;
+    }
+    }
+    if (firstFrameHandler != nil) {
+        firstFrameHandler();
     }
 }
 
