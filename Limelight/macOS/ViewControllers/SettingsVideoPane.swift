@@ -55,6 +55,17 @@ struct VideoView: View {
           .controllerPicker(selection: $settingsModel.selectedHdrTransferFunction, options: SettingsModel.hdrTransferFunctions, title: { value in languageManager.localize(value) })
           .frame(width: 190, alignment: .trailing)
         }
+
+        SettingsRow(title: "Dynamic HDR Preference") {
+          Picker("", selection: $settingsModel.selectedDynamicHdrPreference) {
+            ForEach(SettingsModel.dynamicHdrPreferences, id: \.self) { value in
+              Text(languageManager.localize(value)).tag(value)
+            }
+          }
+          .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedDynamicHdrPreference, options: SettingsModel.dynamicHdrPreferences, title: { value in languageManager.localize(value) })
+          .frame(width: 190, alignment: .trailing)
+        }
       }
 
       if metalSelected {
@@ -131,17 +142,6 @@ struct VideoView: View {
           .labelsHidden()
           .controllerPicker(selection: $settingsModel.selectedHdrToneMappingPolicy, options: SettingsModel.hdrToneMappingPolicies, title: { value in languageManager.localize(value) })
           .frame(width: 230, alignment: .trailing)
-        }
-
-        SettingsRow(title: "Dynamic HDR Preference") {
-          Picker("", selection: $settingsModel.selectedDynamicHdrPreference) {
-            ForEach(SettingsModel.dynamicHdrPreferences, id: \.self) { value in
-              Text(languageManager.localize(value)).tag(value)
-            }
-          }
-          .labelsHidden()
-          .controllerPicker(selection: $settingsModel.selectedDynamicHdrPreference, options: SettingsModel.dynamicHdrPreferences, title: { value in languageManager.localize(value) })
-          .frame(width: 190, alignment: .trailing)
         }
 
         SettingsStatusRow(
