@@ -183,6 +183,8 @@ extension SettingsModel {
     sunshineTargetDisplayName = Self.defaultSunshineTargetDisplayName
     sunshineUseVirtualDisplay = Self.defaultSunshineUseVirtualDisplay
     selectedSunshineScreenMode = Self.defaultSunshineScreenMode
+    selectedRemoteDisplayScale = Self.defaultRemoteDisplayScale
+    restoreRemoteDisplayScale = Self.defaultRestoreRemoteDisplayScale
     sunshineTouchKeyboardAutoInvoke = Self.defaultSunshineTouchKeyboardAutoInvoke
     sunshineHdrBrightnessOverride = Self.defaultSunshineHdrBrightnessOverride
     sunshineMaxBrightness = Self.defaultSunshineMaxBrightness
@@ -563,6 +565,9 @@ extension SettingsModel {
         settings.sunshineUseVirtualDisplay ?? Self.defaultSunshineUseVirtualDisplay
       selectedSunshineScreenMode = Self.sunshineScreenModeSelection(
         for: settings.sunshineScreenMode)
+      selectedRemoteDisplayScale = settings.remoteDisplayScale ?? Self.defaultRemoteDisplayScale
+      restoreRemoteDisplayScale =
+        settings.restoreRemoteDisplayScale ?? Self.defaultRestoreRemoteDisplayScale
       sunshineTouchKeyboardAutoInvoke =
         settings.sunshineTouchKeyboardAutoInvoke ?? Self.defaultSunshineTouchKeyboardAutoInvoke
       sunshineHdrBrightnessOverride =
@@ -880,7 +885,9 @@ extension SettingsModel {
       allowDrawableTimeoutMode: allowDrawableTimeoutMode,
       timingCompatibilityMode: timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround,
-      enableAdaptiveBitrate: enableAdaptiveBitrate
+      enableAdaptiveBitrate: enableAdaptiveBitrate,
+      remoteDisplayScale: selectedRemoteDisplayScale,
+      restoreRemoteDisplayScale: restoreRemoteDisplayScale
     )
 
     let profileKey = SettingsClass.profileKey(for: hostId)

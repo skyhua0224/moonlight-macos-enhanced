@@ -499,6 +499,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) NSTimer *clipboardMonitorTimer;
 @property (nonatomic, strong) Connection *clipboardRuntimeConnection;
 @property (nonatomic, strong) MLAdaptiveBitrateController *adaptiveBitrateController;
+@property (nonatomic, strong) MLRemoteDisplayScale *remoteDisplayScale;
 @property (nonatomic) NSInteger clipboardLastChangeCount;
 @property (nonatomic) NSInteger clipboardLastActivationDiagnosticState;
 @property (nonatomic) uint64_t clipboardLastActivationDiagnosticLogMs;
@@ -573,6 +574,10 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)resolveDeferredCommandModifierWithoutRemoteTapWithReason:(NSString *)reason event:(NSEvent *)event;
 @end
 @interface StreamViewController (MenuUI) <MLStreamScopedCallbackOwner>
+- (void)startRemoteDisplayScaleForCurrentSession;
+- (void)endRemoteDisplayScaleSessionWithReason:(NSString *)reason;
+- (void)presentRemoteDisplayScaleOutcome:(NSDictionary<NSString *, id> *)outcome;
+- (NSMenuItem *)remoteDisplayScaleMenuItem;
 - (NSString *)mouseModeDisplayNameForMode:(NSString *)mode;
 - (NSString *)mouseModeHintForMode:(NSString *)mode;
 - (NSString *)shortcutDisplayStringForAction:(NSString *)action;

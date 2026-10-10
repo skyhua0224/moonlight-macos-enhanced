@@ -85,6 +85,12 @@ enum SunshineVddState: String, Equatable {
   }
 }
 
+struct RemoteDisplayScaleChoice: Identifiable, Equatable {
+  let value: Int
+  let title: String
+  var id: Int { value }
+}
+
 struct SunshineDisplayOption: Identifiable, Equatable {
   let id: String
   let value: String
@@ -408,6 +414,19 @@ class SettingsModel: ObservableObject {
     }
   }
   @Published var selectedSunshineScreenMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  /// 0 = don't change, -1 = the host's recommended value, otherwise a percentage.
+  @Published var selectedRemoteDisplayScale: Int {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var restoreRemoteDisplayScale: Bool {
     didSet {
       guard !isLoading else { return }
       saveSettings()
@@ -1278,6 +1297,47 @@ class SettingsModel: ObservableObject {
     return options
   }
 
+  /// The display the "Remote Display Scale" row describes: the selected target
+  /// display, or the host's primary display while the host default is selected.
+  private var remoteDisplayScaleReferenceDisplay: SunshineDisplayOption? {
+    let target = sunshineTargetDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !target.isEmpty {
+      return availableSunshineDisplays.first(where: { $0.value == target })
+    }
+    return availableSunshineDisplays.first(where: { $0.isPrimary })
+  }
+
+  /// Choices for "Remote Display Scale": don't change, the host's recommended
+  /// value, then the percentages the host reports for the target display (or a
+  /// fixed list until a display snapshot is available).
+  var remoteDisplayScaleChoices: [RemoteDisplayScaleChoice] {
+    let reference = remoteDisplayScaleReferenceDisplay
+    var recommendedTitle = LanguageManager.shared.localize("Recommended")
+    if let recommended = reference?.recommendedScalePercent, recommended > 0 {
+      recommendedTitle += " (\(recommended)%)"
+    }
+
+    var percents = reference?.supportedScalePercents ?? []
+    if percents.isEmpty {
+      percents = Self.remoteDisplayScaleFallbackPercents
+    }
+    if selectedRemoteDisplayScale > 0 && !percents.contains(selectedRemoteDisplayScale) {
+      percents.append(selectedRemoteDisplayScale)
+    }
+
+    var choices = [
+      RemoteDisplayScaleChoice(
+        value: Self.remoteDisplayScaleDontChange,
+        title: LanguageManager.shared.localize("Don't change")),
+      RemoteDisplayScaleChoice(
+        value: Self.remoteDisplayScaleRecommended, title: recommendedTitle),
+    ]
+    for percent in Array(Set(percents)).sorted() where percent > 0 {
+      choices.append(RemoteDisplayScaleChoice(value: percent, title: "\(percent)%"))
+    }
+    return choices
+  }
+
   var sunshineVddSupportsSelection: Bool {
     // VDD is a host capability. Keep the control disabled until the current
     // Foundation endpoint explicitly reports a usable driver; an unknown or
@@ -1482,6 +1542,8 @@ class SettingsModel: ObservableObject {
     sunshineTargetDisplayName = Self.defaultSunshineTargetDisplayName
     sunshineUseVirtualDisplay = Self.defaultSunshineUseVirtualDisplay
     selectedSunshineScreenMode = Self.defaultSunshineScreenMode
+    selectedRemoteDisplayScale = Self.defaultRemoteDisplayScale
+    restoreRemoteDisplayScale = Self.defaultRestoreRemoteDisplayScale
     sunshineHdrBrightnessOverride = Self.defaultSunshineHdrBrightnessOverride
     sunshineMaxBrightness = Self.defaultSunshineMaxBrightness
     sunshineMinBrightness = Self.defaultSunshineMinBrightness

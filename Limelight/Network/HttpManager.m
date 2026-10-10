@@ -1012,6 +1012,49 @@ static const NSString* HTTPS_PORT = @"47984";
     return [object isKindOfClass:[NSDictionary class]] ? object : @{};
 }
 
+// Query component for the display scale routes. Device ids contain characters such as
+// backslash, question mark, hash and braces, so everything outside the unreserved set is escaped.
+static NSString* ScaleQueryValue(NSString* value) {
+    static NSCharacterSet* allowed = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        allowed = [NSCharacterSet characterSetWithCharactersInString:
+                   @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"];
+    });
+    return [value stringByAddingPercentEncodingWithAllowedCharacters:allowed] ?: @"";
+}
+
+- (NSDictionary<NSString*, id>*) fetchRemoteDisplayScaleOptionsForDisplayName:(NSString*)displayName
+                                                                      deviceId:(NSString*)deviceId
+                                                                    httpStatus:(NSInteger*)httpStatus {
+    NSMutableArray<NSString*>* query = [NSMutableArray array];
+    if (displayName.length > 0) {
+        [query addObject:[@"display_name=" stringByAppendingString:ScaleQueryValue(displayName)]];
+    }
+    if (deviceId.length > 0) {
+        [query addObject:[@"device_id=" stringByAppendingString:ScaleQueryValue(deviceId)]];
+    }
+    NSString* path = @"/display-scale-options";
+    if (query.count > 0) {
+        path = [path stringByAppendingFormat:@"?%@", [query componentsJoinedByString:@"&"]];
+    }
+    return [self sunshineAPIRequestWithPath:path method:@"GET" body:nil timeout:3 httpStatus:httpStatus];
+}
+
+- (NSDictionary<NSString*, id>*) setRemoteDisplayScalePercent:(NSInteger)percent
+                                                   displayName:(NSString*)displayName
+                                                      deviceId:(NSString*)deviceId
+                                                    httpStatus:(NSInteger*)httpStatus {
+    NSMutableDictionary<NSString*, id>* body = [@{ @"scale_percent": @(percent) } mutableCopy];
+    if (displayName.length > 0) {
+        body[@"display_name"] = displayName;
+    }
+    if (deviceId.length > 0) {
+        body[@"device_id"] = deviceId;
+    }
+    return [self sunshineAPIRequestWithPath:@"/display-scale" method:@"POST" body:body timeout:3 httpStatus:httpStatus];
+}
+
 static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
     NSString* reason = [json[@"error"] isKindOfClass:[NSString class]] ? json[@"error"] : nil;
     if (reason.length > 0) {

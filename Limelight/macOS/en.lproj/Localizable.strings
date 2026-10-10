@@ -1249,3 +1249,16 @@
 "Recording Detail detail" = "Normal records Info and above. Detailed also records Debug lines, which makes the log larger. What the log window shows is set in the window itself.";
 "Normal" = "Normal";
 "Detailed" = "Detailed";
+"Remote Display Scale" = "Remote Display Scale";
+"Remote Display Scale detail" = "Sets the Windows display scaling on the host when a stream starts, so a high-resolution Mac display is not left tiny at the default scale. Needs a Foundation Sunshine host.";
+"Don't change" = "Don't change";
+"Restore scale after streaming" = "Restore scale after streaming";
+"Restore scale after streaming detail" = "Puts the host display scale back to its previous value when the stream ends, unless it was changed again in the meantime.";
+"Display Scale" = "Display Scale";
+"Recommended (%d%%)" = "Recommended (%d%%)";
+"Display scale set to %d%%" = "Display scale set to %d%%";
+"Some apps may need to restart to pick up the new scale" = "Some apps may need to restart to pick up the new scale";
+"Couldn't change the display scale" = "Couldn't change the display scale";
+"The host does not support that display scale" = "The host does not support that display scale";
+"The host refused to change the display scale" = "The host refused to change the display scale";
+"The host display for the scale was not found" = "The host display for the scale was not found";

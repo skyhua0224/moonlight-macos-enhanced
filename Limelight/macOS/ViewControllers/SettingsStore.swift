@@ -139,6 +139,10 @@ struct Settings: Encodable, Decodable {
   let timingCompatibilityMode: Bool?
   let timingSdrCompatibilityWorkaround: Bool?
   var enableAdaptiveBitrate: Bool? = nil
+  // Remote Windows display scale applied when a stream starts: nil/0 leaves the host alone,
+  // -1 uses the host's recommended value, anything else is a percentage.
+  var remoteDisplayScale: Int? = nil
+  var restoreRemoteDisplayScale: Bool? = nil
 
   private static func globalProfileKey() -> String {
     SettingsClass.profileKey(for: SettingsModel.globalHostId)
@@ -288,7 +292,9 @@ struct Settings: Encodable, Decodable {
       allowDrawableTimeoutMode: allowDrawableTimeoutMode,
       timingCompatibilityMode: timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround,
-      enableAdaptiveBitrate: enableAdaptiveBitrate
+      enableAdaptiveBitrate: enableAdaptiveBitrate,
+      remoteDisplayScale: remoteDisplayScale,
+      restoreRemoteDisplayScale: restoreRemoteDisplayScale
     )
   }
 
@@ -366,7 +372,9 @@ extension SettingsClass {
     mouseMode: Int? = nil,
     volumeLevel: CGFloat? = nil,
     keyboardCompatibilityMode: Int? = nil,
-    streamShortcuts: [String: StreamShortcut]? = nil
+    streamShortcuts: [String: StreamShortcut]? = nil,
+    remoteDisplayScale: Int? = nil,
+    restoreRemoteDisplayScale: Bool? = nil
   ) -> Settings {
     let resolvedResolution = resolution ?? settings.resolution
     let resolvedMatchDisplayResolution = matchDisplayResolution ?? settings.matchDisplayResolution
@@ -427,6 +435,9 @@ extension SettingsClass {
     let resolvedMouseMode = mouseMode ?? settings.mouseMode
     let resolvedConnectionMethod = connectionMethod ?? settings.connectionMethod
     let resolvedStreamShortcuts = streamShortcuts ?? settings.streamShortcuts
+    let resolvedRemoteDisplayScale = remoteDisplayScale ?? settings.remoteDisplayScale
+    let resolvedRestoreRemoteDisplayScale =
+      restoreRemoteDisplayScale ?? settings.restoreRemoteDisplayScale
 
     return Settings(
       resolution: resolvedResolution,
@@ -544,7 +555,9 @@ extension SettingsClass {
       allowDrawableTimeoutMode: settings.allowDrawableTimeoutMode,
       timingCompatibilityMode: settings.timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
-      enableAdaptiveBitrate: settings.enableAdaptiveBitrate
+      enableAdaptiveBitrate: settings.enableAdaptiveBitrate,
+      remoteDisplayScale: resolvedRemoteDisplayScale,
+      restoreRemoteDisplayScale: resolvedRestoreRemoteDisplayScale
     )
   }
 

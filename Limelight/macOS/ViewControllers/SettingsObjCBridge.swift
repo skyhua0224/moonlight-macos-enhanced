@@ -417,7 +417,9 @@ class SettingsClass: NSObject {
       videoFecPercentage: settings.videoFecPercentage,
       timingCompatibilityMode: settings.timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
-      enableAdaptiveBitrate: settings.enableAdaptiveBitrate
+      enableAdaptiveBitrate: settings.enableAdaptiveBitrate,
+      remoteDisplayScale: settings.remoteDisplayScale,
+      restoreRemoteDisplayScale: settings.restoreRemoteDisplayScale
     )
 
     // Recalculate bitrate if auto is enabled, since resolution changed
@@ -526,7 +528,9 @@ class SettingsClass: NSObject {
         videoFecPercentage: updated.videoFecPercentage,
         timingCompatibilityMode: updated.timingCompatibilityMode,
         timingSdrCompatibilityWorkaround: updated.timingSdrCompatibilityWorkaround,
-        enableAdaptiveBitrate: updated.enableAdaptiveBitrate
+        enableAdaptiveBitrate: updated.enableAdaptiveBitrate,
+        remoteDisplayScale: updated.remoteDisplayScale,
+        restoreRemoteDisplayScale: updated.restoreRemoteDisplayScale
       )
     }
 
@@ -643,7 +647,9 @@ class SettingsClass: NSObject {
       videoFecPercentage: settings.videoFecPercentage,
       timingCompatibilityMode: settings.timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
-      enableAdaptiveBitrate: settings.enableAdaptiveBitrate
+      enableAdaptiveBitrate: settings.enableAdaptiveBitrate,
+      remoteDisplayScale: settings.remoteDisplayScale,
+      restoreRemoteDisplayScale: settings.restoreRemoteDisplayScale
     )
 
     // Recalculate bitrate if auto is enabled
@@ -1390,6 +1396,30 @@ class SettingsClass: NSObject {
       return settings.keyboardCompatibilityMode ?? KeyboardCompatibilityMode.defaultMode.rawValue
     }
     return KeyboardCompatibilityMode.defaultMode.rawValue
+  }
+
+  /// Remote display scale for this host: 0 leaves the host alone, -1 means the
+  /// host's recommended value, anything else is a percentage.
+  @objc static func remoteDisplayScale(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.remoteDisplayScale ?? SettingsModel.defaultRemoteDisplayScale
+    }
+    return SettingsModel.defaultRemoteDisplayScale
+  }
+
+  @objc static func restoreRemoteDisplayScale(for key: String) -> Bool {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.restoreRemoteDisplayScale ?? SettingsModel.defaultRestoreRemoteDisplayScale
+    }
+    return SettingsModel.defaultRestoreRemoteDisplayScale
+  }
+
+  /// Saves the control center's pick as this host's "Remote Display Scale" setting.
+  @objc static func setRemoteDisplayScale(_ percent: Int, for key: String) {
+    guard let settings = Settings.getSettings(for: key) else {
+      return
+    }
+    persist(copy(settings, remoteDisplayScale: percent), for: key)
   }
 
   @objc static func quitAppAfterStream(for key: String) -> Bool {

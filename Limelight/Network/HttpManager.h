@@ -54,6 +54,18 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
                                                     timeout:(NSTimeInterval)timeout
                                                  httpStatus:(NSInteger*)httpStatus;
 - (void) invalidateSunshineAPISession;
+// Foundation Sunshine remote display scale (GET /display-scale-options, POST /display-scale).
+// Synchronous with a 3 s request timeout; do not call on the main thread. Same return
+// convention as sunshineAPIRequestWithPath: the parsed JSON (empty when there was none) and
+// the HTTP status, or a negative NSURLError code on transport failure. With neither a
+// display name nor a device id the host targets its primary display.
+- (NSDictionary<NSString*, id>*) fetchRemoteDisplayScaleOptionsForDisplayName:(NSString*)displayName
+                                                                      deviceId:(NSString*)deviceId
+                                                                    httpStatus:(NSInteger*)httpStatus;
+- (NSDictionary<NSString*, id>*) setRemoteDisplayScalePercent:(NSInteger)percent
+                                                   displayName:(NSString*)displayName
+                                                      deviceId:(NSString*)deviceId
+                                                    httpStatus:(NSInteger*)httpStatus;
 // Foundation Sunshine pre-stream bandwidth probe (/api/network/*). Synchronous.
 // Keys: ok, error (reason), retryAfterMs, bandwidthMbps, latencyMs, jitterMs, bytes,
 // partial (host cut the transfer short; bandwidth is then a lower bound).

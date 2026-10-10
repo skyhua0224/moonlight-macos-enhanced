@@ -1230,6 +1230,12 @@ extension SettingsModel {
   static let defaultSunshineTargetDisplayName = ""
   static let defaultSunshineUseVirtualDisplay = false
   static let defaultSunshineScreenMode = "Host Default"
+  static let defaultRemoteDisplayScale = 0
+  static let defaultRestoreRemoteDisplayScale = true
+  static let remoteDisplayScaleDontChange = 0
+  static let remoteDisplayScaleRecommended = -1
+  /// Percentages offered before the host has reported what a display supports.
+  static let remoteDisplayScaleFallbackPercents = [100, 125, 150, 175, 200, 225, 250, 300]
   static let defaultSunshineTouchKeyboardAutoInvoke = false
   static let defaultSunshineHdrBrightnessOverride = false
   static let defaultSunshineMaxBrightness: CGFloat = 1000.0

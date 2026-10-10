@@ -762,6 +762,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 
     [self stopStreamHealthDiagnostics];
+    [self endRemoteDisplayScaleSessionWithReason:reason ?: @"begin-stop"];
     [[MLRemoteUSBForwardingSession sharedSession] stop];
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"begin-stop:%@", reason ?: @"unknown"]];
     [self finalizeInputDiagnosticsWithReason:reason];
@@ -1843,6 +1844,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.pendingDisconnectSource = nil;
         [self startStreamHealthDiagnostics];
         [self startAdaptiveBitrateIfEnabled];
+        [self startRemoteDisplayScaleForCurrentSession];
         self.streamHealthConnectionStartedMs = [self nowMs];
         [self refreshInputDiagnosticsPreference];
         [self scheduleInitialRenderedFrameCheckForGeneration:self.activeStreamGeneration remainingAttempts:80];
@@ -1998,6 +2000,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
         if (self.reconnectInProgress) {
             return;
         }
+
+        // The stream is really over (not restarting): put the host display scale back.
+        [self endRemoteDisplayScaleSessionWithReason:@"connection-terminated"];
         
         // If it was user initiated, just close normally.
         if (self.disconnectWasUserInitiated) {

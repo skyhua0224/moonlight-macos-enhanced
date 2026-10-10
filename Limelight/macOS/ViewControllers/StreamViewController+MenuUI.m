@@ -1589,6 +1589,11 @@
     fpsSubItem.submenu = fpsSubMenu;
     [monitorMenu addItem:fpsSubItem];
 
+    NSMenuItem *displayScaleItem = [self remoteDisplayScaleMenuItem];
+    if (displayScaleItem != nil) {
+        [monitorMenu addItem:displayScaleItem];
+    }
+
     monitorItem.submenu = monitorMenu;
     [self.streamMenu addItem:monitorItem];
 
@@ -1850,6 +1855,173 @@
     disconnectItem.target = self;
     setSymbol(disconnectItem, @"xmark.circle");
     [self.streamMenu addItem:disconnectItem];
+}
+
+#pragma mark - Remote display scale
+
+// Starts the session's remote display scale handling once the stream is up. Everything
+// runs in the background; the stream never waits for it.
+- (void)startRemoteDisplayScaleForCurrentSession {
+    StreamConfiguration *config = self.streamMan.streamConfiguration;
+    NSString *hostUUID = self.app.host.uuid;
+    // Only Foundation Sunshine offers the display scale routes.
+    if (config == nil || !config.foundationHost || hostUUID.length == 0 || config.host.length == 0) {
+        return;
+    }
+
+    MLRemoteDisplayScale *scale = self.remoteDisplayScale;
+    if (scale == nil) {
+        scale = [[MLRemoteDisplayScale alloc] initWithHostUUID:hostUUID
+                                                   hostAddress:config.host
+                                                    serverCert:config.serverCert];
+        self.remoteDisplayScale = scale;
+    } else {
+        [scale updateHostAddress:config.host serverCert:config.serverCert];
+    }
+
+    NSInteger setting = [SettingsClass remoteDisplayScaleFor:hostUUID];
+    BOOL restore = [SettingsClass restoreRemoteDisplayScaleFor:hostUUID];
+    NSUInteger generation = self.activeStreamGeneration;
+    __weak typeof(self) weakSelf = self;
+    [scale beginSessionWithTargetDisplay:config.sunshineTargetDisplayName ?: @""
+                          desiredSetting:setting
+                      restoreAfterStream:restore
+                              completion:^(NSDictionary<NSString *, id> *outcome) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf.stopStreamInProgress || strongSelf.activeStreamGeneration != generation) {
+            return;
+        }
+        [strongSelf presentRemoteDisplayScaleOutcome:outcome];
+    }];
+}
+
+// Stream over: put the host scale back (when asked to and this client changed it).
+- (void)endRemoteDisplayScaleSessionWithReason:(NSString *)reason {
+    MLRemoteDisplayScale *scale = nil;
+    @synchronized (self) {
+        scale = self.remoteDisplayScale;
+        self.remoteDisplayScale = nil;
+    }
+    if (scale == nil) {
+        return;
+    }
+    BOOL restore = [SettingsClass restoreRemoteDisplayScaleFor:self.app.host.uuid];
+    [scale endSessionRestoring:restore reason:reason ?: @"stream-end"];
+}
+
+- (void)presentRemoteDisplayScaleOutcome:(NSDictionary<NSString *, id> *)outcome {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self presentRemoteDisplayScaleOutcome:outcome];
+        });
+        return;
+    }
+    if ([outcome[@"ok"] boolValue]) {
+        NSString *message = [NSString stringWithFormat:MLString(@"Display scale set to %d%%", nil),
+                             [outcome[@"percent"] intValue]];
+        if ([outcome[@"restartRequired"] boolValue]) {
+            message = [NSString stringWithFormat:@"%@. %@", message,
+                       MLString(@"Some apps may need to restart to pick up the new scale", nil)];
+            [self showNotification:message forSeconds:4.5];
+        } else {
+            [self showNotification:message];
+        }
+        return;
+    }
+
+    NSString *errorCode = [outcome[@"errorCode"] isKindOfClass:[NSString class]] ? outcome[@"errorCode"] : @"";
+    NSString *key = @"Couldn't change the display scale";
+    if ([errorCode isEqualToString:@"unsupported_scale"]) {
+        key = @"The host does not support that display scale";
+    } else if ([errorCode isEqualToString:@"permission_denied"]) {
+        key = @"The host refused to change the display scale";
+    } else if ([errorCode isEqualToString:@"display_not_found"]) {
+        key = @"The host display for the scale was not found";
+    }
+    [self showNotification:MLString(key, nil) forSeconds:3.0];
+}
+
+// "Display Scale" submenu of the Display menu. Built from what the host reported when the
+// stream started (re-read in the background for the next time); never waits on the network.
+- (NSMenuItem *)remoteDisplayScaleMenuItem {
+    MLRemoteDisplayScale *scale = self.remoteDisplayScale;
+    if (scale == nil || scale.support == MLRemoteDisplayScaleSupportUnavailable) {
+        return nil;
+    }
+
+    NSString *title = MLString(@"Display Scale", nil);
+    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+    NSMenu *submenu = [[NSMenu alloc] initWithTitle:title];
+    submenu.autoenablesItems = NO;
+
+    if (scale.support == MLRemoteDisplayScaleSupportAvailable) {
+        [scale refreshOptionsIfStale];
+        NSInteger current = scale.currentPercent;
+        NSInteger recommended = scale.recommendedPercent;
+        NSInteger savedSetting = [SettingsClass remoteDisplayScaleFor:self.app.host.uuid];
+        BOOL recommendedChecked = savedSetting < 0 && recommended > 0 && current == recommended;
+
+        if (recommended > 0) {
+            NSString *recommendedTitle = [NSString stringWithFormat:MLString(@"Recommended (%d%%)", nil), (int)recommended];
+            NSMenuItem *recommendedItem = [[NSMenuItem alloc] initWithTitle:recommendedTitle
+                                                                     action:@selector(selectRemoteDisplayScaleFromMenu:)
+                                                              keyEquivalent:@""];
+            recommendedItem.target = self;
+            recommendedItem.representedObject = @(-1);
+            recommendedItem.state = recommendedChecked ? NSControlStateValueOn : NSControlStateValueOff;
+            [submenu addItem:recommendedItem];
+            [submenu addItem:[NSMenuItem separatorItem]];
+        }
+
+        for (NSNumber *percent in scale.supportedPercents) {
+            NSString *percentTitle = [NSString stringWithFormat:@"%ld%%", (long)percent.integerValue];
+            NSMenuItem *percentItem = [[NSMenuItem alloc] initWithTitle:percentTitle
+                                                                 action:@selector(selectRemoteDisplayScaleFromMenu:)
+                                                          keyEquivalent:@""];
+            percentItem.target = self;
+            percentItem.representedObject = percent;
+            percentItem.state = (percent.integerValue == current && !recommendedChecked) ? NSControlStateValueOn : NSControlStateValueOff;
+            [submenu addItem:percentItem];
+        }
+    } else if (scale.awaitingFirstQuery) {
+        NSMenuItem *loadingItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Loading…", nil) action:nil keyEquivalent:@""];
+        loadingItem.enabled = NO;
+        [submenu addItem:loadingItem];
+    } else {
+        // The last query failed in a way that may pass: offer nothing, retry in the background.
+        [scale refreshOptionsIfStale];
+        return nil;
+    }
+
+    item.submenu = submenu;
+    return item;
+}
+
+- (void)selectRemoteDisplayScaleFromMenu:(NSMenuItem *)sender {
+    NSNumber *setting = [sender.representedObject isKindOfClass:[NSNumber class]] ? sender.representedObject : nil;
+    MLRemoteDisplayScale *scale = self.remoteDisplayScale;
+    NSString *hostUUID = self.app.host.uuid;
+    if (setting == nil || scale == nil || hostUUID.length == 0) {
+        return;
+    }
+
+    // -1 is the "Recommended" entry: apply the host's value, remember "Recommended".
+    NSInteger percent = setting.integerValue < 0 ? scale.recommendedPercent : setting.integerValue;
+    if (percent <= 0) {
+        return;
+    }
+    BOOL restore = [SettingsClass restoreRemoteDisplayScaleFor:hostUUID];
+    __weak typeof(self) weakSelf = self;
+    [scale applyPercent:percent restoreAfterStream:restore completion:^(NSDictionary<NSString *, id> *outcome) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil) {
+            return;
+        }
+        if ([outcome[@"ok"] boolValue]) {
+            [SettingsClass setRemoteDisplayScale:setting.integerValue for:hostUUID];
+        }
+        [strongSelf presentRemoteDisplayScaleOutcome:outcome];
+    }];
 }
 
 - (void)handleToggleFullscreenFromMenu:(id)sender {
