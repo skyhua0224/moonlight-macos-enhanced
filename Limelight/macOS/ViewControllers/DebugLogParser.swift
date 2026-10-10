@@ -22,6 +22,47 @@ private final class DebugLogRegexCache {
   }
 }
 
+/// Localisation for the text the parser builds on its background queue.
+///
+/// This must go through `LanguageManager`: it applies the language chosen inside the app,
+/// while `NSLocalizedString` / `String(localized:)` follow the system language and would
+/// show English for a user who picked Chinese in Moonlight but runs a system in English.
+/// Lookups are cached per language because they run for every parsed line.
+private final class DebugLogText {
+  static let shared = DebugLogText()
+
+  private let lock = NSLock()
+  private var cache: [String: String] = [:]
+  private var cachedLanguage = ""
+
+  func localized(_ key: String) -> String {
+    let language = LanguageManager.shared.currentLanguage.rawValue
+    lock.lock()
+    defer { lock.unlock() }
+    if language != cachedLanguage {
+      cache.removeAll(keepingCapacity: true)
+      cachedLanguage = language
+    }
+    if let hit = cache[key] {
+      return hit
+    }
+    let value = LanguageManager.shared.localize(key)
+    cache[key] = value
+    return value
+  }
+}
+
+/// The localised text for `key`.
+private func tr(_ key: String) -> String {
+  DebugLogText.shared.localized(key)
+}
+
+/// The localised format for `key`, filled with `arguments` (all of them are shown as text).
+private func tr(_ key: String, _ arguments: String...) -> String {
+  let boxed: [CVarArg] = arguments.map { $0 as NSString }
+  return String(format: DebugLogText.shared.localized(key), arguments: boxed)
+}
+
 extension String {
   /// Plain case-insensitive substring test. Unlike `localizedCaseInsensitiveContains`
   /// it does not go through locale-aware collation, which is far slower per line.
@@ -247,8 +288,9 @@ final class MLLogCategoryClassifier: NSObject {
     "system": .init(
       domainKey: "system",
       categoryKey: "system",
-      displayName: "System",
-      badgeText: "System"
+      // Not plain "System": that key is the language option and reads "系统默认" in Chinese.
+      displayName: "System Log",
+      badgeText: "System Log"
     ),
     "system.noise": .init(
       domainKey: "system",
@@ -360,7 +402,37 @@ final class MLLogCategoryClassifier: NSObject {
     descriptor(forCategoryKey: categoryKey(forLine: line))
   }
 
+  /// The "[tag]" that opens the message of a line "[time] <LEVEL> [tag] text", lowercased.
+  private static func leadingTag(ofLine line: String) -> String? {
+    guard let levelEnd = line.range(of: "> "),
+      line.distance(from: line.startIndex, to: levelEnd.lowerBound) < 40
+    else { return nil }
+    let rest = line[levelEnd.upperBound...]
+    guard rest.first == "[", let close = rest.firstIndex(of: "]") else { return nil }
+    let tag = rest[rest.index(after: rest.startIndex)..<close]
+    guard tag.count <= 16 else { return nil }
+    return tag.lowercased()
+  }
+
+  /// Where the newer tagged lines belong. Tags without an entry keep the text based rules below.
+  private static func categoryKey(forTag tag: String) -> String? {
+    switch tag {
+    case "audio": return "audio.pipeline"
+    case "video", "hdr": return "video.decoder"
+    case "keyboard", "controller", "touchpad": return "input"
+    case "startup", "live", "display-scale", "sunshine": return "stream.lifecycle"
+    case "fec", "perf": return "stream"
+    case "netprobe": return "network"
+    case "discovery": return "discovery"
+    default: return nil
+    }
+  }
+
   private static func categoryKey(forLine line: String) -> String {
+    if let tag = leadingTag(ofLine: line), let key = categoryKey(forTag: tag) {
+      return key
+    }
+
     let normalized = line.lowercased()
 
     if normalized.contains("[clickdiag]") {
@@ -493,6 +565,10 @@ final class MLLogCategoryClassifier: NSObject {
       return "ui.window"
     }
 
+    if normalized.contains("> stage "), normalized.contains(" failed:") {
+      return "stream.lifecycle"
+    }
+
     if containsAny(normalized, [
       "stream target selection",
       "stream target classification",
@@ -505,6 +581,7 @@ final class MLLogCategoryClassifier: NSObject {
       "connectionstarted",
       "input stream established",
       "disconnect requested",
+      "connection terminated:",
       "begin-stop:",
       "stream stop took",
       "cancel pending reconnect",
@@ -550,6 +627,9 @@ enum DebugNoiseCategory: String, CaseIterable {
       return "Host Identity Mismatch"
     }
   }
+
+  /// `displayName` in the app language (the raw value is what the logger writes).
+  var localizedName: String { tr(displayName) }
 }
 
 extension DebugNoiseCategory {
@@ -830,7 +910,14 @@ enum DebugLogParser {
     let presentation: DebugLogPresentation
     if isNoiseSummary, let noiseCategory = noiseCategory {
       category = MLLogCategoryClassifier.descriptor(forNoiseCategory: noiseCategory)
-      presentation = DebugLogPresentation(title: message, detail: nil)
+      presentation =
+        generatedSummaryPresentation(message: message, noiseCategory: noiseCategory)
+        ?? DebugLogPresentation(title: message, detail: nil)
+    } else if source.isSummary,
+      let repeated = generatedSummaryPresentation(message: message, noiseCategory: nil)
+    {
+      category = MLLogCategoryClassifier.descriptor(forLine: rawLine)
+      presentation = repeated
     } else {
       category = MLLogCategoryClassifier.descriptor(forLine: rawLine)
       presentation = defaultPresentation(
@@ -905,37 +992,39 @@ enum DebugLogParser {
       if !force, let now, now.timeIntervalSince(current.startTime) < aggregationWindowSeconds {
         return
       }
-      let summaryLine: String
+      // The text is written the way the logger words its own summaries; the friendly title and
+      // detail are derived from it, so both sources are shown the same way.
+      let window = Int(aggregationWindowSeconds)
+      let summaryDetail: String
       switch current.category {
       case .discoveryChatter:
         if current.target == "resolved-address" {
-          summaryLine =
-            "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(current.reason) address repeats)"
+          summaryDetail = "repeated address resolution: \(current.reason)"
         } else {
-          summaryLine =
-            "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(current.reason), \(current.target))"
+          summaryDetail = "\(current.reason), \(current.target)"
         }
       case .hostIdentityMismatch:
         var details: [String] = []
         if current.certificateMismatchCount > 0 {
-          details.append("Certificate mismatches: \(current.certificateMismatchCount)")
+          details.append("certificate mismatches: \(current.certificateMismatchCount)")
         }
         if current.incorrectHostCount > 0 {
-          details.append("Incorrect hosts: \(current.incorrectHostCount)")
+          details.append("incorrect hosts: \(current.incorrectHostCount)")
         }
         if let expected = DebugLogNoiseClassifier.shortHostIdentity(current.expectedHostIdentity) {
-          details.append("Expected \(expected)")
+          details.append("expected \(expected)")
         }
         if let actual = DebugLogNoiseClassifier.shortHostIdentity(current.actualHostIdentity) {
-          details.append("Received \(actual)")
+          details.append("received \(actual)")
         }
-        let detailText = details.isEmpty ? "Host identity verification failed" : details.joined(separator: ", ")
-        summaryLine =
-          "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(detailText))"
+        summaryDetail = details.isEmpty ? "host identity verification failed" : details.joined(separator: ", ")
       default:
-        summaryLine =
-          "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(current.reason), target \(current.target))"
+        summaryDetail = "primary cause: \(current.reason), target: \(current.target)"
       }
+      let summaryLine =
+        "\(current.category.displayName): in \(window)s, \(current.count) occurrences (\(summaryDetail))"
+      let summaryPresentation = noiseSummaryPresentation(
+        category: current.category, seconds: "\(window)", count: "\(current.count)", detail: summaryDetail)
       summarySequence += 1
       let summary = DebugLogEntry(
         id: "s\(summarySequence)|" + makeStableID(
@@ -949,15 +1038,15 @@ enum DebugLogParser {
         timestampText: current.timestampText,
         level: .warn,
         message: summaryLine,
-        defaultTitle: summaryLine,
-        defaultDetail: nil,
+        defaultTitle: summaryPresentation.title,
+        defaultDetail: summaryPresentation.detail,
         rawLine: summaryLine,
         count: current.count,
         category: MLLogCategoryClassifier.descriptor(forNoiseCategory: current.category),
         searchIndex: makeSearchIndex(
           category: MLLogCategoryClassifier.descriptor(forNoiseCategory: current.category),
-          defaultTitle: summaryLine,
-          defaultDetail: nil,
+          defaultTitle: summaryPresentation.title,
+          defaultDetail: summaryPresentation.detail,
           message: summaryLine,
           rawLine: summaryLine
         ),
@@ -1060,6 +1149,8 @@ enum DebugLogParser {
 
       let startLine =
         "\(category.displayName): aggregating for \(Int(aggregationWindowSeconds))s window"
+      let startTitle = tr(
+        "%@: aggregating for %@ s window", category.localizedName, "\(Int(aggregationWindowSeconds))")
       summarySequence += 1
       let startEntry = DebugLogEntry(
         id: "s\(summarySequence)|" + makeStableID(
@@ -1073,14 +1164,14 @@ enum DebugLogParser {
         timestampText: entry.timestampText,
         level: .info,
         message: startLine,
-        defaultTitle: startLine,
+        defaultTitle: startTitle,
         defaultDetail: nil,
         rawLine: startLine,
         count: 1,
         category: MLLogCategoryClassifier.descriptor(forNoiseCategory: category),
         searchIndex: makeSearchIndex(
           category: MLLogCategoryClassifier.descriptor(forNoiseCategory: category),
-          defaultTitle: startLine,
+          defaultTitle: startTitle,
           defaultDetail: nil,
           message: startLine,
           rawLine: startLine
@@ -1231,184 +1322,189 @@ enum DebugLogParser {
       return DebugLogPresentation(title: message, detail: nil)
     }
 
+    // Tagged lines are matched on their own text, whatever category they were filed under.
+    if let tagged = taggedPresentation(message: message) {
+      return tagged
+    }
+
     let normalized = message.lowercased()
     let cleaned = stripTechnicalPrefix(from: message)
 
     switch category.categoryKey {
     case "discovery.mdns":
       if normalized == "starting discovery" {
-        return .init(title: "Started scanning for hosts", detail: "Preparing to probe known hosts and local network discovery services")
+        return .init(title: tr("Started scanning for hosts"), detail: tr("Preparing to probe known hosts and local network discovery services"))
       }
       if normalized == "starting mdns discovery" {
-        return .init(title: "Started mDNS discovery", detail: nil)
+        return .init(title: tr("Started mDNS discovery"), detail: nil)
       }
       if normalized == "stopping discovery" {
-        return .init(title: "Stopped scanning for hosts", detail: nil)
+        return .init(title: tr("Stopped scanning for hosts"), detail: nil)
       }
       if normalized == "stopping mdns discovery" {
-        return .init(title: "Stopped mDNS discovery", detail: nil)
+        return .init(title: tr("Stopped mDNS discovery"), detail: nil)
       }
       if normalized == "updating hosts..." {
-        return .init(title: "Updating host list", detail: nil)
+        return .init(title: tr("Updating host list"), detail: nil)
       }
       if let host = firstCapture(in: message, pattern: #"Found new host:\s*(.+)$"#) {
-        return .init(title: "Discovered a new host", detail: host)
+        return .init(title: tr("Discovered a new host"), detail: host)
       }
       if let host = firstCapture(in: message, pattern: #"Found existing host through MDNS:\s*(.+)$"#) {
-        return .init(title: "mDNS discovered a known host", detail: host)
+        return .init(title: tr("mDNS discovered a known host"), detail: host)
       }
       if let captures = captures(in: message, pattern: #"Resolved address:\s*([^\s]+)\s*->\s*(.+)$"#), captures.count >= 2 {
-        return .init(title: "Resolved host address", detail: "\(captures[0]) → \(captures[1])")
+        return .init(title: tr("Resolved host address"), detail: "\(captures[0]) → \(captures[1])")
       }
       if let captures = captures(in: message, pattern: #"Discovery summary for\s+([^:]+):\s*(.+)$"#), captures.count >= 2 {
-        return .init(title: "Host probe result", detail: "\(captures[0]): \(captures[1])")
+        return .init(title: tr("Host probe result"), detail: "\(captures[0]): \(captures[1])")
       }
       if let host = firstCapture(in: message, pattern: #"Found service:\s+.+\.\s([^ ]+)\s+-?\d+$"#) {
-        return .init(title: "Discovered broadcast service", detail: host)
+        return .init(title: tr("Discovered broadcast service"), detail: host)
       }
       return .init(title: cleaned, detail: nil)
 
     case "pairing.identity":
       if normalized.contains("server certificate mismatch") {
-        return .init(title: "Server certificate does not match the saved identity", detail: "This usually means the wrong host was reached or the host certificate changed")
+        return .init(title: tr("Server certificate does not match the saved identity"), detail: tr("This usually means the wrong host was reached or the host certificate changed"))
       }
       if normalized.contains("client certificate imported in memory without keychain access") {
-        return .init(title: "Client certificate loaded into memory", detail: "This connection will not write to Keychain")
+        return .init(title: tr("Client certificate loaded into memory"), detail: tr("This connection will not write to Keychain"))
       }
       if let captures = captures(in: message, pattern: #"incorrect host:\s*([^\s]+)\s+expected:\s*([^\s]+)"#), captures.count >= 2 {
         let actual = DebugLogNoiseClassifier.shortHostIdentity(captures[0]) ?? captures[0]
         let expected = DebugLogNoiseClassifier.shortHostIdentity(captures[1]) ?? captures[1]
-        return .init(title: "Received a response from a host with a mismatched identity", detail: "Actual \(actual) · Expected \(expected)")
+        return .init(title: tr("Received a response from a host with a mismatched identity"), detail: tr("Actual %@ · Expected %@", actual, expected))
       }
       return .init(title: cleaned, detail: nil)
 
     case "network.tls":
       if let code = firstCapture(in: message, pattern: #"error\s+(-?\d+)"#) ?? firstCapture(in: message, pattern: #"Code=(-?\d+)"#) {
-        return .init(title: "TLS / certificate handshake failed", detail: "Error code \(code)")
+        return .init(title: tr("TLS / certificate handshake failed"), detail: tr("Error code %@", code))
       }
-      return .init(title: "TLS / certificate verification failed", detail: cleaned)
+      return .init(title: tr("TLS / certificate verification failed"), detail: cleaned)
 
     case "network.http", "network.transport":
       if let code = firstCapture(in: message, pattern: #"Request failed with error\s+(-?\d+)"#) {
-        return .init(title: friendlyNetworkFailureTitle(for: code), detail: "Error code \(code)")
+        return .init(title: friendlyNetworkFailureTitle(for: code), detail: tr("Error code %@", code))
       }
       if normalized.contains("app list successfully retreived") || normalized.contains("app list successfully retrieved") {
         let tries = firstCapture(in: message, pattern: #"took\s+(\d+)\s+tries"#) ?? "0"
-        return .init(title: "App list retrieved", detail: "Retry count \(tries)")
+        return .init(title: tr("App list retrieved"), detail: tr("Retry count %@", tries))
       }
       if normalized.contains("stun failed to get wan address") {
         let code = firstCapture(in: message, pattern: #":\s*(-?\d+)$"#) ?? "unknown"
-        return .init(title: "STUN failed to obtain the public address", detail: "Error code \(code)")
+        return .init(title: tr("STUN failed to obtain the public address"), detail: tr("Error code %@", code))
       }
       if normalized.contains("requesting:") && normalized.contains("/resume?") {
-        return .init(title: "Requesting stream session resume", detail: nil)
+        return .init(title: tr("Requesting stream session resume"), detail: nil)
       }
       if normalized.contains("received response:") {
-        return .init(title: "Received host response", detail: nil)
+        return .init(title: tr("Received host response"), detail: nil)
       }
       if normalized.contains("making request:") {
-        return .init(title: "Sending host request", detail: nil)
+        return .init(title: tr("Sending host request"), detail: nil)
       }
       return .init(title: cleaned, detail: nil)
 
     case "stream.lifecycle":
       if normalized.contains("stream target selection:") {
         let active = value(forKey: "active", in: message)
-        return .init(title: "Stream target selected", detail: active)
+        return .init(title: tr("Stream target selected"), detail: active)
       }
       if normalized.contains("stream target classification:") {
         let reason = value(forKey: "reason", in: message)
-        return .init(title: "Stream route classification completed", detail: reason)
+        return .init(title: tr("Stream route classification completed"), detail: reason)
       }
       if let detail = suffix(in: cleaned, after: "Stream risk assessment:") {
-        return .init(title: "Stream specification assessment", detail: detail)
+        return .init(title: tr("Stream specification assessment"), detail: detail)
       }
       if let detail = suffix(in: cleaned, after: "Recommended fallback:") {
-        return .init(title: "Recommended fallback configuration", detail: detail)
+        return .init(title: tr("Recommended fallback configuration"), detail: detail)
       }
       if let detail = suffix(in: cleaned, after: "Stream timing config:") {
-        return .init(title: "Stream timing configuration applied", detail: detail)
+        return .init(title: tr("Stream timing configuration applied"), detail: detail)
       }
       if normalized.contains("listartconnectionctx") {
-        return .init(title: "Starting stream connection", detail: nil)
+        return .init(title: tr("Starting stream connection"), detail: nil)
       }
       if normalized.contains("clconnectionstarted") || normalized.contains("connectionstarted") {
-        return .init(title: "Stream connection started", detail: cleaned)
+        return .init(title: tr("Stream connection started"), detail: cleaned)
       }
       if normalized.contains("input stream established") {
-        return .init(title: "Input path established", detail: nil)
+        return .init(title: tr("Input path established"), detail: nil)
       }
       if normalized.contains("performclose invoked") {
-        return .init(title: "User requested the stream window to close", detail: nil)
+        return .init(title: tr("User requested the stream window to close"), detail: nil)
       }
       if normalized.contains("disconnect requested") {
-        return .init(title: "Received stream disconnect request", detail: cleaned)
+        return .init(title: tr("Received stream disconnect request"), detail: cleaned)
       }
       if normalized.contains("stream stop took") {
-        return .init(title: "Stream stopped", detail: cleaned)
+        return .init(title: tr("Stream stopped"), detail: cleaned)
       }
       if normalized.contains("input summary") {
-        return .init(title: "Input statistics summary", detail: suffixAfterFirstColon(in: cleaned) ?? cleaned)
+        return .init(title: tr("Input statistics summary"), detail: suffixAfterFirstColon(in: cleaned) ?? cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "input.scroll":
       if normalized.contains("scroll-trace start") {
-        return .init(title: "Scroll input started", detail: cleaned)
+        return .init(title: tr("Scroll input started"), detail: cleaned)
       }
       if normalized.contains("scroll-trace render") {
-        return .init(title: "Scroll effect displayed", detail: cleaned)
+        return .init(title: tr("Scroll effect displayed"), detail: cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "input.mouse":
       if normalized.contains("absolute pos=") {
-        return .init(title: "Sent absolute mouse position", detail: cleaned)
+        return .init(title: tr("Sent absolute mouse position"), detail: cleaned)
       }
       if normalized.contains("relative raw=") {
-        return .init(title: "Sent relative mouse movement", detail: cleaned)
+        return .init(title: tr("Sent relative mouse movement"), detail: cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "input.click":
-      return .init(title: "Mouse click event", detail: cleaned)
+      return .init(title: tr("Mouse click event"), detail: cleaned)
 
     case "input.capture":
       if let reason = value(forKey: "reason", in: message) {
-        return .init(title: "Mouse capture state changed", detail: reason)
+        return .init(title: tr("Mouse capture state changed"), detail: reason)
       }
-      return .init(title: "Mouse capture state changed", detail: cleaned)
+      return .init(title: tr("Mouse capture state changed"), detail: cleaned)
 
     case "video.decoder":
       if normalized.contains("got sps") || normalized.contains("got pps") {
-        return .init(title: "Video stream parameters updated", detail: cleaned)
+        return .init(title: tr("Video stream parameters updated"), detail: cleaned)
       }
       if normalized.contains("constructing new h264 format description") {
-        return .init(title: "Rebuilt H.264 decode format", detail: nil)
+        return .init(title: tr("Rebuilt H.264 decode format"), detail: nil)
       }
       if normalized.contains("renderer pacing target updated") {
-        return .init(title: "Render pacing target updated", detail: cleaned)
+        return .init(title: tr("Render pacing target updated"), detail: cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "audio.pipeline":
       if normalized.contains("microphone disabled in settings") {
-        return .init(title: "Microphone disabled in Settings", detail: nil)
+        return .init(title: tr("Microphone disabled in Settings"), detail: nil)
       }
       if normalized.contains("microphone setting:") {
-        return .init(title: "Microphone configuration applied", detail: cleaned)
+        return .init(title: tr("Microphone configuration applied"), detail: cleaned)
       }
       return .init(title: cleaned, detail: nil)
 
     case "ui.window":
       if normalized.contains("startup display mode requesting fullscreen toggle") {
-        return .init(title: "Requested fullscreen", detail: nil)
+        return .init(title: tr("Requested fullscreen"), detail: nil)
       }
       if normalized.contains("window-did-enter-fullscreen") {
-        return .init(title: "Window entered fullscreen", detail: nil)
+        return .init(title: tr("Window entered fullscreen"), detail: nil)
       }
       if normalized.contains("window-did-exit-fullscreen") {
-        return .init(title: "Window exited fullscreen", detail: nil)
+        return .init(title: tr("Window exited fullscreen"), detail: nil)
       }
       return .init(title: cleaned, detail: nil)
 
@@ -1431,18 +1527,685 @@ enum DebugLogParser {
   private static func friendlyNetworkFailureTitle(for code: String) -> String {
     switch code {
     case "-1202":
-      return "Certificate validation failed; preparing fallback"
+      return tr("Certificate validation failed; preparing fallback")
     case "-1200":
-      return "TLS secure connection failed; preparing fallback"
+      return tr("TLS secure connection failed; preparing fallback")
     case "-1001":
-      return "Request timed out; preparing fallback"
+      return tr("Request timed out; preparing fallback")
     case "-1004":
-      return "Could not connect to the server; preparing fallback"
+      return tr("Could not connect to the server; preparing fallback")
     case "-1005":
-      return "Network connection interrupted"
+      return tr("Network connection interrupted")
     default:
-      return "Network request failed; preparing fallback"
+      return tr("Network request failed; preparing fallback")
     }
+  }
+
+  // MARK: Tagged lines
+
+  private static func pres(_ title: String, _ detail: String? = nil) -> DebugLogPresentation {
+    DebugLogPresentation(title: title, detail: detail)
+  }
+
+  /// Friendly form of the "[tag] ..." lines and of a few untagged stream-failure lines. Every
+  /// title and detail goes through `tr`, so the app's own language override applies. Lines
+  /// without a rule return nil and stay exactly as logged, instead of being half translated.
+  private static func taggedPresentation(message: String) -> DebugLogPresentation? {
+    guard let tagged = splitTag(message) else {
+      return plainLinePresentation(message)
+    }
+    switch tagged.tag {
+    case "audio": return audioPresentation(tagged.body)
+    case "display-scale": return displayScalePresentation(tagged.body)
+    case "startup": return startupPresentation(tagged.body)
+    case "hdr": return hdrPresentation(tagged.body)
+    case "video": return videoPresentation(tagged.body)
+    case "keyboard": return keyboardPresentation(tagged.body)
+    case "controller": return controllerPresentation(tagged.body)
+    case "live": return livePresentation(tagged.body)
+    case "netprobe": return netProbePresentation(tagged.body)
+    case "fec": return fecPresentation(tagged.body)
+    case "perf": return perfPresentation(tagged.body)
+    case "sunshine": return sunshinePresentation(tagged.body)
+    case "discovery": return discoveryTagPresentation(tagged.body)
+    default: return nil
+    }
+  }
+
+  /// Splits "[tag] body" into its parts. The tag is at most a few characters, so a message
+  /// that merely starts with a bracket is not mistaken for one.
+  private static func splitTag(_ message: String) -> (tag: String, body: String)? {
+    guard message.first == "[", let close = message.firstIndex(of: "]") else { return nil }
+    let tag = message[message.index(after: message.startIndex)..<close]
+    guard !tag.isEmpty, tag.count <= 16 else { return nil }
+    let body = message[message.index(after: close)...].drop(while: { $0 == " " })
+    return (String(tag), String(body))
+  }
+
+  /// Range of `key=` where it starts a token, so "valid=" does not match inside "invalid=".
+  private static func fieldStart(_ key: String, in text: String) -> Range<String.Index>? {
+    let needle = key + "="
+    var from = text.startIndex
+    while from < text.endIndex, let found = text.range(of: needle, range: from..<text.endIndex) {
+      if found.lowerBound == text.startIndex { return found }
+      let before = text[text.index(before: found.lowerBound)]
+      if before == " " || before == "(" { return found }
+      from = found.upperBound
+    }
+    return nil
+  }
+
+  /// Value of `key=` up to the next space or closing bracket (and comma, unless a list is expected).
+  private static func field(_ key: String, in text: String, list: Bool = false) -> String? {
+    guard let found = fieldStart(key, in: text) else { return nil }
+    var end = found.upperBound
+    while end < text.endIndex {
+      let character = text[end]
+      if character == " " || character == ")" || character == ";" || (!list && character == ",") {
+        break
+      }
+      end = text.index(after: end)
+    }
+    let value = text[found.upperBound..<end]
+    return value.isEmpty ? nil : String(value)
+  }
+
+  /// Text between `start` and the next `end`, or the rest of the text when `end` is nil.
+  private static func between(_ text: String, _ start: String, _ end: String?) -> String? {
+    guard let begin = text.range(of: start) else { return nil }
+    var stop = text.endIndex
+    if let end = end, let found = text.range(of: end, range: begin.upperBound..<text.endIndex) {
+      stop = found.lowerBound
+    }
+    let value = text[begin.upperBound..<stop].trimmingCharacters(in: .whitespaces)
+    return value.isEmpty ? nil : value
+  }
+
+  /// A number logged as "125" or "125%", without the percent sign (the localised formats add it).
+  private static func num(_ value: String?) -> String {
+    guard let value = value, !value.isEmpty else { return "?" }
+    return value.hasSuffix("%") ? String(value.dropLast()) : value
+  }
+
+  private static func audioPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Stream start:") {
+      let codec = field("effective", in: body) ?? field("requested", in: body) ?? "?"
+      let channels = field("channels", in: body) ?? "?"
+      let passthrough = between(body, "passthrough=", nil) ?? ""
+      let detail: String
+      if passthrough.hasPrefix("planned") {
+        detail = tr("Codec %@ · %@ channels · passthrough planned", codec, channels)
+      } else if passthrough.hasPrefix("no(") {
+        detail = tr(
+          "Codec %@ · %@ channels · passthrough unavailable (%@)", codec, channels,
+          String(passthrough.dropFirst(3).dropLast()))
+      } else {
+        detail = tr("Codec %@ · %@ channels", codec, channels)
+      }
+      return pres(tr("Audio stream started"), detail)
+    }
+    if let marker = body.range(of: " decoder ready:") {
+      return pres(
+        tr("Audio decoder ready"),
+        tr("%@ · %@ channels", String(body[..<marker.lowerBound]), field("channels", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Output started on attempt") {
+      // "Output started on attempt N after Mms: backend=X"
+      let parts = body.split(separator: " ")
+      let attempt = parts.count > 4 ? String(parts[4]) : "?"
+      let elapsed = parts.count > 6 ? parts[6].replacingOccurrences(of: "ms:", with: "") : "?"
+      let backend = field("backend", in: body) ?? "?"
+      return pres(
+        backend.contains("passthrough") ? tr("Audio output started (passthrough)") : tr("Audio output started"),
+        tr("Attempt %@ · %@ ms · %@", attempt, elapsed, backend))
+    }
+    if body.hasPrefix("Output start attempt") {
+      // "Output start attempt N failed: status=S (CODE) device=NAME elapsedMs=M; ...; retry in Ns"
+      let parts = body.split(separator: " ")
+      let attempt = parts.count > 3 ? String(parts[3]) : "?"
+      let retry = (between(body, "retry in ", nil) ?? "?").trimmingCharacters(in: CharacterSet(charactersIn: "s"))
+      return pres(
+        tr("Audio output failed to start; retrying"),
+        tr(
+          "Attempt %@ · device %@ · status %@ · retry in %@ s", attempt,
+          between(body, "device=", " elapsedMs=") ?? "?", field("status", in: body) ?? "?", retry))
+    }
+    if body.hasPrefix("Passthrough started:") {
+      return pres(
+        tr("Audio passthrough started"),
+        tr("Device %@ · codec %@", between(body, "device=", " codec=") ?? "?", between(body, "codec=", " burst=") ?? "?"))
+    }
+    if body.hasPrefix("Passthrough stopped:") {
+      return pres(
+        tr("Audio passthrough stopped; decoding on this Mac"),
+        between(body, "Passthrough stopped:", ". Falling back"))
+    }
+    if body.hasPrefix("Passthrough could not start (") {
+      return pres(tr("Audio passthrough could not start"), between(body, "start (", ");"))
+    }
+    if body.hasPrefix("Passthrough not used:") {
+      return pres(tr("Audio passthrough not used"), between(body, "not used:", "; decoding"))
+    }
+    if body.hasPrefix("No audio packet has arrived") {
+      return pres(
+        tr("No audio received from the host"),
+        tr(
+          "No audio packet in the first 12 s (codec %@, %@ channels). The host may be streaming without audio.",
+          field("codec", in: body) ?? "?", field("channels", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Audio devices changed while") {
+      let retry = (between(body, "retrying in ", nil) ?? "?").trimmingCharacters(in: CharacterSet(charactersIn: "s"))
+      return pres(tr("Audio device changed; retrying output"), tr("Retry in %@ s", retry))
+    }
+    if body.contains(" packets since last report:") {
+      return pres(
+        tr("Audio packets lost or invalid"),
+        tr(
+          "Valid %@ · invalid %@ · lost %@ · overflow %@", field("valid", in: body) ?? "?",
+          field("invalid", in: body) ?? "?", field("lossPlaceholders", in: body) ?? "?",
+          field("fifoOverflows", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Passthrough bursts since last report:") {
+      return pres(
+        tr("Audio passthrough is losing data"),
+        tr(
+          "Played %@ of %@ · dropped %@ · invalid %@", field("played", in: body) ?? "?",
+          field("enqueued", in: body) ?? "?", field("dropped", in: body) ?? "?", field("invalid", in: body) ?? "?"))
+    }
+    if body.hasPrefix("First PCM packet validated") || (body.hasPrefix("First ") && body.contains(" frame received:")) {
+      return pres(
+        tr("First audio packet received"),
+        tr("%@ bytes · %@ channels", field("bytes", in: body) ?? "?", field("channels", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Output start scheduled in the background") {
+      return pres(tr("Audio output starting in the background"), tr("The stream does not wait for the audio device"))
+    }
+    if body.hasPrefix("Requested codec "), body.contains(" replaced by opus:") {
+      return pres(tr("Audio codec replaced by Opus"), between(body, "replaced by opus:", nil))
+    }
+    if body.contains("muted for this session") {
+      return pres(tr("Audio is muted for this session"), body)
+    }
+    return nil
+  }
+
+  private static func displayScalePresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("options ") {
+      let status = field("status", in: body) ?? "?"
+      if status != "200" || field("setSupported", in: body) == "0" {
+        return pres(
+          tr("Host display scale unavailable"),
+          tr("Status %@ · %@", status, field("errorCode", in: body) ?? "-"))
+      }
+      return pres(
+        tr("Host display scale options"),
+        tr(
+          "Current %@%% · recommended %@%% · supported %@", num(field("current", in: body)),
+          num(field("recommended", in: body)), field("supported", in: body, list: true) ?? "?"))
+    }
+    if body.hasPrefix("ignored stale request") {
+      return pres(
+        tr("Stale display scale request ignored"),
+        tr(
+          "Source %@ · request %@ · current %@", field("source", in: body) ?? "?",
+          field("generation", in: body) ?? "?", field("current", in: body) ?? "?"))
+    }
+    if body.hasPrefix("start: ") {
+      let rest = String(body.dropFirst(7))
+      if rest.hasPrefix("host does not offer a settable scale") {
+        return pres(
+          tr("Host display scale unavailable"),
+          tr("Status %@ · %@", field("status", in: rest) ?? "?", field("errorCode", in: rest) ?? "-"))
+      }
+      if rest.hasPrefix("no change requested") {
+        return pres(tr("Display scale left unchanged"), tr("Current %@%%", num(field("current", in: rest))))
+      }
+      if rest.hasPrefix("host reported no recommended scale") {
+        return pres(tr("Display scale left unchanged"), tr("The host reported no recommended scale"))
+      }
+      if rest.contains("is not supported by this display") {
+        return pres(
+          tr("Display scale left unchanged"),
+          tr("%@%% is not supported by this display", String(rest.prefix(while: { $0.isNumber }))))
+      }
+      if rest.hasPrefix("scale is already") {
+        return pres(
+          tr("Display scale left unchanged"), tr("Already at %@%%", between(rest, "already ", "%") ?? "?"))
+      }
+      return nil
+    }
+    if body.hasPrefix("set source=") {
+      let confirmed = field("result", in: body) == field("requested", in: body)
+      return pres(
+        confirmed ? tr("Host display scale applied") : tr("Host display scale change not confirmed"),
+        tr("%@%% → %@%%", num(field("previous", in: body)), num(field("result", in: body))))
+    }
+    if body.hasPrefix("restore (") {
+      let reason = between(body, "restore (", ")") ?? "-"
+      if body.contains(" requested="), body.contains(" result=") {
+        let target = num(field("requested", in: body))
+        let confirmed = field("result", in: body) == field("requested", in: body)
+        return pres(
+          confirmed
+            ? tr("Host display scale restored to %@%%", target)
+            : tr("Host display scale restore not confirmed"),
+          tr("From %@%% · reason %@", num(field("previous", in: body)), reason))
+      }
+      if let skipped = between(body, " skipped:", nil) {
+        return pres(
+          tr("Host display scale restore skipped"),
+          skipped.hasPrefix("nothing to restore") ? tr("Nothing to restore") : skipped)
+      }
+      if let dropped = between(body, " dropped:", nil) {
+        return pres(tr("Host display scale restore dropped"), dropped)
+      }
+      if let postponed = between(body, " postponed:", nil) {
+        return pres(tr("Host display scale restore postponed"), postponed)
+      }
+      return nil
+    }
+    if body.hasPrefix("restore skipped (") {
+      return pres(tr("Host display scale restore skipped"), between(body, "):", nil))
+    }
+    if body.hasPrefix("restore after streaming is off;") {
+      return pres(
+        tr("Host display scale kept after the stream"),
+        tr("%@%% stays applied", between(body, "the ", "%") ?? "?"))
+    }
+    if body.hasPrefix("scale is back at") {
+      return pres(tr("Host display scale is back at %@%%", between(body, "back at ", "%") ?? "?"))
+    }
+    if body.hasPrefix("pending restore saved:") {
+      return pres(
+        tr("Display scale restore saved"),
+        between(body, "saved:", " device=")?.replacingOccurrences(of: " -> ", with: " → "))
+    }
+    if body.hasPrefix("launch recovery skipped") {
+      let detail: String?
+      if body.contains("not in the saved list") {
+        detail = tr("The host is not in the saved list")
+      } else if body.contains("no known host address") {
+        detail = tr("No known host address")
+      } else {
+        detail = nil
+      }
+      return pres(tr("Display scale recovery skipped"), detail)
+    }
+    return nil
+  }
+
+  private static func startupPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Renderer warmup") {
+      return pres(tr("Renderer warmed up"), tr("Took %@", field("total", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Network prep") {
+      return pres(
+        tr("Network preparation finished"),
+        tr(
+          "Total %@ · crypto %@ · server info %@ · host launch %@", field("total", in: body) ?? "?",
+          field("crypto", in: body) ?? "?", field("serverInfo", in: body) ?? "?",
+          field("hostLaunch", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Main bind") {
+      return pres(
+        tr("Stream window prepared"),
+        tr(
+          "Total %@ · renderer ready %@ · connection %@", field("total", in: body) ?? "?",
+          field("rendererWarmupReady", in: body) ?? "?", field("connectionQueue", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Enhanced drawable prewarm skipped") {
+      return pres(tr("Renderer prewarm skipped"), tr("No drawable is available yet"))
+    }
+    if body.hasPrefix("Enhanced drawable prewarm committed") {
+      return pres(tr("Renderer prewarmed"))
+    }
+    return nil
+  }
+
+  private static func hdrPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Dolby Vision negotiated") {
+      return pres(tr("Dolby Vision negotiated"), tr("Starting on the HDR10 base layer until the host sends Dolby Vision data"))
+    }
+    if body.hasPrefix("Dolby Vision RPU first seen") {
+      return pres(tr("Switching to the Dolby Vision decoder"), tr("Requested a key frame to switch decoders"))
+    }
+    if body.hasPrefix("Format description rebuilt") {
+      let detail: String?
+      if field("dolbyVision", in: body) == "1" {
+        detail = tr("Dolby Vision profile %@", field("profile", in: body) ?? "?")
+      } else if field("dynamicHdr", in: body) == "1" {
+        detail = tr("Dynamic HDR on")
+      } else {
+        detail = nil
+      }
+      return pres(tr("Video format rebuilt"), detail)
+    }
+    if body.hasPrefix("HDR10+ dynamic metadata observed") {
+      return pres(tr("HDR10+ metadata detected"), tr("Frames %@", field("frames", in: body) ?? "?"))
+    }
+    if body.hasPrefix("HDR10+ negotiated but no per-frame metadata") {
+      return pres(
+        tr("HDR10+ negotiated but no metadata received"), tr("The host may not be sending T.35 SEI"))
+    }
+    if body.hasPrefix("HEVC prefix SEI preservation enabled") {
+      return pres(tr("HDR10+ metadata kept in the stream"))
+    }
+    if body.hasPrefix("Host HDR mode update") {
+      return pres(field("enabled", in: body) == "1" ? tr("Host HDR turned on") : tr("Host HDR turned off"))
+    }
+    if body.hasPrefix("Renderer HDR state changed") {
+      return pres(tr("Renderer HDR state changed"), between(body, "changed:", " transfer=")?.replacingOccurrences(of: "->", with: "→"))
+    }
+    if body.hasPrefix("Session mastering metadata received") {
+      return pres(
+        tr("HDR mastering metadata received"),
+        tr("MaxCLL %@ · MaxFALL %@", field("MaxCLL", in: body) ?? "?", field("MaxFALL", in: body) ?? "?"))
+    }
+    if body.hasPrefix("SDR white update nits=") {
+      return pres(tr("SDR white level updated"), tr("%@ nits", field("nits", in: body) ?? "?"))
+    }
+    if body.hasPrefix("SDR white update not sent") {
+      return pres(tr("SDR white level not sent"), tr("The host does not advertise dynamic SDR white"))
+    }
+    return nil
+  }
+
+  private static func videoPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("VT decode session ready") {
+      let renderer = field("renderer", in: body) ?? "?"
+      let hardware = field("hardware", in: body)
+      let detail: String
+      if hardware == "1" {
+        detail = tr("Hardware decoding · renderer %@", renderer)
+      } else if hardware == "0" {
+        detail = tr("Software decoding · renderer %@", renderer)
+      } else {
+        detail = tr("Renderer %@", renderer)
+      }
+      return pres(tr("Video decoder ready"), detail)
+    }
+    if body.hasPrefix("renderer requested=") {
+      return pres(
+        tr("Video renderer selected"),
+        tr("Active %@ · requested %@", field("active", in: body) ?? "?", field("requested", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Falling back to Compatibility renderer") {
+      return pres(tr("Fell back to the Compatibility renderer"), between(body, "renderer:", nil))
+    }
+    if body.hasPrefix("Native display layer backpressure detected") {
+      return pres(
+        tr("Frame dropped: the display is behind"), tr("Count %@", field("count", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Native display layer appears stalled") {
+      return pres(tr("Display layer stalled; flushing queued frames"))
+    }
+    if body.hasPrefix("Native display layer entered failed state") {
+      return pres(tr("Display layer failed; recovering"))
+    }
+    if body.hasPrefix("Enhanced inflight backpressure") {
+      return pres(
+        tr("Renderer is falling behind"),
+        tr("Count %@ · depth %@", field("count", in: body) ?? "?", field("depth", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Dolby Vision decoder format:") {
+      return pres(
+        tr("Dolby Vision decoder switched"),
+        tr(
+          "Profile %@ · level %@ · %@", field("profile", in: body) ?? "?", field("level", in: body) ?? "?",
+          field("dimensions", in: body) ?? "?"))
+    }
+    if body.hasPrefix("Dolby Vision output unavailable") {
+      return pres(tr("Dolby Vision unavailable; using the HDR base layer"), between(body, "unavailable (", ");"))
+    }
+    if body.hasPrefix("Asynchronous video decoder error") {
+      return pres(tr("Video decoder error"), tr("Error %@", between(body, "error:", nil) ?? "?"))
+    }
+    if body.hasPrefix("Enhanced first present") {
+      return pres(tr("First video frame presented"), tr("Startup %@", field("startup", in: body) ?? "?"))
+    }
+    return nil
+  }
+
+  private static func keyboardPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("key mapping=") {
+      return pres(
+        field("key mapping", in: body) == "typed"
+          ? tr("Keyboard mapping: typed characters") : tr("Keyboard mapping: physical key position"),
+        tr("Layout %@", field("layout", in: body) ?? "?"))
+    }
+    return nil
+  }
+
+  private static func controllerPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Host controller type setting=") {
+      let label: String
+      switch field("setting", in: body) ?? "" {
+      case "1": label = tr("Xbox 360")
+      case "2": label = tr("DualShock 4 (PS4)")
+      case "3": label = tr("DualSense (PS5)")
+      default: label = tr("Automatic")
+      }
+      let declared = field("gamepad", in: body)
+      let detail =
+        (declared == nil || body.contains("gamepad=(none)"))
+        ? tr("Nothing declared; the host decides")
+        : tr("Declared to the host as %@", declared ?? "?")
+      return pres(tr("Host controller type: %@", label), detail)
+    }
+    if body.hasPrefix("Neutral input sent before pausing") {
+      return pres(tr("Controller input reset before pausing"))
+    }
+    return nil
+  }
+
+  private static func livePresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Stream resolution is now") {
+      return pres(tr("Stream resolution changed"), between(body, "now", nil))
+    }
+    if body.hasPrefix("Host resolution changed") {
+      return pres(tr("Host resolution changed"), between(body, "changed:", nil))
+    }
+    if body.hasPrefix("Ignoring invalid host resolution") {
+      return pres(tr("Invalid host resolution ignored"), between(body, "resolution", nil))
+    }
+    if body.hasPrefix("resolution ") {
+      return pres(
+        tr("Resolution change requested"),
+        tr("%@ · result %@", body.split(separator: " ").dropFirst().first.map(String.init) ?? "?", field("result", in: body) ?? "?"))
+    }
+    if body.hasPrefix("bitrate ") {
+      return pres(
+        tr("Bitrate change requested"),
+        tr("%@ kbps · result %@", body.split(separator: " ").dropFirst().first.map(String.init) ?? "?", field("result", in: body) ?? "?"))
+    }
+    if body.hasPrefix("framerate ") {
+      return pres(
+        tr("Frame rate change requested"),
+        tr("%@ fps · result %@", body.split(separator: " ").dropFirst().first.map(String.init) ?? "?", field("result", in: body) ?? "?"))
+    }
+    if body.contains("not applied"), body.contains("falling back to reconnect") {
+      return pres(tr("Live change not applied; reconnecting"), body.components(separatedBy: " not applied").first)
+    }
+    return nil
+  }
+
+  private static func netProbePresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("capping bitrate") {
+      // "capping bitrate A -> Bkbps"
+      let parts = body.split(separator: " ")
+      let from = parts.count > 2 ? String(parts[2]) : "?"
+      let to = parts.count > 4 ? parts[4].replacingOccurrences(of: "kbps", with: "") : "?"
+      return pres(tr("Bitrate capped by the network test"), tr("%@ → %@ kbps", from, to))
+    }
+    if body.hasPrefix("bandwidth=") {
+      return pres(
+        tr("Network test finished"),
+        tr(
+          "Bandwidth %@ · latency %@ · jitter %@", field("bandwidth", in: body) ?? "?",
+          field("latency", in: body) ?? "?", field("jitter", in: body) ?? "?"))
+    }
+    if body.hasPrefix("skipped") {
+      return pres(tr("Network test skipped"), field("reason", in: body))
+    }
+    if body.hasPrefix("audio uses") {
+      // "audio uses Nkbps beyond the host reserve: video ceiling A -> Bkbps"
+      return pres(
+        tr("Video bitrate ceiling lowered for audio"),
+        between(body, "video ceiling", nil)?.replacingOccurrences(of: "->", with: "→"))
+    }
+    return nil
+  }
+
+  private static func fecPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Client FEC preference requested") {
+      let value = between(body, "requested:", " (") ?? "?"
+      return pres(
+        tr("Error correction (FEC) preference requested"),
+        value == "-1" ? tr("Automatic") : "\(value)%")
+    }
+    return nil
+  }
+
+  private static func perfPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("fps ") {
+      return pres(
+        tr("Performance sample"),
+        tr(
+          "Received %@ · decoded %@ · rendered %@ fps", field("rx", in: body) ?? "?",
+          field("de", in: body) ?? "?", field("rd", in: body) ?? "?"))
+    }
+    return nil
+  }
+
+  private static func sunshinePresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("Loaded ") && body.contains(" host displays") {
+      return pres(tr("Host displays loaded"), tr("%@ displays", between(body, "Loaded ", " host") ?? "?"))
+    }
+    if body.hasPrefix("Display list request failed") {
+      return pres(tr("Host display list request failed"), between(body, "failed:", nil))
+    }
+    return nil
+  }
+
+  private static func discoveryTagPresentation(_ body: String) -> DebugLogPresentation? {
+    if body.hasPrefix("First verified endpoint") {
+      return pres(
+        tr("Host is reachable"),
+        tr("%@ · %@ ms", between(body, "host=", " elapsedMs=") ?? "?", field("elapsedMs", in: body) ?? "?"))
+    }
+    return nil
+  }
+
+  /// Untagged lines that only deserve a friendly form because they explain a failed stream.
+  private static func plainLinePresentation(_ message: String) -> DebugLogPresentation? {
+    if message.hasPrefix("Stage "), message.contains(" failed:") {
+      let stage = between(message, "Stage ", " failed:") ?? "?"
+      return pres(
+        tr("Stream setup failed"),
+        tr("Stage: %@ · error %@", stageName(stage), between(message, "failed:", nil) ?? "?"))
+    }
+    if message.hasPrefix("Connection terminated:") {
+      return pres(tr("Stream connection terminated"), tr("Code %@", between(message, "terminated:", nil) ?? "?"))
+    }
+    return nil
+  }
+
+  /// Names of the connection stages as the protocol library reports them. An unknown name is shown as logged.
+  private static func stageName(_ name: String) -> String {
+    switch name {
+    case "platform initialization": return tr("Stage platform initialization")
+    case "name resolution": return tr("Stage name resolution")
+    case "audio stream initialization": return tr("Stage audio stream initialization")
+    case "RTSP handshake": return tr("Stage RTSP handshake")
+    case "control stream initialization": return tr("Stage control stream initialization")
+    case "video stream initialization": return tr("Stage video stream initialization")
+    case "input stream initialization": return tr("Stage input stream initialization")
+    case "control stream establishment": return tr("Stage control stream establishment")
+    case "video stream establishment": return tr("Stage video stream establishment")
+    case "audio stream establishment": return tr("Stage audio stream establishment")
+    case "input stream establishment": return tr("Stage input stream establishment")
+    default: return name
+    }
+  }
+
+  // MARK: Generated summaries
+
+  /// "5.0s" or "5s" as logged, shown as a bare number of seconds.
+  private static func seconds(_ value: String) -> String {
+    value.trimmingCharacters(in: CharacterSet(charactersIn: "s "))
+  }
+
+  /// Title and detail of one noise summary. `detail` is the parenthesised part as the logger
+  /// wrote it; its known fragments are translated, anything else is kept as logged.
+  private static func noiseSummaryPresentation(
+    category: DebugNoiseCategory, seconds window: String, count: String, detail: String?
+  ) -> DebugLogPresentation {
+    pres(
+      tr("%@: %@ in %@ s", category.localizedName, count, window),
+      detail.map(localizedNoiseDetail))
+  }
+
+  private static func localizedNoiseDetail(_ detail: String) -> String {
+    if detail.hasPrefix("repeated address resolution:") {
+      return tr("Repeated address resolution: %@", between(detail, "resolution:", nil) ?? "?")
+    }
+    if detail.hasPrefix("primary cause:"), let target = detail.range(of: ", target: ") {
+      let cause = String(detail[detail.index(detail.startIndex, offsetBy: 14)..<target.lowerBound])
+        .trimmingCharacters(in: .whitespaces)
+      return tr(
+        "Primary cause: %@ · Target: %@", cause, String(detail[target.upperBound...]))
+    }
+    let known = [
+      "certificate mismatches: ": "Certificate mismatches: %@",
+      "incorrect hosts: ": "Incorrect hosts: %@",
+      "expected ": "Expected %@",
+      "received ": "Received %@",
+    ]
+    var parts: [String] = []
+    for piece in detail.components(separatedBy: ", ") {
+      if piece.lowercased() == "host identity verification failed" {
+        parts.append(tr("Host identity verification failed"))
+        continue
+      }
+      var translated: String?
+      for (prefix, format) in known where piece.lowercased().hasPrefix(prefix) {
+        translated = tr(format, String(piece.dropFirst(prefix.count)))
+        break
+      }
+      guard let translated = translated else {
+        // A host name or state the logger wrote; part of a plain list, so keep the whole text.
+        return detail
+      }
+      parts.append(translated)
+    }
+    return parts.joined(separator: " · ")
+  }
+
+  /// The summary lines the logger writes itself ("<Noise>: in 5s, N occurrences (...)" and
+  /// "[curated] repeated for 5.0s: N times (last: ...)"), shown in the app language.
+  private static func generatedSummaryPresentation(
+    message: String, noiseCategory: DebugNoiseCategory?
+  ) -> DebugLogPresentation? {
+    if let noiseCategory = noiseCategory, let marker = message.range(of: ": in ") {
+      let rest = message[marker.upperBound...]
+      let parts = rest.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+      guard parts.count >= 3, parts[0].hasSuffix("s,") else { return nil }
+      var detail: String?
+      if let open = rest.firstIndex(of: "("), let close = rest.lastIndex(of: ")"), open < close {
+        detail = String(rest[rest.index(after: open)..<close])
+      }
+      return noiseSummaryPresentation(
+        category: noiseCategory, seconds: seconds(String(parts[0].dropLast())), count: String(parts[1]), detail: detail)
+    }
+    if message.hasPrefix("[curated] repeated for ") {
+      guard let window = between(message, "repeated for ", ": "),
+        let count = between(message, ": ", " times")
+      else { return nil }
+      return pres(
+        tr("Repeated %@ times within %@ s", count, seconds(window)),
+        between(message, "(last:", nil).map { tr("Last: %@", String($0.dropLast())) })
+    }
+    return nil
   }
 
   private static func suffix(in text: String, after needle: String) -> String? {

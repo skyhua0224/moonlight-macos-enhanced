@@ -129,6 +129,7 @@ private final class DebugLogLiveModel: ObservableObject {
   private var isPaused = false
   private var revision = 0
   private var subscription: NSObjectProtocol?
+  private var languageObserver: NSObjectProtocol?
   private var lastSequence: UInt = 0
   private var rawEntries: [DebugLogEntry] = []
   private var curatedEntries: [DebugLogEntry] = []
@@ -154,6 +155,9 @@ private final class DebugLogLiveModel: ObservableObject {
     if let subscription = subscription {
       LogBuffer.shared().removeChangeObserver(subscription)
     }
+    if let languageObserver = languageObserver {
+      NotificationCenter.default.removeObserver(languageObserver)
+    }
   }
 
   func start(query initialQuery: DebugLogQuery) {
@@ -161,6 +165,7 @@ private final class DebugLogLiveModel: ObservableObject {
       guard let self = self else { return }
       self.query = initialQuery
       self.subscribeToLogChanges()
+      self.observeLanguageChanges()
       self.rawEntries = []
       self.curatedEntries = []
       self.lastSequence = 0
@@ -177,6 +182,10 @@ private final class DebugLogLiveModel: ObservableObject {
         LogBuffer.shared().removeChangeObserver(subscription)
       }
       self.subscription = nil
+      if let observer = self.languageObserver {
+        NotificationCenter.default.removeObserver(observer)
+        self.languageObserver = nil
+      }
     }
   }
 
@@ -213,6 +222,30 @@ private final class DebugLogLiveModel: ObservableObject {
         self?.pullNewEntries()
       }
     }
+  }
+
+  /// Titles and details are localised while a line is parsed, so a language change in the app
+  /// has to parse the retained lines again.
+  private func observeLanguageChanges() {
+    guard languageObserver == nil else { return }
+    languageObserver = NotificationCenter.default.addObserver(
+      forName: Notification.Name("LanguageChanged"), object: nil, queue: nil
+    ) { [weak self] _ in
+      self?.queue.async { [weak self] in
+        self?.reparseForLanguageChange()
+      }
+    }
+  }
+
+  private func reparseForLanguageChange() {
+    guard subscription != nil else { return }
+    rawEntries = []
+    curatedEntries = []
+    lastSequence = 0
+    ingest(LogBuffer.shared().lastEntries(UInt(DebugLogLiveModel.maxRetainedLines)))
+    historyLoaded = false
+    loadHistoryIfNeeded()
+    publishCurrentSnapshot()
   }
 
   private func pullNewEntries() {
@@ -364,6 +397,7 @@ private final class DebugLogLiveModel: ObservableObject {
 
 private struct DebugLogLevelBadge: View {
   let level: DebugLogLevel
+  @ObservedObject private var languageManager = LanguageManager.shared
 
   private var color: Color {
     switch level {
@@ -381,7 +415,7 @@ private struct DebugLogLevelBadge: View {
   }
 
   var body: some View {
-    Text(level.displayText.uppercased())
+    Text(languageManager.localize(level.displayText).uppercased())
       .font(.system(size: 10, weight: .bold, design: .monospaced))
       .padding(.horizontal, 6)
       .padding(.vertical, 2)
@@ -460,12 +494,15 @@ private struct DebugLogRowView: View, Equatable {
   let mode: DebugLogViewMode
   /// Overlay layout: time of day only, narrower columns.
   var compact: Bool = false
+  /// The app language the entry text was built in. The titles are localised when a line is
+  /// parsed, so a language change has to rebuild rows whose id did not change.
+  var language: String = ""
 
   // Entries are immutable once parsed; only the folded repeat count can change.
   // Comparing just that lets SwiftUI skip rebuilding rows that did not change.
   static func == (lhs: DebugLogRowView, rhs: DebugLogRowView) -> Bool {
     lhs.entry.id == rhs.entry.id && lhs.entry.count == rhs.entry.count && lhs.mode == rhs.mode
-      && lhs.compact == rhs.compact
+      && lhs.compact == rhs.compact && lhs.language == rhs.language
   }
 
   private var timestampDisplay: String {
@@ -962,7 +999,9 @@ private struct DebugLogViewer: View {
               .padding(.vertical, 16)
           } else {
             ForEach(visibleRows) { entry in
-              DebugLogRowView(entry: entry, mode: currentMode, compact: style == .overlay)
+              DebugLogRowView(
+                entry: entry, mode: currentMode, compact: style == .overlay,
+                language: languageManager.currentLanguage.rawValue)
                 .equatable()
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) {
@@ -1520,11 +1559,14 @@ private struct DebugLogCategoryFilterMenuButton: View {
     Menu {
       Button(languageManager.localize("Clear Category Filters"), action: onClear).disabled(selectedFilters.isEmpty)
       ForEach(domainOptions, id: \.categoryKey) { domain in
-        Menu(domain.displayName) {
+        Menu {
           Toggle(languageManager.localize("All"), isOn: Binding(get: { selectedFilters.contains(domain.categoryKey) }, set: { _ in onToggleDomain(domain.categoryKey) }))
           ForEach(detailProvider(domain), id: \.categoryKey) { detail in
             Toggle(detail.displayName, isOn: Binding(get: { selectedFilters.contains(detail.categoryKey) }, set: { _ in onToggleCategory(detail.categoryKey) }))
           }
+        } label: {
+          // The category icons the filter menu showed before it was rebuilt in SwiftUI.
+          Label(domain.displayName, systemImage: domain.systemImageName)
         }
       }
     } label: { Label(title, systemImage: "line.3.horizontal.decrease.circle") }
