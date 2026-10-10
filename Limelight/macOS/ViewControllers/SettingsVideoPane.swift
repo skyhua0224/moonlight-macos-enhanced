@@ -6,6 +6,14 @@ struct VideoView: View {
   private var metalSelected: Bool {
     SettingsModel.normalizedVideoRendererMode(settingsModel.selectedVideoRendererMode) == "Metal Renderer"
   }
+  private var compatibilitySelected: Bool {
+    SettingsModel.normalizedVideoRendererMode(settingsModel.selectedVideoRendererMode) == "Compatibility Renderer"
+  }
+  // Native and Metal both attach the resolved HDR static metadata (MDCV/CLLI) to decoded frames;
+  // the Compatibility path hands the encoded stream straight to the display layer.
+  private var hdrMetadataRowsVisible: Bool {
+    !compatibilitySelected
+  }
 
   var body: some View {
     SettingsContent {
@@ -95,8 +103,10 @@ struct VideoView: View {
         }
         }
       }
+      }
 
       FormSection(title: "HDR Display Profile") {
+        if hdrMetadataRowsVisible {
         SettingsRow(title: "Metadata Source") {
           Picker("", selection: $settingsModel.selectedHdrMetadataSource) {
             ForEach(SettingsModel.hdrMetadataSources, id: \.self) { value in
@@ -119,7 +129,7 @@ struct VideoView: View {
           .controllerPicker(selection: $settingsModel.selectedHdrClientDisplayProfile, options: SettingsModel.hdrClientDisplayProfiles, title: { value in languageManager.localize(value) })
           .frame(width: 190, alignment: .trailing)
         }
-
+        }
 
         SettingsRow(title: "EDR Strategy") {
           Picker("", selection: $settingsModel.selectedHdrEdrStrategy) {
@@ -151,7 +161,6 @@ struct VideoView: View {
           tint: .secondary
         )
       }
-      }
 
       FormSection(title: "HDR Capabilities") {
         ForEach(settingsModel.videoCapabilityMatrix.items.filter {
@@ -164,8 +173,8 @@ struct VideoView: View {
       CompactVideoCapabilitySection(title: "Decoding", items: settingsModel.videoCapabilityMatrix.items.filter { $0.id.hasPrefix("decode.") })
       if metalSelected {
         CompactVideoCapabilitySection(title: "Quality Enhancement", items: settingsModel.videoCapabilityMatrix.items.filter { $0.id.hasPrefix("enhancement.") })
-        VideoAdvancedSettingsSection()
       }
+      VideoAdvancedSettingsSection()
 
       FormSection(title: "Frame Pacing") {
         SettingsRow(title: "Pacing") {
@@ -250,21 +259,32 @@ private struct CompactVideoCapabilitySection: View {
 
 private struct VideoAdvancedSettingsSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
+  private var rendererMode: String {
+    SettingsModel.normalizedVideoRendererMode(settingsModel.selectedVideoRendererMode)
+  }
   private var metal: Bool {
-    SettingsModel.normalizedVideoRendererMode(settingsModel.selectedVideoRendererMode) == "Metal Renderer"
+    rendererMode == "Metal Renderer"
+  }
+  // The manual luminance values feed the static HDR metadata resolver, which only
+  // runs on the Native and Metal paths. They are consumed when the client display
+  // profile is Manual or the metadata source is Client Override.
+  private var manualBrightnessVisible: Bool {
+    rendererMode != "Compatibility Renderer"
+      && (settingsModel.selectedHdrClientDisplayProfile == "Manual"
+        || settingsModel.selectedHdrMetadataSource == "Client Override")
   }
   var body: some View {
     FormSection(title: "Advanced Video Settings") {
+      if manualBrightnessVisible {
+        SettingsDecimalRow(title: "Max Brightness", value: $settingsModel.hdrManualMaxBrightness)
+        SettingsDecimalRow(title: "Min Brightness", value: $settingsModel.hdrManualMinBrightness)
+        SettingsDecimalRow(title: "Max Average Brightness", value: $settingsModel.hdrManualMaxAverageBrightness)
+      }
+      SettingsValueSliderRow(title: "Optical Output Scale", value: $settingsModel.hdrOpticalOutputScale,
+        range: 50...200, step: 1, suffix: "%")
+      SettingsChoiceRow(title: "HLG Viewing Environment", selection: $settingsModel.selectedHdrHlgViewingEnvironment,
+        options: SettingsModel.hdrHlgViewingEnvironments)
       if metal {
-        if settingsModel.selectedHdrClientDisplayProfile == "Manual" && settingsModel.selectedHdrMetadataSource != "Host" {
-          SettingsDecimalRow(title: "Max Brightness", value: $settingsModel.hdrManualMaxBrightness)
-          SettingsDecimalRow(title: "Min Brightness", value: $settingsModel.hdrManualMinBrightness)
-          SettingsDecimalRow(title: "Max Average Brightness", value: $settingsModel.hdrManualMaxAverageBrightness)
-        }
-        SettingsValueSliderRow(title: "Optical Output Scale", value: $settingsModel.hdrOpticalOutputScale,
-          range: 50...200, step: 1, suffix: "%")
-        SettingsChoiceRow(title: "HLG Viewing Environment", selection: $settingsModel.selectedHdrHlgViewingEnvironment,
-          options: SettingsModel.hdrHlgViewingEnvironments)
         SettingsChoiceRow(title: "Display Sync", selection: $settingsModel.selectedDisplaySyncMode, options: SettingsModel.displaySyncModes)
         SettingsChoiceRow(title: "Allow Drawable Timeout", selection: $settingsModel.selectedAllowDrawableTimeoutMode,
           options: SettingsModel.allowDrawableTimeoutModes)
