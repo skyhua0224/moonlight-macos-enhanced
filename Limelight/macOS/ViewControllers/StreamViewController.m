@@ -1584,14 +1584,28 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.controllerMotionMode = [SettingsClass controllerMotionModeFor:self.app.host.uuid];
     streamConfig.controllerFeedbackTarget = [SettingsClass controllerFeedbackTargetFor:self.app.host.uuid];
     streamConfig.controllerVirtualType = [SettingsClass controllerVirtualTypeFor:self.app.host.uuid];
-    // Foundation Sunshine accepts gamepad=ds5 on /launch and /resume. Send
-    // it only when a real DualSense is present; other controllers continue to
-    // use the standard arrival negotiation.
-    if (streamConfig.controllerVirtualType == 3 ||
-        (streamConfig.controllerVirtualType != 1 && [ControllerSupport hasDualSenseController])) {
-        streamConfig.clientGamepad = @"ds5";
-        Log(LOG_I, @"[controller] Declaring gamepad=ds5 for Foundation Sunshine");
+    // Foundation Sunshine accepts gamepad=auto|x360|ds4|ds5 on /launch and
+    // /resume (nvhttp.cpp make_launch_session). An explicit Host Controller
+    // Type is passed through as chosen. Automatic omits the parameter on
+    // purpose: the host treats "auto" as a declared choice that overrides its
+    // own per-app/global controller selection, while an absent parameter keeps
+    // that selection. The one Automatic exception is a connected DualSense,
+    // which still declares ds5 as before. ControllerSupport derives the
+    // arrival type from the same value so both always name one family.
+    NSString *declaredGamepad = nil;
+    switch (streamConfig.controllerVirtualType) {
+        case 1: declaredGamepad = @"x360"; break;
+        case 2: declaredGamepad = @"ds4"; break;
+        case 3: declaredGamepad = @"ds5"; break;
+        default:
+            if ([ControllerSupport hasDualSenseController]) {
+                declaredGamepad = @"ds5";
+            }
+            break;
     }
+    streamConfig.clientGamepad = declaredGamepad;
+    Log(LOG_I, @"[controller] Host controller type setting=%ld declared gamepad=%@",
+        (long)streamConfig.controllerVirtualType, declaredGamepad ?: @"(none)");
     NSDictionary<NSString *, NSNumber *> *controllerCalibration =
         [SettingsClass controllerCalibrationFor:self.app.host.uuid];
     streamConfig.controllerLeftCenterX = controllerCalibration[@"leftCenterX"].doubleValue;

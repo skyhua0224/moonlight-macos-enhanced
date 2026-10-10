@@ -41,6 +41,8 @@
 @property(nonatomic) NSInteger controllerMotionMode;
 @property(nonatomic) NSInteger controllerFeedbackTarget;
 @property(nonatomic) NSInteger controllerVirtualType;
+// Controller family declared to the host on launch/resume (x360, ds4, ds5), or nil.
+@property(nonatomic, copy) NSString *clientGamepad;
 // A shortcut maps buttons to the touchpad, so controllers without one still
 // announce it and the host emulates a pad that has a touchpad.
 @property(nonatomic) BOOL advertiseTouchpadForShortcut;

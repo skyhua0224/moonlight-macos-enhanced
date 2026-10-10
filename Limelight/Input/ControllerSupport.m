@@ -147,6 +147,7 @@ static void LogControllerMappingDiagnostics(Controller *controller,
             @"motionMode": @(support.controllerMotionMode),
             @"feedbackTarget": @(support.controllerFeedbackTarget),
             @"virtualType": @(support.controllerVirtualType),
+            @"declaredGamepad": support.clientGamepad ?: @"",
             @"leftCalibration": @{
                 @"centerX": @(support.controllerLeftCenterX),
                 @"centerY": @(support.controllerLeftCenterY),
@@ -1216,7 +1217,14 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             GCExtendedGamepad *extended = controller.gamepad.extendedGamepad;
             BOOL hasTouchpad = [extended isKindOfClass:[GCDualSenseGamepad class]] ||
                                [extended isKindOfClass:[GCDualShockGamepad class]];
-            if (self.controllerVirtualType == 1) {
+            // Keep the arrival type in the same family as the gamepad= value
+            // declared on launch/resume, so the host never sees two answers.
+            if ([self.clientGamepad isEqualToString:@"x360"]) {
+                controllerType = LI_CTYPE_XBOX;
+            } else if ([self.clientGamepad isEqualToString:@"ds4"] ||
+                       [self.clientGamepad isEqualToString:@"ds5"]) {
+                controllerType = LI_CTYPE_PS;
+            } else if (self.controllerVirtualType == 1) {
                 controllerType = LI_CTYPE_XBOX;
             } else if (self.controllerVirtualType == 2) {
                 controllerType = LI_CTYPE_PS;
@@ -1917,6 +1925,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     _controllerMotionMode = streamConfig.controllerMotionMode;
     _controllerFeedbackTarget = streamConfig.controllerFeedbackTarget;
     _controllerVirtualType = streamConfig.controllerVirtualType;
+    _clientGamepad = [streamConfig.clientGamepad copy];
     _controllerLeftCenterX = MIN(1.0, MAX(-1.0, streamConfig.controllerLeftCenterX));
     _controllerLeftCenterY = MIN(1.0, MAX(-1.0, streamConfig.controllerLeftCenterY));
     _controllerRightCenterX = MIN(1.0, MAX(-1.0, streamConfig.controllerRightCenterX));
