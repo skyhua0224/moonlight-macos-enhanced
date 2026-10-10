@@ -85,11 +85,20 @@ void ml_iec61937_eac3_reset(ml_iec61937_eac3_state *state);
 int ml_iec61937_eac3_push(ml_iec61937_eac3_state *state, const uint8_t *frame, size_t frame_len,
                           uint8_t *out, size_t out_cap, size_t *out_len);
 
+// Repetition period of Pause bursts in bytes (3 stereo frames for the AC-3
+// carrier, 4 for the E-AC-3 one), and the size of one: preamble plus the 32-bit
+// payload (the pause length).
+#define ML_IEC61937_AC3_PAUSE_PERIOD_BYTES 12
+#define ML_IEC61937_EAC3_PAUSE_PERIOD_BYTES 16
+#define ML_IEC61937_PAUSE_MIN_PERIOD_BYTES 12
+
 // Fill out[0..size) with a stream the receiver treats as "no audio, stay
-// locked": a Pause burst (data type 3, Pd = 0) at the start of every period
-// bytes, zeros in between. period == 0 or period > size produces zeros only.
-// size and period should be multiples of 4 (one stereo frame).
-int ml_iec61937_build_pause(uint8_t *out, size_t out_cap, size_t size, size_t period);
+// locked": back-to-back Pause bursts (data type 3, Pd = 32 bits) every period
+// bytes. The 32-bit payload of the first burst carries gap_samples, the length
+// of the pause in sample periods of the encoded stream (48 kHz: 1536 for one
+// 32 ms frame); the following ones carry 0, as Kodi's packer does. period == 0
+// produces plain zeros instead. size must be a multiple of 4.
+int ml_iec61937_build_pause(uint8_t *out, size_t out_cap, size_t size, size_t period, unsigned gap_samples);
 
 const char *ml_iec61937_strerror(int code);
 

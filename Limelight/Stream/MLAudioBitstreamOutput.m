@@ -633,7 +633,9 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
     state->scratch = calloc(1, state->burstBytes);
     state->codec = _codec;
     if (state->slots == NULL || state->pause == NULL || state->scratch == NULL ||
-        ml_iec61937_build_pause(state->pause, state->burstBytes, state->burstBytes, state->burstBytes) != ML_IEC61937_OK) {
+        ml_iec61937_build_pause(state->pause, state->burstBytes, state->burstBytes,
+                                _codec == MLAudioBitstreamCodecEac3 ? ML_IEC61937_EAC3_PAUSE_PERIOD_BYTES : ML_IEC61937_AC3_PAUSE_PERIOD_BYTES,
+                                1536) != ML_IEC61937_OK) {
         free(state->slots);
         free(state->pause);
         free(state->scratch);

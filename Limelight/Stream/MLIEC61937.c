@@ -243,11 +243,11 @@ int ml_iec61937_eac3_push(ml_iec61937_eac3_state *state, const uint8_t *frame, s
     return ML_IEC61937_OK;
 }
 
-int ml_iec61937_build_pause(uint8_t *out, size_t out_cap, size_t size, size_t period) {
-    if (out == NULL || size == 0) {
+int ml_iec61937_build_pause(uint8_t *out, size_t out_cap, size_t size, size_t period, unsigned gap_samples) {
+    if (out == NULL || size == 0 || (size & 3) != 0) {
         return ML_IEC61937_ERR_ARGUMENT;
     }
-    if (period != 0 && period < ML_IEC61937_PREAMBLE_BYTES) {
+    if (period != 0 && (period < ML_IEC61937_PAUSE_MIN_PERIOD_BYTES || (period & 3) != 0)) {
         return ML_IEC61937_ERR_ARGUMENT;
     }
     if (out_cap < size) {
@@ -255,8 +255,11 @@ int ml_iec61937_build_pause(uint8_t *out, size_t out_cap, size_t size, size_t pe
     }
     memset(out, 0, size);
     if (period != 0) {
-        for (size_t offset = 0; offset + ML_IEC61937_PREAMBLE_BYTES <= size; offset += period) {
-            write_preamble(out + offset, ML_IEC61937_DATA_TYPE_PAUSE, 0);
+        for (size_t offset = 0; offset + ML_IEC61937_PAUSE_MIN_PERIOD_BYTES <= size; offset += period) {
+            write_preamble(out + offset, ML_IEC61937_DATA_TYPE_PAUSE, 32);
+            if (offset == 0) {
+                write_le16(out + ML_IEC61937_PREAMBLE_BYTES, gap_samples & 0xFFFF);
+            }
         }
     }
     return ML_IEC61937_OK;

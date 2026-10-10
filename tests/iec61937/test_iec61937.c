@@ -279,12 +279,16 @@ static void selftest(void) {
     CHECK(ml_iec61937_eac3_push(&st, frame, 200, out, 24575, &out_len) == ML_IEC61937_ERR_BUFFER, "eac3 small output");
 
     // Pause bursts.
-    CHECK(ml_iec61937_build_pause(out, sizeof(out), 6144, 6144) == ML_IEC61937_OK, "pause build");
-    CHECK(out[0] == 0x72 && out[1] == 0xF8 && out[2] == 0x1F && out[3] == 0x4E && out[4] == 0x03 && out[5] == 0 && out[6] == 0 && out[7] == 0, "pause preamble");
-    CHECK(memcmp(out + 8, out + 9, 6144 - 9) == 0 && out[8] == 0, "pause is zero beyond the preamble");
-    CHECK(ml_iec61937_build_pause(out, 100, 6144, 6144) == ML_IEC61937_ERR_BUFFER, "pause small output");
-    CHECK(ml_iec61937_build_pause(out, sizeof(out), 6144, 3) == ML_IEC61937_ERR_ARGUMENT, "pause bad period");
-    CHECK(ml_iec61937_build_pause(out, sizeof(out), 64, 0) == ML_IEC61937_OK && out[0] == 0 && out[63] == 0, "pause silence");
+    CHECK(ml_iec61937_build_pause(out, sizeof(out), 6144, 12, 1536) == ML_IEC61937_OK, "pause build");
+    CHECK(out[0] == 0x72 && out[1] == 0xF8 && out[2] == 0x1F && out[3] == 0x4E && out[4] == 0x03 && out[5] == 0 && out[6] == 32 && out[7] == 0, "pause preamble: type 3, Pd 32 bits");
+    CHECK(out[8] == (1536 & 0xFF) && out[9] == (1536 >> 8) && out[10] == 0 && out[11] == 0, "pause length in the first payload");
+    CHECK(memcmp(out + 12, out + 0, 8) == 0 && out[12] == 0x72 && out[13] == 0xF8 && out[16] == 0x03 && out[20] == 0 && out[21] == 0, "second burst repeats the preamble with an empty gap");
+    CHECK(out[6144 - 12] == 0x72 && out[6144 - 4] == 0 && out[6144 - 1] == 0, "last burst ends on the boundary");
+    CHECK(ml_iec61937_build_pause(out, sizeof(out), 24576, 16, 1536) == ML_IEC61937_OK && out[16] == 0x72 && out[20] == 0x03 && out[24 + 0] == 0 && out[24576 - 16] == 0x72, "E-AC3 pause period");
+    CHECK(ml_iec61937_build_pause(out, 100, 6144, 12, 0) == ML_IEC61937_ERR_BUFFER, "pause small output");
+    CHECK(ml_iec61937_build_pause(out, sizeof(out), 6144, 8, 0) == ML_IEC61937_ERR_ARGUMENT, "pause bad period");
+    CHECK(ml_iec61937_build_pause(out, sizeof(out), 6142, 12, 0) == ML_IEC61937_ERR_ARGUMENT, "pause bad size");
+    CHECK(ml_iec61937_build_pause(out, sizeof(out), 64, 0, 0) == ML_IEC61937_OK && out[0] == 0 && out[63] == 0, "pause silence");
 
     printf("selftest: %s\n", failures == 0 ? "ok" : "FAILED");
 }
