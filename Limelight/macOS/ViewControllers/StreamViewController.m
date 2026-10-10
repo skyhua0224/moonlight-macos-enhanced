@@ -9,6 +9,29 @@
 #import "StreamViewController_Internal.h"
 #import "RemoteUSBForwardingSession.h"
 
+/**
+ * Updates one stream's claim on process-wide GameController background monitoring.
+ *
+ * Call on main, where stream policy and teardown are serialized. Weak ownership avoids
+ * retaining stream controllers; monitoring remains enabled while any live stream requests it.
+ * @param owner Stream whose preference changed or whose teardown began.
+ * @param enabled YES to register the stream's request, NO to remove it.
+ */
+static void MLUpdateGameControllerBackgroundMonitoring(StreamViewController *owner, BOOL enabled) {
+    if (@available(macOS 11.3, *)) {
+        static NSHashTable<StreamViewController *> *owners;
+        if (owners == nil) {
+            owners = [NSHashTable weakObjectsHashTable];
+        }
+        if (enabled) {
+            [owners addObject:owner];
+        } else {
+            [owners removeObject:owner];
+        }
+        GCController.shouldMonitorBackgroundEvents = owners.allObjects.count > 0;
+    }
+}
+
 static NSScreen *MLScreenContainingMouseLocation(void) {
     NSPoint mouseLocation = [NSEvent mouseLocation];
     for (NSScreen *screen in [NSScreen screens]) {
@@ -302,14 +325,26 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
 }
 
+/**
+ * Queues a host motion request on main and revalidates the stream generation there.
+ *
+ * The stream-scoped proxy forwards only to its still-current owner, preventing requests from
+ * a superseded stream from configuring the replacement backend. Safe for native callback threads.
+ * @param controllerNumber Host controller slot.
+ * @param motionType Protocol sensor type.
+ * @param reportRateHz Requested sensor frequency in Hz, or zero to stop reporting.
+ */
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {
-    [self forwardIfCurrentNamed:@"setMotionEventState" block:^(id<MLStreamScopedCallbackOwner> owner) {
-        if ([owner respondsToSelector:@selector(setMotionEventState:motionType:reportRateHz:)]) {
-            [owner setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
-        }
-    }];
+    // Recheck the stream generation after queueing, before choosing a backend.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self forwardIfCurrentNamed:@"setMotionEventState" block:^(id<MLStreamScopedCallbackOwner> owner) {
+            if ([owner respondsToSelector:@selector(setMotionEventState:motionType:reportRateHz:)]) {
+                [owner setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+            }
+        }];
+    });
 }
 
 - (void)connectionStatusUpdate:(int)status {
@@ -339,14 +374,22 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 @implementation StreamViewController
 
+/**
+ * Selects the controller backend from the effective host/global preference on main.
+ * DualSense input follows the same explicit choice as other pads, keeping stream routing
+ * consistent with HIDSupport's delivery gate.
+ * @return YES when GameController is selected; NO for direct HID.
+ */
 - (BOOL)useSystemControllerDriver {
-    // DualSense touch and output reports are exposed by Apple's Game
-    // Controller framework. Select that path automatically for a real DS5,
-    // even when the legacy per-host driver preference is still HID.
-    return [SettingsClass controllerDriverFor:self.app.host.uuid] == 1 ||
-           [ControllerSupport hasDualSenseController];
+    return [SettingsClass controllerDriverFor:self.app.host.uuid] == 1;
 }
 
+/**
+ * Initializes stream UI/state and installs main-queue lifecycle and focus observers.
+ * Focus changes refresh controller delivery immediately, independently of deferred mouse
+ * uncapture, including transient key loss and focus recovery. Observers borrow self weakly
+ * and are removed during stream teardown.
+ */
 - (void)viewDidLoad {
     [super viewDidLoad];
     
@@ -444,6 +487,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     
     self.windowDidResignKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            [weakSelf refreshControllerInputSendingState];
             [weakSelf logKeyLossDiagnosticsForStage:@"received" code:@"MUC003" reason:@"window-resigned-key"];
             if ([weakSelf shouldSuppressTransientKeyLossUncaptureForCode:@"MUC003" reason:@"window-resigned-key"]) {
                 [weakSelf logKeyLossDiagnosticsForStage:@"skip-top-edge-click" code:@"MUC003" reason:@"window-resigned-key"];
@@ -455,6 +499,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         }
     }];
     self.windowDidBecomeKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf refreshControllerInputSendingState];
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf.view.window isKeyWindow]) {
@@ -491,10 +536,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     self.appDidResignActiveObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidResignActiveNotification object:NSApp queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         weakSelf.globalInactivePointerInsideStreamView = NO;
+        [weakSelf refreshControllerInputSendingState];
         [weakSelf requestMouseUncaptureWhenSafeWithReason:@"app-resigned-active" code:@"MUC006"];
     }];
     self.appDidBecomeActiveObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidBecomeActiveNotification object:NSApp queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         weakSelf.globalInactivePointerInsideStreamView = NO;
+        [weakSelf refreshControllerInputSendingState];
         if ([weakSelf isWindowInCurrentSpace] && [weakSelf isCurrentPointerInsideStreamView]) {
             [weakSelf ensureStreamWindowKeyIfPossible];
         }
@@ -606,6 +653,18 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self beginStopStreamIfNeededWithReason:reason completion:nil];
 }
 
+/**
+ * Begins one stream teardown, disabling input and invalidating stream-scoped callbacks.
+ *
+ * Releases this stream's GameController background-monitoring request and clears input
+ * contexts after releasing controller state, removes lifecycle observers/timers, and stops
+ * native streaming on a background queue with controller cleanup on main. Call from
+ * main-thread lifecycle handling. Other streams retain their monitoring requests.
+ * A repeated call schedules its completion immediately rather
+ * than waiting for the first teardown to finish.
+ * @param reason Diagnostic teardown reason; nil uses fallback diagnostic labels.
+ * @param completion Optional block dispatched to main after this stop, or immediately if already stopping.
+ */
 - (void)beginStopStreamIfNeededWithReason:(NSString *)reason completion:(void (^)(void))completion {
     @synchronized (self) {
         if (self.stopStreamInProgress) {
@@ -626,7 +685,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self tearDownStreamLifecycleObserversAndTimers];
 
     self.hidSupport.shouldSendInputEvents = NO;
+    self.hidSupport.shouldSendControllerEvents = NO;
     self.controllerSupport.shouldSendInputEvents = NO;
+    MLUpdateGameControllerBackgroundMonitoring(self, NO);
     self.hidSupport.inputContext = NULL;
     self.controllerSupport.inputContext = NULL;
 
@@ -705,6 +766,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     });
 }
 
+/**
+ * Initializes the visible stream view and installs session settings/lifecycle observers.
+ *
+ * AppKit calls this on main. Creates input backends, subscribes to live controller preference
+ * changes for the active/global profile, and starts stream/window setup. Teardown must remove
+ * these observers and timers before replacing or closing the session.
+ */
 - (void)viewDidAppear {
     [super viewDidAppear];
     
@@ -819,6 +887,21 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
         NSString *setting = note.userInfo[@"setting"];
         [strongSelf applyLiveMouseSettingsRefreshForSetting:setting];
+    }];
+    self.controllerSettingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"MoonlightControllerSettingsDidChange" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+
+        NSString *hostId = note.userInfo[@"hostId"];
+        if (hostId.length > 0 &&
+            ![hostId isEqualToString:@"__global__"] &&
+            ![hostId isEqualToString:strongSelf.app.host.uuid]) {
+            return;
+        }
+
+        [strongSelf refreshControllerInputSendingState];
     }];
     self.hostLatencyUpdatedObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"HostLatencyUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateWindowSubtitle];
@@ -946,6 +1029,51 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.controllerSupport = nil;
 }
 
+/**
+ * Resolves controller delivery for both backends from stream readiness and capture policy.
+ *
+ * Delivery requires a ready context with neither stop nor reconnect in progress, plus captured
+ * keyboard/mouse input in the currently key window of the active app, or the profile's
+ * background preference. Deferred mouse uncapture cannot extend controller focus permission.
+ * Registers that preference for shared GameController background monitoring until teardown
+ * begins, updates both
+ * controller gates and logs the decision. A late refresh cannot restore monitoring while
+ * stopping. Off-main calls asynchronously reschedule themselves on main.
+ */
+- (void)refreshControllerInputSendingState {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self refreshControllerInputSendingState];
+        });
+        return;
+    }
+
+    BOOL streamCanSendInput = !self.stopStreamInProgress &&
+        !self.reconnectInProgress &&
+        [self hasReadyInputContext];
+    BOOL focusedInputEnabled = self.hidSupport.shouldSendInputEvents &&
+        self.view.window.isKeyWindow && [NSApp isActive];
+    BOOL backgroundInputEnabled =
+        [SettingsClass backgroundControllerInputFor:self.app.host.uuid];
+    MLUpdateGameControllerBackgroundMonitoring(self, !self.stopStreamInProgress && backgroundInputEnabled);
+    BOOL shouldSendControllerInput = streamCanSendInput &&
+        (focusedInputEnabled || backgroundInputEnabled);
+
+    self.hidSupport.shouldSendControllerEvents = shouldSendControllerInput;
+    self.controllerSupport.shouldSendInputEvents = shouldSendControllerInput;
+    Log(LOG_I, @"Controller input state updated: enabled=%d focusedInput=%d background=%d ready=%d",
+        shouldSendControllerInput ? 1 : 0,
+        focusedInputEnabled ? 1 : 0,
+        backgroundInputEnabled ? 1 : 0,
+        streamCanSendInput ? 1 : 0);
+}
+
+/**
+ * Removes stream lifecycle/settings observers and invalidates session timers.
+ *
+ * Includes the controller-settings observer so a closed stream cannot react to live preference
+ * changes. Clears observer references for repeated teardown; call on main for UI-owned timers.
+ */
 - (void)tearDownStreamLifecycleObserversAndTimers {
     NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
 
@@ -988,6 +1116,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     if (self.mouseSettingsDidChangeObserver != nil) {
         [defaultCenter removeObserver:self.mouseSettingsDidChangeObserver];
         self.mouseSettingsDidChangeObserver = nil;
+    }
+    if (self.controllerSettingsDidChangeObserver != nil) {
+        [defaultCenter removeObserver:self.controllerSettingsDidChangeObserver];
+        self.controllerSettingsDidChangeObserver = nil;
     }
     if (self.hostLatencyUpdatedObserver != nil) {
         [defaultCenter removeObserver:self.hostLatencyUpdatedObserver];
@@ -1507,6 +1639,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
     });
 }
 
+/**
+ * Binds input backends when the native input-stream establishment stage completes.
+ *
+ * Queues context binding, controller-policy refresh, microphone readiness and pointer rearming
+ * on main after checking the available context. Keyboard/mouse delivery follows the current
+ * key-window and application focus. Other stages and a NULL name are ignored.
+ * @param stageName Borrowed, NUL-terminated native stage name, inspected synchronously.
+ */
 - (void)stageComplete:(const char *)stageName {
     if (stageName == NULL) {
         return;
@@ -1525,8 +1665,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
             if (ctx->initialized) {
                 self.hidSupport.inputContext = inputContext;
                 self.controllerSupport.inputContext = inputContext;
-                self.hidSupport.shouldSendInputEvents = YES;
-                self.controllerSupport.shouldSendInputEvents = YES;
+                self.hidSupport.shouldSendInputEvents = self.view.window.isKeyWindow && [NSApp isActive];
+                [self refreshControllerInputSendingState];
                 [self.streamMan.connection notifyInputStreamReadyForMicrophoneControlIfNeeded];
                 [self rearmMouseCaptureIfPossibleWithReason:@"input-stream-established"];
             }
@@ -1599,6 +1739,15 @@ highFreqMotor:(unsigned short)highFreqMotor {
         (long)screenMode);
 }
 
+/**
+ * Handles successful stream startup and schedules input/UI activation on main.
+ *
+ * Binds both input backends, retries briefly if initialization is delayed, refreshes controller
+ * delivery after binding and reconnect completion, and starts rendering/overlay diagnostics.
+ * Initial and delayed binding sample current key-window/application focus for keyboard/mouse
+ * delivery; background controller delivery remains governed by the profile preference.
+ * May be invoked from the native connection callback thread.
+ */
 - (void)connectionStarted {
     Log(LOG_I, @"[diag] StreamViewController connectionStarted received: main=%d activeGen=%lu",
         [NSThread isMainThread] ? 1 : 0,
@@ -1635,9 +1784,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
                     Log(LOG_I, @"Binding input context on connection start: ctx=%p initialized=%d libInit=%d libConn=%p", ctx, ctx->initialized, LiInputContextIsInitialized(ctx), LiInputContextGetConnectionCtx(ctx));
                     self.hidSupport.inputContext = inputContext;
                     self.controllerSupport.inputContext = inputContext;
-                    // Ensure input is enabled immediately after stream start
-                    self.hidSupport.shouldSendInputEvents = YES;
-                    self.controllerSupport.shouldSendInputEvents = YES;
+                    // Setup may finish after the stream window loses focus.
+                    self.hidSupport.shouldSendInputEvents = self.view.window.isKeyWindow && [NSApp isActive];
+                    [self refreshControllerInputSendingState];
 
                     // If input stream isn't initialized yet, retry briefly to bind after start
                     __block int remainingAttempts = 20;
@@ -1653,6 +1802,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
                         if (ctx != NULL && LiInputContextIsInitialized(ctx)) {
                             strongSelf.hidSupport.inputContext = inputContext;
                             strongSelf.controllerSupport.inputContext = inputContext;
+                            strongSelf.hidSupport.shouldSendInputEvents = strongSelf.view.window.isKeyWindow && [NSApp isActive];
+                            [strongSelf refreshControllerInputSendingState];
                             [strongSelf rearmMouseCaptureIfPossibleWithReason:@"input-context-retry-bound"];
                             return;
                         }
@@ -1687,6 +1838,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         if (self.reconnectInProgress) {
             self.reconnectInProgress = NO;
             [self hideReconnectOverlay];
+            [self refreshControllerInputSendingState];
         }
 
         // Create overlay after streaming starts so it stays on top of the video view.
@@ -1878,9 +2030,15 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self closeWindowFromMainQueueWithMessage:message];
 }
 
+/**
+ * Forwards controller rumble to the active backend when profile and delivery gates allow it.
+ * @param controllerNumber Host controller slot for GameController; direct HID targets its single device.
+ * @param lowFreqMotor Low-frequency motor intensity in the protocol's 16-bit range.
+ * @param highFreqMotor High-frequency motor intensity in the protocol's 16-bit range.
+ */
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
     if ([SettingsClass rumbleFor:self.app.host.uuid]) {
-        if (self.hidSupport.shouldSendInputEvents) {
+        if (self.hidSupport.shouldSendControllerEvents) {
             if (self.controllerSupport != nil) {
                 [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
             } else {
@@ -1890,32 +2048,56 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 }
 
+/**
+ * Forwards trigger rumble to GameController when rumble and controller delivery are enabled.
+ * @param controllerNumber Host controller slot.
+ * @param leftTriggerMotor Left-trigger motor intensity in the protocol's 16-bit range.
+ * @param rightTriggerMotor Right-trigger motor intensity in the protocol's 16-bit range.
+ */
 - (void)rumbleTriggers:(unsigned short)controllerNumber
       leftTriggerMotor:(unsigned short)leftTriggerMotor
      rightTriggerMotor:(unsigned short)rightTriggerMotor {
-    if (![SettingsClass rumbleFor:self.app.host.uuid] || !self.hidSupport.shouldSendInputEvents) {
+    if (![SettingsClass rumbleFor:self.app.host.uuid] || !self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     [self.controllerSupport rumbleTriggers:controllerNumber leftTriggerMotor:leftTriggerMotor rightTriggerMotor:rightTriggerMotor];
 }
 
+/**
+ * Forwards controller LED output to GameController only while controller delivery is enabled.
+ * @param controllerNumber Host controller slot.
+ * @param red Red channel intensity, zero through 255.
+ * @param green Green channel intensity, zero through 255.
+ * @param blue Blue channel intensity, zero through 255.
+ */
 - (void)setControllerLED:(unsigned short)controllerNumber
                        red:(unsigned char)red
                      green:(unsigned char)green
                       blue:(unsigned char)blue {
-    if (!self.hidSupport.shouldSendInputEvents) {
+    if (!self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     [self.controllerSupport setControllerLED:controllerNumber red:red green:green blue:blue];
 }
 
+/**
+ * Forwards adaptive-trigger output to GameController while controller delivery is enabled.
+ *
+ * The backend consumes the borrowed effect buffers synchronously; this method does not retain them.
+ * @param controllerNumber Host controller slot.
+ * @param eventFlags Protocol flags identifying the trigger effects to apply.
+ * @param typeLeft Protocol left-trigger effect type.
+ * @param typeRight Protocol right-trigger effect type.
+ * @param left Borrowed left-trigger effect payload in the protocol-defined format.
+ * @param right Borrowed right-trigger effect payload in the protocol-defined format.
+ */
 - (void)setAdaptiveTriggers:(unsigned short)controllerNumber
                  eventFlags:(unsigned char)eventFlags
                    typeLeft:(unsigned char)typeLeft
                   typeRight:(unsigned char)typeRight
                        left:(const unsigned char *)left
                       right:(const unsigned char *)right {
-    if (!self.hidSupport.shouldSendInputEvents) {
+    if (!self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     [self.controllerSupport setAdaptiveTriggers:controllerNumber eventFlags:eventFlags typeLeft:typeLeft typeRight:typeRight left:left right:right];
@@ -1927,27 +2109,48 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 }
 
+/**
+ * Applies legacy direct-HID rumble only for slot zero while controller delivery is enabled.
+ * @param number Host controller slot; all nonzero slots are ignored.
+ * @param low Low-frequency motor intensity in the protocol's 16-bit range.
+ * @param high High-frequency motor intensity in the protocol's 16-bit range.
+ */
 - (void)controllerRumbleFallback:(unsigned short)number low:(unsigned short)low high:(unsigned short)high {
     // Legacy HID backend is single-device. Never misroute another player's output.
-    if (number == 0 && self.hidSupport.shouldSendInputEvents) {
+    if (number == 0 && self.hidSupport.shouldSendControllerEvents) {
         [self.hidSupport rumbleLowFreqMotor:low highFreqMotor:high];
     }
 }
 
+/**
+ * Forwards DualSense PCM haptics to GameController while controller delivery is enabled.
+ * @param frame Borrowed protocol PCM frame consumed by the backend during this call.
+ */
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame {
-    if (!self.hidSupport.shouldSendInputEvents) {
+    if (!self.hidSupport.shouldSendControllerEvents) {
         return;
     }
     [self.controllerSupport ds5HapticsPcm:frame];
 }
 
+/**
+ * Passes a host motion request to the selected controller backend even while input is paused.
+ *
+ * Called on main by the stream-scoped proxy. The backend retains requested rates, rejects stale
+ * contexts and separately gates outgoing samples, allowing motion to resume after focus returns.
+ * @param controllerNumber Host controller slot; direct HID supports only zero.
+ * @param motionType Protocol gyro or accelerometer sensor type.
+ * @param reportRateHz Requested sensor frequency in Hz, or zero to stop reporting.
+ */
 - (void)setMotionEventState:(unsigned short)controllerNumber
                   motionType:(unsigned char)motionType
                 reportRateHz:(unsigned short)reportRateHz {
-    if (!self.hidSupport.shouldSendInputEvents) {
-        return;
+    // Store host requests even while delivery is paused; backends gate samples.
+    if (self.controllerSupport != nil) {
+        [self.controllerSupport setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
+    } else {
+        [self.hidSupport setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
     }
-    [self.controllerSupport setMotionEventState:controllerNumber motionType:motionType reportRateHz:reportRateHz];
 }
 
 - (void)connectionStatusUpdate:(int)status {

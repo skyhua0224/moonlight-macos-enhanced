@@ -1246,6 +1246,7 @@ extension SettingsModel {
     return UserDefaults.standard.bool(forKey: "autoFullscreen")
   }
   static let defaultRumble = true
+  static let defaultBackgroundControllerInput = false
   static let defaultControllerDriver = "HID"
   static let defaultMouseDriver = MouseInputDriverStrategy.defaultStrategy.displayKey
   static let defaultCoreHIDMaxMouseReportRate = 1000

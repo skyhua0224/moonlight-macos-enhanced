@@ -185,6 +185,8 @@ class SettingsModel: ObservableObject {
   static let sunshineVddCapabilityKeyPrefix = "settings.sunshine.vddCapability."
   static let sunshineVddStateKeyPrefix = "settings.sunshine.vddState."
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
+  static let controllerSettingsChangedNotification =
+    Notification.Name("MoonlightControllerSettingsDidChange")
   static let streamShortcutsChangedNotification = Notification.Name("MoonlightStreamShortcutsDidChange")
   static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
   static let debugLogModeKey = "debugLog.mode"
@@ -222,6 +224,22 @@ class SettingsModel: ObservableObject {
       object: nil,
       userInfo: [
         "hostId": hostId,
+      ])
+  }
+
+  /// Posts a controller-setting change for the selected host or the global profile.
+  ///
+  /// Observers are invoked synchronously on the posting thread unless they specify a queue.
+  /// Call from main-thread settings mutations; this method does not save the setting.
+  /// - Parameter setting: Changed setting identifier included with `hostId` in the notification.
+  private func postControllerSettingsChanged(_ setting: String) {
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    NotificationCenter.default.post(
+      name: Self.controllerSettingsChangedNotification,
+      object: nil,
+      userInfo: [
+        "hostId": hostId,
+        "setting": setting,
       ])
   }
 
@@ -888,6 +906,15 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  /// Allows controller input while unfocused; edits save and notify the selected profile.
+  /// Loading a profile suppresses these side effects. Mutate on the main thread.
+  @Published var backgroundControllerInput: Bool {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+      postControllerSettingsChanged("backgroundControllerInput")
+    }
+  }
   @Published var selectedControllerDriver: String {
     didSet {
       guard !isLoading else { return }
@@ -1384,6 +1411,11 @@ class SettingsModel: ObservableObject {
     })
   }
 
+  /// Initializes UI settings, restores the selected profile identity and registers observers.
+  ///
+  /// Starts published settings from defaults, including disabled background controller input,
+  /// applies persisted logging preferences and refreshes diagnostics/display discovery. Persisted
+  /// profile values are loaded separately. Construct on main for UI state and observer setup.
   init() {
     if let hosts = Self.hosts {
       let selectedProfile = UserDefaults.standard.string(forKey: "selectedSettingsProfile")
@@ -1519,6 +1551,7 @@ class SettingsModel: ObservableObject {
     autoFullscreen = Self.defaultAutoFullscreen
     selectedDisplayMode = Self.getString(from: Self.defaultDisplayMode, in: Self.displayModes)
     rumble = Self.defaultRumble
+    backgroundControllerInput = Self.defaultBackgroundControllerInput
     selectedControllerDriver = Self.defaultControllerDriver
     selectedMouseDriver = Self.defaultMouseDriver
     coreHIDMaxMouseReportRate = Self.defaultCoreHIDMaxMouseReportRate

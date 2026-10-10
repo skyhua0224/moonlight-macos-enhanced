@@ -17,6 +17,8 @@
 
 @property(nullable, nonatomic, retain) GCController *gamepad;
 @property(nonatomic) int playerIndex;
+// Physical transitions are independent of the debounce/chord output mask.
+@property(nonatomic) int physicalButtonFlags;
 @property(nonatomic) int lastButtonFlags;
 @property(nonatomic) int emulatingButtonFlags;
 @property(nonatomic) int supportedEmulationFlags;
@@ -26,6 +28,14 @@
 @property(nonatomic) short lastLeftStickY;
 @property(nonatomic) short lastRightStickX;
 @property(nonatomic) short lastRightStickY;
+
+// Motion sampling state.
+@property(nonatomic, strong, nullable) NSTimer *gyroTimer;
+@property(nonatomic, strong, nullable) NSTimer *accelTimer;
+@property(nonatomic) GCRotationRate lastGyroSample;
+@property(nonatomic) GCAcceleration lastAccelSample;
+@property(nonatomic) BOOL gyroAtRest;
+@property(nonatomic) NSUInteger gyroStationarySampleCount;
 
 // Enhanced Sunshine controller state.
 @property(nonatomic) BOOL controllerAnnounced;

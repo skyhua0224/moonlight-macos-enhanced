@@ -31,6 +31,7 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 
 @interface HIDSupport : NSObject
 @property(atomic) BOOL shouldSendInputEvents;
+@property(atomic) BOOL shouldSendControllerEvents;
 @property(atomic) TemporaryHost *host;
 @property(nonatomic, assign) void *inputContext;
 @property(nonatomic, copy) HIDFreeMouseAbsoluteSyncHandler freeMouseAbsoluteSyncHandler;
@@ -97,6 +98,9 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
                           referenceWidth:(short *)referenceWidth
                          referenceHeight:(short *)referenceHeight;
 - (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs;
+- (void)setMotionEventState:(uint16_t)controllerNumber
+                 motionType:(uint8_t)motionType
+               reportRateHz:(uint16_t)reportRateHz;
 @end
 
 @interface HIDSupport (ScrollInput)

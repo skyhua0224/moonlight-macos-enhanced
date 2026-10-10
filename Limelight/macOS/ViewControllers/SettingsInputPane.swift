@@ -74,6 +74,8 @@ private struct ControllerSettingsSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
 
+  /// Builds controller settings bound to the active profile, including background input.
+  /// Preference edits flow through SettingsModel persistence and live-change notifications.
   var body: some View {
     FormSection(title: "Controller") {
       SettingsRow(title: "Controller Driver") {
@@ -97,6 +99,11 @@ private struct ControllerSettingsSection: View {
       }
 
       ToggleCell(title: "Rumble", boolBinding: $settingsModel.rumble)
+      ToggleCell(
+        title: "Background Controller Input",
+        hintKey: "Background Controller Input detail",
+        boolBinding: $settingsModel.backgroundControllerInput
+      )
       ToggleCell(title: "Swap Buttons", boolBinding: $settingsModel.swapButtons)
       SettingsRow(title: "DualSense Touchpad Mode", detail: "Native Touchpad detail") {
         Picker("", selection: Binding<String>(
