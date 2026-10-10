@@ -9,6 +9,29 @@
 #import "StreamViewController_Internal.h"
 #import "RemoteUSBForwardingSession.h"
 
+/**
+ * Updates one stream's claim on process-wide GameController background monitoring.
+ *
+ * Call on main, where stream policy and teardown are serialized. Weak ownership avoids
+ * retaining stream controllers; monitoring remains enabled while any live stream requests it.
+ * @param owner Stream whose preference changed or whose teardown began.
+ * @param enabled YES to register the stream's request, NO to remove it.
+ */
+static void MLUpdateGameControllerBackgroundMonitoring(StreamViewController *owner, BOOL enabled) {
+    if (@available(macOS 11.3, *)) {
+        static NSHashTable<StreamViewController *> *owners;
+        if (owners == nil) {
+            owners = [NSHashTable weakObjectsHashTable];
+        }
+        if (enabled) {
+            [owners addObject:owner];
+        } else {
+            [owners removeObject:owner];
+        }
+        GCController.shouldMonitorBackgroundEvents = owners.allObjects.count > 0;
+    }
+}
+
 static NSScreen *MLScreenContainingMouseLocation(void) {
     NSPoint mouseLocation = [NSEvent mouseLocation];
     for (NSScreen *screen in [NSScreen screens]) {
@@ -623,9 +646,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
 /**
  * Begins one stream teardown, disabling input and invalidating stream-scoped callbacks.
  *
- * Clears input contexts after releasing controller state, removes lifecycle observers/timers,
- * and stops native streaming on a background queue with controller cleanup on main. Call from
- * main-thread lifecycle handling. A repeated call schedules its completion immediately rather
+ * Releases this stream's GameController background-monitoring request and clears input
+ * contexts after releasing controller state, removes lifecycle observers/timers, and stops
+ * native streaming on a background queue with controller cleanup on main. Call from
+ * main-thread lifecycle handling. Other streams retain their monitoring requests.
+ * A repeated call schedules its completion immediately rather
  * than waiting for the first teardown to finish.
  * @param reason Diagnostic teardown reason; nil uses fallback diagnostic labels.
  * @param completion Optional block dispatched to main after this stop, or immediately if already stopping.
@@ -652,6 +677,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.hidSupport.shouldSendInputEvents = NO;
     self.hidSupport.shouldSendControllerEvents = NO;
     self.controllerSupport.shouldSendInputEvents = NO;
+    MLUpdateGameControllerBackgroundMonitoring(self, NO);
     self.hidSupport.inputContext = NULL;
     self.controllerSupport.inputContext = NULL;
 
@@ -997,9 +1023,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
  * Resolves controller delivery for both backends from stream readiness and capture policy.
  *
  * Delivery requires a ready context with neither stop nor reconnect in progress, plus captured
- * keyboard/mouse input or the profile's background preference. Applies that preference to
- * process-wide GameController background monitoring, updates both controller gates and logs
- * the decision. Off-main calls asynchronously reschedule themselves on main.
+ * keyboard/mouse input or the profile's background preference. Registers that preference for
+ * shared GameController background monitoring until teardown begins, updates both
+ * controller gates and logs the decision. A late refresh cannot restore monitoring while
+ * stopping. Off-main calls asynchronously reschedule themselves on main.
  */
 - (void)refreshControllerInputSendingState {
     if (![NSThread isMainThread]) {
@@ -1015,9 +1042,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     BOOL focusedInputEnabled = self.hidSupport.shouldSendInputEvents;
     BOOL backgroundInputEnabled =
         [SettingsClass backgroundControllerInputFor:self.app.host.uuid];
-    if (@available(macOS 11.3, *)) {
-        GCController.shouldMonitorBackgroundEvents = backgroundInputEnabled;
-    }
+    MLUpdateGameControllerBackgroundMonitoring(self, !self.stopStreamInProgress && backgroundInputEnabled);
     BOOL shouldSendControllerInput = streamCanSendInput &&
         (focusedInputEnabled || backgroundInputEnabled);
 
