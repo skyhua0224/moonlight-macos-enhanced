@@ -969,13 +969,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.hostLatencyUpdatedObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"HostLatencyUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateWindowSubtitle];
     }];
-
-    self.logDidAppendObserver = [[NSNotificationCenter defaultCenter] addObserverForName:MoonlightLogDidAppendNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        NSString *line = note.userInfo[MoonlightLogNotificationLineKey];
-        if (line) {
-            [weakSelf appendLogLineToOverlay:line];
-        }
-    }];
 }
 
 - (void)updateWindowSubtitle {
@@ -1148,9 +1141,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [defaultCenter removeObserver:self.hostLatencyUpdatedObserver];
         self.hostLatencyUpdatedObserver = nil;
     }
-    if (self.logDidAppendObserver != nil) {
-        [defaultCenter removeObserver:self.logDidAppendObserver];
-        self.logDidAppendObserver = nil;
+    if (self.logChangeSubscription != nil) {
+        [[LogBuffer shared] unsubscribe:self.logChangeSubscription];
+        self.logChangeSubscription = nil;
     }
 
     [defaultCenter removeObserver:self name:HIDMouseModeToggledNotification object:nil];

@@ -2340,11 +2340,22 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     [self.view addSubview:self.logOverlayContainer positioned:NSWindowAbove relativeTo:nil];
     [self viewDidLayout];
 
-    // Seed with existing buffered logs
-    NSArray<NSString *> *lines = [[LogBuffer shared] allLines];
+    // Seed with existing buffered logs, then follow the coalesced change signal while visible.
+    NSArray<MLLogEntry *> *existing = [[LogBuffer shared] lastEntries:NSUIntegerMax];
+    NSMutableArray<NSString *> *lines = [NSMutableArray arrayWithCapacity:existing.count];
+    for (MLLogEntry *entry in existing) {
+        if (entry.inRaw) {
+            [lines addObject:entry.line];
+        }
+    }
+    self.logOverlayLastSequence = existing.lastObject.sequence;
     if (lines.count > 0) {
         [self ingestRawLogLinesToOverlay:lines];
     }
+    __weak typeof(self) weakSelf = self;
+    self.logChangeSubscription = [[LogBuffer shared] subscribeToChangesWithHandler:^{
+        [weakSelf appendNewLogEntriesToOverlay];
+    }];
     [self updateLogOverlayToolbarState];
 
     self.logOverlayContainer.alphaValue = 0.0;
@@ -2362,6 +2373,11 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     // If opened from timeout menu (not stream menu), we allow closing it
     // without closing the underlying timeout menu.
     
+    if (self.logChangeSubscription != nil) {
+        [[LogBuffer shared] unsubscribe:self.logChangeSubscription];
+        self.logChangeSubscription = nil;
+    }
+
     NSVisualEffectView *container = self.logOverlayContainer;
     self.logOverlayContainer = nil;
     self.logOverlayScrollView = nil;
@@ -2461,6 +2477,20 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     NSString *selectedKey = [popup.selectedItem.representedObject isKindOfClass:[NSString class]] ? popup.selectedItem.representedObject : @"all";
     self.logOverlayMinimumLevelKey = selectedKey ?: @"all";
     [self rebuildLogOverlayDisplayFromAllRawLines];
+}
+
+// Main queue, from the coalesced change signal.
+- (void)appendNewLogEntriesToOverlay {
+    if (!self.logOverlayTextView) {
+        return;
+    }
+    NSArray<MLLogEntry *> *entries = [[LogBuffer shared] entriesAfterSequence:self.logOverlayLastSequence limit:0];
+    for (MLLogEntry *entry in entries) {
+        self.logOverlayLastSequence = entry.sequence;
+        if (entry.inRaw) {
+            [self appendLogLineToOverlay:entry.line];
+        }
+    }
 }
 
 - (void)appendLogLineToOverlay:(NSString *)line {

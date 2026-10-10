@@ -36,4 +36,11 @@ void LoggerSetInputDiagnosticsEnabled(BOOL enabled);
 BOOL LoggerIsInputDiagnosticsEnabled(void);
 void LoggerPersistMessage(LogLevel level, NSString *message);
 
+// Cheap, lock-free check callers can use to skip building a message that would be dropped.
+BOOL LoggerWouldLog(LogLevel level);
+// Blocks until every line logged before the call has been written. Call before the process
+// goes away on purpose (termination, deliberate aborts). Lines at LOG_E are flushed this way
+// automatically. Safe to call from any thread, including the logging queue (then it is a no-op).
+void LoggerFlush(void);
+
 #endif

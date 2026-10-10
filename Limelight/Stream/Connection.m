@@ -8,7 +8,7 @@
 
 #import "Connection.h"
 #import "Ds5HapticsAudioRenderer.h"
-#import "LogBuffer.h"
+#import "Logger.h"
 #import "Utils.h"
 
 #import "MoonlightEnhanced-Swift.h"
@@ -2215,55 +2215,50 @@ void ClLogMessage(const char* format, ...)
         lastDropLogTime = now;
     }
 
-    va_list va;
-    va_start(va, format);
+    LogLevel derivedLevel = isDropLog ? LOG_W : (isHighFrequencyDiagnostic ? LOG_D : LOG_I);
 
-    if (!isHighFrequencyDiagnostic) {
-        va_list stderrArgs;
-        va_copy(stderrArgs, va);
-        vfprintf(stderr, format, stderrArgs);
-        va_end(stderrArgs);
-    }
+    // The logger decides what is kept (level, input diagnostics) and writes the file, stderr and
+    // in-app copies on its own queue; this callback only formats the text. Skip even that when the
+    // line would be dropped.
+    bool wanted = (!isHighFrequencyDiagnostic || LoggerIsInputDiagnosticsEnabled()) && LoggerWouldLog(derivedLevel);
+    if (wanted) {
+        va_list va;
+        va_start(va, format);
 
-    va_list formatArgs;
-    va_copy(formatArgs, va);
-    char stackBuffer[2048];
-    int requiredLength = vsnprintf(stackBuffer, sizeof(stackBuffer), format, formatArgs);
-    va_end(formatArgs);
+        va_list formatArgs;
+        va_copy(formatArgs, va);
+        char stackBuffer[2048];
+        int requiredLength = vsnprintf(stackBuffer, sizeof(stackBuffer), format, formatArgs);
+        va_end(formatArgs);
 
-    NSString *formattedLine = nil;
-    if (requiredLength >= 0 && requiredLength < (int)sizeof(stackBuffer)) {
-        formattedLine = [NSString stringWithUTF8String:stackBuffer];
-    } else if (requiredLength >= (int)sizeof(stackBuffer)) {
-        size_t heapLength = (size_t)requiredLength + 1;
-        char *heapBuffer = malloc(heapLength);
-        if (heapBuffer != NULL) {
-            va_list heapArgs;
-            va_copy(heapArgs, va);
-            vsnprintf(heapBuffer, heapLength, format, heapArgs);
-            va_end(heapArgs);
-            formattedLine = [NSString stringWithUTF8String:heapBuffer];
-            free(heapBuffer);
+        NSString *formattedLine = nil;
+        if (requiredLength >= 0 && requiredLength < (int)sizeof(stackBuffer)) {
+            formattedLine = [NSString stringWithUTF8String:stackBuffer];
+        } else if (requiredLength >= (int)sizeof(stackBuffer)) {
+            size_t heapLength = (size_t)requiredLength + 1;
+            char *heapBuffer = malloc(heapLength);
+            if (heapBuffer != NULL) {
+                va_list heapArgs;
+                va_copy(heapArgs, va);
+                vsnprintf(heapBuffer, heapLength, format, heapArgs);
+                va_end(heapArgs);
+                formattedLine = [NSString stringWithUTF8String:heapBuffer];
+                free(heapBuffer);
+            }
         }
-    }
 
-    va_end(va);
+        va_end(va);
 
-    if (formattedLine.length > 0) {
-        NSString *trimmedLine = [formattedLine stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
-        if (trimmedLine.length > 0) {
-            LogLevel derivedLevel = isDropLog ? LOG_W : (isHighFrequencyDiagnostic ? LOG_D : LOG_I);
-            [[LogBuffer shared] appendLine:trimmedLine level:derivedLevel];
-            if (!isHighFrequencyDiagnostic || LoggerIsInputDiagnosticsEnabled()) {
+        if (formattedLine.length > 0) {
+            NSString *trimmedLine = [formattedLine stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+            if (trimmedLine.length > 0) {
                 LoggerPersistMessage(derivedLevel, trimmedLine);
             }
         }
     }
 
     if (isDropLog && accumulatedDropCount > 1) {
-        NSString *summaryLine = [NSString stringWithFormat:@"(and %d more dropped frame messages suppressed)", accumulatedDropCount - 1];
-        fprintf(stderr, " %s\n", summaryLine.UTF8String);
-        [[LogBuffer shared] appendLine:summaryLine level:LOG_W];
+        LogMessage(LOG_W, [NSString stringWithFormat:@"(and %d more dropped frame messages suppressed)", accumulatedDropCount - 1]);
         accumulatedDropCount = 0;
     }
 }

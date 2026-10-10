@@ -19,6 +19,7 @@
 #import "AppsViewController.h"
 #import "AppsWorkspaceViewController.h"
 #import "TemporaryHost.h"
+#import "Logger.h"
 #import "MoonlightEnhanced-Swift.h"
 #import <objc/runtime.h>
 
@@ -136,6 +137,8 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
     [[DatabaseSingleton shared] saveContext];
+    // Lines are written by a background queue; make sure the last ones reach the files.
+    LoggerFlush();
 }
 
 - (void)createMainWindow {
