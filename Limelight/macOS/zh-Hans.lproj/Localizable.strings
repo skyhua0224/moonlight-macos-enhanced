@@ -1291,7 +1291,7 @@
 "Adaptive Bitrate" = "自适应码率";
 "Adaptive Bitrate hint" = "串流开始前测量带宽并据此限制码率，串流过程中由主机根据丢包与延迟调整码率。需要 Foundation Sunshine 主机。";
 "Precision Touchpad" = "精确式触控板";
-"Precision Touchpad Hint" = "把触控板的多指触摸作为精确式触控板发送给 Windows 11 主机，由 Windows 自己处理滚动、捏合和三/四指手势。“屏蔽”模式会把所有手指发给 Windows，同时不再让 Mac 用同样的手指移动、点击或滚动；“同时使用”模式下单指仍使用 Mac 的普通指针和点击，第二根手指落下后整个手势交给 Windows，直到所有手指抬起。需要支持该功能的 Windows 11 主机，不支持时自动使用普通鼠标输入。";
+"Precision Touchpad Hint" = "把触控板的多指触摸作为精确式触控板发送给 Windows 11 主机，由 Windows 自己处理滚动、捏合和三/四指手势。“屏蔽”模式会把所有手指发给 Windows，同时不再让 Mac 用同样的手指移动、点击或滚动；“同时使用”模式下单指仍使用 Mac 的普通指针和点击，第二根手指落下后整个手势交给 Windows，直到所有手指抬起。“屏蔽”模式下光标由 Windows 自己移动，这台 Mac 不知道它在哪里，所以用指针唤出悬浮球、把指针滑到其他显示器这类操作会和你看到的光标对不上；需要这些操作时请选“同时使用”。需要支持该功能的 Windows 11 主机，不支持时自动使用普通鼠标输入。";
 "Precision Touchpad Off" = "关闭";
 "Precision Touchpad Block" = "开启 – 屏蔽 macOS 触控板指针事件";
 "Precision Touchpad Both" = "开启 – 同时使用";
