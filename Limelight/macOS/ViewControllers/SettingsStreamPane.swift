@@ -1,6 +1,27 @@
 import AppKit
 import SwiftUI
 
+/// CGSize is Hashable only from macOS 15. A picker whose selection or tag type
+/// is CGSize cannot resolve its view type on macOS 12-14 and the settings
+/// window aborts, so the resolution pickers select this value instead.
+private struct ResolutionChoice: Hashable {
+  let width: Int
+  let height: Int
+
+  init(_ size: CGSize) {
+    width = Int(size.width)
+    height = Int(size.height)
+  }
+
+  var size: CGSize { CGSize(width: width, height: height) }
+
+  static func binding(_ source: Binding<CGSize>) -> Binding<ResolutionChoice> {
+    Binding(
+      get: { ResolutionChoice(source.wrappedValue) },
+      set: { source.wrappedValue = $0.size })
+  }
+}
+
 struct StreamView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
@@ -98,14 +119,14 @@ struct StreamView: View {
 
       FormSection(title: "Resolution & Frame Rate") {
         SettingsRow(title: "Resolution") {
-          Picker("", selection: $settingsModel.selectedResolution) {
-            ForEach(SettingsModel.resolutions, id: \.self) { resolution in
-              if resolution == SettingsModel.matchDisplayResolutionSentinel {
-                Text(languageManager.localize("Match Display")).tag(resolution)
-              } else if resolution == .zero {
-                Text(languageManager.localize("Custom")).tag(resolution)
+          Picker("", selection: ResolutionChoice.binding($settingsModel.selectedResolution)) {
+            ForEach(SettingsModel.resolutions.map(ResolutionChoice.init), id: \.self) { choice in
+              if choice.size == SettingsModel.matchDisplayResolutionSentinel {
+                Text(languageManager.localize("Match Display")).tag(choice)
+              } else if choice.size == .zero {
+                Text(languageManager.localize("Custom")).tag(choice)
               } else {
-                Text("\(Int(resolution.width)) × \(Int(resolution.height))").tag(resolution)
+                Text("\(choice.width) × \(choice.height)").tag(choice)
               }
             }
           }
@@ -174,10 +195,10 @@ struct StreamView: View {
         ToggleCell(title: "Remote Resolution", hintKey: "Remote overrides hint", boolBinding: $settingsModel.remoteResolutionEnabled)
         if settingsModel.remoteResolutionEnabled {
           SettingsRow(title: "Remote Resolution") {
-            Picker("", selection: $settingsModel.selectedRemoteResolution) {
-              ForEach(SettingsModel.remoteResolutions, id: \.self) { resolution in
-                Text(resolution == .zero ? languageManager.localize("Custom") : "\(Int(resolution.width)) × \(Int(resolution.height))")
-                  .tag(resolution)
+            Picker("", selection: ResolutionChoice.binding($settingsModel.selectedRemoteResolution)) {
+              ForEach(SettingsModel.remoteResolutions.map(ResolutionChoice.init), id: \.self) { choice in
+                Text(choice.size == .zero ? languageManager.localize("Custom") : "\(choice.width) × \(choice.height)")
+                  .tag(choice)
               }
             }
             .labelsHidden()
