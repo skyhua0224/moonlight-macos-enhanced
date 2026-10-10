@@ -1862,8 +1862,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * Installs GameController handlers for button, axis and supported touchpad input.
  *
  * Handlers update the assigned controller and flush state through the delivery gate; physical
- * touchpad clicks also require slot ownership, a context and enabled delivery. Removed-device
- * callbacks are rejected, including delayed legacy Menu releases on the main queue. Touch surfaces may produce
+ * touchpad output also requires slot ownership, a context and enabled delivery. Native touchpad
+ * button state is tracked while paused so resuming cannot resend a button released during suspension.
+ * Removed-device callbacks are rejected, including delayed legacy Menu releases on the main queue. Touch surfaces may produce
  * native contacts or mouse gestures according to settings. Call during main-thread controller
  * setup; cleanup must unregister these handlers before releasing the backend.
  * @param controller Physical controller whose supported input profile is registered.
@@ -2040,6 +2041,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                         (void)button;
                         (void)value;
                         if (touchController.gamepad == nil || touchController.gamepad != weakController) return;
+                        BOOL physicalPressed = pressed;
                         [self evaluateControllerShortcuts:touchController];
                         if (ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(touchController.clientShortcutRouting)) & TOUCHPAD_FLAG)
                             pressed = NO;
@@ -2050,9 +2052,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                             }
                             return;
                         }
+                        BOOL usesMouse = ControllerTouchpadUsesMouse(self, touchController);
+                        if (!usesMouse) {
+                            UPDATE_BUTTON_FLAG(touchController, TOUCHPAD_FLAG, physicalPressed);
+                        }
                         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
                         if (inputCtx != NULL && LiInputContextIsInitialized(inputCtx) && self.shouldSendInputEvents && [self controllerOwnsRemoteSlot:touchController]) {
-                            if (ControllerTouchpadUsesMouse(self, touchController)) {
+                            if (usesMouse) {
                                 if (pressed) {
                                     touchController.trackpadPhysicalClickConsumed = YES;
                                     // Mechanical press deflection must not move the
@@ -2095,7 +2101,6 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                                     }
                                 });
                             } else {
-                                UPDATE_BUTTON_FLAG(touchController, TOUCHPAD_FLAG, pressed);
                                 [self updateFinished:touchController];
                             }
                         }
