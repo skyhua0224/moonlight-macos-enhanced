@@ -20,6 +20,10 @@ static NSMutableDictionary<NSString*, NSMutableDictionary*> *gCuratedWarnRepeatT
 static NSObject *gCuratedWarnRepeatLock = nil;
 static NSObject *gCuratedNoiseLock = nil;
 static NSObject *gFileLogLock = nil;
+// Open append handles, keyed by log path. Only touched while holding gFileLogLock.
+static NSMutableDictionary<NSString *, NSFileHandle *> *gOpenLogHandles = nil;
+static NSMutableDictionary<NSString *, NSNumber *> *gOpenLogValidatedAt = nil;
+static const NSTimeInterval kLogHandleRevalidateIntervalSec = 1.0;
 static NSObject *gLoggerStateLock = nil;
 static NSString *gLogDirectoryPath = nil;
 static NSString *gRawFileLogPath = nil;
@@ -173,13 +177,37 @@ static NSString *EnsureCuratedFileLogPath(void) {
     return gCuratedFileLogPath;
 }
 
+// Compiling a pattern for every logged noise line is expensive; the set of patterns is small and fixed.
+static NSRegularExpression *CachedRegularExpression(NSString *pattern) {
+    static NSMutableDictionary<NSString *, NSRegularExpression *> *cache = nil;
+    static NSObject *cacheLock = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        cache = [NSMutableDictionary dictionary];
+        cacheLock = [[NSObject alloc] init];
+    });
+
+    @synchronized (cacheLock) {
+        NSRegularExpression *regex = cache[pattern];
+        if (regex != nil) {
+            return regex;
+        }
+        NSError *error = nil;
+        regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:&error];
+        if (error != nil || regex == nil) {
+            return nil;
+        }
+        cache[pattern] = regex;
+        return regex;
+    }
+}
+
 static NSString *ExtractFirstMatch(NSString *input, NSString *pattern) {
     if (input.length == 0 || pattern.length == 0) {
         return nil;
     }
-    NSError *error = nil;
-    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:&error];
-    if (error != nil || regex == nil) {
+    NSRegularExpression *regex = CachedRegularExpression(pattern);
+    if (regex == nil) {
         return nil;
     }
     NSTextCheckingResult *match = [regex firstMatchInString:input options:0 range:NSMakeRange(0, input.length)];
@@ -403,6 +431,35 @@ static void RotateFileLogIfNeeded(NSString *logPath, unsigned long long maxBytes
     }
 }
 
+static void CloseCachedLogHandleLocked(NSString *logPath) {
+    NSFileHandle *handle = gOpenLogHandles[logPath];
+    if (handle != nil) {
+        @try {
+            [handle closeFile];
+        } @catch (NSException *exception) {
+            // Already closed or invalid; nothing else to release.
+        }
+    }
+    [gOpenLogHandles removeObjectForKey:logPath];
+    [gOpenLogValidatedAt removeObjectForKey:logPath];
+}
+
+// Opens (creating it with a header when missing) the log file for appending and caches the handle.
+static NSFileHandle *OpenCachedLogHandleLocked(NSString *logPath, NSString *title) {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:logPath]) {
+        NSString *header = [NSString stringWithFormat:@"===== %@ started %@ =====\n", title, LoggerTimestampString()];
+        [header writeToFile:logPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
+
+    NSFileHandle *file = [NSFileHandle fileHandleForWritingAtPath:logPath];
+    if (file == nil) {
+        return nil;
+    }
+    gOpenLogHandles[logPath] = file;
+    gOpenLogValidatedAt[logPath] = @(CFAbsoluteTimeGetCurrent());
+    return file;
+}
+
 static void AppendFileLogLineToPath(NSString *logPath, NSString *line, NSString *title, unsigned long long maxBytes) {
     if (line.length == 0) {
         return;
@@ -416,28 +473,55 @@ static void AppendFileLogLineToPath(NSString *logPath, NSString *line, NSString 
         gFileLogLock = [[NSObject alloc] init];
     }
 
+    // Log lines come from decode and network threads at a high rate. Keep the append handle open instead of
+    // stat'ing, opening, seeking and closing the file for every line; the lock still serialises writers.
     @synchronized (gFileLogLock) {
-        RotateFileLogIfNeeded(logPath, maxBytes);
-
-        if (![[NSFileManager defaultManager] fileExistsAtPath:logPath]) {
-            NSString *header = [NSString stringWithFormat:@"===== %@ started %@ =====\n", title, LoggerTimestampString()];
-            [header writeToFile:logPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        if (gOpenLogHandles == nil) {
+            gOpenLogHandles = [NSMutableDictionary dictionary];
+            gOpenLogValidatedAt = [NSMutableDictionary dictionary];
         }
 
-        NSFileHandle *file = [NSFileHandle fileHandleForWritingAtPath:logPath];
+        NSFileHandle *file = gOpenLogHandles[logPath];
+        if (file != nil) {
+            NSTimeInterval now = CFAbsoluteTimeGetCurrent();
+            NSTimeInterval validatedAt = [gOpenLogValidatedAt[logPath] doubleValue];
+            if (now - validatedAt >= kLogHandleRevalidateIntervalSec) {
+                // The file may have been removed (for example by clearing the log directory); reopen if so.
+                if ([[NSFileManager defaultManager] fileExistsAtPath:logPath]) {
+                    gOpenLogValidatedAt[logPath] = @(now);
+                } else {
+                    CloseCachedLogHandleLocked(logPath);
+                    file = nil;
+                }
+            }
+        }
+
         if (file == nil) {
-            return;
+            RotateFileLogIfNeeded(logPath, maxBytes);
+            file = OpenCachedLogHandleLocked(logPath, title);
+            if (file == nil) {
+                return;
+            }
         }
 
         @try {
-            [file seekToEndOfFile];
+            unsigned long long endOffset = [file seekToEndOfFile];
+            if (endOffset >= maxBytes) {
+                CloseCachedLogHandleLocked(logPath);
+                RotateFileLogIfNeeded(logPath, maxBytes);
+                file = OpenCachedLogHandleLocked(logPath, title);
+                if (file == nil) {
+                    return;
+                }
+                [file seekToEndOfFile];
+            }
+
             NSString *entry = [NSString stringWithFormat:@"[%@] %@\n", LoggerTimestampString(), line];
             NSData *data = [entry dataUsingEncoding:NSUTF8StringEncoding];
             [file writeData:data];
         } @catch (NSException *exception) {
             NSLog(@"<WARN> Failed writing log file: %@", exception.reason);
-        } @finally {
-            [file closeFile];
+            CloseCachedLogHandleLocked(logPath);
         }
     }
 }
