@@ -229,6 +229,8 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     BOOL _enhancedUsesCoreAudioDownmix;
     uint64_t _enhancedDownmixFailureCount;
     uint64_t _audioUnderrunCount;
+    // Written by the audio decode thread, read by the render callback.
+    uint64_t _lastAudioSampleMs;
     BOOL _audioDecodeThreadPriorityRaised;
     uint64_t _audioDecodeSampleCount;
     uint64_t _audioDecodeFailureCount;
@@ -829,6 +831,7 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     conn->_audioRenderChannelCount = conn->_channelCount;
     conn->_audioRendererBackend = MLAudioRendererBackendLegacyQueue;
     conn->_audioUnderrunCount = 0;
+    __atomic_store_n(&conn->_lastAudioSampleMs, 0, __ATOMIC_RELAXED);
     conn->_audioDecodeThreadPriorityRaised = NO;
     conn->_audioDecodeSampleCount = 0;
     conn->_audioDecodeFailureCount = 0;
@@ -1040,6 +1043,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         // race since we'll either read the original value of s_WriteIndex (which is safe,
         // we just won't consider this sample) or the new value of s_WriteIndex
         conn->_audioBufferWriteIndex = (conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries;
+        __atomic_store_n(&conn->_lastAudioSampleMs, LiGetMillis(), __ATOMIC_RELAXED);
     } else if (decodeLen < 0) {
         conn->_audioDecodeFailureCount++;
         conn->_audioConsecutiveDecodeFailures++;
@@ -1064,6 +1068,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 
                 __sync_synchronize();
                 conn->_audioBufferWriteIndex = (conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries;
+                __atomic_store_n(&conn->_lastAudioSampleMs, LiGetMillis(), __ATOMIC_RELAXED);
                 return;
             }
         }
@@ -1118,6 +1123,12 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     }
 
     if (copiedFrames < frameCount) {
+        // The host sends no audio packets while nothing is playing. An empty
+        // buffer is an underrun only when audio was arriving a moment ago.
+        uint64_t lastSampleMs = __atomic_load_n(&_lastAudioSampleMs, __ATOMIC_RELAXED);
+        if (lastSampleMs == 0 || LiGetMillis() - lastSampleMs > 250) {
+            return;
+        }
         _audioUnderrunCount++;
         if ((_audioUnderrunCount % 25) == 1) {
             Log(LOG_W, @"Audio underrun on backend=%d requested=%u copied=%u entries=%d",
