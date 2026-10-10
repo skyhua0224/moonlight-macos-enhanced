@@ -351,12 +351,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 @implementation StreamViewController
 
+/**
+ * Selects the controller backend from the effective host/global preference on main.
+ * DualSense input follows the same explicit choice as other pads, keeping stream routing
+ * consistent with HIDSupport's delivery gate.
+ * @return YES when GameController is selected; NO for direct HID.
+ */
 - (BOOL)useSystemControllerDriver {
-    // DualSense touch and output reports are exposed by Apple's Game
-    // Controller framework. Select that path automatically for a real DS5,
-    // even when the legacy per-host driver preference is still HID.
-    return [SettingsClass controllerDriverFor:self.app.host.uuid] == 1 ||
-           [ControllerSupport hasDualSenseController];
+    return [SettingsClass controllerDriverFor:self.app.host.uuid] == 1;
 }
 
 - (void)viewDidLoad {

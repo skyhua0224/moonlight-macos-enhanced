@@ -458,7 +458,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
  * Changes the HID controller-delivery gate and resets motion filters and touchpad gestures.
  *
  * Pausing synchronously drains the input queue and sends neutral gamepad, touch, gyro and mouse
- * releases when a direct-HID context is initialized. Resuming advertises DS4 capabilities before
+ * releases when a direct-HID context is initialized. Resuming advertises PlayStation capabilities before
  * resending physical state. Host motion rates survive this transition. Call on main for menu
  * timers, never from inputQueue because disabling performs dispatch_sync onto that queue.
  * @param enabled Whether controller input may be delivered to the current stream.
@@ -516,9 +516,9 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
             [self resetTrackpadState];
         } else if (self.controllerDriver == 0) {
             // Physical gamepad state continues to update while delivery is paused.
-            // A replacement DS4 session must advertise its extensions first.
+            // A replacement PlayStation session must advertise its extensions first.
             IOHIDDeviceRef device = [self getFirstDevice];
-            if (device != NULL && isPS4(device) && ![self reportPlayStationControllerArrival]) {
+            if (device != NULL && isPlayStation(device) && ![self reportPlayStationControllerArrival]) {
                 return;
             }
             [self sendControllerEvent];
@@ -2045,18 +2045,13 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
            self.coreHIDMouseDriver.secondsSinceLastMovementEvent < 0.25;
 }
 
+/**
+ * Resolves the effective host/global controller backend, including for recognized DualSense pads.
+ * Call on the main HID run loop; direct HID owns input only when this preference is zero.
+ * @return The configured backend (zero for HID, one for GameController).
+ */
 - (NSInteger)controllerDriver {
-    NSInteger configured = [SettingsClass controllerDriverFor:self.host.uuid];
-    // Keep HIDSupport alive for the DS5 output report path, but suppress its
-    // duplicate input events when Apple's Game Controller path is available.
-    if (configured == 0) {
-        for (GCController *controller in GCController.controllers) {
-            if ([controller.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
-                return 1;
-            }
-        }
-    }
-    return configured;
+    return [SettingsClass controllerDriverFor:self.host.uuid];
 }
 
 - (void)refreshMouseInputConfiguration {
@@ -2543,6 +2538,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
  *
  * Rejects missing, truncated and unsupported PlayStation reports before accessing their fields.
  * DS5 simple Bluetooth keeps its compact control layout; complete reports also deliver touch.
+ * DS5 advertises touch capabilities before ordinary or extended input, retrying failed arrival.
  * DS4 processing normalizes sticks, ignores report-counter-only changes and forwards touch/motion
  * through their delivery gates. Runs on the HID manager's main run loop; ordinary state is queued
  * on the serial input queue.
@@ -2741,7 +2737,7 @@ void myHIDReportCallback (
         self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
         self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
         
-        if (self.controllerDriver == 0) {
+        if (self.controllerDriver == 0 && [self reportPlayStationControllerArrival]) {
 
             if (self.lastPS5State.rgucButtonsAndHat[0] != state->rgucButtonsAndHat[0] ||
                 self.lastPS5State.rgucButtonsAndHat[1] != state->rgucButtonsAndHat[1] ||
