@@ -491,6 +491,12 @@ private struct SettingsProfilePicker: View {
     }
     .pickerStyle(.menu)
     .controlSize(.small)
+    .controllerPicker(
+      selection: binding,
+      choices: (SettingsModel.hosts ?? []).compactMap { $0 }.map { host in
+        (value: Optional(host),
+         title: host.id == SettingsModel.globalHostId ? languageManager.localize("Default Profile") : host.name)
+      })
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }

@@ -24,6 +24,7 @@ struct AudioView: View {
               }
             }
             .labelsHidden()
+            .controllerPicker(selection: $settingsModel.selectedAudioConfiguration, options: SettingsModel.audioConfigurations, title: { value in languageManager.localize(value) })
             .pickerStyle(.menu)
             .controlSize(.small)
             .frame(width: 190, alignment: .trailing)
@@ -43,6 +44,7 @@ struct AudioView: View {
               }
             }
             .labelsHidden()
+            .controllerPicker(selection: $settingsModel.selectedAudioOutputMode, options: SettingsModel.audioOutputModes, title: { value in languageManager.localize(value) })
             .pickerStyle(.segmented)
             .controlSize(.small)
             .frame(width: 210, alignment: .trailing)
@@ -60,6 +62,7 @@ struct AudioView: View {
                 }
               }
               .labelsHidden()
+              .controllerPicker(selection: $settingsModel.selectedEnhancedAudioOutputTarget, options: SettingsModel.enhancedAudioOutputTargetDisplayOrder, title: { value in languageManager.localize(value) })
               .pickerStyle(.menu)
               .controlSize(.small)
               .frame(width: 190, alignment: .trailing)
@@ -72,6 +75,7 @@ struct AudioView: View {
                 }
               }
               .labelsHidden()
+              .controllerPicker(selection: $settingsModel.selectedEnhancedAudioPreset, options: SettingsModel.enhancedAudioPresets, title: { value in languageManager.localize(value) })
               .pickerStyle(.menu)
               .controlSize(.small)
               .frame(width: 190, alignment: .trailing)
@@ -120,6 +124,10 @@ struct AudioView: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .controlSize(.small)
+            .controllerPicker(
+              selection: $microphoneManager.selectedDeviceUID,
+              choices: [(value: "", title: languageManager.localize("System Default"))]
+                + microphoneManager.devices.map { (value: $0.uid, title: $0.name) })
             .frame(width: 210, alignment: .trailing)
             .onAppear { microphoneManager.refreshDevices() }
           }
@@ -223,6 +231,7 @@ private struct AudioCompactSliderRow: View {
         .foregroundStyle(.secondary)
       // Fills the row like the system Sound output volume.
       Slider(value: $value, in: 0...1)
+        .controllerSlider(value: $value, in: 0...1)
         .frame(maxWidth: .infinity)
       Image(systemName: "speaker.wave.3.fill")
         .foregroundStyle(.secondary)

@@ -771,6 +771,9 @@ private struct KeyboardTranslationRuleEditorSheet: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(
+            selection: $localAction, options: KeyboardTranslationProfile.localActionOrder(),
+            title: { languageManager.localize(KeyboardTranslationProfile.localActionTitleKey(for: $0)) })
         }
       }
 

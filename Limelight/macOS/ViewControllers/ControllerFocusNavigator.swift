@@ -11,20 +11,34 @@ import SwiftUI
 /// Navigation commands, mapped from controller buttons by ControllerNavigation.
 @objc enum ControllerFocusInput: Int {
   case up, down, left, right, accept, back, previousColumn, nextColumn
+  // Used by the on-screen keyboard: X, Y and the Menu button.
+  case delete, space, done
 }
 
 // MARK: - SwiftUI anchors
 
-/// Invisible marker behind a SwiftUI-drawn control; A runs `trigger`.
+/// Options of a SwiftUI picker, read when the controller opens its list.
+struct ControllerFocusChoices {
+  let titles: [String]
+  let selectedIndex: Int
+  let select: (Int) -> Void
+}
+
+/// Invisible marker behind a SwiftUI-drawn control; A runs `trigger`. Pickers
+/// and sliders also carry what the navigator needs to change their binding.
 final class ControllerFocusAnchorView: NSView {
   var trigger: (() -> Void)?
+  var adjust: ((Int) -> Void)?
+  var choices: (() -> ControllerFocusChoices)?
   var isTargetEnabled = true
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 private struct ControllerFocusAnchor: NSViewRepresentable {
   let enabled: Bool
-  let trigger: () -> Void
+  var trigger: (() -> Void)?
+  var adjust: ((Int) -> Void)?
+  var choices: (() -> ControllerFocusChoices)?
 
   func makeNSView(context: Context) -> ControllerFocusAnchorView {
     let view = ControllerFocusAnchorView()
@@ -34,6 +48,8 @@ private struct ControllerFocusAnchor: NSViewRepresentable {
 
   func updateNSView(_ view: ControllerFocusAnchorView, context: Context) {
     view.trigger = trigger
+    view.adjust = adjust
+    view.choices = choices
     view.isTargetEnabled = enabled
   }
 }
@@ -68,6 +84,76 @@ extension View {
   /// Makes a gesture-driven control reachable by controller; A runs `action`.
   func controllerFocusTarget(enabled: Bool = true, _ action: @escaping () -> Void) -> some View {
     background(ControllerFocusAnchor(enabled: enabled, trigger: action))
+  }
+
+  /// Makes a picker reachable by controller. SwiftUI no longer backs menu
+  /// pickers with an NSPopUpButton on every macOS version, so the anchor
+  /// carries the binding: D-pad steps through `options`, A lists them.
+  func controllerPicker<T: Equatable>(
+    selection: Binding<T>, options: [T], title: @escaping (T) -> String
+  ) -> some View {
+    modifier(ControllerPickerModifier(selection: selection, options: options, title: title))
+  }
+
+  /// Same for options that carry their own titles.
+  func controllerPicker<T: Equatable>(selection: Binding<T>, choices: [(value: T, title: String)]) -> some View {
+    controllerPicker(selection: selection, options: choices.map(\.value), title: { value in
+      choices.first { $0.value == value }?.title ?? ""
+    })
+  }
+
+  /// Makes a slider reachable by controller; D-pad left/right changes the value
+  /// by `step`, or a twentieth of the range.
+  func controllerSlider<V: BinaryFloatingPoint>(
+    value: Binding<V>, in range: ClosedRange<V>, step: V? = nil
+  ) -> some View {
+    modifier(ControllerSliderModifier(value: value, range: range, step: step))
+  }
+}
+
+private struct ControllerPickerModifier<T: Equatable>: ViewModifier {
+  let selection: Binding<T>
+  let options: [T]
+  let title: (T) -> String
+  @Environment(\.isEnabled) private var isEnabled
+
+  func body(content: Content) -> some View {
+    content.background(ControllerFocusAnchor(
+      enabled: isEnabled,
+      adjust: { delta in
+        guard !options.isEmpty else { return }
+        let current = options.firstIndex(of: selection.wrappedValue)
+        let next = current.map { $0 + delta } ?? (delta > 0 ? 0 : options.count - 1)
+        guard next >= 0, next < options.count, next != current else { return }
+        selection.wrappedValue = options[next]
+      },
+      choices: {
+        ControllerFocusChoices(
+          titles: options.map(title),
+          selectedIndex: options.firstIndex(of: selection.wrappedValue) ?? -1,
+          select: { index in
+            guard index >= 0, index < options.count else { return }
+            selection.wrappedValue = options[index]
+          })
+      }))
+  }
+}
+
+private struct ControllerSliderModifier<V: BinaryFloatingPoint>: ViewModifier {
+  let value: Binding<V>
+  let range: ClosedRange<V>
+  let step: V?
+  @Environment(\.isEnabled) private var isEnabled
+
+  func body(content: Content) -> some View {
+    content.background(ControllerFocusAnchor(
+      enabled: isEnabled,
+      adjust: { delta in
+        let span = Double(range.upperBound - range.lowerBound)
+        let increment = step.map { Double($0) } ?? span / 20
+        let next = Double(value.wrappedValue) + increment * Double(delta)
+        value.wrappedValue = V(min(max(next, Double(range.lowerBound)), Double(range.upperBound)))
+      }))
   }
 }
 
@@ -147,6 +233,7 @@ private final class ControllerFocusRing {
   private var pendingDirection: ControllerFocusInput?
   private var pendingTicks = 0
   private var pendingRetries = 0
+  private var pendingKeyboardTicks = 0
 
   // MARK: Entry points
 
@@ -235,11 +322,21 @@ private final class ControllerFocusRing {
     if let search = targets.first(where: { $0.view is NSSearchField }) {
       current = search
     }
+    // The search field takes focus a moment later; the keyboard follows it.
+    pendingKeyboardTicks = 30
   }
 
   /// Called every poll; keeps the ring on the focused control.
   @objc(updateWithWindow:showRing:)
   func update(window: NSWindow?, showRing: Bool) {
+    if pendingKeyboardTicks > 0 {
+      pendingKeyboardTicks -= 1
+      if let window, window === self.window, !ControllerKeyboardPanel.shared.isPresented,
+         (window.firstResponder as? NSTextView)?.isFieldEditor == true {
+        pendingKeyboardTicks = 0
+        ControllerKeyboardPanel.shared.present(in: window)
+      }
+    }
     guard let window, window === self.window, showRing, let current else {
       ring.hide()
       if window == nil || window !== self.window {
@@ -281,6 +378,8 @@ private final class ControllerFocusRing {
     window = nil
     current = nil
     pendingDirection = nil
+    pendingKeyboardTicks = 0
+    ControllerKeyboardPanel.shared.dismiss()
   }
 
   // MARK: Collection
@@ -292,6 +391,19 @@ private final class ControllerFocusRing {
 
     let layout = window.convertToScreen(window.contentLayoutRect)
     let sidebar = sidebarFrame(in: window)
+
+    // Where SwiftUI still backs a picker or slider with an AppKit control, the
+    // anchor wins so each control is reached once.
+    let carrierFrames = targets.compactMap { target -> NSRect? in
+      guard let anchor = target.view as? ControllerFocusAnchorView,
+            anchor.adjust != nil || anchor.choices != nil else { return nil }
+      return frame(of: target)?.insetBy(dx: -8, dy: -8)
+    }
+    targets.removeAll { target in
+      guard target.kind == .popUp || target.kind == .slider, let frame = frame(of: target) else { return false }
+      return carrierFrames.contains { $0.contains(frame) }
+    }
+
     return targets.filter { target in
       guard let frame = frame(of: target), frame.width > 1, frame.height > 1 else { return false }
       guard frame.midX >= layout.minX, frame.midX <= layout.maxX, frame.midY <= layout.maxY else { return false }
@@ -513,6 +625,10 @@ private final class ControllerFocusRing {
   /// D-pad left/right on a value control changes the value instead of moving.
   private func adjust(_ target: Target, forward: Bool) -> Bool {
     switch target.view {
+    case let anchor as ControllerFocusAnchorView:
+      guard let adjust = anchor.adjust else { return false }
+      adjust(forward ? 1 : -1)
+      return true
     case let slider as NSSlider:
       let range = slider.maxValue - slider.minValue
       var step = range / 20
@@ -554,7 +670,11 @@ private final class ControllerFocusRing {
   private func activate(_ target: Target, window: NSWindow) {
     switch target.view {
     case let anchor as ControllerFocusAnchorView:
-      anchor.trigger?()
+      if let choices = anchor.choices {
+        presentChoices(choices(), in: window)
+      } else {
+        anchor.trigger?()
+      }
     case let popUp as NSPopUpButton:
       guard let menu = popUp.menu else { return }
       ControllerMenuPanel.shared.present(
@@ -570,12 +690,31 @@ private final class ControllerFocusRing {
     case let segments as NSSegmentedControl:
       selectSegment(in: segments, step: 1, wrap: true)
     case let field as NSTextField:
-      window.makeFirstResponder(field)
+      if window.makeFirstResponder(field) {
+        ControllerKeyboardPanel.shared.present(in: window)
+      }
     case is NSTableView:
       switchColumn(to: .detail, targets: [], window: window)
     default:
       break
     }
+  }
+
+  /// Lists a SwiftUI picker's options in the controller menu.
+  private func presentChoices(_ choices: ControllerFocusChoices, in window: NSWindow) {
+    let menu = NSMenu()
+    menu.autoenablesItems = false
+    for (index, title) in choices.titles.enumerated() {
+      let item = NSMenuItem(title: title, action: #selector(ControllerChoiceTarget.choose(_:)), keyEquivalent: "")
+      let target = ControllerChoiceTarget { choices.select(index) }
+      item.target = target
+      item.representedObject = target
+      menu.addItem(item)
+    }
+    let selected = choices.titles.indices.contains(choices.selectedIndex) ? choices.selectedIndex : -1
+    ControllerMenuPanel.shared.present(
+      menu: menu, title: selected >= 0 ? choices.titles[selected] : "", in: window,
+      selectedIndex: selected, firstIndex: 0, onClose: nil)
   }
 
   private func selectSegment(in control: NSSegmentedControl, step: Int, wrap: Bool) {
@@ -609,6 +748,13 @@ private final class ControllerFocusRing {
     // SwiftUI pickers update their binding from the item's own action.
     menu.performActionForItem(at: index)
   }
+}
+
+/// Menu item target for a picker option; the item retains it.
+private final class ControllerChoiceTarget: NSObject {
+  private let action: () -> Void
+  init(_ action: @escaping () -> Void) { self.action = action }
+  @objc func choose(_ sender: Any?) { action() }
 }
 
 // MARK: - Controller menu panel
@@ -672,6 +818,7 @@ private final class ControllerFocusRing {
       }
     case .previousColumn: model.moveFocus(by: -6)
     case .nextColumn: model.moveFocus(by: 6)
+    case .delete, .space, .done: break
     }
   }
 

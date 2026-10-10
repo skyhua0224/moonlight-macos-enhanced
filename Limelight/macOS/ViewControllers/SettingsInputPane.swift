@@ -86,6 +86,7 @@ private struct ControllerSettingsSection: View {
           }
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedControllerDriver, options: SettingsModel.controllerDrivers, title: { value in languageManager.localize(value) })
         .frame(width: 170, alignment: .trailing)
       }
 
@@ -96,6 +97,7 @@ private struct ControllerSettingsSection: View {
           }
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedMultiControllerMode, options: SettingsModel.multiControllerModes, title: { value in languageManager.localize(value) })
         .frame(width: 160, alignment: .trailing)
       }
 
@@ -110,6 +112,11 @@ private struct ControllerSettingsSection: View {
           Text(languageManager.localize("Mac-style Trackpad")).tag("Mac-style Trackpad")
         }
         .labelsHidden()
+        .controllerPicker(
+          selection: Binding<String>(
+            get: { settingsModel.nativeTouchpad ? "Host Touchpad" : "Mac-style Trackpad" },
+            set: { settingsModel.nativeTouchpad = ($0 == "Host Touchpad") }),
+          options: ["Host Touchpad", "Mac-style Trackpad"], title: { languageManager.localize($0) })
         .frame(width: 190, alignment: .trailing)
       }
       SettingsRow(title: "DualSense Touchpad Output", detail: "DualSense Touchpad Output detail") {
@@ -127,6 +134,7 @@ private struct ControllerSettingsSection: View {
           }
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedControllerHapticsMode, options: SettingsModel.controllerHapticsModes, title: { value in languageManager.localize(value) })
         .frame(width: 220, alignment: .trailing)
       }
       SettingsRow(title: "Motion Sensor") {
@@ -136,6 +144,7 @@ private struct ControllerSettingsSection: View {
           }
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedControllerMotionMode, options: SettingsModel.controllerMotionModes, title: { value in languageManager.localize(value) })
         .frame(width: 220, alignment: .trailing)
       }
       SettingsRow(title: "Feedback Target") {
@@ -145,6 +154,7 @@ private struct ControllerSettingsSection: View {
           }
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedControllerFeedbackTarget, options: SettingsModel.controllerFeedbackTargets, title: { value in languageManager.localize(value) })
         .frame(width: 220, alignment: .trailing)
       }
       ControllerDeadzoneRow(value: $settingsModel.controllerDeadzone)
@@ -174,6 +184,7 @@ private struct ControllerDeadzoneRow: View {
           .foregroundStyle(.secondary)
       }
       Slider(value: $value, in: 0...0.30, step: 0.01)
+        .controllerSlider(value: $value, in: 0...0.30, step: 0.01)
     }
     .padding(.vertical, 8)
   }
@@ -202,6 +213,7 @@ private struct KeyboardMouseSettingsSection: View {
           }
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedMouseDriver, options: SettingsModel.mouseDrivers, title: { value in languageManager.localize(value) })
         .frame(width: 180, alignment: .trailing)
       }
 
@@ -212,6 +224,7 @@ private struct KeyboardMouseSettingsSection: View {
           }
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedKeyboardCompatibilityMode, options: SettingsModel.keyboardCompatibilityModes, title: { value in languageManager.localize(value) })
         .frame(width: 240, alignment: .trailing)
       }
 
@@ -231,6 +244,7 @@ private struct KeyboardMouseSettingsSection: View {
       ToggleCell(title: "Input Method Text", hintKey: "Input Method Text Hint", boolBinding: $settingsModel.imeTextInput)
       SettingsRow(title: "Pointer Speed") {
         Slider(value: $settingsModel.pointerSensitivity, in: 0.25...3.0)
+          .controllerSlider(value: $settingsModel.pointerSensitivity, in: 0.25...3.0)
           .frame(width: 190)
       }
       SettingsRow(title: "Scroll Mode") {
@@ -240,6 +254,7 @@ private struct KeyboardMouseSettingsSection: View {
           }
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedPhysicalWheelMode, options: SettingsModel.physicalWheelModes, title: { value in languageManager.localize(value) })
         .frame(width: 180, alignment: .trailing)
       }
       SettingsRow(title: "Input Monitoring") {
@@ -551,7 +566,13 @@ private struct MouseTuningSettingsSection: View {
           ForEach(SettingsModel.coreHIDMaxMouseReportRates, id: \.self) { value in
             Text(SettingsModel.coreHIDMaxMouseReportRateLabel(value)).tag(value)
           }
-        }.labelsHidden().frame(width: 190).disabled(!coreHID)
+        }
+        .labelsHidden()
+        .controllerPicker(
+          selection: $settingsModel.coreHIDMaxMouseReportRate, options: SettingsModel.coreHIDMaxMouseReportRates,
+          title: { SettingsModel.coreHIDMaxMouseReportRateLabel($0) })
+        .frame(width: 190)
+        .disabled(!coreHID)
       }
       SettingsChoiceRow(title: "Touchscreen Mode", selection: $settingsModel.selectedTouchscreenMode, options: SettingsModel.touchscreenModes)
     }

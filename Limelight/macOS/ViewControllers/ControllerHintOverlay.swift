@@ -7,6 +7,7 @@ import SwiftUI
   case library
   case settings
   case menu
+  case keyboard
 }
 
 private struct ControllerHintItem: Identifiable {
@@ -144,6 +145,14 @@ private struct ControllerHintView: View {
               button(.view, "Controller Hint Search")]
     case .menu:
       return [move, adjust, button(.a, "Controller Hint Confirm"), button(.b, "Controller Hint Back")]
+    case .keyboard:
+      let shoulders = [ControllerTouchpadShortcut.Button.leftShoulder, .rightShoulder].compactMap { $0.symbolName(family) }
+      let layout = ControllerHintItem(
+        symbols: shoulders.count == 2 ? shoulders : [],
+        fallback: family == .playStation ? "L1 R1" : "LB RB", labelKey: "Controller Hint Keyboard Layout")
+      return [move, button(.a, "Controller Hint Type"), button(.x, "Controller Hint Delete"),
+              button(.y, "Controller Hint Space"), layout, button(.menu, "Controller Hint Done"),
+              button(.b, "Controller Hint Close")]
     case .none:
       return []
     }

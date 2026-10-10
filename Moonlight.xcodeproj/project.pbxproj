@@ -180,6 +180,7 @@
 				macOS/ViewControllers/ControllerShortcutRuntime.swift,
 				macOS/ViewControllers/ControllerHintOverlay.swift,
 				macOS/ViewControllers/ControllerFocusNavigator.swift,
+				macOS/ViewControllers/ControllerKeyboard.swift,
 				macOS/ViewControllers/SettingsShortcutEditors.swift,
 				macOS/ViewControllers/SettingsLogViewer.swift,
 				macOS/ViewControllers/RemoteUSBForwardingViewModel.swift,

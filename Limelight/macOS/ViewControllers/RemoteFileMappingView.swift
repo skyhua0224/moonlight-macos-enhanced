@@ -21,7 +21,14 @@ struct RemoteFileMappingView: View {
               if let host { Text(host.id == SettingsModel.globalHostId ? languageManager.localize("Default Profile") : host.name).tag(Optional(host)) }
             }
           }
-          .labelsHidden().pickerStyle(.menu).frame(width: 220, alignment: .trailing)
+          .labelsHidden().pickerStyle(.menu)
+          .controllerPicker(
+            selection: selectedHostBinding,
+            choices: (SettingsModel.hosts ?? []).compactMap { $0 }.map { host in
+              (value: Optional(host),
+               title: host.id == SettingsModel.globalHostId ? languageManager.localize("Default Profile") : host.name)
+            })
+          .frame(width: 220, alignment: .trailing)
         }
         SettingsRow(title: "Status") {
           HStack(spacing: 8) {

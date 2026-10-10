@@ -27,6 +27,10 @@ struct AppView: View {
           }
           .labelsHidden()
           .pickerStyle(.menu)
+          .controllerPicker(
+            selection: $appearance,
+            choices: [(0, languageManager.localize("System Default")), (1, languageManager.localize("Light")),
+                      (2, languageManager.localize("Dark"))])
           .frame(width: 150, alignment: .trailing)
           .onChange(of: appearance) { value in
             (NSApp.delegate as? AppDelegateForAppKit)?.applyThemePreference(value)
@@ -39,6 +43,9 @@ struct AppView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(
+            selection: $languageManager.currentLanguage, options: AppLanguage.allCases,
+            title: { languageManager.localize($0.rawValue) })
           .frame(width: 150, alignment: .trailing)
           .onChange(of: languageManager.currentLanguage) { _ in
             languageManager.applyAppLanguage()
@@ -87,6 +94,9 @@ struct AppView: View {
             Text(languageManager.localize("Raw")).tag("raw")
           }
           .labelsHidden()
+          .controllerPicker(
+            selection: $settingsModel.debugLogMode,
+            choices: [("curated", languageManager.localize("Curated")), ("raw", languageManager.localize("Raw"))])
           .frame(width: 160, alignment: .trailing)
         }
         SettingsRow(title: "Minimum Log Level") {
@@ -96,6 +106,7 @@ struct AppView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.debugLogMinLevel, options: ["Error", "Warning", "Info", "Debug"], title: { value in languageManager.localize(value) })
           .frame(width: 150, alignment: .trailing)
         }
         ToggleCell(title: "Show System Noise", boolBinding: $settingsModel.debugLogShowSystemNoise)

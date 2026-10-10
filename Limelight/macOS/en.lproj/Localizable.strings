@@ -1168,6 +1168,12 @@
 "Controller Hint Adjust" = "Adjust";
 "Controller Hint Column" = "Switch Column";
 "Controller Hint Cancel" = "Cancel";
+"Controller Hint Type" = "Type";
+"Controller Hint Delete" = "Delete";
+"Controller Hint Space" = "Space";
+"Controller Hint Keyboard Layout" = "Symbols / Shift";
+"Controller Hint Done" = "Done";
+"Keyboard Space" = "space";
 "Controller Shortcut Conflict" = "This trigger overlaps other shortcuts";
 "Replace Conflicting Shortcuts" = "Replace overlapping shortcuts";
 "Keep Both Prefer New" = "Keep both, prefer the new binding";

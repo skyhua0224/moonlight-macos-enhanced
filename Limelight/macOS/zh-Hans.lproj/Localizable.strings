@@ -1234,6 +1234,12 @@
 "Controller Hint Adjust" = "调整";
 "Controller Hint Column" = "切换栏";
 "Controller Hint Cancel" = "取消";
+"Controller Hint Type" = "输入";
+"Controller Hint Delete" = "删除";
+"Controller Hint Space" = "空格";
+"Controller Hint Keyboard Layout" = "符号 / 大写";
+"Controller Hint Done" = "完成";
+"Keyboard Space" = "空格";
 "Controller Shortcut Conflict" = "此触发方式与其他快捷键重合";
 "Replace Conflicting Shortcuts" = "替换重合的快捷键";
 "Keep Both Prefer New" = "同时保留，优先新设置";

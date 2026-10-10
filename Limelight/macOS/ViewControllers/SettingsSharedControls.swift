@@ -234,9 +234,11 @@ struct DimensionsInputView: View {
     HStack(spacing: 5) {
       TextField("\(Int(placeholderDimensions.width))", value: $widthBinding, formatter: NumberOnlyFormatter())
         .multilineTextAlignment(.trailing)
+        .controllerNumericField()
       Text("×").foregroundStyle(.secondary)
       TextField("\(Int(placeholderDimensions.height))", value: $heightBinding, formatter: NumberOnlyFormatter())
         .multilineTextAlignment(.leading)
+        .controllerNumericField()
     }
     .textFieldStyle(.roundedBorder)
     .frame(width: 165)
@@ -307,6 +309,7 @@ struct SettingsSliderRow: View {
           .foregroundStyle(.secondary)
       }
       Slider(value: $value, in: range).focusable()
+        .controllerSlider(value: $value, in: range)
     }
     .padding(.vertical, 8)
   }
@@ -327,6 +330,7 @@ struct SettingsChoiceRow: View {
         }
       }
       .labelsHidden()
+      .controllerPicker(selection: $selection, options: options, title: { value in languageManager.localize(value) })
       .pickerStyle(.menu)
       .focusable()
       .frame(width: 190, alignment: .trailing)
@@ -346,6 +350,7 @@ struct SettingsValueSliderRow: View {
     SettingsRow(title: title) {
       HStack(spacing: 8) {
         Slider(value: $value, in: range, step: step).focusable()
+          .controllerSlider(value: $value, in: range, step: step)
           .frame(width: 190)
         Text(Double(value * multiplier).formatted(.number.precision(.fractionLength(0...2))) + suffix)
           .monospacedDigit()
@@ -371,6 +376,7 @@ struct SettingsDecimalRow: View {
     SettingsRow(title: title) {
       TextField("", value: $value, formatter: formatter)
         .multilineTextAlignment(.trailing)
+        .controllerNumericField()
         .textFieldStyle(.roundedBorder)
         .frame(width: 120)
     }

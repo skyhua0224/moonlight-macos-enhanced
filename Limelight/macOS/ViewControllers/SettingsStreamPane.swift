@@ -37,6 +37,9 @@ struct StreamView: View {
           }
           .labelsHidden()
           .pickerStyle(.menu)
+          .controllerPicker(
+            selection: $settingsModel.selectedConnectionMethod,
+            choices: settingsModel.connectionCandidates.map { (value: $0.id, title: $0.label) })
           .frame(width: 220, alignment: .trailing)
         }
 
@@ -55,6 +58,7 @@ struct StreamView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedDisplayMode, options: SettingsModel.displayModes, title: { mode in languageManager.localize(mode) })
           .frame(width: 220, alignment: .trailing)
         }
 
@@ -66,6 +70,9 @@ struct StreamView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(
+            selection: $languageManager.currentLanguage, options: AppLanguage.allCases,
+            title: { languageManager.localize($0.rawValue) })
           .frame(width: 160, alignment: .trailing)
           .onChange(of: languageManager.currentLanguage) { _ in
             languageManager.applyAppLanguage()
@@ -81,6 +88,7 @@ struct StreamView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedClipboardSyncMode, options: SettingsModel.clipboardSyncModes, title: { mode in languageManager.localize(mode) })
           .pickerStyle(.menu)
           .frame(width: 170, alignment: .trailing)
         }
@@ -102,6 +110,15 @@ struct StreamView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(
+            selection: $settingsModel.selectedResolution,
+            choices: SettingsModel.resolutions.map { resolution in
+              (value: resolution,
+               title: resolution == SettingsModel.matchDisplayResolutionSentinel
+                 ? languageManager.localize("Match Display")
+                 : resolution == .zero ? languageManager.localize("Custom")
+                 : "\(Int(resolution.width)) × \(Int(resolution.height))")
+            })
           .frame(width: 220, alignment: .trailing)
         }
 
@@ -123,6 +140,7 @@ struct StreamView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedFps, options: SettingsModel.fpss, title: { fps in fps == 0 ? languageManager.localize("Custom") : "\(fps) Hz" })
           .frame(width: 150, alignment: .trailing)
         }
 
@@ -130,6 +148,7 @@ struct StreamView: View {
           SettingsRow(title: "Custom FPS") {
             TextField("60", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
               .multilineTextAlignment(.trailing)
+              .controllerNumericField()
               .textFieldStyle(.roundedBorder)
               .frame(width: 90)
           }
@@ -146,6 +165,8 @@ struct StreamView: View {
               Text("100%").tag(100)
             }
             .labelsHidden()
+            .controllerPicker(
+              selection: $settingsModel.streamResolutionScaleRatio, options: [50, 75, 100], title: { "\($0)%" })
             .frame(width: 130, alignment: .trailing)
           }
         }
@@ -160,6 +181,11 @@ struct StreamView: View {
               }
             }
             .labelsHidden()
+            .controllerPicker(
+              selection: $settingsModel.selectedRemoteResolution, options: SettingsModel.remoteResolutions,
+              title: { resolution in
+                resolution == .zero ? languageManager.localize("Custom") : "\(Int(resolution.width)) × \(Int(resolution.height))"
+              })
             .frame(width: 220, alignment: .trailing)
           }
 
@@ -240,6 +266,7 @@ private struct BitrateSettingsSection: View {
       HStack(spacing: 5) {
         TextField("Bitrate", value: mbps, format: .number.precision(.fractionLength(0...3)).locale(locale))
           .labelsHidden()
+          .controllerNumericField()
           .multilineTextAlignment(.trailing)
           .textFieldStyle(.roundedBorder)
           .frame(width: 90)
@@ -251,6 +278,9 @@ private struct BitrateSettingsSection: View {
       SettingsRow(title: "Bitrate") {
         Slider(value: $settingsModel.bitrateSliderValue,
           in: 0...Float(SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate).count - 1), step: 1)
+          .controllerSlider(
+            value: $settingsModel.bitrateSliderValue,
+            in: 0...Float(SettingsModel.bitrateSteps(unlocked: settingsModel.unlockMaxBitrate).count - 1), step: 1)
           .frame(width: 250)
           .accessibilityLabel(Text("Bitrate"))
           .accessibilityValue(Text("\(Double(settingsModel.effectiveBitrateKbps) / 1000, format: .number.precision(.fractionLength(0...3))) Mbps"))
@@ -270,12 +300,19 @@ private struct RemoteFrameRateSection: View {
             ForEach(SettingsModel.fpss, id: \.self) { value in
               Text(value == 0 ? NSLocalizedString("Custom", comment: "") : "\(value) Hz").tag(value)
             }
-          }.labelsHidden().frame(width: 190)
+          }
+          .labelsHidden()
+          .controllerPicker(
+            selection: $settingsModel.selectedRemoteFps, options: SettingsModel.fpss,
+            title: { value in value == 0 ? NSLocalizedString("Custom", comment: "") : "\(value) Hz" })
+          .frame(width: 190)
         }
         if settingsModel.selectedRemoteFps == 0 {
           SettingsRow(title: "Custom FPS") {
             TextField("60", value: $settingsModel.remoteCustomFps, formatter: NumberOnlyFormatter())
-              .multilineTextAlignment(.trailing).frame(width: 90)
+              .multilineTextAlignment(.trailing)
+              .controllerNumericField()
+              .frame(width: 90)
           }
         }
       }

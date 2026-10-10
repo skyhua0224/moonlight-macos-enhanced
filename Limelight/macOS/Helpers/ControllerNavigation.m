@@ -32,6 +32,7 @@ enum {
     UIViewButton = 1 << 8,
     UILB = 1 << 9,
     UIRB = 1 << 10,
+    UIY = 1 << 11,
 };
 
 static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
@@ -131,6 +132,7 @@ static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
         (pad.buttonA.pressed ? UIA : 0) |
         (pad.buttonB.pressed ? UIB : 0) |
         (pad.buttonX.pressed ? UIX : 0) |
+        (pad.buttonY.pressed ? UIY : 0) |
         (pad.buttonMenu.pressed ? UIMenu : 0) |
         (pad.buttonOptions.pressed ? UIViewButton : 0) |
         (pad.leftShoulder.pressed ? UILB : 0) |
@@ -157,14 +159,19 @@ static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
 - (void)pollNavigation {
     // The controller menu panel takes every input while it is open.
     ControllerMenuPanel *menuPanel = ControllerMenuPanel.shared;
-    BOOL overlay = menuPanel.isPresented && menuPanel.parentWindow != nil;
-    NSWindow *window = overlay ? menuPanel.parentWindow : NSApp.keyWindow;
+    ControllerKeyboardPanel *keyboard = ControllerKeyboardPanel.shared;
+    [keyboard validate];
+    BOOL menuOverlay = menuPanel.isPresented && menuPanel.parentWindow != nil;
+    BOOL keyboardOverlay = !menuOverlay && keyboard.isPresented && keyboard.parentWindow != nil;
+    BOOL overlay = menuOverlay || keyboardOverlay;
+    NSWindow *window = menuOverlay ? menuPanel.parentWindow : (keyboardOverlay ? keyboard.parentWindow : NSApp.keyWindow);
     NSWindow *root = window;
     while (root.sheetParent) {
         root = root.sheetParent;
     }
     BOOL main = !overlay && [root.identifier isEqualToString:@"MainWindow"] && root == window;
-    BOOL settings = !overlay && [root.identifier isEqualToString:@"ClientSettingsWindow"];
+    BOOL settingsWindow = [root.identifier isEqualToString:@"ClientSettingsWindow"];
+    BOOL settings = !overlay && settingsWindow;
     BOOL streamMenu = !overlay && self.menuTracking && [root.identifier isEqualToString:@"ClientStreamWindow"];
     if (!NSApp.active || !window || (!overlay && !main && !settings && !streamMenu)) {
         self.navigationWindow = nil;
@@ -214,7 +221,11 @@ static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
 
         if (overlay) {
             [self sendPressed:pressed toHandler:^(ControllerFocusInput input) {
-                [menuPanel handleInput:input];
+                if (keyboardOverlay) {
+                    [keyboard handleInput:input];
+                } else {
+                    [menuPanel handleInput:input];
+                }
             }];
             continue;
         }
@@ -222,7 +233,9 @@ static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
         if (pressed & UIViewButton) {
             NSSearchField *search = main ? [window moonlight_searchFieldInToolbar] : nil;
             if (search) {
-                [window makeFirstResponder:search];
+                if ([window makeFirstResponder:search]) {
+                    [keyboard presentInWindow:window];
+                }
             } else if (!window.sheetParent) {
                 [NSNotificationCenter.defaultCenter postNotificationName:@"ControllerFocusSettingsSearch" object:window];
                 if (settings) {
@@ -255,7 +268,7 @@ static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
         // Settings: a focus ring over every control, LB/RB pick the column.
         if (settings && !self.menuTracking) {
             ControllerFocusNavigator *navigator = self.focusNavigator;
-            [self sendPressed:pressed & ~UIB toHandler:^(ControllerFocusInput input) {
+            [self sendPressed:pressed & ~(UIB | UIX | UIY | UIMenu) toHandler:^(ControllerFocusInput input) {
                 [navigator handleInput:input window:window];
             }];
             if ((pressed & UIB) && ![navigator handleInput:ControllerFocusInputBack window:window]) {
@@ -310,24 +323,28 @@ static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
         }
     }
 
-    BOOL showRing = settings && !self.suspended && !self.menuTracking && self.controllerInUse;
-    [self.focusNavigator updateWithWindow:(settings ? window : nil) showRing:showRing];
+    // The ring stays on the field being typed into while the keyboard is up.
+    BOOL ringWindow = settings || (keyboardOverlay && settingsWindow);
+    BOOL showRing = ringWindow && !self.suspended && !self.menuTracking && self.controllerInUse;
+    [self.focusNavigator updateWithWindow:(ringWindow ? window : nil) showRing:showRing];
 
     if (self.suspended || !self.controllerInUse) {
         [self.hints hide];
     } else {
-        ControllerHintContext context = (overlay || self.menuTracking) ? ControllerHintContextMenu
-            : (settings ? ControllerHintContextSettings : ControllerHintContextLibrary);
+        ControllerHintContext context = keyboardOverlay ? ControllerHintContextKeyboard
+            : ((overlay || self.menuTracking) ? ControllerHintContextMenu
+               : (settings ? ControllerHintContextSettings : ControllerHintContextLibrary));
         [self.hints updateWithWindow:root context:context];
     }
 }
 
 - (void)sendPressed:(uint32_t)pressed toHandler:(void (^)(ControllerFocusInput input))handler {
-    const uint32_t masks[] = {UIUp, UIDown, UILeft, UIRight, UIA, UIB, UILB, UIRB};
+    const uint32_t masks[] = {UIUp, UIDown, UILeft, UIRight, UIA, UIB, UILB, UIRB, UIX, UIY, UIMenu};
     const ControllerFocusInput inputs[] = {
         ControllerFocusInputUp, ControllerFocusInputDown, ControllerFocusInputLeft, ControllerFocusInputRight,
         ControllerFocusInputAccept, ControllerFocusInputBack, ControllerFocusInputPreviousColumn,
-        ControllerFocusInputNextColumn,
+        ControllerFocusInputNextColumn, ControllerFocusInputDelete, ControllerFocusInputSpace,
+        ControllerFocusInputDone,
     };
     for (NSUInteger i = 0; i < sizeof(masks) / sizeof(masks[0]); i++) {
         if (pressed & masks[i]) {

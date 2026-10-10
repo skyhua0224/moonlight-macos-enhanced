@@ -24,6 +24,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedVideoCodec, options: SettingsModel.videoCodecs, title: { codec in languageManager.localize(codec) })
           .frame(width: 190, alignment: .trailing)
         }
 
@@ -35,6 +36,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedVideoRendererMode, options: SettingsModel.videoRendererModes, title: { mode in languageManager.localize(mode) })
           .frame(width: 220, alignment: .trailing)
         }
 
@@ -50,6 +52,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedHdrTransferFunction, options: SettingsModel.hdrTransferFunctions, title: { value in languageManager.localize(value) })
           .frame(width: 190, alignment: .trailing)
         }
       }
@@ -63,6 +66,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedUpscalingMode, options: SettingsModel.upscalingModes, title: { value in languageManager.localize(value) })
           .frame(width: 230, alignment: .trailing)
         }
 
@@ -75,6 +79,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedFrameInterpolationMode, options: SettingsModel.frameInterpolationModes, title: { value in languageManager.localize(value) })
           .frame(width: 230, alignment: .trailing)
         }
         }
@@ -88,6 +93,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedHdrMetadataSource, options: SettingsModel.hdrMetadataSources, title: { value in languageManager.localize(value) })
           .frame(width: 190, alignment: .trailing)
         }
 
@@ -99,6 +105,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedHdrClientDisplayProfile, options: SettingsModel.hdrClientDisplayProfiles, title: { value in languageManager.localize(value) })
           .frame(width: 190, alignment: .trailing)
         }
 
@@ -110,6 +117,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedHdrEdrStrategy, options: SettingsModel.hdrEdrStrategies, title: { value in languageManager.localize(value) })
           .frame(width: 190, alignment: .trailing)
         }
 
@@ -121,6 +129,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedHdrToneMappingPolicy, options: SettingsModel.hdrToneMappingPolicies, title: { value in languageManager.localize(value) })
           .frame(width: 230, alignment: .trailing)
         }
 
@@ -131,6 +140,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedDynamicHdrPreference, options: SettingsModel.dynamicHdrPreferences, title: { value in languageManager.localize(value) })
           .frame(width: 190, alignment: .trailing)
         }
 
@@ -165,6 +175,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedPacingOptions, options: SettingsModel.pacingOptions, title: { value in languageManager.localize(value) })
           .frame(width: 210, alignment: .trailing)
         }
 
@@ -175,6 +186,7 @@ struct VideoView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedSmoothnessLatencyMode, options: SettingsModel.smoothnessLatencyModes, title: { value in languageManager.localize(value) })
           .frame(width: 220, alignment: .trailing)
         }
 

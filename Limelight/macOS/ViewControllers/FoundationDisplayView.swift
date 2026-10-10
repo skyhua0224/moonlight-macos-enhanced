@@ -53,6 +53,9 @@ struct FoundationDisplayView: View {
               }
             }
             .labelsHidden()
+            .controllerPicker(
+              selection: $settingsModel.sunshineTargetDisplayName,
+              choices: settingsModel.sunshineDisplayPickerOptions.map { (value: $0.value, title: $0.title) })
             .frame(width: 230, alignment: .trailing)
             if settingsModel.isLoadingSunshineDisplays {
               ProgressView().controlSize(.small)
@@ -76,6 +79,7 @@ struct FoundationDisplayView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedSunshineScreenMode, options: SettingsModel.sunshineScreenModes, title: { value in languageManager.localize(value) })
           .frame(width: 220, alignment: .trailing)
         }
       }
@@ -87,16 +91,19 @@ struct FoundationDisplayView: View {
           SettingsRow(title: "Maximum Brightness") {
             TextField("1000", value: $settingsModel.sunshineMaxBrightness, formatter: Self.numberFormatter)
               .multilineTextAlignment(.trailing)
+              .controllerNumericField()
               .frame(width: 120)
           }
           SettingsRow(title: "Minimum Brightness") {
             TextField("0.001", value: $settingsModel.sunshineMinBrightness, formatter: Self.numberFormatter)
               .multilineTextAlignment(.trailing)
+              .controllerNumericField()
               .frame(width: 120)
           }
           SettingsRow(title: "Maximum Average Brightness") {
             TextField("1000", value: $settingsModel.sunshineMaxAverageBrightness, formatter: Self.numberFormatter)
               .multilineTextAlignment(.trailing)
+              .controllerNumericField()
               .frame(width: 120)
           }
         }
@@ -108,6 +115,7 @@ struct FoundationDisplayView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedHdrMetadataSource, options: SettingsModel.hdrMetadataSources, title: { value in languageManager.localize(value) })
           .frame(width: 210, alignment: .trailing)
         }
 
@@ -118,6 +126,7 @@ struct FoundationDisplayView: View {
             }
           }
           .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedHdrClientDisplayProfile, options: SettingsModel.hdrClientDisplayProfiles, title: { value in languageManager.localize(value) })
           .frame(width: 210, alignment: .trailing)
         }
 

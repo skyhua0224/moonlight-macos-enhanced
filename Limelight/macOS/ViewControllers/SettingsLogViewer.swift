@@ -690,6 +690,10 @@ struct SettingsLogViewer: View {
           Text(languageManager.localize("Warn")).tag("warn")
           Text(languageManager.localize("Error")).tag("error")
         }
+        .controllerPicker(
+          selection: $settingsModel.debugLogMinLevel,
+          choices: [("all", "All"), ("debug", "Debug"), ("info", "Info"), ("warn", "Warn"), ("error", "Error")]
+            .map { (value: $0.0, title: languageManager.localize($0.1)) })
         .frame(width: 140)
 
         Toggle(languageManager.localize("Show System Noise"), isOn: $settingsModel.debugLogShowSystemNoise)
