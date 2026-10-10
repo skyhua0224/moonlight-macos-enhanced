@@ -20,6 +20,10 @@
 // Opts the view in or out of raw trackpad contacts (needed for the precision touchpad).
 - (void)setIndirectTouchesEnabled:(BOOL)enabled;
 
+// Puts `view` above the stream view's other subviews, except the startup
+// loading overlay while that is showing. No-op when it is already in place.
+- (void)raiseSubviewAboveContent:(NSView *)view;
+
 - (void)refreshPreferredLocalCursor;
 
 @end

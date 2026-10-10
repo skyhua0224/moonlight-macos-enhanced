@@ -933,16 +933,16 @@
         return;
     }
     if (self.edgeMenuButton && self.edgeMenuButton.superview == self.view) {
-        [self.view addSubview:self.edgeMenuButton positioned:NSWindowAbove relativeTo:nil];
+        [self.streamView raiseSubviewAboveContent:self.edgeMenuButton];
     }
     if (self.overlayContainer) {
-        [self.view addSubview:self.overlayContainer positioned:NSWindowAbove relativeTo:nil];
+        [self.streamView raiseSubviewAboveContent:self.overlayContainer];
     }
     if (self.logOverlayContainer) {
-        [self.view addSubview:self.logOverlayContainer positioned:NSWindowAbove relativeTo:nil];
+        [self.streamView raiseSubviewAboveContent:self.logOverlayContainer];
     }
     if (self.reconnectOverlayContainer) {
-        [self.view addSubview:self.reconnectOverlayContainer positioned:NSWindowAbove relativeTo:nil];
+        [self.streamView raiseSubviewAboveContent:self.reconnectOverlayContainer];
     }
 }
 
@@ -1101,7 +1101,7 @@
 
     if (self.edgeMenuButton) {
         if (self.edgeMenuButton.superview != self.view) {
-            [self.view addSubview:self.edgeMenuButton positioned:NSWindowAbove relativeTo:nil];
+            [self.streamView raiseSubviewAboveContent:self.edgeMenuButton];
         }
         [self requestStreamMenuEntrypointsVisibilityUpdate];
         return;
@@ -1159,7 +1159,7 @@
         [strongSelf refreshMouseMovedAcceptanceState];
         [strongSelf updateEdgeMenuButtonAppearance];
     };
-    [self.view addSubview:self.edgeMenuButton positioned:NSWindowAbove relativeTo:nil];
+    [self.streamView raiseSubviewAboveContent:self.edgeMenuButton];
     [self startEdgeMenuFrameWatchdogIfNeeded];
 
     [self updateEdgeMenuButtonAppearance];
