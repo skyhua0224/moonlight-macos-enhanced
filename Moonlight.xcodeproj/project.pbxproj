@@ -128,6 +128,7 @@
 				"Input/HIDSupport+Rumble.m",
 				"Input/HIDSupport+Scroll.m",
 				Input/Ticks.m,
+				Stream/MLAudioBitstreamOutput.m,
 				Stream/MLAdaptiveBitrateController.m,
 				Stream/MLIEC61937.c,
 				Limelight.xcdatamodeld,
