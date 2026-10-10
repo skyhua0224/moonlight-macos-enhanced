@@ -27,6 +27,7 @@
 		D20000050000000000000005 /* RemoteFileProvider.appex in PlugIns */ = {isa = PBXBuildFile; fileRef = D20000100000000000000010 /* RemoteFileProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
 		D20000220000000000000022 /* Ds5HapticsAudioRenderer.m in Sources */ = {isa = PBXBuildFile; fileRef = D20000230000000000000023 /* Ds5HapticsAudioRenderer.m */; };
 		D20000240000000000000024 /* FileProviderCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000250000000000000025 /* FileProviderCoordinator.swift */; };
+		D30000020000000000000002 /* SettingsSearchIndex.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30000010000000000000001 /* SettingsSearchIndex.generated.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -98,6 +99,7 @@
 		D20000100000000000000010 /* RemoteFileProvider.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = RemoteFileProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D20000230000000000000023 /* Ds5HapticsAudioRenderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Limelight/Input/Ds5HapticsAudioRenderer.m"; sourceTree = SOURCE_ROOT; };
 		D20000250000000000000025 /* FileProviderCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Limelight/macOS/ViewControllers/FileProviderCoordinator.swift"; sourceTree = SOURCE_ROOT; };
+		D30000010000000000000001 /* SettingsSearchIndex.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Limelight/macOS/ViewControllers/SettingsSearchIndex.generated.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -324,6 +326,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4C7E0A8D1FECBFFD00684411 /* Build configuration list for PBXNativeTarget "Moonlight for macOS" */;
 			buildPhases = (
+				D30000030000000000000003 /* Generate Settings Search Index */,
 				4C7E0A761FECBFFD00684411 /* Sources */,
 				4C7E0A771FECBFFD00684411 /* Frameworks */,
 				4C7E0A781FECBFFD00684411 /* Resources */,
@@ -447,6 +450,27 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		D30000030000000000000003 /* Generate Settings Search Index */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/generate_settings_search_index.py",
+			);
+			name = "Generate Settings Search Index";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Limelight/macOS/ViewControllers/SettingsSearchIndex.generated.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "/usr/bin/env python3 \"${SRCROOT}/scripts/generate_settings_search_index.py\"\n";
+		};
 		B7C4E0012E8A100000A1B002 /* Build Remote USB Helper */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -502,6 +526,7 @@
 				D20000010000000000000001 /* FileProviderSharedState.swift in Sources */,
 				D20000220000000000000022 /* Ds5HapticsAudioRenderer.m in Sources */,
 				D20000240000000000000024 /* FileProviderCoordinator.swift in Sources */,
+				D30000020000000000000002 /* SettingsSearchIndex.generated.swift in Sources */,
 				4C38E8011FEE08AA000425CD /* (null) in Sources */,
 				4C38E7FC1FEE0875000425CD /* (null) in Sources */,
 				4C38E7F91FEE085B000425CD /* (null) in Sources */,
