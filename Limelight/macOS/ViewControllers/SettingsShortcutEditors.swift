@@ -282,44 +282,46 @@ private struct ControllerShortcutCard: View {
   let trigger: ControllerTouchpadShortcut
   let onEdit: () -> Void
 
+  // Not a Button: the touchpad card carries an info button, and buttons do not nest.
   var body: some View {
-    Button(action: onEdit) {
-      VStack(alignment: .leading, spacing: 12) {
-        ControllerShortcutTokenRowView(trigger: trigger)
+    VStack(alignment: .leading, spacing: 12) {
+      ControllerShortcutTokenRowView(trigger: trigger)
 
+      HStack(spacing: 6) {
         Text(languageManager.localize(ControllerShortcutProfile.titleKey(for: action)))
           .font(.callout.weight(.medium))
           .foregroundColor(.primary)
           .multilineTextAlignment(.leading)
-          .frame(maxWidth: .infinity, alignment: .leading)
-
         if action == ControllerShortcutProfile.touchpadAction {
-          Text(languageManager.localize("Touchpad Button Shortcut hint"))
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+          InfoHintButton(hintKey: "Touchpad Button Shortcut hint")
         }
-
-        HStack(spacing: 6) {
-          Text(languageManager.localize("Change Shortcut"))
-            .font(.footnote.weight(.medium))
-          Image(systemName: "chevron.right")
-            .font(.system(size: 10, weight: .semibold))
-        }
-        .foregroundColor(.secondary)
+        Spacer(minLength: 0)
       }
-      .padding(14)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(Color(NSColor.controlBackgroundColor))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
-      )
+
+      HStack(spacing: 6) {
+        Text(languageManager.localize("Change Shortcut"))
+          .font(.footnote.weight(.medium))
+        Image(systemName: "chevron.right")
+          .font(.system(size: 10, weight: .semibold))
+      }
+      .foregroundColor(.secondary)
     }
-    .controllerButtonStyle(.plain)
+    .padding(14)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .background(
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(Color(NSColor.controlBackgroundColor))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+    )
+    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .onTapGesture(perform: onEdit)
+    .controllerFocusTarget(onEdit)
+    .accessibilityElement(children: .contain)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityAction(.default, onEdit)
   }
 }
 
