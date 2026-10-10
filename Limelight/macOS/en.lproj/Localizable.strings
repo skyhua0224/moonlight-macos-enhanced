@@ -48,6 +48,11 @@
 "Microphone hint" = "This option requires Sunshine (or compatible host) with microphone input support. It may not work if the host doesn't support it.";
 "Play Sound on Host" = "Play Sound on Host";
 "Volume" = "Volume";
+"Audio Output" = "Audio Output";
+"No audio output devices" = "No audio output devices";
+"Unknown Output" = "Unknown Output";
+"Audio output: %@" = "Audio output: %@";
+"Couldn't switch the audio output" = "Couldn't switch the audio output";
 
 /* Sunshine Feature Warnings */
 "Sunshine support required" = "Sunshine support required";

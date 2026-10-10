@@ -5,6 +5,8 @@
 
 #import "StreamViewController_Internal.h"
 #import "MLMenuItemImage.h"
+#import "MLAudioBitstreamOutput.h"
+#import <CoreAudio/CoreAudio.h>
 
 // Same icon mechanism the control center items use (see the setSymbol block in -rebuildStreamMenu).
 static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
@@ -1769,6 +1771,18 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     volSliderItem.view = volView;
     [audioMenu addItem:volSliderItem];
 
+    [audioMenu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *audioOutputItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Audio Output", nil) action:nil keyEquivalent:@""];
+    setSymbol(audioOutputItem, @"hifispeaker");
+    NSMenu *audioOutputMenu = [[NSMenu alloc] initWithTitle:MLString(@"Audio Output", nil)];
+    audioOutputMenu.autoenablesItems = NO;
+    audioOutputMenu.delegate = self;
+    self.audioOutputMenu = audioOutputMenu;
+    [self populateAudioOutputMenu:audioOutputMenu];
+    audioOutputItem.submenu = audioOutputMenu;
+    [audioMenu addItem:audioOutputItem];
+
     audioItem.submenu = audioMenu;
     [self.streamMenu addItem:audioItem];
 
@@ -2045,6 +2059,8 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     if (menu == self.displayScaleMenu) {
         [self populateRemoteDisplayScaleMenu:menu];
         [self.remoteDisplayScale refreshOptionsIfStale];
+    } else if (menu == self.audioOutputMenu) {
+        [self populateAudioOutputMenu:menu];
     }
 }
 
@@ -2370,6 +2386,134 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
 
 - (void)handleVolumeSliderChanged:(NSSlider *)sender {
     [SettingsClass setVolumeLevel:(CGFloat)sender.doubleValue for:self.app.host.uuid];
+}
+
+#pragma mark - Audio output device
+
+static NSString *MLAudioDeviceString(AudioDeviceID device, AudioObjectPropertySelector selector) {
+    CFStringRef value = NULL;
+    UInt32 size = sizeof(value);
+    AudioObjectPropertyAddress address = { selector, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+    if (AudioObjectGetPropertyData(device, &address, 0, NULL, &size, &value) != noErr || value == NULL) {
+        return nil;
+    }
+    return CFBridgingRelease(value);
+}
+
+static BOOL MLAudioDeviceFlag(AudioDeviceID device, AudioObjectPropertySelector selector, BOOL fallback) {
+    UInt32 value = 0;
+    UInt32 size = sizeof(value);
+    AudioObjectPropertyAddress address = { selector, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+    if (AudioObjectGetPropertyData(device, &address, 0, NULL, &size, &value) != noErr) {
+        return fallback;
+    }
+    return value != 0;
+}
+
+static UInt32 MLAudioDeviceOutputChannels(AudioDeviceID device) {
+    AudioObjectPropertyAddress address = { kAudioDevicePropertyStreamConfiguration, kAudioDevicePropertyScopeOutput, kAudioObjectPropertyElementMain };
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(device, &address, 0, NULL, &size) != noErr || size < sizeof(AudioBufferList)) {
+        return 0;
+    }
+    AudioBufferList *list = (AudioBufferList *)malloc(size);
+    if (list == NULL) {
+        return 0;
+    }
+    UInt32 channels = 0;
+    if (AudioObjectGetPropertyData(device, &address, 0, NULL, &size, list) == noErr) {
+        for (UInt32 i = 0; i < list->mNumberBuffers; i++) {
+            channels += list->mBuffers[i].mNumberChannels;
+        }
+    }
+    free(list);
+    return channels;
+}
+
+// The system default output device: what apps play on, and what the menu-bar sound picker sets.
+static AudioDeviceID MLAudioDefaultOutputDevice(void) {
+    AudioDeviceID device = kAudioObjectUnknown;
+    UInt32 size = sizeof(device);
+    AudioObjectPropertyAddress address = { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, &size, &device) != noErr) {
+        return kAudioObjectUnknown;
+    }
+    return device;
+}
+
+// Live output devices (output channels, alive, not hidden) as @{ @"id": AudioDeviceID, @"name": NSString }.
+static NSArray<NSDictionary<NSString *, id> *> *MLAudioOutputDevices(void) {
+    AudioObjectPropertyAddress address = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &address, 0, NULL, &size) != noErr || size < sizeof(AudioDeviceID)) {
+        return @[];
+    }
+    NSMutableData *data = [NSMutableData dataWithLength:size];
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, &size, data.mutableBytes) != noErr) {
+        return @[];
+    }
+    const AudioDeviceID *devices = (const AudioDeviceID *)data.bytes;
+    NSUInteger count = size / sizeof(AudioDeviceID);
+    NSMutableArray<NSDictionary<NSString *, id> *> *result = [NSMutableArray array];
+    for (NSUInteger i = 0; i < count; i++) {
+        AudioDeviceID device = devices[i];
+        if (MLAudioDeviceOutputChannels(device) == 0 ||
+            !MLAudioDeviceFlag(device, kAudioDevicePropertyDeviceIsAlive, NO) ||
+            MLAudioDeviceFlag(device, kAudioDevicePropertyIsHidden, NO)) {
+            continue;
+        }
+        NSString *name = MLAudioDeviceString(device, kAudioObjectPropertyName) ?: MLString(@"Unknown Output", nil);
+        [result addObject:@{ @"id": @(device), @"name": name }];
+    }
+    return result;
+}
+
+// Fills the Audio Output submenu from the devices that exist right now. Main thread.
+- (void)populateAudioOutputMenu:(NSMenu *)menu {
+    [menu removeAllItems];
+    AudioDeviceID current = MLAudioDefaultOutputDevice();
+    for (NSDictionary<NSString *, id> *entry in MLAudioOutputDevices()) {
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:entry[@"name"]
+                                                      action:@selector(selectAudioOutputFromMenu:)
+                                               keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = entry[@"id"];
+        item.state = [entry[@"id"] unsignedIntValue] == current ? NSControlStateValueOn : NSControlStateValueOff;
+        [menu addItem:item];
+    }
+    if (menu.numberOfItems == 0) {
+        NSMenuItem *none = [[NSMenuItem alloc] initWithTitle:MLString(@"No audio output devices", nil) action:nil keyEquivalent:@""];
+        none.enabled = NO;
+        [menu addItem:none];
+    }
+}
+
+// Sets the system default output device (like the menu-bar sound picker) and makes the stream's
+// output follow it. The direct and legacy backends would follow by themselves, but not with the
+// new device's channel setup, the enhanced one stops, and passthrough only plays on the device
+// it took over; the stream restarts its output on the new device (and may try passthrough again).
+- (void)selectAudioOutputFromMenu:(NSMenuItem *)sender {
+    NSNumber *deviceNumber = [sender.representedObject isKindOfClass:[NSNumber class]] ? sender.representedObject : nil;
+    if (deviceNumber == nil) {
+        return;
+    }
+    AudioDeviceID device = (AudioDeviceID)deviceNumber.unsignedIntValue;
+    if (device == MLAudioDefaultOutputDevice()) {
+        return;
+    }
+
+    // Before the change, so a passthrough session that ends because of it does not undo it.
+    [MLAudioBitstreamOutput noteUserChoseDefaultOutputDevice];
+    AudioObjectPropertyAddress address = { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+    OSStatus status = AudioObjectSetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, sizeof(device), &device);
+    if (status != noErr) {
+        Log(LOG_W, @"[audio] Could not switch the default output device from the control center: device=%@ status=%d", sender.title, (int)status);
+        [self showNotification:MLString(@"Couldn't switch the audio output", nil) forSeconds:3.0];
+        return;
+    }
+    Log(LOG_I, @"[audio] Default output device switched from the control center: %@", sender.title);
+    [self.streamMan.connection restartAudioOutputForDeviceChange];
+    [self showNotification:[NSString stringWithFormat:MLString(@"Audio output: %@", nil), sender.title]];
 }
 
 #pragma mark - Bitrate Slider

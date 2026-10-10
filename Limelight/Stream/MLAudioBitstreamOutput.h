@@ -77,6 +77,10 @@ extern NSString * const MLAudioBitstreamErrorStatusKey;
 // stream starts. No-op while an instance is running in this process.
 + (void)restoreLeftoverDeviceFormatIfNeeded;
 
+// The user deliberately picked another default output device (the control center's Audio
+// Output menu). Sessions running at that moment do not put the default back when they end.
++ (void)noteUserChoseDefaultOutputDevice;
+
 // device == kAudioObjectUnknown selects the current default output device.
 - (instancetype)initWithCodec:(int)codec device:(AudioDeviceID)device NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;

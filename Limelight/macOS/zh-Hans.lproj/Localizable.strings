@@ -46,6 +46,11 @@
 "Microphone hint" = "需要主机端支持；不支持时可能不会生效。";
 "Play Sound on Host" = "在主机上播放声音";
 "Volume" = "音量";
+"Audio Output" = "音频输出";
+"No audio output devices" = "没有可用的音频输出设备";
+"Unknown Output" = "未知输出设备";
+"Audio output: %@" = "音频输出：%@";
+"Couldn't switch the audio output" = "无法切换音频输出";
 
 /* Sunshine Feature Warnings */
 "Sunshine support required" = "需要 Sunshine 支持";

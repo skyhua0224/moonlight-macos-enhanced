@@ -1,10 +1,38 @@
 import AVFoundation
+import CoreAudio
 import SwiftUI
+
+/// Re-renders the audio pane when the system default output device changes, so a hint that
+/// names the device (Dolby passthrough) never shows the one from when the pane was opened.
+private final class DefaultOutputDeviceObserver: ObservableObject {
+  private var listener: AudioObjectPropertyListenerBlock?
+  private var address = AudioObjectPropertyAddress(
+    mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain)
+
+  init() {
+    let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+      self?.objectWillChange.send()
+    }
+    listener = block
+    AudioObjectAddPropertyListenerBlock(
+      AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
+  }
+
+  deinit {
+    guard let block = listener else { return }
+    var removeAddress = address
+    AudioObjectRemovePropertyListenerBlock(
+      AudioObjectID(kAudioObjectSystemObject), &removeAddress, DispatchQueue.main, block)
+  }
+}
 
 struct AudioView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var microphoneManager = MicrophoneManager.shared
+  @StateObject private var outputDeviceObserver = DefaultOutputDeviceObserver()
 
   var body: some View {
     SettingsSearchScrollView {

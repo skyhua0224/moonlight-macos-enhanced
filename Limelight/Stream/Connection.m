@@ -209,6 +209,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 - (void)stopAudioPassthroughOnOutputQueue;
 - (void)audioPassthroughLostWithDetail:(NSString *)detail generation:(int32_t)generation;
 - (void)requestAudioPassthroughFallbackWithDetail:(NSString *)detail;
+- (void)restartAudioOutputOnOutputQueueForGeneration:(int32_t)generation reason:(NSString *)reason;
 - (void)noteAudioCodecProblemWithNoticeKey:(NSString *)noticeKey markUnsupported:(BOOL)markUnsupported;
 @end
 
@@ -279,6 +280,10 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 
     int _audioOutputMode;
     int _enhancedAudioOutputTarget;
+    // What the user configured (Automatic is re-resolved when the output device changes).
+    int _enhancedAudioOutputTargetConfigured;
+    id _enhancedAudioConfigObserver;
+    uint64_t _audioDeviceRestartLastMs;       // output queue
     int _enhancedAudioPreset;
     CGFloat _enhancedAudioSpatialIntensity;
     CGFloat _enhancedAudioSoundstageWidth;
@@ -2800,6 +2805,17 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
             return NO;
         }
 
+        // AVAudioEngine follows the system default output, but when that changes it stops itself
+        // and posts this notification: nothing restarts it unless we do.
+        __weak Connection *engineWeakSelf = self;
+        _enhancedAudioConfigObserver = [[NSNotificationCenter defaultCenter]
+            addObserverForName:AVAudioEngineConfigurationChangeNotification
+                        object:_enhancedAudioEngine
+                         queue:nil
+                    usingBlock:^(NSNotification *note) {
+            [engineWeakSelf restartAudioOutputForDeviceChange];
+        }];
+
         _audioRenderChannelCount = 2;
         Log(LOG_I, @"Enhanced renderer using stereo virtualizer: streamChannels=%d target=%d preset=%d spatial=%.2f width=%.2f reverb=%.2f",
             opusConfig->channelCount,
@@ -2853,6 +2869,11 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         AudioUnitUninitialize(_audioUnit);
         AudioComponentInstanceDispose(_audioUnit);
         _audioUnit = NULL;
+    }
+
+    if (_enhancedAudioConfigObserver != nil) {
+        [[NSNotificationCenter defaultCenter] removeObserver:_enhancedAudioConfigObserver];
+        _enhancedAudioConfigObserver = nil;
     }
 
     if (_enhancedAudioEngine != nil) {
@@ -3356,6 +3377,59 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     _audioOutputFailureNoticed = NO;
     [self postAudioOutputNoticeWithKey:@"Dolby passthrough stopped; audio continues decoded on this Mac." deviceName:nil];
     // A short settle time: the device was just handed back (format, hog mode).
+    [self scheduleAudioOutputRetryAfter:0.3 generation:generation];
+}
+
+// Any thread. The default output device changed (the control center's Audio Output menu, or the
+// enhanced engine reporting a configuration change): tear the running output down and start a
+// fresh attempt on the new device. The direct and legacy backends follow the default by
+// themselves, but keep the channel setup of the old device; the enhanced one stops, and the
+// bitstream one only ever plays on the device it took over. A deliberate choice also makes
+// passthrough eligible again after it was given up for the session. Stale after ArCleanup (generation).
+- (void)restartAudioOutputForDeviceChange
+{
+    dispatch_queue_t queue = _audioOutputQueue;
+    if (queue == nil) {
+        return;
+    }
+    const int32_t generation = __atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST);
+    __weak Connection *weakSelf = self;
+    dispatch_async(queue, ^{
+        [weakSelf restartAudioOutputOnOutputQueueForGeneration:generation reason:@"device change"];
+    });
+}
+
+// Output queue only.
+- (void)restartAudioOutputOnOutputQueueForGeneration:(int32_t)generation reason:(NSString *)reason
+{
+    if (__atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation ||
+        _audioCircularBuffer == NULL) {
+        return;
+    }
+    // The engine can report several configuration changes for one switch, and starting the new
+    // output may report one more; one restart per second is plenty.
+    const uint64_t nowMs = LiGetMillis();
+    if (_audioDeviceRestartLastMs != 0 && nowMs - _audioDeviceRestartLastMs < 1000) {
+        return;
+    }
+    _audioDeviceRestartLastMs = nowMs;
+
+    Log(LOG_I, @"[audio] Restarting the audio output (%@): backend=%@ was running=%d",
+        reason, MLAudioRendererBackendName(_audioRendererBackend), _audioOutputRunning ? 1 : 0);
+    [self stopAudioPassthroughOnOutputQueue];
+    [self cleanupSelectedAudioRenderer];
+    _audioOutputRunning = NO;
+    _audioOutputStartAttempts = 0;
+    _audioOutputFailureNoticed = NO;
+    // The user picked a device on purpose: passthrough may be tried again on it.
+    _audioPassthroughGivenUp = NO;
+    __atomic_store_n(&_audioPassthroughFallbackRequested, 0, __ATOMIC_SEQ_CST);
+    _audioPassthroughConsecutiveRejects = 0;
+    // The automatic target (headphones or speakers) depends on the device.
+    if (_audioOutputMode == MLAudioOutputModeEnhanced) {
+        _enhancedAudioOutputTarget = (int)MLResolveEnhancedOutputTarget((MLAudioEnhancedOutputTarget)_enhancedAudioOutputTargetConfigured);
+    }
+    // A short settle time, as after a passthrough fallback: the old device was just handed back.
     [self scheduleAudioOutputRetryAfter:0.3 generation:generation];
 }
 
@@ -3922,6 +3996,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _audioVolumeMultiplier = 1.0f;
     _stateLock = OS_UNFAIR_LOCK_INIT;
     _audioOutputMode = config.audioOutputMode;
+    _enhancedAudioOutputTargetConfigured = config.enhancedAudioOutputTarget;
     _enhancedAudioOutputTarget = (int)MLResolveEnhancedOutputTarget((MLAudioEnhancedOutputTarget)config.enhancedAudioOutputTarget);
     _enhancedAudioPreset = config.enhancedAudioPreset;
     _enhancedAudioSpatialIntensity = config.enhancedAudioSpatialIntensity;

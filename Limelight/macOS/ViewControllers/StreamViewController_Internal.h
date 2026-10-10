@@ -405,6 +405,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) NSMenu *streamMenu;
 // Submenus that are refilled each time they open (see -menuNeedsUpdate:).
 @property (nonatomic, weak) NSMenu *displayScaleMenu;
+@property (nonatomic, weak) NSMenu *audioOutputMenu;
 
 @property (nonatomic, strong) NSVisualEffectView *controlCenterPill;
 @property (nonatomic, strong) NSImageView *controlCenterSignalImageView;

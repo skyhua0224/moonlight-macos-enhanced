@@ -140,6 +140,9 @@ BOOL MLAppleDolbyVisionDirectSurfaceAvailable(unsigned int targetDisplayID);
 // Sends the client SDR reference white. Returns an LI_DYNAMIC_SDR_WHITE_* code.
 - (int)sendClientSdrWhiteNits:(float)nits;
 - (uint64_t)audioUnderrunCount;
+// The system default output device changed (the user picked one in the control center): restart
+// the audio output on it. Safe from any thread; does nothing after the audio stream ended.
+- (void)restartAudioOutputForDeviceChange;
 - (void)terminate;
 - (void)main;
 

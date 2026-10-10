@@ -55,6 +55,15 @@ static NSString *const kMLLeftoverDefaultsKey = @"audio.bitstream.leftoverDevice
 // must not touch a device that is legitimately in an encoded format.
 static _Atomic int sActiveInstances = 0;
 
+// Bumped when the user deliberately picks another default output device (control center).
+// A session that ends after that must not put the default back to what it was.
+static _Atomic uint64_t sUserDeviceChoices = 0;
+
+// CoreAudio moves the default away from a device that is hogged and in an encoded format (other
+// apps cannot play on it) and usually back once it returns to PCM. A default change this soon after
+// start is that, not a choice by someone else.
+static const uint64_t kMLDefaultSettleNs = 3 * NSEC_PER_SEC;
+
 typedef struct {
     // Allocated once per instance and kept until dealloc, so a producer that
     // races with stop still touches valid memory.
@@ -94,14 +103,36 @@ static AudioObjectPropertyAddress MLAddress(AudioObjectPropertySelector selector
     return address;
 }
 
-static AudioDeviceID MLDefaultOutputDeviceID(void) {
+// selector: kAudioHardwarePropertyDefaultOutputDevice (what apps play on) or
+// kAudioHardwarePropertyDefaultSystemOutputDevice (alerts and system sounds).
+static AudioDeviceID MLDefaultDeviceID(AudioObjectPropertySelector selector) {
     AudioDeviceID device = kAudioObjectUnknown;
     UInt32 size = sizeof(device);
-    AudioObjectPropertyAddress address = MLAddress(kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal);
+    AudioObjectPropertyAddress address = MLAddress(selector, kAudioObjectPropertyScopeGlobal);
     if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, &size, &device) != noErr) {
         return kAudioObjectUnknown;
     }
     return device;
+}
+
+static AudioDeviceID MLDefaultOutputDeviceID(void) {
+    return MLDefaultDeviceID(kAudioHardwarePropertyDefaultOutputDevice);
+}
+
+static BOOL MLSetDefaultDevice(AudioObjectPropertySelector selector, AudioDeviceID device) {
+    AudioObjectPropertyAddress address = MLAddress(selector, kAudioObjectPropertyScopeGlobal);
+    return AudioObjectSetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, sizeof(device), &device) == noErr;
+}
+
+static UInt32 MLDeviceTransportType(AudioDeviceID device) {
+    UInt32 type = 0;
+    UInt32 size = sizeof(type);
+    AudioObjectPropertyAddress address = MLAddress(kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal);
+    if (device == kAudioObjectUnknown ||
+        AudioObjectGetPropertyData(device, &address, 0, NULL, &size, &type) != noErr) {
+        return 0;
+    }
+    return type;
 }
 
 static NSString *MLCopyStringProperty(AudioObjectID object, AudioObjectPropertySelector selector) {
@@ -132,6 +163,31 @@ static AudioDeviceID MLDeviceForUID(NSString *uid) {
         return kAudioObjectUnknown;
     }
     return device;
+}
+
+// Puts a default device property back on the device with this UID. Leaves it alone when
+// that device is gone. waitForSystem: give CoreAudio a moment to hand the default back by
+// itself first (it re-evaluates the default when a device returns to PCM).
+static void MLRestoreDefaultDevice(AudioObjectPropertySelector selector, NSString *uid, NSString *what, BOOL waitForSystem) {
+    if (uid.length == 0) {
+        return;
+    }
+    AudioDeviceID device = MLDeviceForUID(uid);
+    if (device == kAudioObjectUnknown || !MLDeviceIsAlive(device)) {
+        return;
+    }
+    for (int i = 0; waitForSystem && i < 8 && MLDefaultDeviceID(selector) != device; i++) {
+        usleep(100 * 1000);
+    }
+    if (MLDefaultDeviceID(selector) == device) {
+        return;
+    }
+    NSString *name = MLCopyStringProperty(device, kAudioObjectPropertyName) ?: uid;
+    if (MLSetDefaultDevice(selector, device)) {
+        Log(LOG_I, @"[audio] bitstream: restored the %@ to %@", what, name);
+    } else {
+        Log(LOG_W, @"[audio] bitstream: could not restore the %@ to %@", what, name);
+    }
 }
 
 static NSArray<NSNumber *> *MLOutputStreams(AudioDeviceID device) {
@@ -332,8 +388,9 @@ static BOOL MLChangePhysicalFormat(AudioStreamID stream, const AudioStreamBasicD
 
 #pragma mark - Persisted leftover
 
-static NSDictionary *MLLeftoverRecord(NSString *uid, uint32_t streamIndex, const AudioStreamBasicDescription *f) {
-    return @{
+static NSDictionary *MLLeftoverRecord(NSString *uid, uint32_t streamIndex, const AudioStreamBasicDescription *f,
+                                      NSString *defaultUID, NSString *systemUID) {
+    NSMutableDictionary *record = [@{
         @"uid": uid,
         @"streamIndex": @(streamIndex),
         @"sampleRate": @(f->mSampleRate),
@@ -345,7 +402,15 @@ static NSDictionary *MLLeftoverRecord(NSString *uid, uint32_t streamIndex, const
         @"channels": @(f->mChannelsPerFrame),
         @"bits": @(f->mBitsPerChannel),
         @"pid": @(getpid()),
-    };
+    } mutableCopy];
+    // Only when the device was the default: a crash must not leave the default on the speakers.
+    if (defaultUID.length > 0) {
+        record[@"defaultUID"] = defaultUID;
+    }
+    if (systemUID.length > 0) {
+        record[@"systemUID"] = systemUID;
+    }
+    return record;
 }
 
 static AudioStreamBasicDescription MLFormatFromRecord(NSDictionary *record) {
@@ -489,6 +554,15 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
     BOOL _countedActive;
     NSMutableArray *_listeners;
     _Atomic bool _eventReported;
+
+    // Default output devices as they were when start began (UIDs), so stop can put them back.
+    NSString *_savedDefaultUID;
+    NSString *_savedSystemUID;
+    uint64_t _choicesAtStart;
+    uint64_t _startedAtNs;
+    // Devices a default change to which is expected (ours, and where CoreAudio parked the default).
+    NSMutableSet<NSNumber *> *_expectedDefaults;
+    _Atomic bool _defaultChosenElsewhere;
 }
 
 + (MLAudioBitstreamSupport *)supportForCodec:(int)codec onDevice:(AudioDeviceID)device {
@@ -556,6 +630,7 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
     AudioStreamBasicDescription current = {0};
     if (MLGetStreamFormat(stream, kAudioStreamPropertyPhysicalFormat, &current) && current.mFormatID == kAudioFormatLinearPCM) {
         // Already PCM (the system or the user changed it); nothing to undo.
+        [self restoreLeftoverDefaultsFromRecord:record];
         [defaults removeObjectForKey:kMLLeftoverDefaultsKey];
         return;
     }
@@ -564,10 +639,36 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
     if (MLChangePhysicalFormat(stream, &target, &failure)) {
         Log(LOG_I, @"[audio] bitstream: restored %@ to %@ after an earlier session ended without cleanup",
             MLCopyStringProperty(device, kAudioObjectPropertyName) ?: uid, MLDescribeFormat(&target));
+        [self restoreLeftoverDefaultsFromRecord:record];
         [defaults removeObjectForKey:kMLLeftoverDefaultsKey];
     } else {
         Log(LOG_E, @"[audio] bitstream: could not restore the leftover format of %@: %@", uid, failure ?: @"unknown");
     }
+}
+
+// A crashed session may have left the default on another device (see the settle comment above).
+// Only a default that sits on a built-in device is moved back: anything else was chosen by the user.
++ (void)restoreLeftoverDefaultsFromRecord:(NSDictionary *)record {
+    const AudioObjectPropertySelector selectors[] = {
+        kAudioHardwarePropertyDefaultOutputDevice,
+        kAudioHardwarePropertyDefaultSystemOutputDevice,
+    };
+    NSArray<NSString *> *keys = @[@"defaultUID", @"systemUID"];
+    NSArray<NSString *> *labels = @[@"default output device", @"system sound output device"];
+    for (NSUInteger i = 0; i < keys.count; i++) {
+        NSString *uid = record[keys[i]];
+        if (![uid isKindOfClass:[NSString class]] || uid.length == 0) {
+            continue;
+        }
+        if (MLDeviceTransportType(MLDefaultDeviceID(selectors[i])) != kAudioDeviceTransportTypeBuiltIn) {
+            continue;
+        }
+        MLRestoreDefaultDevice(selectors[i], uid, labels[i], NO);
+    }
+}
+
++ (void)noteUserChoseDefaultOutputDevice {
+    atomic_fetch_add(&sUserDeviceChoices, 1);
 }
 
 - (instancetype)initWithCodec:(int)codec device:(AudioDeviceID)device {
@@ -583,6 +684,7 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
         // Lets removeListeners tell whether it runs inside an event callback.
         dispatch_queue_set_specific(_eventQueue, (__bridge const void *)self, (__bridge void *)self, NULL);
         _listeners = [NSMutableArray array];
+        _expectedDefaults = [NSMutableSet set];
     }
     return self;
 }
@@ -678,6 +780,21 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
             return [self failStep:@"allocation" detail:@"out of memory" error:error];
         }
 
+        // Taking the device over can make CoreAudio move the default output to another device
+        // (this one stops being offered to other apps); remember where it was to put it back.
+        AudioDeviceID defaultNow = MLDefaultOutputDeviceID();
+        _savedDefaultUID = MLCopyStringProperty(defaultNow, kAudioDevicePropertyDeviceUID);
+        _savedSystemUID = MLCopyStringProperty(MLDefaultDeviceID(kAudioHardwarePropertyDefaultSystemOutputDevice),
+                                               kAudioDevicePropertyDeviceUID);
+        _choicesAtStart = atomic_load(&sUserDeviceChoices);
+        _startedAtNs = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+        atomic_store(&_defaultChosenElsewhere, false);
+        @synchronized (_expectedDefaults) {
+            [_expectedDefaults removeAllObjects];
+            [_expectedDefaults addObject:@(_deviceID)];
+            [_expectedDefaults addObject:@(defaultNow)];
+        }
+
         // Pick the stream first: it needs nothing changed on the device.
         NSArray<NSNumber *> *streams = MLOutputStreams(_deviceID);
         NSUInteger streamIndex = NSNotFound;
@@ -741,7 +858,9 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
             return [self failStep:@"format-save" detail:[NSString stringWithFormat:@"the stream is in %@ and offers no stereo PCM to return to", MLDescribeFormat(&original)] error:error];
         }
         // Persist before touching the format: a crash from here on must be recoverable.
-        [[NSUserDefaults standardUserDefaults] setObject:MLLeftoverRecord(_deviceUID, (uint32_t)streamIndex, &_restoreFormat)
+        [[NSUserDefaults standardUserDefaults] setObject:MLLeftoverRecord(_deviceUID, (uint32_t)streamIndex, &_restoreFormat,
+                                                                          [_savedDefaultUID isEqualToString:_deviceUID] ? _savedDefaultUID : nil,
+                                                                          [_savedSystemUID isEqualToString:_deviceUID] ? _savedSystemUID : nil)
                                                   forKey:kMLLeftoverDefaultsKey];
 
         NSString *failure = nil;
@@ -806,6 +925,10 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
         _countedActive = YES;
         atomic_store(&_running, true);
 
+        // CoreAudio's own move of the default (if any) has happened by now.
+        @synchronized (_expectedDefaults) {
+            [_expectedDefaults addObject:@(MLDefaultOutputDeviceID())];
+        }
         [self installListeners];
         return YES;
     } @finally {
@@ -824,6 +947,7 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
 // Undoes whatever start did. Safe on a never-started instance and idempotent.
 // Never waits for the event queue, so it may run on it.
 - (void)teardownLocked {
+    const BOOL touchedDevice = _didHog || _didSwitchFormat || _didChangeMixing;
     atomic_store(&_stopping, true);
     if (_state != NULL) {
         atomic_store(&_state->active, false);
@@ -881,6 +1005,26 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
     }
     _stream = 0;
     atomic_store(&_running, false);
+
+    if (touchedDevice) {
+        [self restoreDefaultOutputLocked];
+    }
+    _savedDefaultUID = nil;
+    _savedSystemUID = nil;
+}
+
+// After the device is back to PCM and released: if CoreAudio left the default on another device
+// (it normally hands it back by itself, but not always) put it back, unless someone chose it.
+- (void)restoreDefaultOutputLocked {
+    if (_savedDefaultUID.length == 0 && _savedSystemUID.length == 0) {
+        return;
+    }
+    if (atomic_load(&_defaultChosenElsewhere) || atomic_load(&sUserDeviceChoices) != _choicesAtStart) {
+        Log(LOG_I, @"[audio] bitstream: another output device was chosen during the session; the default stays as it is");
+        return;
+    }
+    MLRestoreDefaultDevice(kAudioHardwarePropertyDefaultOutputDevice, _savedDefaultUID, @"default output device", YES);
+    MLRestoreDefaultDevice(kAudioHardwarePropertyDefaultSystemOutputDevice, _savedSystemUID, @"system sound output device", YES);
 }
 
 #pragma mark Events
@@ -956,7 +1100,20 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
             detail = [NSString stringWithFormat:@"the stream format changed to %@", MLDescribeFormat(&current)];
         }
     } else if (selector == kAudioHardwarePropertyDefaultOutputDevice) {
-        if (MLDefaultOutputDeviceID() != _deviceID) {
+        // Not "is it still our device": while we hold the device CoreAudio parks the default
+        // elsewhere on its own. Only a device nobody expected counts as someone choosing it.
+        const AudioDeviceID now = MLDefaultOutputDeviceID();
+        const BOOL settling = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - _startedAtNs < kMLDefaultSettleNs;
+        BOOL expected = NO;
+        @synchronized (_expectedDefaults) {
+            expected = [_expectedDefaults containsObject:@(now)];
+            if (!expected && settling) {
+                [_expectedDefaults addObject:@(now)];
+                expected = YES;
+            }
+        }
+        if (!expected) {
+            atomic_store(&_defaultChosenElsewhere, true);
             event = MLAudioBitstreamEventDefaultDeviceChanged;
             detail = @"the default output device changed";
         }
