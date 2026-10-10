@@ -22,10 +22,10 @@
 
 @end
 
-// Foundation Sunshine remote display scale: applies the configured Windows display scale
-// for a stream, lets the control center change it, and puts it back when the stream ends.
-// Every host call runs on one background serial queue; completion blocks run on the main
-// queue. Nothing here may block or fail a stream.
+// Foundation Sunshine remote display scale: reads the Windows display scale of the streamed
+// display and lets the user change it from the control center. The host is never changed on
+// its own: not when a stream starts and not when it ends. Host calls run on a private serial
+// queue; nothing here blocks the caller.
 typedef NS_ENUM(NSInteger, MLRemoteDisplayScaleSupport) {
     // Not asked yet, or the last request failed in a way that may be temporary.
     MLRemoteDisplayScaleSupportUnknown = 0,
@@ -53,25 +53,20 @@ typedef void (^MLRemoteDisplayScaleCompletion)(NSDictionary<NSString *, id> *out
 // place. Cleared when the session ends.
 @property (nonatomic, copy, nullable) void (^optionsDidChangeHandler)(void);
 
-- (instancetype)initWithHostUUID:(NSString *)hostUUID
-                     hostAddress:(NSString *)hostAddress
-                      serverCert:(NSData *)serverCert;
+- (instancetype)initWithHostAddress:(NSString *)hostAddress
+                         serverCert:(NSData *)serverCert;
 - (void)updateHostAddress:(NSString *)hostAddress serverCert:(NSData *)serverCert;
 
-// Stream start. Always reads the display's scale options (so the control center knows
-// what to offer); changes the scale only when setting is not 0. setting: 0 = don't
-// change, -1 = the host's recommended value, otherwise a percentage. targetDisplay is
-// the session's target display id (empty = the host default, its primary display).
-- (void)beginSessionWithTargetDisplay:(NSString *)targetDisplay
-                       desiredSetting:(NSInteger)setting
-                   restoreAfterStream:(BOOL)restore
-                           completion:(MLRemoteDisplayScaleCompletion)completion;
+// Stream start. Reads the display's scale options so the control center knows what to
+// offer; the host is left as it is. targetDisplay is the session's target display id
+// (empty = the host default, its primary display).
+- (void)beginSessionWithTargetDisplay:(NSString *)targetDisplay;
 
-// Control center: the user changes the host's scale by hand. Applied now, kept on the host after
-// the stream (nothing is restored, not even a change this session made at stream start, and no
-// leftover record remains for the launch-time recovery) and not saved as a setting. Only acts on
-// the session that is live when this is called; if the stream ends (or is replaced) before the
-// request reaches the host it is dropped and the completion is not called.
+// Control center: the user changes the host's scale by hand. Applied now and kept on the host
+// after the stream, exactly as if it had been changed in Windows; it is not saved anywhere and
+// nothing puts the old value back. Only acts on the session that is live when this is called;
+// if the stream ends (or is replaced) before the request reaches the host it is dropped and the
+// completion is not called.
 - (void)applyManualPercent:(NSInteger)percent
                 completion:(MLRemoteDisplayScaleCompletion)completion;
 
@@ -79,20 +74,7 @@ typedef void (^MLRemoteDisplayScaleCompletion)(NSDictionary<NSString *, id> *out
 // properties above.
 - (void)refreshOptionsIfStale;
 
-// Stream end: restores the previous scale when restore is YES and this client changed it,
-// otherwise forgets the pending restore.
-- (void)endSessionRestoring:(BOOL)restore reason:(NSString *)reason;
-
-// A previous run may have died before restoring. Performs that restore, skipping hosts
-// that currently have a live session in this process.
-+ (void)recoverPendingRestoreForHostUUID:(NSString *)hostUUID
-                             hostAddress:(NSString *)hostAddress
-                              serverCert:(NSData *)serverCert;
-
-// Same recovery for every host that has a pending record, using the saved host list for the
-// certificate and addresses. Meant for app launch, so a scale left behind by a crash is put
-// back without waiting for the next stream. Call it off the main thread (it reads the host
-// database); the host calls run on the scale queue and an unreachable host keeps its record.
-+ (void)recoverAllPendingRestoresAtLaunch;
+// Stream end: later answers and requests of this session are dropped. The host keeps its scale.
+- (void)endSession;
 
 @end

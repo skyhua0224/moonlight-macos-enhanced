@@ -1807,20 +1807,8 @@ enum DebugLogParser {
           tr("Host display scale unavailable"),
           tr("Status %@ · %@", field("status", in: rest) ?? "?", field("errorCode", in: rest) ?? "-"))
       }
-      if rest.hasPrefix("no change requested") {
+      if rest.hasPrefix("left as it is") {
         return pres(tr("Display scale left unchanged"), tr("Current %@%%", num(field("current", in: rest))))
-      }
-      if rest.hasPrefix("host reported no recommended scale") {
-        return pres(tr("Display scale left unchanged"), tr("The host reported no recommended scale"))
-      }
-      if rest.contains("is not supported by this display") {
-        return pres(
-          tr("Display scale left unchanged"),
-          tr("%@%% is not supported by this display", String(rest.prefix(while: { $0.isNumber }))))
-      }
-      if rest.hasPrefix("scale is already") {
-        return pres(
-          tr("Display scale left unchanged"), tr("Already at %@%%", between(rest, "already ", "%") ?? "?"))
       }
       return nil
     }
@@ -1829,61 +1817,6 @@ enum DebugLogParser {
       return pres(
         confirmed ? tr("Host display scale applied") : tr("Host display scale change not confirmed"),
         tr("%@%% → %@%%", num(field("previous", in: body)), num(field("result", in: body))))
-    }
-    if body.hasPrefix("restore (") {
-      let reason = between(body, "restore (", ")") ?? "-"
-      if body.contains(" requested="), body.contains(" result=") {
-        let target = num(field("requested", in: body))
-        let confirmed = field("result", in: body) == field("requested", in: body)
-        return pres(
-          confirmed
-            ? tr("Host display scale restored to %@%%", target)
-            : tr("Host display scale restore not confirmed"),
-          tr("From %@%% · reason %@", num(field("previous", in: body)), reason))
-      }
-      if let skipped = between(body, " skipped:", nil) {
-        return pres(
-          tr("Host display scale restore skipped"),
-          skipped.hasPrefix("nothing to restore") ? tr("Nothing to restore") : skipped)
-      }
-      if let dropped = between(body, " dropped:", nil) {
-        return pres(tr("Host display scale restore dropped"), dropped)
-      }
-      if let postponed = between(body, " postponed:", nil) {
-        return pres(tr("Host display scale restore postponed"), postponed)
-      }
-      return nil
-    }
-    if body.hasPrefix("restore skipped (") {
-      let why = between(body, "):", nil)
-      return pres(
-        tr("Host display scale restore skipped"),
-        why?.hasPrefix("this client did not change the scale") == true
-          ? tr("This client did not change the scale") : why)
-    }
-    if body.hasPrefix("restore after streaming is off;") {
-      return pres(
-        tr("Host display scale kept after the stream"),
-        tr("%@%% stays applied", between(body, "the ", "%") ?? "?"))
-    }
-    if body.hasPrefix("scale is back at") {
-      return pres(tr("Host display scale is back at %@%%", between(body, "back at ", "%") ?? "?"))
-    }
-    if body.hasPrefix("pending restore saved:") {
-      return pres(
-        tr("Display scale restore saved"),
-        between(body, "saved:", " device=")?.replacingOccurrences(of: " -> ", with: " → "))
-    }
-    if body.hasPrefix("launch recovery skipped") {
-      let detail: String?
-      if body.contains("not in the saved list") {
-        detail = tr("The host is not in the saved list")
-      } else if body.contains("no known host address") {
-        detail = tr("No known host address")
-      } else {
-        detail = nil
-      }
-      return pres(tr("Display scale recovery skipped"), detail)
     }
     return nil
   }

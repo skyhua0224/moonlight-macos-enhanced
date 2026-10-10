@@ -588,7 +588,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @end
 @interface StreamViewController (MenuUI) <MLStreamScopedCallbackOwner, NSMenuDelegate>
 - (void)startRemoteDisplayScaleForCurrentSession;
-- (void)endRemoteDisplayScaleSessionWithReason:(NSString *)reason;
+- (void)endRemoteDisplayScaleSession;
 - (void)presentRemoteDisplayScaleOutcome:(NSDictionary<NSString *, id> *)outcome;
 - (NSMenuItem *)remoteDisplayScaleMenuItem;
 - (void)remoteDisplayScaleOptionsDidChange;

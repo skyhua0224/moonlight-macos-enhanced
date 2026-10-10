@@ -1968,28 +1968,24 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
 
 #pragma mark - Remote display scale
 
-// Starts the session's remote display scale handling once the stream is up. Everything
-// runs in the background; the stream never waits for it.
+// Asks the host which display scales it offers once the stream is up, for the control center.
+// The host's scale is not changed here. Runs in the background; the stream never waits for it.
 - (void)startRemoteDisplayScaleForCurrentSession {
     StreamConfiguration *config = self.streamMan.streamConfiguration;
-    NSString *hostUUID = self.app.host.uuid;
     // Only Foundation Sunshine offers the display scale routes.
-    if (config == nil || !config.foundationHost || hostUUID.length == 0 || config.host.length == 0) {
+    if (config == nil || !config.foundationHost || config.host.length == 0) {
         return;
     }
 
     MLRemoteDisplayScale *scale = self.remoteDisplayScale;
     if (scale == nil) {
-        scale = [[MLRemoteDisplayScale alloc] initWithHostUUID:hostUUID
-                                                   hostAddress:config.host
-                                                    serverCert:config.serverCert];
+        scale = [[MLRemoteDisplayScale alloc] initWithHostAddress:config.host
+                                                       serverCert:config.serverCert];
         self.remoteDisplayScale = scale;
     } else {
         [scale updateHostAddress:config.host serverCert:config.serverCert];
     }
 
-    NSInteger setting = [SettingsClass remoteDisplayScaleFor:hostUUID];
-    BOOL restore = [SettingsClass restoreRemoteDisplayScaleFor:hostUUID];
     NSUInteger generation = self.activeStreamGeneration;
     __weak typeof(self) weakSelf = self;
     scale.optionsDidChangeHandler = ^{
@@ -1998,20 +1994,11 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
             [strongSelf remoteDisplayScaleOptionsDidChange];
         }
     };
-    [scale beginSessionWithTargetDisplay:config.sunshineTargetDisplayName ?: @""
-                          desiredSetting:setting
-                      restoreAfterStream:restore
-                              completion:^(NSDictionary<NSString *, id> *outcome) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (strongSelf == nil || strongSelf.stopStreamInProgress || strongSelf.activeStreamGeneration != generation) {
-            return;
-        }
-        [strongSelf presentRemoteDisplayScaleOutcome:outcome];
-    }];
+    [scale beginSessionWithTargetDisplay:config.sunshineTargetDisplayName ?: @""];
 }
 
-// Stream over: put the host scale back (when asked to and this client changed it).
-- (void)endRemoteDisplayScaleSessionWithReason:(NSString *)reason {
+// Stream over: the control center has nothing left to ask the host. The host keeps its scale.
+- (void)endRemoteDisplayScaleSession {
     MLRemoteDisplayScale *scale = nil;
     @synchronized (self) {
         scale = self.remoteDisplayScale;
@@ -2020,9 +2007,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     if (scale == nil) {
         return;
     }
-    scale.optionsDidChangeHandler = nil;
-    BOOL restore = [SettingsClass restoreRemoteDisplayScaleFor:self.app.host.uuid];
-    [scale endSessionRestoring:restore reason:reason ?: @"stream-end"];
+    [scale endSession];
 }
 
 - (void)presentRemoteDisplayScaleOutcome:(NSDictionary<NSString *, id> *)outcome {
@@ -2149,8 +2134,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
 }
 
 // A choice here is the user changing the host's scale by hand: it is applied now and stays on the
-// host after the stream. It is neither saved as the per-host setting (that one is applied again at
-// every stream start and put back afterwards) nor restored at the end of the stream.
+// host after the stream. It is not saved anywhere and not put back at the end of the stream.
 - (void)selectRemoteDisplayScaleFromMenu:(NSMenuItem *)sender {
     NSNumber *percent = [sender.representedObject isKindOfClass:[NSNumber class]] ? sender.representedObject : nil;
     MLRemoteDisplayScale *scale = self.remoteDisplayScale;

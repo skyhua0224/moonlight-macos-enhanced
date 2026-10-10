@@ -82,22 +82,6 @@ struct FoundationDisplayView: View {
           .controllerPicker(selection: $settingsModel.selectedSunshineScreenMode, options: SettingsModel.sunshineScreenModes, title: { value in languageManager.localize(value) })
           .frame(width: 220, alignment: .trailing)
         }
-
-        SettingsRow(title: "Remote Display Scale", detail: "Remote Display Scale detail") {
-          Picker("", selection: $settingsModel.selectedRemoteDisplayScale) {
-            ForEach(settingsModel.remoteDisplayScaleChoices) { choice in
-              Text(choice.title).tag(choice.value)
-            }
-          }
-          .labelsHidden()
-          .controllerPicker(
-            selection: $settingsModel.selectedRemoteDisplayScale,
-            choices: settingsModel.remoteDisplayScaleChoices.map { (value: $0.value, title: $0.title) })
-          .frame(width: 220, alignment: .trailing)
-        }
-
-        ToggleCell(title: "Restore scale after streaming", hintKey: "Restore scale after streaming detail", boolBinding: $settingsModel.restoreRemoteDisplayScale)
-          .disabled(settingsModel.selectedRemoteDisplayScale == SettingsModel.remoteDisplayScaleDontChange)
       }
 
       FormSection(title: "HDR Display Profile") {
