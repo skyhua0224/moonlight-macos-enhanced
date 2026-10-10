@@ -21,6 +21,7 @@
 #import "TemporaryHost.h"
 #import "Logger.h"
 #import "MLAudioBitstreamOutput.h"
+#import "StreamManager.h"
 #import "MoonlightEnhanced-Swift.h"
 #import <objc/runtime.h>
 
@@ -94,6 +95,12 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     // format; put it back. Switching a format can take seconds, so not on the main thread.
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         [MLAudioBitstreamOutput restoreLeftoverDeviceFormatIfNeeded];
+    });
+
+    // A crash mid-stream can leave the host on the temporary display scale this client set;
+    // put it back now rather than at the next stream. Host calls are queued with short timeouts.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [MLRemoteDisplayScale recoverAllPendingRestoresAtLaunch];
     });
     
     self.controllerNavigation = [[ControllerNavigation alloc] init];

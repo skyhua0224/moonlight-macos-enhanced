@@ -16,6 +16,8 @@
 #import "HttpResponse.h"
 #import "HttpRequest.h"
 #import "IdManager.h"
+#import "DataManager.h"
+#import "TemporaryHost.h"
 #include "Limelight.h"
 
 @implementation StreamManager {
@@ -290,7 +292,9 @@ static const double kProbeCapTolerance = 1.15;
 #pragma mark - Remote display scale
 
 // UserDefaults record kept per host from the moment this client changes the host display
-// scale until it has put it back: previous, applied (NSNumber), deviceId, displayName.
+// scale until it has put it back: previous, applied (NSNumber), deviceId, displayName, and
+// address (how the stream reached the host; lets launch-time recovery work without a stream.
+// Records written by older builds lack it).
 static NSString *const kRemoteDisplayScalePendingKeyPrefix = @"MLRemoteDisplayScalePending.";
 static const CFTimeInterval kRemoteDisplayScaleRefreshIntervalSec = 5.0;
 
@@ -779,6 +783,10 @@ static void MLScaleClearPending(NSString *hostUUID) {
     if (_hostUUID.length == 0) {
         return;
     }
+    NSString *address = nil;
+    @synchronized (self) {
+        address = _hostAddress;
+    }
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *key = MLScalePendingKey(_hostUUID);
     NSDictionary *existing = [defaults dictionaryForKey:key];
@@ -813,6 +821,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
         @"applied": @(applied),
         @"deviceId": deviceId ?: @"",
         @"displayName": displayName ?: @"",
+        @"address": address ?: @"",
     } forKey:key];
     Log(LOG_I, @"[display-scale] pending restore saved: %ld%% -> %ld%% device=%@", (long)original, (long)applied, deviceId.length > 0 ? deviceId : displayName);
 }
@@ -907,8 +916,82 @@ static void MLScaleClearPending(NSString *hostUUID) {
         return;
     }
     NSString *address = [hostAddress copy];
-    NSData *cert = [serverCert copy];
+    [MLRemoteDisplayScale scheduleRecoveryForHostUUID:hostUUID
+                                            addresses:(address.length > 0 ? @[address] : @[])
+                                                index:0
+                                           serverCert:[serverCert copy]
+                                               reason:@"crash-recovery"];
+}
+
++ (void)recoverAllPendingRestoresAtLaunch {
+    NSString *prefix = kRemoteDisplayScalePendingKeyPrefix;
+    NSMutableArray<NSString *> *hostUUIDs = [NSMutableArray array];
+    for (NSString *key in [[NSUserDefaults standardUserDefaults] dictionaryRepresentation]) {
+        if ([key hasPrefix:prefix] && key.length > prefix.length) {
+            [hostUUIDs addObject:[key substringFromIndex:prefix.length]];
+        }
+    }
+    if (hostUUIDs.count == 0) {
+        return;
+    }
+
+    // The saved host list has the pinned certificate and the addresses the host was last seen on.
+    NSArray *hosts = [[[DataManager alloc] init] getHosts];
+    for (NSString *hostUUID in hostUUIDs) {
+        NSDictionary *record = MLScaleLoadPending(hostUUID);
+        if (record == nil) {
+            continue;
+        }
+        TemporaryHost *host = nil;
+        for (TemporaryHost *candidate in hosts) {
+            if ([candidate.uuid isEqualToString:hostUUID]) {
+                host = candidate;
+                break;
+            }
+        }
+        if (host.serverCert == nil) {
+            Log(LOG_W, @"[display-scale] launch recovery skipped for %@: host is not in the saved list; the record is kept", hostUUID);
+            continue;
+        }
+
+        // The address the stream used first (absent in records from older builds), then the
+        // others the host was known by. Duplicates would only cost another timeout.
+        NSMutableArray<NSString *> *addresses = [NSMutableArray array];
+        for (NSString *address in @[ MLScaleString(record[@"address"]),
+                                     host.localAddress ?: @"",
+                                     host.address ?: @"",
+                                     host.ipv6Address ?: @"",
+                                     host.externalAddress ?: @"" ]) {
+            if (address.length > 0 && ![addresses containsObject:address]) {
+                [addresses addObject:address];
+            }
+        }
+        if (addresses.count == 0) {
+            Log(LOG_W, @"[display-scale] launch recovery skipped for %@: no known host address; the record is kept", hostUUID);
+            continue;
+        }
+        [MLRemoteDisplayScale scheduleRecoveryForHostUUID:hostUUID
+                                                addresses:addresses
+                                                    index:0
+                                               serverCert:host.serverCert
+                                                   reason:@"launch-recovery"];
+    }
+}
+
+// One attempt per scale-queue block, trying addresses[index]. When the host cannot be reached
+// the next address goes to the back of the queue instead of being tried in the same block, so
+// an offline host never holds up a stream's own calls for more than one timeout at a time.
+// The record is re-read on the queue and cleared by whichever restore finishes first, so
+// the launch-time and the stream-start recovery cannot both change the host: the second one
+// finds no record (or, when the host was unreachable for both, simply fails the same way).
++ (void)scheduleRecoveryForHostUUID:(NSString *)hostUUID
+                          addresses:(NSArray<NSString *> *)addresses
+                              index:(NSUInteger)index
+                         serverCert:(NSData *)serverCert
+                             reason:(NSString *)reason {
     dispatch_async(MLRemoteDisplayScaleQueue(), ^{
+        // A session of this process owns the record; it is not a leftover. Checked on the queue
+        // because a stream's calls are queued behind this block: once it is live, we stay out.
         if (MLRemoteDisplayScaleIsLive(hostUUID)) {
             return;
         }
@@ -916,22 +999,36 @@ static void MLScaleClearPending(NSString *hostUUID) {
         if (record == nil) {
             return;
         }
-        [MLRemoteDisplayScale performRestoreForRecord:record hostUUID:hostUUID address:address serverCert:cert reason:@"crash-recovery"];
+        NSString *address = index < addresses.count ? addresses[index] : nil;
+        BOOL reached = [MLRemoteDisplayScale performRestoreForRecord:record
+                                                            hostUUID:hostUUID
+                                                             address:address
+                                                          serverCert:serverCert
+                                                              reason:reason];
+        if (!reached && index + 1 < addresses.count) {
+            [MLRemoteDisplayScale scheduleRecoveryForHostUUID:hostUUID
+                                                    addresses:addresses
+                                                        index:index + 1
+                                                   serverCert:serverCert
+                                                       reason:reason];
+        }
     });
 }
 
 // Puts the previous scale back, but only while the host still shows the value this client
 // applied. Keeps the record when the host could not be reached so a later run can retry.
-+ (void)performRestoreForRecord:(NSDictionary *)record
+// Returns NO when the host could not be reached (or there was nothing to reach it with).
++ (BOOL)performRestoreForRecord:(NSDictionary *)record
                        hostUUID:(NSString *)hostUUID
                         address:(NSString *)address
                      serverCert:(NSData *)serverCert
                          reason:(NSString *)reason {
     HttpManager *http = MLScaleNewHttpManager(address, serverCert);
     if (http == nil) {
-        Log(LOG_W, @"[display-scale] restore (%@) postponed: no host address", reason);
-        return;
+        Log(LOG_W, @"[display-scale] restore (%@) postponed: no host address or certificate", reason);
+        return NO;
     }
+    BOOL reached = YES;
 
     NSInteger previous = MLScaleNumber(record[@"previous"]).integerValue;
     NSInteger applied = MLScaleNumber(record[@"applied"]).integerValue;
@@ -979,10 +1076,12 @@ static void MLScaleClearPending(NSString *hostUUID) {
         Log(LOG_I, @"[display-scale] restore (%@) dropped: host cannot report the display (status=%ld errorCode=%@ device=%@)",
             reason, (long)status, MLScaleErrorCode(status, options), label);
     } else {
-        Log(LOG_W, @"[display-scale] restore (%@) postponed: host unreachable (status=%ld); will retry on the next connection",
-            reason, (long)status);
+        reached = NO;
+        Log(LOG_W, @"[display-scale] restore (%@) postponed: host unreachable at %@ (status=%ld); will retry later",
+            reason, address, (long)status);
     }
     [http invalidateSunshineAPISession];
+    return reached;
 }
 
 @end

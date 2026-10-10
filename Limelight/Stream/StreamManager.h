@@ -83,4 +83,10 @@ typedef void (^MLRemoteDisplayScaleCompletion)(NSDictionary<NSString *, id> *out
                              hostAddress:(NSString *)hostAddress
                               serverCert:(NSData *)serverCert;
 
+// Same recovery for every host that has a pending record, using the saved host list for the
+// certificate and addresses. Meant for app launch, so a scale left behind by a crash is put
+// back without waiting for the next stream. Call it off the main thread (it reads the host
+// database); the host calls run on the scale queue and an unreachable host keeps its record.
++ (void)recoverAllPendingRestoresAtLaunch;
+
 @end
