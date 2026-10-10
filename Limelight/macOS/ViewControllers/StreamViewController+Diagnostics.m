@@ -2353,7 +2353,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
         [self ingestRawLogLinesToOverlay:lines];
     }
     __weak typeof(self) weakSelf = self;
-    self.logChangeSubscription = [[LogBuffer shared] subscribeToChangesWithHandler:^{
+    self.logChangeSubscription = [[LogBuffer shared] addChangeObserver:^{
         [weakSelf appendNewLogEntriesToOverlay];
     }];
     [self updateLogOverlayToolbarState];
@@ -2374,7 +2374,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     // without closing the underlying timeout menu.
     
     if (self.logChangeSubscription != nil) {
-        [[LogBuffer shared] unsubscribe:self.logChangeSubscription];
+        [[LogBuffer shared] removeChangeObserver:self.logChangeSubscription];
         self.logChangeSubscription = nil;
     }
 

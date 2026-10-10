@@ -21,6 +21,8 @@ private struct DebugLogQuery: Equatable {
   var minimumLevel: DebugLogLevel = .info
   var showSystemNoise: Bool = false
   var startDate: Date?
+  /// Also show what the log files hold from before this launch's in-memory log ("All History").
+  var includeHistory: Bool = false
   var keyword: String = ""
   var categoryFilters: Set<String> = []
 }
@@ -36,108 +38,49 @@ private struct DebugLogSnapshot {
   var errorCount: Int = 0
 }
 
-/// Follows one log file: reads only the bytes appended since the last poll and
-/// parses each line exactly once. Not thread-safe; the owner confines it to one queue.
+/// Reads the end of one log file once and parses each line exactly once. It only serves the
+/// "All History" scope (lines older than the logger's in-memory log); the live view never
+/// reads files. Not thread-safe; the owner confines it to one queue.
 private final class DebugLogFileTail {
   private let url: URL
   private let idPrefix: String
   private let maxLines: Int
   private let tailBytes: UInt64
-  private let maxDeltaBytes: UInt64
 
   private(set) var entries: [DebugLogEntry] = []
-  private var offset: UInt64 = 0
-  private var carry = Data()
-  private var nextSequence = 0
 
   init(url: URL, idPrefix: String, maxLines: Int, tailBytes: UInt64) {
     self.url = url
     self.idPrefix = idPrefix
     self.maxLines = maxLines
     self.tailBytes = tailBytes
-    self.maxDeltaBytes = tailBytes
   }
 
-  func ensureFileExists() {
-    let dirURL = url.deletingLastPathComponent()
-    try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
-    if !FileManager.default.fileExists(atPath: url.path) {
-      try? "".write(to: url, atomically: true, encoding: .utf8)
-    }
-  }
-
-  /// Drops everything and reads the last `tailBytes` of the file again.
-  @discardableResult
-  func reload() -> Bool {
+  /// Drops everything and reads the last `tailBytes` of the file.
+  func reload() {
     entries = []
-    carry = Data()
     let size = currentSize()
     let start = size > tailBytes ? size - tailBytes : 0
-    if let data = readData(from: start, upTo: size) {
-      offset = start + UInt64(data.count)
-      ingest(data, dropLeadingPartialLine: start > 0)
-    } else {
-      offset = size
-    }
-    return true
+    guard let data = readData(from: start, upTo: size) else { return }
+    ingest(data, dropLeadingPartialLine: start > 0)
   }
 
-  /// Returns true when new lines were read (or the file was reloaded).
-  func poll() -> Bool {
-    let size = currentSize()
-    if size < offset {
-      // The file was rotated or truncated.
-      return reload()
-    }
-    guard size > offset else { return false }
-
-    var start = offset
-    var droppedLeadingBytes = false
-    if size - offset > maxDeltaBytes {
-      // Far more was written than the viewer keeps anyway; only read the end.
-      start = size - maxDeltaBytes
-      carry = Data()
-      droppedLeadingBytes = true
-    }
-    guard let data = readData(from: start, upTo: size) else { return false }
-    offset = start + UInt64(data.count)
-    ingest(data, dropLeadingPartialLine: droppedLeadingBytes)
-    return true
-  }
-
-  private func ingest(_ newData: Data, dropLeadingPartialLine: Bool) {
-    var data = carry
-    data.append(newData)
-    carry = Data()
-
+  private func ingest(_ data: Data, dropLeadingPartialLine: Bool) {
+    var data = data
     if dropLeadingPartialLine {
       // Reading started in the middle of the file, so the first line may be cut off.
       guard let firstNewline = data.firstIndex(of: 0x0A) else { return }
       data = Data(data[data.index(after: firstNewline)...])
     }
 
-    // A line that is still being written stays in `carry` until its newline arrives.
-    guard let lastNewline = data.lastIndex(of: 0x0A) else {
-      carry = data
-      return
-    }
-    let completePart = Data(data[data.startIndex..<lastNewline])
-    carry = Data(data[data.index(after: lastNewline)...])
-
-    let text = String(decoding: completePart, as: UTF8.self)
+    let text = String(decoding: data, as: UTF8.self)
     var lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
     guard !lines.isEmpty else { return }
     if lines.count > maxLines {
       // Only the newest lines are kept, so there is no point parsing the rest.
       lines = Array(lines.suffix(maxLines))
     }
-
-    let parsed = DebugLogParser.parseLines(lines, idPrefix: idPrefix, startSequence: nextSequence)
-    nextSequence += parsed.count
-    entries.append(contentsOf: parsed)
-    if entries.count > maxLines {
-      entries.removeFirst(entries.count - maxLines)
-    }
+    entries = DebugLogParser.parseLines(lines, idPrefix: idPrefix, startSequence: 0)
   }
 
   private func currentSize() -> UInt64 {
@@ -160,30 +103,38 @@ private final class DebugLogFileTail {
   }
 }
 
-/// Reads the debug logs and publishes filtered snapshots.
+/// Follows the logger's structured entries and publishes filtered snapshots.
 ///
-/// All file reading, parsing and filtering happens on `queue`. Results are handed
-/// to the main thread as a single latest-wins snapshot, so a burst of log lines
-/// costs the UI at most one update per poll instead of one per line.
+/// The live data is the logger's in-memory log (`LogBuffer`): the model subscribes to its
+/// coalesced change signal and, on each signal, pulls the entries with a higher sequence
+/// number on its own queue. Nothing is parsed back from text and no file is read, except
+/// for the "All History" scope, which adds the older part of the log files once.
+/// Filtering, folding and counting happen on `queue`; results reach the main thread as a
+/// single latest-wins snapshot.
 private final class DebugLogLiveModel: ObservableObject {
   /// Main thread only.
   @Published private(set) var snapshot = DebugLogSnapshot()
 
-  private static let maxRetainedLines = 3000
-  private static let initialTailBytes: UInt64 = 1_024 * 1_024
-  private static let pollIntervalMilliseconds = 500
+  private static let maxRetainedLines = 5000
+  private static let trimSlack = 500
+  private static let historyTailBytes: UInt64 = 1_024 * 1_024
+  private static let historyMaxLines = 3000
 
   private let queue = DispatchQueue(label: "com.moonlight.logviewer.model", qos: .utility)
 
   // Everything in this block is read and written on `queue` only.
-  private let rawTail: DebugLogFileTail
-  private let curatedTail: DebugLogFileTail
+  private let rawHistoryTail: DebugLogFileTail
+  private let curatedHistoryTail: DebugLogFileTail
   private var query = DebugLogQuery()
   private var isPaused = false
   private var revision = 0
-  private var timer: DispatchSourceTimer?
-  private var fallbackEntries: [DebugLogEntry] = []
-  private var fallbackIsStale = true
+  private var subscription: NSObjectProtocol?
+  private var lastSequence: UInt = 0
+  private var rawEntries: [DebugLogEntry] = []
+  private var curatedEntries: [DebugLogEntry] = []
+  private var historyLoaded = false
+  private var rawHistory: [DebugLogEntry] = []
+  private var curatedHistory: [DebugLogEntry] = []
 
   // Hand-off to the main thread; every access holds `deliveryLock`.
   private let deliveryLock = NSLock()
@@ -191,47 +142,41 @@ private final class DebugLogLiveModel: ObservableObject {
   private var deliveryScheduled = false
 
   init(rawLogURL: URL, curatedLogURL: URL) {
-    rawTail = DebugLogFileTail(
-      url: rawLogURL, idPrefix: "r", maxLines: DebugLogLiveModel.maxRetainedLines,
-      tailBytes: DebugLogLiveModel.initialTailBytes)
-    curatedTail = DebugLogFileTail(
-      url: curatedLogURL, idPrefix: "c", maxLines: DebugLogLiveModel.maxRetainedLines,
-      tailBytes: DebugLogLiveModel.initialTailBytes)
+    rawHistoryTail = DebugLogFileTail(
+      url: rawLogURL, idPrefix: "hr", maxLines: DebugLogLiveModel.historyMaxLines,
+      tailBytes: DebugLogLiveModel.historyTailBytes)
+    curatedHistoryTail = DebugLogFileTail(
+      url: curatedLogURL, idPrefix: "hc", maxLines: DebugLogLiveModel.historyMaxLines,
+      tailBytes: DebugLogLiveModel.historyTailBytes)
   }
 
   deinit {
-    timer?.cancel()
+    if let subscription = subscription {
+      LogBuffer.shared().removeChangeObserver(subscription)
+    }
   }
 
   func start(query initialQuery: DebugLogQuery) {
     queue.async { [weak self] in
       guard let self = self else { return }
-      self.rawTail.ensureFileExists()
-      self.curatedTail.ensureFileExists()
       self.query = initialQuery
-      self.rawTail.reload()
-      self.curatedTail.reload()
-      self.fallbackIsStale = true
+      self.subscribeToLogChanges()
+      self.rawEntries = []
+      self.curatedEntries = []
+      self.lastSequence = 0
+      self.ingest(LogBuffer.shared().lastEntries(UInt(DebugLogLiveModel.maxRetainedLines)))
+      self.loadHistoryIfNeeded()
       self.publishCurrentSnapshot()
-
-      self.timer?.cancel()
-      let newTimer = DispatchSource.makeTimerSource(queue: self.queue)
-      newTimer.schedule(
-        deadline: .now() + .milliseconds(DebugLogLiveModel.pollIntervalMilliseconds),
-        repeating: .milliseconds(DebugLogLiveModel.pollIntervalMilliseconds),
-        leeway: .milliseconds(100))
-      newTimer.setEventHandler { [weak self] in
-        self?.pollTick()
-      }
-      self.timer = newTimer
-      newTimer.resume()
     }
   }
 
   func stop() {
     queue.async { [weak self] in
-      self?.timer?.cancel()
-      self?.timer = nil
+      guard let self = self else { return }
+      if let subscription = self.subscription {
+        LogBuffer.shared().removeChangeObserver(subscription)
+      }
+      self.subscription = nil
     }
   }
 
@@ -239,12 +184,13 @@ private final class DebugLogLiveModel: ObservableObject {
     queue.async { [weak self] in
       guard let self = self, self.query != newQuery else { return }
       self.query = newQuery
+      self.loadHistoryIfNeeded()
       self.publishCurrentSnapshot()
     }
   }
 
-  /// While paused the files are still followed (so nothing is lost and memory stays
-  /// bounded), but the visible snapshot only changes when the filters change.
+  /// While paused the log is still followed (so nothing is lost and memory stays bounded),
+  /// but the visible snapshot only changes when the filters change.
   func setPaused(_ paused: Bool) {
     queue.async { [weak self] in
       guard let self = self, self.isPaused != paused else { return }
@@ -257,14 +203,64 @@ private final class DebugLogLiveModel: ObservableObject {
 
   // MARK: Work on `queue`
 
-  private func pollTick() {
-    let rawChanged = rawTail.poll()
-    let curatedChanged = curatedTail.poll()
-    if rawChanged {
-      fallbackIsStale = true
+  private func subscribeToLogChanges() {
+    if let existing = subscription {
+      LogBuffer.shared().removeChangeObserver(existing)
     }
-    guard rawChanged || curatedChanged, !isPaused else { return }
+    // Delivered on the main queue at most a few times per second; all the work happens on `queue`.
+    subscription = LogBuffer.shared().addChangeObserver { [weak self] in
+      self?.queue.async { [weak self] in
+        self?.pullNewEntries()
+      }
+    }
+  }
+
+  private func pullNewEntries() {
+    guard subscription != nil else { return }
+    let fresh = LogBuffer.shared().entries(afterSequence: lastSequence, limit: 0)
+    guard !fresh.isEmpty else { return }
+    ingest(fresh)
+    guard !isPaused else { return }
     publishCurrentSnapshot()
+  }
+
+  private func ingest(_ fresh: [MLLogEntry]) {
+    guard let newest = fresh.last else { return }
+    let converted = DebugLogParser.entries(from: fresh)
+    for (source, entry) in zip(fresh, converted) {
+      if source.inRaw {
+        rawEntries.append(entry)
+      }
+      if source.inCurated {
+        curatedEntries.append(entry)
+      }
+    }
+    lastSequence = max(lastSequence, newest.sequence)
+
+    let limit = DebugLogLiveModel.maxRetainedLines
+    let slack = DebugLogLiveModel.trimSlack
+    if rawEntries.count > limit + slack {
+      rawEntries.removeFirst(rawEntries.count - limit)
+    }
+    if curatedEntries.count > limit + slack {
+      curatedEntries.removeFirst(curatedEntries.count - limit)
+    }
+  }
+
+  /// "All History" needs the part of the files that predates the in-memory log; it is read once.
+  private func loadHistoryIfNeeded() {
+    guard query.includeHistory, !historyLoaded else { return }
+    historyLoaded = true
+    rawHistoryTail.reload()
+    curatedHistoryTail.reload()
+    rawHistory = rawHistoryTail.entries
+    if curatedHistoryTail.entries.isEmpty {
+      // No curated file: derive the curated view from the raw lines already parsed.
+      curatedHistory = DebugLogParser.curatedEntries(
+        fromEntries: rawHistory, minimumLevel: .all, showSystemNoise: false)
+    } else {
+      curatedHistory = curatedHistoryTail.entries
+    }
   }
 
   private func publishCurrentSnapshot() {
@@ -275,24 +271,23 @@ private final class DebugLogLiveModel: ObservableObject {
   }
 
   private func baseEntries(for query: DebugLogQuery) -> [DebugLogEntry] {
+    let useRaw: Bool
     switch query.mode {
     case .raw:
-      return rawTail.entries
+      useRaw = true
     case .defaultLog:
-      if query.showSystemNoise {
-        return rawTail.entries
-      }
-      if !curatedTail.entries.isEmpty {
-        return curatedTail.entries
-      }
-      // No curated file yet: derive the curated view from the raw lines already parsed.
-      if fallbackIsStale {
-        fallbackEntries = DebugLogParser.curatedEntries(
-          fromEntries: rawTail.entries, minimumLevel: .all, showSystemNoise: false)
-        fallbackIsStale = false
-      }
-      return fallbackEntries
+      useRaw = query.showSystemNoise
     }
+    let memory = useRaw ? rawEntries : curatedEntries
+    guard query.includeHistory else { return memory }
+
+    // File lines at or after the oldest in-memory entry are already part of the live log.
+    let history = useRaw ? rawHistory : curatedHistory
+    guard let cutoff = memory.first?.timestampText else { return history }
+    let older = history.filter { (entry: DebugLogEntry) -> Bool in
+      (entry.timestampText ?? "") < cutoff
+    }
+    return older + memory
   }
 
   private static func buildSnapshot(
@@ -642,6 +637,7 @@ struct SettingsLogViewer: View {
       minimumLevel: currentMinimumLevel,
       showSystemNoise: settingsModel.debugLogShowSystemNoise,
       startDate: effectiveStartDate,
+      includeHistory: currentTimeScope == .all,
       keyword: appliedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
       categoryFilters: selectedCategoryFilters
     )

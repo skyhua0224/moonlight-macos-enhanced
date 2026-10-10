@@ -78,10 +78,10 @@ typedef NS_ENUM(NSInteger, MLLogNoiseCategory) {
 
 /// Entries with sequence > `sequence`, oldest first. At most `limit` (the newest ones) when
 /// `limit` is non-zero. Entries older than the ring capacity are gone.
-- (NSArray<MLLogEntry *> *)entriesAfterSequence:(NSUInteger)sequence limit:(NSUInteger)limit;
+- (NSArray<MLLogEntry *> *)entriesAfterSequence:(NSUInteger)sequence limit:(NSUInteger)limit NS_SWIFT_NAME(entries(afterSequence:limit:));
 
 /// The newest `count` entries, oldest first.
-- (NSArray<MLLogEntry *> *)lastEntries:(NSUInteger)count;
+- (NSArray<MLLogEntry *> *)lastEntries:(NSUInteger)count NS_SWIFT_NAME(lastEntries(_:));
 
 /// The `line` of every retained entry, oldest first.
 - (NSArray<NSString *> *)allLines;
@@ -89,10 +89,10 @@ typedef NS_ENUM(NSInteger, MLLogNoiseCategory) {
 // MARK: Change signal
 
 /// Registers `handler` for the "log changed" signal. The handler runs on the main queue, at most
-/// about five times per second, and only while subscribed; with no subscriber nothing is
-/// scheduled at all. Returns a token for -unsubscribe:.
-- (id<NSObject>)subscribeToChangesWithHandler:(void (^)(void))handler;
-- (void)unsubscribe:(nullable id<NSObject>)token;
+/// about five times per second, and only while registered; with no observer nothing is
+/// scheduled at all. Returns a token for -removeChangeObserver:.
+- (id<NSObject>)addChangeObserver:(void (^)(void))handler NS_SWIFT_NAME(addChangeObserver(_:));
+- (void)removeChangeObserver:(nullable id<NSObject>)token NS_SWIFT_NAME(removeChangeObserver(_:));
 
 // MARK: Producer API (logging queue only)
 

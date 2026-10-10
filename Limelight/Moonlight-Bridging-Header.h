@@ -19,6 +19,7 @@
 #import "AppDelegateForAppKit.h"
 #import "AwdlAuthorizationHelper.h"
 #import "Logger.h"
+#import "LogBuffer.h"
 #import "MLSystemGestureBlocker.h"
 
 #include "../modules/controller-feedback/ControllerShortcut.h"

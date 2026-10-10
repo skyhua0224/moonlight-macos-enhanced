@@ -1142,7 +1142,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.hostLatencyUpdatedObserver = nil;
     }
     if (self.logChangeSubscription != nil) {
-        [[LogBuffer shared] unsubscribe:self.logChangeSubscription];
+        [[LogBuffer shared] removeChangeObserver:self.logChangeSubscription];
         self.logChangeSubscription = nil;
     }
 

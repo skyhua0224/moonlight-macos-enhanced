@@ -552,6 +552,20 @@ enum DebugNoiseCategory: String, CaseIterable {
   }
 }
 
+extension DebugNoiseCategory {
+  /// Maps `MLLogNoiseCategory` (LogBuffer.h) as delivered by the logger; 0 means "not noise".
+  init?(loggerValue: Int) {
+    switch loggerValue {
+    case 1: self = .appKitMenuInconsistency
+    case 2: self = .networkStackNoise
+    case 3: self = .systemTransportFallback
+    case 4: self = .discoveryChatter
+    case 5: self = .hostIdentityMismatch
+    default: return nil
+    }
+  }
+}
+
 enum DebugLogNoiseClassifier {
   static func category(for line: String) -> DebugNoiseCategory? {
     if line.mlContainsCaseInsensitive("Discovery summary for ")
@@ -779,6 +793,86 @@ enum DebugLogParser {
       sequence += 1
     }
     return result
+  }
+
+  /// Turns entries delivered by the logger into viewer entries. Level, time, message and the
+  /// noise classification come from the logger as fields; only the display category and the
+  /// friendly title are still derived from the text, once per entry.
+  static func entries(from structured: [MLLogEntry]) -> [DebugLogEntry] {
+    var searchTextByCategory: [String: String] = [:]
+    var result: [DebugLogEntry] = []
+    result.reserveCapacity(structured.count)
+    for source in structured {
+      result.append(entry(from: source, searchTextByCategory: &searchTextByCategory))
+    }
+    return result
+  }
+
+  private static func debugLevel(for level: LogLevel) -> DebugLogLevel {
+    if level == LOG_D { return .debug }
+    if level == LOG_I { return .info }
+    if level == LOG_W { return .warn }
+    if level == LOG_E { return .error }
+    return .unknown
+  }
+
+  private static func entry(
+    from source: MLLogEntry,
+    searchTextByCategory: inout [String: String]
+  ) -> DebugLogEntry {
+    let level = debugLevel(for: source.level)
+    let message = source.message
+    let rawLine = source.fileLine
+    let noiseCategory = DebugNoiseCategory(loggerValue: source.noiseCategory)
+    let isNoiseSummary = source.isSummary && noiseCategory != nil
+
+    let category: MLLogCategoryDescriptor
+    let presentation: DebugLogPresentation
+    if isNoiseSummary, let noiseCategory = noiseCategory {
+      category = MLLogCategoryClassifier.descriptor(forNoiseCategory: noiseCategory)
+      presentation = DebugLogPresentation(title: message, detail: nil)
+    } else {
+      category = MLLogCategoryClassifier.descriptor(forLine: rawLine)
+      presentation = defaultPresentation(
+        forMessage: message,
+        rawLine: rawLine,
+        level: level,
+        category: category,
+        isNoiseSummary: false
+      )
+    }
+
+    let searchText: String
+    if let cached = searchTextByCategory[category.categoryKey] {
+      searchText = cached
+    } else {
+      // Localised names are looked up once per batch, not once per line.
+      searchText = category.searchableText
+      searchTextByCategory[category.categoryKey] = searchText
+    }
+
+    return DebugLogEntry(
+      id: "\(source.sequence)",
+      timestamp: Date(timeIntervalSince1970: source.timestamp),
+      timestampText: source.timestampText,
+      level: level,
+      message: message,
+      defaultTitle: presentation.title,
+      defaultDetail: presentation.detail,
+      rawLine: rawLine,
+      count: 1,
+      category: category,
+      searchIndex: makeSearchIndex(
+        category: category,
+        categorySearchText: searchText,
+        defaultTitle: presentation.title,
+        defaultDetail: presentation.detail,
+        message: message,
+        rawLine: rawLine
+      ),
+      noiseCategory: isNoiseSummary ? noiseCategory : nil,
+      isNoiseSummary: isNoiseSummary
+    )
   }
 
   static func curatedEntries(

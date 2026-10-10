@@ -150,7 +150,7 @@ static const CFTimeInterval kLogChangeSignalMinInterval = 0.2;
 
 // MARK: Change signal
 
-- (id<NSObject>)subscribeToChangesWithHandler:(void (^)(void))handler {
+- (id<NSObject>)addChangeObserver:(void (^)(void))handler {
     [_lock lock];
     _nextToken += 1;
     NSNumber *token = @(_nextToken);
@@ -159,7 +159,7 @@ static const CFTimeInterval kLogChangeSignalMinInterval = 0.2;
     return token;
 }
 
-- (void)unsubscribe:(id<NSObject>)token {
+- (void)removeChangeObserver:(id<NSObject>)token {
     if (![token isKindOfClass:[NSNumber class]]) {
         return;
     }
