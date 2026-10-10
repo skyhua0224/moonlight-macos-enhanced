@@ -721,7 +721,14 @@ static void MLScaleClearPending(NSString *hostUUID) {
         [MLScalePercentList(json[@"supported_scale_percents"]) componentsJoinedByString:@","],
         [MLScaleNumber(json[@"scale_set_supported"]) boolValue] ? 1 : 0);
 
+    BOOL changed = NO;
     @synchronized (self) {
+        const MLRemoteDisplayScaleSupport oldSupport = _support;
+        const BOOL oldAwaiting = _awaitingFirstQuery;
+        const NSInteger oldCurrent = _currentPercent;
+        const NSInteger oldRecommended = _recommendedPercent;
+        NSArray<NSNumber *> *oldPercents = _supportedPercents;
+
         _awaitingFirstQuery = NO;
         _lastQueryTime = [NSProcessInfo processInfo].systemUptime;
         if (usable) {
@@ -742,11 +749,18 @@ static void MLScaleClearPending(NSString *hostUUID) {
             _recommendedPercent = 0;
         }
         // A timeout or host error keeps whatever was known before.
+
+        changed = oldSupport != _support || oldAwaiting != _awaitingFirstQuery ||
+                  oldCurrent != _currentPercent || oldRecommended != _recommendedPercent ||
+                  ![oldPercents isEqualToArray:_supportedPercents];
     }
     if (statusOut != NULL) {
         *statusOut = status;
     }
-    [self notifyOptionsDidChange];
+    // A control center that is open is only touched when the answer differs from what it shows.
+    if (changed) {
+        [self notifyOptionsDidChange];
+    }
     return json;
 }
 
@@ -866,7 +880,9 @@ static void MLScaleClearPending(NSString *hostUUID) {
             }
             _support = MLRemoteDisplayScaleSupportAvailable;
         }
-        [self notifyOptionsDidChange];
+        if (resulting != before) {
+            [self notifyOptionsDidChange];
+        }
         NSString *reportedDeviceId = MLScaleString(json[@"device_id"]);
         NSString *reportedDisplayName = MLScaleString(json[@"display_name"]);
         [self recordPendingPrevious:(previous != nil ? previous.integerValue : before)

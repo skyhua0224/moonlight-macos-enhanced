@@ -18,6 +18,50 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     }
 }
 
+// Brings the items of a menu in line with specs: dictionaries with title, optional action (a selector
+// name), rep (represented object), state and enabled. When the items already have that shape only
+// titles, states and enabled flags are touched. The menu can be on screen, shown by the controller
+// panel or under the pointer, and replacing its items there moves the user; items are only replaced
+// when the set of choices really differs. Returns YES when it had to replace them. Main thread.
+static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *> *specs, id target) {
+    BOOL sameShape = menu.numberOfItems == (NSInteger)specs.count;
+    for (NSUInteger i = 0; sameShape && i < specs.count; i++) {
+        NSMenuItem *item = [menu itemAtIndex:(NSInteger)i];
+        NSString *actionName = specs[i][@"action"];
+        SEL action = actionName != nil ? NSSelectorFromString(actionName) : NULL;
+        id representedObject = specs[i][@"rep"];
+        sameShape = item.action == action &&
+                    (item.representedObject == representedObject || [item.representedObject isEqual:representedObject]);
+    }
+    if (!sameShape) {
+        [menu removeAllItems];
+        for (NSDictionary<NSString *, id> *spec in specs) {
+            NSString *actionName = spec[@"action"];
+            SEL action = actionName != nil ? NSSelectorFromString(actionName) : NULL;
+            NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:spec[@"title"] action:action keyEquivalent:@""];
+            item.target = action != NULL ? target : nil;
+            item.representedObject = spec[@"rep"];
+            [menu addItem:item];
+        }
+    }
+    for (NSUInteger i = 0; i < specs.count; i++) {
+        NSMenuItem *item = [menu itemAtIndex:(NSInteger)i];
+        NSDictionary<NSString *, id> *spec = specs[i];
+        if (![item.title isEqualToString:spec[@"title"]]) {
+            item.title = spec[@"title"];
+        }
+        NSControlStateValue state = [spec[@"state"] integerValue];
+        if (item.state != state) {
+            item.state = state;
+        }
+        BOOL enabled = spec[@"enabled"] != nil ? [spec[@"enabled"] boolValue] : YES;
+        if (item.enabled != enabled) {
+            item.enabled = enabled;
+        }
+    }
+    return !sameShape;
+}
+
 @implementation StreamViewController (MenuUI)
 
 - (NSString *)mouseModeDisplayNameForMode:(NSString *)mode {
@@ -1359,6 +1403,12 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
         });
         return;
     }
+    // The controller panel shows this menu's items (and submenus) in its own window. Emptying
+    // and refilling them under it would leave it on orphaned levels, and the panel rebuilds
+    // the menu itself every time it opens.
+    if (ControllerMenuPanel.shared.isPresented) {
+        return;
+    }
     if (!self.streamMenu) {
         self.streamMenu = [[NSMenu alloc] initWithTitle:@"StreamMenu"];
     }
@@ -2032,55 +2082,52 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     return item;
 }
 
-// Replaces the items of the Display Scale submenu with the current snapshot. Main thread.
+// Brings the Display Scale submenu in line with the current snapshot, in place when the choices
+// are the same (see MLSyncMenuItems). Main thread.
 - (void)populateRemoteDisplayScaleMenu:(NSMenu *)submenu {
-    [submenu removeAllItems];
-
+    NSMutableArray<NSDictionary<NSString *, id> *> *specs = [NSMutableArray array];
     void (^addNote)(NSString *) = ^(NSString *text) {
-        NSMenuItem *note = [[NSMenuItem alloc] initWithTitle:text action:nil keyEquivalent:@""];
-        note.enabled = NO;
-        [submenu addItem:note];
+        [specs addObject:@{ @"title": text, @"enabled": @NO, @"state": @(NSControlStateValueOff) }];
     };
 
     MLRemoteDisplayScale *scale = self.remoteDisplayScale;
     if (scale == nil) {
         addNote(MLString(@"Display scale is unavailable", nil));
-        return;
-    }
+    } else {
+        // Read the "still asking" flag before the support state: the query clears the flag only
+        // after it has stored its result, so a NO here means the support value below is final.
+        BOOL awaiting = scale.awaitingFirstQuery;
+        MLRemoteDisplayScaleSupport support = scale.support;
 
-    // Read the "still asking" flag before the support state: the query clears the flag only
-    // after it has stored its result, so a NO here means the support value below is final.
-    BOOL awaiting = scale.awaitingFirstQuery;
-    MLRemoteDisplayScaleSupport support = scale.support;
-
-    if (support == MLRemoteDisplayScaleSupportAvailable) {
-        NSInteger current = scale.currentPercent;
-        NSInteger recommended = scale.recommendedPercent;
-        for (NSNumber *percent in scale.supportedPercents) {
-            BOOL isRecommended = recommended > 0 && percent.integerValue == recommended;
-            NSString *percentTitle = isRecommended
-                ? [NSString stringWithFormat:MLString(@"%d%% (Recommended)", nil), (int)percent.integerValue]
-                : [NSString stringWithFormat:@"%ld%%", (long)percent.integerValue];
-            NSMenuItem *percentItem = [[NSMenuItem alloc] initWithTitle:percentTitle
-                                                                 action:@selector(selectRemoteDisplayScaleFromMenu:)
-                                                          keyEquivalent:@""];
-            percentItem.target = self;
-            // -1 remembers "Recommended" (follow the host's value) instead of a fixed percentage.
-            percentItem.representedObject = isRecommended ? @(-1) : percent;
-            percentItem.state = percent.integerValue == current ? NSControlStateValueOn : NSControlStateValueOff;
-            [submenu addItem:percentItem];
-        }
-        if (submenu.numberOfItems == 0) {
+        if (support == MLRemoteDisplayScaleSupportAvailable) {
+            NSInteger current = scale.currentPercent;
+            NSInteger recommended = scale.recommendedPercent;
+            for (NSNumber *percent in scale.supportedPercents) {
+                BOOL isRecommended = recommended > 0 && percent.integerValue == recommended;
+                NSString *percentTitle = isRecommended
+                    ? [NSString stringWithFormat:MLString(@"%d%% (Recommended)", nil), (int)percent.integerValue]
+                    : [NSString stringWithFormat:@"%ld%%", (long)percent.integerValue];
+                [specs addObject:@{
+                    @"title": percentTitle,
+                    @"action": NSStringFromSelector(@selector(selectRemoteDisplayScaleFromMenu:)),
+                    // -1 remembers "Recommended" (follow the host's value) instead of a fixed percentage.
+                    @"rep": isRecommended ? @(-1) : percent,
+                    @"state": @(percent.integerValue == current ? NSControlStateValueOn : NSControlStateValueOff),
+                }];
+            }
+            if (specs.count == 0) {
+                addNote(MLString(@"Display scale is unavailable", nil));
+            }
+        } else if (support == MLRemoteDisplayScaleSupportUnavailable) {
+            addNote(MLString(@"This host does not support display scaling", nil));
+        } else if (awaiting) {
+            addNote(MLString(@"Loading…", nil));
+        } else {
+            // The last query failed in a way that may pass; the next refresh retries.
             addNote(MLString(@"Display scale is unavailable", nil));
         }
-    } else if (support == MLRemoteDisplayScaleSupportUnavailable) {
-        addNote(MLString(@"This host does not support display scaling", nil));
-    } else if (awaiting) {
-        addNote(MLString(@"Loading…", nil));
-    } else {
-        // The last query failed in a way that may pass; the next refresh retries.
-        addNote(MLString(@"Display scale is unavailable", nil));
     }
+    MLSyncMenuItems(submenu, specs, self);
 }
 
 - (void)remoteDisplayScaleOptionsDidChange {
@@ -2100,8 +2147,7 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
         [self populateRemoteDisplayScaleMenu:menu];
         [self.remoteDisplayScale refreshOptionsIfStale];
     } else if (menu == self.audioOutputMenu) {
-        [self populateAudioOutputMenu:menu];
-    } else if (menu == self.audioMenu) {
+        [self populateAudioOutputMenu:menu];    } else if (menu == self.audioMenu) {
         [menu itemWithTag:MLAudioMenuPassthroughNoteTag].hidden = ![self.streamMan.connection audioPassthroughActive];
     }
 }
@@ -2543,22 +2589,20 @@ static NSArray<NSDictionary<NSString *, id> *> *MLAudioOutputDevices(void) {
 
 // Fills the Audio Output submenu from the devices that exist right now. Main thread.
 - (void)populateAudioOutputMenu:(NSMenu *)menu {
-    [menu removeAllItems];
     AudioDeviceID current = MLAudioDefaultOutputDevice();
+    NSMutableArray<NSDictionary<NSString *, id> *> *specs = [NSMutableArray array];
     for (NSDictionary<NSString *, id> *entry in MLAudioOutputDevices()) {
-        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:entry[@"name"]
-                                                      action:@selector(selectAudioOutputFromMenu:)
-                                               keyEquivalent:@""];
-        item.target = self;
-        item.representedObject = entry[@"id"];
-        item.state = [entry[@"id"] unsignedIntValue] == current ? NSControlStateValueOn : NSControlStateValueOff;
-        [menu addItem:item];
+        [specs addObject:@{
+            @"title": entry[@"name"],
+            @"action": NSStringFromSelector(@selector(selectAudioOutputFromMenu:)),
+            @"rep": entry[@"id"],
+            @"state": @([entry[@"id"] unsignedIntValue] == current ? NSControlStateValueOn : NSControlStateValueOff),
+        }];
     }
-    if (menu.numberOfItems == 0) {
-        NSMenuItem *none = [[NSMenuItem alloc] initWithTitle:MLString(@"No audio output devices", nil) action:nil keyEquivalent:@""];
-        none.enabled = NO;
-        [menu addItem:none];
+    if (specs.count == 0) {
+        [specs addObject:@{ @"title": MLString(@"No audio output devices", nil), @"enabled": @NO, @"state": @(NSControlStateValueOff) }];
     }
+    MLSyncMenuItems(menu, specs, self);
 }
 
 // Sets the system default output device (like the menu-bar sound picker) and makes the stream's

@@ -863,7 +863,7 @@ final class ControllerChoiceTarget: NSObject {
     case .right: model.right()
     case .accept: model.accept()
     case .back:
-      if !model.pop() {
+      if !model.pop(source: "back") {
         dismiss(performed: false)
       }
     case .previousColumn: model.moveFocus(by: -6)
@@ -878,6 +878,7 @@ final class ControllerChoiceTarget: NSObject {
 
   private func dismiss(performed: Bool) {
     guard let panel else { return }
+    LogMessage(LOG_I, "[diag] controller-panel closed performed=\(performed) depth=\(model.levels.count)")
     if let closeObserver {
       NotificationCenter.default.removeObserver(closeObserver)
     }
@@ -981,7 +982,7 @@ final class ControllerMenuModel: ObservableObject {
     if let row = focusedRow, row.kind == .slider {
       adjustSlider(row, forward: false)
     } else {
-      _ = pop()
+      _ = pop(source: "left")
     }
   }
 
@@ -1013,9 +1014,11 @@ final class ControllerMenuModel: ObservableObject {
     _ = level
   }
 
-  func pop() -> Bool {
+  /// source names the input that went back, so a log shows what moved the user up a level.
+  func pop(source: String) -> Bool {
     guard levels.count > 1 else { return false }
-    levels.removeLast()
+    let closed = levels.removeLast()
+    LogMessage(LOG_I, "[diag] controller-panel level popped by \(source): closed=\"\(closed.title)\" depth=\(levels.count)")
     onLayoutChange?()
     return true
   }
@@ -1035,6 +1038,7 @@ final class ControllerMenuModel: ObservableObject {
   private func push(_ row: Row) {
     guard let level = levels.last, let item = level.menu.item(at: row.index), let submenu = item.submenu else { return }
     submenu.update()
+    LogMessage(LOG_I, "[diag] controller-panel level pushed: \"\(row.title)\" items=\(submenu.numberOfItems) depth=\(levels.count + 1)")
     levels.append(Level(menu: submenu, title: row.title, selectedIndex: -1, firstIndex: 0, focus: -1))
     levels[levels.count - 1].focus = initialFocus()
     onLayoutChange?()

@@ -125,10 +125,16 @@ static const uint32_t UIDirections = UIUp | UIDown | UILeft | UIRight;
 }
 
 - (uint32_t)buttonsFor:(GCExtendedGamepad *)pad {
-    return ((pad.dpad.up.pressed || pad.leftThumbstick.yAxis.value > 0.6f) ? UIUp : 0) |
-        ((pad.dpad.down.pressed || pad.leftThumbstick.yAxis.value < -0.6f) ? UIDown : 0) |
-        ((pad.dpad.left.pressed || pad.leftThumbstick.xAxis.value < -0.6f) ? UILeft : 0) |
-        ((pad.dpad.right.pressed || pad.leftThumbstick.xAxis.value > 0.6f) ? UIRight : 0) |
+    // A stick pushed down also reads a little left or right. Taking both axes sent "down" and
+    // "left" together, and left means back in the menus: scrolling a list popped it to its parent.
+    // Only the stronger axis of the stick counts; the d-pad has no such overlap.
+    const float stickX = pad.leftThumbstick.xAxis.value;
+    const float stickY = pad.leftThumbstick.yAxis.value;
+    const BOOL stickHorizontal = fabsf(stickX) > fabsf(stickY);
+    return ((pad.dpad.up.pressed || (!stickHorizontal && stickY > 0.6f)) ? UIUp : 0) |
+        ((pad.dpad.down.pressed || (!stickHorizontal && stickY < -0.6f)) ? UIDown : 0) |
+        ((pad.dpad.left.pressed || (stickHorizontal && stickX < -0.6f)) ? UILeft : 0) |
+        ((pad.dpad.right.pressed || (stickHorizontal && stickX > 0.6f)) ? UIRight : 0) |
         (pad.buttonA.pressed ? UIA : 0) |
         (pad.buttonB.pressed ? UIB : 0) |
         (pad.buttonX.pressed ? UIX : 0) |
