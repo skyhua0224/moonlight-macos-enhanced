@@ -2108,6 +2108,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         self.edgeMenuPointerInside = YES;
         [self cancelEdgeMenuAutoCollapse];
         [self setEdgeMenuButtonExpanded:YES animated:YES];
+        [self logControlOrbStateWithReason:@"area-enter"];
         return;
     }
 
@@ -2136,6 +2137,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         if (!self.edgeMenuPointerInside) {
             [self scheduleEdgeMenuAutoCollapse];
         }
+        [self logControlOrbStateWithReason:@"area-exit"];
         return;
     }
 

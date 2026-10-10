@@ -780,6 +780,25 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     [self scheduleEdgeMenuAutoCollapseAfterDelay:MLEdgeMenuAutoCollapseDelay];
 }
 
+// One line each time the orb's hover / capture state changes (menu open and close always log).
+// When the orb "does not react", the last line shows which flag was holding it: a hover that
+// never reached the orb leaves no line at all, one that did shows whether the mouse was released.
+- (void)logControlOrbStateWithReason:(NSString *)reason {
+    NSRect frame = self.edgeMenuButton.frame;
+    NSString *state = [NSString stringWithFormat:@"expanded=%d inside=%d release=%d menu=%d dragging=%d captured=%d remote=%d hidden=%d key=%d active=%d y=%.0f-%.0f",
+                       self.edgeMenuButtonExpanded ? 1 : 0, self.edgeMenuPointerInside ? 1 : 0,
+                       self.edgeMenuTemporaryReleaseActive ? 1 : 0, self.edgeMenuMenuVisible ? 1 : 0,
+                       self.edgeMenuDragging ? 1 : 0, self.isMouseCaptured ? 1 : 0,
+                       self.isRemoteDesktopMode ? 1 : 0, self.edgeMenuButton.hidden ? 1 : 0,
+                       self.view.window.isKeyWindow ? 1 : 0, NSApp.isActive ? 1 : 0,
+                       NSMinY(frame), NSMaxY(frame)];
+    if (![reason hasPrefix:@"menu-"] && [state isEqualToString:self.edgeMenuStateLogLast]) {
+        return;
+    }
+    self.edgeMenuStateLogLast = state;
+    Log(LOG_I, @"[diag] control-orb state reason=%@ %@", reason, state);
+}
+
 // Shows the whole ball for a moment, then lets it slide back to the edge.
 // The collapse is skipped while the pointer is on it; leaving reschedules it.
 - (void)revealEdgeMenuTemporarilyAnimated:(BOOL)animated {
@@ -796,6 +815,7 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
                                                                        block:^(__unused NSTimer *timer) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || strongSelf.edgeMenuPointerInside || strongSelf.edgeMenuDragging || strongSelf.edgeMenuMenuVisible) {
+            [strongSelf logControlOrbStateWithReason:@"collapse-skipped"];
             return;
         }
 
@@ -1170,6 +1190,7 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
         }
         [strongSelf refreshMouseMovedAcceptanceState];
         [strongSelf updateEdgeMenuButtonAppearance];
+        [strongSelf logControlOrbStateWithReason:hovering ? @"hover-enter" : @"hover-exit"];
     };
     [self.streamView raiseSubviewAboveContent:self.edgeMenuButton];
     [self startEdgeMenuFrameWatchdogIfNeeded];
@@ -1302,6 +1323,7 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     }
 
     self.edgeMenuMenuVisible = YES;
+    [self logControlOrbStateWithReason:@"menu-open"];
     [self refreshMouseMovedAcceptanceState];
     if (sourceView == self.edgeMenuButton && event != nil) {
         [NSMenu popUpContextMenu:menu withEvent:event forView:sourceView];
@@ -1309,6 +1331,7 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
         [menu popUpMenuPositioningItem:nil atLocation:p inView:sourceView];
     }
     self.edgeMenuMenuVisible = NO;
+    [self logControlOrbStateWithReason:@"menu-closed"];
     // Mouse events that were delivered around the menu's modal tracking belong
     // to the menu, not to the ball: forget the press that opened it.
     [self.edgeMenuButton cancelPendingInteraction];
