@@ -1215,7 +1215,14 @@
 "Adaptive Bitrate" = "Adaptive Bitrate";
 "Adaptive Bitrate hint" = "Measures bandwidth before the stream starts to cap the bitrate, then lets the host adjust it during the stream based on packet loss and latency. Requires Foundation Sunshine.";
 "Precision Touchpad" = "Precision Touchpad";
-"Precision Touchpad Hint" = "Send the trackpad's multi-finger touches to a Windows 11 host as a precision touchpad. Windows then handles two-finger scroll, pinch and three- or four-finger gestures. Best for desktop use rather than games. Needs a Windows 11 host that supports it; otherwise normal mouse input is used.";
+"Precision Touchpad Hint" = "Send the trackpad's multi-finger touches to a Windows 11 host as a precision touchpad, so Windows handles scrolling, pinch and three- or four-finger gestures itself. Block mode sends every finger to Windows and stops the Mac from also moving, clicking or scrolling with the same fingers. Use-both mode keeps a single finger on the normal Mac pointer and clicks; as soon as a second finger lands, the whole gesture goes to Windows until all fingers lift. Needs a Windows 11 host that supports it; otherwise normal mouse input is used.";
+"Precision Touchpad Off" = "Off";
+"Precision Touchpad Block" = "On – block macOS trackpad pointer events";
+"Precision Touchpad Both" = "On – use both";
+"DualSense Touchpad Output" = "DualSense Touchpad Output";
+"DualSense Touchpad Output detail" = "Controller touchpad sends the pad as game controller touch or a Mac-style trackpad, as set above. Windows precision touchpad sends its fingers and click as a precision touchpad instead, and needs a Windows 11 host that supports it; otherwise the controller touchpad is used.";
+"DualSense Touchpad Output Controller" = "Controller touchpad (default)";
+"DualSense Touchpad Output Precision" = "Windows precision touchpad";
 "Input Method Text" = "Input Method Text";
 "Input Method Text Hint" = "While a Mac input method such as Pinyin is active, compose text locally and send the committed text to the host as UTF-8. Plain keys and shortcuts still go to the host as key events.";
 "Live stream change failed, reconnecting" = "Live change not applied, reconnecting";

@@ -11,6 +11,7 @@
 #import "StreamConfiguration.h"
 
 @class OnScreenControls;
+@class MLDualSenseTouchpad;
 
 @protocol InputPresenceDelegate <NSObject>
 
@@ -30,6 +31,8 @@
 @property(nonatomic) BOOL gamepadMouseModeEnabled;
 @property(nonatomic) BOOL gamepadMouseModeLongPressMenuEnabled;
 @property(nonatomic) BOOL nativeTouchpadEnabled;
+// Sends DualSense touchpads to the host as a Windows precision touchpad when the host supports it.
+@property(nonatomic, readonly) MLDualSenseTouchpad *dualSenseTouchpad;
 @property(nonatomic) CGFloat gamepadTrackpadPointerSensitivity;
 @property(nonatomic) CGFloat gamepadTrackpadScrollSpeed;
 @property(nonatomic) BOOL gamepadTrackpadReverseScroll;

@@ -176,6 +176,7 @@ struct VideoCapabilityMatrix: Equatable {
 class SettingsModel: ObservableObject {
   static let globalHostId = "__global__"
   static let controllerNativeTouchpadKeyPrefix = "settings.controller.nativeTouchpad."
+  static let controllerDualSensePrecisionTouchpadKeyPrefix = "settings.controller.dualSensePrecisionTouchpad."
   static let controllerDeadzoneKeyPrefix = "settings.controller.deadzone."
   static let controllerHapticsModeKeyPrefix = "settings.controller.hapticsMode."
   static let controllerMotionModeKeyPrefix = "settings.controller.motionMode."
@@ -1068,6 +1069,18 @@ class SettingsModel: ObservableObject {
         userInfo: ["hostId": hostId, "native": nativeTouchpad])
     }
   }
+  // Send the DualSense touchpad to the host as a Windows precision touchpad instead of controller touch input.
+  @Published var dualSensePrecisionTouchpad: Bool {
+    didSet {
+      guard !isLoading else { return }
+      let hostId = selectedHost?.id ?? Self.globalHostId
+      UserDefaults.standard.set(
+        dualSensePrecisionTouchpad,
+        forKey: Self.controllerDualSensePrecisionTouchpadKeyPrefix + hostId)
+      NotificationCenter.default.post(name: Notification.Name("ControllerDualSensePrecisionTouchpadDidChange"), object: nil,
+        userInfo: ["hostId": hostId, "precision": dualSensePrecisionTouchpad])
+    }
+  }
   @Published var controllerDeadzone: Double {
     didSet {
       guard !isLoading else { return }
@@ -1119,11 +1132,12 @@ class SettingsModel: ObservableObject {
     }
   }
   // Send the trackpad's raw multi-finger contacts so Windows sees a precision touchpad.
-  @Published var hostPrecisionTouchpad: Bool {
+  // 0 off, 1 touchpad only (blocks the Mac pointer path), 2 both.
+  @Published var hostPrecisionTouchpadMode: Int {
     didSet {
       guard !isLoading else { return }
       saveSettings()
-      postMouseSettingsChanged("hostPrecisionTouchpad")
+      postMouseSettingsChanged("hostPrecisionTouchpadMode")
     }
   }
   // Compose text with the Mac input method and send the committed text as UTF-8.
@@ -1592,6 +1606,7 @@ class SettingsModel: ObservableObject {
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
     nativeTouchpad = true
+    dualSensePrecisionTouchpad = false
     controllerDeadzone = Self.defaultControllerDeadzone
     selectedControllerHapticsMode = Self.defaultControllerHapticsMode
     selectedControllerMotionMode = Self.defaultControllerMotionMode
@@ -1599,7 +1614,7 @@ class SettingsModel: ObservableObject {
     selectedControllerVirtualType = Self.defaultControllerVirtualType
     controllerCalibration = .default
     gamepadMouseModeLongPressMenu = Self.defaultGamepadMouseModeLongPressMenu
-    hostPrecisionTouchpad = Self.defaultHostPrecisionTouchpad
+    hostPrecisionTouchpadMode = Self.defaultHostPrecisionTouchpadMode
     imeTextInput = Self.defaultImeTextInput
     mouseMode = Self.defaultMouseMode
     selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)

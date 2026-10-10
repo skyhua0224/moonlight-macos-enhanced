@@ -14,6 +14,7 @@
 #import "DataManager.h"
 #import "HIDSupport.h"
 #import "Ds5HapticsAudioRenderer.h"
+#import "MLDualSenseTouchpad.h"
 #include "../../modules/controller-feedback/ControllerFeedbackEnvelope.h"
 #include "Limelight.h"
 #include "Limelight-internal.h"
@@ -277,6 +278,13 @@ static void FlushControllerTrackpad(ControllerSupport *support, Controller *cont
 static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controller *controller,
                                            uint32_t pointerId, BOOL active,
                                            float x, float y, BOOL hasContact) {
+    if (controller != nil && [support.dualSenseTouchpad claimsTouchpad]) {
+        // Windows precision touchpad: no controller touch events, no pointer or scroll output.
+        if (support.shouldSendInputEvents) {
+            [support.dualSenseTouchpad setContact:(pointerId & 1u) active:hasContact x:x y:y player:controller.playerIndex];
+        }
+        return hasContact;
+    }
     PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(support);
     if (controller == nil || !support.shouldSendInputEvents || inputCtx == NULL) {
         return active;
@@ -366,6 +374,15 @@ static void QueueControllerTouchSnapshot(ControllerSupport *support, Controller 
         float y[2] = {primary.yAxis.value, secondary.yAxis.value};
         BOOL touching[2] = {fabsf(x[0]) > 0.001f || fabsf(y[0]) > 0.001f,
                             fabsf(x[1]) > 0.001f || fabsf(y[1]) > 0.001f};
+        if ([current.dualSenseTouchpad claimsTouchpad]) {
+            if (current.shouldSendInputEvents) {
+                for (NSUInteger finger = 0; finger < 2; finger++) {
+                    [current.dualSenseTouchpad setContact:finger active:touching[finger]
+                                                        x:x[finger] y:y[finger] player:controller.playerIndex];
+                }
+            }
+            return;
+        }
         if (ControllerTouchpadUsesMouse(current, controller)) {
             // Axis handlers can fire between the X and Y resets on release.
             // Sample the complete profile after that batch, then update both
@@ -634,17 +651,21 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     NSMutableDictionary<NSNumber *, NSData *> *_pendingHaptics;
     BOOL _hapticsDrainScheduled;
     id _touchpadSettingsObserver;
+    id _dualSensePrecisionObserver;
+    MLDualSenseTouchpad *_dualSenseTouchpad;
     NSTimer *_controllerMaintenanceTimer;
     NSUInteger _maintenanceTicks;
 
 }
 
 @synthesize shouldSendInputEvents = _shouldSendInputEvents;
+@synthesize dualSenseTouchpad = _dualSenseTouchpad;
 
 - (void)setShouldSendInputEvents:(BOOL)enabled {
     BOOL wasEnabled = _shouldSendInputEvents;
     _shouldSendInputEvents = enabled;
     if (wasEnabled && !enabled) {
+        [_dualSenseTouchpad releaseAll];
         for (Controller *controller in _controllers.allValues) {
             ControllerMenuGesture gesture = controller.menuGesture;
             ControllerMenuGestureInterrupt(&gesture, controller.gamepad.extendedGamepad.buttonMenu.pressed);
@@ -1540,6 +1561,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                         [self evaluateControllerShortcuts:touchController];
                         if (ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(touchController.clientShortcutRouting)) & TOUCHPAD_FLAG)
                             pressed = NO;
+                        if ([self.dualSenseTouchpad claimsTouchpad]) {
+                            // The physical click rides on the precision touchpad contacts instead of a controller button.
+                            if (self.shouldSendInputEvents) {
+                                [self.dualSenseTouchpad setButtonPressed:pressed player:touchController.playerIndex];
+                            }
+                            return;
+                        }
                         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
                         if (inputCtx != NULL) {
                             if (ControllerTouchpadUsesMouse(self, touchController)) {
@@ -1928,6 +1956,40 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             Log(LOG_I, @"[controller-touch] Live setting native=%d", me.nativeTouchpadEnabled);
         }];
 
+    _dualSenseTouchpad = [[MLDualSenseTouchpad alloc] init];
+    _dualSenseTouchpad.contextProvider = ^PML_INPUT_STREAM_CONTEXT {
+        ControllerSupport *me = weakSettingsSelf;
+        PML_INPUT_STREAM_CONTEXT ctx = me != nil ? ControllerInputContext(me) : NULL;
+        return (ctx != NULL && LiInputContextIsInitialized(ctx)) ? ctx : NULL;
+    };
+    _dualSenseTouchpad.enabled = streamConfig.dualSensePrecisionTouchpad;
+    Log(LOG_I, @"[touchpad] ds5 output=%@", streamConfig.dualSensePrecisionTouchpad ? @"precision" : @"controller");
+    _dualSensePrecisionObserver = [[NSNotificationCenter defaultCenter]
+        addObserverForName:@"ControllerDualSensePrecisionTouchpadDidChange" object:nil queue:NSOperationQueue.mainQueue
+        usingBlock:^(NSNotification *note) {
+            ControllerSupport *me = weakSettingsSelf;
+            NSString *host = note.userInfo[@"hostId"];
+            if (!me || (![host isEqualToString:sessionHostId] && ![host isEqualToString:@"__global__"])) return;
+            BOOL precision = [note.userInfo[@"precision"] boolValue];
+            PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(me);
+            // Whatever the previous output still holds on the host is let go before the switch.
+            for (Controller *controller in me->_controllers.allValues) {
+                if (input && controller.trackpadMouseButton)
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
+                if (input && controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, controller.playerIndex,
+                    LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
+                if (input && controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, controller.playerIndex,
+                    LI_TOUCH_EVENT_UP, controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0);
+                if (input && (controller.lastButtonFlags & TOUCHPAD_FLAG) != 0) {
+                    [me clearButtonFlag:controller flags:TOUCHPAD_FLAG];
+                    [me updateFinished:controller];
+                }
+                ResetControllerTrackpadMouseState(controller);
+            }
+            me->_dualSenseTouchpad.enabled = precision;
+            Log(LOG_I, @"[touchpad] ds5 output=%@ (live setting)", precision ? @"precision" : @"controller");
+        }];
+
     _controllerMaintenanceTimer = [NSTimer timerWithTimeInterval:0.1 target:self
         selector:@selector(controllerMaintenance:) userInfo:nil repeats:YES];
     [[NSRunLoop mainRunLoop] addTimer:_controllerMaintenanceTimer forMode:NSRunLoopCommonModes];
@@ -2006,6 +2068,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
         // Unset the GCController on this object (in case it is the OSC, which will persist)
         Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+
+        // Lift the pad's fingers on the host before the controller goes away
+        [self->_dualSenseTouchpad releasePlayer:controller.playerIndex];
 
         // Stop haptics on this controller
         [self cleanupControllerHaptics:limeController];
@@ -2087,6 +2152,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 -(void) cleanup
 {
+    [_dualSenseTouchpad releaseAll];
+    _dualSenseTouchpad.enabled = NO;
+    [[NSNotificationCenter defaultCenter] removeObserver:_dualSensePrecisionObserver];
+    _dualSensePrecisionObserver = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:_touchpadSettingsObserver];
     _touchpadSettingsObserver = nil;
     [_controllerMaintenanceTimer invalidate];

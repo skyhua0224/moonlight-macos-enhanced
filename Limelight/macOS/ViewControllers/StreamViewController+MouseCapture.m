@@ -1822,7 +1822,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return;
     }
 
-    if ([setting isEqualToString:@"hostPrecisionTouchpad"]) {
+    if ([setting isEqualToString:@"hostPrecisionTouchpadMode"]) {
         [self configurePrecisionTouchpadInput];
         return;
     }

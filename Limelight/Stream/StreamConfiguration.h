@@ -100,6 +100,8 @@
 @property(nonatomic) BOOL gamepadMouseMode;
 @property(nonatomic) BOOL gamepadMouseModeLongPressMenu;
 @property(nonatomic) BOOL nativeTouchpad;
+// Send the DualSense touchpad to the host as a Windows precision touchpad.
+@property(nonatomic) BOOL dualSensePrecisionTouchpad;
 @property(nonatomic) CGFloat gamepadTrackpadPointerSensitivity;
 @property(nonatomic) CGFloat gamepadTrackpadScrollSpeed;
 @property(nonatomic) BOOL gamepadTrackpadReverseScroll;

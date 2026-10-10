@@ -6,6 +6,7 @@
 //
 
 #import "StreamViewController_Internal.h"
+#import "MLPrecisionTouchpad.h"
 
 static const NSUInteger MLMaxImeCommitLength = 4096;
 
@@ -14,8 +15,10 @@ static const NSUInteger MLMaxImeCommitLength = 4096;
 #pragma mark - Precision touchpad
 
 - (void)configurePrecisionTouchpadInput {
-    BOOL enabled = [SettingsClass hostPrecisionTouchpadFor:self.app.host.uuid];
+    NSInteger mode = [SettingsClass hostPrecisionTouchpadModeFor:self.app.host.uuid];
+    BOOL enabled = mode == MLPrecisionTouchpadModeBlock || mode == MLPrecisionTouchpadModeBoth;
     [self.hidSupport refreshPrecisionTouchpadConfiguration];
+    Log(LOG_I, @"[touchpad] mode=%@", !enabled ? @"off" : (mode == MLPrecisionTouchpadModeBoth ? @"both" : @"block"));
 
     StreamViewMac *streamView = self.streamView;
     if (streamView == nil) {

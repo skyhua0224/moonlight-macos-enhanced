@@ -118,6 +118,7 @@
 				Input/ControllerSupport.m,
 				Input/CoreHIDMouseDriver.swift,
 				Input/HapticContext.m,
+				Input/MLDualSenseTouchpad.m,
 				Input/MLPrecisionTouchpad.m,
 				Input/HIDSupport.m,
 				"Input/HIDSupport+Pointer.m",

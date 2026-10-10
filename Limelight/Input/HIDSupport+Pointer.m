@@ -1021,7 +1021,13 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)refreshPrecisionTouchpadConfiguration {
-    self.precisionTouchpad.enabled = self.host.uuid != nil && [SettingsClass hostPrecisionTouchpadFor:self.host.uuid];
+    MLPrecisionTouchpadMode mode = MLPrecisionTouchpadModeOff;
+    if (self.host.uuid != nil) {
+        NSInteger stored = [SettingsClass hostPrecisionTouchpadModeFor:self.host.uuid];
+        mode = (stored == MLPrecisionTouchpadModeBlock || stored == MLPrecisionTouchpadModeBoth)
+            ? (MLPrecisionTouchpadMode)stored : MLPrecisionTouchpadModeOff;
+    }
+    self.precisionTouchpad.mode = mode;
 }
 
 - (void)handleTrackpadTouchesEvent:(NSEvent *)event inView:(NSView *)view {

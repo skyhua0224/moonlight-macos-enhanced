@@ -111,6 +111,8 @@ struct Settings: Encodable, Decodable {
   let gamepadMouseMode: Bool?
   let gamepadMouseModeLongPressMenu: Bool?
   let hostPrecisionTouchpad: Bool?
+  // 0 off, 1 touchpad only (block pointer), 2 both. Older settings only have the Bool above.
+  var hostPrecisionTouchpadMode: Int? = nil
   let imeTextInput: Bool?
   let mouseMode: Int?
   let pointerSensitivity: CGFloat?
@@ -260,6 +262,7 @@ struct Settings: Encodable, Decodable {
       gamepadMouseMode: gamepadMouseMode,
       gamepadMouseModeLongPressMenu: gamepadMouseModeLongPressMenu,
       hostPrecisionTouchpad: hostPrecisionTouchpad,
+      hostPrecisionTouchpadMode: hostPrecisionTouchpadMode,
       imeTextInput: imeTextInput,
       mouseMode: mouseMode,
       pointerSensitivity: pointerSensitivity,
@@ -515,6 +518,7 @@ extension SettingsClass {
       gamepadMouseMode: settings.gamepadMouseMode,
       gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
       hostPrecisionTouchpad: settings.hostPrecisionTouchpad,
+      hostPrecisionTouchpadMode: settings.hostPrecisionTouchpadMode,
       imeTextInput: settings.imeTextInput,
       mouseMode: resolvedMouseMode,
       pointerSensitivity: settings.pointerSensitivity,

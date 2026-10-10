@@ -6,7 +6,6 @@
 #import "MLPrecisionTouchpad.h"
 #import "Logger.h"
 
-#define MLTouchpadMaxContacts 5
 // Pointer and click events derived from a touch arrive a little after the touch itself.
 #define MLTouchpadLingerMs 150
 // Android's defaults; used when the reported pad size is implausible.
@@ -15,36 +14,71 @@
 #define MLTouchpadMinMm 40
 #define MLTouchpadMaxMm 200
 
-typedef struct {
-    uint8_t count;
-    uint8_t types[MLTouchpadMaxContacts];
-    uint32_t ids[MLTouchpadMaxContacts];
-    float x[MLTouchpadMaxContacts];
-    float y[MLTouchpadMaxContacts];
-    float pressure[MLTouchpadMaxContacts];
-    uint16_t widthMm;
-    uint16_t heightMm;
-    uint8_t buttonState;
-} MLTouchpadFrame;
+#pragma mark - Shared wire helpers
+
+BOOL MLTouchpadHostSupport(uint32_t featureFlags, BOOL *useFrames) {
+    BOOL frames = (featureFlags & LI_FF_TOUCHPAD_FRAME_EVENTS) != 0;
+    if (useFrames != NULL) {
+        *useFrames = frames;
+    }
+    return frames || (featureFlags & LI_FF_TOUCHPAD_EVENTS) != 0;
+}
+
+int MLTouchpadSendFrame(PML_INPUT_STREAM_CONTEXT ctx, const MLTouchpadFrame *frame, BOOL useFrames) {
+    if (useFrames) {
+        return LiSendTouchpadFrameEventCtx(ctx, frame->count, frame->types, frame->ids, frame->x, frame->y,
+                                           frame->pressure, LI_ROT_UNKNOWN, frame->widthMm, frame->heightMm,
+                                           frame->buttonState);
+    }
+    int result = 0;
+    for (uint8_t i = 0; i < frame->count && result == 0; i++) {
+        result = LiSendTouchpadEventCtx(ctx, frame->types[i], frame->ids[i], frame->x[i], frame->y[i],
+                                        frame->pressure[i], 0.0f, 0.0f, LI_ROT_UNKNOWN,
+                                        frame->widthMm, frame->heightMm, frame->buttonState);
+    }
+    return result;
+}
+
+int MLTouchpadSendCancelAll(PML_INPUT_STREAM_CONTEXT ctx, uint16_t widthMm, uint16_t heightMm) {
+    return LiSendTouchpadEventCtx(ctx, LI_TOUCH_EVENT_CANCEL_ALL, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                  LI_ROT_UNKNOWN, widthMm, heightMm, 0);
+}
+
+static NSString *MLPrecisionTouchpadModeName(MLPrecisionTouchpadMode mode) {
+    switch (mode) {
+        case MLPrecisionTouchpadModeBlock: return @"block";
+        case MLPrecisionTouchpadModeBoth: return @"both";
+        case MLPrecisionTouchpadModeOff: break;
+    }
+    return @"off";
+}
 
 @implementation MLPrecisionTouchpad {
     NSMutableDictionary<id, NSNumber *> *_pointerIds;
     // Last known position of each live pointer id, used for button-only frames.
     float _lastX[MLTouchpadMaxContacts];
     float _lastY[MLTouchpadMaxContacts];
+    // Slot is taken (finger on the pad, or leaving in the event being processed).
     BOOL _pointerLive[MLTouchpadMaxContacts];
+    // The host knows about this contact.
+    BOOL _pointerSent[MLTouchpadMaxContacts];
     uint16_t _widthMm;
     uint16_t _heightMm;
+    // Fingers on the pad, whether or not the host sees them.
     int _liveContacts;
+    // The host is receiving this gesture's contacts, so the Mac pointer path stays quiet.
+    BOOL _sessionActive;
     uint64_t _lastActivityMs;
     uint32_t _consumedButtons;
+    // Buttons that went down on the normal pointer path (single finger in "both" mode).
+    uint32_t _localButtons;
     BOOL _physicalButtonDown;
     BOOL _supportKnown;
     BOOL _useFrames;
     BOOL _supported;
     BOOL _scrollSequenceSuppressed;
     uint64_t _lastSendErrorLogMs;
-    BOOL _enabled;
+    MLPrecisionTouchpadMode _mode;
 }
 
 - (instancetype)init {
@@ -57,27 +91,21 @@ typedef struct {
     return self;
 }
 
-- (BOOL)enabled {
+- (MLPrecisionTouchpadMode)mode {
     @synchronized (self) {
-        return _enabled;
+        return _mode;
     }
 }
 
-- (void)setEnabled:(BOOL)enabled {
-    BOOL needsReset = NO;
+- (void)setMode:(MLPrecisionTouchpadMode)mode {
     @synchronized (self) {
-        if (_enabled == enabled) {
+        if (_mode == mode) {
             return;
         }
-        _enabled = enabled;
-        if (!enabled) {
-            needsReset = YES;
-        }
+        _mode = mode;
     }
-    Log(LOG_I, @"[touchpad] precision touchpad %@", enabled ? @"enabled" : @"disabled");
-    if (needsReset) {
-        [self reset];
-    }
+    Log(LOG_I, @"[touchpad] trackpad mode changed to %@", MLPrecisionTouchpadModeName(mode));
+    [self reset];
 }
 
 #pragma mark - Support detection
@@ -93,8 +121,7 @@ typedef struct {
         return NO;
     }
     _supportKnown = YES;
-    _useFrames = (flags & LI_FF_TOUCHPAD_FRAME_EVENTS) != 0;
-    _supported = _useFrames || (flags & LI_FF_TOUCHPAD_EVENTS) != 0;
+    _supported = MLTouchpadHostSupport(flags, &_useFrames);
     if (_supported) {
         Log(LOG_I, @"[touchpad] host supports precision touchpad (flags=0x%x, %@)",
             flags, _useFrames ? @"frame events" : @"single contact events");
@@ -112,7 +139,7 @@ typedef struct {
     BOOL send = NO;
 
     @synchronized (self) {
-        if (!_enabled || ![self refreshSupportLocked]) {
+        if (_mode == MLPrecisionTouchpadModeOff || ![self refreshSupportLocked]) {
             return;
         }
 
@@ -152,16 +179,44 @@ typedef struct {
             return;
         }
 
-        // New contacts first, then the ones already down, then the ones leaving.
+        // Follow every finger first; whether the host sees them is decided afterwards.
+        int endedPointers[MLTouchpadMaxContacts];
+        uint8_t endedTypes[MLTouchpadMaxContacts];
+        int endedCount = 0;
+        for (NSTouch *touch in ups) {
+            NSNumber *mapped = _pointerIds[touch.identity];
+            if (mapped == nil || endedCount >= MLTouchpadMaxContacts) {
+                continue;
+            }
+            [_pointerIds removeObjectForKey:touch.identity];
+            if (_liveContacts > 0) {
+                _liveContacts -= 1;
+            }
+            endedPointers[endedCount] = mapped.intValue;
+            endedTypes[endedCount] = (touch.phase & NSTouchPhaseCancelled) ? LI_TOUCH_EVENT_CANCEL : LI_TOUCH_EVENT_UP;
+            endedCount += 1;
+        }
         for (NSTouch *touch in downs) {
-            [self appendTouch:touch type:LI_TOUCH_EVENT_DOWN toFrame:&frame];
+            [self trackTouchLocked:touch];
         }
         for (NSTouch *touch in moves) {
-            [self appendTouch:touch type:LI_TOUCH_EVENT_MOVE toFrame:&frame];
+            [self trackTouchLocked:touch];
         }
-        for (NSTouch *touch in ups) {
-            uint8_t type = (touch.phase & NSTouchPhaseCancelled) ? LI_TOUCH_EVENT_CANCEL : LI_TOUCH_EVENT_UP;
-            [self appendTouch:touch type:type toFrame:&frame];
+
+        [self updateSessionLocked];
+
+        if (_sessionActive || endedCount > 0) {
+            [self fillFrameLocked:&frame endedPointers:endedPointers endedTypes:endedTypes endedCount:endedCount];
+        }
+        // Slots of the fingers that just left can be reused from the next event on.
+        for (int i = 0; i < endedCount; i++) {
+            _pointerLive[endedPointers[i]] = NO;
+            _pointerSent[endedPointers[i]] = NO;
+        }
+
+        if (_liveContacts == 0 && _sessionActive) {
+            _sessionActive = NO;
+            _lastActivityMs = LiGetMillis();
         }
 
         if (frame.count == 0) {
@@ -188,18 +243,14 @@ typedef struct {
     return (uint16_t)lround(mm);
 }
 
-// Caller holds the lock.
-- (void)appendTouch:(NSTouch *)touch type:(uint8_t)type toFrame:(MLTouchpadFrame *)frame {
-    if (frame->count >= MLTouchpadMaxContacts) {
-        return;
-    }
-
+// Caller holds the lock. Maps the touch to a pointer id (introducing it when new) and remembers its position.
+- (void)trackTouchLocked:(NSTouch *)touch {
     id identity = touch.identity;
     NSNumber *mapped = _pointerIds[identity];
     int pointerId = -1;
     if (mapped != nil) {
         pointerId = mapped.intValue;
-    } else if (type != LI_TOUCH_EVENT_UP && type != LI_TOUCH_EVENT_CANCEL) {
+    } else {
         for (int candidate = 0; candidate < MLTouchpadMaxContacts; candidate++) {
             if (!_pointerLive[candidate]) {
                 pointerId = candidate;
@@ -211,37 +262,79 @@ typedef struct {
         }
         _pointerIds[identity] = @(pointerId);
         _pointerLive[pointerId] = YES;
+        _pointerSent[pointerId] = NO;
         _liveContacts += 1;
-        if (type == LI_TOUCH_EVENT_MOVE) {
-            // A contact we never saw begin (for example after a reset): introduce it.
-            type = LI_TOUCH_EVENT_DOWN;
-        }
-    } else {
-        return;
     }
 
     NSPoint position = touch.normalizedPosition;
     // AppKit's origin is the bottom left; the host expects the top left.
-    float x = (float)MIN(MAX(position.x, 0.0), 1.0);
-    float y = (float)MIN(MAX(1.0 - position.y, 0.0), 1.0);
+    _lastX[pointerId] = (float)MIN(MAX(position.x, 0.0), 1.0);
+    _lastY[pointerId] = (float)MIN(MAX(1.0 - position.y, 0.0), 1.0);
+}
 
+// Caller holds the lock. Decides when the host starts receiving the gesture.
+- (void)updateSessionLocked {
+    if (_sessionActive || _liveContacts == 0) {
+        return;
+    }
+    if (_mode == MLPrecisionTouchpadModeBlock) {
+        _sessionActive = YES;
+    } else if (_mode == MLPrecisionTouchpadModeBoth && _liveContacts >= 2 && _localButtons == 0) {
+        // A second finger turns the gesture over to Windows. With a button held on the normal path
+        // (dragging with a second finger) the gesture stays local so the drag keeps working.
+        _sessionActive = YES;
+    }
+}
+
+// Caller holds the lock. New contacts first, then the ones already down, then the ones leaving.
+- (void)fillFrameLocked:(MLTouchpadFrame *)frame
+          endedPointers:(const int *)endedPointers
+             endedTypes:(const uint8_t *)endedTypes
+             endedCount:(int)endedCount {
+    BOOL introduced[MLTouchpadMaxContacts] = {NO};
+    if (_sessionActive) {
+        for (int pid = 0; pid < MLTouchpadMaxContacts; pid++) {
+            if (_pointerLive[pid] && !_pointerSent[pid] && ![self isEndedPointer:pid in:endedPointers count:endedCount]) {
+                [self appendContact:frame type:LI_TOUCH_EVENT_DOWN pointerId:pid];
+                _pointerSent[pid] = YES;
+                introduced[pid] = YES;
+            }
+        }
+        for (int pid = 0; pid < MLTouchpadMaxContacts; pid++) {
+            if (_pointerLive[pid] && _pointerSent[pid] && !introduced[pid] &&
+                ![self isEndedPointer:pid in:endedPointers count:endedCount]) {
+                [self appendContact:frame type:LI_TOUCH_EVENT_MOVE pointerId:pid];
+            }
+        }
+    }
+    for (int i = 0; i < endedCount; i++) {
+        int pid = endedPointers[i];
+        if (_pointerSent[pid]) {
+            [self appendContact:frame type:endedTypes[i] pointerId:pid];
+        }
+    }
+}
+
+- (BOOL)isEndedPointer:(int)pointerId in:(const int *)ended count:(int)count {
+    for (int i = 0; i < count; i++) {
+        if (ended[i] == pointerId) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (void)appendContact:(MLTouchpadFrame *)frame type:(uint8_t)type pointerId:(int)pointerId {
+    if (frame->count >= MLTouchpadMaxContacts) {
+        return;
+    }
     int slot = frame->count;
     frame->types[slot] = type;
     frame->ids[slot] = (uint32_t)pointerId;
-    frame->x[slot] = x;
-    frame->y[slot] = y;
+    frame->x[slot] = _lastX[pointerId];
+    frame->y[slot] = _lastY[pointerId];
     frame->pressure[slot] = 1.0f;
     frame->count += 1;
-    _lastX[pointerId] = x;
-    _lastY[pointerId] = y;
-
-    if (type == LI_TOUCH_EVENT_UP || type == LI_TOUCH_EVENT_CANCEL) {
-        [_pointerIds removeObjectForKey:identity];
-        _pointerLive[pointerId] = NO;
-        if (_liveContacts > 0) {
-            _liveContacts -= 1;
-        }
-    }
 }
 
 #pragma mark - Sending
@@ -257,18 +350,7 @@ typedef struct {
     }
 
     dispatch(^(PML_INPUT_STREAM_CONTEXT ctx) {
-        int result = 0;
-        if (useFrames) {
-            result = LiSendTouchpadFrameEventCtx(ctx, frame.count, frame.types, frame.ids, frame.x, frame.y,
-                                                 frame.pressure, LI_ROT_UNKNOWN, frame.widthMm, frame.heightMm,
-                                                 frame.buttonState);
-        } else {
-            for (uint8_t i = 0; i < frame.count && result == 0; i++) {
-                result = LiSendTouchpadEventCtx(ctx, frame.types[i], frame.ids[i], frame.x[i], frame.y[i],
-                                                frame.pressure[i], 0.0f, 0.0f, LI_ROT_UNKNOWN,
-                                                frame.widthMm, frame.heightMm, frame.buttonState);
-            }
-        }
+        int result = MLTouchpadSendFrame(ctx, &frame, useFrames);
         if (result != 0) {
             [self noteSendFailure:result];
         }
@@ -297,7 +379,12 @@ typedef struct {
 #pragma mark - Pointer, button and scroll coordination
 
 - (BOOL)engagedLocked {
-    return _enabled && _supported;
+    return _mode != MLPrecisionTouchpadModeOff && _supported;
+}
+
+// Caller holds the lock. YES while the host is being driven by the trackpad (or just was).
+- (BOOL)hostDrivenLocked {
+    return _sessionActive || (LiGetMillis() - _lastActivityMs) < MLTouchpadLingerMs;
 }
 
 - (BOOL)shouldSuppressPointerMotion {
@@ -305,7 +392,7 @@ typedef struct {
         if (![self engagedLocked]) {
             return NO;
         }
-        return _liveContacts > 0 || (LiGetMillis() - _lastActivityMs) < MLTouchpadLingerMs;
+        return [self hostDrivenLocked];
     }
 }
 
@@ -324,9 +411,11 @@ typedef struct {
         }
 
         if (pressed) {
-            BOOL physical = _liveContacts > 0;
-            BOOL tapLike = !physical && (LiGetMillis() - _lastActivityMs) < MLTouchpadLingerMs;
+            BOOL physical = _sessionActive && _liveContacts > 0;
+            BOOL tapLike = !_sessionActive && (LiGetMillis() - _lastActivityMs) < MLTouchpadLingerMs;
             if (!physical && !tapLike) {
+                // A single finger in "both" mode: an ordinary Mac click that Windows sees as a mouse button.
+                _localButtons |= bit;
                 return NO;
             }
             _consumedButtons |= bit;
@@ -339,6 +428,7 @@ typedef struct {
         }
 
         if ((_consumedButtons & bit) == 0) {
+            _localButtons &= ~bit;
             return NO;
         }
         _consumedButtons &= ~bit;
@@ -358,7 +448,7 @@ typedef struct {
 - (BOOL)fillButtonFrameLocked:(MLTouchpadFrame *)frame {
     int pointerId = -1;
     for (int candidate = 0; candidate < MLTouchpadMaxContacts; candidate++) {
-        if (_pointerLive[candidate]) {
+        if (_pointerLive[candidate] && _pointerSent[candidate]) {
             pointerId = candidate;
             break;
         }
@@ -392,7 +482,7 @@ typedef struct {
 
         NSEventPhase phase = event.phase;
         NSEventPhase momentum = event.momentumPhase;
-        BOOL touchDriven = _liveContacts > 0 || (LiGetMillis() - _lastActivityMs) < MLTouchpadLingerMs;
+        BOOL touchDriven = [self hostDrivenLocked];
         if ((phase & (NSEventPhaseBegan | NSEventPhaseMayBegin)) != 0) {
             _scrollSequenceSuppressed = touchDriven;
         }
@@ -413,18 +503,28 @@ typedef struct {
 #pragma mark - Reset
 
 - (void)reset {
-    BOOL cancel = NO;
-    uint16_t widthMm = 0;
-    uint16_t heightMm = 0;
+    MLTouchpadFrame cancel;
+    memset(&cancel, 0, sizeof(cancel));
+    BOOL needsCancel = NO;
+    BOOL useFrames = NO;
 
     @synchronized (self) {
-        cancel = _liveContacts > 0 || _physicalButtonDown;
-        widthMm = _widthMm;
-        heightMm = _heightMm;
+        for (int i = 0; i < MLTouchpadMaxContacts; i++) {
+            if (_pointerSent[i]) {
+                [self appendContact:&cancel type:LI_TOUCH_EVENT_CANCEL pointerId:i];
+            }
+        }
+        needsCancel = cancel.count > 0 || _physicalButtonDown;
+        useFrames = _useFrames;
+        cancel.widthMm = _widthMm;
+        cancel.heightMm = _heightMm;
         [_pointerIds removeAllObjects];
         memset(_pointerLive, 0, sizeof(_pointerLive));
+        memset(_pointerSent, 0, sizeof(_pointerSent));
         _liveContacts = 0;
+        _sessionActive = NO;
         _consumedButtons = 0;
+        _localButtons = 0;
         _physicalButtonDown = NO;
         _scrollSequenceSuppressed = NO;
         _lastActivityMs = 0;
@@ -433,7 +533,7 @@ typedef struct {
         _supported = NO;
     }
 
-    if (!cancel) {
+    if (!needsCancel) {
         return;
     }
     void (^dispatch)(void (^)(PML_INPUT_STREAM_CONTEXT)) = self.dispatchHandler;
@@ -441,10 +541,11 @@ typedef struct {
         return;
     }
     dispatch(^(PML_INPUT_STREAM_CONTEXT ctx) {
-        int result = LiSendTouchpadEventCtx(ctx, LI_TOUCH_EVENT_CANCEL_ALL, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                                            LI_ROT_UNKNOWN, widthMm, heightMm, 0);
+        // Frame-only hosts reject the single-event cancel-all, so release the known contacts in a frame.
+        int result = useFrames ? MLTouchpadSendFrame(ctx, &cancel, YES)
+                               : MLTouchpadSendCancelAll(ctx, cancel.widthMm, cancel.heightMm);
         if (result != 0) {
-            Log(LOG_D, @"[touchpad] cancel-all not sent result=%d", result);
+            Log(LOG_D, @"[touchpad] cancel not sent result=%d", result);
         }
     });
 }

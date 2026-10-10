@@ -1549,6 +1549,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.gamepadMouseModeLongPressMenu = [SettingsClass gamepadMouseModeLongPressMenuFor:self.app.host.uuid];
     streamConfig.wantsRemoteTextContext = [SettingsClass imeTextInputFor:self.app.host.uuid];
     streamConfig.nativeTouchpad = [SettingsClass nativeTouchpadFor:self.app.host.uuid];
+    streamConfig.dualSensePrecisionTouchpad = [SettingsClass dualSensePrecisionTouchpadFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadPointerSensitivity = [SettingsClass pointerSensitivityFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadScrollSpeed = [SettingsClass gestureScrollSpeedFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadReverseScroll = [SettingsClass reverseScrollDirectionFor:self.app.host.uuid];

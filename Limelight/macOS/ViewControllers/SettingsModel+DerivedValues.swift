@@ -1305,7 +1305,15 @@ extension SettingsModel {
   static let defaultTouchscreenMode = 0
   static let defaultGamepadMouseMode = false
   static let defaultGamepadMouseModeLongPressMenu = true
-  static let defaultHostPrecisionTouchpad = false
+  static let defaultHostPrecisionTouchpadMode = 0
+  static let precisionTouchpadModes = [0, 1, 2]
+  // Settings saved before the dropdown only stored an on/off flag; "on" meant blocking the pointer path.
+  static func precisionTouchpadMode(mode: Int?, legacyEnabled: Bool?) -> Int {
+    if let mode, precisionTouchpadModes.contains(mode) {
+      return mode
+    }
+    return legacyEnabled == true ? 1 : defaultHostPrecisionTouchpadMode
+  }
   static let defaultImeTextInput = false
   static let defaultControllerDeadzone = 0.0
   static let defaultControllerHapticsMode = ControllerHapticsMode.automatic.displayKey

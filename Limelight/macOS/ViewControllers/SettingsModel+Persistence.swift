@@ -290,7 +290,7 @@ extension SettingsModel {
     dimNonHoveredArtwork = Self.defaultDimNonHoveredArtwork
     gamepadMouseMode = Self.defaultGamepadMouseMode
     gamepadMouseModeLongPressMenu = Self.defaultGamepadMouseModeLongPressMenu
-    hostPrecisionTouchpad = Self.defaultHostPrecisionTouchpad
+    hostPrecisionTouchpadMode = Self.defaultHostPrecisionTouchpadMode
     imeTextInput = Self.defaultImeTextInput
     mouseMode = Self.defaultMouseMode
     selectedUpscalingMode = Self.upscalingModeTitle(for: Self.defaultUpscalingMode)
@@ -321,6 +321,8 @@ extension SettingsModel {
     let hostId = selectedHost?.id ?? Self.globalHostId
     nativeTouchpad = UserDefaults.standard.object(
       forKey: SettingsModel.controllerNativeTouchpadKeyPrefix + hostId) as? Bool ?? true
+    dualSensePrecisionTouchpad = UserDefaults.standard.object(
+      forKey: SettingsModel.controllerDualSensePrecisionTouchpadKeyPrefix + hostId) as? Bool ?? false
     loadControllerSettings(for: hostId)
     if let settings = Settings.getSettings(for: hostId) {
       selectedResolution = settings.resolution
@@ -504,7 +506,8 @@ extension SettingsModel {
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
       gamepadMouseModeLongPressMenu = settings.gamepadMouseModeLongPressMenu ?? Self.defaultGamepadMouseModeLongPressMenu
-      hostPrecisionTouchpad = settings.hostPrecisionTouchpad ?? Self.defaultHostPrecisionTouchpad
+      hostPrecisionTouchpadMode = Self.precisionTouchpadMode(
+        mode: settings.hostPrecisionTouchpadMode, legacyEnabled: settings.hostPrecisionTouchpad)
       imeTextInput = settings.imeTextInput ?? Self.defaultImeTextInput
       mouseMode = Self.getString(from: settings.mouseMode ?? (Self.defaultMouseMode == "game" ? 0 : 1), in: Self.mouseModes)
       selectedUpscalingMode = Self.upscalingModeTitle(
@@ -850,7 +853,8 @@ extension SettingsModel {
       touchscreenMode: touchscreenMode,
       gamepadMouseMode: gamepadMouseMode,
       gamepadMouseModeLongPressMenu: gamepadMouseModeLongPressMenu,
-      hostPrecisionTouchpad: hostPrecisionTouchpad,
+      hostPrecisionTouchpad: hostPrecisionTouchpadMode != 0,
+      hostPrecisionTouchpadMode: hostPrecisionTouchpadMode,
       imeTextInput: imeTextInput,
       mouseMode: mouseModeVal,
       pointerSensitivity: pointerSensitivity,

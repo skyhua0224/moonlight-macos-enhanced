@@ -112,6 +112,14 @@ private struct ControllerSettingsSection: View {
         .labelsHidden()
         .frame(width: 190, alignment: .trailing)
       }
+      SettingsRow(title: "DualSense Touchpad Output", detail: "DualSense Touchpad Output detail") {
+        Picker("", selection: $settingsModel.dualSensePrecisionTouchpad) {
+          Text(languageManager.localize("DualSense Touchpad Output Controller")).tag(false)
+          Text(languageManager.localize("DualSense Touchpad Output Precision")).tag(true)
+        }
+        .labelsHidden()
+        .frame(width: 250, alignment: .trailing)
+      }
       SettingsRow(title: "Haptic Feedback") {
         Picker("", selection: $settingsModel.selectedControllerHapticsMode) {
           ForEach(SettingsModel.controllerHapticsModes, id: \.self) { value in
@@ -211,7 +219,15 @@ private struct KeyboardMouseSettingsSection: View {
       ToggleCell(title: "Absolute Mouse Mode", boolBinding: $settingsModel.absoluteMouseMode)
       ToggleCell(title: "Swap Mouse Buttons", boolBinding: $settingsModel.swapMouseButtons)
       ToggleCell(title: "Reverse Scroll Direction", boolBinding: $settingsModel.reverseScrollDirection)
-      ToggleCell(title: "Precision Touchpad", hintKey: "Precision Touchpad Hint", boolBinding: $settingsModel.hostPrecisionTouchpad)
+      SettingsRow(title: "Precision Touchpad", detail: "Precision Touchpad Hint") {
+        Picker("", selection: $settingsModel.hostPrecisionTouchpadMode) {
+          Text(languageManager.localize("Precision Touchpad Off")).tag(0)
+          Text(languageManager.localize("Precision Touchpad Block")).tag(1)
+          Text(languageManager.localize("Precision Touchpad Both")).tag(2)
+        }
+        .labelsHidden()
+        .frame(width: 300, alignment: .trailing)
+      }
       ToggleCell(title: "Input Method Text", hintKey: "Input Method Text Hint", boolBinding: $settingsModel.imeTextInput)
       SettingsRow(title: "Pointer Speed") {
         Slider(value: $settingsModel.pointerSensitivity, in: 0.25...3.0)

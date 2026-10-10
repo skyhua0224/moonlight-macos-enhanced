@@ -214,6 +214,8 @@ class SettingsClass: NSObject {
         "gamepadMouseMode": settings.gamepadMouseMode,
         "gamepadMouseModeLongPressMenu": settings.gamepadMouseModeLongPressMenu,
         "hostPrecisionTouchpad": settings.hostPrecisionTouchpad,
+        "hostPrecisionTouchpadMode": SettingsModel.precisionTouchpadMode(
+          mode: settings.hostPrecisionTouchpadMode, legacyEnabled: settings.hostPrecisionTouchpad),
         "imeTextInput": settings.imeTextInput,
         "mouseMode": settings.mouseMode,
         "touchscreenMode": settings.touchscreenMode,
@@ -393,6 +395,7 @@ class SettingsClass: NSObject {
       gamepadMouseMode: settings.gamepadMouseMode,
       gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
       hostPrecisionTouchpad: settings.hostPrecisionTouchpad,
+      hostPrecisionTouchpadMode: settings.hostPrecisionTouchpadMode,
       imeTextInput: settings.imeTextInput,
       mouseMode: settings.mouseMode,
       pointerSensitivity: settings.pointerSensitivity,
@@ -501,6 +504,7 @@ class SettingsClass: NSObject {
         gamepadMouseMode: updated.gamepadMouseMode,
         gamepadMouseModeLongPressMenu: updated.gamepadMouseModeLongPressMenu,
         hostPrecisionTouchpad: updated.hostPrecisionTouchpad,
+        hostPrecisionTouchpadMode: updated.hostPrecisionTouchpadMode,
         imeTextInput: updated.imeTextInput,
         mouseMode: updated.mouseMode,
         pointerSensitivity: updated.pointerSensitivity,
@@ -617,6 +621,7 @@ class SettingsClass: NSObject {
       gamepadMouseMode: settings.gamepadMouseMode,
       gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
       hostPrecisionTouchpad: settings.hostPrecisionTouchpad,
+      hostPrecisionTouchpadMode: settings.hostPrecisionTouchpadMode,
       imeTextInput: settings.imeTextInput,
       mouseMode: settings.mouseMode,
       pointerSensitivity: settings.pointerSensitivity,
@@ -1424,6 +1429,11 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultGamepadMouseMode
   }
 
+  @objc static func dualSensePrecisionTouchpad(for key: String) -> Bool {
+    UserDefaults.standard.object(
+      forKey: SettingsModel.controllerDualSensePrecisionTouchpadKeyPrefix + key) as? Bool ?? false
+  }
+
   @objc static func nativeTouchpad(for key: String) -> Bool {
     UserDefaults.standard.object(
       forKey: SettingsModel.controllerNativeTouchpadKeyPrefix + key) as? Bool ?? true
@@ -1523,8 +1533,12 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultGamepadMouseModeLongPressMenu
   }
 
-  @objc static func hostPrecisionTouchpad(for key: String) -> Bool {
-    Settings.getSettings(for: key)?.hostPrecisionTouchpad ?? SettingsModel.defaultHostPrecisionTouchpad
+  @objc static func hostPrecisionTouchpadMode(for key: String) -> Int {
+    guard let settings = Settings.getSettings(for: key) else {
+      return SettingsModel.defaultHostPrecisionTouchpadMode
+    }
+    return SettingsModel.precisionTouchpadMode(
+      mode: settings.hostPrecisionTouchpadMode, legacyEnabled: settings.hostPrecisionTouchpad)
   }
 
   @objc static func imeTextInput(for key: String) -> Bool {
