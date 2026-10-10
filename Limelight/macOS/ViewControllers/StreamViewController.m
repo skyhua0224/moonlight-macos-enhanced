@@ -384,6 +384,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
     return [SettingsClass controllerDriverFor:self.app.host.uuid] == 1;
 }
 
+/**
+ * Initializes stream UI/state and installs main-queue lifecycle and focus observers.
+ * Focus changes refresh controller delivery immediately, independently of deferred mouse
+ * uncapture, including transient key loss and focus recovery. Observers borrow self weakly
+ * and are removed during stream teardown.
+ */
 - (void)viewDidLoad {
     [super viewDidLoad];
     
@@ -481,6 +487,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     
     self.windowDidResignKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            [weakSelf refreshControllerInputSendingState];
             [weakSelf logKeyLossDiagnosticsForStage:@"received" code:@"MUC003" reason:@"window-resigned-key"];
             if ([weakSelf shouldSuppressTransientKeyLossUncaptureForCode:@"MUC003" reason:@"window-resigned-key"]) {
                 [weakSelf logKeyLossDiagnosticsForStage:@"skip-top-edge-click" code:@"MUC003" reason:@"window-resigned-key"];
@@ -492,6 +499,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         }
     }];
     self.windowDidBecomeKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [weakSelf refreshControllerInputSendingState];
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf.view.window isKeyWindow]) {
@@ -528,10 +536,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     self.appDidResignActiveObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidResignActiveNotification object:NSApp queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         weakSelf.globalInactivePointerInsideStreamView = NO;
+        [weakSelf refreshControllerInputSendingState];
         [weakSelf requestMouseUncaptureWhenSafeWithReason:@"app-resigned-active" code:@"MUC006"];
     }];
     self.appDidBecomeActiveObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidBecomeActiveNotification object:NSApp queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         weakSelf.globalInactivePointerInsideStreamView = NO;
+        [weakSelf refreshControllerInputSendingState];
         if ([weakSelf isWindowInCurrentSpace] && [weakSelf isCurrentPointerInsideStreamView]) {
             [weakSelf ensureStreamWindowKeyIfPossible];
         }
@@ -1023,8 +1033,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
  * Resolves controller delivery for both backends from stream readiness and capture policy.
  *
  * Delivery requires a ready context with neither stop nor reconnect in progress, plus captured
- * keyboard/mouse input or the profile's background preference. Registers that preference for
- * shared GameController background monitoring until teardown begins, updates both
+ * keyboard/mouse input in the currently key window of the active app, or the profile's
+ * background preference. Deferred mouse uncapture cannot extend controller focus permission.
+ * Registers that preference for shared GameController background monitoring until teardown
+ * begins, updates both
  * controller gates and logs the decision. A late refresh cannot restore monitoring while
  * stopping. Off-main calls asynchronously reschedule themselves on main.
  */
@@ -1039,7 +1051,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
     BOOL streamCanSendInput = !self.stopStreamInProgress &&
         !self.reconnectInProgress &&
         [self hasReadyInputContext];
-    BOOL focusedInputEnabled = self.hidSupport.shouldSendInputEvents;
+    BOOL focusedInputEnabled = self.hidSupport.shouldSendInputEvents &&
+        self.view.window.isKeyWindow && [NSApp isActive];
     BOOL backgroundInputEnabled =
         [SettingsClass backgroundControllerInputFor:self.app.host.uuid];
     MLUpdateGameControllerBackgroundMonitoring(self, !self.stopStreamInProgress && backgroundInputEnabled);
