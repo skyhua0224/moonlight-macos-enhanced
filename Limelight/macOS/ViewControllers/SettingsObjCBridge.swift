@@ -1359,6 +1359,11 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultAwdlStabilityHelperEnabled
   }
 
+  /// Applies the stored recording settings to the logger. Called once at launch.
+  @objc static func applyLoggerSettings() {
+    SettingsModel.applyStoredLoggerSettings()
+  }
+
   @objc static func inputDiagnosticsEnabled() -> Bool {
     if UserDefaults.standard.object(forKey: SettingsModel.debugLogInputDiagnosticsKey) != nil {
       return UserDefaults.standard.bool(forKey: SettingsModel.debugLogInputDiagnosticsKey)

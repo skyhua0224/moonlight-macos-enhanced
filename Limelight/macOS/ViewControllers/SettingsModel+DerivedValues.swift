@@ -1411,6 +1411,7 @@ extension SettingsModel {
   static let defaultStreamResolutionScaleRatio = 100
   static let defaultDebugLogMode = "default"
   static let defaultDebugLogMinLevel = "info"
+  static let defaultDebugLogRecordingDetail = "normal"
   static let defaultDebugLogShowSystemNoise = false
   static let defaultDebugLogAutoScroll = true
   static let defaultDebugLogTimeScope = "launch"
@@ -1807,17 +1808,46 @@ extension SettingsModel {
     }
   }
 
-  static func loggerLevel(from stringValue: String) -> LogLevel {
-    switch stringValue {
-    case "all", "debug":
-      return LOG_D
-    case "warn":
-      return LOG_W
-    case "error":
-      return LOG_E
+  static func normalizedDebugLogRecordingDetail(_ value: String?) -> String {
+    switch value?.lowercased() {
+    case "detailed":
+      return "detailed"
     default:
-      return LOG_I
+      return defaultDebugLogRecordingDetail
     }
+  }
+
+  /// Recording never drops below Info; "detailed" additionally records Debug.
+  static func loggerLevel(forRecordingDetail detail: String) -> LogLevel {
+    detail == "detailed" ? LOG_D : LOG_I
+  }
+
+  /// The stored recording detail. When it has never been stored, it is derived once from the
+  /// minimum level of the previous version, so nobody ends up recording less than before:
+  /// "debug" or "all" become "detailed", anything else (including "warn" and "error", which
+  /// the logger no longer honours) becomes "normal".
+  static func storedDebugLogRecordingDetail() -> String {
+    let defaults = UserDefaults.standard
+    if let stored = defaults.string(forKey: debugLogRecordingDetailKey) {
+      return normalizedDebugLogRecordingDetail(stored)
+    }
+    let legacyLevel = defaults.string(forKey: debugLogMinLevelKey)?.lowercased()
+    let migrated = (legacyLevel == "debug" || legacyLevel == "all") ? "detailed" : "normal"
+    defaults.set(migrated, forKey: debugLogRecordingDetailKey)
+    return migrated
+  }
+
+  /// Applies the stored logger settings. Called at app launch (before any Settings window
+  /// exists) and whenever a SettingsModel is created. The curated log is always produced.
+  static func applyStoredLoggerSettings() {
+    LoggerSetCuratedModeEnabled(true)
+    LoggerSetMinimumLevel(loggerLevel(forRecordingDetail: storedDebugLogRecordingDetail()))
+    let defaults = UserDefaults.standard
+    let inputDiagnostics =
+      defaults.object(forKey: debugLogInputDiagnosticsKey) != nil
+      ? defaults.bool(forKey: debugLogInputDiagnosticsKey)
+      : defaultDebugLogInputDiagnostics
+    LoggerSetInputDiagnosticsEnabled(inputDiagnostics)
   }
 
   static func getInt(from selectedSetting: String, in settingsArray: [String]) -> Int {

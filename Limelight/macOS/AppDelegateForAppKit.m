@@ -119,6 +119,7 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
+    [SettingsClass applyLoggerSettings];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
     [[LanguageManager shared] applyAppLanguage];
 

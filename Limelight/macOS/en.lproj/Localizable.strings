@@ -979,8 +979,6 @@
 "Runtime" = "Runtime";
 "Foundation USB forwarding detail" = "Share a supported USB device with the host through the secure forwarding channel.";
 "Diagnostics are written to the application log." = "Diagnostics are written to the application log.";
-"Curated" = "Curated";
-"Raw" = "Raw";
 "Maximum Brightness" = "Maximum Brightness";
 "Minimum Brightness" = "Minimum Brightness";
 "Maximum Average Brightness" = "Maximum Average Brightness";
@@ -1005,7 +1003,6 @@
 "Bitrate detail" = "Bitrate detail";
 "Audio Enhancement" = "Audio Enhancement";
 "Diagnostics" = "Diagnostics";
-"Minimum Log Level" = "Minimum Log Level";
 "Show Performance Overlay" = "Show Performance Overlay";
 "Dim Unfocused Artwork" = "Dim Unfocused Artwork";
 "AWDL Stability Helper detail" = "AWDL Stability Helper detail";
@@ -1109,7 +1106,6 @@
 "Decoding" = "Decoding";
 "Mouse Tuning" = "Mouse Tuning";
 "View Live Log" = "View Live Log";
-"Auto Scroll Logs" = "Auto Scroll Logs";
 "Metal tuning is available with the Metal renderer." = "Available with the Metal renderer.";
 "Clear Category Filters" = "Clear Category Filters";
 
@@ -1249,3 +1245,7 @@
 "Bitrate set to %@ Mbps" = "Bitrate set to %@ Mbps";
 "Frame rate set to %d FPS" = "Frame rate set to %d FPS";
 "Resolution set to %dx%d" = "Resolution set to %dx%d";
+"Recording Detail" = "Recording Detail";
+"Recording Detail detail" = "Normal records Info and above. Detailed also records Debug lines, which makes the log larger. What the log window shows is set in the window itself.";
+"Normal" = "Normal";
+"Detailed" = "Detailed";

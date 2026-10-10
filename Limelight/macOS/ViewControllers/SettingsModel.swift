@@ -189,11 +189,17 @@ class SettingsModel: ObservableObject {
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
   static let streamShortcutsChangedNotification = Notification.Name("MoonlightStreamShortcutsDidChange")
   static let matchDisplayResolutionSentinel = CGSize(width: -1, height: -1)
+  // The five keys up to debugLogTimeScopeKey are legacy: before the recording and viewing options
+  // were separated they held both the logger's settings and the log window's filters. They are
+  // no longer written; they are only read to seed the recording detail and the log viewer's own
+  // preferences.
   static let debugLogModeKey = "debugLog.mode"
   static let debugLogMinLevelKey = "debugLog.minLevel"
   static let debugLogShowSystemNoiseKey = "debugLog.showSystemNoise"
   static let debugLogAutoScrollKey = "debugLog.autoScroll"
   static let debugLogTimeScopeKey = "debugLog.timeScope"
+  /// What the logger records ("normal" or "detailed").
+  static let debugLogRecordingDetailKey = "debugLog.recordingDetail"
   static let debugLogInputDiagnosticsKey = "debugLog.inputDiagnostics"
   static let awdlStabilityHelperEnabledKey = "networkCompatibility.awdlHelperEnabled"
   static let awdlStabilityHelperAcknowledgedKey = "networkCompatibility.awdlHelperAcknowledged"
@@ -264,31 +270,12 @@ class SettingsModel: ObservableObject {
     }
   }
 
-  @Published var debugLogMode: String {
+  /// What the logger records: "normal" (Info and above) or "detailed" (also Debug).
+  /// What the log viewer shows is a separate matter (see DebugLogViewerPreferences).
+  @Published var debugLogRecordingDetail: String {
     didSet {
-      UserDefaults.standard.set(debugLogMode, forKey: Self.debugLogModeKey)
-      LoggerSetCuratedModeEnabled(debugLogMode != "raw")
-    }
-  }
-  @Published var debugLogMinLevel: String {
-    didSet {
-      UserDefaults.standard.set(debugLogMinLevel, forKey: Self.debugLogMinLevelKey)
-      LoggerSetMinimumLevel(Self.loggerLevel(from: debugLogMinLevel))
-    }
-  }
-  @Published var debugLogShowSystemNoise: Bool {
-    didSet {
-      UserDefaults.standard.set(debugLogShowSystemNoise, forKey: Self.debugLogShowSystemNoiseKey)
-    }
-  }
-  @Published var debugLogAutoScroll: Bool {
-    didSet {
-      UserDefaults.standard.set(debugLogAutoScroll, forKey: Self.debugLogAutoScrollKey)
-    }
-  }
-  @Published var debugLogTimeScope: String {
-    didSet {
-      UserDefaults.standard.set(debugLogTimeScope, forKey: Self.debugLogTimeScopeKey)
+      UserDefaults.standard.set(debugLogRecordingDetail, forKey: Self.debugLogRecordingDetailKey)
+      LoggerSetMinimumLevel(Self.loggerLevel(forRecordingDetail: debugLogRecordingDetail))
     }
   }
   @Published var debugLogInputDiagnostics: Bool {
@@ -1459,23 +1446,7 @@ class SettingsModel: ObservableObject {
       selectedHost = Host(id: Self.globalHostId, name: "Global")
     }
 
-    let persistedLogMode = UserDefaults.standard.string(forKey: Self.debugLogModeKey)
-    let envLogMode = ProcessInfo.processInfo.environment["MOONLIGHT_LOG_VIEW"]
-    debugLogMode = Self.normalizedDebugLogMode(persistedLogMode ?? envLogMode)
-    debugLogMinLevel = Self.normalizedDebugLogMinLevel(
-      UserDefaults.standard.string(forKey: Self.debugLogMinLevelKey))
-    if UserDefaults.standard.object(forKey: Self.debugLogShowSystemNoiseKey) != nil {
-      debugLogShowSystemNoise = UserDefaults.standard.bool(forKey: Self.debugLogShowSystemNoiseKey)
-    } else {
-      debugLogShowSystemNoise = Self.defaultDebugLogShowSystemNoise
-    }
-    if UserDefaults.standard.object(forKey: Self.debugLogAutoScrollKey) != nil {
-      debugLogAutoScroll = UserDefaults.standard.bool(forKey: Self.debugLogAutoScrollKey)
-    } else {
-      debugLogAutoScroll = Self.defaultDebugLogAutoScroll
-    }
-    debugLogTimeScope = Self.normalizedDebugLogTimeScope(
-      UserDefaults.standard.string(forKey: Self.debugLogTimeScopeKey))
+    debugLogRecordingDetail = Self.storedDebugLogRecordingDetail()
     if UserDefaults.standard.object(forKey: Self.debugLogInputDiagnosticsKey) != nil {
       debugLogInputDiagnostics = UserDefaults.standard.bool(forKey: Self.debugLogInputDiagnosticsKey)
     } else {
@@ -1669,9 +1640,7 @@ class SettingsModel: ObservableObject {
       self, selector: #selector(handleSunshineDisplayRuntimeUpdate),
       name: NSNotification.Name("MoonlightSunshineDisplayRuntimeDidChange"), object: nil)
 
-    LoggerSetCuratedModeEnabled(debugLogMode != "raw")
-    LoggerSetMinimumLevel(Self.loggerLevel(from: debugLogMinLevel))
-    LoggerSetInputDiagnosticsEnabled(debugLogInputDiagnostics)
+    Self.applyStoredLoggerSettings()
 
     selectedProfileObserver = NotificationCenter.default.addObserver(
       forName: Notification.Name("MoonlightSelectedSettingsProfileChanged"),

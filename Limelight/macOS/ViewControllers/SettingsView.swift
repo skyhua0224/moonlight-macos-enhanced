@@ -189,6 +189,7 @@ enum SettingsSearchIndex {
     "USB Mapping": ["USB forwarding", "USB 转发", "USB/IP"],
     "Host Files": ["file mapping", "文件映射", "主机文件"],
     "Input Diagnostics": ["mapping", "诊断"],
+    "Recording Detail": ["log", "debug", "日志", "调试"],
     "Check for Updates": ["Sparkle", "update", "更新"],
     "Moonlight macOS Enhanced": ["版本"],
   ]

@@ -88,34 +88,17 @@ struct AppView: View {
       }
 
       FormSection(title: "Diagnostics") {
-        SettingsRow(title: "Log Mode") {
-          Picker("", selection: $settingsModel.debugLogMode) {
-            Text(languageManager.localize("Curated")).tag("default")
-            Text(languageManager.localize("Raw")).tag("raw")
+        SettingsRow(title: "Recording Detail", detail: "Recording Detail detail") {
+          Picker("", selection: $settingsModel.debugLogRecordingDetail) {
+            Text(languageManager.localize("Normal")).tag("normal")
+            Text(languageManager.localize("Detailed")).tag("detailed")
           }
           .labelsHidden()
           .controllerPicker(
-            selection: $settingsModel.debugLogMode,
-            choices: [("default", languageManager.localize("Curated")), ("raw", languageManager.localize("Raw"))])
+            selection: $settingsModel.debugLogRecordingDetail,
+            choices: [("normal", languageManager.localize("Normal")), ("detailed", languageManager.localize("Detailed"))])
           .frame(width: 160, alignment: .trailing)
         }
-        SettingsRow(title: "Minimum Log Level") {
-          Picker("", selection: $settingsModel.debugLogMinLevel) {
-            Text(languageManager.localize("Error")).tag("error")
-            Text(languageManager.localize("Warning")).tag("warn")
-            Text(languageManager.localize("Info")).tag("info")
-            Text(languageManager.localize("Debug")).tag("debug")
-            Text(languageManager.localize("All")).tag("all")
-          }
-          .labelsHidden()
-          .controllerPicker(
-            selection: $settingsModel.debugLogMinLevel,
-            choices: [("error", "Error"), ("warn", "Warning"), ("info", "Info"), ("debug", "Debug"), ("all", "All")]
-              .map { (value: $0.0, title: languageManager.localize($0.1)) })
-          .frame(width: 150, alignment: .trailing)
-        }
-        ToggleCell(title: "Show System Noise", boolBinding: $settingsModel.debugLogShowSystemNoise)
-        ToggleCell(title: "Auto Scroll Logs", boolBinding: $settingsModel.debugLogAutoScroll)
         ToggleCell(title: "Input Diagnostics", boolBinding: $settingsModel.debugLogInputDiagnostics)
         SettingsRow(title: "View Live Log") {
           Button("Open") { showLiveLogViewer = true }

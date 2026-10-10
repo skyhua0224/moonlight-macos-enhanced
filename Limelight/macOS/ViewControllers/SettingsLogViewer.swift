@@ -560,15 +560,16 @@ private final class DebugLogScrollTracker {
   var didInitialScroll = false
 }
 
-/// Where the viewer shows and keeps its filter choices. The Settings window passes bindings
-/// to the persisted settings; the in-stream overlay passes bindings to throw-away local state.
+/// Where the viewer shows and keeps its filter choices. These only decide what is DISPLAYED;
+/// what the logger records is set on the Settings page and is never touched from here. The
+/// Settings window passes bindings to the remembered viewer preferences; the in-stream overlay
+/// passes bindings to throw-away local state.
 private struct DebugLogViewerOptions {
   var mode: Binding<String>
   var minLevel: Binding<String>
   var showSystemNoise: Binding<Bool>
   var autoScroll: Binding<Bool>
   var timeScope: Binding<String>
-  var inputDiagnostics: Binding<Bool>
 }
 
 private enum DebugLogViewerStyle {
@@ -1098,10 +1099,6 @@ private struct DebugLogViewer: View {
           .frame(width: 180, alignment: .leading)
           .disabled(currentMode == .raw)
 
-        Toggle(languageManager.localize("Input Diagnostics"), isOn: options.inputDiagnostics)
-          .toggleStyle(.checkbox)
-          .frame(width: 180, alignment: .leading)
-
         Toggle(languageManager.localize("Auto Scroll"), isOn: options.autoScroll)
           .toggleStyle(.checkbox)
           .frame(width: 130, alignment: .leading)
@@ -1320,10 +1317,75 @@ private struct DebugLogViewer: View {
   }
 }
 
-/// The Settings window's log viewer: filter choices live in the persisted settings.
+/// The viewer's own filter choices for the Settings log window, remembered between launches.
+/// They are view filters only: they never change what the logger records (that is the
+/// recording detail on the Settings page).
+///
+/// They have their own UserDefaults keys. The first time the window is used they are seeded
+/// from the values the previous version stored under the legacy `debugLog.*` keys, which are
+/// left untouched.
+private final class DebugLogViewerPreferences: ObservableObject {
+  static let shared = DebugLogViewerPreferences()
+
+  private static let modeKey = "debugLogViewer.mode"
+  private static let minLevelKey = "debugLogViewer.minLevel"
+  private static let showSystemNoiseKey = "debugLogViewer.showSystemNoise"
+  private static let autoScrollKey = "debugLogViewer.autoScroll"
+  private static let timeScopeKey = "debugLogViewer.timeScope"
+
+  @Published var mode: String {
+    didSet { UserDefaults.standard.set(mode, forKey: Self.modeKey) }
+  }
+  @Published var minLevel: String {
+    didSet { UserDefaults.standard.set(minLevel, forKey: Self.minLevelKey) }
+  }
+  @Published var showSystemNoise: Bool {
+    didSet { UserDefaults.standard.set(showSystemNoise, forKey: Self.showSystemNoiseKey) }
+  }
+  @Published var autoScroll: Bool {
+    didSet { UserDefaults.standard.set(autoScroll, forKey: Self.autoScrollKey) }
+  }
+  @Published var timeScope: String {
+    didSet { UserDefaults.standard.set(timeScope, forKey: Self.timeScopeKey) }
+  }
+
+  private init() {
+    let defaults = UserDefaults.standard
+    let envMode = ProcessInfo.processInfo.environment["MOONLIGHT_LOG_VIEW"]
+    mode = SettingsModel.normalizedDebugLogMode(
+      defaults.string(forKey: Self.modeKey)
+        ?? defaults.string(forKey: SettingsModel.debugLogModeKey)
+        ?? envMode)
+    minLevel = SettingsModel.normalizedDebugLogMinLevel(
+      defaults.string(forKey: Self.minLevelKey)
+        ?? defaults.string(forKey: SettingsModel.debugLogMinLevelKey))
+    timeScope = SettingsModel.normalizedDebugLogTimeScope(
+      defaults.string(forKey: Self.timeScopeKey)
+        ?? defaults.string(forKey: SettingsModel.debugLogTimeScopeKey))
+    showSystemNoise = Self.storedBool(
+      Self.showSystemNoiseKey, legacyKey: SettingsModel.debugLogShowSystemNoiseKey,
+      fallback: SettingsModel.defaultDebugLogShowSystemNoise)
+    autoScroll = Self.storedBool(
+      Self.autoScrollKey, legacyKey: SettingsModel.debugLogAutoScrollKey,
+      fallback: SettingsModel.defaultDebugLogAutoScroll)
+  }
+
+  private static func storedBool(_ key: String, legacyKey: String, fallback: Bool) -> Bool {
+    let defaults = UserDefaults.standard
+    if defaults.object(forKey: key) != nil {
+      return defaults.bool(forKey: key)
+    }
+    if defaults.object(forKey: legacyKey) != nil {
+      return defaults.bool(forKey: legacyKey)
+    }
+    return fallback
+  }
+}
+
+/// The Settings window's log viewer: filter choices are remembered viewer preferences.
 struct SettingsLogViewer: View {
   @Environment(\.dismiss) private var dismiss
-  @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject private var preferences = DebugLogViewerPreferences.shared
   let rawLogURL: URL?
   let curatedLogURL: URL?
 
@@ -1336,12 +1398,11 @@ struct SettingsLogViewer: View {
     DebugLogViewer(
       style: .window,
       options: DebugLogViewerOptions(
-        mode: $settingsModel.debugLogMode,
-        minLevel: $settingsModel.debugLogMinLevel,
-        showSystemNoise: $settingsModel.debugLogShowSystemNoise,
-        autoScroll: $settingsModel.debugLogAutoScroll,
-        timeScope: $settingsModel.debugLogTimeScope,
-        inputDiagnostics: $settingsModel.debugLogInputDiagnostics),
+        mode: $preferences.mode,
+        minLevel: $preferences.minLevel,
+        showSystemNoise: $preferences.showSystemNoise,
+        autoScroll: $preferences.autoScroll,
+        timeScope: $preferences.timeScope),
       rawLogURL: rawLogURL,
       curatedLogURL: curatedLogURL,
       onClose: { dismiss() })
@@ -1350,15 +1411,16 @@ struct SettingsLogViewer: View {
 
 // MARK: - In-stream overlay
 
-/// Filter choices of one open overlay. They are not persisted and do not touch the logger's
-/// own settings: the overlay only filters what it displays.
+/// Filter choices of one open overlay. They start from sensible defaults every time, are not
+/// persisted and do not touch the logger's settings: the overlay only filters what it displays.
+/// (They deliberately do not share the Settings window's remembered preferences: a stored
+/// "Error" filter or raw mode would make the stream overlay look empty or noisy with no cue.)
 private final class DebugLogOverlayPreferences: ObservableObject {
   @Published var mode = "default"
   @Published var minLevel = "all"
   @Published var showSystemNoise = false
   @Published var autoScroll = true
   @Published var timeScope = "launch"
-  @Published var inputDiagnostics = false
 }
 
 private struct DebugLogOverlayRoot: View {
@@ -1373,8 +1435,7 @@ private struct DebugLogOverlayRoot: View {
         minLevel: $preferences.minLevel,
         showSystemNoise: $preferences.showSystemNoise,
         autoScroll: $preferences.autoScroll,
-        timeScope: $preferences.timeScope,
-        inputDiagnostics: $preferences.inputDiagnostics),
+        timeScope: $preferences.timeScope),
       rawLogURL: nil,
       curatedLogURL: nil,
       onClose: onClose)

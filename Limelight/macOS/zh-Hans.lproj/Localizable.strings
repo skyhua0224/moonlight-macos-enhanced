@@ -1034,8 +1034,6 @@
 "Runtime" = "运行状态";
 "Foundation USB forwarding detail" = "通过安全转发通道，将支持的 USB 设备共享给主机。";
 "Diagnostics are written to the application log." = "诊断信息会写入应用日志。";
-"Curated" = "精选日志";
-"Raw" = "原始日志";
 "Maximum Brightness" = "最大亮度";
 "Minimum Brightness" = "最小亮度";
 "Maximum Average Brightness" = "最大平均亮度";
@@ -1060,7 +1058,6 @@
 "Bitrate detail" = "调整串流码率。更高码率需要更稳定的网络带宽。";
 "Audio Enhancement" = "音效增强";
 "Diagnostics" = "诊断";
-"Minimum Log Level" = "最低日志级别";
 "Show Performance Overlay" = "显示性能浮层";
 "Dim Unfocused Artwork" = "降低未选中应用封面亮度";
 "AWDL Stability Helper detail" = "改善部分 Wi‑Fi 网络下的主机发现和连接稳定性。";
@@ -1164,7 +1161,6 @@
 "Decoding" = "解码能力";
 "Mouse Tuning" = "鼠标调节";
 "View Live Log" = "查看实时日志";
-"Auto Scroll Logs" = "自动滚动日志";
 "Metal tuning is available with the Metal renderer." = "选择 Metal 渲染器后可调节。";
 "Clear Category Filters" = "清除分类筛选";
 
@@ -1304,3 +1300,7 @@
 "Bitrate set to %@ Mbps" = "码率已设为 %@ Mbps";
 "Frame rate set to %d FPS" = "帧率已设为 %d FPS";
 "Resolution set to %dx%d" = "分辨率已设为 %dx%d";
+"Recording Detail" = "记录详细程度";
+"Recording Detail detail" = "“普通”记录信息及以上级别；“详细”还会记录调试信息，日志会更大。日志窗口中显示哪些内容，请在窗口内设置。";
+"Normal" = "普通";
+"Detailed" = "详细";

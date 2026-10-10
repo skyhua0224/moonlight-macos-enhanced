@@ -186,10 +186,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "app/Network Compatibility/AWDL Stability Helper", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "AWDL Stability Helper", detailKey: "AWDL Stability Helper detail", keywords: []),
     SettingsSearchEntry(id: "app/Network Compatibility/Input Monitoring", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "Input Monitoring", detailKey: nil, keywords: ["Open Settings"]),
     SettingsSearchEntry(id: "app/Network Compatibility/Microphone", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "Microphone", detailKey: nil, keywords: ["Open Settings"]),
-    SettingsSearchEntry(id: "app/Diagnostics/Log Mode", pane: .app, kind: .row, sectionKey: "Diagnostics", titleKey: "Log Mode", detailKey: nil, keywords: ["Curated", "Raw"]),
-    SettingsSearchEntry(id: "app/Diagnostics/Minimum Log Level", pane: .app, kind: .row, sectionKey: "Diagnostics", titleKey: "Minimum Log Level", detailKey: nil, keywords: ["Error", "Warning", "Info", "Debug", "All"]),
-    SettingsSearchEntry(id: "app/Diagnostics/Show System Noise", pane: .app, kind: .row, sectionKey: "Diagnostics", titleKey: "Show System Noise", detailKey: nil, keywords: []),
-    SettingsSearchEntry(id: "app/Diagnostics/Auto Scroll Logs", pane: .app, kind: .row, sectionKey: "Diagnostics", titleKey: "Auto Scroll Logs", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "app/Diagnostics/Recording Detail", pane: .app, kind: .row, sectionKey: "Diagnostics", titleKey: "Recording Detail", detailKey: "Recording Detail detail", keywords: ["Normal", "Detailed"]),
     SettingsSearchEntry(id: "app/Diagnostics/Input Diagnostics", pane: .app, kind: .row, sectionKey: "Diagnostics", titleKey: "Input Diagnostics", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Diagnostics/View Live Log", pane: .app, kind: .row, sectionKey: "Diagnostics", titleKey: "View Live Log", detailKey: nil, keywords: ["Open"]),
   ]
