@@ -2654,6 +2654,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  *
  * Runs on the main run loop, releasing the previous touch/mouse state when modes change and
  * sending stick-derived movement or scroll events only for connected remote slot owners.
+ * DS4 and DualSense Options holds switch only the touch surface, retaining ordinary controls.
  * @param timer Mouse-emulation polling timer; its value is not used.
  */
 -(void) mouseTimerCallback:(NSTimer*)timer {
@@ -2664,10 +2665,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         GCController *gcController = controller.gamepad;
         GCExtendedGamepad *gamepad = gcController.extendedGamepad;
         
-        // DualSense Options toggles only the touch surface. Game controls keep
+        // PlayStation Options toggles only the touch surface. Game controls keep
         // streaming, including while Windows is receiving trackpad gestures.
-        BOOL dualSense = [gamepad isKindOfClass:GCDualSenseGamepad.class];
-        BOOL enabled = _gamepadMouseModeLongPressMenuEnabled && (dualSense || _gamepadMouseModeEnabled);
+        BOOL hasTouchpad = [gamepad isKindOfClass:GCDualSenseGamepad.class] ||
+                           [gamepad isKindOfClass:GCDualShockGamepad.class];
+        BOOL enabled = _gamepadMouseModeLongPressMenuEnabled && (hasTouchpad || _gamepadMouseModeEnabled);
         BOOL pressed = gamepad.buttonMenu.pressed;
         ControllerMenuGesture gesture = controller.menuGesture;
         BOOL toggle = ControllerMenuGestureUpdate(&gesture, enabled, pressed, NSProcessInfo.processInfo.systemUptime);
@@ -2686,7 +2688,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     [self setMouseButtons:controller.lastMouseModeButtonFlags trackpadButton:0 forController:controller];
                 }
             }
-            if (dualSense) {
+            if (hasTouchpad) {
                 controller.touchpadMouseMode = !wasMouse;
                 controller.hasTouchpadModeOverride = YES;
             } else [self setGamepadMouseModeActive:!controller.isMouseMode forController:controller];

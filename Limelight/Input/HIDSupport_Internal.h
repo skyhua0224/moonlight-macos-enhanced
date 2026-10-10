@@ -46,6 +46,13 @@ typedef struct {
 @property (nonatomic) BOOL gamepadMouseModeEnabled;
 @property (nonatomic) BOOL gamepadMouseModeLongPressMenuEnabled;
 @property (nonatomic) BOOL gamepadMenuPressed;
+@property (atomic) BOOL trackpadOwnsPointer;
+@property (nonatomic) BOOL nativeTouchpadEnabled;
+@property (nonatomic) BOOL playStationHasMotion;
+@property (nonatomic) float trackpadPointerSensitivity;
+@property (nonatomic) float trackpadScrollSpeed;
+@property (nonatomic) BOOL trackpadReverseScroll;
+@property (nonatomic, strong) id touchpadSettingsObserver;
 @property (nonatomic, strong) NSTimer *gamepadMenuTimer;
 @property (nonatomic) CVDisplayLinkRef displayLink;
 @property (atomic) CGFloat mouseDeltaX;
@@ -198,6 +205,12 @@ typedef struct {
 - (void)updateButtonFlags:(int)flag state:(BOOL)set;
 - (void)setupHidManager;
 - (BOOL)reportPlayStationControllerArrival;
+- (BOOL)touchpadUsesMouse;
+- (void)resetTrackpadState;
+- (void)releaseTrackpadState;
+- (void)setTrackpadMouseButton:(int)button;
+- (void)handlePlayStationTouchpad:(const UInt8 *)primary secondary:(const UInt8 *)secondary
+                         height:(float)height pressed:(BOOL)pressed;
 - (void)handlePS4TouchpadState:(PS4StatePacket_t *)state;
 - (void)handlePS4MotionState:(PS4StatePacket_t *)state;
 - (void)loadPS4MotionCalibrationForDevice:(IOHIDDeviceRef)device;
