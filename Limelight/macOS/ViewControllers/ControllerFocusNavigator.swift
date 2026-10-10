@@ -30,6 +30,8 @@ final class ControllerFocusAnchorView: NSView {
   var trigger: (() -> Void)?
   var adjust: ((Int) -> Void)?
   var choices: (() -> ControllerFocusChoices)?
+  /// Builds the NSMenu (submenus and checkmarks included) A lists in the controller menu.
+  var menuProvider: (() -> (title: String, menu: NSMenu))?
   var isTargetEnabled = true
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
@@ -39,6 +41,7 @@ private struct ControllerFocusAnchor: NSViewRepresentable {
   var trigger: (() -> Void)?
   var adjust: ((Int) -> Void)?
   var choices: (() -> ControllerFocusChoices)?
+  var menuProvider: (() -> (title: String, menu: NSMenu))?
 
   func makeNSView(context: Context) -> ControllerFocusAnchorView {
     let view = ControllerFocusAnchorView()
@@ -50,6 +53,7 @@ private struct ControllerFocusAnchor: NSViewRepresentable {
     view.trigger = trigger
     view.adjust = adjust
     view.choices = choices
+    view.menuProvider = menuProvider
     view.isTargetEnabled = enabled
   }
 }
@@ -102,6 +106,13 @@ extension View {
     })
   }
 
+  /// Makes a SwiftUI `Menu` reachable by controller. SwiftUI does not always back
+  /// it with an NSPopUpButton, so the anchor builds an equivalent NSMenu on demand
+  /// (see `ControllerMenuBuilder`); A lists it, submenus open with A or right.
+  func controllerMenu(_ menu: @escaping () -> (title: String, menu: NSMenu)) -> some View {
+    modifier(ControllerMenuModifier(menu: menu))
+  }
+
   /// Makes a slider reachable by controller; D-pad left/right changes the value
   /// by `step`, or a twentieth of the range.
   func controllerSlider<V: BinaryFloatingPoint>(
@@ -136,6 +147,39 @@ private struct ControllerPickerModifier<T: Equatable>: ViewModifier {
             selection.wrappedValue = options[index]
           })
       }))
+  }
+}
+
+private struct ControllerMenuModifier: ViewModifier {
+  let menu: () -> (title: String, menu: NSMenu)
+  @Environment(\.isEnabled) private var isEnabled
+
+  func body(content: Content) -> some View {
+    content.background(ControllerFocusAnchor(enabled: isEnabled, menuProvider: menu))
+  }
+}
+
+/// Builds the NSMenu items `controllerMenu(_:)` hands to the controller menu.
+enum ControllerMenuBuilder {
+  /// A menu item that runs `action` when chosen. The item retains its target.
+  static func item(
+    title: String, checked: Bool = false, enabled: Bool = true, action: @escaping () -> Void
+  ) -> NSMenuItem {
+    let item = NSMenuItem(title: title, action: #selector(ControllerChoiceTarget.choose(_:)), keyEquivalent: "")
+    let target = ControllerChoiceTarget(action)
+    item.target = target
+    item.representedObject = target
+    item.state = checked ? .on : .off
+    item.isEnabled = enabled
+    return item
+  }
+
+  /// An item that opens `submenu`; `checked` marks it when something inside is on.
+  static func submenuItem(title: String, checked: Bool = false, submenu: NSMenu) -> NSMenuItem {
+    let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+    item.submenu = submenu
+    item.state = checked ? .on : .off
+    return item
   }
 }
 
@@ -396,11 +440,12 @@ private final class ControllerFocusRing {
     // anchor wins so each control is reached once.
     let carrierFrames = targets.compactMap { target -> NSRect? in
       guard let anchor = target.view as? ControllerFocusAnchorView,
-            anchor.adjust != nil || anchor.choices != nil else { return nil }
+            anchor.adjust != nil || anchor.choices != nil || anchor.menuProvider != nil else { return nil }
       return frame(of: target)?.insetBy(dx: -8, dy: -8)
     }
     targets.removeAll { target in
-      guard target.kind == .popUp || target.kind == .slider, let frame = frame(of: target) else { return false }
+      guard target.kind == .popUp || target.kind == .menu || target.kind == .slider,
+            let frame = frame(of: target) else { return false }
       return carrierFrames.contains { $0.contains(frame) }
     }
 
@@ -670,7 +715,12 @@ private final class ControllerFocusRing {
   private func activate(_ target: Target, window: NSWindow) {
     switch target.view {
     case let anchor as ControllerFocusAnchorView:
-      if let choices = anchor.choices {
+      if let provider = anchor.menuProvider {
+        let built = provider()
+        ControllerMenuPanel.shared.present(
+          menu: built.menu, title: built.title, in: window,
+          selectedIndex: -1, firstIndex: 0, onClose: nil)
+      } else if let choices = anchor.choices {
         presentChoices(choices(), in: window)
       } else {
         anchor.trigger?()
@@ -751,7 +801,7 @@ private final class ControllerFocusRing {
 }
 
 /// Menu item target for a picker option; the item retains it.
-private final class ControllerChoiceTarget: NSObject {
+final class ControllerChoiceTarget: NSObject {
   private let action: () -> Void
   init(_ action: @escaping () -> Void) { self.action = action }
   @objc func choose(_ sender: Any?) { action() }
