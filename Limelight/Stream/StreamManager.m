@@ -436,6 +436,9 @@ static void MLScaleClearPending(NSString *hostUUID) {
     CFTimeInterval _lastQueryTime;
     BOOL _refreshInFlight;
     BOOL _sessionLive;
+    // Bumped when a session begins and when it ends. Work created for one session carries the
+    // value it saw and is dropped on the scale queue if the session is no longer that one.
+    NSUInteger _sessionGeneration;
 }
 
 - (instancetype)initWithHostUUID:(NSString *)hostUUID hostAddress:(NSString *)hostAddress serverCert:(NSData *)serverCert {
@@ -467,6 +470,34 @@ static void MLScaleClearPending(NSString *hostUUID) {
             _serverCert = [serverCert copy];
         }
     }
+}
+
+#pragma mark Session guard
+
+// Generation to stamp on work created right now (any thread).
+- (NSUInteger)currentSessionGeneration {
+    @synchronized (self) {
+        return _sessionGeneration;
+    }
+}
+
+// YES while `generation` is still the live session. Call it on the scale queue right before
+// anything that writes to the host: -endSessionRestoring: flips this under the same lock and
+// queues its restore behind us, so a request that passes here is always followed by the restore,
+// and one created before teardown (or for an earlier session) cannot pass any more.
+- (BOOL)isSessionCurrent:(NSUInteger)generation source:(NSString *)source {
+    BOOL live = NO;
+    NSUInteger current = 0;
+    @synchronized (self) {
+        live = _sessionLive;
+        current = _sessionGeneration;
+    }
+    if (live && current == generation) {
+        return YES;
+    }
+    Log(LOG_I, @"[display-scale] ignored stale request source=%@ generation=%lu current=%lu live=%d",
+        source, (unsigned long)generation, (unsigned long)current, live ? 1 : 0);
+    return NO;
 }
 
 #pragma mark Snapshot
@@ -610,6 +641,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
                        desiredSetting:(NSInteger)setting
                    restoreAfterStream:(BOOL)restore
                            completion:(MLRemoteDisplayScaleCompletion)completion {
+    NSUInteger generation = 0;
     @synchronized (self) {
         _target = [targetDisplay copy] ?: @"";
         _resolvedDeviceId = nil;
@@ -618,10 +650,15 @@ static void MLScaleClearPending(NSString *hostUUID) {
         _support = MLRemoteDisplayScaleSupportUnknown;
         _awaitingFirstQuery = YES;
         _sessionLive = YES;
+        generation = ++_sessionGeneration;
     }
     MLRemoteDisplayScaleSetLive(_hostUUID, YES);
 
     dispatch_async(MLRemoteDisplayScaleQueue(), ^{
+        // The stream may already be over, or replaced, by the time the queue gets here.
+        if (![self isSessionCurrent:generation source:@"stream-start"]) {
+            return;
+        }
         HttpManager *http = [self newHttpManager];
         if (http == nil) {
             @synchronized (self) {
@@ -653,7 +690,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
         } else if (wanted == self.currentPercent) {
             Log(LOG_I, @"[display-scale] start: scale is already %ld%%", (long)wanted);
         } else {
-            [self applyPercentOnQueue:wanted http:http restore:restore source:@"stream-start" completion:completion];
+            [self applyPercentOnQueue:wanted http:http restore:restore generation:generation source:@"stream-start" completion:completion];
         }
         [http invalidateSunshineAPISession];
     });
@@ -661,11 +698,17 @@ static void MLScaleClearPending(NSString *hostUUID) {
 
 #pragma mark Applying a value (scale queue only)
 
+// A request that is no longer for the live session is dropped without calling the completion:
+// the stream it belonged to is gone, so there is nobody left to show an outcome to.
 - (void)applyPercentOnQueue:(NSInteger)percent
                        http:(HttpManager *)http
                     restore:(BOOL)restore
+                 generation:(NSUInteger)generation
                      source:(NSString *)source
                  completion:(MLRemoteDisplayScaleCompletion)completion {
+    if (![self isSessionCurrent:generation source:source]) {
+        return;
+    }
     NSString *deviceId = nil;
     NSString *displayName = nil;
     NSInteger before = 0;
@@ -779,7 +822,12 @@ static void MLScaleClearPending(NSString *hostUUID) {
 - (void)applyPercent:(NSInteger)percent
   restoreAfterStream:(BOOL)restore
           completion:(MLRemoteDisplayScaleCompletion)completion {
+    // Stamped when the action is created: a menu that outlives its stream must not act on a later one.
+    NSUInteger generation = [self currentSessionGeneration];
     dispatch_async(MLRemoteDisplayScaleQueue(), ^{
+        if (![self isSessionCurrent:generation source:@"control-center"]) {
+            return;
+        }
         HttpManager *http = [self newHttpManager];
         if (http == nil) {
             [self finishOnMain:completion outcome:@{ @"ok": @NO, @"changed": @NO, @"errorCode": @"no_host", @"httpStatus": @0 }];
@@ -791,13 +839,14 @@ static void MLScaleClearPending(NSString *hostUUID) {
         if (self.support != MLRemoteDisplayScaleSupportAvailable) {
             [self finishOnMain:completion outcome:@{ @"ok": @NO, @"changed": @NO, @"errorCode": @"unsupported_platform", @"httpStatus": @0 }];
         } else {
-            [self applyPercentOnQueue:percent http:http restore:restore source:@"control-center" completion:completion];
+            [self applyPercentOnQueue:percent http:http restore:restore generation:generation source:@"control-center" completion:completion];
         }
         [http invalidateSunshineAPISession];
     });
 }
 
 - (void)refreshOptionsIfStale {
+    NSUInteger generation = 0;
     @synchronized (self) {
         if (!_sessionLive || _refreshInFlight || _awaitingFirstQuery ||
             _support == MLRemoteDisplayScaleSupportUnavailable ||
@@ -805,9 +854,11 @@ static void MLScaleClearPending(NSString *hostUUID) {
             return;
         }
         _refreshInFlight = YES;
+        generation = _sessionGeneration;
     }
     dispatch_async(MLRemoteDisplayScaleQueue(), ^{
-        HttpManager *http = [self newHttpManager];
+        // After teardown (or for a replaced session) the snapshot is not worth another host call.
+        HttpManager *http = [self isSessionCurrent:generation source:@"refresh"] ? [self newHttpManager] : nil;
         if (http != nil) {
             [self queryOptionsWithHttp:http status:NULL];
             [http invalidateSunshineAPISession];
@@ -825,6 +876,8 @@ static void MLScaleClearPending(NSString *hostUUID) {
     NSData *cert = nil;
     @synchronized (self) {
         _sessionLive = NO;
+        // Invalidates every request stamped before this point; see -isSessionCurrent:source:.
+        _sessionGeneration++;
         address = _hostAddress;
         cert = _serverCert;
     }

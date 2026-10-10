@@ -62,7 +62,9 @@ typedef void (^MLRemoteDisplayScaleCompletion)(NSDictionary<NSString *, id> *out
                    restoreAfterStream:(BOOL)restore
                            completion:(MLRemoteDisplayScaleCompletion)completion;
 
-// Control center: apply a percentage now.
+// Control center: apply a percentage now. Only acts on the session that is live when this is
+// called; if the stream ends (or is replaced) before the request reaches the host it is
+// dropped and the completion is not called.
 - (void)applyPercent:(NSInteger)percent
   restoreAfterStream:(BOOL)restore
           completion:(MLRemoteDisplayScaleCompletion)completion;
