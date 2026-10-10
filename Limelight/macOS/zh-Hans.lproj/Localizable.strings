@@ -1334,6 +1334,9 @@
 "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter." = "%@ 音频在视频码率之外约需 %@ Mbps（预计总计 %@ Mbps），而当前链路不是有线局域网。带宽不足会导致音频中断和画面卡顿。";
 "The %@ decoder failed. Audio is muted; Opus will be used next time." = "%@ 解码失败，本次已静音，下次将使用 Opus。";
 "The host rejected the stream while %@ audio was requested. Opus will be used next time; start the stream again." = "请求 %@ 音频时主机拒绝了串流。下次将使用 Opus，请重新开始串流。";
+"Audio output \"%@\" did not start. The stream continues without sound and keeps retrying." = "音频输出设备“%@”未能启动。串流会继续，暂时没有声音，并会不断重试。";
+"The audio output did not start. The stream continues without sound and keeps retrying." = "音频输出设备未能启动。串流会继续，暂时没有声音，并会不断重试。";
+"Audio restored." = "声音已恢复。";
 "AC3" = "AC3";
 "E-AC3" = "E-AC3";
 "Audio codec hint compressed" = "%@ 音频约占用 %@ Mbps。它在这台 Mac 上解码，与 Opus 相比会增加约 32 毫秒的音频延迟，且没有音质提升，仅为兼容性而提供。如果网络承载不了，会出现音频中断和画面卡顿。";

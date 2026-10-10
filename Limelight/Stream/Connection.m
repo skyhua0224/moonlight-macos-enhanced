@@ -188,6 +188,14 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 - (BOOL)attempt714PrimaryDecoderReprobeWithSampleData:(char *)sampleData
                                          sampleLength:(int)sampleLength;
 - (void)updateVolume;
+- (OSStatus)initializeLegacyAudioQueueRendererWithOpusConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
+                                               channelLayout:(const AudioChannelLayout *)channelLayout;
+- (void)prepareAudioOutputQueue;
+- (void)beginAudioOutputStartWithOpusConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
+                              channelLayout:(const AudioChannelLayout *)channelLayout;
+- (void)shutdownAudioOutput;
+- (BOOL)audioOutputAttemptCancelled;
+- (void)discardBufferedAudio;
 - (void)noteAudioCodecProblemWithNoticeKey:(NSString *)noticeKey markUnsupported:(BOOL)markUnsupported;
 @end
 
@@ -294,6 +302,35 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     BOOL _hasAudioFallbackDecoderConfig;
     BOOL _usingAudioFallbackDecoderConfig;
     BOOL _audioPrimaryReprobeAttempted;
+
+    // Output start and teardown. Starting an output device can block inside
+    // CoreAudio for ~10 s and fail (HDMI/DisplayPort clocks stall while the
+    // display reconfigures), so ArInit never starts it itself: it prepares the
+    // decoder and ring and schedules the start on _audioOutputQueue. That serial
+    // queue owns every output backend (_audioUnit, _audioQueue, the enhanced
+    // engine) and the ring/scratch memory the render callbacks read, so starts
+    // never overlap and teardown is ordered after any in-flight start.
+    //  - _audioOutputGeneration is bumped by ArInit and ArCleanup (atomic). Every
+    //    queued block carries the generation it was created for and does nothing
+    //    when it is stale, which cancels pending retries and device-change
+    //    triggers. A start that is already inside CoreAudio cannot be aborted;
+    //    it is simply torn down by the cleanup block queued behind it.
+    //  - ArCleanup waits (bounded) for that cleanup block: the ring may only be
+    //    freed after the unit that reads it is stopped. If CoreAudio wedges past
+    //    the bound, the block still frees everything later and ArCleanup returns
+    //    without touching the ring, so there is no use-after-free either way.
+    //  - Written and read on _audioOutputQueue only unless noted.
+    dispatch_queue_t _audioOutputQueue;
+    int32_t _audioOutputGeneration;       // atomic; any thread
+    int32_t _audioAttemptGeneration;      // generation of the attempt in progress
+    int32_t _audioOutputRetryToken;       // invalidates an earlier scheduled retry
+    BOOL _audioOutputRunning;
+    BOOL _audioOutputFailureNoticed;
+    int _audioOutputStartAttempts;
+    OSStatus _audioOutputStartStatus;     // last failure reported by a backend
+    OPUS_MULTISTREAM_CONFIGURATION _audioOutputOpusConfig;
+    AudioChannelLayout _audioOutputChannelLayout;
+    AudioObjectPropertyListenerBlock _audioOutputListener; // set by ArInit, removed by ArCleanup
 
 #if defined(LI_MIC_CONTROL_START)
     dispatch_queue_t _micQueue;
@@ -551,6 +588,38 @@ static NSString *MLDefaultOutputDeviceName(void) {
     return CFBridgingRelease(deviceName);
 }
 
+// The device clock did not start ('stop'). Every further backend in the same
+// attempt would wait out the same ~10 s timeout and fail identically.
+static BOOL MLAudioStatusIsDeviceNotRunning(OSStatus status) {
+    return status == kAudioHardwareNotRunningError;
+}
+
+// Renders an OSStatus that is a four-character code as 'abcd'; "n/a" otherwise.
+static NSString *MLAudioStatusFourCC(OSStatus status) {
+    char code[4] = {
+        (char)((status >> 24) & 0xFF), (char)((status >> 16) & 0xFF),
+        (char)((status >> 8) & 0xFF), (char)(status & 0xFF)
+    };
+    for (int i = 0; i < 4; i++) {
+        if (code[i] < 0x20 || code[i] > 0x7E) {
+            return @"n/a";
+        }
+    }
+    return [NSString stringWithFormat:@"'%c%c%c%c'", code[0], code[1], code[2], code[3]];
+}
+
+static NSString *MLAudioRendererBackendName(MLAudioRendererBackend backend) {
+    switch (backend) {
+        case MLAudioRendererBackendDirect:
+            return @"direct";
+        case MLAudioRendererBackendEnhanced:
+            return @"enhanced";
+        case MLAudioRendererBackendLegacyQueue:
+        default:
+            return @"legacy-queue";
+    }
+}
+
 static UInt32 MLDefaultOutputTransportType(void) {
     AudioDeviceID deviceID = kAudioObjectUnknown;
     UInt32 propertySize = sizeof(deviceID);
@@ -803,6 +872,10 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     OPUS_MULTISTREAM_CONFIGURATION opusConfig = {};
     MLPrepareOpusDecoderConfig(originalOpusConfig, &opusConfig);
 
+    // Must precede the buffer allocations below: it waits for a teardown of an
+    // earlier run that may still be queued and would free what is allocated here.
+    [conn prepareAudioOutputQueue];
+
     // The library may have downgraded the request (not Sunshine, too many
     // channels). What it negotiated is what it puts into the SDP, so it wins.
     int negotiatedCodec = MLAudioCodecOpus;
@@ -1012,89 +1085,11 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     //[audioSession setPreferredOutputNumberOfChannels:opusConfig->channelCount error:&audioSessionError];
 #endif
 
-    OSStatus status = noErr;
-
-    if ((MLAudioOutputMode)conn->_audioOutputMode == MLAudioOutputModeDirect) {
-        if ([conn initializeDirectAudioRendererWithOpusConfig:&opusConfig channelLayout:&channelLayout]) {
-            conn->_audioRendererBackend = MLAudioRendererBackendDirect;
-            return noErr;
-        }
-        Log(LOG_W, @"Direct audio renderer unavailable; falling back to legacy audio queue backend");
-    } else if ((MLAudioOutputMode)conn->_audioOutputMode == MLAudioOutputModeEnhanced) {
-        if ([conn initializeEnhancedAudioRendererWithOpusConfig:&opusConfig]) {
-            conn->_audioRendererBackend = MLAudioRendererBackendEnhanced;
-            return noErr;
-        }
-        Log(LOG_W, @"Enhanced audio renderer unavailable; falling back to legacy audio queue backend");
-    }
-    
-    AudioStreamBasicDescription audioFormat = {0};
-    audioFormat.mSampleRate = opusConfig.sampleRate;
-    audioFormat.mBitsPerChannel = 16;
-    audioFormat.mFormatID = kAudioFormatLinearPCM;
-    audioFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked;
-    audioFormat.mChannelsPerFrame = opusConfig.channelCount;
-    audioFormat.mBytesPerFrame = audioFormat.mChannelsPerFrame * (audioFormat.mBitsPerChannel / 8);
-    audioFormat.mBytesPerPacket = audioFormat.mBytesPerFrame;
-    audioFormat.mFramesPerPacket = audioFormat.mBytesPerPacket / audioFormat.mBytesPerFrame;
-    audioFormat.mReserved = 0;
-
-    if (conn->_audioQueueContext == NULL) {
-        conn->_audioQueueContext = (__bridge_retained void *)conn;
-    }
-
-    status = AudioQueueNewOutput(&audioFormat, FillOutputBuffer, conn->_audioQueueContext, nil, nil, 0, &conn->_audioQueue);
-    if (status != noErr) {
-        Log(LOG_E, @"Error allocating output queue: %d\n", status);
-        if (conn->_audioQueueContext != NULL) {
-            CFBridgingRelease(conn->_audioQueueContext);
-            conn->_audioQueueContext = NULL;
-        }
-        return status;
-    }
-    
-    // We need to specify a channel layout for surround sound configurations
-    status = AudioQueueSetProperty(conn->_audioQueue, kAudioQueueProperty_ChannelLayout, &channelLayout, sizeof(channelLayout));
-    if (status != noErr) {
-        Log(LOG_E, @"Error configuring surround channel layout: %d\n", status);
-        AudioQueueDispose(conn->_audioQueue, true);
-        conn->_audioQueue = NULL;
-        if (conn->_audioQueueContext != NULL) {
-            CFBridgingRelease(conn->_audioQueueContext);
-            conn->_audioQueueContext = NULL;
-        }
-        return status;
-    }
-    
-    for (int i = 0; i < AUDIO_QUEUE_BUFFERS; i++) {
-        status = AudioQueueAllocateBuffer(conn->_audioQueue, audioFormat.mBytesPerFrame * opusConfig.samplesPerFrame, &conn->_audioBuffers[i]);
-        if (status != noErr) {
-            Log(LOG_E, @"Error allocating output buffer: %d\n", status);
-            AudioQueueDispose(conn->_audioQueue, true);
-            conn->_audioQueue = NULL;
-            if (conn->_audioQueueContext != NULL) {
-                CFBridgingRelease(conn->_audioQueueContext);
-                conn->_audioQueueContext = NULL;
-            }
-            return status;
-        }
-
-        FillOutputBuffer(conn->_audioQueueContext, conn->_audioQueue, conn->_audioBuffers[i]);
-    }
-    
-    status = AudioQueueStart(conn->_audioQueue, nil);
-    if (status != noErr) {
-        Log(LOG_E, @"Error starting queue: %d\n", status);
-        AudioQueueDispose(conn->_audioQueue, true);
-        conn->_audioQueue = NULL;
-        if (conn->_audioQueueContext != NULL) {
-            CFBridgingRelease(conn->_audioQueueContext);
-            conn->_audioQueueContext = NULL;
-        }
-        return status;
-    }
-    
-    return status;
+    // Starting the output can block for ~10 s per backend when the device clock
+    // does not run, and a stream without sound is better than no stream, so the
+    // start happens in the background and ArInit succeeds regardless of it.
+    [conn beginAudioOutputStartWithOpusConfig:&opusConfig channelLayout:&channelLayout];
+    return 0;
 }
 
 void ArCleanup(void)
@@ -1104,7 +1099,9 @@ void ArCleanup(void)
         return;
     }
 
-    [conn cleanupSelectedAudioRenderer];
+    // Stops the output (cancelling a start that is pending or in flight) and frees
+    // the ring and render scratch buffer, which the render callbacks read.
+    [conn shutdownAudioOutput];
 
     if (conn->_audioCodec != MLAudioCodecOpus) {
         MLAudioRxReportStats(conn, LiGetMillis(), YES);
@@ -1127,18 +1124,10 @@ void ArCleanup(void)
         opus_multistream_decoder_destroy(conn->_opusDecoder);
         conn->_opusDecoder = NULL;
     }
-    
-    // Must be freed after the queue is stopped
-    if (conn->_audioCircularBuffer != NULL) {
-        free(conn->_audioCircularBuffer);
-        conn->_audioCircularBuffer = NULL;
-    }
 
-    if (conn->_audioRenderScratchBuffer != NULL) {
-        free(conn->_audioRenderScratchBuffer);
-        conn->_audioRenderScratchBuffer = NULL;
-    }
-    
+    // The ring and scratch buffer are freed by -shutdownAudioOutput, after the
+    // output that reads them has been stopped.
+
 #if TARGET_OS_IPHONE
     // Audio session is now inactive
     [[AVAudioSession sharedInstance] setActive: NO error: nil];
@@ -1582,6 +1571,9 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     
     // Check if there is space for this sample in the buffer. Again, this can race
     // but in the worst case, we'll not see the sample callback having consumed a sample.
+    // While no output is running (still starting, or retrying after a failure) nothing
+    // consumes, so the ring fills once and the rest is dropped here without blocking
+    // or logging; the output start discards that stale content.
     if (conn->_audioBufferEntries == 0 || ((conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries) == conn->_audioBufferReadIndex) {
         return;
     }
@@ -1939,6 +1931,9 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 
     for (NSUInteger attempt = 0; attempt < 2; attempt++) {
         BOOL stereoFallback = (attempt == 1 && requestedRenderChannels > 2);
+        if (stereoFallback && [self audioOutputAttemptCancelled]) {
+            return NO;
+        }
         _audioRenderChannelCount = stereoFallback ? 2 : requestedRenderChannels;
 
         AudioComponentDescription desc = {0};
@@ -1953,6 +1948,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 
         OSStatus status = AudioComponentInstanceNew(component, &_audioUnit);
         if (status != noErr) {
+            _audioOutputStartStatus = status;
             _audioUnit = NULL;
             return NO;
         }
@@ -1967,6 +1963,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
                                       &callback,
                                       sizeof(callback));
         if (status != noErr) {
+            _audioOutputStartStatus = status;
             [self cleanupSelectedAudioRenderer];
             if (!stereoFallback && requestedRenderChannels > 2) {
                 Log(LOG_W, @"Direct renderer multichannel callback setup failed (%d); retrying with stereo downmix", status);
@@ -2001,6 +1998,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
                                       &audioFormat,
                                       sizeof(audioFormat));
         if (status != noErr) {
+            _audioOutputStartStatus = status;
             [self cleanupSelectedAudioRenderer];
             if (!stereoFallback && requestedRenderChannels > 2) {
                 Log(LOG_W, @"Direct renderer multichannel stream format rejected (%d); retrying with stereo downmix", status);
@@ -2017,6 +2015,7 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
                                           channelLayout,
                                           sizeof(AudioChannelLayout));
             if (status != noErr) {
+                _audioOutputStartStatus = status;
                 [self cleanupSelectedAudioRenderer];
                 Log(LOG_W, @"Direct renderer channel layout rejected (%d); retrying with stereo downmix", status);
                 continue;
@@ -2025,7 +2024,12 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 
         status = AudioUnitInitialize(_audioUnit);
         if (status != noErr) {
+            _audioOutputStartStatus = status;
             [self cleanupSelectedAudioRenderer];
+            if (MLAudioStatusIsDeviceNotRunning(status)) {
+                Log(LOG_W, @"Direct renderer initialization failed (%d, device not running); skipping the stereo downmix retry", status);
+                return NO;
+            }
             if (!stereoFallback && requestedRenderChannels > 2) {
                 Log(LOG_W, @"Direct renderer multichannel initialization failed (%d); retrying with stereo downmix", status);
                 continue;
@@ -2033,9 +2037,18 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
             return NO;
         }
 
+        // Whatever accumulated in the ring while the device was unavailable is
+        // stale; drop it so the first thing heard is current audio.
+        [self discardBufferedAudio];
         status = AudioOutputUnitStart(_audioUnit);
         if (status != noErr) {
+            _audioOutputStartStatus = status;
             [self cleanupSelectedAudioRenderer];
+            if (MLAudioStatusIsDeviceNotRunning(status)) {
+                // The stereo retry would wait out the same ~10 s device timeout.
+                Log(LOG_W, @"Direct renderer start failed (%d, device not running); skipping the stereo downmix retry", status);
+                return NO;
+            }
             if (!stereoFallback && requestedRenderChannels > 2) {
                 Log(LOG_W, @"Direct renderer multichannel start failed (%d); retrying with stereo downmix", status);
                 continue;
@@ -2503,7 +2516,9 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         [_enhancedAudioEngine prepare];
 
         NSError *error = nil;
+        [self discardBufferedAudio];
         if (![_enhancedAudioEngine startAndReturnError:&error]) {
+            _audioOutputStartStatus = error != nil ? (OSStatus)error.code : kAudioHardwareUnspecifiedError;
             Log(LOG_W, @"Failed to start enhanced audio renderer: %@", error.localizedDescription);
             [self cleanupSelectedAudioRenderer];
             return NO;
@@ -2576,6 +2591,357 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 
     _audioRendererBackend = MLAudioRendererBackendLegacyQueue;
     _audioRenderChannelCount = 0;
+}
+
+#pragma mark - Output start, retry and teardown
+
+// Seconds to wait after the Nth failed start attempt before trying again.
+static const int kAudioOutputRetryDelaysSec[] = { 3, 5, 8, 12, 15 };
+// Settle time after the system reports a device change before retrying.
+static const NSTimeInterval kAudioOutputDeviceChangeRetryDelaySec = 0.5;
+// How long ArCleanup waits for the output queue. An in-flight start returns
+// within CoreAudio's own ~10 s timeout; this bound only protects stream
+// shutdown from a wedged CoreAudio.
+static const int64_t kAudioOutputTeardownWaitSec = 15;
+
+- (BOOL)audioOutputAttemptCancelled
+{
+    return __atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != _audioAttemptGeneration;
+}
+
+// Drops everything buffered so far. Only called right before an output starts
+// consuming, so no reader is active; the decode thread keeps writing, which only
+// ever moves the write index forward.
+- (void)discardBufferedAudio
+{
+    _audioBufferReadFrameOffset = 0;
+    __sync_synchronize();
+    _audioBufferReadIndex = _audioBufferWriteIndex;
+}
+
+- (OSStatus)initializeLegacyAudioQueueRendererWithOpusConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
+                                               channelLayout:(const AudioChannelLayout *)channelLayout
+{
+    AudioStreamBasicDescription audioFormat = {0};
+    audioFormat.mSampleRate = opusConfig->sampleRate;
+    audioFormat.mBitsPerChannel = 16;
+    audioFormat.mFormatID = kAudioFormatLinearPCM;
+    audioFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked;
+    audioFormat.mChannelsPerFrame = opusConfig->channelCount;
+    audioFormat.mBytesPerFrame = audioFormat.mChannelsPerFrame * (audioFormat.mBitsPerChannel / 8);
+    audioFormat.mBytesPerPacket = audioFormat.mBytesPerFrame;
+    audioFormat.mFramesPerPacket = audioFormat.mBytesPerPacket / audioFormat.mBytesPerFrame;
+    audioFormat.mReserved = 0;
+
+    if (_audioQueueContext == NULL) {
+        _audioQueueContext = (__bridge_retained void *)self;
+    }
+
+    OSStatus status = AudioQueueNewOutput(&audioFormat, FillOutputBuffer, _audioQueueContext, nil, nil, 0, &_audioQueue);
+    if (status != noErr) {
+        Log(LOG_E, @"Error allocating output queue: %d\n", status);
+        _audioQueue = NULL;
+        if (_audioQueueContext != NULL) {
+            CFBridgingRelease(_audioQueueContext);
+            _audioQueueContext = NULL;
+        }
+        return status;
+    }
+
+    // We need to specify a channel layout for surround sound configurations
+    status = AudioQueueSetProperty(_audioQueue, kAudioQueueProperty_ChannelLayout, channelLayout, sizeof(AudioChannelLayout));
+    if (status != noErr) {
+        Log(LOG_E, @"Error configuring surround channel layout: %d\n", status);
+        AudioQueueDispose(_audioQueue, true);
+        _audioQueue = NULL;
+        if (_audioQueueContext != NULL) {
+            CFBridgingRelease(_audioQueueContext);
+            _audioQueueContext = NULL;
+        }
+        return status;
+    }
+
+    [self discardBufferedAudio];
+    for (int i = 0; i < AUDIO_QUEUE_BUFFERS; i++) {
+        status = AudioQueueAllocateBuffer(_audioQueue, audioFormat.mBytesPerFrame * opusConfig->samplesPerFrame, &_audioBuffers[i]);
+        if (status != noErr) {
+            Log(LOG_E, @"Error allocating output buffer: %d\n", status);
+            AudioQueueDispose(_audioQueue, true);
+            _audioQueue = NULL;
+            if (_audioQueueContext != NULL) {
+                CFBridgingRelease(_audioQueueContext);
+                _audioQueueContext = NULL;
+            }
+            return status;
+        }
+
+        FillOutputBuffer(_audioQueueContext, _audioQueue, _audioBuffers[i]);
+    }
+
+    status = AudioQueueStart(_audioQueue, nil);
+    if (status != noErr) {
+        Log(LOG_E, @"Error starting queue: %d\n", status);
+        AudioQueueDispose(_audioQueue, true);
+        _audioQueue = NULL;
+        if (_audioQueueContext != NULL) {
+            CFBridgingRelease(_audioQueueContext);
+            _audioQueueContext = NULL;
+        }
+        return status;
+    }
+
+    return noErr;
+}
+
+// Creates the output queue, or waits for a teardown of a previous run on this
+// object that timed out and may still be queued.
+- (void)prepareAudioOutputQueue
+{
+    if (_audioOutputQueue == nil) {
+        dispatch_queue_attr_t attr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,
+                                                                             QOS_CLASS_USER_INITIATED, 0);
+        _audioOutputQueue = dispatch_queue_create("moonlight.audio.output", attr);
+    } else {
+        dispatch_sync(_audioOutputQueue, ^{});
+    }
+}
+
+// Called by ArInit once decoder and ring exist. Returns immediately; the first
+// start attempt runs on the output queue.
+- (void)beginAudioOutputStartWithOpusConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
+                              channelLayout:(const AudioChannelLayout *)channelLayout
+{
+    _audioOutputOpusConfig = *opusConfig;
+    _audioOutputChannelLayout = *channelLayout;
+    _audioOutputRunning = NO;
+    _audioOutputFailureNoticed = NO;
+    _audioOutputStartAttempts = 0;
+    _audioOutputStartStatus = noErr;
+
+    const int32_t generation = __atomic_add_fetch(&_audioOutputGeneration, 1, __ATOMIC_SEQ_CST);
+    __weak Connection *weakSelf = self;
+
+    // A start that failed may succeed once the system settles (display mode
+    // change finished, another default device chosen, device re-attached), so
+    // those events trigger a prompt retry. The block runs on the output queue.
+    AudioObjectPropertyListenerBlock listener = ^(UInt32 numberAddresses, const AudioObjectPropertyAddress *addresses) {
+        [weakSelf audioOutputEnvironmentChangedForGeneration:generation];
+    };
+    _audioOutputListener = listener;
+    const AudioObjectPropertySelector selectors[] = {
+        kAudioHardwarePropertyDefaultOutputDevice,
+        kAudioHardwarePropertyDevices,
+    };
+    for (size_t i = 0; i < sizeof(selectors) / sizeof(selectors[0]); i++) {
+        AudioObjectPropertyAddress address = {
+            selectors[i],
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        OSStatus status = AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &address,
+                                                              _audioOutputQueue, listener);
+        if (status != noErr) {
+            Log(LOG_W, @"[audio] Could not observe audio device changes (selector 0x%08X, status %d); retries are timer-only",
+                (unsigned int)selectors[i], (int)status);
+        }
+    }
+
+    Log(LOG_I, @"[audio] Output start scheduled in the background; the stream does not wait for the audio device");
+    dispatch_async(_audioOutputQueue, ^{
+        [weakSelf runAudioOutputStartAttemptForGeneration:generation];
+    });
+}
+
+// Output queue only.
+- (void)audioOutputEnvironmentChangedForGeneration:(int32_t)generation
+{
+    if (__atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation || _audioOutputRunning) {
+        return;
+    }
+    Log(LOG_I, @"[audio] Audio devices changed while the output is not running; retrying in %.1fs",
+        kAudioOutputDeviceChangeRetryDelaySec);
+    [self scheduleAudioOutputRetryAfter:kAudioOutputDeviceChangeRetryDelaySec generation:generation];
+}
+
+// Output queue only. A newer schedule (or a running attempt) supersedes this one.
+- (void)scheduleAudioOutputRetryAfter:(NSTimeInterval)delay generation:(int32_t)generation
+{
+    const int32_t token = ++_audioOutputRetryToken;
+    __weak Connection *weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), _audioOutputQueue, ^{
+        Connection *strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf->_audioOutputRetryToken != token) {
+            return;
+        }
+        [strongSelf runAudioOutputStartAttemptForGeneration:generation];
+    });
+}
+
+// Tells the user about the audio output through the stream notice. Not the
+// codec-problem path: that one is latched once per session on purpose.
+- (void)postAudioOutputNoticeWithKey:(NSString *)noticeKey deviceName:(NSString *)deviceName
+{
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(self);
+    if (callbacks == nil || ![callbacks respondsToSelector:@selector(audioCodecNotice:)]) {
+        return;
+    }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSString *format = [[LanguageManager shared] localize:noticeKey];
+        NSString *message = deviceName.length > 0 ? [NSString stringWithFormat:format, deviceName] : format;
+        [callbacks audioCodecNotice:message];
+    });
+}
+
+// One start attempt: the configured backend, then (unless the device clock is
+// known not to run) the remaining fallbacks. Output queue only; the serial
+// queue is what keeps two attempts from ever overlapping.
+- (void)runAudioOutputStartAttemptForGeneration:(int32_t)generation
+{
+    if (__atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation || _audioOutputRunning) {
+        return;
+    }
+    _audioAttemptGeneration = generation;
+    // Supersede any timer still pending from an earlier failure.
+    _audioOutputRetryToken++;
+
+    const int attempt = ++_audioOutputStartAttempts;
+    const uint64_t startMs = LiGetMillis();
+    OPUS_MULTISTREAM_CONFIGURATION opusConfig = _audioOutputOpusConfig;
+    AudioChannelLayout channelLayout = _audioOutputChannelLayout;
+    // Backends overwrite this with the status of the step that failed.
+    _audioOutputStartStatus = kAudioHardwareUnspecifiedError;
+
+    BOOL started = NO;
+    MLAudioRendererBackend backend = MLAudioRendererBackendLegacyQueue;
+    const MLAudioOutputMode mode = (MLAudioOutputMode)_audioOutputMode;
+
+    if (mode == MLAudioOutputModeDirect) {
+        if ([self initializeDirectAudioRendererWithOpusConfig:&opusConfig channelLayout:&channelLayout]) {
+            started = YES;
+            backend = MLAudioRendererBackendDirect;
+        } else if (!MLAudioStatusIsDeviceNotRunning(_audioOutputStartStatus) && ![self audioOutputAttemptCancelled]) {
+            Log(LOG_W, @"Direct audio renderer unavailable; falling back to legacy audio queue backend");
+        }
+    } else if (mode == MLAudioOutputModeEnhanced) {
+        if ([self initializeEnhancedAudioRendererWithOpusConfig:&opusConfig]) {
+            started = YES;
+            backend = MLAudioRendererBackendEnhanced;
+        } else if (!MLAudioStatusIsDeviceNotRunning(_audioOutputStartStatus) && ![self audioOutputAttemptCancelled]) {
+            Log(LOG_W, @"Enhanced audio renderer unavailable; falling back to legacy audio queue backend");
+        }
+    }
+
+    if (!started) {
+        if ([self audioOutputAttemptCancelled]) {
+            // Stream is ending; ArCleanup's teardown follows on this queue.
+        } else if (MLAudioStatusIsDeviceNotRunning(_audioOutputStartStatus)) {
+            Log(LOG_W, @"[audio] Output device clock is not running; skipping the remaining backends of attempt %d", attempt);
+        } else {
+            OSStatus status = [self initializeLegacyAudioQueueRendererWithOpusConfig:&opusConfig
+                                                                       channelLayout:&channelLayout];
+            if (status == noErr) {
+                started = YES;
+                backend = MLAudioRendererBackendLegacyQueue;
+            } else {
+                _audioOutputStartStatus = status;
+            }
+        }
+    }
+
+    const uint64_t elapsedMs = LiGetMillis() - startMs;
+
+    if (started) {
+        _audioRendererBackend = backend;
+        _audioOutputRunning = YES;
+        Log(LOG_I, @"[audio] Output started on attempt %d after %llums: backend=%@",
+            attempt, (unsigned long long)elapsedMs, MLAudioRendererBackendName(backend));
+        if (_audioOutputFailureNoticed && ![self audioOutputAttemptCancelled]) {
+            _audioOutputFailureNoticed = NO;
+            [self postAudioOutputNoticeWithKey:@"Audio restored." deviceName:nil];
+        }
+        return;
+    }
+
+    if ([self audioOutputAttemptCancelled]) {
+        return;
+    }
+
+    const int delaySec = kAudioOutputRetryDelaysSec[MIN(attempt, (int)(sizeof(kAudioOutputRetryDelaysSec) / sizeof(kAudioOutputRetryDelaysSec[0]))) - 1];
+    NSString *deviceName = MLDefaultOutputDeviceName();
+    Log(LOG_W, @"[audio] Output start attempt %d failed: status=%d (%@) device=%@ elapsedMs=%llu; stream continues without sound, retry in %ds",
+        attempt,
+        (int)_audioOutputStartStatus,
+        MLAudioStatusFourCC(_audioOutputStartStatus),
+        deviceName,
+        (unsigned long long)elapsedMs,
+        delaySec);
+
+    if (!_audioOutputFailureNoticed) {
+        _audioOutputFailureNoticed = YES;
+        // MLDefaultOutputDeviceName reports "Unknown Output" when the name cannot be read.
+        BOOL hasName = deviceName.length > 0 && ![deviceName isEqualToString:@"Unknown Output"];
+        [self postAudioOutputNoticeWithKey:hasName
+            ? @"Audio output \"%@\" did not start. The stream continues without sound and keeps retrying."
+            : @"The audio output did not start. The stream continues without sound and keeps retrying."
+                                deviceName:hasName ? deviceName : nil];
+    }
+
+    [self scheduleAudioOutputRetryAfter:delaySec generation:generation];
+}
+
+// ArCleanup: cancels pending and future starts, stops the output and frees the
+// buffers the render callbacks read. Waits for the output queue so an in-flight
+// start finishes (and is torn down) before the memory goes away, but never longer
+// than kAudioOutputTeardownWaitSec; see the ivar comment for the timeout case.
+- (void)shutdownAudioOutput
+{
+    __atomic_add_fetch(&_audioOutputGeneration, 1, __ATOMIC_SEQ_CST);
+
+    AudioObjectPropertyListenerBlock listener = _audioOutputListener;
+    _audioOutputListener = nil;
+    if (listener != nil) {
+        const AudioObjectPropertySelector selectors[] = {
+            kAudioHardwarePropertyDefaultOutputDevice,
+            kAudioHardwarePropertyDevices,
+        };
+        for (size_t i = 0; i < sizeof(selectors) / sizeof(selectors[0]); i++) {
+            AudioObjectPropertyAddress address = {
+                selectors[i],
+                kAudioObjectPropertyScopeGlobal,
+                kAudioObjectPropertyElementMain
+            };
+            AudioObjectRemovePropertyListenerBlock(kAudioObjectSystemObject, &address, _audioOutputQueue, listener);
+        }
+    }
+
+    void (^teardown)(void) = ^{
+        [self cleanupSelectedAudioRenderer];
+        self->_audioOutputRunning = NO;
+        // Freed only now that nothing can render from them any more.
+        if (self->_audioCircularBuffer != NULL) {
+            free(self->_audioCircularBuffer);
+            self->_audioCircularBuffer = NULL;
+        }
+        if (self->_audioRenderScratchBuffer != NULL) {
+            free(self->_audioRenderScratchBuffer);
+            self->_audioRenderScratchBuffer = NULL;
+        }
+    };
+
+    if (_audioOutputQueue == nil) {
+        teardown();
+        return;
+    }
+
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    dispatch_async(_audioOutputQueue, ^{
+        teardown();
+        dispatch_semaphore_signal(done);
+    });
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, kAudioOutputTeardownWaitSec * NSEC_PER_SEC)) != 0) {
+        Log(LOG_W, @"[audio] Audio output teardown is still waiting on CoreAudio after %llds; it will finish in the background",
+            (long long)kAudioOutputTeardownWaitSec);
+    }
 }
 
 static OSStatus RenderDirectAudioUnit(void *inRefCon,
