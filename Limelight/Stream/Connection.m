@@ -2964,8 +2964,9 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
         }
     }
 
-    if (started) {
-        // Nothing else to start.
+    if (started || MLAudioStatusIsDeviceNotRunning(_audioOutputStartStatus)) {
+        // Nothing else to start, or the device clock is not running and every
+        // other backend would wait out the same timeout.
     } else if (mode == MLAudioOutputModeDirect) {
         if ([self initializeDirectAudioRendererWithOpusConfig:&opusConfig channelLayout:&channelLayout]) {
             started = YES;
@@ -3092,6 +3093,16 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
 
     NSError *error = nil;
     if (![output start:&error]) {
+        NSNumber *status = error.userInfo[MLAudioBitstreamErrorStatusKey];
+        if (status != nil && MLAudioStatusIsDeviceNotRunning((OSStatus)status.intValue)) {
+            // The device clock is not running: no backend can start right now, and
+            // passthrough is as likely to work as any once it recovers. Leave it
+            // eligible and let the attempt end here so the retry tries it again.
+            _audioOutputStartStatus = (OSStatus)status.intValue;
+            Log(LOG_W, @"[audio] Passthrough could not start (%@); the device is not running, it will be tried again",
+                error.localizedDescription ?: @"unknown error");
+            return NO;
+        }
         _audioPassthroughGivenUp = YES;
         Log(LOG_W, @"[audio] Passthrough could not start (%@); decoding %@ on this Mac instead",
             error.localizedDescription ?: @"unknown error", [MLAudioStreamPlan codecDisplayName:_audioCodec]);

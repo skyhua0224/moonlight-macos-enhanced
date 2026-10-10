@@ -22,6 +22,7 @@
 #include "MLIEC61937.h"
 
 NSErrorDomain const MLAudioBitstreamErrorDomain = @"MLAudioBitstreamOutputErrorDomain";
+NSString * const MLAudioBitstreamErrorStatusKey = @"status";
 
 // 'cec3' is the IEC 61937 E-AC-3 carrier (4x the base rate, 6144 frames per
 // burst). The SDK only names the AC3 one (kAudioFormat60958AC3), so define it.
@@ -790,7 +791,14 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
         }
         status = AudioDeviceStart(_deviceID, _procID);
         if (status != noErr) {
-            return [self failStep:@"device-start" detail:[NSString stringWithFormat:@"AudioDeviceStart status %d", (int)status] error:error];
+            BOOL failed = [self failStep:@"device-start" detail:[NSString stringWithFormat:@"AudioDeviceStart status %d", (int)status] error:error];
+            if (error != NULL && *error != nil) {
+                // The caller tells a device whose clock is not running (worth retrying) from a real refusal.
+                NSMutableDictionary *info = [(*error).userInfo mutableCopy];
+                info[MLAudioBitstreamErrorStatusKey] = @(status);
+                *error = [NSError errorWithDomain:(*error).domain code:(*error).code userInfo:info];
+            }
+            return failed;
         }
         _deviceStarted = YES;
         atomic_store(&s->active, true);

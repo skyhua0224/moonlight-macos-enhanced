@@ -47,6 +47,8 @@ typedef struct {
 } MLAudioBitstreamStats;
 
 extern NSErrorDomain const MLAudioBitstreamErrorDomain;
+// userInfo key of a start error: the OSStatus (NSNumber) of the CoreAudio call that failed, when there was one.
+extern NSString * const MLAudioBitstreamErrorStatusKey;
 
 // Sends raw AC3 / E-AC3 syncframes to an HDMI-class device untouched, in
 // exclusive (hog) mode with the device switched to its encoded physical format.
