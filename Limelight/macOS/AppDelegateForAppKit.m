@@ -20,6 +20,7 @@
 #import "AppsWorkspaceViewController.h"
 #import "TemporaryHost.h"
 #import "Logger.h"
+#import "MLAudioBitstreamOutput.h"
 #import "MoonlightEnhanced-Swift.h"
 #import <objc/runtime.h>
 
@@ -88,6 +89,12 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 
     [SparkleUpdateManager startIfConfigured];
     [self installUpdateMenuItem];
+
+    // A crash during Dolby passthrough can leave the sound device in an encoded
+    // format; put it back. Switching a format can take seconds, so not on the main thread.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [MLAudioBitstreamOutput restoreLeftoverDeviceFormatIfNeeded];
+    });
     
     self.controllerNavigation = [[ControllerNavigation alloc] init];
     [self refreshLocalizedChrome];

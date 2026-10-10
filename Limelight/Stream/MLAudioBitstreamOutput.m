@@ -519,6 +519,13 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
 }
 
 + (void)restoreLeftoverDeviceFormatIfNeeded {
+    // App launch and the first stream start may both call this.
+    @synchronized([MLAudioBitstreamOutput class]) {
+        [self restoreLeftoverLocked];
+    }
+}
+
++ (void)restoreLeftoverLocked {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSDictionary *record = [defaults dictionaryForKey:kMLLeftoverDefaultsKey];
     if (record == nil) {

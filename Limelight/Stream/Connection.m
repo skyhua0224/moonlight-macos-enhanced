@@ -8,6 +8,7 @@
 
 #import "Connection.h"
 #import "Ds5HapticsAudioRenderer.h"
+#import "MLAudioBitstreamOutput.h"
 #import "Logger.h"
 #import "Utils.h"
 
@@ -70,6 +71,10 @@ enum {
 // to the user (250 ms of damaged audio for 5 ms PCM packets).
 #define ML_AUDIO_RX_LATE_INVALID_BURST 50
 #define ML_AUDIO_RX_STATS_INTERVAL_MS 10000
+// Pause bursts per report interval that are still unremarkable for passthrough.
+#define ML_AUDIO_PASSTHROUGH_REPORT_PAUSES 4
+// Frames in a row the bitstream output may reject before the session decodes locally.
+#define ML_AUDIO_PASSTHROUGH_MAX_CONSECUTIVE_REJECTS 10
 
 static void MLAudioRxReportStats(Connection *conn, uint64_t nowMs, BOOL force);
 
@@ -162,6 +167,8 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     MLAudioRendererBackendLegacyQueue = 0,
     MLAudioRendererBackendDirect = 1,
     MLAudioRendererBackendEnhanced = 2,
+    // AC3 / E-AC3 sent untouched to the output device (MLAudioBitstreamOutput).
+    MLAudioRendererBackendBitstream = 3,
 };
 
 @interface Connection ()
@@ -196,6 +203,11 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 - (void)shutdownAudioOutput;
 - (BOOL)audioOutputAttemptCancelled;
 - (void)discardBufferedAudio;
+- (NSString *)audioPassthroughRejectionReason;
+- (BOOL)startAudioPassthroughOnOutputQueue;
+- (void)stopAudioPassthroughOnOutputQueue;
+- (void)audioPassthroughLostWithDetail:(NSString *)detail generation:(int32_t)generation;
+- (void)requestAudioPassthroughFallbackWithDetail:(NSString *)detail;
 - (void)noteAudioCodecProblemWithNoticeKey:(NSString *)noticeKey markUnsupported:(BOOL)markUnsupported;
 @end
 
@@ -331,6 +343,29 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     OPUS_MULTISTREAM_CONFIGURATION _audioOutputOpusConfig;
     AudioChannelLayout _audioOutputChannelLayout;
     AudioObjectPropertyListenerBlock _audioOutputListener; // set by ArInit, removed by ArCleanup
+
+    // AC3 / E-AC3 bitstream passthrough: one more output backend, owned by
+    // _audioOutputQueue like the others. The decode thread hands raw frames to
+    // _bitstreamOutput instead of the AudioConverter while _audioPassthroughActive is set.
+    //  - Lifetime: _bitstreamOutput is assigned on the output queue before it is
+    //    published through _audioPassthroughEverStarted (release store; the decode
+    //    thread loads with acquire), and reassigned only by -begin... (ArInit),
+    //    which runs before the library starts the decode thread. -stop leaves the
+    //    object alive, so the decode thread can never message a deallocated output:
+    //    it either sees no output or one that stays valid until the next session.
+    //    ArCleanup runs after the library has stopped the decode thread.
+    //  - _audioPassthroughActive (atomic) is cleared on the output queue before the
+    //    output is stopped; a frame that races with it is rejected by the output.
+    //  - The converter, FIFO and ring are prepared in ArInit regardless, so falling
+    //    back needs nothing new.
+    MLAudioBitstreamOutput *_bitstreamOutput;
+    int32_t _audioPassthroughActive;          // atomic
+    int32_t _audioPassthroughEverStarted;     // atomic
+    int32_t _audioPassthroughFallbackRequested; // atomic; decode thread asks at most once
+    BOOL _audioPassthroughGivenUp;            // output queue; for the rest of the session
+    BOOL _audioLeftoverChecked;               // output queue
+    uint64_t _audioPassthroughConsecutiveRejects; // decode thread
+    MLAudioBitstreamStats _bitstreamReported;     // decode thread (and ArCleanup after it ended)
 
 #if defined(LI_MIC_CONTROL_START)
     dispatch_queue_t _micQueue;
@@ -614,6 +649,8 @@ static NSString *MLAudioRendererBackendName(MLAudioRendererBackend backend) {
             return @"direct";
         case MLAudioRendererBackendEnhanced:
             return @"enhanced";
+        case MLAudioRendererBackendBitstream:
+            return @"bitstream-passthrough";
         case MLAudioRendererBackendLegacyQueue:
         default:
             return @"legacy-queue";
@@ -1043,9 +1080,10 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     conn->_audioPrimaryReprobeAttempted = preferCompatibility714Topology;
 
     {
+        NSString *passthroughRejection = [conn audioPassthroughRejectionReason];
         MLAudioStreamPlan *plan = conn->_audioPlan;
         int packetMs = MAX(1, opusConfig.samplesPerFrame / MAX(1, opusConfig.sampleRate / 1000));
-        Log(LOG_I, @"[audio] Stream start: codec requested=%@ effective=%@ negotiated=%@ channels=%d packetMs=%d samplesPerFrame=%d expectedPacketBytes=%d wireKbps=%d payloadKbps=%d continuousAudio=%d fallback=%@",
+        Log(LOG_I, @"[audio] Stream start: codec requested=%@ effective=%@ negotiated=%@ channels=%d packetMs=%d samplesPerFrame=%d expectedPacketBytes=%d wireKbps=%d payloadKbps=%d continuousAudio=%d fallback=%@ passthrough=%@",
             plan != nil ? plan.requestedCodecName : @"opus",
             plan != nil ? plan.effectiveCodecName : @"opus",
             [MLAudioStreamPlan codecName:conn->_audioCodec],
@@ -1056,7 +1094,8 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
             plan != nil ? (int)plan.wireKbps : 0,
             plan != nil ? (int)plan.payloadKbps : 0,
             conn->_continuousAudio ? 1 : 0,
-            plan != nil ? plan.fallbackLogText : @"none");
+            plan != nil ? plan.fallbackLogText : @"none",
+            passthroughRejection == nil ? @"planned" : [NSString stringWithFormat:@"no(%@)", passthroughRejection]);
     }
 
     Log(LOG_I, @"Audio renderer init request: backendMode=%d audioConfiguration=0x%08X channels=%d streams=%d coupled=%d samplesPerFrame=%d disableHighQuality714=%d",
@@ -1173,6 +1212,33 @@ static void MLAudioRxReportStats(Connection *conn, uint64_t nowMs, BOOL force)
     conn->_audioRxReportedLoss = conn->_audioRxLossPlaceholders;
     conn->_audioRxReportedValid = conn->_audioRxValidPackets;
     conn->_audioRxLastReportMs = nowMs;
+
+    // Passthrough burst counters. A few pause bursts are normal (the prefill at
+    // start, a jitter spike), so only more than that, drops or rejected frames
+    // make a line.
+    if (__atomic_load_n(&conn->_audioPassthroughEverStarted, __ATOMIC_ACQUIRE) != 0) {
+        const MLAudioBitstreamStats total = [conn->_bitstreamOutput stats];
+        const MLAudioBitstreamStats last = conn->_bitstreamReported;
+        const uint64_t pauses = total.pauseBursts - last.pauseBursts;
+        const uint64_t dropped = total.droppedBursts - last.droppedBursts;
+        const uint64_t rejected = total.invalidFrames - last.invalidFrames;
+        if (pauses > ML_AUDIO_PASSTHROUGH_REPORT_PAUSES || dropped > 0 || rejected > 0) {
+            Log(LOG_W, @"[audio] Passthrough bursts since last report: enqueued=%llu played=%llu pause=%llu dropped=%llu invalid=%llu queued=%u (session totals enqueued=%llu played=%llu pause=%llu dropped=%llu invalid=%llu)%@",
+                (unsigned long long)(total.burstsEnqueued - last.burstsEnqueued),
+                (unsigned long long)(total.burstsPlayed - last.burstsPlayed),
+                (unsigned long long)pauses,
+                (unsigned long long)dropped,
+                (unsigned long long)rejected,
+                total.queuedBursts,
+                (unsigned long long)total.burstsEnqueued,
+                (unsigned long long)total.burstsPlayed,
+                (unsigned long long)total.pauseBursts,
+                (unsigned long long)total.droppedBursts,
+                (unsigned long long)total.invalidFrames,
+                rejected > 0 ? [NSString stringWithFormat:@" lastInvalid=%@", [conn->_bitstreamOutput lastInvalidReason]] : @"");
+        }
+        conn->_bitstreamReported = total;
+    }
 }
 
 // Handles one packet of a PCM session on the audio decode thread. Only packets of
@@ -1409,7 +1475,36 @@ static void MLCompressedFail(Connection *conn, NSString *reason)
                              markUnsupported:YES];
 }
 
+// Passthrough: hands one validated frame to the bitstream output. Decode thread only.
+// There is no mute flag in this class; volume 0 is mute, and not enqueueing
+// makes the device play pause bursts. Any other volume cannot be applied to a
+// bitstream and is ignored.
+static void MLAudioPassthroughSubmit(Connection *conn, const uint8_t *bytes, int length)
+{
+    if (conn->_audioVolumeMultiplier <= 0.0f) {
+        conn->_audioPassthroughConsecutiveRejects = 0;
+        return;
+    }
+    MLAudioBitstreamOutput *output = conn->_bitstreamOutput;
+    if (output == nil) {
+        return;
+    }
+    if ([output enqueueFrame:bytes length:(size_t)length]) {
+        conn->_audioPassthroughConsecutiveRejects = 0;
+        return;
+    }
+    if (++conn->_audioPassthroughConsecutiveRejects == ML_AUDIO_PASSTHROUGH_MAX_CONSECUTIVE_REJECTS) {
+        [conn requestAudioPassthroughFallbackWithDetail:
+            [NSString stringWithFormat:@"the output rejected %d frames in a row (%@)",
+             ML_AUDIO_PASSTHROUGH_MAX_CONSECUTIVE_REJECTS, [output lastInvalidReason]]];
+    }
+}
+
 // Handles one packet of an AC3 / E-AC3 session on the audio decode thread.
+//
+// While passthrough is active (read once per packet) the validation, first-packet
+// and muted-state logic and the counters are the same, but a valid frame goes to
+// the bitstream output and the converter, FIFO and ring are left alone.
 //
 // - (NULL, 0) is a packet the library could not recover: one frame of silence.
 // - Every frame must start with the AC-3 sync word 0x0B77 (E-AC3 uses it too). If
@@ -1423,6 +1518,7 @@ static void MLCompressedHandleSample(Connection *conn, const char *sampleData, i
     const uint64_t nowMs = LiGetMillis();
     const int frames = conn->_audioSamplesPerFrame;
     const BOOL isPlaceholder = (sampleData == NULL || sampleLength == 0);
+    const BOOL passthrough = __atomic_load_n(&conn->_audioPassthroughActive, __ATOMIC_ACQUIRE) != 0;
 
     if (conn->_audioRxState == MLAudioRxStateMuted) {
         if (isPlaceholder) {
@@ -1441,8 +1537,11 @@ static void MLCompressedHandleSample(Connection *conn, const char *sampleData, i
     }
 
     if (isPlaceholder) {
+        // Passthrough: the device plays a pause burst when its queue runs dry.
         conn->_audioRxLossPlaceholders++;
-        MLCompressedFifoAppend(conn, NULL, frames);
+        if (!passthrough) {
+            MLCompressedFifoAppend(conn, NULL, frames);
+        }
     } else {
         const uint8_t *bytes = (const uint8_t *)sampleData;
         const BOOL looksValid = sampleLength >= 8 && sampleLength <= ML_COMPRESSED_MAX_FRAME_BYTES &&
@@ -1459,7 +1558,9 @@ static void MLCompressedHandleSample(Connection *conn, const char *sampleData, i
                 MLAudioRxReportStats(conn, nowMs, NO);
                 return;
             }
-            MLCompressedFifoAppend(conn, NULL, frames);
+            if (!passthrough) {
+                MLCompressedFifoAppend(conn, NULL, frames);
+            }
             if (conn->_audioRxConsecutiveInvalid == ML_AUDIO_RX_LATE_INVALID_BURST) {
                 Log(LOG_E, @"[audio] %d consecutive packets are not valid %@ frames (last %d bytes). Audio stays silent until valid frames resume",
                     ML_AUDIO_RX_LATE_INVALID_BURST, [MLAudioStreamPlan codecName:conn->_audioCodec], sampleLength);
@@ -1471,8 +1572,14 @@ static void MLCompressedHandleSample(Connection *conn, const char *sampleData, i
             conn->_audioRxConsecutiveInvalid = 0;
             if (conn->_audioRxState == MLAudioRxStateAwaitingFirstPacket) {
                 conn->_audioRxState = MLAudioRxStateStreaming;
-                Log(LOG_I, @"[audio] First %@ frame received: bytes=%d channels=%d samplesPerFrame=%d",
-                    [MLAudioStreamPlan codecName:conn->_audioCodec], sampleLength, conn->_channelCount, frames);
+                Log(LOG_I, @"[audio] First %@ frame received: bytes=%d channels=%d samplesPerFrame=%d passthrough=%d",
+                    [MLAudioStreamPlan codecName:conn->_audioCodec], sampleLength, conn->_channelCount, frames, passthrough ? 1 : 0);
+            }
+
+            if (passthrough) {
+                MLAudioPassthroughSubmit(conn, bytes, sampleLength);
+                MLAudioRxReportStats(conn, nowMs, NO);
+                return;
             }
 
             MLCompressedInput input = { bytes, (UInt32)sampleLength, NO, {0} };
@@ -1538,7 +1645,9 @@ static void MLCompressedHandleSample(Connection *conn, const char *sampleData, i
         }
     }
 
-    MLCompressedFifoDrain(conn, nowMs);
+    if (!passthrough) {
+        MLCompressedFifoDrain(conn, nowMs);
+    }
     MLAudioRxReportStats(conn, nowMs, NO);
 }
 
@@ -1569,6 +1678,13 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         conn->_audioDecodeThreadPriorityRaised = YES;
     }
     
+    // Passthrough frames never touch the ring, which nothing consumes then and
+    // which therefore sits full: they must be handled before the ring check.
+    if (useCompressed && __atomic_load_n(&conn->_audioPassthroughActive, __ATOMIC_ACQUIRE) != 0) {
+        MLCompressedHandleSample(conn, sampleData, sampleLength);
+        return;
+    }
+
     // Check if there is space for this sample in the buffer. Again, this can race
     // but in the worst case, we'll not see the sample callback having consumed a sample.
     // While no output is running (still starting, or retrying after a failure) nothing
@@ -2717,6 +2833,17 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     _audioOutputFailureNoticed = NO;
     _audioOutputStartAttempts = 0;
     _audioOutputStartStatus = noErr;
+    // Safe to drop the previous session's output here: its teardown already ran
+    // on the output queue (prepareAudioOutputQueue waited for it) and the decode
+    // thread has not been started yet.
+    __atomic_store_n(&_audioPassthroughActive, 0, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&_audioPassthroughEverStarted, 0, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&_audioPassthroughFallbackRequested, 0, __ATOMIC_SEQ_CST);
+    _bitstreamOutput = nil;
+    _audioPassthroughGivenUp = NO;
+    _audioLeftoverChecked = NO;
+    _audioPassthroughConsecutiveRejects = 0;
+    memset(&_bitstreamReported, 0, sizeof(_bitstreamReported));
 
     const int32_t generation = __atomic_add_fetch(&_audioOutputGeneration, 1, __ATOMIC_SEQ_CST);
     __weak Connection *weakSelf = self;
@@ -2806,6 +2933,12 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
 
     const int attempt = ++_audioOutputStartAttempts;
     const uint64_t startMs = LiGetMillis();
+    if (!_audioLeftoverChecked) {
+        // Before any backend touches the device: a crashed earlier run may have
+        // left it in an encoded format that breaks PCM output.
+        _audioLeftoverChecked = YES;
+        [MLAudioBitstreamOutput restoreLeftoverDeviceFormatIfNeeded];
+    }
     OPUS_MULTISTREAM_CONFIGURATION opusConfig = _audioOutputOpusConfig;
     AudioChannelLayout channelLayout = _audioOutputChannelLayout;
     // Backends overwrite this with the status of the step that failed.
@@ -2815,7 +2948,25 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     MLAudioRendererBackend backend = MLAudioRendererBackendLegacyQueue;
     const MLAudioOutputMode mode = (MLAudioOutputMode)_audioOutputMode;
 
-    if (mode == MLAudioOutputModeDirect) {
+    // Passthrough first. If it cannot start it is given up for the session and
+    // this same attempt carries on with the normal backends (local decode), so
+    // no "did not start" notice comes from it alone.
+    if (!_audioPassthroughGivenUp && ![self audioOutputAttemptCancelled]) {
+        NSString *rejection = [self audioPassthroughRejectionReason];
+        if (rejection == nil) {
+            if ([self startAudioPassthroughOnOutputQueue]) {
+                started = YES;
+                backend = MLAudioRendererBackendBitstream;
+            }
+        } else if ([self audioCodecUsesPassthroughPath]) {
+            // Not latched: the default device may change before a later attempt.
+            Log(LOG_I, @"[audio] Passthrough not used: %@; decoding on this Mac", rejection);
+        }
+    }
+
+    if (started) {
+        // Nothing else to start.
+    } else if (mode == MLAudioOutputModeDirect) {
         if ([self initializeDirectAudioRendererWithOpusConfig:&opusConfig channelLayout:&channelLayout]) {
             started = YES;
             backend = MLAudioRendererBackendDirect;
@@ -2889,6 +3040,119 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     [self scheduleAudioOutputRetryAfter:delaySec generation:generation];
 }
 
+#pragma mark - Bitstream passthrough (output queue)
+
+- (BOOL)audioCodecUsesPassthroughPath
+{
+    return _audioCodec == MLAudioCodecAc3 || _audioCodec == MLAudioCodecEac3;
+}
+
+// nil when this session can pass the codec through to the current default output
+// device, otherwise the reason it cannot. The same rule is used for the plan in the
+// stream start log and for the start attempt (which asks again, because the default
+// device may have changed since).
+- (NSString *)audioPassthroughRejectionReason
+{
+    if (![self audioCodecUsesPassthroughPath]) {
+        return @"codec";
+    }
+    if (_audioHostKey.length > 0 && ![SettingsClass audioBitstreamPassthroughAllowedFor:_audioHostKey]) {
+        return @"user setting";
+    }
+    if (_channelCount > 6) {
+        return @"more than 5.1 channels";
+    }
+    MLAudioBitstreamSupport *support = [MLAudioBitstreamOutput supportForCodecOnDefaultDevice:_audioCodec];
+    if (!support.available) {
+        return [NSString stringWithFormat:@"%@ does not accept %@", support.deviceName,
+                [MLAudioStreamPlan codecDisplayName:_audioCodec]];
+    }
+    return nil;
+}
+
+// Output queue only. YES when the bitstream output is running; on failure the
+// output is torn down by the class itself and passthrough is given up.
+- (BOOL)startAudioPassthroughOnOutputQueue
+{
+    const int32_t generation = _audioAttemptGeneration;
+    MLAudioBitstreamOutput *output = [[MLAudioBitstreamOutput alloc] initWithCodec:_audioCodec
+                                                                            device:kAudioObjectUnknown];
+    __weak Connection *weakSelf = self;
+    // Called on the output's own queue. Only hops to ours: stopping from there
+    // would wait on the very callback that is running.
+    output.eventHandler = ^(MLAudioBitstreamEvent event, NSString *detail) {
+        Connection *strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf->_audioOutputQueue == nil) {
+            return;
+        }
+        dispatch_async(strongSelf->_audioOutputQueue, ^{
+            [strongSelf audioPassthroughLostWithDetail:detail generation:generation];
+        });
+    };
+
+    NSError *error = nil;
+    if (![output start:&error]) {
+        _audioPassthroughGivenUp = YES;
+        Log(LOG_W, @"[audio] Passthrough could not start (%@); decoding %@ on this Mac instead",
+            error.localizedDescription ?: @"unknown error", [MLAudioStreamPlan codecDisplayName:_audioCodec]);
+        return NO;
+    }
+
+    _bitstreamOutput = output;
+    const int burstBytes = _audioCodec == MLAudioCodecEac3 ? 24576 : 6144;
+    Log(LOG_I, @"[audio] Passthrough started: device=%@ codec=%@ burst=%d bytes (%d ms)",
+        output.deviceName, [MLAudioStreamPlan codecDisplayName:_audioCodec], burstBytes, 32);
+    __atomic_store_n(&_audioPassthroughEverStarted, 1, __ATOMIC_RELEASE);
+    __atomic_store_n(&_audioPassthroughActive, 1, __ATOMIC_RELEASE);
+    return YES;
+}
+
+// Output queue only. Idempotent. Stops the decode thread from using the output
+// first, then lets the class restore the device. The object stays alive.
+- (void)stopAudioPassthroughOnOutputQueue
+{
+    __atomic_store_n(&_audioPassthroughActive, 0, __ATOMIC_SEQ_CST);
+    [_bitstreamOutput stop];
+}
+
+// Any thread (the decode thread, when the output keeps rejecting frames).
+- (void)requestAudioPassthroughFallbackWithDetail:(NSString *)detail
+{
+    if (__atomic_exchange_n(&_audioPassthroughFallbackRequested, 1, __ATOMIC_SEQ_CST) != 0 || _audioOutputQueue == nil) {
+        return;
+    }
+    const int32_t generation = __atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST);
+    __weak Connection *weakSelf = self;
+    dispatch_async(_audioOutputQueue, ^{
+        [weakSelf audioPassthroughLostWithDetail:detail generation:generation];
+    });
+}
+
+// Output queue only. The device went away, changed, was taken over, or the
+// output stopped being usable: carry on decoding on this Mac through the normal
+// start/retry machinery. The host's codec is fine, so it is not marked as failed.
+- (void)audioPassthroughLostWithDetail:(NSString *)detail generation:(int32_t)generation
+{
+    if (__atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation ||
+        __atomic_load_n(&_audioPassthroughActive, __ATOMIC_SEQ_CST) == 0) {
+        return;
+    }
+    __atomic_store_n(&_audioPassthroughFallbackRequested, 1, __ATOMIC_SEQ_CST);
+    MLAudioBitstreamStats stats = [_bitstreamOutput stats];
+    Log(LOG_W, @"[audio] Passthrough stopped: %@. Falling back to decoding %@ on this Mac (bursts enqueued=%llu played=%llu pause=%llu dropped=%llu)",
+        detail, [MLAudioStreamPlan codecDisplayName:_audioCodec],
+        (unsigned long long)stats.burstsEnqueued, (unsigned long long)stats.burstsPlayed,
+        (unsigned long long)stats.pauseBursts, (unsigned long long)stats.droppedBursts);
+    [self stopAudioPassthroughOnOutputQueue];
+    _audioPassthroughGivenUp = YES;
+    _audioOutputRunning = NO;
+    _audioOutputStartAttempts = 0;
+    _audioOutputFailureNoticed = NO;
+    [self postAudioOutputNoticeWithKey:@"Dolby passthrough stopped; audio continues decoded on this Mac." deviceName:nil];
+    // A short settle time: the device was just handed back (format, hog mode).
+    [self scheduleAudioOutputRetryAfter:0.3 generation:generation];
+}
+
 // ArCleanup: cancels pending and future starts, stops the output and frees the
 // buffers the render callbacks read. Waits for the output queue so an in-flight
 // start finishes (and is torn down) before the memory goes away, but never longer
@@ -2915,6 +3179,9 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     }
 
     void (^teardown)(void) = ^{
+        // Restores the device format, mixing and hog mode before anything else
+        // could open the device, and before the ring below is freed.
+        [self stopAudioPassthroughOnOutputQueue];
         [self cleanupSelectedAudioRenderer];
         self->_audioOutputRunning = NO;
         // Freed only now that nothing can render from them any more.
