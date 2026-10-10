@@ -1254,6 +1254,17 @@ static NSString *HIDCurrentKeyboardLayoutID(void) {
 // mode is exactly the static table with flags 0. Typed mode sends A-Z / 0-9 by
 // the character the key types, flagged non-normalized so the host resolves the
 // key in its own layout; everything else stays positional with flags 0.
+// On Apple ISO keyboards the key left of 1 reports kVK_ISO_Section and the key
+// beside the left Shift reports kVK_ANSI_Grave, the reverse of the PC positions
+// the table describes. Swap them so each physical key sends its PC equivalent.
+static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
+    if ((macKeyCode == kVK_ISO_Section || macKeyCode == kVK_ANSI_Grave) &&
+        KBGetLayoutType(LMGetKbdType()) == kKeyboardISO) {
+        return macKeyCode == kVK_ISO_Section ? kVK_ANSI_Grave : kVK_ISO_Section;
+    }
+    return macKeyCode;
+}
+
 - (uint32_t)keyPairForMacKeyCode:(unsigned short)macKeyCode {
     NSInteger mode = [self usesTypedKeyMapping] ? 1 : 0;
     short virtualKey = mode == 1 ? [self typedVirtualKeyForMacKeyCode:macKeyCode] : 0;
@@ -1261,7 +1272,7 @@ static NSString *HIDCurrentKeyboardLayoutID(void) {
     if (virtualKey != 0) {
         return HIDPackKeyPair((short)(0x8000 | virtualKey), SS_KBE_FLAG_NON_NORMALIZED);
     }
-    NSNumber *positional = [self.mappings objectForKey:@(macKeyCode)];
+    NSNumber *positional = [self.mappings objectForKey:@(HIDPositionalKeyCode(macKeyCode))];
     return HIDPackKeyPair((short)(0x8000 | (positional != nil ? [positional shortValue] : 0)), 0);
 }
 
