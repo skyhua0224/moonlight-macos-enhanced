@@ -203,6 +203,7 @@ private struct KeyboardMouseSettingsSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var inputPermissions = InputMonitoringPermissionManager.sharedManager
+  @StateObject private var accessibility = AccessibilityGesturePermission()
 
   var body: some View {
     FormSection(title: "Keyboard & Mouse") {
@@ -243,6 +244,11 @@ private struct KeyboardMouseSettingsSection: View {
       ToggleCell(title: "Reverse Scroll Direction", boolBinding: $settingsModel.reverseScrollDirection)
       SettingsRow(title: "Precision Touchpad") {
         HStack(spacing: 6) {
+          if settingsModel.hostPrecisionTouchpadMode != 0 && !accessibility.isTrusted {
+            InfoHintButton(
+              hintKey: "Precision Touchpad Gesture Permission Hint",
+              systemImage: "exclamationmark.triangle.fill", tint: .orange)
+          }
           InfoHintButton(hintKey: "Precision Touchpad Hint")
           Picker("", selection: $settingsModel.hostPrecisionTouchpadMode) {
             Text(languageManager.localize("Precision Touchpad Off")).tag(0)
@@ -254,6 +260,11 @@ private struct KeyboardMouseSettingsSection: View {
             languageManager.localize(["Precision Touchpad Off", "Precision Touchpad Block", "Precision Touchpad Both"][value])
           })
           .frame(width: 300, alignment: .trailing)
+        }
+      }
+      .onChange(of: settingsModel.hostPrecisionTouchpadMode) { mode in
+        if mode != 0 {
+          accessibility.offerPermissionIfNeeded()
         }
       }
       ToggleCell(title: "Input Method Text", hintKey: "Input Method Text Hint", boolBinding: $settingsModel.imeTextInput)
@@ -281,6 +292,53 @@ private struct KeyboardMouseSettingsSection: View {
             .foregroundStyle(.secondary)
         }
       }
+    }
+  }
+}
+
+/// Accessibility access lets the stream swallow macOS system gestures (Mission Control, Spaces swipes)
+/// while the precision touchpad sends every finger to the host. Without it the touchpad still works.
+@MainActor
+private final class AccessibilityGesturePermission: ObservableObject {
+  @Published var isTrusted = MLSystemGestureBlocker.isAccessibilityTrusted()
+  private var activeObserver: NSObjectProtocol?
+  private var didPromptThisSession = false
+
+  init() {
+    activeObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in self?.refresh() }
+    }
+  }
+
+  deinit {
+    if let activeObserver {
+      NotificationCenter.default.removeObserver(activeObserver)
+    }
+  }
+
+  func refresh() {
+    isTrusted = MLSystemGestureBlocker.isAccessibilityTrusted()
+  }
+
+  func offerPermissionIfNeeded() {
+    refresh()
+    guard !isTrusted else { return }
+    let language = LanguageManager.shared
+    let alert = NSAlert()
+    alert.alertStyle = .informational
+    alert.messageText = language.localize("Precision Touchpad Gesture Permission Title")
+    alert.informativeText = language.localize("Precision Touchpad Gesture Permission Message")
+    alert.addButton(withTitle: language.localize("Open Accessibility Settings"))
+    alert.addButton(withTitle: language.localize("Not Now"))
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    if didPromptThisSession {
+      MLSystemGestureBlocker.openAccessibilitySettings()
+    } else {
+      didPromptThisSession = true
+      // The system prompt lists the app under Accessibility and offers its own shortcut to the pane.
+      _ = MLSystemGestureBlocker.requestAccessibilityPermission()
     }
   }
 }

@@ -205,13 +205,15 @@ struct InlineSectionLabel: View {
 
 struct InfoHintButton: View {
   let hintKey: String
+  var systemImage: String = "info.circle"
+  var tint: Color = .secondary
   @ObservedObject private var languageManager = LanguageManager.shared
   @SwiftUI.State private var isPresented = false
 
   var body: some View {
     Button { isPresented.toggle() } label: {
-      Image(systemName: "info.circle")
-        .foregroundStyle(.secondary)
+      Image(systemName: systemImage)
+        .foregroundStyle(tint)
     }
     .controllerButtonStyle(.plain)
     .popover(isPresented: $isPresented) {

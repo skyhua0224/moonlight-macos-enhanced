@@ -2917,6 +2917,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     self.pendingHybridRemoteCursorSync = self.isRemoteDesktopMode && ![self usesAbsoluteRemoteDesktopPointerSync];
     self.isMouseCaptured = YES;
     [self refreshMouseMovedAcceptanceState];
+    [self refreshSystemGestureBlockWithReason:@"mouse-captured"];
     [self updateControlCenterEntrypointHints];
     [self noteInputDiagnosticsCaptureArmed];
     Log(LOG_D, @"[diag] captureMouse armed: key=%d fullscreen=%d remoteDesktop=%d inputCtx=%p",
@@ -2983,6 +2984,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     self.pendingMouseExitedRecapture = NO;
     self.isMouseCaptured = NO;
     [self refreshMouseMovedAcceptanceState];
+    [self refreshSystemGestureBlockWithReason:[NSString stringWithFormat:@"mouse-uncaptured:%@", reason ?: @"unknown"]];
     [self updateControlCenterEntrypointHints];
     [self noteInputDiagnosticsUncapture];
     [self logMouseUncaptureStage:@"commit" code:code reason:reason];

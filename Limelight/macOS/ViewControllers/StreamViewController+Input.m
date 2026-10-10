@@ -20,6 +20,8 @@ static const NSUInteger MLMaxImeCommitLength = 4096;
     [self.hidSupport refreshPrecisionTouchpadConfiguration];
     Log(LOG_I, @"[touchpad] mode=%@", !enabled ? @"off" : (mode == MLPrecisionTouchpadModeBoth ? @"both" : @"block"));
 
+    self.precisionTouchpadModeForGestureBlock = enabled ? mode : MLPrecisionTouchpadModeOff;
+
     StreamViewMac *streamView = self.streamView;
     if (streamView == nil) {
         return;
@@ -39,6 +41,49 @@ static const NSUInteger MLMaxImeCommitLength = 4096;
     }
     [streamView setIndirectTouchesEnabled:enabled];
     Log(LOG_I, @"[touchpad] stream view indirect touches %@", enabled ? @"enabled" : @"disabled");
+    [self refreshSystemGestureBlockWithReason:@"touchpad-mode"];
+}
+
+#pragma mark - System gesture block
+
+- (void)refreshSystemGestureBlockWithReason:(NSString *)reason {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self refreshSystemGestureBlockWithReason:reason];
+        });
+        return;
+    }
+
+    NSInteger mode = self.precisionTouchpadModeForGestureBlock;
+    NSWindow *window = self.view.window;
+    BOOL wanted = (mode == MLPrecisionTouchpadModeBlock || mode == MLPrecisionTouchpadModeBoth) &&
+                  self.isMouseCaptured &&
+                  !self.stopStreamInProgress &&
+                  !self.reconnectInProgress &&
+                  !self.edgeMenuTemporaryReleaseActive &&
+                  !self.edgeMenuMenuVisible &&
+                  window != nil && window.isKeyWindow && NSApp.isActive;
+
+    if (!wanted) {
+        self.systemGestureBlockUnavailableLogged = NO;
+        [self.systemGestureBlocker removeWithReason:reason];
+        return;
+    }
+    if (self.systemGestureBlocker.installed) {
+        return;
+    }
+    if (![MLSystemGestureBlocker isAccessibilityTrusted]) {
+        // Block mode keeps working without the permission; only the local system gestures stay active.
+        if (!self.systemGestureBlockUnavailableLogged) {
+            self.systemGestureBlockUnavailableLogged = YES;
+            Log(LOG_I, @"[gesture] block tap not installed reason=%@ accessibility=0", reason);
+        }
+        return;
+    }
+    if (self.systemGestureBlocker == nil) {
+        self.systemGestureBlocker = [[MLSystemGestureBlocker alloc] init];
+    }
+    [self.systemGestureBlocker installWithReason:reason];
 }
 
 #pragma mark - Input method text

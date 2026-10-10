@@ -1292,6 +1292,11 @@
 "Precision Touchpad Off" = "关闭";
 "Precision Touchpad Block" = "开启 – 屏蔽 macOS 触控板指针事件";
 "Precision Touchpad Both" = "开启 – 同时使用";
+"Precision Touchpad Gesture Permission Hint" = "尚未授予辅助功能权限，串流时调度中心、切换桌面等 macOS 手势仍会在这台 Mac 上生效。请在“隐私与安全性 > 辅助功能”中允许 Moonlight，或在“系统设置 > 触控板”中关闭这些手势。";
+"Precision Touchpad Gesture Permission Title" = "串流时屏蔽 macOS 手势？";
+"Precision Touchpad Gesture Permission Message" = "触控板发送给 Windows 时，Moonlight 可以阻止调度中心、切换桌面等三/四指 macOS 手势同时在这台 Mac 上触发。这需要辅助功能权限。未授权时精确式触控板仍可使用，但这些手势也会在 Mac 上触发。";
+"Open Accessibility Settings" = "打开辅助功能设置";
+"Not Now" = "暂不";
 "DualSense Touchpad Output" = "DualSense 触控板输出";
 "DualSense Touchpad Output detail" = "“手柄触控板”按上方设置把触控板作为游戏手柄触摸或 Mac 风格触控板发送；“Windows 精确式触控板”则把手指和按压作为精确式触控板发送，需要支持该功能的 Windows 11 主机，不支持时自动使用手柄触控板。";
 "DualSense Touchpad Output Controller" = "手柄触控板（默认）";

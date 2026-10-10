@@ -539,6 +539,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     
     self.windowDidResignKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf refreshControllerShortcutContext];
+        [weakSelf refreshSystemGestureBlockWithReason:@"window-resigned-key"];
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             [weakSelf logKeyLossDiagnosticsForStage:@"received" code:@"MUC003" reason:@"window-resigned-key"];
             if ([weakSelf shouldSuppressTransientKeyLossUncaptureForCode:@"MUC003" reason:@"window-resigned-key"]) {
@@ -552,6 +553,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
     self.windowDidBecomeKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf refreshControllerShortcutContext];
+        [weakSelf refreshSystemGestureBlockWithReason:@"window-became-key"];
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf.view.window isKeyWindow]) {
@@ -599,11 +601,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.appDidResignActiveObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidResignActiveNotification object:NSApp queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf refreshControllerShortcutContext];
         weakSelf.globalInactivePointerInsideStreamView = NO;
+        [weakSelf refreshSystemGestureBlockWithReason:@"app-resigned-active"];
         [weakSelf requestMouseUncaptureWhenSafeWithReason:@"app-resigned-active" code:@"MUC006"];
     }];
     self.appDidBecomeActiveObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidBecomeActiveNotification object:NSApp queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf refreshControllerShortcutContext];
         weakSelf.globalInactivePointerInsideStreamView = NO;
+        [weakSelf refreshSystemGestureBlockWithReason:@"app-became-active"];
         if ([weakSelf isWindowInCurrentSpace] && [weakSelf isCurrentPointerInsideStreamView]) {
             [weakSelf ensureStreamWindowKeyIfPossible];
         }
@@ -1087,6 +1091,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)tearDownStreamLifecycleObserversAndTimers {
     NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
+
+    // Never leave the system gesture filter running once the stream is stopping or gone.
+    self.precisionTouchpadModeForGestureBlock = 0;
+    [self.systemGestureBlocker removeWithReason:@"stream-teardown"];
 
     if (self.windowDidExitFullScreenNotification != nil) {
         [defaultCenter removeObserver:self.windowDidExitFullScreenNotification];

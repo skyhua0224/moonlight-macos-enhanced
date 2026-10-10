@@ -1226,6 +1226,11 @@
 "Precision Touchpad Off" = "Off";
 "Precision Touchpad Block" = "On – block macOS trackpad pointer events";
 "Precision Touchpad Both" = "On – use both";
+"Precision Touchpad Gesture Permission Hint" = "Accessibility access is not granted, so macOS gestures such as Mission Control and swiping between Spaces still act on this Mac while streaming. Grant Moonlight access under Privacy & Security > Accessibility, or turn those gestures off in System Settings > Trackpad.";
+"Precision Touchpad Gesture Permission Title" = "Block macOS gestures while streaming?";
+"Precision Touchpad Gesture Permission Message" = "Moonlight can keep three- and four-finger macOS gestures, such as Mission Control and swiping between Spaces, from also acting on this Mac while the trackpad is sent to Windows. This needs Accessibility access. Without it the precision touchpad still works, but those gestures also trigger on the Mac.";
+"Open Accessibility Settings" = "Open Accessibility Settings";
+"Not Now" = "Not Now";
 "DualSense Touchpad Output" = "DualSense Touchpad Output";
 "DualSense Touchpad Output detail" = "Controller touchpad sends the pad as game controller touch or a Mac-style trackpad, as set above. Windows precision touchpad sends its fingers and click as a precision touchpad instead, and needs a Windows 11 host that supports it; otherwise the controller touchpad is used.";
 "DualSense Touchpad Output Controller" = "Controller touchpad (default)";
