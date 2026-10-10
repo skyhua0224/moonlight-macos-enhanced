@@ -1453,6 +1453,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
                                   streamConfig.videoCodecPreference != 0 &&
                                   (streamConfig.videoCodecPreference == 2 ? av1DecodeSupported : hevcDecodeSupported);
 
+    if (streamConfig.enableHdr) {
+        NSScreen *displayScreen = self.view.window.screen ?: MLScreenContainingMouseLocation();
+        streamConfig.hdrTargetDisplayID = [displayScreen.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
+    }
     if (streamConfig.enableHdr && !streamConfig.sunshineHdrBrightnessOverride) {
         NSScreen *targetScreen = self.view.window.screen ?: MLScreenContainingMouseLocation();
         double autoMax = 0, autoMin = 0, autoAvg = 0;

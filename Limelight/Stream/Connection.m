@@ -86,14 +86,26 @@ static int MLResolvedDynamicRangeModeForPreference(BOOL hdrEnabled, int hdrTrans
     }
 }
 
-static BOOL MLAppleDolbyVisionDirectSurfaceAvailable(void) {
+static BOOL MLAppleDolbyVisionDirectSurfaceAvailable(unsigned int targetDisplayID) {
 #if TARGET_OS_OSX
     if (@available(macOS 15.0, *)) {
         if (!VTIsHardwareDecodeSupported(kCMVideoCodecType_DolbyVisionHEVC) ||
             ![AVPlayer eligibleForHDRPlayback]) {
             return NO;
         }
-        NSScreen *screen = NSScreen.mainScreen ?: NSScreen.screens.firstObject;
+        // Judge the display that shows the stream window, not whichever screen
+        // happens to hold the menu bar.
+        NSScreen *screen = nil;
+        if (targetDisplayID != 0) {
+            for (NSScreen *candidate in NSScreen.screens) {
+                NSNumber *number = candidate.deviceDescription[@"NSScreenNumber"];
+                if (number != nil && number.unsignedIntValue == targetDisplayID) {
+                    screen = candidate;
+                    break;
+                }
+            }
+        }
+        screen = screen ?: NSScreen.mainScreen ?: NSScreen.screens.firstObject;
         return screen != nil &&
             screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0;
     }
@@ -2760,7 +2772,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     // Auto resolves to PQ above, so Dolby Vision follows the resolved mode
     // rather than requiring an explicit PQ/HLG choice. The host picks DV only
     // when its encoder can attach an RPU and falls back to HDR10/HDR10+.
-    if (config.enableHdr && MLAppleDolbyVisionDirectSurfaceAvailable()) {
+    if (config.enableHdr && MLAppleDolbyVisionDirectSurfaceAvailable(config.hdrTargetDisplayID)) {
         if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HDR10_PQ) {
             _streamConfig.dynamicHdrCaps |= DYNAMIC_HDR_CAPS_DOLBY_VISION_81;
         } else if (_streamConfig.dynamicRangeMode == DYNAMIC_RANGE_MODE_HLG) {

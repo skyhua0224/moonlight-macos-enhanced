@@ -65,6 +65,8 @@
 @property(nonatomic) CGFloat sunshineMaxAverageBrightness;
 // Display luminance estimated from the target screen's EDR capability. Only
 // sent when HDR is on and the manual override above is off.
+// CGDirectDisplayID of the screen showing the stream window; 0 when unknown.
+@property(nonatomic) unsigned int hdrTargetDisplayID;
 @property(nonatomic) BOOL hdrAutoLuminanceAvailable;
 @property(nonatomic) CGFloat hdrAutoMaxBrightness;
 @property(nonatomic) CGFloat hdrAutoMinBrightness;

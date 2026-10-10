@@ -659,8 +659,9 @@
 "HDR Capabilities" = "HDR 能力";
 "Dolby Vision negotiation detail" = "由主机和显示器自动协商；需要时会回退到兼容 HDR。";
 "HDR10+ capability detail" = "当主机、解码器和显示器支持动态 HDR 元数据时自动协商。";
-"Dolby Vision 8.1 capability detail" = "当主机、解码器和显示器支持 Dolby Vision Profile 8.1 时自动协商。";
-"Dolby Vision 8.4 capability detail" = "当主机、解码器和显示器支持 Dolby Vision Profile 8.4 时自动协商。";
+"Dolby Vision capability detail native" = "原生渲染器会把 Dolby Vision 元数据直接交给显示器，主机发送 Dolby Vision 时生效。";
+"Dolby Vision capability detail metal" = "Metal 渲染器只显示 Dolby Vision 流的 HDR10 基础层。要完整的 Dolby Vision，请使用原生渲染器。";
+"Dolby Vision capability detail unavailable" = "需要 HEVC 硬件解码、HDR 播放、支持 HDR 的显示器以及原生渲染器。";
 "Display capability has not been queried" = "刷新主机显示器列表以查询 Foundation 能力。";
 "Loading Foundation display topology" = "正在加载 Foundation 显示拓扑…";
 "Foundation display topology endpoint ready" = "Foundation 显示拓扑端点已就绪。";

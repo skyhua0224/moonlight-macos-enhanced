@@ -205,18 +205,32 @@ private struct HDRCapabilityRow: View {
   let capability: VideoCapabilityItem
   @ObservedObject private var languageManager = LanguageManager.shared
 
+  private var detail: String? {
+    capability.detailKey.map { languageManager.localize($0) }
+  }
+
   var body: some View {
-    HStack(spacing: 10) {
-      Image(systemName: capability.availability.systemImage)
-        .foregroundStyle(capability.availability.tint)
-        .frame(width: 18)
-      Text(languageManager.localize(capability.titleKey))
-      Spacer(minLength: 12)
-      Text(languageManager.localize(capability.availability.localizationKey))
-        .foregroundStyle(capability.availability.tint)
-        .font(.callout)
+    VStack(alignment: .leading, spacing: 2) {
+      HStack(spacing: 10) {
+        Image(systemName: capability.availability.systemImage)
+          .foregroundStyle(capability.availability.tint)
+          .frame(width: 18)
+        Text(languageManager.localize(capability.titleKey))
+        Spacer(minLength: 12)
+        Text(languageManager.localize(capability.availability.localizationKey))
+          .foregroundStyle(capability.availability.tint)
+          .font(.callout)
+      }
+      if capability.id.hasPrefix("display.dolbyVision"), capability.availability != .available, let detail {
+        Text(detail)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .padding(.leading, 28)
+          .fixedSize(horizontal: false, vertical: true)
+      }
     }
     .frame(minHeight: 36)
+    .help(detail ?? "")
     .overlay(alignment: .bottom) {
       Divider().opacity(0.45)
     }

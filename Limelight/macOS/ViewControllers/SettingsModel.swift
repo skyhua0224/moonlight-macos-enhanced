@@ -604,6 +604,7 @@ class SettingsModel: ObservableObject {
         selectedVideoRendererMode = normalized
         return
       }
+      refreshVideoCapabilityMatrix()
       saveSettings()
     }
   }
@@ -1782,7 +1783,7 @@ class SettingsModel: ObservableObject {
   }
 
   func refreshVideoCapabilityMatrix() {
-    let updated = Self.currentVideoCapabilityMatrix()
+    let updated = Self.currentVideoCapabilityMatrix(rendererSelection: selectedVideoRendererMode)
     if updated != videoCapabilityMatrix {
       videoCapabilityMatrix = updated
     }

@@ -660,8 +660,9 @@
 "HDR Capabilities" = "HDR Capabilities";
 "Dolby Vision negotiation detail" = "Negotiated automatically with the host and display; the stream falls back to compatible HDR when needed.";
 "HDR10+ capability detail" = "Negotiated automatically when the host, decoder, and display support dynamic HDR metadata.";
-"Dolby Vision 8.1 capability detail" = "Negotiated automatically when the host, decoder, and display support Dolby Vision Profile 8.1.";
-"Dolby Vision 8.4 capability detail" = "Negotiated automatically when the host, decoder, and display support Dolby Vision Profile 8.4.";
+"Dolby Vision capability detail native" = "The Native renderer passes Dolby Vision metadata straight to the display. It is used when the host sends Dolby Vision.";
+"Dolby Vision capability detail metal" = "The Metal renderer shows only the HDR10 base layer of a Dolby Vision stream. Use the Native renderer for full Dolby Vision.";
+"Dolby Vision capability detail unavailable" = "Needs HEVC hardware decoding, HDR playback, an HDR-capable display and the Native renderer.";
 "Display capability has not been queried" = "Refresh the host display list to query Foundation capabilities.";
 "Loading Foundation display topology" = "Loading Foundation display topology…";
 "Foundation display topology endpoint ready" = "The Foundation display topology endpoint is ready.";

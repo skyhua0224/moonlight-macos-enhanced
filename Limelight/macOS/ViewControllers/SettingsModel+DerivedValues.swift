@@ -671,7 +671,44 @@ extension SettingsModel {
     return .unavailable
   }
 
-  static func currentVideoCapabilityMatrix() -> VideoCapabilityMatrix {
+  /// Dolby Vision rides on the RPU the host embeds in the HEVC stream. Only the
+  /// Native renderer hands it to the display untouched; the Metal renderer
+  /// draws the HDR10 base layer, so it is reported as limited.
+  private static func dolbyVisionAvailability(
+    hdrAvailability: CapabilityAvailability,
+    screen: NSScreen?,
+    rendererSelection: String
+  ) -> (availability: CapabilityAvailability, detailKey: String) {
+    let unavailable = (CapabilityAvailability.unavailable, "Dolby Vision capability detail unavailable")
+    guard hdrAvailability != .unavailable, #available(macOS 15.0, *) else { return unavailable }
+    // The direct path requires Apple's public Dolby HEVC decoder probe, HDR
+    // playback eligibility, and an EDR-capable active display. The renderer
+    // also has a documented per-frame metadata generation fallback.
+    do {
+      _ = try VTHDRPerFrameMetadataGenerationSession(
+        framesPerSecond: 60,
+        hdrFormats: [.dolbyVision])
+    } catch {
+      return unavailable
+    }
+    let decoderAvailable = VTIsHardwareDecodeSupported(kCMVideoCodecType_DolbyVisionHEVC)
+    let hdrPlaybackEligible = AVPlayer.eligibleForHDRPlayback
+    let edrAvailable = (screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1) > 1
+    guard decoderAvailable, hdrPlaybackEligible, edrAvailable else { return unavailable }
+
+    switch rendererSelection {
+    case "Native Renderer (Recommended)":
+      return (.available, "Dolby Vision capability detail native")
+    case "Metal Renderer":
+      return (.limited, "Dolby Vision capability detail metal")
+    default:
+      return unavailable
+    }
+  }
+
+  static func currentVideoCapabilityMatrix(
+    rendererSelection: String = defaultVideoRendererMode
+  ) -> VideoCapabilityMatrix {
     let screen = NSScreen.main ?? NSScreen.screens.first
     let displayName = screen?.localizedName ?? ""
     let metalAvailable = MTLCreateSystemDefaultDevice() != nil
@@ -687,27 +724,10 @@ extension SettingsModel {
       // VideoToolbox decode through Core Video and Metal presentation.
       hdr10PlusAvailability = .limited
     }
-    let dolbyVisionAvailability: CapabilityAvailability
-    if hdrAvailability == .unavailable {
-      dolbyVisionAvailability = .unavailable
-    } else if #available(macOS 15.0, *) {
-      // The direct path requires Apple's public Dolby HEVC decoder probe,
-      // HDR playback eligibility, and an EDR-capable active display. The
-      // renderer also has a documented per-frame metadata generation fallback.
-      do {
-        _ = try VTHDRPerFrameMetadataGenerationSession(
-          framesPerSecond: 60,
-          hdrFormats: [.dolbyVision])
-        let decoderAvailable = VTIsHardwareDecodeSupported(kCMVideoCodecType_DolbyVisionHEVC)
-        let hdrPlaybackEligible = AVPlayer.eligibleForHDRPlayback
-        let edrAvailable = (screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1) > 1
-        dolbyVisionAvailability = decoderAvailable && hdrPlaybackEligible && edrAvailable ? .limited : .unavailable
-      } catch {
-        dolbyVisionAvailability = .unavailable
-      }
-    } else {
-      dolbyVisionAvailability = .unavailable
-    }
+    let dolbyVision = dolbyVisionAvailability(
+      hdrAvailability: hdrAvailability,
+      screen: screen,
+      rendererSelection: normalizedVideoRendererMode(rendererSelection))
 
     return VideoCapabilityMatrix(
       displayName: displayName,
@@ -747,14 +767,14 @@ extension SettingsModel {
         VideoCapabilityItem(
           id: "display.dolbyVision81",
           titleKey: "Dolby Vision Profile 8.1",
-          availability: dolbyVisionAvailability,
-          detailKey: "Dolby Vision 8.1 capability detail"
+          availability: dolbyVision.availability,
+          detailKey: dolbyVision.detailKey
         ),
         VideoCapabilityItem(
           id: "display.dolbyVision84",
           titleKey: "Dolby Vision Profile 8.4",
-          availability: dolbyVisionAvailability,
-          detailKey: "Dolby Vision 8.4 capability detail"
+          availability: dolbyVision.availability,
+          detailKey: dolbyVision.detailKey
         ),
         VideoCapabilityItem(
           id: "decode.av1",
