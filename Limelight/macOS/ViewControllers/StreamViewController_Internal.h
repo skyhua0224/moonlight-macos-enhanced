@@ -24,7 +24,7 @@
 #import "HIDSupport.h"
 #import "MLSystemGestureBlocker.h"
 #import "MoonlightEnhanced-Swift.h"
-#import "LogBuffer.h"
+#import "Logger.h"
 
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Carbon/Carbon.h>
@@ -416,30 +416,6 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) NSTextField *menuBitrateValueLabel;
 
 @property (nonatomic, strong) NSVisualEffectView *logOverlayContainer;
-@property (nonatomic, strong) NSScrollView *logOverlayScrollView;
-@property (nonatomic, strong) NSTextView *logOverlayTextView;
-@property (nonatomic, strong) NSSearchField *logOverlaySearchField;
-@property (nonatomic, strong) NSPopUpButton *logOverlayModePopup;
-@property (nonatomic, strong) NSPopUpButton *logOverlayLevelPopup;
-@property (nonatomic, strong) NSPopUpButton *logOverlayCategoryPopup;
-@property (nonatomic, strong) id<NSObject> logChangeSubscription;
-@property (nonatomic) NSUInteger logOverlayLastSequence;
-@property (nonatomic, strong) NSMutableArray<NSString *> *logOverlayAllRawLines;
-@property (nonatomic, strong) NSMutableArray<NSString *> *logOverlayDisplayLines;
-@property (nonatomic, strong) NSMutableArray<NSString *> *logOverlayPausedRawLines;
-@property (nonatomic, copy) NSString *logOverlayLastFoldKey;
-@property (nonatomic, copy) NSString *logOverlayLastFoldBaseLine;
-@property (nonatomic, copy) NSString *logOverlayModeKey;
-@property (nonatomic, copy) NSString *logOverlayMinimumLevelKey;
-@property (nonatomic, copy) NSString *logOverlaySearchText;
-@property (nonatomic, copy) NSString *logOverlayCategoryFilterKey;
-@property (nonatomic) NSUInteger logOverlayLastFoldCount;
-@property (nonatomic) NSRange logOverlayLastRenderedRange;
-@property (nonatomic) BOOL logOverlayHasLastRenderedRange;
-@property (nonatomic) BOOL logOverlayPauseUpdates;
-@property (nonatomic) BOOL logOverlayAutoScrollEnabled;
-@property (nonatomic) NSUInteger logOverlaySoftMaxLines;
-@property (nonatomic) NSUInteger logOverlayTrimToLines;
 
 @property (nonatomic, strong) NSVisualEffectView *reconnectOverlayContainer;
 @property (nonatomic, strong) NSProgressIndicator *reconnectSpinner;
@@ -847,30 +823,10 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)cancelPendingReconnectForUserExitWithReason:(NSString *)reason;
 - (void)toggleOverlay;
 - (void)toggleLogOverlay;
-- (void)resetLogOverlayState;
-- (NSString *)errorCodeFromLogLine:(NSString *)line;
-- (NSDictionary<NSString *, NSString *> *)compactPresentationForLogLine:(NSString *)rawLine;
-- (NSString *)foldedDisplayLineWithBase:(NSString *)base count:(NSUInteger)count;
-- (void)appendRenderedLineToOverlayTextView:(NSString *)line;
-- (void)replaceLastRenderedLineInOverlayTextView:(NSString *)line;
-- (void)rebuildOverlayTextFromDisplayLines;
-- (void)trimLogOverlayIfNeeded;
-- (void)appendRawLogLineToOverlayState:(NSString *)rawLine;
-- (void)appendRawLinesToOverlayState:(NSArray<NSString *> *)rawLines;
-- (void)scrollLogOverlayToLatest;
-- (void)updateLogOverlayToolbarState;
-- (NSArray<NSString *> *)compactLinesFromRawLines:(NSArray<NSString *> *)rawLines;
 - (void)handleTimeoutCopyLogs:(id)sender;
 - (void)showLogOverlay;
 - (void)hideLogOverlay;
-- (void)handleLogOverlayClose:(id)sender;
-- (void)handleLogOverlayPauseToggle:(id)sender;
-- (void)handleLogOverlayAutoScrollToggle:(id)sender;
-- (void)handleLogOverlayJumpLatest:(id)sender;
-- (void)handleLogOverlayCopyCompact:(id)sender;
-- (void)handleLogOverlayClearFromNow:(id)sender;
-- (void)appendLogLineToOverlay:(NSString *)line;
-- (void)appendNewLogEntriesToOverlay;
+- (void)layoutLogOverlay;
 - (void)copyAllLogsToPasteboard;
 - (void)showReconnectOverlayWithMessage:(NSString *)message;
 - (void)startAdaptiveBitrateIfEnabled;

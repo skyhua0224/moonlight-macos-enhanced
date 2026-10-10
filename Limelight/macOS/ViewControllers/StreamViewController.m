@@ -1141,10 +1141,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [defaultCenter removeObserver:self.hostLatencyUpdatedObserver];
         self.hostLatencyUpdatedObserver = nil;
     }
-    if (self.logChangeSubscription != nil) {
-        [[LogBuffer shared] removeChangeObserver:self.logChangeSubscription];
-        self.logChangeSubscription = nil;
-    }
 
     [defaultCenter removeObserver:self name:HIDMouseModeToggledNotification object:nil];
     [defaultCenter removeObserver:self name:HIDGamepadQuitNotification object:nil];

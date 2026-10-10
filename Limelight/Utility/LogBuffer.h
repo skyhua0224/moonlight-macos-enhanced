@@ -83,9 +83,6 @@ typedef NS_ENUM(NSInteger, MLLogNoiseCategory) {
 /// The newest `count` entries, oldest first.
 - (NSArray<MLLogEntry *> *)lastEntries:(NSUInteger)count NS_SWIFT_NAME(lastEntries(_:));
 
-/// The `line` of every retained entry, oldest first.
-- (NSArray<NSString *> *)allLines;
-
 // MARK: Change signal
 
 /// Registers `handler` for the "log changed" signal. The handler runs on the main queue, at most

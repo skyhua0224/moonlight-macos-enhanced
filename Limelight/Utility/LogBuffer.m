@@ -139,15 +139,6 @@ static const CFTimeInterval kLogChangeSignalMinInterval = 0.2;
     return result;
 }
 
-- (NSArray<NSString *> *)allLines {
-    NSArray<MLLogEntry *> *entries = [self lastEntries:NSUIntegerMax];
-    NSMutableArray<NSString *> *lines = [NSMutableArray arrayWithCapacity:entries.count];
-    for (MLLogEntry *entry in entries) {
-        [lines addObject:entry.line];
-    }
-    return lines;
-}
-
 // MARK: Change signal
 
 - (id<NSObject>)addChangeObserver:(void (^)(void))handler {

@@ -458,11 +458,20 @@ private struct DebugLogStatBadge: View {
 private struct DebugLogRowView: View, Equatable {
   let entry: DebugLogEntry
   let mode: DebugLogViewMode
+  /// Overlay layout: time of day only, narrower columns.
+  var compact: Bool = false
 
   // Entries are immutable once parsed; only the folded repeat count can change.
   // Comparing just that lets SwiftUI skip rebuilding rows that did not change.
   static func == (lhs: DebugLogRowView, rhs: DebugLogRowView) -> Bool {
     lhs.entry.id == rhs.entry.id && lhs.entry.count == rhs.entry.count && lhs.mode == rhs.mode
+      && lhs.compact == rhs.compact
+  }
+
+  private var timestampDisplay: String {
+    guard let text = entry.timestampText else { return "--" }
+    // "yyyy-MM-dd HH:mm:ss.SSS" -> "HH:mm:ss.SSS"
+    return compact ? String(text.suffix(12)) : text
   }
 
   private var primaryText: String {
@@ -488,10 +497,10 @@ private struct DebugLogRowView: View, Equatable {
 
   var body: some View {
     HStack(alignment: .top, spacing: 8) {
-      Text(entry.timestampText ?? "--")
+      Text(timestampDisplay)
         .font(.system(size: 11, design: .monospaced))
         .foregroundColor(.secondary)
-        .frame(width: 170, alignment: .leading)
+        .frame(width: compact ? 92 : 170, alignment: .leading)
 
       DebugLogLevelBadge(level: entry.level)
         .frame(width: 58, alignment: .leading)
@@ -551,9 +560,29 @@ private final class DebugLogScrollTracker {
   var didInitialScroll = false
 }
 
-struct SettingsLogViewer: View {
-  @Environment(\.dismiss) private var dismiss
-  @EnvironmentObject private var settingsModel: SettingsModel
+/// Where the viewer shows and keeps its filter choices. The Settings window passes bindings
+/// to the persisted settings; the in-stream overlay passes bindings to throw-away local state.
+private struct DebugLogViewerOptions {
+  var mode: Binding<String>
+  var minLevel: Binding<String>
+  var showSystemNoise: Binding<Bool>
+  var autoScroll: Binding<Bool>
+  var timeScope: Binding<String>
+  var inputDiagnostics: Binding<Bool>
+}
+
+private enum DebugLogViewerStyle {
+  /// Full-size layout for the Settings log window.
+  case window
+  /// Compact, translucent layout for the in-stream overlay.
+  case overlay
+}
+
+/// The one log viewer, used by the Settings window and the in-stream overlay.
+private struct DebugLogViewer: View {
+  let style: DebugLogViewerStyle
+  let options: DebugLogViewerOptions
+  let onClose: () -> Void
   @ObservedObject var languageManager = LanguageManager.shared
   @StateObject private var model: DebugLogLiveModel
   @SwiftUI.State private var searchText: String = ""
@@ -575,7 +604,16 @@ struct SettingsLogViewer: View {
   private static let scrollSpaceName = "log-scroll-space"
   private static let bottomTolerance: CGFloat = 24
 
-  init(rawLogURL: URL?, curatedLogURL: URL?) {
+  init(
+    style: DebugLogViewerStyle,
+    options: DebugLogViewerOptions,
+    rawLogURL: URL?,
+    curatedLogURL: URL?,
+    onClose: @escaping () -> Void
+  ) {
+    self.style = style
+    self.options = options
+    self.onClose = onClose
     let baseDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
       .appendingPathComponent("Logs", isDirectory: true)
       .appendingPathComponent("Moonlight", isDirectory: true)
@@ -594,7 +632,7 @@ struct SettingsLogViewer: View {
   }
 
   private var currentMode: DebugLogViewMode {
-    settingsModel.debugLogMode == "raw" ? .raw : .defaultLog
+    options.mode.wrappedValue == "raw" ? .raw : .defaultLog
   }
 
   private var currentModeDisplayName: String {
@@ -607,7 +645,7 @@ struct SettingsLogViewer: View {
   }
 
   private var currentMinimumLevel: DebugLogLevel {
-    switch settingsModel.debugLogMinLevel.lowercased() {
+    switch options.minLevel.wrappedValue.lowercased() {
     case "all": return .all
     case "debug": return .debug
     case "warn", "warning": return .warn
@@ -617,7 +655,7 @@ struct SettingsLogViewer: View {
   }
 
   private var currentTimeScope: DebugLogTimeScope {
-    DebugLogTimeScope(rawValue: settingsModel.debugLogTimeScope) ?? .launch
+    DebugLogTimeScope(rawValue: options.timeScope.wrappedValue) ?? .launch
   }
 
   private var effectiveStartDate: Date? {
@@ -635,7 +673,7 @@ struct SettingsLogViewer: View {
     DebugLogQuery(
       mode: currentMode,
       minimumLevel: currentMinimumLevel,
-      showSystemNoise: settingsModel.debugLogShowSystemNoise,
+      showSystemNoise: options.showSystemNoise.wrappedValue,
       startDate: effectiveStartDate,
       includeHistory: currentTimeScope == .all,
       keyword: appliedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
@@ -797,13 +835,13 @@ struct SettingsLogViewer: View {
 
   private func exportFilteredEntries() {
     let snapshotEntries = snapshot.rows
-    let snapshotMode = settingsModel.debugLogMode
-    let snapshotMinLevel = settingsModel.debugLogMinLevel
-    let snapshotShowNoise = settingsModel.debugLogShowSystemNoise
+    let snapshotMode = options.mode.wrappedValue
+    let snapshotMinLevel = options.minLevel.wrappedValue
+    let snapshotShowNoise = options.showSystemNoise.wrappedValue
     let snapshotSearch = searchText
     let snapshotCategories = categoryFilterExportSummary()
     let snapshotTotalRows = snapshot.totalRows
-    let snapshotTimeScope = settingsModel.debugLogTimeScope
+    let snapshotTimeScope = options.timeScope.wrappedValue
     let snapshotStartDate = effectiveStartDate
 
     let panel = NSSavePanel()
@@ -895,7 +933,7 @@ struct SettingsLogViewer: View {
   /// Follows new rows only while the viewer is already at the bottom, so reading
   /// older lines is not interrupted by the stream of new ones.
   private func followLatestIfNeeded(_ proxy: ScrollViewProxy) {
-    guard settingsModel.debugLogAutoScroll, !snapshot.rows.isEmpty else { return }
+    guard options.autoScroll.wrappedValue, !snapshot.rows.isEmpty else { return }
     let isFirstContent = !scrollTracker.didInitialScroll
     scrollTracker.didInitialScroll = true
     guard isFirstContent || scrollTracker.isAtBottom else { return }
@@ -914,7 +952,7 @@ struct SettingsLogViewer: View {
               .padding(.vertical, 16)
           } else {
             ForEach(snapshot.rows) { entry in
-              DebugLogRowView(entry: entry, mode: currentMode)
+              DebugLogRowView(entry: entry, mode: currentMode, compact: style == .overlay)
                 .equatable()
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) {
@@ -956,7 +994,7 @@ struct SettingsLogViewer: View {
       .onPreferenceChange(DebugLogViewportHeightPreferenceKey.self) { height in
         handleViewportHeight(height)
       }
-      .background(Color(NSColor.textBackgroundColor))
+      .background(style == .window ? Color(NSColor.textBackgroundColor) : Color.black.opacity(0.3))
       .overlay(
         RoundedRectangle(cornerRadius: 6)
           .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
@@ -972,7 +1010,7 @@ struct SettingsLogViewer: View {
       .onChange(of: snapshot.revision) { _ in
         followLatestIfNeeded(proxy)
       }
-      .onChange(of: settingsModel.debugLogAutoScroll) { enabled in
+      .onChange(of: options.autoScroll.wrappedValue) { enabled in
         if enabled {
           scrollToLatest(proxy)
         }
@@ -980,7 +1018,32 @@ struct SettingsLogViewer: View {
     }
   }
 
-  var body: some View {
+  private func clearFromNow() {
+    clearFromDate = Date()
+    options.timeScope.wrappedValue = DebugLogTimeScope.sinceClear.rawValue
+    pushQuery()
+  }
+
+  private func togglePause() {
+    isPaused.toggle()
+    model.setPaused(isPaused)
+  }
+
+  private var categoryFilterButton: some View {
+    DebugLogCategoryFilterMenuButton(
+      title: categoryMenuTitle,
+      domainOptions: Self.domainOptions,
+      selectedFilters: selectedCategoryFilters,
+      detailProvider: detailOptions(for:),
+      onToggleDomain: toggleDomainFilter(_:),
+      onToggleCategory: toggleCategoryFilter(_:),
+      onClear: clearCategoryFilters
+    )
+  }
+
+  // MARK: Window layout
+
+  private var windowContent: some View {
     VStack(spacing: 12) {
       HStack {
         Text(languageManager.localize("Live Debug Log"))
@@ -993,7 +1056,7 @@ struct SettingsLogViewer: View {
           copyFilteredEntries()
         }
         Button(languageManager.localize("Close")) {
-          dismiss()
+          onClose()
         }
       }
 
@@ -1001,14 +1064,14 @@ struct SettingsLogViewer: View {
         Text(languageManager.localize("Log Mode"))
           .font(.caption)
           .foregroundColor(.secondary)
-        Picker("", selection: $settingsModel.debugLogMode) {
+        Picker("", selection: options.mode) {
           Text(languageManager.localize("Curated Log")).tag("default")
           Text(languageManager.localize("Raw Log")).tag("raw")
         }
         .pickerStyle(.segmented)
         .frame(width: 260)
 
-        Picker("", selection: $settingsModel.debugLogMinLevel) {
+        Picker("", selection: options.minLevel) {
           Text(languageManager.localize("All")).tag("all")
           Text(languageManager.localize("Debug")).tag("debug")
           Text(languageManager.localize("Info")).tag("info")
@@ -1016,21 +1079,21 @@ struct SettingsLogViewer: View {
           Text(languageManager.localize("Error")).tag("error")
         }
         .controllerPicker(
-          selection: $settingsModel.debugLogMinLevel,
+          selection: options.minLevel,
           choices: [("all", "All"), ("debug", "Debug"), ("info", "Info"), ("warn", "Warn"), ("error", "Error")]
             .map { (value: $0.0, title: languageManager.localize($0.1)) })
         .frame(width: 140)
 
-        Toggle(languageManager.localize("Show System Noise"), isOn: $settingsModel.debugLogShowSystemNoise)
+        Toggle(languageManager.localize("Show System Noise"), isOn: options.showSystemNoise)
           .toggleStyle(.checkbox)
           .frame(width: 180, alignment: .leading)
           .disabled(currentMode == .raw)
 
-        Toggle(languageManager.localize("Input Diagnostics"), isOn: $settingsModel.debugLogInputDiagnostics)
+        Toggle(languageManager.localize("Input Diagnostics"), isOn: options.inputDiagnostics)
           .toggleStyle(.checkbox)
           .frame(width: 180, alignment: .leading)
 
-        Toggle(languageManager.localize("Auto Scroll"), isOn: $settingsModel.debugLogAutoScroll)
+        Toggle(languageManager.localize("Auto Scroll"), isOn: options.autoScroll)
           .toggleStyle(.checkbox)
           .frame(width: 130, alignment: .leading)
       }
@@ -1039,7 +1102,7 @@ struct SettingsLogViewer: View {
         Text(languageManager.localize("Log Range"))
           .font(.caption)
           .foregroundColor(.secondary)
-        Picker("", selection: $settingsModel.debugLogTimeScope) {
+        Picker("", selection: options.timeScope) {
           Text(languageManager.localize("All History")).tag("all")
           Text(languageManager.localize("This Launch")).tag("launch")
           Text(languageManager.localize("Since Clear")).tag("since_clear")
@@ -1048,9 +1111,7 @@ struct SettingsLogViewer: View {
         .frame(width: 280)
 
         Button(languageManager.localize("Clear From Now")) {
-          clearFromDate = Date()
-          settingsModel.debugLogTimeScope = DebugLogTimeScope.sinceClear.rawValue
-          pushQuery()
+          clearFromNow()
         }
 
         if let startDate = effectiveStartDate, currentTimeScope != .all {
@@ -1066,17 +1127,9 @@ struct SettingsLogViewer: View {
         TextField(languageManager.localize("Search terms / host / error code / category"), text: $searchText)
           .textFieldStyle(.roundedBorder)
 
-        DebugLogCategoryFilterMenuButton(
-          title: categoryMenuTitle,
-          domainOptions: Self.domainOptions,
-          selectedFilters: selectedCategoryFilters,
-          detailProvider: detailOptions(for:),
-          onToggleDomain: toggleDomainFilter(_:),
-          onToggleCategory: toggleCategoryFilter(_:),
-          onClear: clearCategoryFilters
-        )
-        .frame(width: 260, height: 28)
-        .controllerMenu(controllerCategoryMenu)
+        categoryFilterButton
+          .frame(width: 260, height: 28)
+          .controllerMenu(controllerCategoryMenu)
 
         Text("\(languageManager.localize("Filtered Rows")): \(snapshot.rows.count)")
           .font(.caption)
@@ -1108,8 +1161,7 @@ struct SettingsLogViewer: View {
         Spacer()
 
         Button(languageManager.localize(isPaused ? "Resume" : "Pause")) {
-          isPaused.toggle()
-          model.setPaused(isPaused)
+          togglePause()
         }
       }
 
@@ -1117,6 +1169,115 @@ struct SettingsLogViewer: View {
     }
     .padding(16)
     .frame(minWidth: 980, minHeight: 560)
+  }
+
+  // MARK: Overlay layout
+
+  private var overlayTitleRow: some View {
+    HStack(spacing: 8) {
+      Text(languageManager.localize("Live Debug Log"))
+        .font(.headline)
+      Spacer()
+      Button(languageManager.localize(isPaused ? "Resume" : "Pause")) {
+        togglePause()
+      }
+      Button(languageManager.localize("Copy All")) {
+        copyFilteredEntries()
+      }
+      Button(languageManager.localize("Clear From Now")) {
+        clearFromNow()
+      }
+      Button(languageManager.localize("Close")) {
+        onClose()
+      }
+    }
+    .controlSize(.small)
+  }
+
+  private var overlayFilterRow: some View {
+    HStack(spacing: 8) {
+      Picker("", selection: options.mode) {
+        Text(languageManager.localize("Curated Log")).tag("default")
+        Text(languageManager.localize("Raw Log")).tag("raw")
+      }
+      .pickerStyle(.menu)
+      .labelsHidden()
+      .frame(width: 130)
+
+      Picker("", selection: options.minLevel) {
+        Text(languageManager.localize("All")).tag("all")
+        Text(languageManager.localize("Debug")).tag("debug")
+        Text(languageManager.localize("Info")).tag("info")
+        Text(languageManager.localize("Warn")).tag("warn")
+        Text(languageManager.localize("Error")).tag("error")
+      }
+      .pickerStyle(.menu)
+      .labelsHidden()
+      .frame(width: 100)
+
+      categoryFilterButton
+        .frame(width: 190, height: 24)
+
+      TextField(languageManager.localize("Search terms / host / error code / category"), text: $searchText)
+        .textFieldStyle(.roundedBorder)
+    }
+    .controlSize(.small)
+  }
+
+  private var overlayStatusRow: some View {
+    HStack(spacing: 6) {
+      DebugLogStatBadge(label: languageManager.localize("Debug"), value: snapshot.debugCount, color: .gray)
+      DebugLogStatBadge(label: languageManager.localize("Info"), value: snapshot.infoCount, color: .blue)
+      DebugLogStatBadge(label: languageManager.localize("Warn"), value: snapshot.warnCount, color: .orange)
+      DebugLogStatBadge(label: languageManager.localize("Error"), value: snapshot.errorCount, color: .red)
+      Spacer()
+      Text("\(languageManager.localize("Filtered Rows")): \(snapshot.rows.count)")
+        .font(.caption)
+        .foregroundColor(.secondary)
+      Toggle(languageManager.localize("Show System Noise"), isOn: options.showSystemNoise)
+        .toggleStyle(.checkbox)
+        .disabled(currentMode == .raw)
+      Toggle(languageManager.localize("Auto Scroll"), isOn: options.autoScroll)
+        .toggleStyle(.checkbox)
+    }
+    .controlSize(.small)
+  }
+
+  @ViewBuilder private var overlayDetail: some View {
+    if let entry = detailEntry {
+      DebugLogEntryDetailView(entry: entry, onClose: { detailEntry = nil })
+        .background(Color.black.opacity(0.92))
+        .cornerRadius(12)
+    }
+  }
+
+  private var overlayContent: some View {
+    VStack(spacing: 8) {
+      overlayTitleRow
+      overlayFilterRow
+      overlayStatusRow
+      logList
+    }
+    .padding(12)
+    .overlay {
+      overlayDetail
+    }
+  }
+
+  // The details of a row open as a sheet in the Settings window and inline in the overlay
+  // (a sheet would take over the stream window).
+  private var sheetEntry: Binding<DebugLogEntry?> {
+    style == .window ? $detailEntry : Binding<DebugLogEntry?>.constant(nil)
+  }
+
+  var body: some View {
+    Group {
+      if style == .window {
+        windowContent
+      } else {
+        overlayContent
+      }
+    }
     .onAppear {
       appLaunchDate = NSRunningApplication.current.launchDate ?? Date()
       appliedSearchText = searchText
@@ -1126,30 +1287,155 @@ struct SettingsLogViewer: View {
       pendingSearchRefresh?.cancel()
       model.stop()
     }
-    .onChange(of: settingsModel.debugLogMode) { _ in
+    .onChange(of: options.mode.wrappedValue) { _ in
       pushQuery()
     }
-    .onChange(of: settingsModel.debugLogShowSystemNoise) { _ in
+    .onChange(of: options.showSystemNoise.wrappedValue) { _ in
       pushQuery()
     }
     .onChange(of: searchText) { _ in
       scheduleSearchRefresh()
     }
-    .onChange(of: settingsModel.debugLogMinLevel) { _ in
+    .onChange(of: options.minLevel.wrappedValue) { _ in
       pushQuery()
     }
-    .onChange(of: settingsModel.debugLogTimeScope) { _ in
+    .onChange(of: options.timeScope.wrappedValue) { _ in
       if currentTimeScope == .sinceClear && clearFromDate == nil {
         clearFromDate = Date()
       }
       pushQuery()
     }
-    .sheet(item: $detailEntry) { entry in
+    .sheet(item: sheetEntry) { entry in
       DebugLogEntryDetailView(entry: entry)
     }
   }
 }
 
+/// The Settings window's log viewer: filter choices live in the persisted settings.
+struct SettingsLogViewer: View {
+  @Environment(\.dismiss) private var dismiss
+  @EnvironmentObject private var settingsModel: SettingsModel
+  let rawLogURL: URL?
+  let curatedLogURL: URL?
+
+  init(rawLogURL: URL?, curatedLogURL: URL?) {
+    self.rawLogURL = rawLogURL
+    self.curatedLogURL = curatedLogURL
+  }
+
+  var body: some View {
+    DebugLogViewer(
+      style: .window,
+      options: DebugLogViewerOptions(
+        mode: $settingsModel.debugLogMode,
+        minLevel: $settingsModel.debugLogMinLevel,
+        showSystemNoise: $settingsModel.debugLogShowSystemNoise,
+        autoScroll: $settingsModel.debugLogAutoScroll,
+        timeScope: $settingsModel.debugLogTimeScope,
+        inputDiagnostics: $settingsModel.debugLogInputDiagnostics),
+      rawLogURL: rawLogURL,
+      curatedLogURL: curatedLogURL,
+      onClose: { dismiss() })
+  }
+}
+
+// MARK: - In-stream overlay
+
+/// Filter choices of one open overlay. They are not persisted and do not touch the logger's
+/// own settings: the overlay only filters what it displays.
+private final class DebugLogOverlayPreferences: ObservableObject {
+  @Published var mode = "default"
+  @Published var minLevel = "all"
+  @Published var showSystemNoise = false
+  @Published var autoScroll = true
+  @Published var timeScope = "launch"
+  @Published var inputDiagnostics = false
+}
+
+private struct DebugLogOverlayRoot: View {
+  @ObservedObject var preferences: DebugLogOverlayPreferences
+  let onClose: () -> Void
+
+  var body: some View {
+    DebugLogViewer(
+      style: .overlay,
+      options: DebugLogViewerOptions(
+        mode: $preferences.mode,
+        minLevel: $preferences.minLevel,
+        showSystemNoise: $preferences.showSystemNoise,
+        autoScroll: $preferences.autoScroll,
+        timeScope: $preferences.timeScope,
+        inputDiagnostics: $preferences.inputDiagnostics),
+      rawLogURL: nil,
+      curatedLogURL: nil,
+      onClose: onClose)
+  }
+}
+
+/// Translucent dark panel that hosts the overlay. It consumes the mouse events the SwiftUI
+/// content does not handle, so a click or scroll on the overlay never reaches the stream.
+private final class DebugLogOverlayContainerView: NSVisualEffectView {
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    configure()
+  }
+
+  required init?(coder: NSCoder) {
+    super.init(coder: coder)
+    configure()
+  }
+
+  private func configure() {
+    material = .hudWindow
+    blendingMode = .withinWindow
+    state = .active
+    appearance = NSAppearance(named: .darkAqua)
+    wantsLayer = true
+    layer?.cornerRadius = 12
+    layer?.masksToBounds = true
+  }
+
+  override var mouseDownCanMoveWindow: Bool { false }
+
+  override func mouseDown(with event: NSEvent) {}
+  override func mouseUp(with event: NSEvent) {}
+  override func mouseDragged(with event: NSEvent) {}
+  override func rightMouseDown(with event: NSEvent) {}
+  override func rightMouseUp(with event: NSEvent) {}
+  override func rightMouseDragged(with event: NSEvent) {}
+  override func otherMouseDown(with event: NSEvent) {}
+  override func otherMouseUp(with event: NSEvent) {}
+  override func otherMouseDragged(with event: NSEvent) {}
+  override func scrollWheel(with event: NSEvent) {}
+}
+
+/// Entry points for the stream window (Objective-C).
+@objc final class DebugLogOverlayFactory: NSObject {
+  /// The panel to place in the stream view. Everything inside is subscribed to the logger only
+  /// while the panel is in a window; removing it from its superview releases it.
+  @objc(makeContainerWithOnClose:)
+  static func makeContainer(onClose: @escaping () -> Void) -> NSVisualEffectView {
+    let container = DebugLogOverlayContainerView(frame: .zero)
+    let root = DebugLogOverlayRoot(preferences: DebugLogOverlayPreferences(), onClose: onClose)
+    let host = NSHostingView(rootView: root)
+    host.frame = container.bounds
+    host.autoresizingMask = [.width, .height]
+    container.addSubview(host)
+    return container
+  }
+
+  /// The curated log as text (what "Copy Log" puts on the pasteboard): timestamps included,
+  /// consecutive repeats folded into "xN".
+  @objc static func curatedLogText() -> String {
+    let curated = LogBuffer.shared().lastEntries(5000).filter { (entry: MLLogEntry) -> Bool in
+      entry.inCurated
+    }
+    let folded = DebugLogParser.foldConsecutiveDuplicates(DebugLogParser.entries(from: curated))
+    return folded.map { (entry: DebugLogEntry) -> String in
+      entry.count > 1 ? "\(entry.rawLine)  ×\(entry.count)" : entry.rawLine
+    }.joined(separator: "\n")
+  }
+}
 
 private struct DebugLogCategoryFilterMenuButton: View {
   @ObservedObject private var languageManager = LanguageManager.shared
@@ -1176,6 +1462,8 @@ private struct DebugLogCategoryFilterMenuButton: View {
 }
 private struct DebugLogEntryDetailView: View {
   let entry: DebugLogEntry
+  /// Set when shown inline (overlay) instead of as a sheet.
+  var onClose: (() -> Void)?
   @ObservedObject private var languageManager = LanguageManager.shared
   @Environment(\.dismiss) private var dismiss
 
@@ -1186,7 +1474,11 @@ private struct DebugLogEntryDetailView: View {
           .font(.headline)
         Spacer()
         Button(languageManager.localize("Close")) {
-          dismiss()
+          if let onClose = onClose {
+            onClose()
+          } else {
+            dismiss()
+          }
         }
       }
 
@@ -1251,6 +1543,6 @@ private struct DebugLogEntryDetailView: View {
       Spacer()
     }
     .padding(16)
-    .frame(minWidth: 760, minHeight: 360)
+    .frame(minWidth: onClose == nil ? 760 : 0, minHeight: onClose == nil ? 360 : 0)
   }
 }
