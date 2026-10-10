@@ -53,6 +53,7 @@
 "Unknown Output" = "Unknown Output";
 "Audio output: %@" = "Audio output: %@";
 "Couldn't switch the audio output" = "Couldn't switch the audio output";
+"Volume is controlled on the output device" = "Volume is controlled on the output device";
 
 /* Sunshine Feature Warnings */
 "Sunshine support required" = "Sunshine support required";

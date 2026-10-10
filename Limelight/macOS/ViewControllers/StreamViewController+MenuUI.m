@@ -8,6 +8,9 @@
 #import "MLAudioBitstreamOutput.h"
 #import <CoreAudio/CoreAudio.h>
 
+// Tag of the "volume is controlled on the output device" note in the Audio submenu.
+static const NSInteger MLAudioMenuPassthroughNoteTag = 7301;
+
 // Same icon mechanism the control center items use (see the setSymbol block in -rebuildStreamMenu).
 static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     if (@available(macOS 11.0, *)) {
@@ -1764,12 +1767,26 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
         self.menuVolumeSlider.action = @selector(handleVolumeSliderChanged:);
         self.menuVolumeSlider.continuous = YES;
     }
+    // A level from a drag that is still waiting to be saved must not be read back as the old one.
+    [self flushPendingVolumeLevel];
     self.menuVolumeSlider.doubleValue = [SettingsClass volumeLevelFor:self.app.host.uuid];
     [volView addSubview:self.menuVolumeSlider];
 
     NSMenuItem *volSliderItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
     volSliderItem.view = volView;
     [audioMenu addItem:volSliderItem];
+
+    // Bitstream passthrough: the output device applies the volume, the slider only mutes at 0.
+    // Shown only while passthrough runs (kept current in -menuNeedsUpdate:).
+    NSMenuItem *passthroughVolumeNote = [[NSMenuItem alloc] initWithTitle:MLString(@"Volume is controlled on the output device", nil)
+                                                                   action:nil
+                                                            keyEquivalent:@""];
+    passthroughVolumeNote.enabled = NO;
+    passthroughVolumeNote.tag = MLAudioMenuPassthroughNoteTag;
+    passthroughVolumeNote.hidden = ![self.streamMan.connection audioPassthroughActive];
+    [audioMenu addItem:passthroughVolumeNote];
+    audioMenu.delegate = self;
+    self.audioMenu = audioMenu;
 
     [audioMenu addItem:[NSMenuItem separatorItem]];
 
@@ -2061,6 +2078,8 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
         [self.remoteDisplayScale refreshOptionsIfStale];
     } else if (menu == self.audioOutputMenu) {
         [self populateAudioOutputMenu:menu];
+    } else if (menu == self.audioMenu) {
+        [menu itemWithTag:MLAudioMenuPassthroughNoteTag].hidden = ![self.streamMan.connection audioPassthroughActive];
     }
 }
 
@@ -2384,8 +2403,39 @@ static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
     [self attemptReconnectWithReason:@"bitrate-changed"]; 
 }
 
+// Runs for every event of a drag. Only the cheap part happens here: the new gain goes straight
+// to the running stream. Saving it (a settings encode and write, then a notification that makes
+// the stream re-read its settings and look up the host) waits until the drag ends, or until the
+// slider has been still for a moment (keyboard and controller steps never send a mouse-up).
 - (void)handleVolumeSliderChanged:(NSSlider *)sender {
-    [SettingsClass setVolumeLevel:(CGFloat)sender.doubleValue for:self.app.host.uuid];
+    double level = MIN(1.0, MAX(0.0, sender.doubleValue));
+    [self.streamMan.connection setAudioVolumeLevel:(float)level];
+    self.menuVolumePendingLevel = level;
+    self.menuVolumeHasPendingLevel = YES;
+
+    if (NSApp.currentEvent.type == NSEventTypeLeftMouseUp) {
+        [self flushPendingVolumeLevel];
+        return;
+    }
+
+    [self.menuVolumePersistTimer invalidate];
+    // Common modes: an open menu tracks in the event-tracking mode, where default-mode timers do not fire.
+    NSTimer *timer = [NSTimer timerWithTimeInterval:0.2 target:self selector:@selector(flushPendingVolumeLevel) userInfo:nil repeats:NO];
+    [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
+    self.menuVolumePersistTimer = timer;
+}
+
+- (void)flushPendingVolumeLevel {
+    [self.menuVolumePersistTimer invalidate];
+    self.menuVolumePersistTimer = nil;
+    if (!self.menuVolumeHasPendingLevel) {
+        return;
+    }
+    self.menuVolumeHasPendingLevel = NO;
+    NSString *hostUUID = self.app.host.uuid;
+    if (hostUUID.length > 0) {
+        [SettingsClass setVolumeLevel:(CGFloat)self.menuVolumePendingLevel for:hostUUID];
+    }
 }
 
 #pragma mark - Audio output device

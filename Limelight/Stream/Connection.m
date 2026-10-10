@@ -1908,10 +1908,25 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 }
 
 - (void)updateVolume {
-    if (_hostAddress != nil) {
-        NSString *uuid = [SettingsClass getHostUUIDFrom:_hostAddress];
+    // The host key is known once the stream is configured; resolving the host from its address is
+    // a Core Data lookup of every host, which a drag of the control center slider must not repeat.
+    NSString *uuid = _audioHostKey;
+    if (uuid.length == 0 && _hostAddress != nil) {
+        uuid = [SettingsClass getHostUUIDFrom:_hostAddress];
+    }
+    if (uuid.length > 0) {
         _audioVolumeMultiplier = [SettingsClass volumeLevelFor:uuid];
     }
+}
+
+// The control center slider applies the gain directly while it is dragged; the saved setting
+// follows later through the usual notification (-updateVolume), with the same value.
+- (void)setAudioVolumeLevel:(float)level {
+    _audioVolumeMultiplier = MIN(1.0f, MAX(0.0f, level));
+}
+
+- (BOOL)audioPassthroughActive {
+    return __atomic_load_n(&_audioPassthroughActive, __ATOMIC_ACQUIRE) != 0;
 }
 
 - (void)copyPCMFrames:(UInt32)frameCount toInterleavedBuffer:(short *)outputBuffer

@@ -405,7 +405,12 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) NSMenu *streamMenu;
 // Submenus that are refilled each time they open (see -menuNeedsUpdate:).
 @property (nonatomic, weak) NSMenu *displayScaleMenu;
+@property (nonatomic, weak) NSMenu *audioMenu;
 @property (nonatomic, weak) NSMenu *audioOutputMenu;
+// Volume slider drag: the latest level waiting to be saved (see -handleVolumeSliderChanged:).
+@property (nonatomic, strong) NSTimer *menuVolumePersistTimer;
+@property (nonatomic) double menuVolumePendingLevel;
+@property (nonatomic) BOOL menuVolumeHasPendingLevel;
 
 @property (nonatomic, strong) NSVisualEffectView *controlCenterPill;
 @property (nonatomic, strong) NSImageView *controlCenterSignalImageView;

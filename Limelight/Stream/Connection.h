@@ -143,6 +143,10 @@ BOOL MLAppleDolbyVisionDirectSurfaceAvailable(unsigned int targetDisplayID);
 // The system default output device changed (the user picked one in the control center): restart
 // the audio output on it. Safe from any thread; does nothing after the audio stream ended.
 - (void)restartAudioOutputForDeviceChange;
+// Applies a volume (0 to 1) to the running stream without touching the saved setting.
+- (void)setAudioVolumeLevel:(float)level;
+// YES while AC3 / E-AC3 is passed through to the output device untouched (the volume is the device's).
+- (BOOL)audioPassthroughActive;
 - (void)terminate;
 - (void)main;
 
