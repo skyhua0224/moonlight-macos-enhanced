@@ -997,8 +997,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
  * Resolves controller delivery for both backends from stream readiness and capture policy.
  *
  * Delivery requires a ready context with neither stop nor reconnect in progress, plus captured
- * keyboard/mouse input or the profile's background preference. Updates both controller gates
- * and logs the decision. Off-main calls asynchronously reschedule themselves on main.
+ * keyboard/mouse input or the profile's background preference. Applies that preference to
+ * process-wide GameController background monitoring, updates both controller gates and logs
+ * the decision. Off-main calls asynchronously reschedule themselves on main.
  */
 - (void)refreshControllerInputSendingState {
     if (![NSThread isMainThread]) {
@@ -1014,6 +1015,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
     BOOL focusedInputEnabled = self.hidSupport.shouldSendInputEvents;
     BOOL backgroundInputEnabled =
         [SettingsClass backgroundControllerInputFor:self.app.host.uuid];
+    if (@available(macOS 11.3, *)) {
+        GCController.shouldMonitorBackgroundEvents = backgroundInputEnabled;
+    }
     BOOL shouldSendControllerInput = streamCanSendInput &&
         (focusedInputEnabled || backgroundInputEnabled);
 
