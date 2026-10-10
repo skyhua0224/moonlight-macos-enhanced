@@ -1471,6 +1471,13 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     BOOL _dynamicDolbyVision;
     BOOL _dolbyVisionBaseLayerFallback;
     int _dolbyVisionNalLogBudget;
+    // The host attaches the Dolby Vision RPU only after its luminance analysis has
+    // warmed up, so a stream starts on the HDR10 base layer and switches decoders
+    // at the first key frame after an RPU has been seen.
+    BOOL _dolbyVisionAwaitingRpu;
+    BOOL _dolbyVisionRpuObserved;
+    BOOL _dolbyVisionSwitchPending;
+    uint64_t _dolbyVisionFramesBeforeRpu;
     BOOL _hdr10PlusEvidencePersisted;
     atomic_int _decompressionOutputError;
     int _streamBitrateKbps;
@@ -2956,6 +2963,10 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _lastLoggedMetalConversionPath = 0;
     _lastLoggedStaticMetadataHash = 0;
     _dolbyVisionBaseLayerFallback = NO;
+    _dolbyVisionAwaitingRpu = NO;
+    _dolbyVisionRpuObserved = NO;
+    _dolbyVisionSwitchPending = NO;
+    _dolbyVisionFramesBeforeRpu = 0;
     atomic_store(&_decompressionOutputError, noErr);
     _framePacingMode = streamConfig ? streamConfig.framePacingMode : 1;
     _smoothnessLatencyMode = streamConfig ? streamConfig.smoothnessLatencyMode : 1;
@@ -5883,7 +5894,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 {
     OSStatus status;
 
-    if ((_dolbyVisionGeneratedMetadata || _dolbyVisionBaseLayerFallback) && (videoFormat & VIDEO_FORMAT_MASK_H265)) {
+    if ((_dolbyVisionGeneratedMetadata || _dolbyVisionBaseLayerFallback || _dolbyVisionAwaitingRpu) &&
+        (videoFormat & VIDEO_FORMAT_MASK_H265)) {
         // Profile 8.x RPU is an HEVC UNSPEC 62 NAL. The base HEVC decoder
         // must not be handed that NAL when Apple is generating metadata from
         // the decoded IOSurface instead of consuming the compressed dvh1 path.
@@ -5894,6 +5906,9 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                                        sizeof(nalHeader),
                                        nalHeader) == noErr &&
             ((nalHeader[0] >> 1) & 0x3F) == 62) {
+            if (_dolbyVisionAwaitingRpu && !_dolbyVisionRpuObserved) {
+                _dolbyVisionRpuObserved = YES;
+            }
             return;
         }
     }
@@ -6128,6 +6143,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         if ([self readyForPictureData]) {
             int dynamicHdr = LiGetNegotiatedDynamicHdrFormat();
             if (formatDesc != NULL && videoFormat == _configuredVideoFormat && dynamicHdr == _configuredDynamicHdr &&
+                !_dolbyVisionSwitchPending &&
                 (_configuredVPSData == vpsData || [_configuredVPSData isEqualToData:vpsData]) &&
                 [_configuredSPSData isEqualToData:spsData] && [_configuredPPSData isEqualToData:ppsData]) return DR_OK;
 
@@ -6186,7 +6202,20 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                 int negotiatedDynamicHdr = LiGetNegotiatedDynamicHdrFormat();
                 BOOL wantsDolbyVision = negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_81 ||
                                         negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84;
-                if (formatDesc != NULL && wantsDolbyVision && !_dolbyVisionBaseLayerFallback) {
+                if (formatDesc != NULL && wantsDolbyVision && !_dolbyVisionBaseLayerFallback && !_dolbyVisionRpuObserved) {
+                    // No RPU yet: the Dolby Vision decoder rejects pictures without
+                    // one, so decode the HDR10 base layer until the host starts
+                    // sending it.
+                    if (!_dolbyVisionAwaitingRpu) {
+                        _dolbyVisionAwaitingRpu = YES;
+                        _dolbyVisionFramesBeforeRpu = 0;
+                        Log(LOG_I, @"[hdr] Dolby Vision negotiated; starting on the HDR10 base layer until the host sends the first RPU");
+                    }
+                } else {
+                    _dolbyVisionAwaitingRpu = NO;
+                }
+                _dolbyVisionSwitchPending = NO;
+                if (formatDesc != NULL && wantsDolbyVision && !_dolbyVisionBaseLayerFallback && _dolbyVisionRpuObserved) {
                     if (@available(macOS 15.0, *)) {
                         // The dvcC record identifies the single-layer profile:
                         // 8.1 uses a PQ base layer and 8.4 uses an HLG base
@@ -6258,7 +6287,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                         }
                     }
                 }
-                if (formatDesc != NULL && wantsDolbyVision && !_dynamicDolbyVision) {
+                if (formatDesc != NULL && wantsDolbyVision && !_dynamicDolbyVision && !_dolbyVisionAwaitingRpu) {
                     // Generated metadata does not preserve Foundation's authored
                     // RPU. Report and present the compatible base HDR honestly.
                     [self useDolbyVisionBaseLayerWithReason:@"Dolby configuration unsupported"];
@@ -6515,6 +6544,17 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     CFRelease(dataBlockBuffer);
     CFRelease(frameBlockBuffer);
     CFRelease(sampleBuffer);
+
+    if (_dolbyVisionAwaitingRpu) {
+        if (!_dolbyVisionRpuObserved) {
+            _dolbyVisionFramesBeforeRpu++;
+        } else if (!_dolbyVisionSwitchPending) {
+            _dolbyVisionSwitchPending = YES;
+            Log(LOG_I, @"[hdr] Dolby Vision RPU first seen after %llu base-layer frames; requesting a key frame to switch to the Dolby Vision decoder",
+                (unsigned long long)_dolbyVisionFramesBeforeRpu);
+            status = DR_NEED_IDR;
+        }
+    }
 
     return status == DR_NEED_IDR ? DR_NEED_IDR : DR_OK;
 }

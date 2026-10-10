@@ -664,7 +664,7 @@
 "Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
 "HDR Capabilities" = "HDR Capabilities";
 "Dolby Vision negotiation detail" = "Negotiated automatically with the host and display; the stream falls back to compatible HDR when needed.";
-"HDR10+ capability detail" = "Available once a stream has delivered HDR10+ per-frame metadata to the Native renderer. Dolby Vision is preferred when both are offered; set Dynamic HDR Preference to HDR10+ to use it.";
+"HDR10+ capability detail" = "Needs macOS 13 or later, HEVC hardware decoding, an HDR display and the Native renderer; the Metal renderer shows the HDR10 picture without the per-frame metadata. Dolby Vision is preferred when both are offered; set Dynamic HDR Preference to HDR10+ to use it.";
 "Dolby Vision capability detail native" = "The Native renderer passes Dolby Vision metadata straight to the display. It is used when the host sends Dolby Vision.";
 "Dolby Vision capability detail metal" = "The Metal renderer shows only the HDR10 base layer of a Dolby Vision stream. Use the Native renderer for full Dolby Vision.";
 "Dolby Vision capability detail unavailable" = "Needs HEVC hardware decoding, HDR playback, an HDR-capable display and the Native renderer.";

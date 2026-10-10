@@ -1666,6 +1666,10 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     if (self.stopStreamInProgress || self.reconnectInProgress || self.spaceTransitionInProgress) {
         return NO;
     }
+    if (self.logOverlayContainer != nil) {
+        // The log viewer needs the local pointer for as long as it is open.
+        return NO;
+    }
     if (![self isWindowInCurrentSpace]) {
         return NO;
     }
@@ -1691,6 +1695,9 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
     if (self.spaceTransitionInProgress) {
         return @"space-transition";
+    }
+    if (self.logOverlayContainer != nil) {
+        return @"log-overlay-open";
     }
     if (![self isWindowInCurrentSpace]) {
         return @"window-not-current-space";
@@ -2828,6 +2835,11 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     }
 
     if (self.stopStreamInProgress || self.reconnectInProgress) {
+        return;
+    }
+
+    if (self.logOverlayContainer != nil) {
+        [self noteInputDiagnosticsCaptureSkipped:@"log-overlay-open"];
         return;
     }
 

@@ -415,7 +415,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) NSSlider *menuBitrateSlider;
 @property (nonatomic, strong) NSTextField *menuBitrateValueLabel;
 
-@property (nonatomic, strong) NSVisualEffectView *logOverlayContainer;
+@property (nonatomic, strong) NSView *logOverlayContainer;
 @property (nonatomic) BOOL logOverlayReleasedMouseCapture;
 
 @property (nonatomic, strong) NSVisualEffectView *reconnectOverlayContainer;

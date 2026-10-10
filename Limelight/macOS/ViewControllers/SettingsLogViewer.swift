@@ -920,6 +920,15 @@ private struct DebugLogViewer: View {
     }
   }
 
+  private static let overlayRowLimit = 400
+
+  /// The in-stream viewer sits on top of the video, so its list is kept short to keep each
+  /// refresh cheap. Copy and export still use every filtered row.
+  private var visibleRows: [DebugLogEntry] {
+    guard style == .overlay, snapshot.rows.count > Self.overlayRowLimit else { return snapshot.rows }
+    return Array(snapshot.rows.suffix(Self.overlayRowLimit))
+  }
+
   private func scrollToLatest(_ proxy: ScrollViewProxy) {
     scrollTracker.isAtBottom = true
     if showsJumpToLatest {
@@ -951,7 +960,7 @@ private struct DebugLogViewer: View {
               .padding(.horizontal, 8)
               .padding(.vertical, 16)
           } else {
-            ForEach(snapshot.rows) { entry in
+            ForEach(visibleRows) { entry in
               DebugLogRowView(entry: entry, mode: currentMode, compact: style == .overlay)
                 .equatable()
                 .contentShape(Rectangle())
@@ -1374,7 +1383,9 @@ private struct DebugLogOverlayRoot: View {
 
 /// Translucent dark panel that hosts the overlay. It consumes the mouse events the SwiftUI
 /// content does not handle, so a click or scroll on the overlay never reaches the stream.
-private final class DebugLogOverlayContainerView: NSVisualEffectView {
+/// A flat dark panel. A live blur over the video layer has to be recomposited for every
+/// decoded frame, which is costly on a high-resolution HDR stream.
+private final class DebugLogOverlayContainerView: NSView {
   override init(frame frameRect: NSRect) {
     super.init(frame: frameRect)
     configure()
@@ -1386,11 +1397,9 @@ private final class DebugLogOverlayContainerView: NSVisualEffectView {
   }
 
   private func configure() {
-    material = .hudWindow
-    blendingMode = .withinWindow
-    state = .active
     appearance = NSAppearance(named: .darkAqua)
     wantsLayer = true
+    layer?.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 0.94).cgColor
     layer?.cornerRadius = 12
     layer?.masksToBounds = true
   }
@@ -1414,7 +1423,7 @@ private final class DebugLogOverlayContainerView: NSVisualEffectView {
   /// The panel to place in the stream view. Everything inside is subscribed to the logger only
   /// while the panel is in a window; removing it from its superview releases it.
   @objc(makeContainerWithOnClose:)
-  static func makeContainer(onClose: @escaping () -> Void) -> NSVisualEffectView {
+  static func makeContainer(onClose: @escaping () -> Void) -> NSView {
     let container = DebugLogOverlayContainerView(frame: .zero)
     let root = DebugLogOverlayRoot(preferences: DebugLogOverlayPreferences(), onClose: onClose)
     let host = NSHostingView(rootView: root)

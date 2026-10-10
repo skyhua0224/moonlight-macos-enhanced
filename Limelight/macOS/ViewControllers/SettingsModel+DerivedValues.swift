@@ -718,15 +718,16 @@ extension SettingsModel {
       hdr10PlusAvailability = .unavailable
     } else if !hevcHardwareDecodeSupported {
       hdr10PlusAvailability = .unavailable
-    } else if UserDefaults.standard.bool(forKey: "MLHDR10PlusMetadataObserved") &&
-                normalizedVideoRendererMode(rendererSelection) == "Native Renderer (Recommended)" {
-      // A previous stream showed the per-frame metadata reaching the decoder
-      // output, which the Native renderer hands to the display.
+    } else if normalizedVideoRendererMode(rendererSelection) != "Native Renderer (Recommended)" {
+      // The Metal renderer draws without the dynamic metadata.
+      hdr10PlusAvailability = .limited
+    } else if #available(macOS 13.0, *) {
+      // VideoToolbox publishes the HDR10+ per-frame metadata of an HEVC stream
+      // from macOS 13 and the Native renderer hands it to the display. This
+      // needs no earlier stream to be known.
       hdr10PlusAvailability = .available
     } else {
-      // Not yet observed on this Mac, or the Metal renderer, which draws
-      // without the dynamic metadata.
-      hdr10PlusAvailability = .limited
+      hdr10PlusAvailability = .unavailable
     }
     let dolbyVision = dolbyVisionAvailability(
       hdrAvailability: hdrAvailability,
