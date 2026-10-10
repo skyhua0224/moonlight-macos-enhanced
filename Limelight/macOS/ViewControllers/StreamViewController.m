@@ -2089,7 +2089,43 @@ highFreqMotor:(unsigned short)highFreqMotor {
             [weakSelf.streamMan stopStream];
         });
     }
-    [self closeWindowFromMainQueueWithMessage:[NSString stringWithFormat:@"%s failed with error %d", stageName, errorCode]];
+    NSString *message = [NSString stringWithFormat:@"%s failed with error %d", stageName, errorCode];
+    NSString *audioMessage = [self audioCodecRejectionMessageForError:errorCode];
+    if (audioMessage != nil) {
+        message = audioMessage;
+    }
+    [self closeWindowFromMainQueueWithMessage:message];
+}
+
+// The host answers 415 when it cannot encode AC3 / E-AC3 (its FFmpeg has no such
+// encoder). It answers 415 for other unsupported settings too, so this only applies
+// when the session really asked for one of the two. The codec is remembered as
+// failed, which makes the next attempt use Opus.
+- (NSString *)audioCodecRejectionMessageForError:(int)errorCode {
+    NSString *hostKey = self.app.host.uuid;
+    if (errorCode != 415 || hostKey.length == 0) {
+        return nil;
+    }
+    NSInteger requestedCodec = [SettingsClass audioCodecFor:hostKey];
+    if (requestedCodec != 1 && requestedCodec != 2) {
+        return nil;
+    }
+    NSInteger audioConfigSelection = [SettingsClass audioConfigurationFor:hostKey];
+    MLAudioStreamPlan *plan =
+        [MLAudioStreamPlan planWithRequestedCodec:requestedCodec
+                                     channelCount:[MLAudioStreamPlan channelCountForAudioConfigurationIndex:audioConfigSelection]
+                                 videoBitrateKbps:0
+                       disableHighQualitySurround:NO
+                                   foundationHost:-1
+                                      codecFailed:[SettingsClass audioCodecFailed:requestedCodec forHost:hostKey]];
+    if (plan.effectiveCodec != requestedCodec) {
+        return nil;
+    }
+    [SettingsClass markAudioCodecFailed:requestedCodec forHost:hostKey];
+    Log(LOG_W, @"[audio] Host rejected the stream with 415 while %@ was requested; remembered as unsupported, Opus is used next time",
+        plan.requestedCodecName);
+    NSString *format = [[LanguageManager shared] localize:@"The host rejected the stream while %@ audio was requested. Opus will be used next time; start the stream again."];
+    return [NSString stringWithFormat:format, [MLAudioStreamPlan codecDisplayName:requestedCodec]];
 }
 
 - (void)launchFailed:(NSString *)message {
