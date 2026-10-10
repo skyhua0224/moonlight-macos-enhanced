@@ -208,10 +208,17 @@ struct AudioView: View {
       break
     }
 
-    let stereo = MLAudioStreamPlan.mbpsText(plan(2).wireKbps)
-    let surround = MLAudioStreamPlan.mbpsText(plan(6).wireKbps)
+    if choice == .pcm {
+      let stereo = MLAudioStreamPlan.mbpsText(plan(2).wireKbps)
+      let surround = MLAudioStreamPlan.mbpsText(plan(6).wireKbps)
+      return String(
+        format: languageManager.localize("Audio codec hint PCM"), stereo, surround)
+    }
+    // AC3 / E-AC3 run at a fixed bitrate whatever the channel count.
     return String(
-      format: languageManager.localize("Audio codec hint PCM"), stereo, surround)
+      format: languageManager.localize("Audio codec hint compressed"),
+      MLAudioStreamPlan.codecDisplayName(choice.codecId),
+      MLAudioStreamPlan.mbpsText(current.wireKbps))
   }
 
   private var microphoneStatus: String {

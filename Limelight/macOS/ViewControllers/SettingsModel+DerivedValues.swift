@@ -2047,11 +2047,15 @@ extension SettingsModel {
 enum AudioCodecChoice: CaseIterable {
   case opus
   case pcm
+  case ac3
+  case eac3
 
   var displayKey: String {
     switch self {
     case .opus: return "Opus"
     case .pcm: return "Lossless (PCM)"
+    case .ac3: return "AC3"
+    case .eac3: return "E-AC3"
     }
   }
 
@@ -2059,6 +2063,8 @@ enum AudioCodecChoice: CaseIterable {
     switch self {
     case .opus: return MLAudioStreamPlan.codecOpus
     case .pcm: return MLAudioStreamPlan.codecPcm
+    case .ac3: return MLAudioStreamPlan.codecAc3
+    case .eac3: return MLAudioStreamPlan.codecEac3
     }
   }
 
@@ -2086,6 +2092,8 @@ extension SettingsModel {
   static var audioCodecs: [String] = [
     "Opus",
     "Lossless (PCM)",
+    "AC3",
+    "E-AC3",
   ]
 }
 
@@ -2132,6 +2140,7 @@ extension SettingsModel {
   }
 
   var effectiveCodecName: String { Self.codecName(effectiveCodec) }
+  var effectiveCodecDisplayName: String { Self.codecDisplayName(effectiveCodec) }
   var requestedCodecName: String { Self.codecName(requestedCodec) }
 
   var fallbackLogText: String {
@@ -2166,6 +2175,16 @@ extension SettingsModel {
     case codecEac3: return "eac3"
     case codecPcm: return "pcm"
     default: return "opus"
+    }
+  }
+
+  /// Name for messages shown to the user.
+  static func codecDisplayName(_ codec: Int) -> String {
+    switch codec {
+    case codecAc3: return "AC3"
+    case codecEac3: return "E-AC3"
+    case codecPcm: return "PCM"
+    default: return "Opus"
     }
   }
 

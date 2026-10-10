@@ -298,7 +298,7 @@ private struct StreamHostRuntimeInfo {
     ]
     if audio.effectiveCodec != MLAudioStreamPlan.codecOpus {
       summaryParts.append(
-        "audio \(audio.effectiveCodecName) \(MLAudioStreamPlan.mbpsText(audio.wireKbps)) Mbps")
+        "audio \(audio.effectiveCodecDisplayName) \(MLAudioStreamPlan.mbpsText(audio.wireKbps)) Mbps")
       summaryParts.append("total \(MLAudioStreamPlan.mbpsText(evaluation.totalStreamKbps)) Mbps")
     }
     let summaryLine = summaryParts.joined(separator: " · ")
@@ -440,7 +440,7 @@ private struct StreamHostRuntimeInfo {
         wiredFastLan
           ? "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps). Without enough bandwidth, audio drops out and video stutters."
           : "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter.",
-        audio.effectiveCodecName.uppercased(),
+        audio.effectiveCodecDisplayName,
         MLAudioStreamPlan.mbpsText(audio.wireKbps),
         MLAudioStreamPlan.mbpsText(totalStreamKbps)
       )

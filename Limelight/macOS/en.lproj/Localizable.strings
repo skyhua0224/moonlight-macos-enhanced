@@ -1273,7 +1273,11 @@
 "Audio codec fallback: channels" = "This codec supports up to 5.1 channels, so Opus is used with this audio configuration.";
 "Audio codec fallback: host" = "This host is not Foundation Sunshine, so Opus is used.";
 "Audio codec fallback: failed" = "This host did not deliver this codec last time, so Opus is used. Choose Opus and then this codec again to retry.";
-"The host did not send PCM audio. Audio is muted; Opus will be used next time." = "The host did not send PCM audio. Audio is muted; Opus will be used next time.";
-"PCM audio is damaged. Audio is silent until it recovers." = "PCM audio is damaged. Audio is silent until it recovers.";
+"The host did not send %@ audio. Audio is muted; Opus will be used next time." = "The host did not send %@ audio. Audio is muted; Opus will be used next time.";
+"%@ audio is damaged. Audio is silent until it recovers." = "%@ audio is damaged. Audio is silent until it recovers.";
 "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps). Without enough bandwidth, audio drops out and video stutters." = "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps). Without enough bandwidth, audio drops out and video stutters.";
 "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter." = "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter.";
+"The %@ decoder failed. Audio is muted; Opus will be used next time." = "The %@ decoder failed. Audio is muted; Opus will be used next time.";
+"AC3" = "AC3";
+"E-AC3" = "E-AC3";
+"Audio codec hint compressed" = "%@ audio uses about %@ Mbps. It is decoded on this Mac, which adds about 32 ms of audio latency compared with Opus and brings no quality gain; it is offered for compatibility. If the link cannot carry it, audio drops out and video stutters.";

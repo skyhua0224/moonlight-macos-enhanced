@@ -1328,7 +1328,11 @@
 "Audio codec fallback: channels" = "此编码最多支持 5.1 声道，当前音频配置将使用 Opus。";
 "Audio codec fallback: host" = "此主机不是 Foundation Sunshine，因此使用 Opus。";
 "Audio codec fallback: failed" = "此主机上次没有送出这种编码，因此使用 Opus。先选择 Opus 再重新选择该编码即可重试。";
-"The host did not send PCM audio. Audio is muted; Opus will be used next time." = "主机没有发送 PCM 音频，本次已静音，下次将使用 Opus。";
-"PCM audio is damaged. Audio is silent until it recovers." = "PCM 音频数据异常，恢复前将保持静音。";
+"The host did not send %@ audio. Audio is muted; Opus will be used next time." = "主机没有发送 %@ 音频，本次已静音，下次将使用 Opus。";
+"%@ audio is damaged. Audio is silent until it recovers." = "%@ 音频数据异常，恢复前将保持静音。";
 "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps). Without enough bandwidth, audio drops out and video stutters." = "%@ 音频在视频码率之外约需 %@ Mbps（预计总计 %@ Mbps）。带宽不足时会出现音频中断和画面卡顿。";
 "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter." = "%@ 音频在视频码率之外约需 %@ Mbps（预计总计 %@ Mbps），而当前链路不是有线局域网。带宽不足会导致音频中断和画面卡顿。";
+"The %@ decoder failed. Audio is muted; Opus will be used next time." = "%@ 解码失败，本次已静音，下次将使用 Opus。";
+"AC3" = "AC3";
+"E-AC3" = "E-AC3";
+"Audio codec hint compressed" = "%@ 音频约占用 %@ Mbps。它在这台 Mac 上解码，与 Opus 相比会增加约 32 毫秒的音频延迟，且没有音质提升，仅为兼容性而提供。如果网络承载不了，会出现音频中断和画面卡顿。";

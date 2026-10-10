@@ -13,6 +13,7 @@
 
 #import "MoonlightEnhanced-Swift.h"
 
+#import <AudioToolbox/AudioToolbox.h>
 #import <AudioUnit/AudioUnit.h>
 #import <CoreAudio/CoreAudio.h>
 #import <AVFoundation/AVFoundation.h>
@@ -59,18 +60,18 @@ enum {
     MLAudioCodecPcm = 3,
 };
 
-// PCM receive state machine (audio decode thread only).
+// Receive state machine of the PCM / AC3 / E-AC3 paths (audio decode thread only).
 enum {
-    MLPcmStateAwaitingFirstPacket = 0, // nothing validated yet
-    MLPcmStateStreaming = 1,           // at least one packet had the exact PCM size
-    MLPcmStateMuted = 2,               // the host did not send PCM; nothing is rendered
+    MLAudioRxStateAwaitingFirstPacket = 0, // nothing validated yet
+    MLAudioRxStateStreaming = 1,           // the first packet matched the negotiated codec
+    MLAudioRxStateMuted = 2,               // the host does not deliver the codec; nothing is rendered
 };
-// Consecutive packets with the wrong size, after the stream was validated, that
-// are reported to the user (5 ms per packet, so 250 ms of damaged audio).
-#define ML_PCM_LATE_INVALID_BURST 50
-#define ML_PCM_STATS_INTERVAL_MS 10000
+// Consecutive invalid packets, after the stream was validated, that are reported
+// to the user (250 ms of damaged audio for 5 ms PCM packets).
+#define ML_AUDIO_RX_LATE_INVALID_BURST 50
+#define ML_AUDIO_RX_STATS_INTERVAL_MS 10000
 
-static void MLPcmReportStats(Connection *conn, uint64_t nowMs, BOOL force);
+static void MLAudioRxReportStats(Connection *conn, uint64_t nowMs, BOOL force);
 
 static const float kDirectRendererMakeupGain = 1.24f;
 static const float kEnhancedRendererOutputGain = 1.08f;
@@ -217,17 +218,27 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     NSString *_audioHostKey;
     int _audioRequestedCodec;
     int32_t _audioNoticeSent;
-    // PCM validation and counters, touched by the audio decode thread only.
+    // Packet validation counters of the non-Opus paths, touched by the audio decode thread only.
     int _pcmExpectedBytes;
-    int _pcmState;
-    uint64_t _pcmValidPackets;
-    uint64_t _pcmInvalidPackets;
-    uint64_t _pcmLossPlaceholders;
-    uint64_t _pcmConsecutiveInvalid;
-    uint64_t _pcmReportedValid;
-    uint64_t _pcmReportedInvalid;
-    uint64_t _pcmReportedLoss;
-    uint64_t _pcmLastReportMs;
+    int _audioRxState;
+    uint64_t _audioRxValidPackets;
+    uint64_t _audioRxInvalidPackets;
+    uint64_t _audioRxLossPlaceholders;
+    uint64_t _audioRxConsecutiveInvalid;
+    uint64_t _audioRxReportedValid;
+    uint64_t _audioRxReportedInvalid;
+    uint64_t _audioRxReportedLoss;
+    uint64_t _audioRxLastReportMs;
+    // AC3 / E-AC3: AudioToolbox decoder plus a FIFO that turns whatever the
+    // decoder returns into whole ring entries (decode thread only).
+    AudioConverterRef _compressedConverter;
+    short *_compressedFifo;
+    short *_compressedScratch;
+    int _compressedFifoFrames;
+    int _compressedFifoCapacityFrames;
+    uint64_t _compressedDecodedFrames;
+    uint64_t _compressedConsecutiveErrors;
+    uint64_t _compressedFifoOverflows;
     int _audioBufferEntries;
     int _audioBufferWriteIndex;
     int _audioBufferReadIndex;
@@ -803,12 +814,17 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
         conn->_audioCodec = negotiatedCodec;
     }
     const BOOL usePcm = conn->_audioCodec == MLAudioCodecPcm;
+    const BOOL useCompressed = conn->_audioCodec == MLAudioCodecAc3 || conn->_audioCodec == MLAudioCodecEac3;
     conn->_pcmExpectedBytes = 0;
-    conn->_pcmState = MLPcmStateAwaitingFirstPacket;
-    conn->_pcmValidPackets = conn->_pcmInvalidPackets = conn->_pcmLossPlaceholders = 0;
-    conn->_pcmConsecutiveInvalid = 0;
-    conn->_pcmReportedValid = conn->_pcmReportedInvalid = conn->_pcmReportedLoss = 0;
-    conn->_pcmLastReportMs = 0;
+    conn->_audioRxState = MLAudioRxStateAwaitingFirstPacket;
+    conn->_audioRxValidPackets = conn->_audioRxInvalidPackets = conn->_audioRxLossPlaceholders = 0;
+    conn->_audioRxConsecutiveInvalid = 0;
+    conn->_audioRxReportedValid = conn->_audioRxReportedInvalid = conn->_audioRxReportedLoss = 0;
+    conn->_audioRxLastReportMs = 0;
+    conn->_compressedFifoFrames = 0;
+    conn->_compressedDecodedFrames = 0;
+    conn->_compressedConsecutiveErrors = 0;
+    conn->_compressedFifoOverflows = 0;
     
     // Initialize the circular buffer
     conn->_audioBufferWriteIndex = conn->_audioBufferReadIndex = 0;
@@ -818,6 +834,11 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     int frameDurationMs = MAX(1, (int)(opusConfig.samplesPerFrame / (opusConfig.sampleRate / 1000)));
     int targetBufferDurationMs = MLAudioRingBufferDurationForMode((MLAudioOutputMode)conn->_audioOutputMode);
     int bufferedFramesTarget = MAX(1, (targetBufferDurationMs + frameDurationMs - 1) / frameDurationMs);
+    if (frameDurationMs >= 20) {
+        // AC3 / E-AC3 frames are 32 ms long: keep at least three of them in flight so a
+        // late packet does not run the output dry.
+        bufferedFramesTarget = MAX(bufferedFramesTarget, 3);
+    }
     conn->_audioBufferEntries = MAX(2, bufferedFramesTarget + 1);
     conn->_audioCircularBuffer = malloc(conn->_audioBufferEntries * conn->_audioBufferStride * sizeof(short));
     if (conn->_audioCircularBuffer == NULL) {
@@ -876,6 +897,9 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
             conn->_audioCircularBuffer = NULL;
             return -1;
         }
+    } else if (useCompressed) {
+        // AC3 / E-AC3 are decoded by AudioToolbox; the decoder is created below.
+        conn->_opusDecoder = NULL;
     } else {
         conn->_opusDecoder = opus_multistream_decoder_create(decoderConfig.sampleRate,
                                                              decoderConfig.channelCount,
@@ -900,6 +924,37 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
         free(conn->_audioCircularBuffer);
         conn->_audioCircularBuffer = NULL;
         return -1;
+    }
+    if (useCompressed) {
+        const int fifoFrames = opusConfig.samplesPerFrame * 3;
+        conn->_compressedFifoCapacityFrames = fifoFrames;
+        conn->_compressedFifo = calloc((size_t)fifoFrames * opusConfig.channelCount, sizeof(short));
+        conn->_compressedScratch = calloc((size_t)opusConfig.samplesPerFrame * opusConfig.channelCount, sizeof(short));
+        OSStatus converterStatus = -1;
+        if (conn->_compressedFifo != NULL && conn->_compressedScratch != NULL) {
+            converterStatus = MLCreateCompressedAudioConverter(conn->_audioCodec, opusConfig.channelCount,
+                                                               &channelLayout, &conn->_compressedConverter);
+        }
+        if (converterStatus != noErr || conn->_compressedConverter == NULL) {
+            // Not fatal for the stream: the user gets silence and a notice, and the
+            // next session uses Opus.
+            conn->_compressedConverter = NULL;
+            conn->_audioRxState = MLAudioRxStateMuted;
+            Log(LOG_E, @"[audio] Could not create the %@ decoder (status %d); audio is muted for this session",
+                [MLAudioStreamPlan codecName:conn->_audioCodec], (int)converterStatus);
+            [conn noteAudioCodecProblemWithNoticeKey:@"The %@ decoder failed. Audio is muted; Opus will be used next time."
+                                     markUnsupported:YES];
+        } else {
+            UInt32 layoutSize = (UInt32)sizeof(AudioChannelLayout);
+            AudioChannelLayout reported = {};
+            OSStatus layoutStatus = AudioConverterGetProperty(conn->_compressedConverter,
+                                                              kAudioConverterOutputChannelLayout,
+                                                              &layoutSize, &reported);
+            Log(LOG_I, @"[audio] %@ decoder ready: channels=%d fifoFrames=%d outputLayoutStatus=%d outputLayoutTag=0x%08X expectedLayoutTag=0x%08X",
+                [MLAudioStreamPlan codecName:conn->_audioCodec], opusConfig.channelCount, fifoFrames,
+                (int)layoutStatus, (unsigned int)reported.mChannelLayoutTag,
+                (unsigned int)channelLayout.mChannelLayoutTag);
+        }
     }
     conn->_audioDeviceChannelCount = MLDefaultOutputChannelCount();
     conn->_audioRenderChannelCount = conn->_channelCount;
@@ -1049,9 +1104,22 @@ void ArCleanup(void)
 
     [conn cleanupSelectedAudioRenderer];
 
-    if (conn->_audioCodec == MLAudioCodecPcm) {
-        MLPcmReportStats(conn, LiGetMillis(), YES);
+    if (conn->_audioCodec != MLAudioCodecOpus) {
+        MLAudioRxReportStats(conn, LiGetMillis(), YES);
     }
+    if (conn->_compressedConverter != NULL) {
+        AudioConverterDispose(conn->_compressedConverter);
+        conn->_compressedConverter = NULL;
+    }
+    if (conn->_compressedFifo != NULL) {
+        free(conn->_compressedFifo);
+        conn->_compressedFifo = NULL;
+    }
+    if (conn->_compressedScratch != NULL) {
+        free(conn->_compressedScratch);
+        conn->_compressedScratch = NULL;
+    }
+    conn->_compressedFifoFrames = 0;
 
     if (conn->_opusDecoder != NULL) {
         opus_multistream_decoder_destroy(conn->_opusDecoder);
@@ -1075,29 +1143,45 @@ void ArCleanup(void)
 #endif
 }
 
-// Reports PCM validation counters. Decode thread only; silent while nothing went
-// wrong, and at most one line per ML_PCM_STATS_INTERVAL_MS unless forced.
-static void MLPcmReportStats(Connection *conn, uint64_t nowMs, BOOL force)
+// Scales interleaved samples in place. Decode thread only.
+static void MLApplyAudioVolume(short *samples, int count, float volume)
 {
-    if (!force && nowMs - conn->_pcmLastReportMs < ML_PCM_STATS_INTERVAL_MS) {
+    if (volume == 1.0f) {
         return;
     }
-    uint64_t invalid = conn->_pcmInvalidPackets - conn->_pcmReportedInvalid;
-    uint64_t loss = conn->_pcmLossPlaceholders - conn->_pcmReportedLoss;
-    uint64_t valid = conn->_pcmValidPackets - conn->_pcmReportedValid;
+    for (int i = 0; i < count; i++) {
+        float scaled = (float)samples[i] * volume;
+        if (scaled > 32767.0f) scaled = 32767.0f;
+        if (scaled < -32768.0f) scaled = -32768.0f;
+        samples[i] = (short)scaled;
+    }
+}
+
+// Reports validation counters of the non-Opus paths. Decode thread only; silent while nothing went
+// wrong, and at most one line per ML_AUDIO_RX_STATS_INTERVAL_MS unless forced.
+static void MLAudioRxReportStats(Connection *conn, uint64_t nowMs, BOOL force)
+{
+    if (!force && nowMs - conn->_audioRxLastReportMs < ML_AUDIO_RX_STATS_INTERVAL_MS) {
+        return;
+    }
+    uint64_t invalid = conn->_audioRxInvalidPackets - conn->_audioRxReportedInvalid;
+    uint64_t loss = conn->_audioRxLossPlaceholders - conn->_audioRxReportedLoss;
+    uint64_t valid = conn->_audioRxValidPackets - conn->_audioRxReportedValid;
     if (invalid > 0 || loss > 0) {
-        Log(LOG_W, @"[audio] PCM packets since last report: valid=%llu sizeMismatch=%llu lossPlaceholders=%llu (session totals valid=%llu sizeMismatch=%llu lossPlaceholders=%llu)",
+        Log(LOG_W, @"[audio] %@ packets since last report: valid=%llu invalid=%llu lossPlaceholders=%llu fifoOverflows=%llu (session totals valid=%llu invalid=%llu lossPlaceholders=%llu)",
+            [MLAudioStreamPlan codecName:conn->_audioCodec],
             (unsigned long long)valid,
             (unsigned long long)invalid,
             (unsigned long long)loss,
-            (unsigned long long)conn->_pcmValidPackets,
-            (unsigned long long)conn->_pcmInvalidPackets,
-            (unsigned long long)conn->_pcmLossPlaceholders);
+            (unsigned long long)conn->_compressedFifoOverflows,
+            (unsigned long long)conn->_audioRxValidPackets,
+            (unsigned long long)conn->_audioRxInvalidPackets,
+            (unsigned long long)conn->_audioRxLossPlaceholders);
     }
-    conn->_pcmReportedInvalid = conn->_pcmInvalidPackets;
-    conn->_pcmReportedLoss = conn->_pcmLossPlaceholders;
-    conn->_pcmReportedValid = conn->_pcmValidPackets;
-    conn->_pcmLastReportMs = nowMs;
+    conn->_audioRxReportedInvalid = conn->_audioRxInvalidPackets;
+    conn->_audioRxReportedLoss = conn->_audioRxLossPlaceholders;
+    conn->_audioRxReportedValid = conn->_audioRxValidPackets;
+    conn->_audioRxLastReportMs = nowMs;
 }
 
 // Handles one packet of a PCM session on the audio decode thread. Only packets of
@@ -1110,20 +1194,20 @@ static void MLPcmReportStats(Connection *conn, uint64_t nowMs, BOOL force)
 //   ignores the codec attribute and sends Opus). The session is muted for good.
 // - After the first valid packet a wrong size is damage, not a codec mismatch: the
 //   packet is replaced by one frame of silence and counted. A burst of
-//   ML_PCM_LATE_INVALID_BURST consecutive bad packets is reported once to the
+//   ML_AUDIO_RX_LATE_INVALID_BURST consecutive bad packets is reported once to the
 //   user; audio resumes by itself as soon as valid packets arrive again.
 static void MLPcmHandleSample(Connection *conn, const char *sampleData, int sampleLength)
 {
     const uint64_t nowMs = LiGetMillis();
     const BOOL isPlaceholder = (sampleData == NULL || sampleLength == 0);
 
-    if (conn->_pcmState == MLPcmStateMuted) {
+    if (conn->_audioRxState == MLAudioRxStateMuted) {
         if (isPlaceholder) {
-            conn->_pcmLossPlaceholders++;
+            conn->_audioRxLossPlaceholders++;
         } else {
-            conn->_pcmInvalidPackets++;
+            conn->_audioRxInvalidPackets++;
         }
-        MLPcmReportStats(conn, nowMs, NO);
+        MLAudioRxReportStats(conn, nowMs, NO);
         return;
     }
 
@@ -1131,43 +1215,35 @@ static void MLPcmHandleSample(Connection *conn, const char *sampleData, int samp
     const size_t entryBytes = (size_t)conn->_audioBufferStride * sizeof(short);
 
     if (isPlaceholder) {
-        conn->_pcmLossPlaceholders++;
+        conn->_audioRxLossPlaceholders++;
         memset(entry, 0, entryBytes);
     } else if (sampleLength == conn->_pcmExpectedBytes) {
         memcpy(entry, sampleData, entryBytes);
-        conn->_pcmValidPackets++;
-        conn->_pcmConsecutiveInvalid = 0;
-        if (conn->_pcmState == MLPcmStateAwaitingFirstPacket) {
-            conn->_pcmState = MLPcmStateStreaming;
+        conn->_audioRxValidPackets++;
+        conn->_audioRxConsecutiveInvalid = 0;
+        if (conn->_audioRxState == MLAudioRxStateAwaitingFirstPacket) {
+            conn->_audioRxState = MLAudioRxStateStreaming;
             Log(LOG_I, @"[audio] First PCM packet validated: bytes=%d channels=%d samplesPerFrame=%d",
                 sampleLength, conn->_channelCount, conn->_audioSamplesPerFrame);
         }
-        const float volume = conn->_audioVolumeMultiplier;
-        if (volume != 1.0f) {
-            for (int i = 0; i < conn->_audioBufferStride; i++) {
-                float scaled = (float)entry[i] * volume;
-                if (scaled > 32767.0f) scaled = 32767.0f;
-                if (scaled < -32768.0f) scaled = -32768.0f;
-                entry[i] = (short)scaled;
-            }
-        }
+        MLApplyAudioVolume(entry, conn->_audioBufferStride, conn->_audioVolumeMultiplier);
     } else {
-        conn->_pcmInvalidPackets++;
-        conn->_pcmConsecutiveInvalid++;
-        if (conn->_pcmState == MLPcmStateAwaitingFirstPacket) {
-            conn->_pcmState = MLPcmStateMuted;
+        conn->_audioRxInvalidPackets++;
+        conn->_audioRxConsecutiveInvalid++;
+        if (conn->_audioRxState == MLAudioRxStateAwaitingFirstPacket) {
+            conn->_audioRxState = MLAudioRxStateMuted;
             Log(LOG_E, @"[audio] First audio packet has %d bytes, PCM needs exactly %d: the host is not sending PCM. Audio is muted for this session and the host is remembered as not supporting PCM",
                 sampleLength, conn->_pcmExpectedBytes);
-            [conn noteAudioCodecProblemWithNoticeKey:@"The host did not send PCM audio. Audio is muted; Opus will be used next time."
+            [conn noteAudioCodecProblemWithNoticeKey:@"The host did not send %@ audio. Audio is muted; Opus will be used next time."
                                      markUnsupported:YES];
-            MLPcmReportStats(conn, nowMs, NO);
+            MLAudioRxReportStats(conn, nowMs, NO);
             return;
         }
         memset(entry, 0, entryBytes);
-        if (conn->_pcmConsecutiveInvalid == ML_PCM_LATE_INVALID_BURST) {
+        if (conn->_audioRxConsecutiveInvalid == ML_AUDIO_RX_LATE_INVALID_BURST) {
             Log(LOG_E, @"[audio] %d consecutive PCM packets with the wrong size (expected %d, last %d). Audio stays silent until valid packets resume",
-                ML_PCM_LATE_INVALID_BURST, conn->_pcmExpectedBytes, sampleLength);
-            [conn noteAudioCodecProblemWithNoticeKey:@"PCM audio is damaged. Audio is silent until it recovers."
+                ML_AUDIO_RX_LATE_INVALID_BURST, conn->_pcmExpectedBytes, sampleLength);
+            [conn noteAudioCodecProblemWithNoticeKey:@"%@ audio is damaged. Audio is silent until it recovers."
                                      markUnsupported:NO];
         }
     }
@@ -1176,7 +1252,303 @@ static void MLPcmHandleSample(Connection *conn, const char *sampleData, int samp
     __sync_synchronize();
     conn->_audioBufferWriteIndex = (conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries;
     __atomic_store_n(&conn->_lastAudioSampleMs, nowMs, __ATOMIC_RELAXED);
-    MLPcmReportStats(conn, nowMs, NO);
+    MLAudioRxReportStats(conn, nowMs, NO);
+}
+
+// ---- AC3 / E-AC3 -----------------------------------------------------------
+//
+// The host sends one raw AC3 / E-AC3 syncframe (1536 samples, 32 ms) per packet.
+// AudioToolbox decodes it to 16-bit interleaved PCM, which goes into the same ring
+// as every other codec, so all output backends keep working unchanged.
+//
+// An AudioConverter may return more or fewer frames than were fed (decoder
+// priming), so decoded PCM first goes into a small FIFO and is moved into the
+// ring in whole entries. Whatever goes wrong yields silence, never raw bytes.
+
+// Input handed to the AudioConverter callback: exactly one compressed frame.
+typedef struct {
+    const uint8_t *data;
+    UInt32 size;
+    BOOL consumed;
+    AudioStreamPacketDescription description;
+} MLCompressedInput;
+
+// Returned by the input callback when the frame was already consumed. A normal
+// condition: the converter then hands back whatever PCM it has produced so far.
+static const OSStatus kMLCompressedNeedMoreInput = -50505;
+// AC3 frames are at most a few KB; anything bigger is not an AC3 frame.
+#define ML_COMPRESSED_MAX_FRAME_BYTES 8192
+// Consecutive converter errors before the decoder is given up for the session.
+#define ML_COMPRESSED_MAX_CONSECUTIVE_ERRORS 10
+// Valid frames after which a decoder that produced no PCM at all counts as failed.
+#define ML_COMPRESSED_MAX_SILENT_FRAMES 16
+
+static OSStatus MLCompressedInputProc(AudioConverterRef converter,
+                                      UInt32 *ioNumberDataPackets,
+                                      AudioBufferList *ioData,
+                                      AudioStreamPacketDescription **outDataPacketDescription,
+                                      void *inUserData)
+{
+    MLCompressedInput *input = (MLCompressedInput *)inUserData;
+    if (input == NULL || input->consumed || input->size == 0) {
+        *ioNumberDataPackets = 0;
+        ioData->mNumberBuffers = 1;
+        ioData->mBuffers[0].mNumberChannels = 0;
+        ioData->mBuffers[0].mDataByteSize = 0;
+        ioData->mBuffers[0].mData = NULL;
+        if (outDataPacketDescription != NULL) {
+            *outDataPacketDescription = NULL;
+        }
+        return kMLCompressedNeedMoreInput;
+    }
+
+    input->description.mStartOffset = 0;
+    input->description.mVariableFramesInPacket = 0;
+    input->description.mDataByteSize = input->size;
+
+    ioData->mNumberBuffers = 1;
+    ioData->mBuffers[0].mNumberChannels = 0;
+    ioData->mBuffers[0].mDataByteSize = input->size;
+    ioData->mBuffers[0].mData = (void *)input->data;
+    if (outDataPacketDescription != NULL) {
+        *outDataPacketDescription = &input->description;
+    }
+    *ioNumberDataPackets = 1;
+    input->consumed = YES;
+    return noErr;
+}
+
+// Creates the AudioToolbox decoder for AC3 or E-AC3 with 16-bit interleaved output.
+static OSStatus MLCreateCompressedAudioConverter(int codec, int channels, const AudioChannelLayout *outputLayout,
+                                                 AudioConverterRef *outConverter)
+{
+    AudioStreamBasicDescription input = {0};
+    input.mSampleRate = 48000.0;
+    input.mFormatID = (codec == MLAudioCodecEac3) ? kAudioFormatEnhancedAC3 : kAudioFormatAC3;
+    input.mChannelsPerFrame = (UInt32)channels;
+    input.mFramesPerPacket = 1536;
+
+    AudioStreamBasicDescription output = {0};
+    output.mSampleRate = 48000.0;
+    output.mFormatID = kAudioFormatLinearPCM;
+    output.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    output.mBitsPerChannel = 16;
+    output.mChannelsPerFrame = (UInt32)channels;
+    output.mBytesPerFrame = output.mChannelsPerFrame * (UInt32)sizeof(short);
+    output.mFramesPerPacket = 1;
+    output.mBytesPerPacket = output.mBytesPerFrame;
+
+    AudioConverterRef converter = NULL;
+    OSStatus status = AudioConverterNew(&input, &output, &converter);
+    if (status != noErr || converter == NULL) {
+        return status != noErr ? status : -1;
+    }
+
+    // Ask for the channel order the ring uses (L R C LFE Ls Rs for 5.1). Stereo has no
+    // ordering question. If the decoder refuses, keep its native order and say so.
+    if (channels > 2 && outputLayout != NULL) {
+        OSStatus layoutStatus = AudioConverterSetProperty(converter, kAudioConverterOutputChannelLayout,
+                                                          (UInt32)sizeof(AudioChannelLayout), outputLayout);
+        if (layoutStatus != noErr) {
+            Log(LOG_W, @"[audio] %@ decoder did not accept the output channel layout (status %d); channel order may differ",
+                [MLAudioStreamPlan codecName:codec], (int)layoutStatus);
+        }
+    }
+
+    *outConverter = converter;
+    return noErr;
+}
+
+// Appends frames of interleaved PCM to the FIFO; a FIFO that cannot take them is
+// emptied first so the audio never lags behind by more than a few frames.
+static void MLCompressedFifoAppend(Connection *conn, const short *samples, int frames)
+{
+    const int channels = conn->_channelCount;
+    if (frames <= 0 || channels <= 0) {
+        return;
+    }
+    if (conn->_compressedFifoFrames + frames > conn->_compressedFifoCapacityFrames) {
+        conn->_compressedFifoFrames = 0;
+        conn->_compressedFifoOverflows++;
+        if (frames > conn->_compressedFifoCapacityFrames) {
+            return;
+        }
+    }
+    short *destination = conn->_compressedFifo + (size_t)conn->_compressedFifoFrames * channels;
+    if (samples != NULL) {
+        memcpy(destination, samples, (size_t)frames * channels * sizeof(short));
+    } else {
+        memset(destination, 0, (size_t)frames * channels * sizeof(short));
+    }
+    conn->_compressedFifoFrames += frames;
+}
+
+// Moves whole frames out of the FIFO into the ring while the ring has room.
+static void MLCompressedFifoDrain(Connection *conn, uint64_t nowMs)
+{
+    const int frames = conn->_audioSamplesPerFrame;
+    const int channels = conn->_channelCount;
+    const size_t entrySamples = (size_t)frames * channels;
+    while (conn->_compressedFifoFrames >= frames &&
+           ((conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries) != conn->_audioBufferReadIndex) {
+        short *entry = &conn->_audioCircularBuffer[conn->_audioBufferWriteIndex * conn->_audioBufferStride];
+        memcpy(entry, conn->_compressedFifo, entrySamples * sizeof(short));
+        MLApplyAudioVolume(entry, conn->_audioBufferStride, conn->_audioVolumeMultiplier);
+
+        conn->_compressedFifoFrames -= frames;
+        if (conn->_compressedFifoFrames > 0) {
+            memmove(conn->_compressedFifo, conn->_compressedFifo + entrySamples,
+                    (size_t)conn->_compressedFifoFrames * channels * sizeof(short));
+        }
+
+        __sync_synchronize();
+        conn->_audioBufferWriteIndex = (conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries;
+        __atomic_store_n(&conn->_lastAudioSampleMs, nowMs, __ATOMIC_RELAXED);
+    }
+}
+
+// Gives up on the decoder for this session: silence from now on, the user is told
+// once and the host is remembered as not delivering this codec.
+static void MLCompressedFail(Connection *conn, NSString *reason)
+{
+    conn->_audioRxState = MLAudioRxStateMuted;
+    Log(LOG_E, @"[audio] %@ decoding failed (%@). Audio is muted for this session and the host is remembered as not delivering this codec",
+        [MLAudioStreamPlan codecName:conn->_audioCodec], reason);
+    [conn noteAudioCodecProblemWithNoticeKey:@"The %@ decoder failed. Audio is muted; Opus will be used next time."
+                             markUnsupported:YES];
+}
+
+// Handles one packet of an AC3 / E-AC3 session on the audio decode thread.
+//
+// - (NULL, 0) is a packet the library could not recover: one frame of silence.
+// - Every frame must start with the AC-3 sync word 0x0B77 (E-AC3 uses it too). If
+//   the very first packet does not, the host is not sending this codec (an Opus
+//   stream starts differently): the session is muted and the host remembered.
+//   Later invalid packets become one frame of silence each.
+// - A converter error yields one frame of silence; repeated errors, or a decoder
+//   that never produces PCM, end the decoding for the session (MLCompressedFail).
+static void MLCompressedHandleSample(Connection *conn, const char *sampleData, int sampleLength)
+{
+    const uint64_t nowMs = LiGetMillis();
+    const int frames = conn->_audioSamplesPerFrame;
+    const BOOL isPlaceholder = (sampleData == NULL || sampleLength == 0);
+
+    if (conn->_audioRxState == MLAudioRxStateMuted) {
+        if (isPlaceholder) {
+            conn->_audioRxLossPlaceholders++;
+        } else {
+            conn->_audioRxInvalidPackets++;
+        }
+        MLAudioRxReportStats(conn, nowMs, NO);
+        return;
+    }
+
+    if (conn->_compressedConverter == NULL || conn->_compressedFifo == NULL || conn->_compressedScratch == NULL) {
+        // The decoder could not be created in ArInit (already reported there).
+        conn->_audioRxState = MLAudioRxStateMuted;
+        return;
+    }
+
+    if (isPlaceholder) {
+        conn->_audioRxLossPlaceholders++;
+        MLCompressedFifoAppend(conn, NULL, frames);
+    } else {
+        const uint8_t *bytes = (const uint8_t *)sampleData;
+        const BOOL looksValid = sampleLength >= 8 && sampleLength <= ML_COMPRESSED_MAX_FRAME_BYTES &&
+                                bytes[0] == 0x0B && bytes[1] == 0x77;
+        if (!looksValid) {
+            conn->_audioRxInvalidPackets++;
+            conn->_audioRxConsecutiveInvalid++;
+            if (conn->_audioRxState == MLAudioRxStateAwaitingFirstPacket) {
+                conn->_audioRxState = MLAudioRxStateMuted;
+                Log(LOG_E, @"[audio] First audio packet (%d bytes) is not an AC-3 frame: the host is not sending %@. Audio is muted for this session and the host is remembered as not supporting it",
+                    sampleLength, [MLAudioStreamPlan codecName:conn->_audioCodec]);
+                [conn noteAudioCodecProblemWithNoticeKey:@"The host did not send %@ audio. Audio is muted; Opus will be used next time."
+                                         markUnsupported:YES];
+                MLAudioRxReportStats(conn, nowMs, NO);
+                return;
+            }
+            MLCompressedFifoAppend(conn, NULL, frames);
+            if (conn->_audioRxConsecutiveInvalid == ML_AUDIO_RX_LATE_INVALID_BURST) {
+                Log(LOG_E, @"[audio] %d consecutive packets are not valid %@ frames (last %d bytes). Audio stays silent until valid frames resume",
+                    ML_AUDIO_RX_LATE_INVALID_BURST, [MLAudioStreamPlan codecName:conn->_audioCodec], sampleLength);
+                [conn noteAudioCodecProblemWithNoticeKey:@"%@ audio is damaged. Audio is silent until it recovers."
+                                         markUnsupported:NO];
+            }
+        } else {
+            conn->_audioRxValidPackets++;
+            conn->_audioRxConsecutiveInvalid = 0;
+            if (conn->_audioRxState == MLAudioRxStateAwaitingFirstPacket) {
+                conn->_audioRxState = MLAudioRxStateStreaming;
+                Log(LOG_I, @"[audio] First %@ frame received: bytes=%d channels=%d samplesPerFrame=%d",
+                    [MLAudioStreamPlan codecName:conn->_audioCodec], sampleLength, conn->_channelCount, frames);
+            }
+
+            MLCompressedInput input = { bytes, (UInt32)sampleLength, NO, {0} };
+            BOOL converterFailed = NO;
+            OSStatus failureStatus = noErr;
+            int producedFrames = 0;
+            // The first pass consumes the frame; a second pass collects PCM the
+            // converter may still hold from its priming.
+            for (int pass = 0; pass < 2; pass++) {
+                AudioBufferList output;
+                output.mNumberBuffers = 1;
+                output.mBuffers[0].mNumberChannels = (UInt32)conn->_channelCount;
+                output.mBuffers[0].mDataByteSize = (UInt32)(frames * conn->_channelCount * (int)sizeof(short));
+                output.mBuffers[0].mData = conn->_compressedScratch;
+                UInt32 outputFrames = (UInt32)frames;
+                OSStatus status = AudioConverterFillComplexBuffer(conn->_compressedConverter,
+                                                                  MLCompressedInputProc,
+                                                                  &input,
+                                                                  &outputFrames,
+                                                                  &output,
+                                                                  NULL);
+                if (status != noErr && status != kMLCompressedNeedMoreInput) {
+                    converterFailed = YES;
+                    failureStatus = status;
+                    break;
+                }
+                if (outputFrames == 0) {
+                    break;
+                }
+                if (outputFrames > (UInt32)frames) {
+                    outputFrames = (UInt32)frames;
+                }
+                MLCompressedFifoAppend(conn, conn->_compressedScratch, (int)outputFrames);
+                producedFrames += (int)outputFrames;
+                if (status == kMLCompressedNeedMoreInput || outputFrames < (UInt32)frames) {
+                    break;
+                }
+            }
+
+            if (converterFailed) {
+                conn->_compressedConsecutiveErrors++;
+                if (conn->_compressedConsecutiveErrors <= 3) {
+                    Log(LOG_W, @"[audio] %@ conversion error %d (consecutive %llu); playing silence for this frame",
+                        [MLAudioStreamPlan codecName:conn->_audioCodec], (int)failureStatus,
+                        (unsigned long long)conn->_compressedConsecutiveErrors);
+                }
+                MLCompressedFifoAppend(conn, NULL, frames);
+                if (conn->_compressedConsecutiveErrors >= ML_COMPRESSED_MAX_CONSECUTIVE_ERRORS) {
+                    MLCompressedFail(conn, [NSString stringWithFormat:@"converter status %d", (int)failureStatus]);
+                    MLAudioRxReportStats(conn, nowMs, NO);
+                    return;
+                }
+            } else {
+                conn->_compressedConsecutiveErrors = 0;
+                conn->_compressedDecodedFrames += (uint64_t)producedFrames;
+                if (conn->_compressedDecodedFrames == 0 &&
+                    conn->_audioRxValidPackets >= ML_COMPRESSED_MAX_SILENT_FRAMES) {
+                    MLCompressedFail(conn, @"the decoder returned no audio");
+                    MLAudioRxReportStats(conn, nowMs, NO);
+                    return;
+                }
+            }
+        }
+    }
+
+    MLCompressedFifoDrain(conn, nowMs);
+    MLAudioRxReportStats(conn, nowMs, NO);
 }
 
 void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
@@ -1186,7 +1558,8 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         return;
     }
     const BOOL usePcm = conn->_audioCodec == MLAudioCodecPcm;
-    if (!usePcm && conn->_opusDecoder == NULL) {
+    const BOOL useCompressed = conn->_audioCodec == MLAudioCodecAc3 || conn->_audioCodec == MLAudioCodecEac3;
+    if (!usePcm && !useCompressed && conn->_opusDecoder == NULL) {
         return;
     }
 
@@ -1213,6 +1586,10 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 
     if (usePcm) {
         MLPcmHandleSample(conn, sampleData, sampleLength);
+        return;
+    }
+    if (useCompressed) {
+        MLCompressedHandleSample(conn, sampleData, sampleLength);
         return;
     }
     
@@ -1301,13 +1678,15 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     }
     const int codec = _audioCodec;
     NSString *hostKey = _audioHostKey;
+    NSString *codecName = [MLAudioStreamPlan codecDisplayName:codec];
     id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(self);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         if (markUnsupported && hostKey.length > 0) {
             [SettingsClass markAudioCodecFailed:codec forHost:hostKey];
         }
         if (callbacks != nil && [callbacks respondsToSelector:@selector(audioCodecNotice:)]) {
-            [callbacks audioCodecNotice:[[LanguageManager shared] localize:noticeKey]];
+            NSString *format = [[LanguageManager shared] localize:noticeKey];
+            [callbacks audioCodecNotice:[NSString stringWithFormat:format, codecName]];
         }
     });
 }
