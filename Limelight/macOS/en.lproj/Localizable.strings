@@ -1232,7 +1232,7 @@
 "Open Accessibility Settings" = "Open Accessibility Settings";
 "Not Now" = "Not Now";
 "DualSense Touchpad Output" = "DualSense Touchpad Output";
-"DualSense Touchpad Output detail" = "Controller touchpad sends the pad as game controller touch or a Mac-style trackpad, as set above. Windows precision touchpad sends its fingers and click as a precision touchpad instead, and needs a Windows 11 host that supports it; otherwise the controller touchpad is used.";
+"DualSense Touchpad Output detail" = "Controller touchpad sends the pad as game controller touch or a Mac-style trackpad, as set above. Windows precision touchpad sends its fingers and click as a precision touchpad instead, and needs a Windows 11 host that supports it; otherwise the controller touchpad is used. The DualSense touchpad tracks at most two fingers, so one- and two-finger gestures work but three- and four-finger gestures do not.";
 "DualSense Touchpad Output Controller" = "Controller touchpad (default)";
 "DualSense Touchpad Output Precision" = "Windows precision touchpad";
 "Input Method Text" = "Input Method Text";

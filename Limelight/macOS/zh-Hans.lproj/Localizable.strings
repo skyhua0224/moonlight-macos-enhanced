@@ -1298,7 +1298,7 @@
 "Open Accessibility Settings" = "打开辅助功能设置";
 "Not Now" = "暂不";
 "DualSense Touchpad Output" = "DualSense 触控板输出";
-"DualSense Touchpad Output detail" = "“手柄触控板”按上方设置把触控板作为游戏手柄触摸或 Mac 风格触控板发送；“Windows 精确式触控板”则把手指和按压作为精确式触控板发送，需要支持该功能的 Windows 11 主机，不支持时自动使用手柄触控板。";
+"DualSense Touchpad Output detail" = "“手柄触控板”按上方设置把触控板作为游戏手柄触摸或 Mac 风格触控板发送；“Windows 精确式触控板”则把手指和按压作为精确式触控板发送，需要支持该功能的 Windows 11 主机，不支持时自动使用手柄触控板。DualSense 触控板最多识别两根手指，因此只支持单指和双指手势，不支持三指和四指手势。";
 "DualSense Touchpad Output Controller" = "手柄触控板（默认）";
 "DualSense Touchpad Output Precision" = "Windows 精确式触控板";
 "Input Method Text" = "输入法文字";
