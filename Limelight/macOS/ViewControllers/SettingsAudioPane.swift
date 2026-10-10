@@ -43,6 +43,21 @@ struct AudioView: View {
             .frame(width: 190, alignment: .trailing)
           }
 
+          if dolbyOutputApplies {
+            AudioCompactRow(title: "Dolby Output") {
+              Picker("", selection: $settingsModel.selectedDolbyOutput) {
+                ForEach(SettingsModel.dolbyOutputModes, id: \.self) { value in
+                  Text(languageManager.localize(value)).tag(value)
+                }
+              }
+              .labelsHidden()
+              .controllerPicker(selection: $settingsModel.selectedDolbyOutput, options: SettingsModel.dolbyOutputModes, title: { value in languageManager.localize(value) })
+              .pickerStyle(.menu)
+              .controlSize(.small)
+              .frame(width: 190, alignment: .trailing)
+            }
+          }
+
           AudioCompactRow(title: "Play Sound on Host") {
             Toggle("", isOn: $settingsModel.audioOnPC)
               .labelsHidden()
@@ -222,10 +237,30 @@ struct AudioView: View {
         format: languageManager.localize("Audio codec hint PCM"), stereo, surround)
     }
     // AC3 / E-AC3 run at a fixed bitrate whatever the channel count.
+    let mbps = MLAudioStreamPlan.mbpsText(current.wireKbps)
+    if settingsModel.selectedDolbyOutput != "Decode on This Mac" {
+      let support = MLAudioBitstreamOutput.supportOnDefaultDevice(forCodec: Int32(choice.codecId))
+      if support.available {
+        let dolbyName = languageManager.localize(
+          choice == .eac3 ? "Dolby Digital Plus" : "Dolby Digital")
+        var text = String(
+          format: languageManager.localize("Audio codec hint passthrough"),
+          support.deviceName, dolbyName, mbps)
+        if channels <= 2 {
+          text += " " + languageManager.localize("Audio codec hint passthrough stereo")
+        }
+        return text
+      }
+    }
     return String(
       format: languageManager.localize("Audio codec hint compressed"),
-      MLAudioStreamPlan.codecDisplayName(choice.codecId),
-      MLAudioStreamPlan.mbpsText(current.wireKbps))
+      MLAudioStreamPlan.codecDisplayName(choice.codecId), mbps)
+  }
+
+  /// The Dolby Output choice only matters for the codecs that can be passed through.
+  private var dolbyOutputApplies: Bool {
+    let choice = AudioCodecChoice(selection: settingsModel.selectedAudioCodec)
+    return choice == .ac3 || choice == .eac3
   }
 
   private var microphoneStatus: String {

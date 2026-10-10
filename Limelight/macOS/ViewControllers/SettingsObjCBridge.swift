@@ -1588,6 +1588,18 @@ class SettingsClass: NSObject {
       ?? SettingsModel.defaultContinuousAudio
   }
 
+  /// Whether AC3 / E-AC3 may be sent to the output device as a bitstream.
+  /// Only "Decode on This Mac" forbids it; whether the device can take it is
+  /// decided when the stream starts.
+  @objc static func audioBitstreamPassthroughAllowed(for key: String) -> Bool {
+    let defaults = UserDefaults.standard
+    let value = defaults.string(forKey: SettingsModel.dolbyOutputKeyPrefix + key)
+      ?? (key == SettingsModel.globalHostId ? nil : defaults.string(
+        forKey: SettingsModel.dolbyOutputKeyPrefix + SettingsModel.globalHostId))
+      ?? SettingsModel.defaultDolbyOutput
+    return value != "Decode on This Mac"
+  }
+
   /// True when an earlier session learned that this host does not deliver the codec.
   @objc(audioCodecFailed:forHost:)
   static func audioCodecFailed(_ codec: Int, for key: String) -> Bool {

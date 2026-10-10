@@ -142,6 +142,7 @@ extension SettingsModel {
     let defaults = UserDefaults.standard
     defaults.set(selectedAudioCodec, forKey: Self.audioCodecKeyPrefix + hostId)
     defaults.set(continuousAudio, forKey: Self.continuousAudioKeyPrefix + hostId)
+    defaults.set(selectedDolbyOutput, forKey: Self.dolbyOutputKeyPrefix + hostId)
   }
 
   func loadAudioCodecSettings(for hostId: String) {
@@ -156,6 +157,12 @@ extension SettingsModel {
       ?? (hostId == Self.globalHostId
         ? nil : defaults.object(forKey: continuousKey + Self.globalHostId) as? Bool)
       ?? Self.defaultContinuousAudio
+
+    let dolbyKey = Self.dolbyOutputKeyPrefix
+    let dolbyStored = defaults.string(forKey: dolbyKey + hostId)
+      ?? (hostId == Self.globalHostId ? nil : defaults.string(forKey: dolbyKey + Self.globalHostId))
+    selectedDolbyOutput = dolbyStored.flatMap { Self.dolbyOutputModes.contains($0) ? $0 : nil }
+      ?? Self.defaultDolbyOutput
     reloadAudioCodecFailures(for: hostId)
   }
 
@@ -288,6 +295,7 @@ extension SettingsModel {
     selectedAudioConfiguration = Self.defaultAudioConfiguration
     selectedAudioCodec = Self.defaultAudioCodec
     continuousAudio = Self.defaultContinuousAudio
+    selectedDolbyOutput = Self.defaultDolbyOutput
     selectedAudioOutputMode = Self.defaultAudioOutputMode
     selectedEnhancedAudioOutputTarget = Self.defaultEnhancedAudioOutputTarget
     selectedEnhancedAudioPreset = Self.defaultEnhancedAudioPreset

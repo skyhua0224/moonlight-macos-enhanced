@@ -1285,5 +1285,11 @@
 "AC3" = "AC3";
 "E-AC3" = "E-AC3";
 "Audio codec hint compressed" = "%@ audio uses about %@ Mbps. It is decoded on this Mac, which adds about 32 ms of audio latency compared with Opus and brings no quality gain; it is offered for compatibility. If the link cannot carry it, audio drops out and video stutters.";
+"Dolby Output" = "Dolby Output";
+"Decode on This Mac" = "Decode on This Mac";
+"Dolby Digital" = "Dolby Digital";
+"Dolby Digital Plus" = "Dolby Digital Plus";
+"Audio codec hint passthrough" = "%1$@ accepts %2$@ directly: the audio is sent to it untouched. While streaming, other apps cannot play sound on this device, and the volume is controlled on the device. It uses about %3$@ Mbps; if the link cannot carry it, audio drops out and video stutters.";
+"Audio codec hint passthrough stereo" = "Choose 5.1 in Audio Configuration to get surround sound from it.";
 "Keep Audio Stream Active During Silence" = "Keep Audio Stream Active During Silence";
 "Keep Audio Stream Active During Silence hint" = "The host sends silence while nothing is playing. This costs a little bandwidth and can help when the first sound after a quiet period is cut off.";

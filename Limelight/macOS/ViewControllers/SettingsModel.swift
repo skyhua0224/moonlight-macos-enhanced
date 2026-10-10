@@ -194,6 +194,7 @@ class SettingsModel: ObservableObject {
   static let audioCodecKeyPrefix = "settings.audio.codec."
   static let audioCodecFailureKeyPrefix = "settings.audio.codecFailure."
   static let continuousAudioKeyPrefix = "settings.audio.continuous."
+  static let dolbyOutputKeyPrefix = "settings.audio.dolbyOutput."
   static let foundationHostKeyPrefix = "settings.sunshine.foundationHost."
   static let audioCodecFailureChangedNotification = Notification.Name("MoonlightAudioCodecFailureDidChange")
   static let sunshineVddCapabilityKeyPrefix = "settings.sunshine.vddCapability."
@@ -718,6 +719,13 @@ class SettingsModel: ObservableObject {
   @Published var continuousAudio: Bool = SettingsModel.defaultContinuousAudio {
     didSet {
       guard !isLoading else { return }
+      persistAudioCodecSettings()
+    }
+  }
+  // Whether AC3 / E-AC3 may go to the output device untouched when it accepts them.
+  @Published var selectedDolbyOutput: String = SettingsModel.defaultDolbyOutput {
+    didSet {
+      guard !isLoading, oldValue != selectedDolbyOutput else { return }
       persistAudioCodecSettings()
     }
   }
@@ -1622,6 +1630,7 @@ class SettingsModel: ObservableObject {
     selectedAudioConfiguration = Self.defaultAudioConfiguration
     selectedAudioCodec = Self.defaultAudioCodec
     continuousAudio = Self.defaultContinuousAudio
+    selectedDolbyOutput = Self.defaultDolbyOutput
     selectedAudioOutputMode = Self.defaultAudioOutputMode
     selectedEnhancedAudioOutputTarget = Self.defaultEnhancedAudioOutputTarget
     selectedEnhancedAudioPreset = Self.defaultEnhancedAudioPreset

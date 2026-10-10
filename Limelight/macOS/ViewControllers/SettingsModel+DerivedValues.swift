@@ -2088,6 +2088,13 @@ enum AudioCodecChoice: CaseIterable {
 extension SettingsModel {
   static let defaultAudioCodec = AudioCodecChoice.opus.displayKey
   static let defaultContinuousAudio = false
+  static let defaultDolbyOutput = "Automatic"
+  // Literal list so the settings search indexes the option names. "Automatic"
+  // passes AC3 / E-AC3 through when the output device accepts it.
+  static var dolbyOutputModes: [String] = [
+    "Automatic",
+    "Decode on This Mac",
+  ]
   // Literal list so the settings search indexes the option names; keep it in
   // step with AudioCodecChoice.displayKey.
   static var audioCodecs: [String] = [
