@@ -56,6 +56,7 @@ typedef struct MLDecodeFrameContext MLDecodeFrameContext;
 - (void)refreshEnhancedHDRPresentationIfNeeded;
 - (BOOL)applyPendingHostHDRModeIfNeeded;
 - (void)resolveHDRTransferState;
+- (void)logStaticHDRMetadataSummary:(NSString *)summary;
 - (BOOL)updateDecompressionSessionForFormatChange;
 - (void)noteHDR10PlusMetadataForImageBuffer:(CVImageBufferRef)imageBuffer;
 - (void)handleDecompressionOutput:(CVImageBufferRef)imageBuffer
@@ -338,6 +339,78 @@ static void MLLogDynamicHDRImageAttachments(CVImageBufferRef imageBuffer,
     }
     free(keys);
     free(values);
+}
+
+static NSString *MLFourCCString(FourCharCode code)
+{
+    char chars[5] = {
+        (char)((code >> 24) & 0xFF),
+        (char)((code >> 16) & 0xFF),
+        (char)((code >> 8) & 0xFF),
+        (char)(code & 0xFF),
+        0,
+    };
+    for (int index = 0; index < 4; index++) {
+        if (chars[index] < 32 || chars[index] > 126) {
+            return [NSString stringWithFormat:@"0x%08X", (unsigned int)code];
+        }
+    }
+    return [NSString stringWithUTF8String:chars] ?: @"?";
+}
+
+// One-line summary of the colour-related extensions a format description
+// carries. These come from the bitstream VUI for the base HEVC description.
+static NSString *MLFormatDescriptionSummary(CMFormatDescriptionRef desc)
+{
+    if (desc == NULL) {
+        return @"none";
+    }
+
+    CFTypeRef primaries = CMFormatDescriptionGetExtension(desc, kCMFormatDescriptionExtension_ColorPrimaries);
+    CFTypeRef transfer = CMFormatDescriptionGetExtension(desc, kCMFormatDescriptionExtension_TransferFunction);
+    CFTypeRef matrix = CMFormatDescriptionGetExtension(desc, kCMFormatDescriptionExtension_YCbCrMatrix);
+    CFTypeRef fullRange = CMFormatDescriptionGetExtension(desc, kCMFormatDescriptionExtension_FullRangeVideo);
+    CFTypeRef atoms = CMFormatDescriptionGetExtension(desc, kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms);
+    NSString *atomNames = @"none";
+    if (atoms != NULL && CFGetTypeID(atoms) == CFDictionaryGetTypeID()) {
+        NSArray *keys = [(__bridge NSDictionary *)atoms allKeys];
+        atomNames = keys.count > 0 ? [keys componentsJoinedByString:@","] : @"none";
+    }
+
+    return [NSString stringWithFormat:@"codec=%@ primaries=%@ transfer=%@ matrix=%@ fullRange=%@ atoms=[%@]",
+            MLFourCCString(CMFormatDescriptionGetMediaSubType(desc)),
+            primaries ? (__bridge id)primaries : @"missing",
+            transfer ? (__bridge id)transfer : @"missing",
+            matrix ? (__bridge id)matrix : @"missing",
+            fullRange ? (__bridge id)fullRange : @"missing",
+            atomNames];
+}
+
+// Logs what VideoToolbox produced: the delivered pixel format and every
+// propagating attachment key. Call before any attachment is rewritten.
+static void MLLogDecodedBufferAttachments(CVImageBufferRef imageBuffer)
+{
+    if (imageBuffer == NULL) {
+        return;
+    }
+
+    NSString *keyList = @"none";
+    CFDictionaryRef attachments = CVBufferCopyAttachments(imageBuffer, kCVAttachmentMode_ShouldPropagate);
+    if (attachments != NULL) {
+        NSArray *keys = [(__bridge NSDictionary *)attachments allKeys];
+        NSMutableArray<NSString *> *names = [NSMutableArray arrayWithCapacity:keys.count];
+        for (id key in keys) {
+            [names addObject:[key description]];
+        }
+        [names sortUsingSelector:@selector(compare:)];
+        if (names.count > 0) {
+            keyList = [names componentsJoinedByString:@","];
+        }
+        CFRelease(attachments);
+    }
+    Log(LOG_I, @"[hdr] First decoded buffer from VideoToolbox: pixelFormat=%@ attachments=[%@]",
+        MLFourCCString(CVPixelBufferGetPixelFormatType(imageBuffer)),
+        keyList);
 }
 
 // VideoToolbox parses HDR10+ T.35 SEI NAL units and publishes the result as an
@@ -1243,6 +1316,9 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     NSInteger _nativeColorSpaceKind;
     BOOL _loggedNativeColorTags;
     BOOL _loggedMetalColorTags;
+    BOOL _loggedDecodedBufferAttachments;
+    NSInteger _lastLoggedMetalConversionPath;
+    NSUInteger _lastLoggedStaticMetadataHash;
     CFDataRef _nativeMasteringDisplayColorVolume;
     CFDataRef _nativeContentLightLevelInfo;
 
@@ -1550,6 +1626,13 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
         Log(LOG_I, @"[hdr] Session mastering metadata received: max=%u minScaled=%u MaxCLL=%u MaxFALL=%u",
             metadata->maxDisplayLuminance, metadata->minDisplayLuminance,
             metadata->maxContentLightLevel, metadata->maxFrameAverageLightLevel);
+        // Primaries are in 0.00002 units. Index order is the host's R, G, B.
+        Log(LOG_I, @"[hdr] Session mastering primaries: R=(%u,%u) G=(%u,%u) B=(%u,%u) white=(%u,%u) maxFullFrame=%u",
+            (unsigned int)metadata->displayPrimaries[0].x, (unsigned int)metadata->displayPrimaries[0].y,
+            (unsigned int)metadata->displayPrimaries[1].x, (unsigned int)metadata->displayPrimaries[1].y,
+            (unsigned int)metadata->displayPrimaries[2].x, (unsigned int)metadata->displayPrimaries[2].y,
+            (unsigned int)metadata->whitePoint.x, (unsigned int)metadata->whitePoint.y,
+            (unsigned int)metadata->maxFullFrameLuminance);
     }
 }
 
@@ -1582,6 +1665,9 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _enableHdr = effective;
     [self resolveHDRTransferState];
     _loggedNativeColorTags = NO;
+    _loggedDecodedBufferAttachments = NO;
+    _lastLoggedMetalConversionPath = 0;
+    _lastLoggedStaticMetadataHash = 0;
     _hdrColorConversionContext = nil;
     atomic_store(&_hostHDRMetadataChanged, true);
     atomic_store(&_enhancedHDRMetadataChanged, true);
@@ -2050,7 +2136,12 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     // Native output must describe source content, not invent a mastering
     // display from the destination screen. Overrides remain explicit.
     if (!hasHostHdrMetadata && !_hdrBrightnessOverrideEnabled &&
-        _hdrMetadataSourceMode != MLHDRMetadataSourceModeClientOverride) return;
+        _hdrMetadataSourceMode != MLHDRMetadataSourceModeClientOverride) {
+        [self logStaticHDRMetadataSummary:[NSString stringWithFormat:
+            @"source=none-skipped (no host metadata, no client override; decoder MDCV/CLLI left untouched) metadataSourceMode=%ld profileMode=%ld",
+            (long)_hdrMetadataSourceMode, (long)_hdrClientDisplayProfileMode]];
+        return;
+    }
     [self copyResolvedHDRStaticMetadataWithHostMetadata:&hostHdrMetadata
                                         hasHostMetadata:hasHostHdrMetadata
                                          displayInfoOut:&_nativeMasteringDisplayColorVolume
@@ -2859,6 +2950,9 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _streamBitrateKbps = streamConfig ? streamConfig.bitRate : 0;
     _loggedNativeColorTags = NO;
     _loggedMetalColorTags = NO;
+    _loggedDecodedBufferAttachments = NO;
+    _lastLoggedMetalConversionPath = 0;
+    _lastLoggedStaticMetadataHash = 0;
     _dolbyVisionBaseLayerFallback = NO;
     atomic_store(&_decompressionOutputError, noErr);
     _framePacingMode = streamConfig ? streamConfig.framePacingMode : 1;
@@ -3499,6 +3593,12 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
         }
     }
 
+    // Before anything below rewrites attachments, record what VideoToolbox gave us.
+    if (!_loggedDecodedBufferAttachments) {
+        _loggedDecodedBufferAttachments = YES;
+        MLLogDecodedBufferAttachments(imageBuffer);
+    }
+
     MLLogDynamicHDRImageAttachments(imageBuffer,
                                     &_hdr10PlusMetadataOutputObserved,
                                     &_dolbyMetadataObserved);
@@ -3587,6 +3687,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
 
 - (BOOL)createDecompressionSession {
     [self teardownDecompressionSession];
+    _loggedDecodedBufferAttachments = NO;
 
     VTDecompressionOutputCallbackRecord callbackRecord;
     callbackRecord.decompressionOutputCallback = decompressionOutputCallback;
@@ -4181,6 +4282,42 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
             ? MLCreateContentLightLevelInfoData(hostHdrMetadata)
             : MLCreateContentLightLevelInfoDataFromLuminance(resolvedMaxLuminance, resolvedMaxAverageLuminance);
     }
+
+    NSString *sourceName = @"client-defaults";
+    if (shouldUseHostStaticMetadata) {
+        sourceName = @"host";
+    } else if (_hdrMetadataSourceMode == MLHDRMetadataSourceModeClientOverride) {
+        sourceName = @"client-override";
+    } else if (manualMetadataConfigured) {
+        sourceName = _hdrMetadataSourceMode == MLHDRMetadataSourceModeHybrid ? @"hybrid-manual" : @"manual";
+    }
+    double attachedMax = shouldUseHostStaticMetadata
+        ? (double)hostHdrMetadata->maxDisplayLuminance : (double)fmaxf(resolvedMaxLuminance, 100.0f);
+    double attachedMin = shouldUseHostStaticMetadata
+        ? (double)hostHdrMetadata->minDisplayLuminance / 10000.0 : (double)fmaxf(resolvedMinLuminance, 0.0001f);
+    double attachedMaxCll = shouldUseHostStaticMetadata
+        ? (double)hostHdrMetadata->maxContentLightLevel : (double)fmaxf(resolvedMaxLuminance, 1.0f);
+    double attachedMaxFall = shouldUseHostStaticMetadata
+        ? (double)hostHdrMetadata->maxFrameAverageLightLevel : (double)fmaxf(resolvedMaxAverageLuminance, 1.0f);
+    [self logStaticHDRMetadataSummary:[NSString stringWithFormat:
+        @"source=%@ metadataSourceMode=%ld profileMode=%ld hostMetadata=%d mdcv=%d clli=%d max=%.2f min=%.5f MaxCLL=%.0f MaxFALL=%.0f",
+        sourceName,
+        (long)_hdrMetadataSourceMode,
+        (long)_hdrClientDisplayProfileMode,
+        hasHostHdrMetadata ? 1 : 0,
+        (displayInfoOut != NULL && *displayInfoOut != NULL) ? 1 : 0,
+        (contentInfoOut != NULL && *contentInfoOut != NULL) ? 1 : 0,
+        attachedMax, attachedMin, attachedMaxCll, attachedMaxFall]];
+}
+
+- (void)logStaticHDRMetadataSummary:(NSString *)summary
+{
+    // Compared by hash so the decode and render threads never race on an object ivar.
+    if (summary == nil || summary.hash == _lastLoggedStaticMetadataHash) {
+        return;
+    }
+    _lastLoggedStaticMetadataHash = summary.hash;
+    Log(LOG_I, @"[hdr] Static HDR metadata: %@", summary);
 }
 
 - (CVImageBufferRef)copyInterpolatedFrameFromPreviousSource:(CVImageBufferRef)previousSourceFrame
@@ -4945,6 +5082,24 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     id<MTLTexture> sourceRGBTexture = nil;
     BOOL nativePQConversion = _enableHdr && _hdrOutputUsesEDR &&
         _hdrTransferMode == MLHDRTransferModePQ && planeCount >= 2;
+    {
+        NSInteger conversionPath = nativePQConversion ? 1 : (planeCount >= 2 ? 2 : 3);
+        if (conversionPath != _lastLoggedMetalConversionPath) {
+            _lastLoggedMetalConversionPath = conversionPath;
+            NSString *conversionName = conversionPath == 1
+                ? @"CoreImage PQ (matrix and range from buffer tags)"
+                : (conversionPath == 2 ? @"compute shader (fixed BT.2020 matrix when HDR, BT.709 when SDR)"
+                                       : @"direct RGB texture");
+            Log(LOG_I, @"[hdr] Metal conversion path: %@ transfer=%@ hdr=%d edr=%d toneMapToSDR=%d pixelFormat=%@ planes=%zu",
+                conversionName,
+                MLHDRTransferModeName(_hdrTransferMode),
+                _enableHdr ? 1 : 0,
+                _hdrOutputUsesEDR ? 1 : 0,
+                _hdrToneMapToSDR ? 1 : 0,
+                MLFourCCString(pixelFormat),
+                (size_t)planeCount);
+        }
+    }
     CVMetalTextureRef primaryTextureRef = NULL;
     CVMetalTextureRef secondaryTextureRef = NULL;
 
@@ -6070,6 +6225,17 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                     }
                 }
             }
+
+            // The base hvc1 description's colour extensions come from the
+            // bitstream VUI; the final one may be the dvh1 wrapper.
+            _loggedDecodedBufferAttachments = NO;
+            Log(LOG_I, @"[hdr] Format description rebuilt: final(%@) base(%@) dynamicHdr=%d dolbyVision=%d profile=%d baseLayerFallback=%d",
+                MLFormatDescriptionSummary(formatDesc),
+                (videoFormat & VIDEO_FORMAT_MASK_H265) ? MLFormatDescriptionSummary(_baseHEVCFormatDesc) : @"n/a",
+                dynamicHdr,
+                _dynamicDolbyVision ? 1 : 0,
+                _dynamicDolbyVisionProfile,
+                _dolbyVisionBaseLayerFallback ? 1 : 0);
 
             if ([self usesDecompressionSession]) {
                 if (![self updateDecompressionSessionForFormatChange]) {
