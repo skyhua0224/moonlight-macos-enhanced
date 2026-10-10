@@ -48,6 +48,11 @@ typedef void (^MLRemoteDisplayScaleCompletion)(NSDictionary<NSString *, id> *out
 @property (nonatomic, readonly) NSInteger currentPercent;      // 0 when unknown
 @property (nonatomic, readonly) NSInteger recommendedPercent;  // 0 when unknown
 
+// Called on the main queue after the snapshot above may have changed (an options query
+// finished, or a scale was applied), so a control center that is already open can update in
+// place. Cleared when the session ends.
+@property (nonatomic, copy, nullable) void (^optionsDidChangeHandler)(void);
+
 - (instancetype)initWithHostUUID:(NSString *)hostUUID
                      hostAddress:(NSString *)hostAddress
                       serverCert:(NSData *)serverCert;

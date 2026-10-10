@@ -525,6 +525,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
     // Bumped when a session begins and when it ends. Work created for one session carries the
     // value it saw and is dropped on the scale queue if the session is no longer that one.
     NSUInteger _sessionGeneration;
+    void (^_optionsDidChangeHandler)(void);
 }
 
 - (instancetype)initWithHostUUID:(NSString *)hostUUID hostAddress:(NSString *)hostAddress serverCert:(NSData *)serverCert {
@@ -616,6 +617,33 @@ static void MLScaleClearPending(NSString *hostUUID) {
     @synchronized (self) {
         return _recommendedPercent;
     }
+}
+
+- (void (^)(void))optionsDidChangeHandler {
+    @synchronized (self) {
+        return _optionsDidChangeHandler;
+    }
+}
+
+- (void)setOptionsDidChangeHandler:(void (^)(void))handler {
+    @synchronized (self) {
+        _optionsDidChangeHandler = [handler copy];
+    }
+}
+
+// Tells the control center (main queue) that the snapshot moved. Safe from any thread.
+- (void)notifyOptionsDidChange {
+    void (^handler)(void) = self.optionsDidChangeHandler;
+    if (handler == nil) {
+        return;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // Re-read: the session may have ended (handler cleared) while this was queued.
+        void (^current)(void) = self.optionsDidChangeHandler;
+        if (current != nil) {
+            current();
+        }
+    });
 }
 
 - (HttpManager *)newHttpManager {
@@ -718,6 +746,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
     if (statusOut != NULL) {
         *statusOut = status;
     }
+    [self notifyOptionsDidChange];
     return json;
 }
 
@@ -837,6 +866,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
             }
             _support = MLRemoteDisplayScaleSupportAvailable;
         }
+        [self notifyOptionsDidChange];
         NSString *reportedDeviceId = MLScaleString(json[@"device_id"]);
         NSString *reportedDisplayName = MLScaleString(json[@"display_name"]);
         [self recordPendingPrevious:(previous != nil ? previous.integerValue : before)
@@ -969,6 +999,7 @@ static void MLScaleClearPending(NSString *hostUUID) {
         _sessionLive = NO;
         // Invalidates every request stamped before this point; see -isSessionCurrent:source:.
         _sessionGeneration++;
+        _optionsDidChangeHandler = nil;
         address = _hostAddress;
         cert = _serverCert;
     }

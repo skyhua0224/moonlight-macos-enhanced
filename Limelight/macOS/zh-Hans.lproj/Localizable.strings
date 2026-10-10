@@ -1315,6 +1315,9 @@
 "Restore scale after streaming detail" = "串流结束时把主机显示缩放恢复为之前的值；如果期间被再次修改，则保持不变。";
 "Display Scale" = "显示缩放";
 "Recommended (%d%%)" = "推荐（%d%%）";
+"%d%% (Recommended)" = "%d%%（推荐）";
+"This host does not support display scaling" = "此主机不支持显示缩放";
+"Display scale is unavailable" = "显示缩放暂时不可用";
 "Display scale set to %d%%" = "显示缩放已设为 %d%%";
 "Some apps may need to restart to pick up the new scale" = "部分应用可能需要重启才能应用新的缩放";
 "Couldn't change the display scale" = "无法更改显示缩放";

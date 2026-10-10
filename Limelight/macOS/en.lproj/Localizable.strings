@@ -1260,6 +1260,9 @@
 "Restore scale after streaming detail" = "Puts the host display scale back to its previous value when the stream ends, unless it was changed again in the meantime.";
 "Display Scale" = "Display Scale";
 "Recommended (%d%%)" = "Recommended (%d%%)";
+"%d%% (Recommended)" = "%d%% (Recommended)";
+"This host does not support display scaling" = "This host does not support display scaling";
+"Display scale is unavailable" = "Display scale is unavailable";
 "Display scale set to %d%%" = "Display scale set to %d%%";
 "Some apps may need to restart to pick up the new scale" = "Some apps may need to restart to pick up the new scale";
 "Couldn't change the display scale" = "Couldn't change the display scale";

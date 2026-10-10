@@ -403,6 +403,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL suppressNextRightMouseUp;
 
 @property (nonatomic, strong) NSMenu *streamMenu;
+// Submenus that are refilled each time they open (see -menuNeedsUpdate:).
+@property (nonatomic, weak) NSMenu *displayScaleMenu;
 
 @property (nonatomic, strong) NSVisualEffectView *controlCenterPill;
 @property (nonatomic, strong) NSImageView *controlCenterSignalImageView;
@@ -578,11 +580,12 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (BOOL)shouldDeferCommandModifierForShortcutHandlingWithEvent:(NSEvent *)event;
 - (void)resolveDeferredCommandModifierWithoutRemoteTapWithReason:(NSString *)reason event:(NSEvent *)event;
 @end
-@interface StreamViewController (MenuUI) <MLStreamScopedCallbackOwner>
+@interface StreamViewController (MenuUI) <MLStreamScopedCallbackOwner, NSMenuDelegate>
 - (void)startRemoteDisplayScaleForCurrentSession;
 - (void)endRemoteDisplayScaleSessionWithReason:(NSString *)reason;
 - (void)presentRemoteDisplayScaleOutcome:(NSDictionary<NSString *, id> *)outcome;
 - (NSMenuItem *)remoteDisplayScaleMenuItem;
+- (void)remoteDisplayScaleOptionsDidChange;
 - (NSString *)mouseModeDisplayNameForMode:(NSString *)mode;
 - (NSString *)mouseModeHintForMode:(NSString *)mode;
 - (NSString *)shortcutDisplayStringForAction:(NSString *)action;

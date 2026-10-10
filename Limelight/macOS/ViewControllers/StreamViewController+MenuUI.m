@@ -6,6 +6,13 @@
 #import "StreamViewController_Internal.h"
 #import "MLMenuItemImage.h"
 
+// Same icon mechanism the control center items use (see the setSymbol block in -rebuildStreamMenu).
+static void MLStreamMenuSetSymbol(NSMenuItem *item, NSString *symbolName) {
+    if (@available(macOS 11.0, *)) {
+        MLSetMenuItemImage(item, [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:nil]);
+    }
+}
+
 @implementation StreamViewController (MenuUI)
 
 - (NSString *)mouseModeDisplayNameForMode:(NSString *)mode {
@@ -1883,6 +1890,12 @@
     BOOL restore = [SettingsClass restoreRemoteDisplayScaleFor:hostUUID];
     NSUInteger generation = self.activeStreamGeneration;
     __weak typeof(self) weakSelf = self;
+    scale.optionsDidChangeHandler = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf != nil && strongSelf.activeStreamGeneration == generation) {
+            [strongSelf remoteDisplayScaleOptionsDidChange];
+        }
+    };
     [scale beginSessionWithTargetDisplay:config.sunshineTargetDisplayName ?: @""
                           desiredSetting:setting
                       restoreAfterStream:restore
@@ -1905,6 +1918,7 @@
     if (scale == nil) {
         return;
     }
+    scale.optionsDidChangeHandler = nil;
     BOOL restore = [SettingsClass restoreRemoteDisplayScaleFor:self.app.host.uuid];
     [scale endSessionRestoring:restore reason:reason ?: @"stream-end"];
 }
@@ -1942,59 +1956,96 @@
 }
 
 // "Display Scale" submenu of the Display menu. Built from what the host reported when the
-// stream started (re-read in the background for the next time); never waits on the network.
+// stream started and refilled in place (see -menuNeedsUpdate: and the options handler) when
+// a newer answer arrives, so an open menu never stays on a stale placeholder.
 - (NSMenuItem *)remoteDisplayScaleMenuItem {
     MLRemoteDisplayScale *scale = self.remoteDisplayScale;
-    if (scale == nil || scale.support == MLRemoteDisplayScaleSupportUnavailable) {
+    if (scale == nil) {
         return nil;
     }
 
     NSString *title = MLString(@"Display Scale", nil);
     NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+    MLStreamMenuSetSymbol(item, @"textformat.size");
     NSMenu *submenu = [[NSMenu alloc] initWithTitle:title];
     submenu.autoenablesItems = NO;
+    submenu.delegate = self;
+    self.displayScaleMenu = submenu;
+    [self populateRemoteDisplayScaleMenu:submenu];
+    [scale refreshOptionsIfStale];
 
-    if (scale.support == MLRemoteDisplayScaleSupportAvailable) {
-        [scale refreshOptionsIfStale];
+    item.submenu = submenu;
+    return item;
+}
+
+// Replaces the items of the Display Scale submenu with the current snapshot. Main thread.
+- (void)populateRemoteDisplayScaleMenu:(NSMenu *)submenu {
+    [submenu removeAllItems];
+
+    void (^addNote)(NSString *) = ^(NSString *text) {
+        NSMenuItem *note = [[NSMenuItem alloc] initWithTitle:text action:nil keyEquivalent:@""];
+        note.enabled = NO;
+        [submenu addItem:note];
+    };
+
+    MLRemoteDisplayScale *scale = self.remoteDisplayScale;
+    if (scale == nil) {
+        addNote(MLString(@"Display scale is unavailable", nil));
+        return;
+    }
+
+    // Read the "still asking" flag before the support state: the query clears the flag only
+    // after it has stored its result, so a NO here means the support value below is final.
+    BOOL awaiting = scale.awaitingFirstQuery;
+    MLRemoteDisplayScaleSupport support = scale.support;
+
+    if (support == MLRemoteDisplayScaleSupportAvailable) {
         NSInteger current = scale.currentPercent;
         NSInteger recommended = scale.recommendedPercent;
-        NSInteger savedSetting = [SettingsClass remoteDisplayScaleFor:self.app.host.uuid];
-        BOOL recommendedChecked = savedSetting < 0 && recommended > 0 && current == recommended;
-
-        if (recommended > 0) {
-            NSString *recommendedTitle = [NSString stringWithFormat:MLString(@"Recommended (%d%%)", nil), (int)recommended];
-            NSMenuItem *recommendedItem = [[NSMenuItem alloc] initWithTitle:recommendedTitle
-                                                                     action:@selector(selectRemoteDisplayScaleFromMenu:)
-                                                              keyEquivalent:@""];
-            recommendedItem.target = self;
-            recommendedItem.representedObject = @(-1);
-            recommendedItem.state = recommendedChecked ? NSControlStateValueOn : NSControlStateValueOff;
-            [submenu addItem:recommendedItem];
-            [submenu addItem:[NSMenuItem separatorItem]];
-        }
-
         for (NSNumber *percent in scale.supportedPercents) {
-            NSString *percentTitle = [NSString stringWithFormat:@"%ld%%", (long)percent.integerValue];
+            BOOL isRecommended = recommended > 0 && percent.integerValue == recommended;
+            NSString *percentTitle = isRecommended
+                ? [NSString stringWithFormat:MLString(@"%d%% (Recommended)", nil), (int)percent.integerValue]
+                : [NSString stringWithFormat:@"%ld%%", (long)percent.integerValue];
             NSMenuItem *percentItem = [[NSMenuItem alloc] initWithTitle:percentTitle
                                                                  action:@selector(selectRemoteDisplayScaleFromMenu:)
                                                           keyEquivalent:@""];
             percentItem.target = self;
-            percentItem.representedObject = percent;
-            percentItem.state = (percent.integerValue == current && !recommendedChecked) ? NSControlStateValueOn : NSControlStateValueOff;
+            // -1 remembers "Recommended" (follow the host's value) instead of a fixed percentage.
+            percentItem.representedObject = isRecommended ? @(-1) : percent;
+            percentItem.state = percent.integerValue == current ? NSControlStateValueOn : NSControlStateValueOff;
             [submenu addItem:percentItem];
         }
-    } else if (scale.awaitingFirstQuery) {
-        NSMenuItem *loadingItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Loading…", nil) action:nil keyEquivalent:@""];
-        loadingItem.enabled = NO;
-        [submenu addItem:loadingItem];
+        if (submenu.numberOfItems == 0) {
+            addNote(MLString(@"Display scale is unavailable", nil));
+        }
+    } else if (support == MLRemoteDisplayScaleSupportUnavailable) {
+        addNote(MLString(@"This host does not support display scaling", nil));
+    } else if (awaiting) {
+        addNote(MLString(@"Loading…", nil));
     } else {
-        // The last query failed in a way that may pass: offer nothing, retry in the background.
-        [scale refreshOptionsIfStale];
-        return nil;
+        // The last query failed in a way that may pass; the next refresh retries.
+        addNote(MLString(@"Display scale is unavailable", nil));
     }
+}
 
-    item.submenu = submenu;
-    return item;
+- (void)remoteDisplayScaleOptionsDidChange {
+    NSMenu *menu = self.displayScaleMenu;
+    if (menu != nil && !self.stopStreamInProgress) {
+        [self populateRemoteDisplayScaleMenu:menu];
+    }
+}
+
+#pragma mark - NSMenuDelegate
+
+// Called when one of the control center submenus below is about to open (and by the
+// controller panel through -update): refill it so it never shows what it knew when the
+// whole menu was built.
+- (void)menuNeedsUpdate:(NSMenu *)menu {
+    if (menu == self.displayScaleMenu) {
+        [self populateRemoteDisplayScaleMenu:menu];
+        [self.remoteDisplayScale refreshOptionsIfStale];
+    }
 }
 
 - (void)selectRemoteDisplayScaleFromMenu:(NSMenuItem *)sender {
