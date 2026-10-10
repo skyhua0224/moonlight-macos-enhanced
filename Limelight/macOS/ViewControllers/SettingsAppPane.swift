@@ -90,23 +90,28 @@ struct AppView: View {
       FormSection(title: "Diagnostics") {
         SettingsRow(title: "Log Mode") {
           Picker("", selection: $settingsModel.debugLogMode) {
-            Text(languageManager.localize("Curated")).tag("curated")
+            Text(languageManager.localize("Curated")).tag("default")
             Text(languageManager.localize("Raw")).tag("raw")
           }
           .labelsHidden()
           .controllerPicker(
             selection: $settingsModel.debugLogMode,
-            choices: [("curated", languageManager.localize("Curated")), ("raw", languageManager.localize("Raw"))])
+            choices: [("default", languageManager.localize("Curated")), ("raw", languageManager.localize("Raw"))])
           .frame(width: 160, alignment: .trailing)
         }
         SettingsRow(title: "Minimum Log Level") {
           Picker("", selection: $settingsModel.debugLogMinLevel) {
-            ForEach(["Error", "Warning", "Info", "Debug"], id: \.self) { value in
-              Text(languageManager.localize(value)).tag(value)
-            }
+            Text(languageManager.localize("Error")).tag("error")
+            Text(languageManager.localize("Warning")).tag("warn")
+            Text(languageManager.localize("Info")).tag("info")
+            Text(languageManager.localize("Debug")).tag("debug")
+            Text(languageManager.localize("All")).tag("all")
           }
           .labelsHidden()
-          .controllerPicker(selection: $settingsModel.debugLogMinLevel, options: ["Error", "Warning", "Info", "Debug"], title: { value in languageManager.localize(value) })
+          .controllerPicker(
+            selection: $settingsModel.debugLogMinLevel,
+            choices: [("error", "Error"), ("warn", "Warning"), ("info", "Info"), ("debug", "Debug"), ("all", "All")]
+              .map { (value: $0.0, title: languageManager.localize($0.1)) })
           .frame(width: 150, alignment: .trailing)
         }
         ToggleCell(title: "Show System Noise", boolBinding: $settingsModel.debugLogShowSystemNoise)
