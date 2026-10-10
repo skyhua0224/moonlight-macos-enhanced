@@ -3440,6 +3440,11 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     CFTypeRef metadata = key != NULL ? CVBufferGetAttachment(imageBuffer, key, NULL) : NULL;
     size_t payloadBytes = 0;
     if (metadata != NULL) {
+        if (_hdr10PlusFramesWithMetadata == 0) {
+            // Settings reports HDR10+ as available only after a stream proved
+            // the per-frame metadata reaches the decoder output.
+            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"MLHDR10PlusMetadataObserved"];
+        }
         _hdr10PlusFramesWithMetadata++;
         if (CFGetTypeID(metadata) == CFDataGetTypeID()) {
             payloadBytes = (size_t)CFDataGetLength((CFDataRef)metadata);
