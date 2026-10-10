@@ -1547,6 +1547,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.showPerformanceOverlay = [SettingsClass showPerformanceOverlayFor:self.app.host.uuid];
     streamConfig.gamepadMouseMode = [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
     streamConfig.gamepadMouseModeLongPressMenu = [SettingsClass gamepadMouseModeLongPressMenuFor:self.app.host.uuid];
+    streamConfig.wantsRemoteTextContext = [SettingsClass imeTextInputFor:self.app.host.uuid];
     streamConfig.nativeTouchpad = [SettingsClass nativeTouchpadFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadPointerSensitivity = [SettingsClass pointerSensitivityFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadScrollSpeed = [SettingsClass gestureScrollSpeedFor:self.app.host.uuid];
@@ -1592,6 +1593,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
         }
     }
     self.hidSupport = [[HIDSupport alloc] init:self.app.host];
+    [self configurePrecisionTouchpadInput];
+    [self refreshTextInputConfiguration];
     __weak StreamViewController *shortcutOwner = self;
     uint64_t (^shortcutHandler)(unsigned short, uint32_t) = ^uint64_t(unsigned short player, uint32_t buttons) {
         return [shortcutOwner.controllerShortcutRuntime processButtons:buttons player:player];

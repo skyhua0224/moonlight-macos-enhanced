@@ -1281,7 +1281,7 @@
 "Adaptive Bitrate" = "自适应码率";
 "Adaptive Bitrate hint" = "串流开始前测量带宽并据此限制码率，串流过程中由主机根据丢包与延迟调整码率。需要 Foundation Sunshine 主机。";
 "Precision Touchpad" = "精确式触控板";
-"Precision Touchpad Hint" = "把触控板的多指触摸作为精确式触控板发送给 Windows 11 主机，由 Windows 处理双指滚动、捏合和三/四指手势。需要主机支持，下次连接时生效，不支持时自动回退为普通鼠标输入。";
+"Precision Touchpad Hint" = "把触控板的多指触摸作为精确式触控板发送给 Windows 11 主机，由 Windows 处理双指滚动、捏合和三/四指手势。更适合桌面操作而非游戏。需要支持该功能的 Windows 11 主机，不支持时自动使用普通鼠标输入。";
 "Input Method Text" = "输入法文字";
 "Input Method Text Hint" = "使用拼音等 Mac 输入法时，在本机完成组字，并把确认后的文字以 UTF-8 发送到主机。普通按键和快捷键仍作为按键事件发送。";
 "Live stream change failed, reconnecting" = "实时调整未生效，正在重新连接";

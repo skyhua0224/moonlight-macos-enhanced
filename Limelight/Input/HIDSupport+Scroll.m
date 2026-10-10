@@ -177,6 +177,9 @@ static inline BOOL HIDPhysicalWheelModePrefersHighPrecision(HIDPhysicalWheelMode
 }
 
 - (void)scrollWheel:(NSEvent *)event {
+    if ([self.precisionTouchpad shouldSuppressScrollEvent:event]) {
+        return;
+    }
     uint64_t traceId = [self prepareScrollTraceFromSource:@"appkit"
                                                 rawDeltaX:event.scrollingDeltaX
                                                 rawDeltaY:event.scrollingDeltaY

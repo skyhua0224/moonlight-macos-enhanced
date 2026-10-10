@@ -303,6 +303,10 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
                                          referenceSize:(NSSize)referenceSize
                                          clampToBounds:(BOOL)clampToBounds
                                              sourceTag:(NSString *)sourceTag {
+    if ([self.precisionTouchpad shouldSuppressPointerMotion]) {
+        return;
+    }
+
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
     if (!HIDValidateInputContext(inputCtx, "sendCoalescedAbsoluteMousePosition")) {
         return;
@@ -385,6 +389,11 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
         return NO;
     }
 
+    if ([self.precisionTouchpad shouldSuppressPointerMotion]) {
+        // The trackpad is driving the host; report the motion as handled so it is not re-sent as relative motion.
+        return YES;
+    }
+
     CGFloat sensitivity = HIDPointerSensitivityForHost(self.host);
     double calibratedSensitivity = sensitivity * HIDCoreHIDFreeMouseBaselineScale;
     double viewDeltaX = deltaX * calibratedSensitivity;
@@ -428,6 +437,9 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
         };
         
         mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+            if ([self.precisionTouchpad consumeMouseButton:BUTTON_LEFT pressed:pressed]) {
+                return;
+            }
             if (self.shouldSendInputEvents) {
                 PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                 if (!inputCtx) {
@@ -446,6 +458,9 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
             }
         };
         mouse.mouseInput.rightButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+            if ([self.precisionTouchpad consumeMouseButton:BUTTON_RIGHT pressed:pressed]) {
+                return;
+            }
             if (self.shouldSendInputEvents) {
                 PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                 if (!inputCtx) {
@@ -708,6 +723,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         return;
     }
 
+    if ([self.precisionTouchpad consumeMouseButton:button pressed:YES]) {
+        return;
+    }
+
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
     if (!HIDValidateInputContext(inputCtx, "mouseDown")) {
         return;
@@ -736,6 +755,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         }
     }
     
+    if ([self.precisionTouchpad consumeMouseButton:button pressed:NO]) {
+        return;
+    }
+
     if (self.shouldSendInputEvents) {
         PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
         if (HIDValidateInputContext(inputCtx, "mouseUp")) {
@@ -754,6 +777,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 
 - (void)mouseMoved:(NSEvent *)event {
     if (!self.shouldSendInputEvents) {
+        return;
+    }
+
+    if ([self.precisionTouchpad shouldSuppressPointerMotion]) {
         return;
     }
 
@@ -811,6 +838,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 - (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint
                                 referenceSize:(NSSize)referenceSize
                                 clampToBounds:(BOOL)clampToBounds {
+    if ([self.precisionTouchpad shouldSuppressPointerMotion]) {
+        return;
+    }
+
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
     if (!HIDValidateInputContext(inputCtx, "sendAbsoluteMousePosition")) {
         return;
@@ -870,6 +901,10 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
 
     if (!self.shouldSendInputEvents) {
+        return;
+    }
+
+    if ([self.precisionTouchpad consumeMouseButton:button pressed:pressed]) {
         return;
     }
 
@@ -952,5 +987,49 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                                                 referenceHeight);
 }
 
+
+@end
+
+@implementation HIDSupport (PrecisionTouchpad)
+
+- (void)setUpPrecisionTouchpad {
+    MLPrecisionTouchpad *touchpad = [[MLPrecisionTouchpad alloc] init];
+    __weak HIDSupport *weakSelf = self;
+    touchpad.dispatchHandler = ^(void (^work)(PML_INPUT_STREAM_CONTEXT ctx)) {
+        HIDSupport *strongSelf = weakSelf;
+        if (strongSelf == nil) {
+            return;
+        }
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(strongSelf);
+        if (!HIDValidateInputContext(inputCtx, "precisionTouchpad")) {
+            return;
+        }
+        HIDDispatchInput(strongSelf, inputCtx, ^{
+            work(inputCtx);
+        });
+    };
+    touchpad.featureFlagsProvider = ^uint32_t{
+        HIDSupport *strongSelf = weakSelf;
+        PML_INPUT_STREAM_CONTEXT inputCtx = strongSelf != nil ? (PML_INPUT_STREAM_CONTEXT)strongSelf.inputContext : NULL;
+        if (inputCtx == NULL || inputCtx->connectionContext == NULL) {
+            return 0;
+        }
+        return LiGetHostFeatureFlagsCtx(inputCtx->connectionContext);
+    };
+    self.precisionTouchpad = touchpad;
+    [self refreshPrecisionTouchpadConfiguration];
+}
+
+- (void)refreshPrecisionTouchpadConfiguration {
+    self.precisionTouchpad.enabled = self.host.uuid != nil && [SettingsClass hostPrecisionTouchpadFor:self.host.uuid];
+}
+
+- (void)handleTrackpadTouchesEvent:(NSEvent *)event inView:(NSView *)view {
+    if (!self.shouldSendInputEvents) {
+        [self.precisionTouchpad reset];
+        return;
+    }
+    [self.precisionTouchpad handleTouchesEvent:event inView:view];
+}
 
 @end

@@ -9,6 +9,7 @@
 #import "Controller.h"
 #import "Ticks.h"
 #import "HIDSupportRumbleTypes.h"
+#import "MLPrecisionTouchpad.h"
 
 #import "MoonlightEnhanced-Swift.h"
 #include <limits.h>
@@ -90,6 +91,7 @@
 @property (atomic) BOOL coreHIDFreeMouseAbsoluteSyncScheduled;
 @property (atomic) uint64_t coreHIDFreeMouseAbsoluteSyncToken;
 @property (nonatomic) dispatch_queue_t inputQueue;
+@property (nonatomic, strong) MLPrecisionTouchpad *precisionTouchpad;
 @property (atomic) uint64_t suppressRelativeMouseUntilMs;
 @property (nonatomic, strong) NSObject *freeMouseVirtualCursorLock;
 @property (atomic) BOOL freeMouseVirtualCursorRequestedActive;

@@ -1822,6 +1822,15 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return;
     }
 
+    if ([setting isEqualToString:@"hostPrecisionTouchpad"]) {
+        [self configurePrecisionTouchpadInput];
+        return;
+    }
+    if ([setting isEqualToString:@"imeTextInput"]) {
+        [self refreshTextInputConfiguration];
+        return;
+    }
+
     NSString *desiredMode = [SettingsClass mouseModeFor:self.app.host.uuid];
     BOOL wantsRemoteDesktopMode = [desiredMode isEqualToString:@"remote"];
     if (wantsRemoteDesktopMode != self.isRemoteDesktopMode) {
@@ -2177,6 +2186,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 }
 
 - (void)flagsChanged:(NSEvent *)event {
+    [self routeFlagsChangedToInputMethod:event];
     NSEventModifierFlags relevantModifiers = MLRelevantShortcutModifiers(event.modifierFlags);
     if ([self shouldDeferCommandModifierForShortcutHandlingWithEvent:event]) {
         self.deferredCommandModifierPendingForShortcutTranslation = YES;
@@ -2252,10 +2262,16 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)keyDown:(NSEvent *)event {
     [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"plain-keydown" event:event];
+    if ([self routeKeyDownToInputMethod:event]) {
+        return;
+    }
     [self.hidSupport keyDown:event];
 }
 
 - (void)keyUp:(NSEvent *)event {
+    if ([self shouldSwallowKeyUpForInputMethod:event]) {
+        return;
+    }
     [self.hidSupport keyUp:event];
 }
 

@@ -387,6 +387,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 - (void)setShouldSendInputEvents:(BOOL)enabled {
     BOOL wasEnabled = __atomic_load_n(&_shouldSendInputEvents, __ATOMIC_ACQUIRE);
     if (wasEnabled && !enabled) {
+        [self.precisionTouchpad reset];
         [self releaseAllPressedMouseButtons];
         [self releaseAllModifierKeys];
         if (self.controllerDriver == 0) {
@@ -762,6 +763,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     if (self) {
         self.host = host;
         self.inputQueue = dispatch_queue_create("com.moonlight.input", DISPATCH_QUEUE_SERIAL);
+        [self setUpPrecisionTouchpad];
         self.freeMouseVirtualCursorLock = [[NSObject alloc] init];
         self.freeMouseVirtualCursorGainX = 1.0;
         self.freeMouseVirtualCursorGainY = 1.0;
@@ -1067,6 +1069,47 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     }
 }
 
+- (BOOL)sendUtf8Text:(NSString *)text {
+    if (text.length == 0 || !self.shouldSendInputEvents) {
+        return NO;
+    }
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!HIDValidateInputContext(inputCtx, "sendUtf8Text")) {
+        return NO;
+    }
+
+    // Keep every packet far below the 16-bit control payload limit and never split a character.
+    static const NSUInteger maxChunkBytes = 480;
+    NSMutableArray<NSData *> *chunks = [NSMutableArray array];
+    NSMutableData *current = [NSMutableData data];
+    [text enumerateSubstringsInRange:NSMakeRange(0, text.length)
+                             options:NSStringEnumerationByComposedCharacterSequences
+                          usingBlock:^(NSString *substring, NSRange range, NSRange enclosingRange, BOOL *stop) {
+        NSData *piece = [substring dataUsingEncoding:NSUTF8StringEncoding];
+        if (piece.length == 0) {
+            return;
+        }
+        if (current.length + piece.length > maxChunkBytes && current.length > 0) {
+            [chunks addObject:[current copy]];
+            [current setLength:0];
+        }
+        [current appendData:piece];
+    }];
+    if (current.length > 0) {
+        [chunks addObject:[current copy]];
+    }
+    if (chunks.count == 0) {
+        return NO;
+    }
+
+    HIDDispatchInput(self, inputCtx, ^{
+        for (NSData *chunk in chunks) {
+            LiSendUtf8TextEventCtx(inputCtx, (const char *)chunk.bytes, (unsigned int)chunk.length);
+        }
+    });
+    return YES;
+}
+
 - (void)releaseAllModifierKeys {
     // Send asynchronously to avoid blocking the main thread if the connection is dead
     self.keyboardPhysicalModifierSourceMask = 0;
@@ -1337,6 +1380,10 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     }
 
     if (!self.shouldSendInputEvents) {
+        return;
+    }
+
+    if ([self.precisionTouchpad shouldSuppressPointerMotion]) {
         return;
     }
 

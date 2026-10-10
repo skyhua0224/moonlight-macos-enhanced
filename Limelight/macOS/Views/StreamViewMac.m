@@ -119,6 +119,36 @@
     return NO;
 }
 
+- (void)setIndirectTouchesEnabled:(BOOL)enabled {
+    self.allowedTouchTypes = enabled ? NSTouchTypeMaskIndirect : 0;
+    // Resting palms and thumbs are not contacts the host should see.
+    self.wantsRestingTouches = NO;
+}
+
+- (void)touchesBeganWithEvent:(NSEvent *)event {
+    if (self.touchHandler != nil) {
+        self.touchHandler(event, self);
+    }
+}
+
+- (void)touchesMovedWithEvent:(NSEvent *)event {
+    if (self.touchHandler != nil) {
+        self.touchHandler(event, self);
+    }
+}
+
+- (void)touchesEndedWithEvent:(NSEvent *)event {
+    if (self.touchHandler != nil) {
+        self.touchHandler(event, self);
+    }
+}
+
+- (void)touchesCancelledWithEvent:(NSEvent *)event {
+    if (self.touchHandler != nil) {
+        self.touchHandler(event, self);
+    }
+}
+
 - (BOOL)performKeyEquivalent:(NSEvent *)event {
     return [self.keyboardNotifiable onKeyboardEquivalent:event];
 }

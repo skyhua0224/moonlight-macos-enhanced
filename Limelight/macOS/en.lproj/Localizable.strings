@@ -1215,7 +1215,7 @@
 "Adaptive Bitrate" = "Adaptive Bitrate";
 "Adaptive Bitrate hint" = "Measures bandwidth before the stream starts to cap the bitrate, then lets the host adjust it during the stream based on packet loss and latency. Requires Foundation Sunshine.";
 "Precision Touchpad" = "Precision Touchpad";
-"Precision Touchpad Hint" = "Send the trackpad's multi-finger touches to a Windows 11 host as a precision touchpad. Windows then handles two-finger scroll, pinch and three- or four-finger gestures. Needs a host that supports it, takes effect on the next connection, and falls back to normal mouse input otherwise.";
+"Precision Touchpad Hint" = "Send the trackpad's multi-finger touches to a Windows 11 host as a precision touchpad. Windows then handles two-finger scroll, pinch and three- or four-finger gestures. Best for desktop use rather than games. Needs a Windows 11 host that supports it; otherwise normal mouse input is used.";
 "Input Method Text" = "Input Method Text";
 "Input Method Text Hint" = "While a Mac input method such as Pinyin is active, compose text locally and send the committed text to the host as UTF-8. Plain keys and shortcuts still go to the host as key events.";
 "Live stream change failed, reconnecting" = "Live change not applied, reconnecting";

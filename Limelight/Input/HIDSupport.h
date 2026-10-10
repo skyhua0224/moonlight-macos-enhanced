@@ -44,6 +44,9 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (void)keyDown:(NSEvent *)event;
 - (void)keyUp:(NSEvent *)event;
 
+// Sends committed text from the Mac input method as UTF-8 text. Returns NO when nothing could be sent.
+- (BOOL)sendUtf8Text:(NSString *)text;
+
 - (void)releaseAllModifierKeys;
 - (void)sendSyntheticRemoteShortcut:(StreamShortcut *)shortcut;
 - (void)sendSyntheticRemoteModifierTapForFlags:(NSEventModifierFlags)modifierFlags;
@@ -67,6 +70,13 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (BOOL)shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration;
 - (BOOL)hasRecentCoreHIDMouseMovement;
 
+@end
+
+// Native Windows precision touchpad: raw trackpad contacts instead of mouse motion and scrolling.
+@interface HIDSupport (PrecisionTouchpad)
+- (void)setUpPrecisionTouchpad;
+- (void)refreshPrecisionTouchpadConfiguration;
+- (void)handleTrackpadTouchesEvent:(NSEvent *)event inView:(NSView *)view;
 @end
 
 @interface HIDSupport (PointerInput)

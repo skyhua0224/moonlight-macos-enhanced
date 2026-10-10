@@ -485,6 +485,16 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) int liveStreamHeight;
 @property (nonatomic) NSUInteger liveBitrateDebounceToken;
 
+// Mac input method text (see StreamViewController+TextInput.m).
+@property (nonatomic) BOOL imeTextInputEnabled;
+@property (nonatomic, strong) NSTextInputContext *imeInputContext;
+@property (nonatomic, copy) NSString *imeMarkedText;
+@property (nonatomic, strong) NSMutableSet<NSNumber *> *imeConsumedKeyCodes;
+@property (nonatomic, strong) NSData *imeRemoteTextContext;
+@property (nonatomic, strong) NSTextField *imeCompositionLabel;
+@property (nonatomic) BOOL imeHandlingEvent;
+@property (nonatomic) BOOL imeEventProducedText;
+
 @property (nonatomic, strong) NSTrackingArea *mouseTrackingArea;
 @property (nonatomic) BOOL isMouseInsideView;
 @property (nonatomic) BOOL globalInactivePointerInsideStreamView;
@@ -873,6 +883,16 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (BOOL)applyLiveResolutionWidth:(int)width height:(int)height;
 - (void)streamResolutionChanged:(uint32_t)width height:(uint32_t)height;
 - (void)applyHostStreamResolutionWidth:(int)width height:(int)height;
+@end
+
+@interface StreamViewController (InputExtensions) <NSTextInputClient>
+- (void)configurePrecisionTouchpadInput;
+- (void)refreshTextInputConfiguration;
+- (BOOL)routeKeyDownToInputMethod:(NSEvent *)event;
+- (BOOL)shouldSwallowKeyUpForInputMethod:(NSEvent *)event;
+- (void)routeFlagsChangedToInputMethod:(NSEvent *)event;
+- (void)remoteTextContextUpdated:(const LI_REMOTE_TEXT_CONTEXT *)context;
+- (void)discardInputMethodComposition;
 @end
 
 @interface StreamViewController (InternalTeardown)
