@@ -138,6 +138,7 @@ struct FileMappingSettingsPage: View {
 }
 
 struct AboutSettingsPage: View {
+  // settings-search: ignore (not shown in the settings window; AboutUpdatesSettingsPage replaced it)
   @ObservedObject private var languageManager = LanguageManager.shared
 
   var body: some View {
@@ -167,6 +168,7 @@ struct AboutSettingsPage: View {
 }
 
 struct UpdatesSettingsPage: View {
+  // settings-search: ignore (not shown in the settings window; AboutUpdatesSettingsPage replaced it)
   @ObservedObject private var languageManager = LanguageManager.shared
 
   var body: some View {
@@ -439,6 +441,7 @@ private struct AboutHeroCard: View {
   @ObservedObject private var languageManager = LanguageManager.shared
 
   var body: some View {
+    // settings-search: entry "Moonlight macOS Enhanced" detail="About hero subtitle" keywords="version"
     VStack(spacing: 8) {
       Image(nsImage: NSApp.applicationIconImage)
         .resizable()
@@ -523,6 +526,7 @@ private struct AboutUpdateCard: View {
       }
 
       Divider()
+      // settings-search: entry "Check for Updates" detail="Update Sources detail"
       HStack {
         Text(languageManager.localize("Update Sources detail"))
           .font(.footnote)

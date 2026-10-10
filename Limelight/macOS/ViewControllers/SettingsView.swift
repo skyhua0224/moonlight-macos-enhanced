@@ -96,7 +96,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
   }
 }
 
-private struct SettingsSearchEntry: Identifiable, Hashable {
+struct SettingsSearchEntry: Identifiable, Hashable {
   let id: String
   let pane: SettingsPaneType
   let sectionKey: String
@@ -115,72 +115,73 @@ private struct SettingsSearchEntry: Identifiable, Hashable {
   }
 }
 
-private enum SettingsSearchIndex {
-  static let entries: [SettingsSearchEntry] = [
-    entry(.stream, "General", "Profile", keywords: ["Host", "主机", "配置"]),
-    entry(.stream, "General", "Connection Method", keywords: ["addresses", "连接方式", "地址"]),
-    entry(.stream, "General", "Connection Addresses", "Connection Addresses detail", keywords: ["host", "IP", "端口", "管理地址"]),
-    entry(.stream, "Resolution & Frame Rate", "Resolution", keywords: ["分辨率"]),
-    entry(.stream, "Resolution & Frame Rate", "Frame Rate", keywords: ["FPS", "帧率"]),
-    entry(.stream, "Bitrate & Playback", "Bitrate", "Bitrate detail", keywords: ["码率"]),
-    entry(.stream, "Bitrate & Playback", "Auto Adjust Bitrate", keywords: ["自动码率"]),
-    entry(.stream, "Bitrate & Playback", "Play Sound on Host", keywords: ["audio", "音频", "主机声音"]),
-    entry(.stream, "Clipboard", "Clipboard Sync", "Clipboard Sync detail", keywords: ["paste", "剪贴板"]),
-
-    entry(.video, "Video", "Video Codec", keywords: ["H.264", "HEVC", "AV1", "编码"]),
-    entry(.video, "Video", "Renderer Mode", keywords: ["Metal", "渲染器"]),
-    entry(.video, "Video", "HDR", "HDR detail", keywords: ["高动态范围"]),
-    entry(.video, "Video", "10-bit SDR", keywords: ["10 bit", "10位", "SDR"]),
-    entry(.video, "Video", "Transfer Function", keywords: ["PQ", "HLG", "传输函数"]),
-    entry(.video, "HDR Capabilities", "HDR Capabilities", keywords: ["HDR10+", "Dolby Vision", "杜比视界"]),
-    entry(.video, "HDR Capabilities", "Dolby Vision Profile 8.1", keywords: ["DV", "杜比"]),
-    entry(.video, "HDR Capabilities", "Dolby Vision Profile 8.4", keywords: ["DV", "杜比"]),
-    entry(.video, "Frame Pacing", "Pacing", keywords: ["jitter", "帧 pacing", "流畅"]),
-    entry(.video, "Frame Pacing", "VSync", keywords: ["垂直同步"]),
-
-    entry(.audio, "Audio Configuration", "Audio Configuration", keywords: ["output", "输出", "音频设备"]),
-    entry(.audio, "Audio Configuration", "Volume", keywords: ["音量"]),
-    entry(.audio, "Audio Configuration", "Play Sound on Host", keywords: ["主机播放"]),
-    entry(.audio, "Audio Enhancement", "Sound Mode", keywords: ["音效"]),
-    entry(.audio, "Microphone", "Enable Microphone", keywords: ["mic", "麦克风"]),
-    entry(.audio, "Microphone", "Microphone Permission", keywords: ["permission", "权限"]),
-    entry(.audio, "Microphone", "Test Microphone", keywords: ["输入测试"]),
-
-    entry(.input, "Controller", "Connected Controllers", keywords: ["gamepad", "手柄", "DualSense", "DS5"]),
-    entry(.input, "Controller", "Host Controller Type", keywords: ["DS5", "DS4", "PlayStation", "手柄类型"]),
-    entry(.input, "Controller", "Haptic Feedback", keywords: ["rumble", "震动", "触觉"]),
-    entry(.input, "Controller", "Motion Sensor", keywords: ["motion", "陀螺仪", "动作"]),
-    entry(.input, "Controller", "DualSense Touchpad Mode", "Native Touchpad detail", keywords: ["touchpad", "触控板", "Trackpad"]),
-    entry(.input, "Controller", "Controller Deadzone", keywords: ["摇杆", "死区"]),
-    entry(.keyboard, "Keyboard & Mouse", "Keyboard Translation", keywords: ["keyboard", "键盘"]),
-    entry(.keyboard, "Keyboard & Mouse", "Mouse Mode", keywords: ["mouse", "鼠标"]),
-    entry(.keyboard, "Keyboard & Mouse", "Pointer Speed", keywords: ["指针"]),
-
-    entry(.display, "Host Display", "Target Display", keywords: ["显示器", "拓扑"]),
-    entry(.display, "Host Display", "VDD Capability", keywords: ["virtual display", "虚拟显示器"]),
-    entry(.display, "Host Display", "Use Virtual Display", keywords: ["VDD", "虚拟显示"]),
-    entry(.display, "Host Display", "Screen Mode", keywords: ["屏幕模式", "自定义分辨率"]),
-    entry(.display, "HDR Display Profile", "HDR Metadata Source", keywords: ["HDR", "元数据"]),
-    entry(.display, "HDR Display Profile", "Override HDR Display Profile", keywords: ["亮度", "显示档案"]),
-
-    entry(.usb, "USB Mapping", "USB Mapping", "USB settings subtitle", keywords: ["USB forwarding", "USB 转发", "USB/IP"]),
-    entry(.fileMapping, "Host Files", "Host Files", "Host Files purpose detail", keywords: ["file mapping", "文件映射", "主机文件"]),
-    entry(.app, "Diagnostics", "Input Diagnostics", keywords: ["mapping", "诊断"]),
-    entry(.app, "Updates", "Check for Updates", keywords: ["Sparkle", "update", "更新"]),
-    entry(.about, "About", "Moonlight macOS Enhanced", "About hero subtitle", keywords: ["version", "版本"]),
-  ]
-
-  private static func entry(_ pane: SettingsPaneType, _ sectionKey: String, _ titleKey: String,
-                            _ detailKey: String? = nil, keywords: [String] = []) -> SettingsSearchEntry {
-    SettingsSearchEntry(
-      id: "\(pane.rawValue)-\(sectionKey)-\(titleKey)",
-      pane: pane,
-      sectionKey: sectionKey,
-      titleKey: titleKey,
-      detailKey: detailKey,
-      keywords: keywords
+/// The searchable settings items. `generatedEntries` lives in
+/// SettingsSearchIndex.generated.swift and is produced from the settings views
+/// by scripts/generate_settings_search_index.py (an Xcode build phase runs it
+/// before compiling), so a new row is searchable without touching this file.
+/// Only extra search words for existing rows are written by hand below.
+enum SettingsSearchIndex {
+  static let entries: [SettingsSearchEntry] = SettingsSearchIndex.generatedEntries.map { (entry: SettingsSearchEntry) -> SettingsSearchEntry in
+    guard let extra = SettingsSearchIndex.supplementalKeywords[entry.titleKey] else { return entry }
+    return SettingsSearchEntry(
+      id: entry.id,
+      pane: entry.pane,
+      sectionKey: entry.sectionKey,
+      titleKey: entry.titleKey,
+      detailKey: entry.detailKey,
+      keywords: entry.keywords + extra
     )
   }
+
+  /// Optional synonyms and abbreviations, keyed by the row's title key. Rows do
+  /// not need an item here to be found.
+  private static let supplementalKeywords: [String: [String]] = [
+    "Profile": ["Host", "主机", "配置"],
+    "Connection Method": ["addresses", "连接方式", "地址"],
+    "Connection Addresses": ["host", "IP", "端口", "管理地址"],
+    "Resolution": ["分辨率"],
+    "Frame Rate": ["FPS", "帧率"],
+    "Bitrate": ["码率"],
+    "Auto Adjust Bitrate": ["自动码率"],
+    "Play Sound on Host": ["audio", "音频", "主机声音", "主机播放"],
+    "Clipboard Sync": ["paste", "剪贴板"],
+    "Video Codec": ["HEVC", "编码"],
+    "Renderer Mode": ["Metal", "渲染器"],
+    "HDR": ["高动态范围"],
+    "10-bit SDR": ["10 bit", "10位", "SDR"],
+    "Transfer Function": ["PQ", "HLG", "传输函数"],
+    "Dolby Vision Profile 8.1": ["DV", "杜比", "杜比视界"],
+    "Dolby Vision Profile 8.4": ["DV", "杜比", "杜比视界"],
+    "Pacing": ["jitter", "帧 pacing", "流畅"],
+    "VSync": ["垂直同步"],
+    "Audio Configuration": ["output", "输出", "音频设备"],
+    "Volume": ["音量"],
+    "Sound Mode": ["音效"],
+    "Enable Microphone": ["mic", "麦克风"],
+    "Microphone Permission": ["permission", "权限"],
+    "Start Test": ["Test Microphone", "输入测试"],
+    "Connected Controllers": ["gamepad", "手柄", "DualSense", "DS5"],
+    "Host Controller Type": ["DS5", "DS4", "PlayStation", "手柄类型"],
+    "Haptic Feedback": ["rumble", "震动", "触觉"],
+    "Rumble": ["haptic", "震动"],
+    "Motion Sensor": ["motion", "陀螺仪", "动作"],
+    "DualSense Touchpad Mode": ["touchpad", "触控板", "Trackpad"],
+    "Controller Deadzone": ["摇杆", "死区"],
+    "Keyboard Translation": ["keyboard", "键盘"],
+    "Mouse Mode": ["mouse", "鼠标"],
+    "Pointer Speed": ["指针"],
+    "Target Display": ["显示器", "拓扑"],
+    "VDD Capability": ["virtual display", "虚拟显示器"],
+    "Use Virtual Display": ["VDD", "虚拟显示"],
+    "Screen Mode": ["屏幕模式", "自定义分辨率"],
+    "HDR Metadata Source": ["HDR", "元数据"],
+    "Override HDR Display Profile": ["亮度", "显示档案"],
+    "USB Mapping": ["USB forwarding", "USB 转发", "USB/IP"],
+    "Host Files": ["file mapping", "文件映射", "主机文件"],
+    "Input Diagnostics": ["mapping", "诊断"],
+    "Check for Updates": ["Sparkle", "update", "更新"],
+    "Moonlight macOS Enhanced": ["版本"],
+  ]
 }
 
 struct SettingsView: View {

@@ -184,6 +184,7 @@ private struct ControllerDeadzoneRow: View {
   @ObservedObject private var languageManager = LanguageManager.shared
 
   var body: some View {
+    // settings-search: entry "Controller Deadzone"
     VStack(alignment: .leading, spacing: 7) {
       HStack {
         Text(languageManager.localize("Controller Deadzone"))

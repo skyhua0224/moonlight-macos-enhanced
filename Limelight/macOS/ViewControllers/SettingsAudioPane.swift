@@ -132,6 +132,7 @@ struct AudioView: View {
             .onAppear { microphoneManager.refreshDevices() }
           }
 
+          // settings-search: entry "Start Test"
           HStack {
             Spacer()
             Button(languageManager.localize(microphoneManager.isTesting ? "Stop" : "Start Test")) {
