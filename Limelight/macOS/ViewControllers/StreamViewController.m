@@ -1534,9 +1534,20 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.audioCodec = (int)audioPlan.effectiveCodec;
     streamConfig.audioExcessBitrateKbps = (int)audioPlan.excessKbps;
     streamConfig.continuousAudio = [SettingsClass continuousAudioFor:self.app.host.uuid];
+    self.pendingAudioPlanNotice = nil;
     if (audioPlan.fallbackReason != MLAudioFallbackReasonNone) {
         Log(LOG_W, @"[audio] Requested codec %@ replaced by opus: %@",
             audioPlan.requestedCodecName, audioPlan.fallbackLogText);
+        if (audioPlan.fallbackReason == MLAudioFallbackReasonTooManyChannels) {
+            // The settings page asks the user to pick a combination; a stream started
+            // without picking one should not hide that the codec was not used.
+            // Same keys as the Audio Configuration choices that exceed 5.1.
+            NSString *layoutName = [[LanguageManager shared] localize:
+                (audioConfigSelection == 3 ? @"7.1.4 surround sound" : @"7.1 surround sound")];
+            self.pendingAudioPlanNotice =
+                [NSString stringWithFormat:[[LanguageManager shared] localize:@"Audio codec conflict notice"],
+                 [MLAudioStreamPlan codecDisplayName:requestedAudioCodec], layoutName];
+        }
     }
 
     NSString *codecName = @"H.264";
@@ -1827,6 +1838,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
             callbackConn,
             callbackInputContext,
             self.streamMan.connection);
+        if (self.pendingAudioPlanNotice.length > 0) {
+            NSString *audioPlanNotice = self.pendingAudioPlanNotice;
+            self.pendingAudioPlanNotice = nil;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self audioCodecNotice:audioPlanNotice];
+            });
+        }
         @try {
                 // Notify session manager (main-thread only for window access)
                 [[StreamingSessionManager shared] startStreamingWithHost:self.app.host.uuid

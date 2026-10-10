@@ -43,6 +43,15 @@ struct AudioView: View {
             .frame(width: 190, alignment: .trailing)
           }
 
+          if let conflict = audioCodecChannelConflict {
+            AudioCodecConflictRow(
+              message: conflict.message,
+              keepCodecTitle: conflict.keepCodecTitle,
+              keepChannelsTitle: conflict.keepChannelsTitle,
+              keepCodec: { settingsModel.selectedAudioConfiguration = "5.1 surround sound" },
+              keepChannels: { settingsModel.selectedAudioCodec = SettingsModel.defaultAudioCodec })
+          }
+
           if dolbyOutputApplies {
             AudioCompactRow(title: "Dolby Output") {
               Picker("", selection: $settingsModel.selectedDolbyOutput) {
@@ -221,7 +230,8 @@ struct AudioView: View {
     let current = plan(channels)
     switch current.fallbackReason {
     case .tooManyChannels:
-      return languageManager.localize("Audio codec fallback: channels")
+      // Shown as a choice instead of a note: see audioCodecChannelConflict.
+      return nil
     case .notFoundationHost:
       return languageManager.localize("Audio codec fallback: host")
     case .previouslyFailed:
@@ -255,6 +265,30 @@ struct AudioView: View {
     return String(
       format: languageManager.localize("Audio codec hint compressed"),
       MLAudioStreamPlan.codecDisplayName(choice.codecId), mbps)
+  }
+
+  /// PCM, AC3 and E-AC3 carry at most 5.1. With a larger Audio Configuration one of
+  /// the two settings has to give way, and which one is the user's call, so the
+  /// pane offers both instead of silently using Opus.
+  private var audioCodecChannelConflict:
+    (message: String, keepCodecTitle: String, keepChannelsTitle: String)?
+  {
+    let choice = AudioCodecChoice(selection: settingsModel.selectedAudioCodec)
+    guard choice != .opus else { return nil }
+    let channels = MLAudioStreamPlan.channelCount(
+      forAudioConfigurationIndex: SettingsModel.getInt(
+        from: settingsModel.selectedAudioConfiguration, in: SettingsModel.audioConfigurations))
+    guard channels > 6 else { return nil }
+    let codecName = MLAudioStreamPlan.codecDisplayName(choice.codecId)
+    let layoutName = languageManager.localize(settingsModel.selectedAudioConfiguration)
+    return (
+      message: String(
+        format: languageManager.localize("Audio codec conflict message"), codecName, layoutName),
+      keepCodecTitle: String(
+        format: languageManager.localize("Audio codec conflict keep codec"), codecName),
+      keepChannelsTitle: String(
+        format: languageManager.localize("Audio codec conflict keep channels"), layoutName)
+    )
   }
 
   /// The Dolby Output choice only matters for the codecs that can be passed through.
@@ -297,6 +331,37 @@ private struct AudioCompactGroup<Content: View>: View {
       .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
     .settingsSearchSection(title)
+  }
+}
+
+/// Two-way choice shown under the Audio Codec row while it conflicts with the
+/// Audio Configuration.
+private struct AudioCodecConflictRow: View {
+  let message: String
+  let keepCodecTitle: String
+  let keepChannelsTitle: String
+  let keepCodec: () -> Void
+  let keepChannels: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundStyle(.orange)
+        Text(message)
+          .font(.caption)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      HStack(spacing: 8) {
+        Button(keepCodecTitle, action: keepCodec)
+        Button(keepChannelsTitle, action: keepChannels)
+      }
+      .controlSize(.small)
+    }
+    .padding(.vertical, 8)
+    .overlay(alignment: .bottom) {
+      Divider().opacity(0.45)
+    }
   }
 }
 

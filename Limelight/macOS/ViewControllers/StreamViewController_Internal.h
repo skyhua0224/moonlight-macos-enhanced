@@ -437,6 +437,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) NSButton *timeoutViewLogsButton;
 @property (nonatomic, strong) NSButton *timeoutCopyLogsButton;
 @property (nonatomic, strong) StreamRiskAssessment *currentStreamRiskAssessment;
+// Shown once the stream is up: the audio codec the user picked could not be used with the chosen channel layout.
+@property (nonatomic, copy) NSString *pendingAudioPlanNotice;
 
 @property (nonatomic) NSInteger connectWatchdogToken;
 @property (nonatomic) uint64_t connectWatchdogStartMs;

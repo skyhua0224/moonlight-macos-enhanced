@@ -1271,6 +1271,10 @@
 "Lossless (PCM)" = "Lossless (PCM)";
 "Audio codec hint PCM" = "Lossless audio needs about %@ Mbps of bandwidth for stereo and %@ Mbps for 5.1 surround, on top of the video bitrate. If the link cannot carry it, audio drops out and video stutters.";
 "Audio codec fallback: channels" = "This codec supports up to 5.1 channels, so Opus is used with this audio configuration.";
+"Audio codec conflict message" = "%1$@ carries at most 5.1 channels, but Audio Configuration is set to %2$@. Choose which one to keep. Until you choose, streams use Opus.";
+"Audio codec conflict keep codec" = "Use %@ with 5.1";
+"Audio codec conflict keep channels" = "Keep %@, use Opus";
+"Audio codec conflict notice" = "%1$@ carries at most 5.1 channels, so this stream uses Opus with %2$@. Choose the combination in Settings > Audio.";
 "Audio codec fallback: host" = "This host is not Foundation Sunshine, so Opus is used.";
 "Audio codec fallback: failed" = "This host did not deliver this codec last time, so Opus is used. Choose Opus and then this codec again to retry.";
 "The host did not send %@ audio. Audio is muted; Opus will be used next time." = "The host did not send %@ audio. Audio is muted; Opus will be used next time.";
