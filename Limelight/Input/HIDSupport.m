@@ -118,6 +118,20 @@ static struct KeyMapping keys[] = {
     {kVK_VolumeDown, 0xAE},
     {kVK_VolumeUp, 0xAF},
 
+    // Keys that exist only on ISO and JIS keyboards. Each value is a virtual
+    // key the host's VK-to-scancode table (keylayout.h) knows, with the scancode
+    // of the same physical key:
+    //   VK_OEM_102  0xE2 -> 0x56  extra ISO key beside left Shift
+    //   VK_ABNT_C1  0xC1 -> 0x73  JIS Ro / underscore key
+    //   VK_ABNT_C2  0xC2 -> 0x7E  JIS keypad comma
+    // The JIS Yen key (scancode 0x7D) and the Eisu/Kana keys have no entry in
+    // the host table, so they are deliberately not mapped.
+    // Note: on some ISO keyboards macOS reports this key and the grave key with
+    // their codes swapped; that case is not handled here.
+    {kVK_ISO_Section, 0xE2},
+    {kVK_JIS_Underscore, 0xC1},
+    {kVK_JIS_KeypadComma, 0xC2},
+
     {kVK_F1, 0x70},
     {kVK_F2, 0x71},
     {kVK_F3, 0x72},
