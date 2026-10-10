@@ -1275,6 +1275,7 @@
 "Audio codec conflict keep codec" = "Use %@ with 5.1";
 "Audio codec conflict keep channels" = "Keep %@, use Opus";
 "Audio codec conflict notice" = "%1$@ carries at most 5.1 channels, so this stream uses Opus with %2$@. Choose the combination in Settings > Audio.";
+"No lossless audio has arrived yet. If the host is playing sound, the network is dropping its large audio packets; use stereo, AC3 or Opus instead." = "No lossless audio has arrived yet. If the host is playing sound, the network is dropping its large audio packets; use stereo, AC3 or Opus instead.";
 "Audio codec fallback: host" = "This host is not Foundation Sunshine, so Opus is used.";
 "Audio codec fallback: failed" = "This host did not deliver this codec last time, so Opus is used. Choose Opus and then this codec again to retry.";
 "The host did not send %@ audio. Audio is muted; Opus will be used next time." = "The host did not send %@ audio. Audio is muted; Opus will be used next time.";

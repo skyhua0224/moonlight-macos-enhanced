@@ -2874,6 +2874,30 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     }
 
     Log(LOG_I, @"[audio] Output start scheduled in the background; the stream does not wait for the audio device");
+
+    // PCM surround packets are larger than one network packet and depend on IP
+    // fragmentation. When none has arrived after a while, say what the likely
+    // reason is; the host also sends nothing while it is silent, so this is a
+    // hint, not a failure, and nothing is remembered.
+    if (_audioCodec == MLAudioCodecPcm && _pcmExpectedBytes > _streamConfig.packetSize) {
+        const int expectedBytes = _pcmExpectedBytes;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(12 * NSEC_PER_SEC)), _audioOutputQueue, ^{
+            Connection *strongSelf = weakSelf;
+            if (strongSelf == nil ||
+                __atomic_load_n(&strongSelf->_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation) {
+                return;
+            }
+            // Racy read of decode-thread counters; only zero vs. non-zero matters.
+            if (strongSelf->_audioRxValidPackets + strongSelf->_audioRxInvalidPackets +
+                strongSelf->_audioRxLossPlaceholders != 0) {
+                return;
+            }
+            Log(LOG_W, @"[audio] No PCM packet has arrived 12 s into the stream (each is %d bytes, larger than one network packet); the path may not carry fragmented or oversized packets",
+                expectedBytes);
+            [strongSelf postAudioOutputNoticeWithKey:@"No lossless audio has arrived yet. If the host is playing sound, the network is dropping its large audio packets; use stereo, AC3 or Opus instead."
+                                          deviceName:nil];
+        });
+    }
     dispatch_async(_audioOutputQueue, ^{
         [weakSelf runAudioOutputStartAttemptForGeneration:generation];
     });
@@ -3945,7 +3969,23 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _audioCodec = (int)_audioPlan.effectiveCodec;
 #if defined(AUDIO_CODEC_PCM_S16)
     _streamConfig.audioCodec = _audioCodec;
-    _streamConfig.audioBitrate = 0; // host default for AC3/E-AC3, fixed for PCM
+    // AC3 / E-AC3 frames are sent as one datagram each. At the host defaults (640 /
+    // 384 kbps) a frame is 2560 / 1536 bytes, which only arrives if every hop
+    // fragments and reassembles it; with mismatched MTUs or over a tunnel it is
+    // dropped and the stream is silent. Ask for a bitrate whose frame fits in one
+    // packet instead: 320 kbps = 1280 bytes, 256 kbps = 1024 bytes on small-MTU paths.
+    // 0 keeps the library default (fixed for PCM).
+    _streamConfig.audioBitrate = 0;
+    if (_audioCodec == MLAudioCodecAc3 || _audioCodec == MLAudioCodecEac3) {
+        _streamConfig.audioBitrate = _streamConfig.packetSize >= 1392
+            ? (int)[MLAudioStreamPlan compressedBitrateKbps] * 1000
+            : (_streamConfig.packetSize >= 1024 ? 224000 : 192000);
+        Log(LOG_I, @"[audio] Requesting %@ at %d kbps so each frame (%d bytes) fits in one packet (packetSize=%d)",
+            [MLAudioStreamPlan codecName:_audioCodec],
+            _streamConfig.audioBitrate / 1000,
+            _streamConfig.audioBitrate / 1000 * 32 / 8,
+            _streamConfig.packetSize);
+    }
 #else
     if (_audioCodec != MLAudioCodecOpus) {
         Log(LOG_W, @"[audio] This build of the protocol library has no audio codec selection; using opus");

@@ -2123,6 +2123,10 @@ extension SettingsModel {
   private static let hostReserveHighQualityPerChannelKbps = 256
   private static let highQualityVideoBitrateKbps = 15_000
   private static let lowBitrateVideoKbps = 5_000
+  /// Bitrate requested for AC3 and E-AC3. One 32 ms frame is then 1280 bytes and
+  /// fits in a single packet; the host defaults (640 / 384 kbps) need IP
+  /// fragmentation, which mismatched MTUs and tunnels drop.
+  static let compressedBitrateKbps = 320
 
   let requestedCodec: Int
   let effectiveCodec: Int
@@ -2244,11 +2248,8 @@ extension SettingsModel {
     case codecPcm:
       payloadKbps = 48 * 16 * channels
       duration = 5
-    case codecAc3:
-      payloadKbps = 640
-      duration = 32
-    case codecEac3:
-      payloadKbps = 384
+    case codecAc3, codecEac3:
+      payloadKbps = compressedBitrateKbps
       duration = 32
     default:
       highQuality =
