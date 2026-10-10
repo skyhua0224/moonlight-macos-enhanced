@@ -1226,6 +1226,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
 #pragma mark - Streaming Operations
 
 - (void)prepareForStreaming {
+    const uint64_t startupBeginMs = LiGetMillis();
+    self.startupSummaryLogged = NO;
     [self stopStreamHealthDiagnostics];
     [self resetStreamHealthDiagnostics];
     self.pendingDisconnectSource = nil;
@@ -1247,6 +1249,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 
     StreamConfiguration *streamConfig = [[StreamConfiguration alloc] init];
+    streamConfig.startupBeginMs = startupBeginMs;
     
     streamConfig.host = self.app.host.activeAddress;
     streamConfig.hostUUID = self.app.host.uuid;
@@ -1785,6 +1788,47 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.waitingForFirstRenderedFrame = NO;
     self.streamView.statusText = nil;
     Log(LOG_I, @"[diag] First rendered frame observed via %@; clearing loading indicator", source);
+    [self logStartupSummary];
+}
+
+// One line that says where the time from click to first frame went. The stages are
+// contiguous, so beforeRequest + hostLaunch + replyToConnect + connectToFirstVideo +
+// firstVideoToFrame add up to the total. connectToFirstVideo covers the RTSP handshake and
+// the host starting its encoder, and counts as host time although it includes a little
+// client decoder setup. indicator is the extra delay until the loading indicator was cleared
+// and is not part of the total. Logged once per stream attempt; main thread only.
+- (void)logStartupSummary {
+    if (self.startupSummaryLogged) {
+        return;
+    }
+    self.startupSummaryLogged = YES;
+
+    StreamConfiguration *config = self.streamMan.streamConfiguration;
+    VideoDecoderRenderer *renderer = self.streamMan.connection.renderer;
+    if (config == nil || renderer == nil || config.startupBeginMs == 0) {
+        return;
+    }
+
+    uint64_t (^span)(uint64_t, uint64_t) = ^uint64_t(uint64_t from, uint64_t to) {
+        return (from != 0 && to >= from) ? to - from : 0;
+    };
+    const uint64_t presentedMs = renderer.firstFramePresentedMs != 0 ? renderer.firstFramePresentedMs : LiGetMillis();
+    const uint64_t beforeRequest = span(config.startupBeginMs, config.startupRequestMs);
+    const uint64_t hostLaunch = span(config.startupRequestMs, config.startupReplyMs);
+    const uint64_t replyToConnect = span(config.startupReplyMs, config.startupConnectMs);
+    const uint64_t connectToFirstVideo = span(config.startupConnectMs, renderer.firstDecodeInputMs);
+    const uint64_t firstVideoToFrame = span(renderer.firstDecodeInputMs, presentedMs);
+    const uint64_t indicator = span(presentedMs, LiGetMillis());
+    Log(LOG_I, @"[startup] first frame after %llums: beforeRequest=%llums hostLaunch=%llums replyToConnect=%llums connectToFirstVideo=%llums firstVideoToFrame=%llums indicator=%llums (client≈%llums host≈%llums)",
+        (unsigned long long)span(config.startupBeginMs, presentedMs),
+        (unsigned long long)beforeRequest,
+        (unsigned long long)hostLaunch,
+        (unsigned long long)replyToConnect,
+        (unsigned long long)connectToFirstVideo,
+        (unsigned long long)firstVideoToFrame,
+        (unsigned long long)indicator,
+        (unsigned long long)(beforeRequest + replyToConnect + firstVideoToFrame),
+        (unsigned long long)(hostLaunch + connectToFirstVideo));
 }
 
 // The renderer reports its first rendered frame the moment it happens, so the indicator does

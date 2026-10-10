@@ -5993,6 +5993,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 }
 
 - (int)submitDecodeUnit:(void *)du_void {
+    if (_firstDecodeInputMs == 0) _firstDecodeInputMs = LiGetMillis();
     PDECODE_UNIT unit = (PDECODE_UNIT)du_void;
     if (!self.directSubmission || unit == NULL) return [self submitDecodeUnitPayload:du_void];
     const uint64_t now = LiGetMillis();
@@ -6129,6 +6130,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 {
     OSStatus status;
 
+    if (_firstDecodeInputMs == 0) _firstDecodeInputMs = LiGetMillis();
     if (bufferType != BUFFER_TYPE_PICDATA) {
         if (bufferType == BUFFER_TYPE_VPS) {
             Log(LOG_D, @"Got VPS");

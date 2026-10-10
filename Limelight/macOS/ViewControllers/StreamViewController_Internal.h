@@ -329,6 +329,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) uint64_t streamHealthConnectionStartedMs;
 @property (nonatomic) NSInteger streamHealthMitigationStep;
 @property (nonatomic) BOOL waitingForFirstRenderedFrame;
+@property (nonatomic) BOOL startupSummaryLogged;
 @property (nonatomic) int lastConnectionStatus;
 @property (nonatomic) NSUInteger connectionPoorStatusBurstCount;
 @property (nonatomic) uint64_t connectionPoorStatusBurstWindowStartMs;
@@ -545,6 +546,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (BOOL)isWindowBorderlessMode;
 - (StreamViewMac *)streamView;
 - (void)prepareForStreaming;
+// Logs the "[startup] first frame" timeline once per stream attempt.
+- (void)logStartupSummary;
 - (void)scheduleInitialRenderedFrameCheckForGeneration:(NSUInteger)generation remainingAttempts:(NSUInteger)remainingAttempts;
 - (void)stageStarting:(const char *)stageName;
 - (void)stageComplete:(const char *)stageName;

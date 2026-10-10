@@ -1095,6 +1095,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
             [self requestStreamMenuEntrypointsVisibilityUpdate];
         });
         Log(LOG_I, @"[diag] First rendered frame observed; clearing startup loading indicator");
+        [self logStartupSummary];
     }
 
     if (hasPayloadInFreshWindow || hasProgressSinceLast) {

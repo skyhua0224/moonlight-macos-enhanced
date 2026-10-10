@@ -5085,6 +5085,7 @@ static void FillOutputBuffer(void *aqData,
     // Advertising the remote text context makes the host stream caret updates,
     // so it is only requested when the local input method wants them.
     LiSetRemoteTextContextCallbackCtx(&_connectionContext, _wantsRemoteTextContext ? ClRemoteTextContext : NULL);
+    _rendererStreamConfig.startupConnectMs = LiGetMillis();
     Log(LOG_I, @"LiStartConnectionCtx: connCtx=%p globalCtx=%p inputCtx=%p", &_connectionContext, LiGetGlobalConnectionContextPtr(), LiGetInputContextFromConnectionCtx(&_connectionContext));
     LiStartConnectionCtx(&_connectionContext,
                          &_serverInfo,

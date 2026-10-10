@@ -136,4 +136,14 @@
 @property(nonatomic) int upscalingMode;
 @property(nonatomic) int frameInterpolationMode;
 
+// Startup timeline for the "[startup] first frame" summary, as LiGetMillis() values; 0 = not
+// reached. Each mark is written once, by the stage that owns it, on that stage's thread.
+/// The stream view started preparing this stream (the user's click, as far as the client sees it).
+@property(nonatomic) uint64_t startupBeginMs;
+/// The launch/resume request was about to go out / the host answered it.
+@property(nonatomic) uint64_t startupRequestMs;
+@property(nonatomic) uint64_t startupReplyMs;
+/// The protocol library was started (RTSP handshake begins).
+@property(nonatomic) uint64_t startupConnectMs;
+
 @end

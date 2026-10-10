@@ -189,6 +189,8 @@
         }
     }
     const uint64_t hostLaunchEndMs = LiGetMillis();
+    _config.startupRequestMs = hostLaunchStartMs;
+    _config.startupReplyMs = hostLaunchEndMs;
     if (self.isCancelled || _callbacks == nil) {
         [self discardPreparedConnection];
         return;
