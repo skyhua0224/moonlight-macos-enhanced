@@ -200,6 +200,11 @@
 "Export Log…" = "导出日志…";
 "Live Debug Log" = "实时调试日志";
 "Copy All" = "复制全部";
+"Pause" = "暂停";
+"Resume" = "继续";
+"Jump to Latest" = "跳到最新";
+"Copy Line" = "复制此行";
+"Show Details" = "查看详情";
 "(No logs yet)" = "（暂无日志）";
 "Pairing Cache" = "配对缓存";
 "Reset Hosts (Recommended)" = "清空主机列表（推荐）";

@@ -1,5 +1,35 @@
 import Foundation
 
+/// Compiled regular expressions, shared by every log line. Compiling a pattern
+/// per line used to dominate the cost of parsing a few thousand lines.
+private final class DebugLogRegexCache {
+  static let shared = DebugLogRegexCache()
+
+  private let lock = NSLock()
+  private var cache: [String: NSRegularExpression] = [:]
+
+  func regex(for pattern: String) -> NSRegularExpression? {
+    lock.lock()
+    defer { lock.unlock() }
+    if let cached = cache[pattern] {
+      return cached
+    }
+    guard let compiled = try? NSRegularExpression(pattern: pattern) else {
+      return nil
+    }
+    cache[pattern] = compiled
+    return compiled
+  }
+}
+
+extension String {
+  /// Plain case-insensitive substring test. Unlike `localizedCaseInsensitiveContains`
+  /// it does not go through locale-aware collation, which is far slower per line.
+  fileprivate func mlContainsCaseInsensitive(_ needle: String) -> Bool {
+    range(of: needle, options: .caseInsensitive) != nil
+  }
+}
+
 @objcMembers
 final class MLLogCategoryDescriptor: NSObject {
   let domainKey: String
@@ -524,8 +554,8 @@ enum DebugNoiseCategory: String, CaseIterable {
 
 enum DebugLogNoiseClassifier {
   static func category(for line: String) -> DebugNoiseCategory? {
-    if line.localizedCaseInsensitiveContains("Discovery summary for ")
-      || line.localizedCaseInsensitiveContains("Resolved address:")
+    if line.mlContainsCaseInsensitive("Discovery summary for ")
+      || line.mlContainsCaseInsensitive("Resolved address:")
     {
       return .discoveryChatter
     }
@@ -534,23 +564,23 @@ enum DebugLogNoiseClassifier {
       return .hostIdentityMismatch
     }
 
-    if line.localizedCaseInsensitiveContains("Internal inconsistency in menus") {
+    if line.mlContainsCaseInsensitive("Internal inconsistency in menus") {
       return .appKitMenuInconsistency
     }
 
-    if line.localizedCaseInsensitiveContains("NSURLErrorDomain")
+    if line.mlContainsCaseInsensitive("NSURLErrorDomain")
       && (line.contains("-1001") || line.contains("-1004") || line.contains("-1005"))
     {
       return .systemTransportFallback
     }
 
-    if line.localizedCaseInsensitiveContains("nw_")
-      || line.localizedCaseInsensitiveContains("tcp_input")
-      || line.localizedCaseInsensitiveContains("Request failed with error")
-      || (line.localizedCaseInsensitiveContains("Connection ")
-        && line.localizedCaseInsensitiveContains("failed"))
-      || (line.localizedCaseInsensitiveContains("Task <")
-        && line.localizedCaseInsensitiveContains("finished with error"))
+    if line.mlContainsCaseInsensitive("nw_")
+      || line.mlContainsCaseInsensitive("tcp_input")
+      || line.mlContainsCaseInsensitive("Request failed with error")
+      || (line.mlContainsCaseInsensitive("Connection ")
+        && line.mlContainsCaseInsensitive("failed"))
+      || (line.mlContainsCaseInsensitive("Task <")
+        && line.mlContainsCaseInsensitive("finished with error"))
     {
       return .networkStackNoise
     }
@@ -559,11 +589,11 @@ enum DebugLogNoiseClassifier {
   }
 
   static func isServerCertificateMismatchLine(_ line: String) -> Bool {
-    line.localizedCaseInsensitiveContains("Server certificate mismatch")
+    line.mlContainsCaseInsensitive("Server certificate mismatch")
   }
 
   static func isIncorrectHostLine(_ line: String) -> Bool {
-    line.localizedCaseInsensitiveContains("Received response from incorrect host:")
+    line.mlContainsCaseInsensitive("Received response from incorrect host:")
   }
 
   static func extractErrorCodeDescription(from line: String) -> String {
@@ -618,7 +648,7 @@ enum DebugLogNoiseClassifier {
   }
 
   private static func firstMatch(in text: String, pattern: String) -> String? {
-    guard let regex = try? NSRegularExpression(pattern: pattern) else {
+    guard let regex = DebugLogRegexCache.shared.regex(for: pattern) else {
       return nil
     }
     let range = NSRange(text.startIndex..<text.endIndex, in: text)
@@ -716,7 +746,39 @@ enum DebugLogParser {
 
   static func parseEntries(from text: String) -> [DebugLogEntry] {
     let rows = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-    return rows.map(parseSingleLine)
+    return rows.map { parseSingleLine($0, entryID: nil, category: nil, categorySearchText: nil) }
+  }
+
+  /// Parses complete log lines once. Every entry gets the unique id
+  /// `idPrefix` + running sequence number, so ids stay unique and stable while the
+  /// viewer appends lines, even when many lines share a timestamp and text.
+  /// `startSequence` is the number of lines already parsed for this prefix.
+  static func parseLines(
+    _ lines: [String],
+    idPrefix: String,
+    startSequence: Int
+  ) -> [DebugLogEntry] {
+    var searchTextByCategory: [String: String] = [:]
+    var result: [DebugLogEntry] = []
+    result.reserveCapacity(lines.count)
+    var sequence = startSequence
+    for line in lines {
+      let category = MLLogCategoryClassifier.descriptor(forLine: line)
+      let searchText: String
+      if let cached = searchTextByCategory[category.categoryKey] {
+        searchText = cached
+      } else {
+        // Localised names are looked up once per batch, not once per line.
+        searchText = category.searchableText
+        searchTextByCategory[category.categoryKey] = searchText
+      }
+      result.append(
+        parseSingleLine(
+          line, entryID: "\(idPrefix)\(sequence)", category: category,
+          categorySearchText: searchText))
+      sequence += 1
+    }
+    return result
   }
 
   static func curatedEntries(
@@ -725,9 +787,24 @@ enum DebugLogParser {
     showSystemNoise: Bool,
     aggregationWindowSeconds: TimeInterval = 5.0
   ) -> [DebugLogEntry] {
+    curatedEntries(
+      fromEntries: parseEntries(from: text),
+      minimumLevel: minimumLevel,
+      showSystemNoise: showSystemNoise,
+      aggregationWindowSeconds: aggregationWindowSeconds
+    )
+  }
+
+  /// Same as `curatedEntries(fromRawText:...)` for lines that are already parsed.
+  static func curatedEntries(
+    fromEntries entries: [DebugLogEntry],
+    minimumLevel: DebugLogLevel,
+    showSystemNoise: Bool,
+    aggregationWindowSeconds: TimeInterval = 5.0
+  ) -> [DebugLogEntry] {
     var result: [DebugLogEntry] = []
-    let entries = parseEntries(from: text)
     var pending: PendingNoiseAggregation?
+    var summarySequence = 0
 
     func flushPending(force: Bool, now: Date?) {
       guard let current = pending else { return }
@@ -765,8 +842,9 @@ enum DebugLogParser {
         summaryLine =
           "\(current.category.displayName): \(Int(aggregationWindowSeconds))s, \(current.count) lines (\(current.reason), target \(current.target))"
       }
+      summarySequence += 1
       let summary = DebugLogEntry(
-        id: makeStableID(
+        id: "s\(summarySequence)|" + makeStableID(
           timestampText: current.timestampText,
           rawLine: summaryLine,
           category: MLLogCategoryClassifier.descriptor(forNoiseCategory: current.category),
@@ -833,7 +911,7 @@ enum DebugLogParser {
             current.reason = DebugLogNoiseClassifier.extractDiscoveryHost(from: entry.rawLine)
             current.target =
               DebugLogNoiseClassifier.extractDiscoveryState(from: entry.rawLine)
-              ?? (entry.rawLine.localizedCaseInsensitiveContains("Resolved address:")
+              ?? (entry.rawLine.mlContainsCaseInsensitive("Resolved address:")
                 ? "resolved-address" : "state changed")
           } else if category == .hostIdentityMismatch {
             if DebugLogNoiseClassifier.isServerCertificateMismatchLine(entry.rawLine) {
@@ -874,7 +952,7 @@ enum DebugLogParser {
           : DebugLogNoiseClassifier.extractErrorCodeDescription(from: entry.rawLine),
         target: category == .discoveryChatter
           ? (DebugLogNoiseClassifier.extractDiscoveryState(from: entry.rawLine)
-            ?? (entry.rawLine.localizedCaseInsensitiveContains("Resolved address:")
+            ?? (entry.rawLine.mlContainsCaseInsensitive("Resolved address:")
               ? "resolved-address" : "state changed"))
           : category == .hostIdentityMismatch
             ? "cert-or-host-mismatch"
@@ -888,8 +966,9 @@ enum DebugLogParser {
 
       let startLine =
         "\(category.displayName): aggregating for \(Int(aggregationWindowSeconds))s window"
+      summarySequence += 1
       let startEntry = DebugLogEntry(
-        id: makeStableID(
+        id: "s\(summarySequence)|" + makeStableID(
           timestampText: entry.timestampText,
           rawLine: startLine,
           category: MLLogCategoryClassifier.descriptor(forNoiseCategory: category),
@@ -976,7 +1055,12 @@ enum DebugLogParser {
     return folded
   }
 
-  private static func parseSingleLine(_ line: String) -> DebugLogEntry {
+  private static func parseSingleLine(
+    _ line: String,
+    entryID: String?,
+    category knownCategory: MLLogCategoryDescriptor?,
+    categorySearchText: String?
+  ) -> DebugLogEntry {
     var remaining = line
     var timestampText: String?
     var timestamp: Date?
@@ -1002,7 +1086,7 @@ enum DebugLogParser {
       message = matched[1]
     }
 
-    let category = MLLogCategoryClassifier.descriptor(forLine: line)
+    let category = knownCategory ?? MLLogCategoryClassifier.descriptor(forLine: line)
     let presentation = defaultPresentation(
       forMessage: message,
       rawLine: line,
@@ -1012,13 +1096,14 @@ enum DebugLogParser {
     )
 
     return DebugLogEntry(
-      id: makeStableID(
-        timestampText: timestampText,
-        rawLine: line,
-        category: category,
-        noiseCategory: nil,
-        isNoiseSummary: false
-      ),
+      id: entryID
+        ?? makeStableID(
+          timestampText: timestampText,
+          rawLine: line,
+          category: category,
+          noiseCategory: nil,
+          isNoiseSummary: false
+        ),
       timestamp: timestamp,
       timestampText: timestampText,
       level: level,
@@ -1030,6 +1115,7 @@ enum DebugLogParser {
       category: category,
       searchIndex: makeSearchIndex(
         category: category,
+        categorySearchText: categorySearchText,
         defaultTitle: presentation.title,
         defaultDetail: presentation.detail,
         message: message,
@@ -1286,7 +1372,7 @@ enum DebugLogParser {
   }
 
   private static func captures(in text: String, pattern: String) -> [String]? {
-    guard let regex = try? NSRegularExpression(pattern: pattern) else {
+    guard let regex = DebugLogRegexCache.shared.regex(for: pattern) else {
       return nil
     }
     let range = NSRange(text.startIndex..<text.endIndex, in: text)
@@ -1308,12 +1394,13 @@ enum DebugLogParser {
 
   private static func makeSearchIndex(
     category: MLLogCategoryDescriptor,
+    categorySearchText: String? = nil,
     defaultTitle: String,
     defaultDetail: String?,
     message: String,
     rawLine: String
   ) -> String {
-    "\(category.searchableText)\n\(defaultTitle)\n\(defaultDetail ?? "")\n\(message)\n\(rawLine)".lowercased()
+    "\(categorySearchText ?? category.searchableText)\n\(defaultTitle)\n\(defaultDetail ?? "")\n\(message)\n\(rawLine)".lowercased()
   }
 
   private static func makeStableID(

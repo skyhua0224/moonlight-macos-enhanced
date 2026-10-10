@@ -14,72 +14,51 @@ private enum DebugLogTimeScope: String {
   case sinceClear = "since_clear"
 }
 
-private final class DebugLogLiveModel: ObservableObject {
-  @Published var refreshToken = UUID()
+/// What the viewer currently wants to see. Built on the main thread and applied
+/// on the model's own queue, so filtering never runs on the UI thread.
+private struct DebugLogQuery: Equatable {
+  var mode: DebugLogViewMode = .defaultLog
+  var minimumLevel: DebugLogLevel = .info
+  var showSystemNoise: Bool = false
+  var startDate: Date?
+  var keyword: String = ""
+  var categoryFilters: Set<String> = []
+}
 
-  private let rawLogURL: URL
-  private let curatedLogURL: URL
-  private let maxRetainedLines = 3000
-  private let initialTailBytes: UInt64 = 1_024 * 1_024
-  private var rawText: String = ""
-  private var curatedText: String = ""
-  private var rawFileSize: UInt64 = 0
-  private var curatedFileSize: UInt64 = 0
-  private var rawEntries: [DebugLogEntry] = []
-  private var defaultEntries: [DebugLogEntry] = []
-  private var timer: Timer?
+/// One immutable, already filtered and folded view of the log.
+private struct DebugLogSnapshot {
+  var revision: Int = 0
+  var rows: [DebugLogEntry] = []
+  var totalRows: Int = 0
+  var debugCount: Int = 0
+  var infoCount: Int = 0
+  var warnCount: Int = 0
+  var errorCount: Int = 0
+}
 
-  init(rawLogURL: URL, curatedLogURL: URL) {
-    self.rawLogURL = rawLogURL
-    self.curatedLogURL = curatedLogURL
+/// Follows one log file: reads only the bytes appended since the last poll and
+/// parses each line exactly once. Not thread-safe; the owner confines it to one queue.
+private final class DebugLogFileTail {
+  private let url: URL
+  private let idPrefix: String
+  private let maxLines: Int
+  private let tailBytes: UInt64
+  private let maxDeltaBytes: UInt64
+
+  private(set) var entries: [DebugLogEntry] = []
+  private var offset: UInt64 = 0
+  private var carry = Data()
+  private var nextSequence = 0
+
+  init(url: URL, idPrefix: String, maxLines: Int, tailBytes: UInt64) {
+    self.url = url
+    self.idPrefix = idPrefix
+    self.maxLines = maxLines
+    self.tailBytes = tailBytes
+    self.maxDeltaBytes = tailBytes
   }
 
-  func start() {
-    ensureLogFileExists(at: rawLogURL)
-    ensureLogFileExists(at: curatedLogURL)
-    reloadAll()
-
-    timer?.invalidate()
-    timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-      self?.pollForUpdates()
-    }
-    if let timer {
-      RunLoop.main.add(timer, forMode: .common)
-    }
-  }
-
-  func stop() {
-    timer?.invalidate()
-    timer = nil
-  }
-
-  func entries(
-    mode: DebugLogViewMode,
-    minimumLevel: DebugLogLevel,
-    showSystemNoise: Bool
-  ) -> [DebugLogEntry] {
-    let baseEntries: [DebugLogEntry]
-    switch mode {
-    case .raw:
-      baseEntries = rawEntries
-    case .defaultLog:
-      if showSystemNoise {
-        baseEntries = rawEntries
-      } else {
-        baseEntries = defaultEntries
-      }
-    }
-
-    guard minimumLevel != .all else {
-      return baseEntries
-    }
-
-    return baseEntries.filter {
-      DebugLogParser.matchesMinimumLevel($0.level, minimumLevel: minimumLevel)
-    }
-  }
-
-  private func ensureLogFileExists(at url: URL) {
+  func ensureFileExists() {
     let dirURL = url.deletingLastPathComponent()
     try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
     if !FileManager.default.fileExists(atPath: url.path) {
@@ -87,121 +66,304 @@ private final class DebugLogLiveModel: ObservableObject {
     }
   }
 
-  private func reloadAll() {
-    rawText = readTailText(from: rawLogURL, maxBytes: initialTailBytes)
-    curatedText = readTailText(from: curatedLogURL, maxBytes: initialTailBytes)
-    rawFileSize = fileSize(of: rawLogURL)
-    curatedFileSize = fileSize(of: curatedLogURL)
-    rebuildEntryCaches(rawChanged: true, curatedChanged: true)
-    refreshToken = UUID()
+  /// Drops everything and reads the last `tailBytes` of the file again.
+  @discardableResult
+  func reload() -> Bool {
+    entries = []
+    carry = Data()
+    let size = currentSize()
+    let start = size > tailBytes ? size - tailBytes : 0
+    if let data = readData(from: start, upTo: size) {
+      offset = start + UInt64(data.count)
+      ingest(data, dropLeadingPartialLine: start > 0)
+    } else {
+      offset = size
+    }
+    return true
   }
 
-  private func pollForUpdates() {
-    var changed = false
-    var rawChanged = false
-    var curatedChanged = false
+  /// Returns true when new lines were read (or the file was reloaded).
+  func poll() -> Bool {
+    let size = currentSize()
+    if size < offset {
+      // The file was rotated or truncated.
+      return reload()
+    }
+    guard size > offset else { return false }
 
-    let latestRawSize = fileSize(of: rawLogURL)
-    if latestRawSize < rawFileSize {
-      rawText = readTailText(from: rawLogURL, maxBytes: initialTailBytes)
-      rawFileSize = latestRawSize
-      rawChanged = true
-      changed = true
-    } else if latestRawSize > rawFileSize {
-      if let delta = readDeltaText(from: rawLogURL, startOffset: rawFileSize) {
-        rawText = trimToLastLines(rawText + delta, maxLines: maxRetainedLines)
-      }
-      rawFileSize = latestRawSize
-      rawChanged = true
-      changed = true
+    var start = offset
+    var droppedLeadingBytes = false
+    if size - offset > maxDeltaBytes {
+      // Far more was written than the viewer keeps anyway; only read the end.
+      start = size - maxDeltaBytes
+      carry = Data()
+      droppedLeadingBytes = true
+    }
+    guard let data = readData(from: start, upTo: size) else { return false }
+    offset = start + UInt64(data.count)
+    ingest(data, dropLeadingPartialLine: droppedLeadingBytes)
+    return true
+  }
+
+  private func ingest(_ newData: Data, dropLeadingPartialLine: Bool) {
+    var data = carry
+    data.append(newData)
+    carry = Data()
+
+    if dropLeadingPartialLine {
+      // Reading started in the middle of the file, so the first line may be cut off.
+      guard let firstNewline = data.firstIndex(of: 0x0A) else { return }
+      data = Data(data[data.index(after: firstNewline)...])
     }
 
-    let latestCuratedSize = fileSize(of: curatedLogURL)
-    if latestCuratedSize < curatedFileSize {
-      curatedText = readTailText(from: curatedLogURL, maxBytes: initialTailBytes)
-      curatedFileSize = latestCuratedSize
-      curatedChanged = true
-      changed = true
-    } else if latestCuratedSize > curatedFileSize {
-      if let delta = readDeltaText(from: curatedLogURL, startOffset: curatedFileSize) {
-        curatedText = trimToLastLines(curatedText + delta, maxLines: maxRetainedLines)
-      }
-      curatedFileSize = latestCuratedSize
-      curatedChanged = true
-      changed = true
+    // A line that is still being written stays in `carry` until its newline arrives.
+    guard let lastNewline = data.lastIndex(of: 0x0A) else {
+      carry = data
+      return
+    }
+    let completePart = Data(data[data.startIndex..<lastNewline])
+    carry = Data(data[data.index(after: lastNewline)...])
+
+    let text = String(decoding: completePart, as: UTF8.self)
+    var lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+    guard !lines.isEmpty else { return }
+    if lines.count > maxLines {
+      // Only the newest lines are kept, so there is no point parsing the rest.
+      lines = Array(lines.suffix(maxLines))
     }
 
-    if changed {
-      rebuildEntryCaches(rawChanged: rawChanged, curatedChanged: curatedChanged)
-      refreshToken = UUID()
+    let parsed = DebugLogParser.parseLines(lines, idPrefix: idPrefix, startSequence: nextSequence)
+    nextSequence += parsed.count
+    entries.append(contentsOf: parsed)
+    if entries.count > maxLines {
+      entries.removeFirst(entries.count - maxLines)
     }
   }
 
-  private func rebuildEntryCaches(rawChanged: Bool, curatedChanged: Bool) {
-    if rawChanged {
-      rawEntries = DebugLogParser.parseEntries(from: rawText)
-    }
-
-    let hasCuratedText = !curatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    if hasCuratedText {
-      if curatedChanged {
-        defaultEntries = DebugLogParser.parseEntries(from: curatedText)
-      }
-    } else if rawChanged || curatedChanged {
-      defaultEntries = DebugLogParser.curatedEntries(
-        fromRawText: rawText,
-        minimumLevel: .all,
-        showSystemNoise: false
-      )
-    }
-  }
-
-  private func fileSize(of url: URL) -> UInt64 {
+  private func currentSize() -> UInt64 {
     let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
     return (attrs?[.size] as? NSNumber)?.uint64Value ?? 0
   }
 
-  private func readTailText(from url: URL, maxBytes: UInt64) -> String {
-    let size = fileSize(of: url)
-    guard let file = try? FileHandle(forReadingFrom: url) else {
-      return ""
+  private func readData(from start: UInt64, upTo end: UInt64) -> Data? {
+    guard end > start, let file = try? FileHandle(forReadingFrom: url) else {
+      return nil
     }
     defer { try? file.close() }
 
     do {
-      if size > maxBytes {
-        try file.seek(toOffset: size - maxBytes)
-      } else {
-        try file.seek(toOffset: 0)
+      try file.seek(toOffset: start)
+      return try file.read(upToCount: Int(end - start)) ?? Data()
+    } catch {
+      return nil
+    }
+  }
+}
+
+/// Reads the debug logs and publishes filtered snapshots.
+///
+/// All file reading, parsing and filtering happens on `queue`. Results are handed
+/// to the main thread as a single latest-wins snapshot, so a burst of log lines
+/// costs the UI at most one update per poll instead of one per line.
+private final class DebugLogLiveModel: ObservableObject {
+  /// Main thread only.
+  @Published private(set) var snapshot = DebugLogSnapshot()
+
+  private static let maxRetainedLines = 3000
+  private static let initialTailBytes: UInt64 = 1_024 * 1_024
+  private static let pollIntervalMilliseconds = 500
+
+  private let queue = DispatchQueue(label: "com.moonlight.logviewer.model", qos: .utility)
+
+  // Everything in this block is read and written on `queue` only.
+  private let rawTail: DebugLogFileTail
+  private let curatedTail: DebugLogFileTail
+  private var query = DebugLogQuery()
+  private var isPaused = false
+  private var revision = 0
+  private var timer: DispatchSourceTimer?
+  private var fallbackEntries: [DebugLogEntry] = []
+  private var fallbackIsStale = true
+
+  // Hand-off to the main thread; every access holds `deliveryLock`.
+  private let deliveryLock = NSLock()
+  private var undeliveredSnapshot: DebugLogSnapshot?
+  private var deliveryScheduled = false
+
+  init(rawLogURL: URL, curatedLogURL: URL) {
+    rawTail = DebugLogFileTail(
+      url: rawLogURL, idPrefix: "r", maxLines: DebugLogLiveModel.maxRetainedLines,
+      tailBytes: DebugLogLiveModel.initialTailBytes)
+    curatedTail = DebugLogFileTail(
+      url: curatedLogURL, idPrefix: "c", maxLines: DebugLogLiveModel.maxRetainedLines,
+      tailBytes: DebugLogLiveModel.initialTailBytes)
+  }
+
+  deinit {
+    timer?.cancel()
+  }
+
+  func start(query initialQuery: DebugLogQuery) {
+    queue.async { [weak self] in
+      guard let self = self else { return }
+      self.rawTail.ensureFileExists()
+      self.curatedTail.ensureFileExists()
+      self.query = initialQuery
+      self.rawTail.reload()
+      self.curatedTail.reload()
+      self.fallbackIsStale = true
+      self.publishCurrentSnapshot()
+
+      self.timer?.cancel()
+      let newTimer = DispatchSource.makeTimerSource(queue: self.queue)
+      newTimer.schedule(
+        deadline: .now() + .milliseconds(DebugLogLiveModel.pollIntervalMilliseconds),
+        repeating: .milliseconds(DebugLogLiveModel.pollIntervalMilliseconds),
+        leeway: .milliseconds(100))
+      newTimer.setEventHandler { [weak self] in
+        self?.pollTick()
       }
-      let data = try file.readToEnd() ?? Data()
-      return trimToLastLines(String(decoding: data, as: UTF8.self), maxLines: maxRetainedLines)
-    } catch {
-      return ""
+      self.timer = newTimer
+      newTimer.resume()
     }
   }
 
-  private func readDeltaText(from url: URL, startOffset: UInt64) -> String? {
-    guard let file = try? FileHandle(forReadingFrom: url) else {
-      return nil
-    }
-    defer { try? file.close() }
-
-    do {
-      try file.seek(toOffset: startOffset)
-      let data = try file.readToEnd() ?? Data()
-      guard !data.isEmpty else { return nil }
-      return String(decoding: data, as: UTF8.self)
-    } catch {
-      return nil
+  func stop() {
+    queue.async { [weak self] in
+      self?.timer?.cancel()
+      self?.timer = nil
     }
   }
 
-  private func trimToLastLines(_ text: String, maxLines: Int) -> String {
-    guard maxLines > 0 else { return text }
-    let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-    guard lines.count > maxLines else { return text }
-    return lines.suffix(maxLines).joined(separator: "\n")
+  func updateQuery(_ newQuery: DebugLogQuery) {
+    queue.async { [weak self] in
+      guard let self = self, self.query != newQuery else { return }
+      self.query = newQuery
+      self.publishCurrentSnapshot()
+    }
+  }
+
+  /// While paused the files are still followed (so nothing is lost and memory stays
+  /// bounded), but the visible snapshot only changes when the filters change.
+  func setPaused(_ paused: Bool) {
+    queue.async { [weak self] in
+      guard let self = self, self.isPaused != paused else { return }
+      self.isPaused = paused
+      if !paused {
+        self.publishCurrentSnapshot()
+      }
+    }
+  }
+
+  // MARK: Work on `queue`
+
+  private func pollTick() {
+    let rawChanged = rawTail.poll()
+    let curatedChanged = curatedTail.poll()
+    if rawChanged {
+      fallbackIsStale = true
+    }
+    guard rawChanged || curatedChanged, !isPaused else { return }
+    publishCurrentSnapshot()
+  }
+
+  private func publishCurrentSnapshot() {
+    revision += 1
+    let built = DebugLogLiveModel.buildSnapshot(
+      base: baseEntries(for: query), query: query, revision: revision)
+    deliver(built)
+  }
+
+  private func baseEntries(for query: DebugLogQuery) -> [DebugLogEntry] {
+    switch query.mode {
+    case .raw:
+      return rawTail.entries
+    case .defaultLog:
+      if query.showSystemNoise {
+        return rawTail.entries
+      }
+      if !curatedTail.entries.isEmpty {
+        return curatedTail.entries
+      }
+      // No curated file yet: derive the curated view from the raw lines already parsed.
+      if fallbackIsStale {
+        fallbackEntries = DebugLogParser.curatedEntries(
+          fromEntries: rawTail.entries, minimumLevel: .all, showSystemNoise: false)
+        fallbackIsStale = false
+      }
+      return fallbackEntries
+    }
+  }
+
+  private static func buildSnapshot(
+    base: [DebugLogEntry], query: DebugLogQuery, revision: Int
+  ) -> DebugLogSnapshot {
+    var scoped = base
+    if query.minimumLevel != .all {
+      scoped = scoped.filter { (entry: DebugLogEntry) -> Bool in
+        DebugLogParser.matchesMinimumLevel(entry.level, minimumLevel: query.minimumLevel)
+      }
+    }
+    if let startDate = query.startDate {
+      scoped = scoped.filter { (entry: DebugLogEntry) -> Bool in
+        guard let timestamp = entry.timestamp else { return false }
+        return timestamp >= startDate
+      }
+    }
+
+    let folded = DebugLogParser.foldConsecutiveDuplicates(scoped)
+
+    var rows = folded
+    if !query.keyword.isEmpty || !query.categoryFilters.isEmpty {
+      rows = folded.filter { (entry: DebugLogEntry) -> Bool in
+        guard entry.matchesKeyword(query.keyword) else { return false }
+        if query.categoryFilters.isEmpty { return true }
+        return query.categoryFilters.contains { entry.matchesCategoryFilter($0) }
+      }
+    }
+
+    var result = DebugLogSnapshot()
+    result.revision = revision
+    result.totalRows = folded.count
+    for entry in rows {
+      let weight = max(1, entry.count)
+      switch entry.level {
+      case .debug: result.debugCount += weight
+      case .info: result.infoCount += weight
+      case .warn: result.warnCount += weight
+      case .error: result.errorCount += weight
+      case .all, .unknown: break
+      }
+    }
+    result.rows = rows
+    return result
+  }
+
+  private func deliver(_ built: DebugLogSnapshot) {
+    deliveryLock.lock()
+    undeliveredSnapshot = built
+    let needsSchedule = !deliveryScheduled
+    deliveryScheduled = true
+    deliveryLock.unlock()
+
+    guard needsSchedule else { return }
+    DispatchQueue.main.async { [weak self] in
+      self?.applyUndeliveredSnapshot()
+    }
+  }
+
+  // MARK: Main thread
+
+  private func applyUndeliveredSnapshot() {
+    deliveryLock.lock()
+    let pending = undeliveredSnapshot
+    undeliveredSnapshot = nil
+    deliveryScheduled = false
+    deliveryLock.unlock()
+
+    if let pending = pending {
+      snapshot = pending
+    }
   }
 }
 
@@ -298,9 +460,15 @@ private struct DebugLogStatBadge: View {
   }
 }
 
-private struct DebugLogRowView: View {
+private struct DebugLogRowView: View, Equatable {
   let entry: DebugLogEntry
   let mode: DebugLogViewMode
+
+  // Entries are immutable once parsed; only the folded repeat count can change.
+  // Comparing just that lets SwiftUI skip rebuilding rows that did not change.
+  static func == (lhs: DebugLogRowView, rhs: DebugLogRowView) -> Bool {
+    lhs.entry.id == rhs.entry.id && lhs.entry.count == rhs.entry.count && lhs.mode == rhs.mode
+  }
 
   private var primaryText: String {
     switch mode {
@@ -340,14 +508,12 @@ private struct DebugLogRowView: View {
 
         Text(primaryText)
           .font(mode == .raw ? .system(size: 12, design: .monospaced) : .system(size: 12, weight: .medium))
-          .textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading)
 
         if let secondaryText {
           Text(secondaryText)
             .font(.system(size: 11, design: .monospaced))
             .foregroundColor(.secondary)
-            .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
 
@@ -367,6 +533,29 @@ private struct DebugLogRowView: View {
   }
 }
 
+private struct DebugLogContentFramePreferenceKey: PreferenceKey {
+  static let defaultValue: CGRect = .zero
+  static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+    value = nextValue()
+  }
+}
+
+private struct DebugLogViewportHeightPreferenceKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = nextValue()
+  }
+}
+
+/// Scroll bookkeeping that must not trigger view updates by itself; main thread only.
+private final class DebugLogScrollTracker {
+  var lastContentHeight: CGFloat = -1
+  var contentMaxY: CGFloat = 0
+  var viewportHeight: CGFloat = 0
+  var isAtBottom = true
+  var didInitialScroll = false
+}
+
 struct SettingsLogViewer: View {
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var settingsModel: SettingsModel
@@ -375,17 +564,21 @@ struct SettingsLogViewer: View {
   @SwiftUI.State private var searchText: String = ""
   @SwiftUI.State private var appliedSearchText: String = ""
   @SwiftUI.State private var selectedCategoryFilters: Set<String> = []
-  @SwiftUI.State private var renderedEntries: [DebugLogEntry] = []
-  @SwiftUI.State private var totalRows: Int = 0
   @SwiftUI.State private var detailEntry: DebugLogEntry?
   @SwiftUI.State private var clearFromDate: Date?
   @SwiftUI.State private var appLaunchDate: Date = NSRunningApplication.current.launchDate ?? Date()
   @SwiftUI.State private var pendingSearchRefresh: DispatchWorkItem?
+  @SwiftUI.State private var isPaused: Bool = false
+  @SwiftUI.State private var showsJumpToLatest: Bool = false
+  @SwiftUI.State private var scrollTracker = DebugLogScrollTracker()
 
   private static let domainOptions = MLLogCategoryClassifier.domainFilterOptions()
   private static let detailOptions = MLLogCategoryClassifier.filterOptions().filter {
     $0.categoryKey != $0.domainKey
   }
+  private static let endAnchorID = "log-end"
+  private static let scrollSpaceName = "log-scroll-space"
+  private static let bottomTolerance: CGFloat = 24
 
   init(rawLogURL: URL?, curatedLogURL: URL?) {
     let baseDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
@@ -399,6 +592,10 @@ struct SettingsLogViewer: View {
         rawLogURL: rawLogURL ?? fallbackRaw,
         curatedLogURL: curatedLogURL ?? fallbackCurated
       ))
+  }
+
+  private var snapshot: DebugLogSnapshot {
+    model.snapshot
   }
 
   private var currentMode: DebugLogViewMode {
@@ -415,10 +612,10 @@ struct SettingsLogViewer: View {
   }
 
   private var currentMinimumLevel: DebugLogLevel {
-    switch settingsModel.debugLogMinLevel {
+    switch settingsModel.debugLogMinLevel.lowercased() {
     case "all": return .all
     case "debug": return .debug
-    case "warn": return .warn
+    case "warn", "warning": return .warn
     case "error": return .error
     default: return .info
     }
@@ -437,6 +634,17 @@ struct SettingsLogViewer: View {
     case .sinceClear:
       return clearFromDate ?? appLaunchDate
     }
+  }
+
+  private var currentQuery: DebugLogQuery {
+    DebugLogQuery(
+      mode: currentMode,
+      minimumLevel: currentMinimumLevel,
+      showSystemNoise: settingsModel.debugLogShowSystemNoise,
+      startDate: effectiveStartDate,
+      keyword: appliedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+      categoryFilters: selectedCategoryFilters
+    )
   }
 
   private static let logTimestampFormatter: DateFormatter = {
@@ -467,7 +675,7 @@ struct SettingsLogViewer: View {
       selectedCategoryFilters.subtract(domainDetailKeys)
       selectedCategoryFilters.insert(domainKey)
     }
-    refreshRenderedEntries()
+    pushQuery()
   }
 
   private var categoryMenuTitle: String {
@@ -490,56 +698,9 @@ struct SettingsLogViewer: View {
     return preview + suffix
   }
 
-  private var visibleDebugCount: Int {
-    renderedEntries.reduce(0) { $0 + ($1.level == .debug ? max(1, $1.count) : 0) }
-  }
-
-  private var visibleInfoCount: Int {
-    renderedEntries.reduce(0) { $0 + ($1.level == .info ? max(1, $1.count) : 0) }
-  }
-
-  private var visibleWarnCount: Int {
-    renderedEntries.reduce(0) { $0 + ($1.level == .warn ? max(1, $1.count) : 0) }
-  }
-
-  private var visibleErrorCount: Int {
-    renderedEntries.reduce(0) { $0 + ($1.level == .error ? max(1, $1.count) : 0) }
-  }
-
-  private func filterEntriesByTimeScope(_ entries: [DebugLogEntry]) -> [DebugLogEntry] {
-    guard let startDate = effectiveStartDate else {
-      return entries
-    }
-    return entries.filter { entry in
-      if let ts = entry.timestamp {
-        return ts >= startDate
-      }
-      if let text = entry.timestampText, let parsed = Self.logTimestampFormatter.date(from: text) {
-        return parsed >= startDate
-      }
-      return false
-    }
-  }
-
-  private func refreshRenderedEntries() {
-    let base = model.entries(
-      mode: currentMode,
-      minimumLevel: currentMinimumLevel,
-      showSystemNoise: settingsModel.debugLogShowSystemNoise
-    )
-    let scopedBase = filterEntriesByTimeScope(base)
-    let foldedBase = DebugLogParser.foldConsecutiveDuplicates(scopedBase)
-    totalRows = foldedBase.count
-
-    let keyword = appliedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    renderedEntries = foldedBase.filter { entry in
-      return entry.matchesKeyword(keyword)
-        && matchesSelectedCategoryFilters(entry)
-    }
-  }
-
-  private func matchesSelectedCategoryFilters(_ entry: DebugLogEntry) -> Bool {
-    selectedCategoryFilters.isEmpty || selectedCategoryFilters.contains { entry.matchesCategoryFilter($0) }
+  /// Sends the current filters to the model, which re-filters off the main thread.
+  private func pushQuery() {
+    model.updateQuery(currentQuery)
   }
 
   private func toggleCategoryFilter(_ filterKey: String) {
@@ -552,18 +713,58 @@ struct SettingsLogViewer: View {
       }
       selectedCategoryFilters.insert(filterKey)
     }
-    refreshRenderedEntries()
+    pushQuery()
   }
 
   private func clearCategoryFilters() {
     guard !selectedCategoryFilters.isEmpty else { return }
     selectedCategoryFilters.removeAll()
-    refreshRenderedEntries()
+    pushQuery()
   }
 
   private func categoryFilterExportSummary() -> String {
     let selected = selectedCategoryDescriptors.map(\.displayName)
     return selected.isEmpty ? languageManager.localize("No Filter (Showing All)") : selected.joined(separator: " | ")
+  }
+
+  /// The category filter as an NSMenu for the controller menu panel, which reaches
+  /// it where the SwiftUI Menu cannot be focused (macOS 27).
+  private func controllerCategoryMenu() -> (title: String, menu: NSMenu) {
+    let menu = NSMenu(title: categoryMenuTitle)
+    menu.autoenablesItems = false
+    menu.addItem(
+      ControllerMenuBuilder.item(
+        title: languageManager.localize("Clear Category Filters"),
+        enabled: !selectedCategoryFilters.isEmpty
+      ) {
+        clearCategoryFilters()
+      })
+    menu.addItem(NSMenuItem.separator())
+
+    for domain in Self.domainOptions {
+      let submenu = NSMenu(title: domain.displayName)
+      submenu.autoenablesItems = false
+      var anySelected = selectedCategoryFilters.contains(domain.categoryKey)
+      submenu.addItem(
+        ControllerMenuBuilder.item(
+          title: languageManager.localize("All"),
+          checked: selectedCategoryFilters.contains(domain.categoryKey)
+        ) {
+          toggleDomainFilter(domain.categoryKey)
+        })
+      for detail in detailOptions(for: domain) {
+        let isSelected = selectedCategoryFilters.contains(detail.categoryKey)
+        anySelected = anySelected || isSelected
+        submenu.addItem(
+          ControllerMenuBuilder.item(title: detail.displayName, checked: isSelected) {
+            toggleCategoryFilter(detail.categoryKey)
+          })
+      }
+      menu.addItem(
+        ControllerMenuBuilder.submenuItem(
+          title: domain.displayName, checked: anySelected, submenu: submenu))
+    }
+    return (title: categoryMenuTitle, menu: menu)
   }
 
   private func scheduleSearchRefresh() {
@@ -577,32 +778,35 @@ struct SettingsLogViewer: View {
 
     if normalized.isEmpty {
       appliedSearchText = ""
-      refreshRenderedEntries()
+      pushQuery()
       return
     }
 
     let workItem = DispatchWorkItem {
       appliedSearchText = searchText
-      refreshRenderedEntries()
+      pushQuery()
     }
     pendingSearchRefresh = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: workItem)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
   }
 
-  private func copyFilteredEntries() {
-    let text = renderedEntries.map(\.rawLine).joined(separator: "\n")
+  private func copyToPasteboard(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
   }
 
+  private func copyFilteredEntries() {
+    copyToPasteboard(snapshot.rows.map(\.rawLine).joined(separator: "\n"))
+  }
+
   private func exportFilteredEntries() {
-    let snapshotEntries = renderedEntries
+    let snapshotEntries = snapshot.rows
     let snapshotMode = settingsModel.debugLogMode
     let snapshotMinLevel = settingsModel.debugLogMinLevel
     let snapshotShowNoise = settingsModel.debugLogShowSystemNoise
     let snapshotSearch = searchText
     let snapshotCategories = categoryFilterExportSummary()
-    let snapshotTotalRows = totalRows
+    let snapshotTotalRows = snapshot.totalRows
     let snapshotTimeScope = settingsModel.debugLogTimeScope
     let snapshotStartDate = effectiveStartDate
 
@@ -652,6 +856,131 @@ struct SettingsLogViewer: View {
       }
     } else if panel.runModal() == .OK, let destinationURL = panel.url {
       saveAction(destinationURL)
+    }
+  }
+
+  // MARK: Scrolling
+
+  private func handleContentFrame(_ frame: CGRect) {
+    // While rows are being added the content grows before the scroll position catches up,
+    // so a height change says nothing about whether the user is at the bottom.
+    let heightChanged = abs(frame.height - scrollTracker.lastContentHeight) > 1
+    scrollTracker.lastContentHeight = frame.height
+    scrollTracker.contentMaxY = frame.maxY
+    if !heightChanged {
+      updateFollowState()
+    }
+  }
+
+  private func handleViewportHeight(_ height: CGFloat) {
+    scrollTracker.viewportHeight = height
+    updateFollowState()
+  }
+
+  private func updateFollowState() {
+    guard scrollTracker.viewportHeight > 0 else { return }
+    let atBottom = scrollTracker.contentMaxY <= scrollTracker.viewportHeight + Self.bottomTolerance
+    scrollTracker.isAtBottom = atBottom
+    if showsJumpToLatest == atBottom {
+      showsJumpToLatest = !atBottom
+    }
+  }
+
+  private func scrollToLatest(_ proxy: ScrollViewProxy) {
+    scrollTracker.isAtBottom = true
+    if showsJumpToLatest {
+      showsJumpToLatest = false
+    }
+    DispatchQueue.main.async {
+      proxy.scrollTo(Self.endAnchorID, anchor: .bottom)
+    }
+  }
+
+  /// Follows new rows only while the viewer is already at the bottom, so reading
+  /// older lines is not interrupted by the stream of new ones.
+  private func followLatestIfNeeded(_ proxy: ScrollViewProxy) {
+    guard settingsModel.debugLogAutoScroll, !snapshot.rows.isEmpty else { return }
+    let isFirstContent = !scrollTracker.didInitialScroll
+    scrollTracker.didInitialScroll = true
+    guard isFirstContent || scrollTracker.isAtBottom else { return }
+    scrollToLatest(proxy)
+  }
+
+  private var logList: some View {
+    ScrollViewReader { proxy in
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 2) {
+          if snapshot.rows.isEmpty {
+            Text(languageManager.localize("(No logs yet)"))
+              .font(.system(.caption, design: .monospaced))
+              .foregroundColor(.secondary)
+              .padding(.horizontal, 8)
+              .padding(.vertical, 16)
+          } else {
+            ForEach(snapshot.rows) { entry in
+              DebugLogRowView(entry: entry, mode: currentMode)
+                .equatable()
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                  detailEntry = entry
+                }
+                .contextMenu {
+                  Button(languageManager.localize("Copy Line")) {
+                    copyToPasteboard(entry.rawLine)
+                  }
+                  Button(languageManager.localize("Show Details")) {
+                    detailEntry = entry
+                  }
+                }
+            }
+          }
+          Color.clear
+            .frame(height: 1)
+            .id(Self.endAnchorID)
+        }
+        .padding(.vertical, 4)
+        .background(
+          GeometryReader { geometry in
+            Color.clear.preference(
+              key: DebugLogContentFramePreferenceKey.self,
+              value: geometry.frame(in: .named(Self.scrollSpaceName)))
+          }
+        )
+      }
+      .coordinateSpace(name: Self.scrollSpaceName)
+      .background(
+        GeometryReader { geometry in
+          Color.clear.preference(
+            key: DebugLogViewportHeightPreferenceKey.self, value: geometry.size.height)
+        }
+      )
+      .onPreferenceChange(DebugLogContentFramePreferenceKey.self) { frame in
+        handleContentFrame(frame)
+      }
+      .onPreferenceChange(DebugLogViewportHeightPreferenceKey.self) { height in
+        handleViewportHeight(height)
+      }
+      .background(Color(NSColor.textBackgroundColor))
+      .overlay(
+        RoundedRectangle(cornerRadius: 6)
+          .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+      )
+      .overlay(alignment: .bottomTrailing) {
+        if showsJumpToLatest {
+          Button(languageManager.localize("Jump to Latest")) {
+            scrollToLatest(proxy)
+          }
+          .padding(12)
+        }
+      }
+      .onChange(of: snapshot.revision) { _ in
+        followLatestIfNeeded(proxy)
+      }
+      .onChange(of: settingsModel.debugLogAutoScroll) { enabled in
+        if enabled {
+          scrollToLatest(proxy)
+        }
+      }
     }
   }
 
@@ -725,7 +1054,7 @@ struct SettingsLogViewer: View {
         Button(languageManager.localize("Clear From Now")) {
           clearFromDate = Date()
           settingsModel.debugLogTimeScope = DebugLogTimeScope.sinceClear.rawValue
-          refreshRenderedEntries()
+          pushQuery()
         }
 
         if let startDate = effectiveStartDate, currentTimeScope != .all {
@@ -751,11 +1080,12 @@ struct SettingsLogViewer: View {
           onClear: clearCategoryFilters
         )
         .frame(width: 260, height: 28)
+        .controllerMenu(controllerCategoryMenu)
 
-        Text("\(languageManager.localize("Filtered Rows")): \(renderedEntries.count)")
+        Text("\(languageManager.localize("Filtered Rows")): \(snapshot.rows.count)")
           .font(.caption)
           .foregroundColor(.secondary)
-        Text("\(languageManager.localize("Total Rows")): \(totalRows)")
+        Text("\(languageManager.localize("Total Rows")): \(snapshot.totalRows)")
           .font(.caption)
           .foregroundColor(.secondary)
       }
@@ -775,83 +1105,48 @@ struct SettingsLogViewer: View {
             .lineLimit(1)
         }
 
-        DebugLogStatBadge(label: languageManager.localize("Debug"), value: visibleDebugCount, color: .gray)
-        DebugLogStatBadge(label: languageManager.localize("Info"), value: visibleInfoCount, color: .blue)
-        DebugLogStatBadge(label: languageManager.localize("Warn"), value: visibleWarnCount, color: .orange)
-        DebugLogStatBadge(label: languageManager.localize("Error"), value: visibleErrorCount, color: .red)
+        DebugLogStatBadge(label: languageManager.localize("Debug"), value: snapshot.debugCount, color: .gray)
+        DebugLogStatBadge(label: languageManager.localize("Info"), value: snapshot.infoCount, color: .blue)
+        DebugLogStatBadge(label: languageManager.localize("Warn"), value: snapshot.warnCount, color: .orange)
+        DebugLogStatBadge(label: languageManager.localize("Error"), value: snapshot.errorCount, color: .red)
         Spacer()
+
+        Button(languageManager.localize(isPaused ? "Resume" : "Pause")) {
+          isPaused.toggle()
+          model.setPaused(isPaused)
+        }
       }
 
-      ScrollViewReader { proxy in
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: 2) {
-            if renderedEntries.isEmpty {
-              Text(languageManager.localize("(No logs yet)"))
-                .font(.system(.caption, design: .monospaced))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 16)
-            } else {
-              ForEach(renderedEntries) { entry in
-                DebugLogRowView(entry: entry, mode: currentMode)
-                  .id(entry.id)
-                  .contentShape(Rectangle())
-                  .onTapGesture(count: 2) {
-                    detailEntry = entry
-                  }
-              }
-            }
-            Color.clear
-              .frame(height: 1)
-              .id("log-end")
-          }
-          .padding(.vertical, 4)
-        }
-        .background(Color(NSColor.textBackgroundColor))
-        .overlay(
-          RoundedRectangle(cornerRadius: 6)
-            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-        )
-        .onChange(of: renderedEntries.count) { _ in
-          guard settingsModel.debugLogAutoScroll else { return }
-          withAnimation(.easeOut(duration: 0.12)) {
-            proxy.scrollTo("log-end", anchor: .bottom)
-          }
-        }
-      }
+      logList
     }
     .padding(16)
     .frame(minWidth: 980, minHeight: 560)
     .onAppear {
       appLaunchDate = NSRunningApplication.current.launchDate ?? Date()
       appliedSearchText = searchText
-      model.start()
-      refreshRenderedEntries()
+      model.start(query: currentQuery)
     }
     .onDisappear {
       pendingSearchRefresh?.cancel()
       model.stop()
     }
-    .onReceive(model.$refreshToken) { _ in
-      refreshRenderedEntries()
-    }
     .onChange(of: settingsModel.debugLogMode) { _ in
-      refreshRenderedEntries()
+      pushQuery()
     }
     .onChange(of: settingsModel.debugLogShowSystemNoise) { _ in
-      refreshRenderedEntries()
+      pushQuery()
     }
     .onChange(of: searchText) { _ in
       scheduleSearchRefresh()
     }
     .onChange(of: settingsModel.debugLogMinLevel) { _ in
-      refreshRenderedEntries()
+      pushQuery()
     }
     .onChange(of: settingsModel.debugLogTimeScope) { _ in
       if currentTimeScope == .sinceClear && clearFromDate == nil {
         clearFromDate = Date()
       }
-      refreshRenderedEntries()
+      pushQuery()
     }
     .sheet(item: $detailEntry) { entry in
       DebugLogEntryDetailView(entry: entry)

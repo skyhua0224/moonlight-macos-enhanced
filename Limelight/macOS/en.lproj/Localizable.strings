@@ -202,6 +202,11 @@
 "Export Log…" = "Export Log…";
 "Live Debug Log" = "Live Debug Log";
 "Copy All" = "Copy All";
+"Pause" = "Pause";
+"Resume" = "Resume";
+"Jump to Latest" = "Jump to Latest";
+"Copy Line" = "Copy Line";
+"Show Details" = "Show Details";
 "(No logs yet)" = "(No logs yet)";
 "Pairing Cache" = "Pairing Cache";
 "Reset Hosts (Recommended)" = "Reset Hosts (Recommended)";
