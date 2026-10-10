@@ -159,6 +159,8 @@ public class LanguageManager: NSObject, ObservableObject {
 
     "Audio": "Audio",
     "Audio Configuration": "Audio Configuration",
+    "Keep Audio Stream Active During Silence": "Keep Audio Stream Active During Silence",
+    "Keep Audio Stream Active During Silence hint": "The host sends silence while nothing is playing. This costs a little bandwidth and can help when the first sound after a quiet period is cut off.",
     "Audio Codec": "Audio Codec",
     "Opus": "Opus",
     "Lossless (PCM)": "Lossless (PCM)",
@@ -570,6 +572,8 @@ public class LanguageManager: NSObject, ObservableObject {
 
     "Audio": "音频",
     "Audio Configuration": "音频配置",
+    "Keep Audio Stream Active During Silence": "静音时保持音频流",
+    "Keep Audio Stream Active During Silence hint": "没有声音播放时，主机会持续发送静音数据。这会占用少量带宽，当安静一段时间后的第一个声音被截断时可能有帮助。",
     "Audio Codec": "音频编码",
     "Opus": "Opus",
     "Lossless (PCM)": "无损 (PCM)",

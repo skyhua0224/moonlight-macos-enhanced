@@ -193,6 +193,7 @@ class SettingsModel: ObservableObject {
   static let controllerShortcutProfileKeyPrefix = "settings.controller.shortcuts."
   static let audioCodecKeyPrefix = "settings.audio.codec."
   static let audioCodecFailureKeyPrefix = "settings.audio.codecFailure."
+  static let continuousAudioKeyPrefix = "settings.audio.continuous."
   static let foundationHostKeyPrefix = "settings.sunshine.foundationHost."
   static let audioCodecFailureChangedNotification = Notification.Name("MoonlightAudioCodecFailureDidChange")
   static let sunshineVddCapabilityKeyPrefix = "settings.sunshine.vddCapability."
@@ -711,6 +712,13 @@ class SettingsModel: ObservableObject {
       persistAudioCodecSettings()
       // Choosing a codec again is the way to retry one the host rejected.
       clearAudioCodecFailures()
+    }
+  }
+  // Ask the host to keep sending silence while nothing plays.
+  @Published var continuousAudio: Bool = SettingsModel.defaultContinuousAudio {
+    didSet {
+      guard !isLoading else { return }
+      persistAudioCodecSettings()
     }
   }
   // Codec ids (AUDIO_CODEC_*) this host failed to deliver in an earlier session.
@@ -1613,6 +1621,7 @@ class SettingsModel: ObservableObject {
     audioOnPC = Self.defaultAudioOnPC
     selectedAudioConfiguration = Self.defaultAudioConfiguration
     selectedAudioCodec = Self.defaultAudioCodec
+    continuousAudio = Self.defaultContinuousAudio
     selectedAudioOutputMode = Self.defaultAudioOutputMode
     selectedEnhancedAudioOutputTarget = Self.defaultEnhancedAudioOutputTarget
     selectedEnhancedAudioPreset = Self.defaultEnhancedAudioPreset

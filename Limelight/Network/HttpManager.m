@@ -709,6 +709,13 @@ static const NSString* HTTPS_PORT = @"47984";
         [extraParams appendFormat:@"&customScreenMode=%d", config.sunshineScreenMode];
     }
 
+    // Keep the host sending (silent) audio while nothing plays. Sent only when the
+    // user turned it on, so hosts and sessions that do not use it see no change.
+    if (config.continuousAudio) {
+        [extraParams appendString:@"&continuousAudio=1"];
+    }
+    Log(LOG_I, @"[audio] continuousAudio=%d", config.continuousAudio ? 1 : 0);
+
     // Foundation Sunshine's per-client touch keyboard intent. Send an explicit
     // value so a host-side opt-in cannot override the user's client setting.
     [extraParams appendFormat:@"&touchKeyboard=%d", config.sunshineTouchKeyboardAutoInvoke ? 1 : 0];

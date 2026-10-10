@@ -35,6 +35,8 @@
 /// already reduced to Opus where the channel layout or an earlier failure rules it
 /// out. The connection still falls back to Opus when the host is not Foundation Sunshine.
 @property(nonatomic) int audioCodec;
+/// Ask the host to keep sending (silent) audio while nothing plays.
+@property(nonatomic) BOOL continuousAudio;
 /// Audio bandwidth on top of what the host already reserves from the video bitrate (kbps).
 @property(nonatomic) int audioExcessBitrateKbps;
 @property(nonatomic) BOOL disableHighQualitySurround;

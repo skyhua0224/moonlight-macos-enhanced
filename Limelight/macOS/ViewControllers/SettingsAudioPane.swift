@@ -50,6 +50,13 @@ struct AudioView: View {
               .controlSize(.small)
           }
 
+          AudioCompactRow(title: "Keep Audio Stream Active During Silence", hint: languageManager.localize("Keep Audio Stream Active During Silence hint")) {
+            Toggle("", isOn: $settingsModel.continuousAudio)
+              .labelsHidden()
+              .toggleStyle(.switch)
+              .controlSize(.small)
+          }
+
           AudioCompactRow(title: "Sound Mode") {
             Picker("", selection: $settingsModel.selectedAudioOutputMode) {
               ForEach(SettingsModel.audioOutputModes, id: \.self) { value in

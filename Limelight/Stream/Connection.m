@@ -216,6 +216,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     int _audioCodec;
     MLAudioStreamPlan *_audioPlan;
     NSString *_audioHostKey;
+    BOOL _continuousAudio;
     int _audioRequestedCodec;
     int32_t _audioNoticeSent;
     // Packet validation counters of the non-Opus paths, touched by the audio decode thread only.
@@ -971,7 +972,7 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     {
         MLAudioStreamPlan *plan = conn->_audioPlan;
         int packetMs = MAX(1, opusConfig.samplesPerFrame / MAX(1, opusConfig.sampleRate / 1000));
-        Log(LOG_I, @"[audio] Stream start: codec requested=%@ effective=%@ negotiated=%@ channels=%d packetMs=%d samplesPerFrame=%d expectedPacketBytes=%d wireKbps=%d payloadKbps=%d fallback=%@",
+        Log(LOG_I, @"[audio] Stream start: codec requested=%@ effective=%@ negotiated=%@ channels=%d packetMs=%d samplesPerFrame=%d expectedPacketBytes=%d wireKbps=%d payloadKbps=%d continuousAudio=%d fallback=%@",
             plan != nil ? plan.requestedCodecName : @"opus",
             plan != nil ? plan.effectiveCodecName : @"opus",
             [MLAudioStreamPlan codecName:conn->_audioCodec],
@@ -981,6 +982,7 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
             conn->_pcmExpectedBytes,
             plan != nil ? (int)plan.wireKbps : 0,
             plan != nil ? (int)plan.payloadKbps : 0,
+            conn->_continuousAudio ? 1 : 0,
             plan != nil ? plan.fallbackLogText : @"none");
     }
 
@@ -3295,6 +3297,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
                                             foundationHost:config.foundationHost ? 1 : 0
                                                codecFailed:userAudioCodecFailed];
     _audioRequestedCodec = (int)userAudioCodec;
+    _continuousAudio = config.continuousAudio;
     _audioCodec = (int)_audioPlan.effectiveCodec;
 #if defined(AUDIO_CODEC_PCM_S16)
     _streamConfig.audioCodec = _audioCodec;

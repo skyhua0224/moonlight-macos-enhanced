@@ -101,6 +101,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "audio/Audio/Audio Configuration", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Audio Configuration", detailKey: nil, keywords: ["Stereo", "5.1 surround sound", "7.1 surround sound", "7.1.4 surround sound"]),
     SettingsSearchEntry(id: "audio/Audio/Audio Codec", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Audio Codec", detailKey: nil, keywords: ["Opus", "Lossless (PCM)", "AC3", "E-AC3"]),
     SettingsSearchEntry(id: "audio/Audio/Play Sound on Host", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Play Sound on Host", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "audio/Audio/Keep Audio Stream Active During Silence", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Keep Audio Stream Active During Silence", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio/Sound Mode", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Sound Mode", detailKey: nil, keywords: ["Default", "Audio Enhancement"]),
     SettingsSearchEntry(id: "audio/Audio/Volume", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Volume", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio Enhancement/Listening Device", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Listening Device", detailKey: nil, keywords: ["Automatic", "Headphones", "Speakers"]),

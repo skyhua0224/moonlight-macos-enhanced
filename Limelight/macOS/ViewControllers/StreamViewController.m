@@ -1533,6 +1533,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
                                       codecFailed:requestedAudioCodecFailed];
     streamConfig.audioCodec = (int)audioPlan.effectiveCodec;
     streamConfig.audioExcessBitrateKbps = (int)audioPlan.excessKbps;
+    streamConfig.continuousAudio = [SettingsClass continuousAudioFor:self.app.host.uuid];
     if (audioPlan.fallbackReason != MLAudioFallbackReasonNone) {
         Log(LOG_W, @"[audio] Requested codec %@ replaced by opus: %@",
             audioPlan.requestedCodecName, audioPlan.fallbackLogText);

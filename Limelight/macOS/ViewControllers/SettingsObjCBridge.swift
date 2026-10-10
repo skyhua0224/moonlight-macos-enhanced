@@ -1580,6 +1580,14 @@ class SettingsClass: NSObject {
     return AudioCodecChoice(selection: value).codecId
   }
 
+  @objc static func continuousAudio(for key: String) -> Bool {
+    let defaults = UserDefaults.standard
+    return (defaults.object(forKey: SettingsModel.continuousAudioKeyPrefix + key) as? Bool)
+      ?? (key == SettingsModel.globalHostId ? nil : defaults.object(
+        forKey: SettingsModel.continuousAudioKeyPrefix + SettingsModel.globalHostId) as? Bool)
+      ?? SettingsModel.defaultContinuousAudio
+  }
+
   /// True when an earlier session learned that this host does not deliver the codec.
   @objc(audioCodecFailed:forHost:)
   static func audioCodecFailed(_ codec: Int, for key: String) -> Bool {

@@ -2087,6 +2087,7 @@ enum AudioCodecChoice: CaseIterable {
 
 extension SettingsModel {
   static let defaultAudioCodec = AudioCodecChoice.opus.displayKey
+  static let defaultContinuousAudio = false
   // Literal list so the settings search indexes the option names; keep it in
   // step with AudioCodecChoice.displayKey.
   static var audioCodecs: [String] = [
