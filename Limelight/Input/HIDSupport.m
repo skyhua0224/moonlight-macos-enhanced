@@ -554,7 +554,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 }
 
 /**
- * Changes the HID controller-delivery gate and resets motion filtering state.
+ * Changes the HID controller-delivery gate and resets motion filters and touchpad gestures.
  *
  * Pausing synchronously drains the input queue and sends neutral gamepad, touch, gyro and mouse
  * releases when a direct-HID context is initialized. Resuming advertises DS4 capabilities before
@@ -581,6 +581,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
             self.gamepadMenuTimer = nil;
 
             int heldMouseButtons = self.controller.lastMouseModeButtonFlags;
+            int trackpadButton = self.controller.trackpadMouseButton;
             PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
             if (self.controllerDriver == 0 && input && LiInputContextIsInitialized(input)) {
                 int player = self.controller.playerIndex;
@@ -600,6 +601,8 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
                     if (stopGyro) {
                         LiSendControllerMotionEventCtx(input, player, LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
                     }
+                    if (trackpadButton && !(heldMouseButtons & (trackpadButton == BUTTON_LEFT ? A_FLAG : B_FLAG)))
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, trackpadButton);
                     if (heldMouseButtons & A_FLAG)
                         LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
                     if (heldMouseButtons & B_FLAG)
@@ -609,6 +612,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
             self.controller.lastMouseModeButtonFlags = 0;
             self.ps4PrimaryTouchActive = NO;
             self.ps4SecondaryTouchActive = NO;
+            [self resetTrackpadState];
         } else if (self.controllerDriver == 0) {
             // Physical gamepad state continues to update while delivery is paused.
             // A replacement DS4 session must advertise its extensions first.
@@ -622,9 +626,9 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 }
 
 /**
- * Replaces the borrowed stream context and resets all session-specific DS4 input state.
+ * Replaces the borrowed stream context and resets session-specific PlayStation input state.
  *
- * A changed pointer clears arrival, requested motion rates, filter history and active contacts,
+ * A changed pointer clears arrival, requested motion rates, filter history, mode overrides and gestures,
  * then synchronizes scroll diagnostics. The HID monitor serializes this reset with motion
  * processing and requests, including context invalidation on the connection callback thread.
  * @param inputContext Native input context, or NULL to detach; the pointer is not retained or freed.
@@ -653,6 +657,8 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         self.remainingPS4GyroRestDiagnosticLogs = 0;
         self.ps4PrimaryTouchActive = NO;
         self.ps4SecondaryTouchActive = NO;
+        [self resetTrackpadState];
+        self.controller.hasTouchpadModeOverride = NO;
         [self syncScrollTraceDiagnosticsPreferenceToInputContext];
     }
 }
@@ -1003,8 +1009,9 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 }
 
 /**
- * Creates the HID input backend and snapshots the effective host/global motion preference.
- * Registers device observers and input queues on main; cleanup must unregister them.
+ * Creates the HID backend and snapshots effective host/global motion and touchpad preferences.
+ * Registers device/preference observers and input queues on main; cleanup must unregister them.
+ * Live touchpad preferences resend controller state only when the direct-HID driver is active.
  * @param host Host profile whose input settings apply to this stream.
  * @return Initialized input backend.
  */
@@ -1037,7 +1044,25 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         [self rumbleSync];
 
         self.controller = [[Controller alloc] init];
+        self.nativeTouchpadEnabled = [SettingsClass nativeTouchpadFor:host.uuid];
+        self.trackpadPointerSensitivity = [SettingsClass pointerSensitivityFor:host.uuid];
+        self.trackpadScrollSpeed = [SettingsClass gestureScrollSpeedFor:host.uuid];
+        self.trackpadReverseScroll = [SettingsClass reverseScrollDirectionFor:host.uuid];
         [self refreshGamepadMouseModeConfiguration];
+        __weak HIDSupport *weakSelf = self;
+        self.touchpadSettingsObserver = [[NSNotificationCenter defaultCenter]
+            addObserverForName:@"ControllerTouchpadModeDidChange" object:nil queue:NSOperationQueue.mainQueue
+            usingBlock:^(NSNotification *note) {
+                HIDSupport *me = weakSelf;
+                NSString *changedHost = note.userInfo[@"hostId"];
+                if (!me || (![changedHost isEqualToString:me.host.uuid] && ![changedHost isEqualToString:@"__global__"])) return;
+                @synchronized (me) {
+                    [me releaseTrackpadState];
+                    me.controller.hasTouchpadModeOverride = NO;
+                    me.nativeTouchpadEnabled = [SettingsClass nativeTouchpadFor:me.host.uuid];
+                    if (me.controllerDriver == 0) [me sendControllerEvent];
+                }
+            }];
         
         for (GCMouse *mouse in GCMouse.mice) {
             [self registerMouseCallbacks:mouse];
@@ -1148,7 +1173,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
  *
  * Requires the direct driver, enabled controller delivery and a valid context. Marks arrival
  * only after a successful protocol call so failures may be retried. Call from the serialized
- * HID controller path before sending extended input. Disabled motion omits sensor capabilities.
+ * HID controller path before sending extended input. Only DS4 advertises motion; Disabled motion omits sensor capabilities.
  * @return YES if arrival was already advertised or was successfully sent; otherwise NO.
  */
 - (BOOL)reportPlayStationControllerArrival {
@@ -1171,7 +1196,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
                        LB_FLAG | RB_FLAG | LS_CLK_FLAG | RS_CLK_FLAG | SPECIAL_FLAG |
                        A_FLAG | B_FLAG | X_FLAG | Y_FLAG | TOUCHPAD_FLAG;
     uint16_t capabilities = LI_CCAP_ANALOG_TRIGGERS | LI_CCAP_RUMBLE | LI_CCAP_TOUCHPAD;
-    if (self.controllerMotionMode != 2) {
+    if (self.playStationHasMotion && self.controllerMotionMode != 2) {
         capabilities |= LI_CCAP_ACCEL | LI_CCAP_GYRO;
     }
     int err = LiSendControllerArrivalEventCtx(inputCtx, 0, 1, LI_CTYPE_PS, buttons, capabilities);
@@ -1387,7 +1412,7 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 }
 
 /**
- * Sends a DS4 contact transition after ensuring controller arrival is advertised.
+ * Sends a native PlayStation contact transition after advertising controller arrival.
  *
  * Unchanged contacts generate no packet; releases use the last delivered position. Requires a
  * valid context and permitted arrival/delivery. Call from serialized HID touch processing.
@@ -1423,36 +1448,190 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 }
 
 /**
- * Decodes both DS4 contacts, sends their transitions and updates stored touch positions.
- *
- * Coordinates are normalized from the device's touch surface; stable pointer IDs are zero and
- * one. Call on the serialized HID report path after validating the packet's size.
- * @param state Non-NULL complete DS4 state packet, borrowed for the duration of the call.
+ * Resolves the touch surface mode independently of ordinary gamepad controls.
+ * @return YES for legacy whole-gamepad mouse mode, a local override or Mac-style Trackpad.
+ */
+- (BOOL)touchpadUsesMouse {
+    return self.controller.isMouseMode || (self.controller.hasTouchpadModeOverride
+        ? self.controller.touchpadMouseMode : !self.nativeTouchpadEnabled);
+}
+
+/**
+ * Clears gesture anchors, fractional deltas and delivered contacts without sending events.
+ * Caller holds the HID monitor; used after releases or stream-context replacement.
+ */
+- (void)resetTrackpadState {
+    self.trackpadOwnsPointer = NO;
+    self.controller.trackpadGesture = (ControllerTrackpadGesture){0};
+    self.controller.primaryTouchActive = self.controller.secondaryTouchActive = NO;
+    self.controller.trackpadMouseAccumulatedX = self.controller.trackpadMouseAccumulatedY = 0;
+    self.controller.trackpadScrollAccumulatedX = self.controller.trackpadScrollAccumulatedY = 0;
+    self.controller.trackpadMouseButton = 0;
+    self.controller.trackpadTouchBegan = 0;
+    self.controller.trackpadPhysicalClickConsumed = NO;
+    self.controller.trackpadClickMovementSuppressedUntil = 0;
+    self.ps4PrimaryTouchActive = self.ps4SecondaryTouchActive = NO;
+}
+
+/**
+ * Releases native contacts or a touchpad mouse click before resetting local gestures.
+ * Runs on main under the HID monitor, never inputQueue; synchronously drains queued input.
+ * A/B mouse sources are preserved when releasing the mechanical touchpad button.
+ */
+- (void)releaseTrackpadState {
+    PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+    if (self.controllerDriver == 0 && self.shouldSendControllerEvents && input && LiInputContextIsInitialized(input)) {
+        BOOL primary = self.ps4PrimaryTouchActive, secondary = self.ps4SecondaryTouchActive;
+        float px = self.ps4PrimaryTouchX, py = self.ps4PrimaryTouchY;
+        float sx = self.ps4SecondaryTouchX, sy = self.ps4SecondaryTouchY;
+        int click = self.controller.trackpadMouseButton;
+        int held = self.controller.lastMouseModeButtonFlags;
+        dispatch_sync(self.inputQueue, ^{
+            LiSetThreadConnectionContext(input->connectionContext);
+            if (primary) LiSendControllerTouchEventCtx(input, 0, LI_TOUCH_EVENT_UP, 0, px, py, 0);
+            if (secondary) LiSendControllerTouchEventCtx(input, 0, LI_TOUCH_EVENT_UP, 1, sx, sy, 0);
+            if (click && !(held & (click == BUTTON_LEFT ? A_FLAG : B_FLAG)))
+                LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, click);
+        });
+    }
+    self.controller.lastButtonFlags &= ~TOUCHPAD_FLAG;
+    [self resetTrackpadState];
+}
+
+/**
+ * Updates the mechanical mouse-button source without releasing a held A/B source.
+ * @param button BUTTON_LEFT, BUTTON_RIGHT or zero on release; caller holds the HID monitor.
+ */
+- (void)setTrackpadMouseButton:(int)button {
+    int previous = self.controller.trackpadMouseButton;
+    if (previous == button) return;
+    PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+    int held = self.controller.lastMouseModeButtonFlags;
+    if (input && self.shouldSendControllerEvents) {
+        HIDDispatchInput(self, input, ^{
+            if (previous && !(held & (previous == BUTTON_LEFT ? A_FLAG : B_FLAG)))
+                LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, previous);
+            if (button && !(held & (button == BUTTON_LEFT ? A_FLAG : B_FLAG)))
+                LiSendMouseButtonEventCtx(input, BUTTON_ACTION_PRESS, button);
+        });
+    }
+    self.controller.trackpadMouseButton = button;
+}
+
+/**
+ * Consumes a complete DS4/DS5 contact pair on the main HID callback run loop.
+ * Reuses the shared gesture engine for pointer, two-finger scroll and tap clicks. Native mode
+ * preserves normalized controller-touch events. Both contacts are updated before consuming
+ * their centroid; contact transitions reanchor to the final pair to prevent pointer/scroll jumps.
+ * @param primary Four bytes containing the primary activity/ID byte and packed X/Y coordinates.
+ * @param secondary Four bytes for the secondary contact; both arrays are borrowed for this call.
+ * @param height Device touch surface height (DS4: 920, DS5: 1070); width is 1920.
+ * @param pressed Current mechanical touchpad-button state.
+ */
+- (void)handlePlayStationTouchpad:(const UInt8 *)primary secondary:(const UInt8 *)secondary
+                         height:(float)height pressed:(BOOL)pressed {
+    @synchronized (self) {
+        PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+        if (self.controllerDriver != 0 || !self.shouldSendControllerEvents || !input ||
+            !LiInputContextIsInitialized(input)) return;
+        BOOL active[2] = {(primary[0] & 0x80) == 0, (secondary[0] & 0x80) == 0};
+        const UInt8 *contacts[2] = {primary, secondary};
+        float x[2], y[2];
+        for (unsigned i = 0; i < 2; i++) {
+            const UInt8 *c = contacts[i];
+            x[i] = MIN(1.0f, (c[1] | ((c[2] & 0x0F) << 8)) / 1920.0f);
+            y[i] = MIN(1.0f, ((c[2] >> 4) | (c[3] << 4)) / height);
+        }
+        if (![self touchpadUsesMouse]) {
+            if (![self reportPlayStationControllerArrival]) return;
+            [self sendPS4TouchWithActive:active[0] x:x[0] y:y[0]
+                wasActive:self.ps4PrimaryTouchActive lastX:self.ps4PrimaryTouchX lastY:self.ps4PrimaryTouchY pointerId:0];
+            [self sendPS4TouchWithActive:active[1] x:x[1] y:y[1]
+                wasActive:self.ps4SecondaryTouchActive lastX:self.ps4SecondaryTouchX lastY:self.ps4SecondaryTouchY pointerId:1];
+            self.ps4PrimaryTouchActive = active[0]; self.ps4SecondaryTouchActive = active[1];
+            self.ps4PrimaryTouchX = x[0]; self.ps4PrimaryTouchY = y[0];
+            self.ps4SecondaryTouchX = x[1]; self.ps4SecondaryTouchY = y[1];
+            return;
+        }
+        Controller *controller = self.controller;
+        ControllerTrackpadGesture state = controller.trackpadGesture;
+        unsigned previousContacts = state.contacts;
+        BOOL changed = NO;
+        for (unsigned i = 0; i < 2; i++)
+            changed |= ControllerTrackpadUpdate(&state, i, active[i], x[i], y[i]);
+        if (changed && state.contacts != 0) {
+            // Contact transitions can occur before the other finger's coordinate update.
+            // Anchor against the complete report, never an intermediate centroid.
+            unsigned finger = state.contacts == 2 ? 1 : 0;
+            state.anchorX = state.contacts == 3 ? (state.x[0] + state.x[1]) * 0.5f : state.x[finger];
+            state.anchorY = state.contacts == 3 ? (state.y[0] + state.y[1]) * 0.5f : state.y[finger];
+        }
+        controller.trackpadGesture = state;
+        self.trackpadOwnsPointer = state.contacts != 0;
+        controller.primaryTouchActive = active[0]; controller.secondaryTouchActive = active[1];
+        NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+        if (previousContacts == 0 && state.contacts != 0) {
+            controller.trackpadTouchBegan = now;
+            controller.trackpadPhysicalClickConsumed = pressed || controller.trackpadMouseButton != 0;
+        }
+        if (pressed) {
+            controller.trackpadPhysicalClickConsumed = YES;
+            if (!controller.trackpadMouseButton) {
+                controller.trackpadClickMovementSuppressedUntil = now + 0.05;
+                [self setTrackpadMouseButton:active[1] ? BUTTON_RIGHT : BUTTON_LEFT];
+            }
+        } else [self setTrackpadMouseButton:0];
+        if (previousContacts != 0 && state.contacts == 0) {
+            BOOL tap = now - controller.trackpadTouchBegan <= 0.25 &&
+                state.maximumTravelSquared <= 0.000064f && !controller.trackpadPhysicalClickConsumed;
+            int button = state.maximumContacts == 2 ? BUTTON_RIGHT : BUTTON_LEFT;
+            int held = controller.lastMouseModeButtonFlags;
+            if (tap && !(held & (button == BUTTON_LEFT ? A_FLAG : B_FLAG))) {
+                HIDDispatchInput(self, input, ^{
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_PRESS, button);
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, button);
+                });
+            }
+            controller.trackpadTouchBegan = 0;
+        }
+        if (changed) {
+            controller.trackpadMouseAccumulatedX = controller.trackpadMouseAccumulatedY = 0;
+            controller.trackpadScrollAccumulatedX = controller.trackpadScrollAccumulatedY = 0;
+        }
+        ControllerTrackpadDelta delta = ControllerTrackpadConsume(&state);
+        controller.trackpadGesture = state;
+        if (now < controller.trackpadClickMovementSuppressedUntil) return;
+        if (delta.scroll) {
+            float scale = 2400.0f * fminf(4, fmaxf(0.1f, self.trackpadScrollSpeed));
+            id preference = [[NSUserDefaults standardUserDefaults] objectForKey:@"com.apple.swipescrolldirection"];
+            BOOL natural = preference == nil || [preference boolValue];
+            BOOL inverted = natural != self.trackpadReverseScroll;
+            controller.trackpadScrollAccumulatedX += (inverted ? -delta.dx : delta.dx) * scale;
+            controller.trackpadScrollAccumulatedY += (inverted ? delta.dy : -delta.dy) * scale;
+            short dx = (short)controller.trackpadScrollAccumulatedX, dy = (short)controller.trackpadScrollAccumulatedY;
+            controller.trackpadScrollAccumulatedX -= dx; controller.trackpadScrollAccumulatedY -= dy;
+            HIDDispatchInput(self, input, ^{
+                if (dx) LiSendHighResHScrollEventCtx(input, dx);
+                if (dy) LiSendHighResScrollEventCtx(input, dy);
+            });
+        } else {
+            float scale = 1200.0f * fminf(4, fmaxf(0.1f, self.trackpadPointerSensitivity));
+            controller.trackpadMouseAccumulatedX += delta.dx * scale;
+            controller.trackpadMouseAccumulatedY += delta.dy * scale;
+            short dx = (short)controller.trackpadMouseAccumulatedX, dy = (short)controller.trackpadMouseAccumulatedY;
+            controller.trackpadMouseAccumulatedX -= dx; controller.trackpadMouseAccumulatedY -= dy;
+            if (dx || dy) HIDDispatchInput(self, input, ^{ LiSendMouseMoveEventCtx(input, dx, dy); });
+        }
+    }
+}
+
+/**
+ * Adapts a validated DS4 report to the shared HID touchpad path on main.
+ * @param state Borrowed complete DS4 state; consumed synchronously.
  */
 - (void)handlePS4TouchpadState:(PS4StatePacket_t *)state {
-    BOOL primaryActive = (state->ucTouchpadCounter1 & 0x80) == 0;
-    float primaryX = MIN(1.0f, (state->rgucTouchpadData1[0] |
-                              ((state->rgucTouchpadData1[1] & 0x0F) << 8)) / 1920.0f);
-    float primaryY = MIN(1.0f, ((state->rgucTouchpadData1[1] >> 4) |
-                              (state->rgucTouchpadData1[2] << 4)) / 920.0f);
-    [self sendPS4TouchWithActive:primaryActive x:primaryX y:primaryY
-                       wasActive:self.ps4PrimaryTouchActive
-                           lastX:self.ps4PrimaryTouchX lastY:self.ps4PrimaryTouchY pointerId:0];
-    self.ps4PrimaryTouchActive = primaryActive;
-    self.ps4PrimaryTouchX = primaryX;
-    self.ps4PrimaryTouchY = primaryY;
-
-    BOOL secondaryActive = (state->ucTouchpadCounter2 & 0x80) == 0;
-    float secondaryX = MIN(1.0f, (state->rgucTouchpadData2[0] |
-                                ((state->rgucTouchpadData2[1] & 0x0F) << 8)) / 1920.0f);
-    float secondaryY = MIN(1.0f, ((state->rgucTouchpadData2[1] >> 4) |
-                                (state->rgucTouchpadData2[2] << 4)) / 920.0f);
-    [self sendPS4TouchWithActive:secondaryActive x:secondaryX y:secondaryY
-                       wasActive:self.ps4SecondaryTouchActive
-                           lastX:self.ps4SecondaryTouchX lastY:self.ps4SecondaryTouchY pointerId:1];
-    self.ps4SecondaryTouchActive = secondaryActive;
-    self.ps4SecondaryTouchX = secondaryX;
-    self.ps4SecondaryTouchY = secondaryY;
+    [self handlePlayStationTouchpad:&state->ucTouchpadCounter1 secondary:&state->ucTouchpadCounter2
+        height:920.0f pressed:(state->rgucButtonsHatAndCounter[2] & 0x02) != 0];
 }
 
 /**
@@ -2764,7 +2943,8 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
 /**
  * Parses supported PlayStation/Nintendo HID reports and updates controller input state.
  *
- * Rejects missing, truncated and unsupported DS4 reports before accessing their fields.
+ * Rejects missing, truncated and unsupported PlayStation reports before accessing their fields.
+ * DS5 simple Bluetooth keeps its compact control layout; complete reports also deliver touch.
  * DS4 processing normalizes sticks, ignores report-counter-only changes and forwards touch/motion
  * through their delivery gates. Runs on the HID manager's main run loop; ordinary state is queued
  * on the serial input queue.
@@ -2796,6 +2976,7 @@ void myHIDReportCallback (
     };
     
     if (isPS4(device)) {
+        self.playStationHasMotion = YES;
         NSUInteger stateOffset;
         switch (report[0]) {
             case k_EPS4ReportIdUsbState:
@@ -2901,21 +3082,40 @@ void myHIDReportCallback (
             [self handlePS4MotionState:state];
         }
     } else if (isPS5(device)) {
-        PS5StatePacket_t *state = (PS5StatePacket_t *)report;
+        self.playStationHasMotion = NO;
+        NSUInteger stateOffset;
+        BOOL simple = report[0] == k_EPS5ReportIdState && reportLength == 10;
         switch (report[0]) {
             case k_EPS5ReportIdState:
-                state = (PS5StatePacket_t *)(report + 1);
-                self.isPS5Bluetooth = reportLength == 10;
+                stateOffset = 1;
+                self.isPS5Bluetooth = simple;
                 break;
             case k_EPS5ReportIdBluetoothState:
-                state = (PS5StatePacket_t *)(report + 2);
+                stateOffset = 2;
                 self.isPS5Bluetooth = YES;
                 break;
             default:
-                NSLog(@"Unknown PS5 packet: 0x%hhu", report[0]);
-                break;
+                return;
         }
-        
+        NSUInteger required = simple ? 9 : offsetof(PS5StatePacket_t, ucZero);
+        if ((NSUInteger)reportLength < stateOffset + required) {
+            Log(LOG_W, @"Ignoring truncated DS5 input report: id=0x%02x length=%ld", report[0], (long)reportLength);
+            return;
+        }
+        // Simple Bluetooth places buttons before triggers and has no touch contacts.
+        PS5StatePacket_t decoded = {0};
+        if (simple) {
+            memcpy(&decoded, report + stateOffset, 4);
+            memcpy(decoded.rgucButtonsAndHat, report + stateOffset + 4, 3);
+            decoded.ucTriggerLeft = report[stateOffset + 7];
+            decoded.ucTriggerRight = report[stateOffset + 8];
+        } else {
+            memcpy(&decoded, report + stateOffset, MIN(sizeof(decoded), (NSUInteger)reportLength - stateOffset));
+        }
+        PS5StatePacket_t *state = &decoded;
+        BOOL hasTouchpad = !simple && (NSUInteger)reportLength >=
+            stateOffset + offsetof(PS5StatePacket_t, rgucUnknown1);
+
         UInt8 abxy = state->rgucButtonsAndHat[0] >> 4;
         [self updateButtonFlags:X_FLAG state:(abxy & 0x01) != 0];
         [self updateButtonFlags:A_FLAG state:(abxy & 0x02) != 0];
@@ -2934,6 +3134,7 @@ void myHIDReportCallback (
 
         [self updateButtonFlags:SPECIAL_FLAG state:(state->rgucButtonsAndHat[2] & 0x01) != 0];
         
+        if (hasTouchpad) [self updateButtonFlags:TOUCHPAD_FLAG state:(state->rgucButtonsAndHat[2] & 0x02) != 0];
         self.controller.lastLeftTrigger = state->ucTriggerLeft;
         self.controller.lastRightTrigger = state->ucTriggerRight;
 
@@ -2958,6 +3159,8 @@ void myHIDReportCallback (
                 [self sendControllerEvent];
                 self.lastPS5State = *state;
             }
+            if (hasTouchpad) [self handlePlayStationTouchpad:&state->ucTouchpadCounter1
+                secondary:&state->ucTouchpadCounter2 height:1070.0f pressed:(state->rgucButtonsAndHat[2] & 0x02) != 0];
         }
     } else if (isNintendo(device)) {
         if (self.waitingForVibrationEnable) {
@@ -3087,7 +3290,7 @@ void myHIDReportCallback (
 }
 
 /**
- * Initializes DS4 motion calibration and synchronizes rumble for a newly matched device.
+ * Initializes DS4 motion calibration, enables direct-HID DS5 extended reports and syncs rumble.
  *
  * Called on the HID manager's main run loop; calibration feature-report reads are synchronous.
  * @param context Borrowed HIDSupport callback context.
@@ -3101,6 +3304,15 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
                                 IOHIDDeviceRef          device) {
     HIDSupport *self = (__bridge HIDSupport *)context;
 
+    self.playStationHasMotion = isPS4(device);
+    if (self.controllerDriver == 0 && isPS5(device)) {
+        // Reading Sony's serial-number feature report enables Bluetooth reports with touch data.
+        UInt8 feature[64] = {0x09};
+        CFIndex length = sizeof(feature);
+        IOReturn status = IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, feature[0], feature, &length);
+        if (status != kIOReturnSuccess)
+            Log(LOG_W, @"Unable to enable DS5 extended HID reports: result=0x%x", status);
+    }
     [self loadPS4MotionCalibrationForDevice:device];
     [self rumbleSync];
 }
@@ -3137,6 +3349,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
                 float secondaryX = self.ps4SecondaryTouchX, secondaryY = self.ps4SecondaryTouchY;
                 BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
                 int mouseButtons = self.controller.lastMouseModeButtonFlags;
+                int trackpadButton = self.controller.trackpadMouseButton;
                 dispatch_sync(self.inputQueue, ^{
                     LiSetThreadConnectionContext(input->connectionContext);
                     LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
@@ -3146,6 +3359,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
                         LiSendControllerTouchEventCtx(input, player, LI_TOUCH_EVENT_UP, 1, secondaryX, secondaryY, 0);
                     if (stopGyro)
                         LiSendControllerMotionEventCtx(input, player, LI_MOTION_TYPE_GYRO, 0, 0, 0);
+                    if (trackpadButton && !(mouseButtons & (trackpadButton == BUTTON_LEFT ? A_FLAG : B_FLAG)))
+                        LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, trackpadButton);
                     if (mouseButtons & A_FLAG)
                         LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
                     if (mouseButtons & B_FLAG)
@@ -3172,6 +3387,9 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
             self.ps4PrimaryTouchActive = NO;
             self.ps4SecondaryTouchActive = NO;
             self.controller.lastMouseModeButtonFlags = 0;
+            [self resetTrackpadState];
+            self.controller.hasTouchpadModeOverride = NO;
+            self.lastPS5State = (PS5StatePacket_t){};
             self.lastPS4State = (PS4StatePacket_t){};
             self.controller.lastButtonFlags = 0;
             self.controller.lastLeftTrigger = 0;
@@ -3186,6 +3404,10 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 }
 
 
+/**
+ * Refreshes legacy mouse/menu preferences for the current host on main.
+ * Cancels an in-progress hold when preferences change and exits disabled legacy mouse mode.
+ */
 - (void)refreshGamepadMouseModeConfiguration {
     BOOL mouseEnabled = [SettingsClass gamepadMouseModeFor:self.host.uuid];
     BOOL mouseChanged = mouseEnabled != self.gamepadMouseModeEnabled;
@@ -3216,43 +3438,48 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
  * Switches direct-HID gamepad mouse mode, releasing delivered mouse buttons as needed.
  *
  * Entering mouse mode sends neutral gamepad state; leaving restores held A/B bits and flushes
- * ordinary state. Resets touch/mouse accumulators and posts HIDMouseModeToggledNotification.
+ * ordinary state. Releases the touch surface and resets gestures under the HID monitor.
+ * Posts HIDMouseModeToggledNotification after the transition.
  * Call on main, where mode and menu gesture state are managed.
  * @param active Whether stick/button mouse emulation should be active.
  */
 - (void)setGamepadMouseModeActive:(BOOL)active {
-    if (self.controller.isMouseMode == active) return;
-    PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
-    int heldMouseButtons = self.controller.lastMouseModeButtonFlags;
-    if (input && self.shouldSendControllerEvents) {
-        int player = self.controller.playerIndex;
-        HIDDispatchInput(self, input, ^{
-            if (heldMouseButtons & A_FLAG)
-                LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
-            if (heldMouseButtons & B_FLAG)
-                LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
-            if (active)
-                LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
-        });
+    @synchronized (self) {
+        if (self.controller.isMouseMode == active) return;
+        [self releaseTrackpadState];
+        PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+        int heldMouseButtons = self.controller.lastMouseModeButtonFlags;
+        if (input && self.shouldSendControllerEvents) {
+            int player = self.controller.playerIndex;
+            HIDDispatchInput(self, input, ^{
+                if (heldMouseButtons & A_FLAG)
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                if (heldMouseButtons & B_FLAG)
+                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                if (active)
+                    LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
+            });
+        }
+        self.controller.isMouseMode = active;
+        self.controller.lastMouseModeButtonFlags = 0;
+        if (!active) self.controller.lastButtonFlags |= heldMouseButtons & (A_FLAG | B_FLAG);
+        self.controller.primaryTouchActive = NO;
+        self.controller.secondaryTouchActive = NO;
+        self.controller.trackpadMouseAccumulatedX = 0;
+        self.controller.trackpadMouseAccumulatedY = 0;
+        self.controller.trackpadScrollAccumulatedY = 0;
+        self.controller.trackpadMouseButton = 0;
+        [[NSNotificationCenter defaultCenter] postNotificationName:HIDMouseModeToggledNotification
+            object:nil userInfo:@{@"enabled": @(active)}];
+        if (!active && self.controllerDriver == 0) [self sendControllerEvent];
     }
-    self.controller.isMouseMode = active;
-    self.controller.lastMouseModeButtonFlags = 0;
-    if (!active) self.controller.lastButtonFlags |= heldMouseButtons & (A_FLAG | B_FLAG);
-    self.controller.primaryTouchActive = NO;
-    self.controller.secondaryTouchActive = NO;
-    self.controller.trackpadMouseAccumulatedX = 0;
-    self.controller.trackpadMouseAccumulatedY = 0;
-    self.controller.trackpadScrollAccumulatedY = 0;
-    self.controller.trackpadMouseButton = 0;
-    [[NSNotificationCenter defaultCenter] postNotificationName:HIDMouseModeToggledNotification
-        object:nil userInfo:@{@"enabled": @(active)}];
-    if (!active && self.controllerDriver == 0) [self sendControllerEvent];
 }
 
 /**
- * Advances the direct-HID menu-hold gesture and toggles mouse mode when consumed.
+ * Advances the direct-HID menu hold and toggles the touchpad or legacy mouse mode.
  *
- * Requires the direct driver, mouse/hold settings and enabled controller delivery. Installs a
+ * Requires the direct driver, hold setting and enabled controller delivery. Sony pads switch
+ * only their touch surface; other pads require the legacy mouse setting. Installs a
  * one-shot main-run-loop timer for devices that report only button edges; cancellation clears
  * the timer and a consumed hold removes the menu bit. Call on the main thread.
  */
@@ -3281,13 +3508,24 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
     if (toggle) {
         self.controller.lastButtonFlags &= ~PLAY_FLAG;
-        [self setGamepadMouseModeActive:!self.controller.isMouseMode];
+        if (hasTouchpad) {
+            @synchronized (self) {
+                BOOL wasMouse = [self touchpadUsesMouse];
+                [self releaseTrackpadState];
+                self.controller.hasTouchpadModeOverride = YES;
+                self.controller.touchpadMouseMode = !wasMouse;
+                [self sendControllerEvent];
+            }
+            [[NSNotificationCenter defaultCenter] postNotificationName:HIDMouseModeToggledNotification
+                object:nil userInfo:@{@"enabled": @([self touchpadUsesMouse])}];
+        } else [self setGamepadMouseModeActive:!self.controller.isMouseMode];
     }
 }
 
 /**
  * Updates a direct-HID button or sends its mouse-mode equivalent through the controller gate.
  *
+ * Consumes touchpad buttons in pointer mode; preserves their click source across A/B transitions.
  * Tracks menu-hold consumption and deduplicates A/B mouse-button transitions while mouse mode
  * is active. Physical gamepad state can still update while remote delivery is paused. Call from
  * the main-run-loop HID input path; remote mouse events are queued on inputQueue.
@@ -3299,6 +3537,10 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     else self.controllerShortcutPhysicalButtons &= ~flag;
     uint64_t routing = [self evaluateControllerShortcuts];
     if (ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(routing)) & flag) set = NO;
+    if (flag == TOUCHPAD_FLAG && [self touchpadUsesMouse]) {
+        self.controller.lastButtonFlags &= ~TOUCHPAD_FLAG;
+        return;
+    }
     if (flag == PLAY_FLAG) {
         self.gamepadMenuPressed = set;
         [self updateGamepadMenuGesture];
@@ -3313,6 +3555,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
             if (set == wasPressed) return;
             if (set) self.controller.lastMouseModeButtonFlags |= A_FLAG;
             else self.controller.lastMouseModeButtonFlags &= ~A_FLAG;
+            if (self.controller.trackpadMouseButton == BUTTON_LEFT) return;
             if (set) {
                  PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                  if (!inputCtx) {
@@ -3334,6 +3577,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
             if (set == wasPressed) return;
             if (set) self.controller.lastMouseModeButtonFlags |= B_FLAG;
             else self.controller.lastMouseModeButtonFlags &= ~B_FLAG;
+            if (self.controller.trackpadMouseButton == BUTTON_RIGHT) return;
             if (set) {
                  PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                  if (!inputCtx) {
@@ -3420,6 +3664,10 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
 }
 
+/**
+ * Removes HID and touchpad preference observers, stops timers and closes devices on main.
+ * Controller delivery must be disabled before teardown to release remote touch/mouse state.
+ */
 - (void)tearDownHidManagerOnMainThread {
     [self.gamepadMenuTimer invalidate];
     self.gamepadMenuTimer = nil;
@@ -3427,6 +3675,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.controller.menuGesture = (ControllerMenuGesture){0};
     [self tearDownCoreHIDMouseDriver];
 
+    [[NSNotificationCenter defaultCenter] removeObserver:self.touchpadSettingsObserver];
+    self.touchpadSettingsObserver = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseConnectObserver];
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseDisconnectObserver];
     self.mouseConnectObserver = nil;

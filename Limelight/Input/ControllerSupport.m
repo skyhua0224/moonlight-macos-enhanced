@@ -2784,7 +2784,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     Controller *controller = _controllers[@(player)];
     if (!controller) return;
     GCExtendedGamepad *gamepad = controller.gamepad.extendedGamepad;
-    BOOL dualSense = [gamepad isKindOfClass:GCDualSenseGamepad.class];
+    BOOL hasTouchpad = [gamepad isKindOfClass:GCDualSenseGamepad.class] ||
+                       [gamepad isKindOfClass:GCDualShockGamepad.class];
 
             PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
             BOOL wasMouse = ControllerTouchpadUsesMouse(self, controller);
@@ -2799,7 +2800,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     [self setMouseButtons:controller.lastMouseModeButtonFlags trackpadButton:0 forController:controller];
                 }
             }
-            if (dualSense) {
+            if (hasTouchpad) {
                 controller.touchpadMouseMode = !wasMouse;
                 controller.hasTouchpadModeOverride = YES;
             } else [self setGamepadMouseModeActive:!controller.isMouseMode forController:controller];
