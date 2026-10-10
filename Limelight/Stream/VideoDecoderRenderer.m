@@ -1470,6 +1470,8 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     BOOL _dolbyMetadataObserved;
     BOOL _dynamicDolbyVision;
     BOOL _dolbyVisionBaseLayerFallback;
+    int _dolbyVisionNalLogBudget;
+    BOOL _hdr10PlusEvidencePersisted;
     atomic_int _decompressionOutputError;
     int _streamBitrateKbps;
     int _dynamicDolbyVisionProfile;
@@ -3602,6 +3604,13 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     MLLogDynamicHDRImageAttachments(imageBuffer,
                                     &_hdr10PlusMetadataOutputObserved,
                                     &_dolbyMetadataObserved);
+    if (_hdr10PlusMetadataOutputObserved && !_hdr10PlusEvidencePersisted) {
+        // The decoder delivered HDR10+ per-frame metadata on this Mac, whatever
+        // dynamic format was negotiated. That is the evidence the capability
+        // list waits for.
+        _hdr10PlusEvidencePersisted = YES;
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"MLHDR10PlusMetadataObserved"];
+    }
     [self noteHDR10PlusMetadataForImageBuffer:imageBuffer];
     if (_activeRendererMode != MLActiveVideoRendererModeEnhanced) {
         // The Metal presenter applies host HDR mode changes on its draw
@@ -5889,6 +5898,42 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         }
     }
 
+    if (_dynamicDolbyVision && (videoFormat & VIDEO_FORMAT_MASK_H265)) {
+        // A NAL unit never ends in a zero byte: zeros before the next start code
+        // belong to the byte stream (a four-byte start code leaves one behind).
+        // The Dolby Vision decoder reads the RPU relative to the end of its NAL,
+        // so do not hand it that padding.
+        int trimmedZeros = 0;
+        while (nalLength - trimmedZeros > NALU_START_PREFIX_SIZE + 2) {
+            uint8_t lastByte = 0xFF;
+            if (CMBlockBufferCopyDataBytes(dataBuffer, offset + nalLength - trimmedZeros - 1, 1, &lastByte) != noErr ||
+                lastByte != 0) {
+                break;
+            }
+            trimmedZeros++;
+        }
+        nalLength -= trimmedZeros;
+
+        if (_dolbyVisionNalLogBudget > 0) {
+            _dolbyVisionNalLogBudget--;
+            const int payloadLength = nalLength - NALU_START_PREFIX_SIZE;
+            uint8_t head[6] = { 0 };
+            uint8_t tail[4] = { 0 };
+            const int headLength = payloadLength < 6 ? payloadLength : 6;
+            const int tailLength = payloadLength < 4 ? payloadLength : 4;
+            if (headLength > 0) {
+                CMBlockBufferCopyDataBytes(dataBuffer, offset + NALU_START_PREFIX_SIZE, headLength, head);
+            }
+            if (tailLength > 0) {
+                CMBlockBufferCopyDataBytes(dataBuffer, offset + nalLength - tailLength, tailLength, tail);
+            }
+            Log(LOG_I, @"[hdr] Dolby Vision sample NAL: type=%d length=%d trimmedZeros=%d head=%02x%02x%02x%02x%02x%02x tail=%02x%02x%02x%02x",
+                (head[0] >> 1) & 0x3F, payloadLength, trimmedZeros,
+                head[0], head[1], head[2], head[3], head[4], head[5],
+                tail[0], tail[1], tail[2], tail[3]);
+        }
+    }
+
     size_t oldOffset = CMBlockBufferGetDataLength(frameBuffer);
 
     // Append a 4 byte buffer to the frame block for the length prefix
@@ -6161,7 +6206,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                                                                         compatibility, dvcCBytes)) {
                             NSDictionary *sampleDescriptionAtoms = @{
                                 @"hvcC": (__bridge id)hvcC,
-                                @"dvcC": [NSData dataWithBytes:dvcCBytes length:sizeof(dvcCBytes)]
+                                // Profiles 8 to 10 carry the record in a dvvC box; dvcC is for profiles up to 7.
+                                @"dvvC": [NSData dataWithBytes:dvcCBytes length:sizeof(dvcCBytes)]
                             };
                             NSMutableDictionary *extensions = [NSMutableDictionary dictionary];
                             if (baseExtensions != NULL) {
@@ -6197,6 +6243,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                                 CFRelease(formatDesc);
                                 formatDesc = dolbyFormatDesc;
                                 _dynamicDolbyVision = YES;
+                                _dolbyVisionNalLogBudget = 16;
                                 _dynamicDolbyVisionProfile = negotiatedDynamicHdr == DYNAMIC_HDR_FORMAT_DOLBY_VISION_PROFILE_84 ? 84 : 81;
                                 Log(LOG_I, @"[video] Dolby Vision decoder format: profile=%d level=%d configurationBytes=%zu dimensions=%dx%d",
                                     _dynamicDolbyVisionProfile, dvcCBytes[3] >> 3, sizeof(dvcCBytes), dimensions.width, dimensions.height);

@@ -1560,6 +1560,15 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
         return;
     }
 
+    // The viewer needs the local pointer. Opened from a shortcut the mouse is
+    // still captured by the stream, so release it; closing the viewer takes it
+    // back.
+    self.logOverlayReleasedMouseCapture = self.isMouseCaptured;
+    if (self.logOverlayReleasedMouseCapture) {
+        [self.hidSupport releaseAllModifierKeys];
+        [self uncaptureMouseWithCode:@"MUC204" reason:@"log-overlay"];
+    }
+
     __weak typeof(self) weakSelf = self;
     self.logOverlayContainer = [DebugLogOverlayFactory makeContainerWithOnClose:^{
         [weakSelf hideLogOverlay];
@@ -1584,6 +1593,11 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 
     NSVisualEffectView *container = self.logOverlayContainer;
     self.logOverlayContainer = nil;
+
+    if (self.logOverlayReleasedMouseCapture) {
+        self.logOverlayReleasedMouseCapture = NO;
+        [self rearmMouseCaptureIfPossibleWithReason:@"log-overlay-closed"];
+    }
 
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
         context.duration = 0.15;
