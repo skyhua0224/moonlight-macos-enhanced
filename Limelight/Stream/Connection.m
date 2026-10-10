@@ -203,6 +203,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 - (void)shutdownAudioOutput;
 - (BOOL)audioOutputAttemptCancelled;
 - (void)discardBufferedAudio;
+- (UInt32)bufferedRingFrames;
 - (NSString *)audioPassthroughRejectionReason;
 - (BOOL)startAudioPassthroughOnOutputQueue;
 - (void)stopAudioPassthroughOnOutputQueue;
@@ -301,6 +302,17 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     BOOL _enhancedUsesCoreAudioDownmix;
     uint64_t _enhancedDownmixFailureCount;
     uint64_t _audioUnderrunCount;
+    // Ring health for the periodic [audio] ring line. Full-ring drops are counted by the
+    // decode thread, the largest pull by the enhanced render callback (never reset: it
+    // also sizes the start-up buffering). All plain statistics; torn reads are harmless.
+    uint64_t _audioRingFullDrops;
+    uint64_t _audioRingReportedDrops;
+    uint64_t _audioRingReportedUnderruns;
+    UInt32 _audioMaxPullFrames;
+    uint64_t _enhancedRebufferCount;
+    uint64_t _audioRingReportedRebuffers;
+    // Enhanced render thread only: YES while output is held back to build a buffer.
+    BOOL _enhancedHoldingForBuffer;
     // Written by the audio decode thread, read by the render callback.
     uint64_t _lastAudioSampleMs;
     BOOL _audioDecodeThreadPriorityRaised;
@@ -624,6 +636,34 @@ static NSString *MLDefaultOutputDeviceName(void) {
     return CFBridgingRelease(deviceName);
 }
 
+// I/O buffer size in frames of the default output device, 0 when unknown. Logged once
+// per start next to the size the render callback actually asks for.
+static UInt32 MLDefaultOutputBufferFrames(void) {
+    AudioDeviceID deviceID = kAudioObjectUnknown;
+    UInt32 propertySize = sizeof(deviceID);
+    AudioObjectPropertyAddress deviceAddress = {
+        kAudioHardwarePropertyDefaultOutputDevice,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &deviceAddress, 0, NULL,
+                                   &propertySize, &deviceID) != noErr || deviceID == kAudioObjectUnknown) {
+        return 0;
+    }
+
+    UInt32 frames = 0;
+    propertySize = sizeof(frames);
+    AudioObjectPropertyAddress sizeAddress = {
+        kAudioDevicePropertyBufferFrameSize,
+        kAudioDevicePropertyScopeOutput,
+        kAudioObjectPropertyElementMain
+    };
+    if (AudioObjectGetPropertyData(deviceID, &sizeAddress, 0, NULL, &propertySize, &frames) != noErr) {
+        return 0;
+    }
+    return frames;
+}
+
 // The device clock did not start ('stop'). Every further backend in the same
 // attempt would wait out the same ~10 s timeout and fail identically.
 static BOOL MLAudioStatusIsDeviceNotRunning(OSStatus status) {
@@ -937,6 +977,10 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     conn->_compressedDecodedFrames = 0;
     conn->_compressedConsecutiveErrors = 0;
     conn->_compressedFifoOverflows = 0;
+    conn->_audioRingFullDrops = conn->_audioRingReportedDrops = conn->_audioRingReportedUnderruns = 0;
+    conn->_audioMaxPullFrames = 0;
+    conn->_enhancedRebufferCount = conn->_audioRingReportedRebuffers = 0;
+    conn->_enhancedHoldingForBuffer = YES;
     
     // Initialize the circular buffer
     conn->_audioBufferWriteIndex = conn->_audioBufferReadIndex = 0;
@@ -950,6 +994,17 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
         // AC3 / E-AC3 frames are 32 ms long: keep at least three of them in flight so a
         // late packet does not run the output dry.
         bufferedFramesTarget = MAX(bufferedFramesTarget, 3);
+    }
+    if (conn->_audioOutputMode == MLAudioOutputModeEnhanced) {
+        // The enhanced engine pulls up to AUDIO_RENDER_SCRATCH_FRAMES per render call and
+        // was logged calling twice back to back (4096 frames per ~85 ms) on a DisplayPort
+        // output. A ring that holds less than one such burst plus margin overflows between
+        // the bursts (the newest packets are dropped) and runs dry inside them, so about a
+        // third of the audio was replaced by silence in 25 ms pieces. Size it for a burst
+        // measured in whole entries, plus one entry for the partly read one.
+        const int burstFrames = 2 * AUDIO_RENDER_SCRATCH_FRAMES + 1024;
+        const int burstEntries = (burstFrames + opusConfig.samplesPerFrame - 1) / opusConfig.samplesPerFrame + 1;
+        bufferedFramesTarget = MAX(bufferedFramesTarget, burstEntries);
     }
     conn->_audioBufferEntries = MAX(2, bufferedFramesTarget + 1);
     conn->_audioCircularBuffer = malloc(conn->_audioBufferEntries * conn->_audioBufferStride * sizeof(short));
@@ -1213,6 +1268,32 @@ static void MLAudioRxReportStats(Connection *conn, uint64_t nowMs, BOOL force)
     conn->_audioRxReportedLoss = conn->_audioRxLossPlaceholders;
     conn->_audioRxReportedValid = conn->_audioRxValidPackets;
     conn->_audioRxLastReportMs = nowMs;
+
+    // Ring health. The ring is only used when the stream is decoded on this Mac; a line
+    // appears when the output side starved or the decode side found the ring full, so a
+    // clean session stays silent. fullDrops with underruns in the same interval means the
+    // output pulls in bigger pieces than the ring holds (maxPull is the largest request
+    // the render callback saw), not that the network lost anything.
+    if (__atomic_load_n(&conn->_audioPassthroughActive, __ATOMIC_ACQUIRE) == 0) {
+        const uint64_t ringDrops = conn->_audioRingFullDrops - conn->_audioRingReportedDrops;
+        const uint64_t underruns = conn->_audioUnderrunCount - conn->_audioRingReportedUnderruns;
+        conn->_audioRingReportedDrops = conn->_audioRingFullDrops;
+        conn->_audioRingReportedUnderruns = conn->_audioUnderrunCount;
+        const uint64_t rebuffers = conn->_enhancedRebufferCount - conn->_audioRingReportedRebuffers;
+        conn->_audioRingReportedRebuffers = conn->_enhancedRebufferCount;
+        if (ringDrops > 0 || underruns > 0 || rebuffers > 0) {
+            Log(LOG_W, @"[audio] ring since last report: fullDrops=%llu underruns=%llu rebuffers=%llu maxPull=%u frames ring=%d entries x %d frames backend=%@ (session totals fullDrops=%llu underruns=%llu)",
+                (unsigned long long)ringDrops,
+                (unsigned long long)underruns,
+                (unsigned long long)rebuffers,
+                (unsigned int)conn->_audioMaxPullFrames,
+                conn->_audioBufferEntries,
+                conn->_audioSamplesPerFrame,
+                MLAudioRendererBackendName(conn->_audioRendererBackend),
+                (unsigned long long)conn->_audioRingFullDrops,
+                (unsigned long long)conn->_audioUnderrunCount);
+        }
+    }
 
     // Passthrough burst counters. A few pause bursts are normal (the prefill at
     // start, a jitter spike), so only more than that, drops or rejected frames
@@ -1696,6 +1777,13 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     // consumes, so the ring fills once and the rest is dropped here without blocking
     // or logging; the output start discards that stale content.
     if (conn->_audioBufferEntries == 0 || ((conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries) == conn->_audioBufferReadIndex) {
+        // Counted so the ring line shows when the output side keeps the ring full, which
+        // is how audio is lost without any network loss (not logged per packet). Drops
+        // before the output runs are expected (the start discards that content).
+        if (conn->_audioOutputRunning) {
+            conn->_audioRingFullDrops++;
+        }
+        MLAudioRxReportStats(conn, LiGetMillis(), NO);
         return;
     }
 
@@ -1708,6 +1796,9 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         return;
     }
     
+    // The PCM and AC3 paths report from their own handlers; Opus has none.
+    MLAudioRxReportStats(conn, LiGetMillis(), NO);
+
     decodeLen = opus_multistream_decode(conn->_opusDecoder, (unsigned char *)sampleData, sampleLength,
                                         (short*)&conn->_audioCircularBuffer[conn->_audioBufferWriteIndex * conn->_audioBufferStride], conn->_audioSamplesPerFrame, 0);
     if (decodeLen > 0) {
@@ -2195,6 +2286,23 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     return NO;
 }
 
+// Frames waiting in the ring, counting the unread rest of the entry being read.
+// Render thread. The write index may advance meanwhile, which only makes the answer low.
+- (UInt32)bufferedRingFrames
+{
+    if (_audioBufferEntries <= 0 || _audioSamplesPerFrame <= 0) {
+        return 0;
+    }
+    int entries = _audioBufferWriteIndex - _audioBufferReadIndex;
+    if (entries < 0) {
+        entries += _audioBufferEntries;
+    }
+    if (entries == 0) {
+        return 0;
+    }
+    return (UInt32)entries * (UInt32)_audioSamplesPerFrame - _audioBufferReadFrameOffset;
+}
+
 - (void)renderEnhancedStereoPCMFrames:(UInt32)frameCount
                     toFloatBufferList:(AudioBufferList *)outputData
 {
@@ -2210,6 +2318,48 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         : (outputData->mNumberBuffers > 1 ? (float *)outputData->mBuffers[1].mData : NULL);
     if ((interleaved && interleavedDst == NULL) || (!interleaved && (leftDst == NULL || rightDst == NULL))) {
         return;
+    }
+
+    if (frameCount > _audioMaxPullFrames) {
+        _audioMaxPullFrames = frameCount;
+    }
+
+    // Large pulls (seen on DisplayPort output: 2048 frames, twice back to back) leave no
+    // slack when the ring is read down to empty on every burst, because the stream only
+    // delivers as much as one burst per burst: every small delay then cuts a piece out of
+    // the audio. Hold the output until the ring holds two pulls plus 20 ms, then play on;
+    // an emptied ring while audio is still arriving builds the cushion again. Small pulls
+    // (512 frames) keep reading immediately, as they always did.
+    if (_audioMaxPullFrames > 1024 && _audioSamplesPerFrame > 0 && _audioBufferEntries > 2) {
+        const UInt32 usableLimit = (UInt32)(_audioBufferEntries - 2) * (UInt32)_audioSamplesPerFrame;
+        const UInt32 wanted = MIN(2 * _audioMaxPullFrames + 960, usableLimit);
+        const UInt32 buffered = [self bufferedRingFrames];
+        const uint64_t lastSampleMs = __atomic_load_n(&_lastAudioSampleMs, __ATOMIC_RELAXED);
+        const BOOL audioArriving = lastSampleMs != 0 && LiGetMillis() - lastSampleMs <= 50;
+
+        if (!_enhancedHoldingForBuffer && buffered == 0 && audioArriving) {
+            _enhancedHoldingForBuffer = YES;
+            _enhancedRebufferCount++;
+        }
+        if (_enhancedHoldingForBuffer) {
+            // A stream that went quiet (the host sends nothing while nothing plays) must
+            // still get its last, shorter than the cushion, sound out.
+            const BOOL streamPaused = lastSampleMs != 0 && !audioArriving;
+            if (buffered >= wanted || (streamPaused && buffered > 0)) {
+                _enhancedHoldingForBuffer = NO;
+            } else {
+                if (interleaved) {
+                    memset(interleavedDst, 0, frameCount * 2 * sizeof(float));
+                    outputData->mBuffers[0].mDataByteSize = frameCount * 2 * sizeof(float);
+                } else {
+                    memset(leftDst, 0, frameCount * sizeof(float));
+                    memset(rightDst, 0, frameCount * sizeof(float));
+                    outputData->mBuffers[0].mDataByteSize = frameCount * sizeof(float);
+                    outputData->mBuffers[1].mDataByteSize = frameCount * sizeof(float);
+                }
+                return;
+            }
+        }
     }
 
     const BOOL headphones = _enhancedAudioOutputTarget == MLAudioEnhancedOutputTargetHeadphones;
@@ -2663,13 +2813,17 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         if (opusConfig->channelCount > 2) {
             Log(LOG_I, @"Enhanced multichannel virtualization active: streamChannels=%d -> stereo", opusConfig->channelCount);
         }
-        Log(LOG_I, @"Initialized enhanced audio renderer: preset=%d target=%d spatial=%.2f width=%.2f samplesPerFrame=%d bufferEntries=%d",
+        // The size the engine really pulls is in the later [audio] ring line (maxPull);
+        // logging the device's own buffer size next to it shows whether they differ.
+        Log(LOG_I, @"Initialized enhanced audio renderer: preset=%d target=%d spatial=%.2f width=%.2f samplesPerFrame=%d bufferEntries=%d outputDevice=%@ deviceBufferFrames=%u",
             _enhancedAudioPreset,
             _enhancedAudioOutputTarget,
             _enhancedAudioSpatialIntensity,
             _enhancedAudioSoundstageWidth,
             opusConfig->samplesPerFrame,
-            _audioBufferEntries);
+            _audioBufferEntries,
+            MLDefaultOutputDeviceName(),
+            (unsigned int)MLDefaultOutputBufferFrames());
         return YES;
     }
 
