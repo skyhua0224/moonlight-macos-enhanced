@@ -224,6 +224,37 @@ import VideoToolbox
   }
 }
 
+/// How a pressed Mac key is turned into a Windows virtual key. `physical` sends the key
+/// by position (the long-standing behavior); `typed` sends the letter or digit the key
+/// types under the Mac's current layout, so it follows the host's layout instead.
+enum KeyMappingMode: Int, CaseIterable {
+  case physical = 0
+  case typed = 1
+
+  static let defaultMode: Self = .physical
+
+  init(selection: String) {
+    self = Self.allCases.first(where: { $0.displayKey == selection }) ?? Self.defaultMode
+  }
+
+  init(persistedRawValue: Int?) {
+    self = persistedRawValue.flatMap { Self(rawValue: $0) } ?? Self.defaultMode
+  }
+
+  var displayKey: String {
+    switch self {
+    case .physical:
+      return "Physical key position"
+    case .typed:
+      return "Typed characters"
+    }
+  }
+
+  static var displayKeys: [String] {
+    Self.allCases.map(\.displayKey)
+  }
+}
+
 extension SettingsModel {
   func refreshConnectionCandidates() {
     guard let hostId = selectedHost?.id, hostId != Self.globalHostId else { return }
@@ -581,6 +612,7 @@ extension SettingsModel {
   static var rewrittenScrollModes: [String] = RewrittenScrollMode.displayKeys
   static var freeMouseMotionModes: [String] = FreeMouseMotionMode.displayKeys
   static var keyboardCompatibilityModes: [String] = KeyboardCompatibilityMode.displayKeys
+  static var keyMappingModes: [String] = KeyMappingMode.displayKeys
   static var coreHIDMaxMouseReportRates: [Int] = [1000, 2000, 4000, 8000, 500, 250, 125, 0]
   static var mouseModes: [String] = ["game", "remote"]
   static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
@@ -1345,6 +1377,7 @@ extension SettingsModel {
   static let defaultShowConnectionWarnings = true
   static let defaultCaptureSystemShortcuts = false
   static let defaultKeyboardCompatibilityMode = KeyboardCompatibilityMode.defaultMode.displayKey
+  static let defaultKeyMappingMode = KeyMappingMode.defaultMode.displayKey
   static let defaultVolumeLevel = 1.0
   static let defaultMultiControllerMode = "Auto"
   static let defaultSwapButtons = false

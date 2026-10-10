@@ -138,6 +138,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Mouse Mode", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Mouse Mode", detailKey: nil, keywords: ["Locked Mouse", "Free Mouse"]),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Mouse Driver", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Mouse Driver", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Keyboard Translation", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Keyboard Translation", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Key Mapping", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Key Mapping", detailKey: "Key Mapping detail", keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Capture System Shortcuts", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Capture System Shortcuts", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Absolute Mouse Mode", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Absolute Mouse Mode", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Swap Mouse Buttons", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Swap Mouse Buttons", detailKey: nil, keywords: []),

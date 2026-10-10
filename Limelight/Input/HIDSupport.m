@@ -389,10 +389,72 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     });
 }
 
+// A key event is sent as a (virtual key, flags) pair. The pair used for a key-down
+// is remembered per Mac key code and reused for the matching key-up, because the
+// host tracks key state per (VK, flags).
+static inline uint32_t HIDPackKeyPair(short keyCode, uint8_t flags) {
+    return ((uint32_t)flags << 16) | (uint32_t)(uint16_t)keyCode;
+}
+
+static inline short HIDKeyPairKeyCode(uint32_t pair) {
+    return (short)(uint16_t)(pair & 0xFFFF);
+}
+
+static inline char HIDKeyPairFlags(uint32_t pair) {
+    return (char)((pair >> 16) & 0xFF);
+}
+
+// Main-block character keys: the keys whose character can come from a layout
+// (letters, digits and the punctuation positions). Keypad, modifier, function,
+// navigation and ISO/JIS-only keys are never remapped by typed character.
+static BOOL HIDIsTypedMappingCandidateKeyCode(unsigned short keyCode) {
+    switch (keyCode) {
+        case kVK_ANSI_A: case kVK_ANSI_B: case kVK_ANSI_C: case kVK_ANSI_D: case kVK_ANSI_E:
+        case kVK_ANSI_F: case kVK_ANSI_G: case kVK_ANSI_H: case kVK_ANSI_I: case kVK_ANSI_J:
+        case kVK_ANSI_K: case kVK_ANSI_L: case kVK_ANSI_M: case kVK_ANSI_N: case kVK_ANSI_O:
+        case kVK_ANSI_P: case kVK_ANSI_Q: case kVK_ANSI_R: case kVK_ANSI_S: case kVK_ANSI_T:
+        case kVK_ANSI_U: case kVK_ANSI_V: case kVK_ANSI_W: case kVK_ANSI_X: case kVK_ANSI_Y:
+        case kVK_ANSI_Z:
+        case kVK_ANSI_0: case kVK_ANSI_1: case kVK_ANSI_2: case kVK_ANSI_3: case kVK_ANSI_4:
+        case kVK_ANSI_5: case kVK_ANSI_6: case kVK_ANSI_7: case kVK_ANSI_8: case kVK_ANSI_9:
+        case kVK_ANSI_Equal: case kVK_ANSI_Minus: case kVK_ANSI_RightBracket:
+        case kVK_ANSI_LeftBracket: case kVK_ANSI_Quote: case kVK_ANSI_Semicolon:
+        case kVK_ANSI_Backslash: case kVK_ANSI_Comma: case kVK_ANSI_Slash:
+        case kVK_ANSI_Period: case kVK_ANSI_Grave:
+            return YES;
+        default:
+            return NO;
+    }
+}
+
+// The Windows virtual key for a character, if it is A-Z or 0-9 (VK == ASCII code).
+static short HIDVirtualKeyForTypedCharacter(UniChar character) {
+    if (character >= 'a' && character <= 'z') {
+        return (short)(character - 'a' + 'A');
+    }
+    if ((character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9')) {
+        return (short)character;
+    }
+    return 0;
+}
+
 @implementation HIDInputDiagnosticsSnapshot
 @end
 
-@implementation HIDSupport
+@implementation HIDSupport {
+    // Mac key code -> packed (VK, flags) of the key-down that is still held.
+    // Guarded by _pressedKeyPairsLock; written from key events, drained by
+    // releaseAllModifierKeys.
+    NSMutableDictionary<NSNumber *, NSNumber *> *_pressedKeyPairs;
+    NSLock *_pressedKeyPairsLock;
+    // Typed-character cache. Main thread only (Text Input Services is not
+    // thread safe); key events arrive on the main thread.
+    NSMutableDictionary<NSNumber *, NSNumber *> *_typedVirtualKeyCache;
+    NSString *_typedLayoutID;
+    CFAbsoluteTime _typedLayoutCheckTime;
+    NSInteger _loggedKeyMappingMode;
+    NSString *_loggedKeyMappingLayoutID;
+}
 
 @synthesize shouldSendInputEvents = _shouldSendInputEvents;
 - (BOOL)shouldSendInputEvents {
@@ -777,6 +839,10 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     if (self) {
         self.host = host;
         self.inputQueue = dispatch_queue_create("com.moonlight.input", DISPATCH_QUEUE_SERIAL);
+        _pressedKeyPairs = [NSMutableDictionary dictionary];
+        _pressedKeyPairsLock = [[NSLock alloc] init];
+        _typedVirtualKeyCache = [NSMutableDictionary dictionary];
+        _loggedKeyMappingMode = -1;
         [self setUpPrecisionTouchpad];
         self.freeMouseVirtualCursorLock = [[NSObject alloc] init];
         self.freeMouseVirtualCursorGainX = 1.0;
@@ -815,7 +881,17 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
             [d setObject:@(m.windows) forKey:@(m.mac)];
         }
         _mappings = [NSDictionary dictionaryWithDictionary:d];
-        
+
+        // The typed-character cache is per keyboard layout; drop it when the
+        // layout changes. keyDown also re-checks the layout id (throttled).
+        [[NSDistributedNotificationCenter defaultCenter]
+            addObserver:self
+               selector:@selector(keyboardInputSourceDidChange:)
+                   name:(__bridge NSString *)kTISNotifySelectedKeyboardInputSourceChanged
+                 object:nil
+     suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
+        [self logKeyMappingStateForMode:[self usesTypedKeyMapping] ? 1 : 0];
+
         [self initializeDisplayLink];
         [self setupCoreHIDMouseDriverIfNeeded];
     }
@@ -823,6 +899,7 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 }
 
 - (void)dealloc {
+    [[NSDistributedNotificationCenter defaultCenter] removeObserver:self];
     [self.authoredRumbleTimer invalidate];
     [self.gamepadMenuTimer invalidate];
     [self tearDownCoreHIDMouseDriver];
@@ -1053,17 +1130,184 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     [self syncKeyboardModifierStateForEvent:event];
 }
 
+#pragma mark - Key mapping (position / typed character)
+
+- (BOOL)usesTypedKeyMapping {
+    return [SettingsClass keyMappingModeFor:self.host.uuid] == 1;
+}
+
+- (void)invalidateTypedKeyCache {
+    [_typedVirtualKeyCache removeAllObjects];
+    _typedLayoutID = nil;
+}
+
+- (void)keyboardInputSourceDidChange:(NSNotification *)note {
+    __weak HIDSupport *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf invalidateTypedKeyCache];
+    });
+}
+
+// Copies the id of the current keyboard layout. Main thread only.
+static NSString *HIDCurrentKeyboardLayoutID(void) {
+    TISInputSourceRef source = TISCopyCurrentKeyboardLayoutInputSource();
+    if (source == NULL) {
+        return nil;
+    }
+    CFStringRef layoutID = (CFStringRef)TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
+    NSString *result = layoutID != NULL ? [(__bridge NSString *)layoutID copy] : nil;
+    CFRelease(source);
+    return result;
+}
+
+// Logs "[keyboard] key mapping=position|typed layout=<id>" once per stream and
+// whenever the mode (or, in typed mode, the layout) changes. Main thread only;
+// position mode just after the first line does not touch Text Input Services.
+- (void)logKeyMappingStateForMode:(NSInteger)mode {
+    if (![NSThread isMainThread] || (mode == 0 && _loggedKeyMappingMode == 0)) {
+        return;
+    }
+    NSString *layoutID = (mode == 1 && _typedLayoutID != nil) ? _typedLayoutID : HIDCurrentKeyboardLayoutID();
+    if (mode == 1 && _loggedKeyMappingMode == 1 &&
+        ((layoutID == nil && _loggedKeyMappingLayoutID == nil) ||
+         [layoutID isEqualToString:_loggedKeyMappingLayoutID])) {
+        return;
+    }
+    _loggedKeyMappingMode = mode;
+    _loggedKeyMappingLayoutID = [layoutID copy];
+    Log(LOG_I, @"[keyboard] key mapping=%s layout=%@", mode == 1 ? "typed" : "position", layoutID ?: @"(unknown)");
+}
+
+// Refreshes the cache when the keyboard layout changed. The layout id is
+// re-read at most every 250 ms; the input source notification covers the rest.
+- (void)refreshTypedKeyCacheIfNeeded {
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (_typedLayoutID != nil && now - _typedLayoutCheckTime < 0.25) {
+        return;
+    }
+    _typedLayoutCheckTime = now;
+    NSString *layoutID = HIDCurrentKeyboardLayoutID();
+    if (layoutID == nil) {
+        [_typedVirtualKeyCache removeAllObjects];
+        _typedLayoutID = nil;
+        return;
+    }
+    if (![layoutID isEqualToString:_typedLayoutID]) {
+        [_typedVirtualKeyCache removeAllObjects];
+        _typedLayoutID = layoutID;
+    }
+}
+
+// The A-Z / 0-9 Windows virtual key for the character this Mac key types, without
+// modifiers, under the current keyboard layout; 0 when the key is not a
+// candidate or its character is not A-Z / 0-9. Main thread only, cached per key.
+- (short)typedVirtualKeyForMacKeyCode:(unsigned short)macKeyCode {
+    if (!HIDIsTypedMappingCandidateKeyCode(macKeyCode) || ![NSThread isMainThread]) {
+        return 0;
+    }
+
+    [self refreshTypedKeyCacheIfNeeded];
+    NSNumber *cached = _typedVirtualKeyCache[@(macKeyCode)];
+    if (cached != nil) {
+        return cached.shortValue;
+    }
+
+    short virtualKey = 0;
+    UniChar character = 0;
+    BOOL translated = NO;
+    TISInputSourceRef source = TISCopyCurrentKeyboardLayoutInputSource();
+    if (source != NULL) {
+        CFDataRef layoutData = (CFDataRef)TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData);
+        if (layoutData != NULL) {
+            const UCKeyboardLayout *layout = (const UCKeyboardLayout *)CFDataGetBytePtr(layoutData);
+            UInt32 deadKeyState = 0;
+            UniCharCount length = 0;
+            UniChar characters[4] = {0, 0, 0, 0};
+            OSStatus status = UCKeyTranslate(layout, macKeyCode, kUCKeyActionDisplay, 0,
+                                             LMGetKbdType(), kUCKeyTranslateNoDeadKeysMask,
+                                             &deadKeyState, 4, &length, characters);
+            if (status == noErr && length == 1) {
+                character = characters[0];
+                translated = YES;
+                virtualKey = HIDVirtualKeyForTypedCharacter(character);
+            }
+        }
+        CFRelease(source);
+    }
+
+    _typedVirtualKeyCache[@(macKeyCode)] = @(virtualKey);
+
+    if (virtualKey == 0) {
+        // Only letter and digit positions are worth reporting; punctuation
+        // positions normally type punctuation.
+        short positional = (short)[self.mappings[@(macKeyCode)] shortValue];
+        if ((positional >= 'A' && positional <= 'Z') || (positional >= '0' && positional <= '9')) {
+            Log(LOG_D, @"[keyboard] typed mapping: key 0x%02x has no A-Z/0-9 character under layout=%@ (%@), using position",
+                macKeyCode, _typedLayoutID ?: @"(unknown)",
+                translated ? [NSString stringWithFormat:@"U+%04X", character] : @"no translation");
+        }
+    }
+    return virtualKey;
+}
+
+// The (VK, flags) pair for a Mac key under the current mapping mode. Position
+// mode is exactly the static table with flags 0. Typed mode sends A-Z / 0-9 by
+// the character the key types, flagged non-normalized so the host resolves the
+// key in its own layout; everything else stays positional with flags 0.
+- (uint32_t)keyPairForMacKeyCode:(unsigned short)macKeyCode {
+    NSInteger mode = [self usesTypedKeyMapping] ? 1 : 0;
+    short virtualKey = mode == 1 ? [self typedVirtualKeyForMacKeyCode:macKeyCode] : 0;
+    [self logKeyMappingStateForMode:mode];
+    if (virtualKey != 0) {
+        return HIDPackKeyPair((short)(0x8000 | virtualKey), SS_KBE_FLAG_NON_NORMALIZED);
+    }
+    NSNumber *positional = [self.mappings objectForKey:@(macKeyCode)];
+    return HIDPackKeyPair((short)(0x8000 | (positional != nil ? [positional shortValue] : 0)), 0);
+}
+
 - (void)keyDown:(NSEvent *)event {
     if (self.shouldSendInputEvents) {
         [self syncKeyboardModifierStateForEvent:event];
-        short keyCode = 0x8000 | [self translateKeyCodeWithEvent:event];
         char modifiers = [self translateKeyModifierWithEvent:event];
         PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
         if (!HIDValidateInputContext(inputCtx, "keyDown")) {
             return;
         }
+
+        NSNumber *macKey = @(event.keyCode);
+        uint32_t pair = 0;
+        BOOL hasPair = NO;
+        BOOL replacedHeldPair = NO;
+        uint32_t previousPair = 0;
+        [_pressedKeyPairsLock lock];
+        NSNumber *held = _pressedKeyPairs[macKey];
+        if (held != nil && event.isARepeat) {
+            // Auto-repeat keeps the pair of the original press.
+            pair = held.unsignedIntValue;
+            hasPair = YES;
+        }
+        [_pressedKeyPairsLock unlock];
+        if (!hasPair) {
+            pair = [self keyPairForMacKeyCode:event.keyCode];
+            [_pressedKeyPairsLock lock];
+            held = _pressedKeyPairs[macKey];
+            if (held != nil && held.unsignedIntValue != pair) {
+                // A key-up was missed and the pair changed since; release the old one.
+                replacedHeldPair = YES;
+                previousPair = held.unsignedIntValue;
+            }
+            _pressedKeyPairs[macKey] = @(pair);
+            [_pressedKeyPairsLock unlock];
+        }
+
+        short keyCode = HIDKeyPairKeyCode(pair);
+        char keyFlags = HIDKeyPairFlags(pair);
         HIDDispatchInput(self, inputCtx, ^{
-            LiSendKeyboardEventCtx(inputCtx, keyCode, KEY_ACTION_DOWN, modifiers);
+            if (replacedHeldPair) {
+                LiSendKeyboardEvent2Ctx(inputCtx, HIDKeyPairKeyCode(previousPair), KEY_ACTION_UP, 0,
+                                        HIDKeyPairFlags(previousPair));
+            }
+            LiSendKeyboardEvent2Ctx(inputCtx, keyCode, KEY_ACTION_DOWN, modifiers, keyFlags);
         });
     }
 }
@@ -1071,14 +1315,25 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
 - (void)keyUp:(NSEvent *)event {
     if (self.shouldSendInputEvents) {
         [self syncKeyboardModifierStateForEvent:event];
-        short keyCode = 0x8000 | [self translateKeyCodeWithEvent:event];
         char modifiers = [self translateKeyModifierWithEvent:event];
         PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
         if (!HIDValidateInputContext(inputCtx, "keyUp")) {
             return;
         }
+
+        // Release with exactly the pair the key-down used, even if the layout or
+        // the key mapping setting changed while the key was held.
+        NSNumber *macKey = @(event.keyCode);
+        [_pressedKeyPairsLock lock];
+        NSNumber *held = _pressedKeyPairs[macKey];
+        [_pressedKeyPairs removeObjectForKey:macKey];
+        [_pressedKeyPairsLock unlock];
+        uint32_t pair = held != nil ? held.unsignedIntValue : [self keyPairForMacKeyCode:event.keyCode];
+
+        short keyCode = HIDKeyPairKeyCode(pair);
+        char keyFlags = HIDKeyPairFlags(pair);
         HIDDispatchInput(self, inputCtx, ^{
-            LiSendKeyboardEventCtx(inputCtx, keyCode, KEY_ACTION_UP, modifiers);
+            LiSendKeyboardEvent2Ctx(inputCtx, keyCode, KEY_ACTION_UP, modifiers, keyFlags);
         });
     }
 }
@@ -1129,11 +1384,23 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     self.keyboardPhysicalModifierSourceMask = 0;
     self.keyboardRemoteModifierMask = 0;
     self.keyboardDeferredShortcutTranslationCommandMask = 0;
+
+    // Non-modifier keys still held are released with the exact (VK, flags) pair
+    // their key-down used, so a typed-character key cannot stay stuck on the host.
+    [_pressedKeyPairsLock lock];
+    NSArray<NSNumber *> *heldPairs = _pressedKeyPairs.allValues;
+    [_pressedKeyPairs removeAllObjects];
+    [_pressedKeyPairsLock unlock];
+
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
     if (!inputCtx) {
         return;
     }
     HIDDispatchInput(self, inputCtx, ^{
+        for (NSNumber *heldPair in heldPairs) {
+            uint32_t pair = heldPair.unsignedIntValue;
+            LiSendKeyboardEvent2Ctx(inputCtx, HIDKeyPairKeyCode(pair), KEY_ACTION_UP, 0, HIDKeyPairFlags(pair));
+        }
         LiSendKeyboardEventCtx(inputCtx, 0x5B, KEY_ACTION_UP, 0);
         LiSendKeyboardEventCtx(inputCtx, 0x5C, KEY_ACTION_UP, 0);
         LiSendKeyboardEventCtx(inputCtx, 0xA0, KEY_ACTION_UP, 0);
@@ -1223,7 +1490,10 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
     }
 
     char translatedModifiers = HIDRemoteModifierFlagsToGenericFlags(remoteModifierMask);
-    short translatedKeyCode = (short)(0x8000 | [mappedKey shortValue]);
+    // The remote key follows the key mapping mode like a typed key does.
+    uint32_t keyPair = [self keyPairForMacKeyCode:(unsigned short)shortcut.keyCode];
+    short translatedKeyCode = HIDKeyPairKeyCode(keyPair);
+    char translatedKeyFlags = HIDKeyPairFlags(keyPair);
 
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
     if (!HIDValidateInputContext(inputCtx, "sendSyntheticRemoteShortcut")) {
@@ -1254,8 +1524,8 @@ static void HIDDispatchSyntheticRemoteModifierTap(HIDSupport *support,
             }
         }
 
-        LiSendKeyboardEventCtx(inputCtx, translatedKeyCode, KEY_ACTION_DOWN, translatedModifiers);
-        LiSendKeyboardEventCtx(inputCtx, translatedKeyCode, KEY_ACTION_UP, translatedModifiers);
+        LiSendKeyboardEvent2Ctx(inputCtx, translatedKeyCode, KEY_ACTION_DOWN, translatedModifiers, translatedKeyFlags);
+        LiSendKeyboardEvent2Ctx(inputCtx, translatedKeyCode, KEY_ACTION_UP, translatedModifiers, translatedKeyFlags);
 
         for (NSInteger i = (NSInteger)(sizeof(remoteOrder) / sizeof(remoteOrder[0])) - 1; i >= 0; i--) {
             HIDKeyboardRemoteModifierMask mask = remoteOrder[(NSUInteger)i];

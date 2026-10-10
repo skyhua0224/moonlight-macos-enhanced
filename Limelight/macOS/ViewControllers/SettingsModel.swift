@@ -189,6 +189,7 @@ class SettingsModel: ObservableObject {
   static let controllerFeedbackTargetKeyPrefix = "settings.controller.feedbackTarget."
   static let controllerVirtualTypeKeyPrefix = "settings.controller.virtualType."
   static let controllerCalibrationKeyPrefix = "settings.controller.calibration."
+  static let keyMappingModeKeyPrefix = "settings.keyboard.keyMappingMode."
   static let controllerShortcutProfileKeyPrefix = "settings.controller.shortcuts."
   static let sunshineVddCapabilityKeyPrefix = "settings.sunshine.vddCapability."
   static let sunshineVddStateKeyPrefix = "settings.sunshine.vddState."
@@ -867,6 +868,12 @@ class SettingsModel: ObservableObject {
     didSet {
       guard !isLoading else { return }
       saveSettings()
+    }
+  }
+  @Published var selectedKeyMappingMode: String {
+    didSet {
+      guard !isLoading else { return }
+      persistKeyMappingMode()
     }
   }
   @Published var keyboardTranslationRules: [KeyboardTranslationRule] {
@@ -1605,6 +1612,7 @@ class SettingsModel: ObservableObject {
     showConnectionWarnings = Self.defaultShowConnectionWarnings
     captureSystemShortcuts = Self.defaultCaptureSystemShortcuts
     selectedKeyboardCompatibilityMode = Self.defaultKeyboardCompatibilityMode
+    selectedKeyMappingMode = Self.defaultKeyMappingMode
     keyboardTranslationRules = KeyboardTranslationProfile.defaultRules()
     volumeLevel = Self.defaultVolumeLevel
 

@@ -122,6 +122,21 @@ extension SettingsModel {
     })?.normalized ?? .default
   }
 
+  /// The key mapping mode is stored per host as the persisted raw value, like the
+  /// other per-host keyboard and controller settings that live outside `Settings`.
+  func persistKeyMappingMode() {
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    UserDefaults.standard.set(
+      KeyMappingMode(selection: selectedKeyMappingMode).rawValue,
+      forKey: Self.keyMappingModeKeyPrefix + hostId)
+  }
+
+  func loadKeyMappingMode(for hostId: String) {
+    selectedKeyMappingMode = KeyMappingMode(
+      persistedRawValue: controllerSettingObject(
+        prefix: Self.keyMappingModeKeyPrefix, hostId: hostId, as: Int.self)).displayKey
+  }
+
   func resetControllerCalibration() {
     controllerCalibration = .default
   }
@@ -247,6 +262,7 @@ extension SettingsModel {
     showConnectionWarnings = Self.defaultShowConnectionWarnings
     captureSystemShortcuts = Self.defaultCaptureSystemShortcuts
     selectedKeyboardCompatibilityMode = Self.defaultKeyboardCompatibilityMode
+    selectedKeyMappingMode = Self.defaultKeyMappingMode
     keyboardTranslationRules = KeyboardTranslationProfile.defaultRules()
     volumeLevel = Self.defaultVolumeLevel
 
@@ -305,6 +321,7 @@ extension SettingsModel {
 
   func loadAndSaveDefaultSettings() {
     loadDefaultSettings()
+    persistKeyMappingMode()
     saveSettings()
   }
 
@@ -326,6 +343,7 @@ extension SettingsModel {
     dualSensePrecisionTouchpad = UserDefaults.standard.object(
       forKey: SettingsModel.controllerDualSensePrecisionTouchpadKeyPrefix + hostId) as? Bool ?? false
     loadControllerSettings(for: hostId)
+    loadKeyMappingMode(for: hostId)
     if let settings = Settings.getSettings(for: hostId) {
       selectedResolution = settings.resolution
 

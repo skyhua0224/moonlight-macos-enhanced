@@ -1047,6 +1047,10 @@
 "Feedback Target" = "反馈目标";
 "Connected Controllers" = "已连接手柄";
 "Keyboard Translation" = "键盘翻译";
+"Key Mapping" = "按键映射";
+"Key Mapping detail" = "当 Mac 与主机使用不同的键盘布局时，请选择“输入的字符”。按键位置绑定按键的游戏（如 WASD）使用“物理按键位置”效果最佳。";
+"Physical key position" = "物理按键位置";
+"Typed characters" = "输入的字符";
 "Capture System Shortcuts" = "捕获系统快捷键";
 "Pointer Speed" = "指针速度";
 "Scroll Mode" = "滚动模式";

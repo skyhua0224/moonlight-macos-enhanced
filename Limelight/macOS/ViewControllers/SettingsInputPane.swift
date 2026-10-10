@@ -229,15 +229,29 @@ private struct KeyboardMouseSettingsSection: View {
         .frame(width: 180, alignment: .trailing)
       }
 
-      SettingsRow(title: "Keyboard Translation") {
-        Picker("", selection: $settingsModel.selectedKeyboardCompatibilityMode) {
-          ForEach(SettingsModel.keyboardCompatibilityModes, id: \.self) { value in
-            Text(languageManager.localize(value)).tag(value)
+      // Grouped so the section keeps the same number of direct children.
+      Group {
+        SettingsRow(title: "Keyboard Translation") {
+          Picker("", selection: $settingsModel.selectedKeyboardCompatibilityMode) {
+            ForEach(SettingsModel.keyboardCompatibilityModes, id: \.self) { value in
+              Text(languageManager.localize(value)).tag(value)
+            }
           }
+          .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedKeyboardCompatibilityMode, options: SettingsModel.keyboardCompatibilityModes, title: { value in languageManager.localize(value) })
+          .frame(width: 240, alignment: .trailing)
         }
-        .labelsHidden()
-        .controllerPicker(selection: $settingsModel.selectedKeyboardCompatibilityMode, options: SettingsModel.keyboardCompatibilityModes, title: { value in languageManager.localize(value) })
-        .frame(width: 240, alignment: .trailing)
+
+        SettingsRow(title: "Key Mapping", detail: "Key Mapping detail") {
+          Picker("", selection: $settingsModel.selectedKeyMappingMode) {
+            ForEach(SettingsModel.keyMappingModes, id: \.self) { value in
+              Text(languageManager.localize(value)).tag(value)
+            }
+          }
+          .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedKeyMappingMode, options: SettingsModel.keyMappingModes, title: { value in languageManager.localize(value) })
+          .frame(width: 240, alignment: .trailing)
+        }
       }
 
       ToggleCell(title: "Capture System Shortcuts", boolBinding: $settingsModel.captureSystemShortcuts)

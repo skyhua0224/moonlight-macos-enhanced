@@ -992,6 +992,10 @@
 "Feedback Target" = "Feedback Target";
 "Connected Controllers" = "Connected Controllers";
 "Keyboard Translation" = "Keyboard Translation";
+"Key Mapping" = "Key Mapping";
+"Key Mapping detail" = "Use Typed characters when your Mac and the host use different keyboard layouts. Games that bind keys by position (WASD) work best with Physical key position.";
+"Physical key position" = "Physical key position";
+"Typed characters" = "Typed characters";
 "Capture System Shortcuts" = "Capture System Shortcuts";
 "Pointer Speed" = "Pointer Speed";
 "Scroll Mode" = "Scroll Mode";

@@ -473,6 +473,10 @@ public class LanguageManager: NSObject, ObservableObject {
     "Feedback Target": "Feedback Target",
     "Connected Controllers": "Connected Controllers",
     "Keyboard Translation": "Keyboard Translation",
+    "Key Mapping": "Key Mapping",
+    "Key Mapping detail": "Use Typed characters when your Mac and the host use different keyboard layouts. Games that bind keys by position (WASD) work best with Physical key position.",
+    "Physical key position": "Physical key position",
+    "Typed characters": "Typed characters",
     "Capture System Shortcuts": "Capture System Shortcuts",
     "Scroll Mode": "Scroll Mode",
   ]
@@ -869,6 +873,10 @@ public class LanguageManager: NSObject, ObservableObject {
     "Feedback Target": "反馈目标",
     "Connected Controllers": "已连接手柄",
     "Keyboard Translation": "键盘翻译",
+    "Key Mapping": "按键映射",
+    "Key Mapping detail": "当 Mac 与主机使用不同的键盘布局时，请选择“输入的字符”。按键位置绑定按键的游戏（如 WASD）使用“物理按键位置”效果最佳。",
+    "Physical key position": "物理按键位置",
+    "Typed characters": "输入的字符",
     "Capture System Shortcuts": "捕获系统快捷键",
     "Scroll Mode": "滚动模式",
   ]

@@ -1422,6 +1422,15 @@ class SettingsClass: NSObject {
     persist(copy(settings, remoteDisplayScale: percent), for: key)
   }
 
+  /// 0 = physical key position (default), 1 = typed characters.
+  @objc static func keyMappingMode(for key: String) -> Int {
+    let defaults = UserDefaults.standard
+    let stored = defaults.object(forKey: SettingsModel.keyMappingModeKeyPrefix + key) as? Int
+      ?? (key == SettingsModel.globalHostId ? nil : defaults.object(
+        forKey: SettingsModel.keyMappingModeKeyPrefix + SettingsModel.globalHostId) as? Int)
+    return KeyMappingMode(persistedRawValue: stored).rawValue
+  }
+
   @objc static func quitAppAfterStream(for key: String) -> Bool {
     if let settings = Settings.getSettings(for: key) {
       return settings.quitAppAfterStream ?? SettingsModel.defaultQuitAppAfterStream
