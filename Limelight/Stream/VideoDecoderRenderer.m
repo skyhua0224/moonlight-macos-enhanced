@@ -1456,6 +1456,13 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     BOOL _preparedHDRDisplaySupportsEDRPresentation;
     CGDirectDisplayID _preparedHDRDisplayID;
     BOOL _metalDrawScheduled;
+
+    // Held for a whole decode submission and by -stop while it tears the decoder down. The stream
+    // library calls -stop before it has joined the thread that submits frames, so without this a
+    // frame could still be inside VideoToolbox when the session is invalidated.
+    NSRecursiveLock *_decodeSubmitLock;
+    // Set by -stop under the lock; frames that arrive afterwards are dropped.
+    BOOL _decoderStopped;
     NSUInteger _lastLoggedDrawableWidth;
     NSUInteger _lastLoggedDrawableHeight;
     OSType _lastLoggedDecodedPixelFormat;
@@ -1607,6 +1614,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
 {
     self = [super init];
 
+    _decodeSubmitLock = [[NSRecursiveLock alloc] init];
     atomic_init(&_decompressionOutputError, noErr);
     atomic_init(&_hostHDRMetadataChanged, false);
     atomic_init(&_hostHdrState, -1);
@@ -2964,6 +2972,9 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
                upscalingMode:(int)upscalingMode
                 streamConfig:(StreamConfiguration *)streamConfig
 {
+    [_decodeSubmitLock lock];
+    _decoderStopped = NO;
+    [_decodeSubmitLock unlock];
     self->videoFormat = videoFormat;
     self.frameRate = frameRate;
     _streamWidth = streamConfig ? streamConfig.width : 0;
@@ -5677,6 +5688,10 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         _displayLink = NULL;
     }
 
+    // Taken only after the display link is stopped: its callback submits frames in pull mode, and
+    // stopping it waits for that callback. A frame already being decoded finishes first.
+    [_decodeSubmitLock lock];
+    _decoderStopped = YES;
     [self clearCurrentFrame];
     [self teardownDecompressionSession];
     [self teardownDolbyVisionMetadataSession];
@@ -5684,6 +5699,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         CFRelease(_baseHEVCFormatDesc);
         _baseHEVCFormatDesc = NULL;
     }
+    [_decodeSubmitLock unlock];
     [self teardownEnhancementProcessor];
     [self teardownFrameInterpolationProcessor];
     [self teardownHDRPresentationResources];
@@ -5993,6 +6009,14 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 }
 
 - (int)submitDecodeUnit:(void *)du_void {
+    [_decodeSubmitLock lock];
+    // After -stop there is no decoder to feed; the frame is simply dropped.
+    int result = _decoderStopped ? DR_OK : [self submitDecodeUnitLocked:du_void];
+    [_decodeSubmitLock unlock];
+    return result;
+}
+
+- (int)submitDecodeUnitLocked:(void *)du_void {
     if (_firstDecodeInputMs == 0) _firstDecodeInputMs = LiGetMillis();
     PDECODE_UNIT unit = (PDECODE_UNIT)du_void;
     if (!self.directSubmission || unit == NULL) return [self submitDecodeUnitPayload:du_void];
