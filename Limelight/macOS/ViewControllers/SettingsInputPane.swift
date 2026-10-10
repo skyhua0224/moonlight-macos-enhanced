@@ -125,6 +125,9 @@ private struct ControllerSettingsSection: View {
           Text(languageManager.localize("DualSense Touchpad Output Precision")).tag(true)
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.dualSensePrecisionTouchpad, options: [false, true], title: { value in
+          languageManager.localize(value ? "DualSense Touchpad Output Precision" : "DualSense Touchpad Output Controller")
+        })
         .frame(width: 250, alignment: .trailing)
       }
       SettingsRow(title: "Haptic Feedback") {
@@ -239,6 +242,9 @@ private struct KeyboardMouseSettingsSection: View {
           Text(languageManager.localize("Precision Touchpad Both")).tag(2)
         }
         .labelsHidden()
+        .controllerPicker(selection: $settingsModel.hostPrecisionTouchpadMode, options: [0, 1, 2], title: { value in
+          languageManager.localize(["Precision Touchpad Off", "Precision Touchpad Block", "Precision Touchpad Both"][value])
+        })
         .frame(width: 300, alignment: .trailing)
       }
       ToggleCell(title: "Input Method Text", hintKey: "Input Method Text Hint", boolBinding: $settingsModel.imeTextInput)
