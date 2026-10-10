@@ -48,6 +48,8 @@
 - (void)streamResolutionChanged:(uint32_t)width height:(uint32_t)height;
 // Host text focus / caret updates, only delivered when wantsRemoteTextContext is set.
 - (void)remoteTextContextUpdated:(const LI_REMOTE_TEXT_CONTEXT *)context;
+// The audio transport failed in a way the user should know about. May arrive on any thread.
+- (void)audioCodecNotice:(NSString *)message;
 
 @end
 

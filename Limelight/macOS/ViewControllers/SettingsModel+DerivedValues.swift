@@ -2039,3 +2039,222 @@ extension SettingsModel {
     VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
   }
 }
+
+// MARK: - Audio codec choice and bandwidth planning
+
+/// Audio codecs the client can request from a Foundation Sunshine host. The ids
+/// match the AUDIO_CODEC_* constants of moonlight-common-c.
+enum AudioCodecChoice: CaseIterable {
+  case opus
+  case pcm
+
+  var displayKey: String {
+    switch self {
+    case .opus: return "Opus"
+    case .pcm: return "Lossless (PCM)"
+    }
+  }
+
+  var codecId: Int {
+    switch self {
+    case .opus: return MLAudioStreamPlan.codecOpus
+    case .pcm: return MLAudioStreamPlan.codecPcm
+    }
+  }
+
+  init(selection: String) {
+    self = Self.allCases.first { $0.displayKey == selection } ?? .opus
+  }
+
+  init(codecId: Int) {
+    self = Self.allCases.first { $0.codecId == codecId } ?? .opus
+  }
+}
+
+/// Why a requested codec is replaced by Opus.
+@objc enum MLAudioFallbackReason: Int {
+  case none = 0
+  case tooManyChannels = 1
+  case notFoundationHost = 2
+  case previouslyFailed = 3
+}
+
+extension SettingsModel {
+  static let defaultAudioCodec = AudioCodecChoice.opus.displayKey
+  // Literal list so the settings search indexes the option names; keep it in
+  // step with AudioCodecChoice.displayKey.
+  static var audioCodecs: [String] = [
+    "Opus",
+    "Lossless (PCM)",
+  ]
+}
+
+/// What the audio stream of one session looks like on the wire. A single source
+/// of truth for the settings page, the pre-stream risk assessment, the bandwidth
+/// probe and the log line, so the numbers they show cannot drift apart.
+@objcMembers final class MLAudioStreamPlan: NSObject {
+  static let codecOpus = 0
+  static let codecAc3 = 1
+  static let codecEac3 = 2
+  static let codecPcm = 3
+
+  // RTP over UDP/IPv4: 12 + 8 + 20 bytes in front of every audio packet.
+  private static let perPacketOverheadBytes = 40.0
+  // The host protects audio with a 4 data + 2 parity Reed-Solomon block.
+  private static let fecFactor = 1.5
+  // Mirrors rtsp.cpp: the host reserves this much of the configured bitrate for audio.
+  private static let hostReservePerChannelKbps = 96
+  private static let hostReserveHighQualityPerChannelKbps = 256
+  private static let highQualityVideoBitrateKbps = 15_000
+  private static let lowBitrateVideoKbps = 5_000
+
+  let requestedCodec: Int
+  let effectiveCodec: Int
+  let channelCount: Int
+  let packetDurationMs: Int
+  let payloadKbps: Int
+  let wireKbps: Int
+  let hostReserveKbps: Int
+  let highQuality: Bool
+  let fallbackReasonRaw: Int
+
+  var fallbackReason: MLAudioFallbackReason {
+    MLAudioFallbackReason(rawValue: fallbackReasonRaw) ?? .none
+  }
+
+  /// Bandwidth the link has to carry beyond what the host already holds back
+  /// from the configured video bitrate for audio.
+  var excessKbps: Int { max(0, wireKbps - hostReserveKbps) }
+
+  /// Exact payload size of one PCM packet, 0 for the other codecs.
+  var pcmPacketBytes: Int {
+    effectiveCodec == Self.codecPcm ? packetDurationMs * 48 * channelCount * 2 : 0
+  }
+
+  var effectiveCodecName: String { Self.codecName(effectiveCodec) }
+  var requestedCodecName: String { Self.codecName(requestedCodec) }
+
+  var fallbackLogText: String {
+    switch fallbackReason {
+    case .none: return "none"
+    case .tooManyChannels: return "more than 5.1 channels"
+    case .notFoundationHost: return "host is not Foundation Sunshine"
+    case .previouslyFailed: return "host did not deliver this codec earlier"
+    }
+  }
+
+  private init(
+    requestedCodec: Int, effectiveCodec: Int, channelCount: Int, packetDurationMs: Int,
+    payloadKbps: Int, wireKbps: Int, hostReserveKbps: Int, highQuality: Bool,
+    fallbackReason: MLAudioFallbackReason
+  ) {
+    self.requestedCodec = requestedCodec
+    self.effectiveCodec = effectiveCodec
+    self.channelCount = channelCount
+    self.packetDurationMs = packetDurationMs
+    self.payloadKbps = payloadKbps
+    self.wireKbps = wireKbps
+    self.hostReserveKbps = hostReserveKbps
+    self.highQuality = highQuality
+    self.fallbackReasonRaw = fallbackReason.rawValue
+    super.init()
+  }
+
+  static func codecName(_ codec: Int) -> String {
+    switch codec {
+    case codecAc3: return "ac3"
+    case codecEac3: return "eac3"
+    case codecPcm: return "pcm"
+    default: return "opus"
+    }
+  }
+
+  /// Channels of the Audio Configuration choices (stereo, 5.1, 7.1, 7.1.4).
+  @objc(channelCountForAudioConfigurationIndex:)
+  static func channelCount(forAudioConfigurationIndex index: Int) -> Int {
+    switch index {
+    case 1: return 6
+    case 2: return 8
+    case 3: return 12
+    default: return 2
+    }
+  }
+
+  /// foundationHost: -1 unknown (settings preview), 0 not Foundation Sunshine, 1 Foundation Sunshine.
+  @objc(planWithRequestedCodec:channelCount:videoBitrateKbps:disableHighQualitySurround:foundationHost:codecFailed:)
+  static func make(
+    requestedCodec: Int,
+    channelCount: Int,
+    videoBitrateKbps: Int,
+    disableHighQualitySurround: Bool,
+    foundationHost: Int,
+    codecFailed: Bool
+  ) -> MLAudioStreamPlan {
+    let channels = max(1, channelCount)
+    let video = max(0, videoBitrateKbps)
+
+    var effective = requestedCodec
+    var reason = MLAudioFallbackReason.none
+    if effective != codecOpus {
+      if effective != codecPcm && effective != codecAc3 && effective != codecEac3 {
+        effective = codecOpus
+      } else if channels > 6 {
+        effective = codecOpus
+        reason = .tooManyChannels
+      } else if foundationHost == 0 {
+        effective = codecOpus
+        reason = .notFoundationHost
+      } else if codecFailed {
+        effective = codecOpus
+        reason = .previouslyFailed
+      }
+    }
+
+    var payloadKbps = 0
+    var duration = 5
+    var highQuality = false
+    switch effective {
+    case codecPcm:
+      payloadKbps = 48 * 16 * channels
+      duration = 5
+    case codecAc3:
+      payloadKbps = 640
+      duration = 32
+    case codecEac3:
+      payloadKbps = 384
+      duration = 32
+    default:
+      highQuality =
+        channels > 2 && video >= highQualityVideoBitrateKbps && !disableHighQualitySurround
+      payloadKbps = opusPayloadKbps(channels: channels, highQuality: highQuality)
+      duration = (!highQuality && video < lowBitrateVideoKbps) ? 10 : 5
+    }
+
+    let packetsPerSecond = 1000.0 / Double(duration)
+    let wire =
+      Double(payloadKbps) * fecFactor
+      + packetsPerSecond * fecFactor * perPacketOverheadBytes * 8.0 / 1000.0
+
+    let perChannel = highQuality ? hostReserveHighQualityPerChannelKbps : hostReservePerChannelKbps
+    let reserve = min(perChannel * channels, video / 5)
+
+    return MLAudioStreamPlan(
+      requestedCodec: requestedCodec, effectiveCodec: effective, channelCount: channels,
+      packetDurationMs: duration, payloadKbps: payloadKbps, wireKbps: Int(wire.rounded()),
+      hostReserveKbps: reserve, highQuality: highQuality, fallbackReason: reason)
+  }
+
+  /// Host defaults from audio.cpp (total bitrate of the Opus stream).
+  private static func opusPayloadKbps(channels: Int, highQuality: Bool) -> Int {
+    switch channels {
+    case ...2: return highQuality ? 512 : 96
+    case 3...6: return highQuality ? 1536 : 256
+    case 7...8: return highQuality ? 2048 : 450
+    default: return highQuality ? 3072 : 600
+    }
+  }
+
+  static func mbpsText(_ kbps: Int) -> String {
+    String(format: "%.1f", Double(kbps) / 1000.0)
+  }
+}

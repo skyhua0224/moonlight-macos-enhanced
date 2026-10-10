@@ -402,6 +402,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
 }
 
+- (void)audioCodecNotice:(NSString *)message {
+    [self forwardIfCurrentNamed:@"audioCodecNotice" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(audioCodecNotice:)]) {
+            [owner audioCodecNotice:message];
+        }
+    }];
+}
+
 - (void)remoteTextContextUpdated:(const LI_REMOTE_TEXT_CONTEXT *)context {
     // The context is only valid during the callback, so hand over a copy.
     NSData *snapshot = context != NULL ? [NSData dataWithBytes:context length:sizeof(*context)] : nil;
@@ -1496,6 +1504,40 @@ highFreqMotor:(unsigned short)highFreqMotor {
             streamConfig.hdrAutoLuminanceAvailable ? 1 : 0);
     }
 
+    NSInteger audioConfigSelection = [SettingsClass audioConfigurationFor:self.app.host.uuid];
+    int audioConfig = AUDIO_CONFIGURATION_STEREO;
+    if (audioConfigSelection == 1) {
+        audioConfig = AUDIO_CONFIGURATION_51_SURROUND;
+    } else if (audioConfigSelection == 2) {
+        audioConfig = AUDIO_CONFIGURATION_71_SURROUND;
+    } else if (audioConfigSelection == 3) {
+        audioConfig = AUDIO_CONFIGURATION_714_SURROUND;
+    }
+    int audioOutputMode = (int)[SettingsClass audioOutputModeFor:self.app.host.uuid];
+    streamConfig.audioOutputMode = audioOutputMode;
+    streamConfig.disableHighQualitySurround =
+        (audioOutputMode == 1 && audioConfig == AUDIO_CONFIGURATION_714_SURROUND);
+    streamConfig.audioConfiguration = audioConfig;
+    // The audio transport is planned before the risk assessment so its bandwidth
+    // is part of the stream total. The host is not known to be Foundation Sunshine
+    // yet; the connection makes that last check once serverinfo has been read.
+    NSInteger requestedAudioCodec = [SettingsClass audioCodecFor:self.app.host.uuid];
+    BOOL requestedAudioCodecFailed = [SettingsClass audioCodecFailed:requestedAudioCodec
+                                                             forHost:self.app.host.uuid];
+    MLAudioStreamPlan *audioPlan =
+        [MLAudioStreamPlan planWithRequestedCodec:requestedAudioCodec
+                                     channelCount:[MLAudioStreamPlan channelCountForAudioConfigurationIndex:audioConfigSelection]
+                                 videoBitrateKbps:streamConfig.bitRate
+                       disableHighQualitySurround:streamConfig.disableHighQualitySurround
+                                   foundationHost:-1
+                                      codecFailed:requestedAudioCodecFailed];
+    streamConfig.audioCodec = (int)audioPlan.effectiveCodec;
+    streamConfig.audioExcessBitrateKbps = (int)audioPlan.excessKbps;
+    if (audioPlan.fallbackReason != MLAudioFallbackReasonNone) {
+        Log(LOG_W, @"[audio] Requested codec %@ replaced by opus: %@",
+            audioPlan.requestedCodecName, audioPlan.fallbackLogText);
+    }
+
     NSString *codecName = @"H.264";
     if (streamConfig.videoCodecPreference == 2) {
         codecName = @"AV1";
@@ -1511,7 +1553,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
                                                               bitrateKbps:streamConfig.bitRate
                                                                 codecName:codecName
                                                              enableYUV444:enableYuv444
-                                                                 autoMode:autoAdjustBitrate];
+                                                                 autoMode:autoAdjustBitrate
+                                                               audioCodec:audioPlan.effectiveCodec
+                                                              audioChannels:audioPlan.channelCount
+                                                disableHighQualitySurround:streamConfig.disableHighQualitySurround];
     Log(LOG_I, @"[diag] Stream risk assessment: %@ codec=%@ chroma=%@ decode=%d target=%@",
         self.currentStreamRiskAssessment.summaryLine ?: @"(none)",
         self.currentStreamRiskAssessment.codecName ?: codecName,
@@ -1533,20 +1578,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.multiController = streamSettings.multiController;
     streamConfig.gamepadMask = self.useSystemControllerDriver ? (int)[ControllerSupport getConnectedGamepadMask:streamConfig] : 1;
     
-    NSInteger audioConfigSelection = [SettingsClass audioConfigurationFor:self.app.host.uuid];
-    int audioConfig = AUDIO_CONFIGURATION_STEREO;
-    if (audioConfigSelection == 1) {
-        audioConfig = AUDIO_CONFIGURATION_51_SURROUND;
-    } else if (audioConfigSelection == 2) {
-        audioConfig = AUDIO_CONFIGURATION_71_SURROUND;
-    } else if (audioConfigSelection == 3) {
-        audioConfig = AUDIO_CONFIGURATION_714_SURROUND;
-    }
-    int audioOutputMode = (int)[SettingsClass audioOutputModeFor:self.app.host.uuid];
-    streamConfig.audioOutputMode = audioOutputMode;
-    streamConfig.disableHighQualitySurround =
-        (audioOutputMode == 1 && audioConfig == AUDIO_CONFIGURATION_714_SURROUND);
-    streamConfig.audioConfiguration = audioConfig;
     streamConfig.enhancedAudioOutputTarget = (int)[SettingsClass enhancedAudioOutputTargetFor:self.app.host.uuid];
     streamConfig.enhancedAudioPreset = (int)[SettingsClass enhancedAudioPresetFor:self.app.host.uuid];
     streamConfig.enhancedAudioSpatialIntensity = [SettingsClass enhancedAudioSpatialIntensityFor:self.app.host.uuid];

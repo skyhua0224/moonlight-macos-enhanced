@@ -1570,6 +1570,57 @@ class SettingsClass: NSObject {
     return version?.intValue != 0
   }
 
+  /// Requested audio codec (AUDIO_CODEC_* id) for a host, falling back to the global value.
+  @objc static func audioCodec(for key: String) -> Int {
+    let defaults = UserDefaults.standard
+    let value = defaults.string(forKey: SettingsModel.audioCodecKeyPrefix + key)
+      ?? (key == SettingsModel.globalHostId ? nil : defaults.string(
+        forKey: SettingsModel.audioCodecKeyPrefix + SettingsModel.globalHostId))
+      ?? SettingsModel.defaultAudioCodec
+    return AudioCodecChoice(selection: value).codecId
+  }
+
+  /// True when an earlier session learned that this host does not deliver the codec.
+  @objc(audioCodecFailed:forHost:)
+  static func audioCodecFailed(_ codec: Int, for key: String) -> Bool {
+    guard codec > 0, codec < 31 else { return false }
+    let bits = UserDefaults.standard.integer(forKey: SettingsModel.audioCodecFailureKeyPrefix + key)
+    return bits & (1 << codec) != 0
+  }
+
+  @objc(markAudioCodecFailed:forHost:)
+  static func markAudioCodecFailed(_ codec: Int, for key: String) {
+    guard codec > 0, codec < 31 else { return }
+    let defaults = UserDefaults.standard
+    let storageKey = SettingsModel.audioCodecFailureKeyPrefix + key
+    defaults.set(defaults.integer(forKey: storageKey) | (1 << codec), forKey: storageKey)
+    DispatchQueue.main.async {
+      NotificationCenter.default.post(
+        name: SettingsModel.audioCodecFailureChangedNotification, object: nil)
+    }
+  }
+
+  @objc(clearAudioCodecFailuresForHost:)
+  static func clearAudioCodecFailures(for key: String) {
+    UserDefaults.standard.removeObject(forKey: SettingsModel.audioCodecFailureKeyPrefix + key)
+  }
+
+  /// Remembers whether the host reported Foundation Sunshine tags, so the audio
+  /// settings can explain why a codec other than Opus is not used.
+  @objc(recordFoundationHost:forHost:)
+  static func recordFoundationHost(_ isFoundation: Bool, for key: String) {
+    guard !key.isEmpty else { return }
+    let defaults = UserDefaults.standard
+    let storageKey = SettingsModel.foundationHostKeyPrefix + key
+    if (defaults.object(forKey: storageKey) as? Bool) != isFoundation {
+      defaults.set(isFoundation, forKey: storageKey)
+      DispatchQueue.main.async {
+        NotificationCenter.default.post(
+          name: SettingsModel.audioCodecFailureChangedNotification, object: nil)
+      }
+    }
+  }
+
   @objc static func gamepadMouseModeLongPressMenu(for key: String) -> Bool {
     if let settings = Settings.getSettings(for: key) {
       return settings.gamepadMouseModeLongPressMenu ?? SettingsModel.defaultGamepadMouseModeLongPressMenu

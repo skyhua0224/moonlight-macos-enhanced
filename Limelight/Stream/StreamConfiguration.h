@@ -31,6 +31,12 @@
 @property(nonatomic) BOOL optimizeGameSettings;
 @property(nonatomic) BOOL playAudioOnPC;
 @property(nonatomic) int audioConfiguration;
+/// Audio codec the user asked for (AUDIO_CODEC_*: 0 Opus, 1 AC3, 2 E-AC3, 3 PCM),
+/// already reduced to Opus where the channel layout or an earlier failure rules it
+/// out. The connection still falls back to Opus when the host is not Foundation Sunshine.
+@property(nonatomic) int audioCodec;
+/// Audio bandwidth on top of what the host already reserves from the video bitrate (kbps).
+@property(nonatomic) int audioExcessBitrateKbps;
 @property(nonatomic) BOOL disableHighQualitySurround;
 @property(nonatomic) int audioOutputMode;
 @property(nonatomic) int enhancedAudioOutputTarget;

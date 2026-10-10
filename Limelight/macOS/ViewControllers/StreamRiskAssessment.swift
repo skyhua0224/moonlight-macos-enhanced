@@ -102,6 +102,8 @@ private struct StreamRiskEvaluation {
   let cadenceLabel: String?
   let wirelessLinkText: String?
   let reasons: [String]
+  let audioWireKbps: Int
+  let totalStreamKbps: Int
 }
 
 private struct StreamCadenceAnalysis {
@@ -175,6 +177,11 @@ private struct StreamHostRuntimeInfo {
   let autoModeActive: Bool
   let manualExpertMode: Bool
   let targetAddress: String
+  /// Codec name (opus, pcm, ac3, eac3), its wire bandwidth, and the video
+  /// bitrate plus the audio bandwidth the host does not already reserve.
+  let audioCodecName: String
+  let audioWireKbps: Int
+  let totalStreamKbps: Int
 
   init(
     routeTier: StreamRiskRouteTier,
@@ -193,7 +200,10 @@ private struct StreamHostRuntimeInfo {
     reasons: [String],
     recommendedFallbacks: [StreamRiskRecommendation],
     autoModeActive: Bool,
-    targetAddress: String
+    targetAddress: String,
+    audioCodecName: String = "opus",
+    audioWireKbps: Int = 0,
+    totalStreamKbps: Int = 0
   ) {
     routeTierRawValue = routeTier.rawValue
     riskLevelRawValue = riskLevel.rawValue
@@ -217,6 +227,9 @@ private struct StreamHostRuntimeInfo {
     self.autoModeActive = autoModeActive
     manualExpertMode = !autoModeActive
     self.targetAddress = targetAddress
+    self.audioCodecName = audioCodecName
+    self.audioWireKbps = audioWireKbps
+    self.totalStreamKbps = totalStreamKbps
   }
 
   var routeTier: StreamRiskRouteTier {
@@ -229,7 +242,7 @@ private struct StreamHostRuntimeInfo {
 }
 
 @objcMembers final class StreamRiskAssessor: NSObject {
-  @objc(assessWithHost:targetAddress:connectionMethod:width:height:fps:bitrateKbps:codecName:enableYUV444:autoMode:)
+  @objc(assessWithHost:targetAddress:connectionMethod:width:height:fps:bitrateKbps:codecName:enableYUV444:autoMode:audioCodec:audioChannels:disableHighQualitySurround:)
   static func assess(
     host: TemporaryHost?,
     targetAddress: String?,
@@ -240,8 +253,17 @@ private struct StreamHostRuntimeInfo {
     bitrateKbps: Int,
     codecName: String,
     enableYUV444: Bool,
-    autoMode: Bool
+    autoMode: Bool,
+    audioCodec: Int,
+    audioChannels: Int,
+    disableHighQualitySurround: Bool
   ) -> StreamRiskAssessment {
+    // The codec was already checked against the channel layout and earlier
+    // failures; the host check happens when the connection starts.
+    let audio = MLAudioStreamPlan.make(
+      requestedCodec: audioCodec, channelCount: audioChannels,
+      videoBitrateKbps: bitrateKbps, disableHighQualitySurround: disableHighQualitySurround,
+      foundationHost: -1, codecFailed: false)
     let resolvedTarget = resolvedTargetAddress(host: host, targetAddress: targetAddress, connectionMethod: connectionMethod)
     let codec = StreamCodecKind.from(codecName)
     let profile = sanitizedProfile(
@@ -256,7 +278,8 @@ private struct StreamHostRuntimeInfo {
       targetAddress: resolvedTarget,
       profile: profile,
       bitrateKbps: bitrateKbps,
-      autoMode: autoMode
+      autoMode: autoMode,
+      audio: audio
     )
     let recommendations = recommendedFallbacks(
       from: profile,
@@ -264,14 +287,21 @@ private struct StreamHostRuntimeInfo {
       targetAddress: resolvedTarget,
       bitrateKbps: max(1, bitrateKbps),
       autoMode: autoMode,
-      currentRiskLevel: evaluation.riskLevel
+      currentRiskLevel: evaluation.riskLevel,
+      audio: audio
     )
-    let summaryLine = [
+    var summaryParts = [
       streamRiskLocalizedFormat("Startup %@", evaluation.riskLevel.label),
       evaluation.routeTier.label,
       formatPixelRate(evaluation.pixelRate),
       String(format: "%.3f bpppf", evaluation.bitsPerPixelPerFrame),
-    ].joined(separator: " · ")
+    ]
+    if audio.effectiveCodec != MLAudioStreamPlan.codecOpus {
+      summaryParts.append(
+        "audio \(audio.effectiveCodecName) \(MLAudioStreamPlan.mbpsText(audio.wireKbps)) Mbps")
+      summaryParts.append("total \(MLAudioStreamPlan.mbpsText(evaluation.totalStreamKbps)) Mbps")
+    }
+    let summaryLine = summaryParts.joined(separator: " · ")
 
     return StreamRiskAssessment(
       routeTier: evaluation.routeTier,
@@ -290,7 +320,10 @@ private struct StreamHostRuntimeInfo {
       reasons: Array(evaluation.reasons.prefix(5)),
       recommendedFallbacks: recommendations,
       autoModeActive: autoMode,
-      targetAddress: resolvedTarget
+      targetAddress: resolvedTarget,
+      audioCodecName: audio.effectiveCodecName,
+      audioWireKbps: evaluation.audioWireKbps,
+      totalStreamKbps: evaluation.totalStreamKbps
     )
   }
 
@@ -299,7 +332,8 @@ private struct StreamHostRuntimeInfo {
     targetAddress: String,
     profile: StreamRiskProfile,
     bitrateKbps: Int,
-    autoMode: Bool
+    autoMode: Bool,
+    audio: MLAudioStreamPlan
   ) -> StreamRiskEvaluation {
     let routeTier = classifyRouteTier(host: host, targetAddress: targetAddress)
     let hostRuntimeInfo = inferredHostRuntimeInfo(host: host)
@@ -398,6 +432,26 @@ private struct StreamHostRuntimeInfo {
       reasons.append(hostTimingReason)
     }
 
+    let totalStreamKbps = safeBitrateKbps + audio.excessKbps
+    if audio.effectiveCodec != MLAudioStreamPlan.codecOpus {
+      // Wired / fast LAN means a direct LAN route that does not leave over Wi-Fi.
+      let wiredFastLan = routeTier == .lanDirect && wirelessLinkInfo == nil
+      let audioReason = streamRiskLocalizedFormat(
+        wiredFastLan
+          ? "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps). Without enough bandwidth, audio drops out and video stutters."
+          : "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter.",
+        audio.effectiveCodecName.uppercased(),
+        MLAudioStreamPlan.mbpsText(audio.wireKbps),
+        MLAudioStreamPlan.mbpsText(totalStreamKbps)
+      )
+      if wiredFastLan {
+        reasons.append(audioReason)
+      } else {
+        riskLevel = maxRisk(riskLevel, .medium)
+        reasons.insert(audioReason, at: 0)
+      }
+    }
+
     switch routeTier {
     case .overlayRemote:
       reasons.append(streamRiskLocalized("The selected path is routed through a tunnel or overlay network."))
@@ -434,7 +488,9 @@ private struct StreamHostRuntimeInfo {
       displayRefreshRateHz: displayRefreshRateHz,
       cadenceLabel: cadence.label,
       wirelessLinkText: wirelessLinkInfo?.text,
-      reasons: reasons
+      reasons: reasons,
+      audioWireKbps: audio.wireKbps,
+      totalStreamKbps: totalStreamKbps
     )
   }
 
@@ -444,7 +500,8 @@ private struct StreamHostRuntimeInfo {
     targetAddress: String,
     bitrateKbps: Int,
     autoMode: Bool,
-    currentRiskLevel: StreamRiskLevel
+    currentRiskLevel: StreamRiskLevel,
+    audio: MLAudioStreamPlan
   ) -> [StreamRiskRecommendation] {
     var candidates: [StreamRiskProfile] = []
 
@@ -500,7 +557,8 @@ private struct StreamHostRuntimeInfo {
         targetAddress: targetAddress,
         profile: candidate,
         bitrateKbps: bitrateKbps,
-        autoMode: autoMode
+        autoMode: autoMode,
+        audio: audio
       )
       guard evaluation.riskLevel.rawValue <= currentRiskLevel.rawValue else { continue }
 

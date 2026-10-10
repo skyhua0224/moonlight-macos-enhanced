@@ -51,6 +51,27 @@
 #define AUDIO_ENHANCED_BUFFER_DURATION 60
 #define AUDIO_RENDER_SCRATCH_FRAMES 2048
 
+// Audio codec ids, identical to AUDIO_CODEC_* in moonlight-common-c.
+enum {
+    MLAudioCodecOpus = 0,
+    MLAudioCodecAc3 = 1,
+    MLAudioCodecEac3 = 2,
+    MLAudioCodecPcm = 3,
+};
+
+// PCM receive state machine (audio decode thread only).
+enum {
+    MLPcmStateAwaitingFirstPacket = 0, // nothing validated yet
+    MLPcmStateStreaming = 1,           // at least one packet had the exact PCM size
+    MLPcmStateMuted = 2,               // the host did not send PCM; nothing is rendered
+};
+// Consecutive packets with the wrong size, after the stream was validated, that
+// are reported to the user (5 ms per packet, so 250 ms of damaged audio).
+#define ML_PCM_LATE_INVALID_BURST 50
+#define ML_PCM_STATS_INTERVAL_MS 10000
+
+static void MLPcmReportStats(Connection *conn, uint64_t nowMs, BOOL force);
+
 static const float kDirectRendererMakeupGain = 1.24f;
 static const float kEnhancedRendererOutputGain = 1.08f;
 
@@ -166,6 +187,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 - (BOOL)attempt714PrimaryDecoderReprobeWithSampleData:(char *)sampleData
                                          sampleLength:(int)sampleLength;
 - (void)updateVolume;
+- (void)noteAudioCodecProblemWithNoticeKey:(NSString *)noticeKey markUnsupported:(BOOL)markUnsupported;
 @end
 
 @implementation Connection {
@@ -188,6 +210,24 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     id<ConnectionCallbacks> _callbacks;
 
     OpusMSDecoder *_opusDecoder;
+    // Audio codec of this session. Planned in -initWithConfig:, confirmed against
+    // the library's negotiated value in ArInit.
+    int _audioCodec;
+    MLAudioStreamPlan *_audioPlan;
+    NSString *_audioHostKey;
+    int _audioRequestedCodec;
+    int32_t _audioNoticeSent;
+    // PCM validation and counters, touched by the audio decode thread only.
+    int _pcmExpectedBytes;
+    int _pcmState;
+    uint64_t _pcmValidPackets;
+    uint64_t _pcmInvalidPackets;
+    uint64_t _pcmLossPlaceholders;
+    uint64_t _pcmConsecutiveInvalid;
+    uint64_t _pcmReportedValid;
+    uint64_t _pcmReportedInvalid;
+    uint64_t _pcmReportedLoss;
+    uint64_t _pcmLastReportMs;
     int _audioBufferEntries;
     int _audioBufferWriteIndex;
     int _audioBufferReadIndex;
@@ -750,6 +790,25 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     AudioChannelLayout channelLayout = {};
     OPUS_MULTISTREAM_CONFIGURATION opusConfig = {};
     MLPrepareOpusDecoderConfig(originalOpusConfig, &opusConfig);
+
+    // The library may have downgraded the request (not Sunshine, too many
+    // channels). What it negotiated is what it puts into the SDP, so it wins.
+    int negotiatedCodec = MLAudioCodecOpus;
+#if defined(AUDIO_CODEC_PCM_S16)
+    negotiatedCodec = LiGetNegotiatedAudioCodec();
+#endif
+    if (negotiatedCodec != conn->_audioCodec) {
+        Log(LOG_W, @"[audio] Library negotiated codec %d but the client planned %d; following the library",
+            negotiatedCodec, conn->_audioCodec);
+        conn->_audioCodec = negotiatedCodec;
+    }
+    const BOOL usePcm = conn->_audioCodec == MLAudioCodecPcm;
+    conn->_pcmExpectedBytes = 0;
+    conn->_pcmState = MLPcmStateAwaitingFirstPacket;
+    conn->_pcmValidPackets = conn->_pcmInvalidPackets = conn->_pcmLossPlaceholders = 0;
+    conn->_pcmConsecutiveInvalid = 0;
+    conn->_pcmReportedValid = conn->_pcmReportedInvalid = conn->_pcmReportedLoss = 0;
+    conn->_pcmLastReportMs = 0;
     
     // Initialize the circular buffer
     conn->_audioBufferWriteIndex = conn->_audioBufferReadIndex = 0;
@@ -806,23 +865,38 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
             decoderConfig.coupledStreams);
     }
     
-    conn->_opusDecoder = opus_multistream_decoder_create(decoderConfig.sampleRate,
-                                                         decoderConfig.channelCount,
-                                                         decoderConfig.streams,
-                                                         decoderConfig.coupledStreams,
-                                                         decoderConfig.mapping,
-                                                         &err);
-    if (conn->_opusDecoder == NULL || err != OPUS_OK) {
-        Log(LOG_E, @"Failed to create Opus decoder: %d\n", err);
-        free(conn->_audioCircularBuffer);
-        conn->_audioCircularBuffer = NULL;
-        return -1;
+    if (usePcm) {
+        // Raw s16le PCM needs no decoder: every packet is exactly one ring entry.
+        conn->_opusDecoder = NULL;
+        conn->_pcmExpectedBytes = opusConfig.samplesPerFrame * opusConfig.channelCount * (int)sizeof(short);
+        if (conn->_pcmExpectedBytes != conn->_audioBufferStride * (int)sizeof(short)) {
+            Log(LOG_E, @"[audio] PCM packet size %d does not match the ring entry size %d",
+                conn->_pcmExpectedBytes, conn->_audioBufferStride * (int)sizeof(short));
+            free(conn->_audioCircularBuffer);
+            conn->_audioCircularBuffer = NULL;
+            return -1;
+        }
+    } else {
+        conn->_opusDecoder = opus_multistream_decoder_create(decoderConfig.sampleRate,
+                                                             decoderConfig.channelCount,
+                                                             decoderConfig.streams,
+                                                             decoderConfig.coupledStreams,
+                                                             decoderConfig.mapping,
+                                                             &err);
+        if (conn->_opusDecoder == NULL || err != OPUS_OK) {
+            Log(LOG_E, @"Failed to create Opus decoder: %d\n", err);
+            free(conn->_audioCircularBuffer);
+            conn->_audioCircularBuffer = NULL;
+            return -1;
+        }
     }
     conn->_audioRenderScratchBuffer = calloc(AUDIO_RENDER_SCRATCH_FRAMES * conn->_channelCount, sizeof(short));
     if (conn->_audioRenderScratchBuffer == NULL) {
         Log(LOG_E, @"Failed to allocate audio render scratch buffer\n");
-        opus_multistream_decoder_destroy(conn->_opusDecoder);
-        conn->_opusDecoder = NULL;
+        if (conn->_opusDecoder != NULL) {
+            opus_multistream_decoder_destroy(conn->_opusDecoder);
+            conn->_opusDecoder = NULL;
+        }
         free(conn->_audioCircularBuffer);
         conn->_audioCircularBuffer = NULL;
         return -1;
@@ -838,6 +912,22 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     conn->_audioConsecutiveDecodeFailures = 0;
     conn->_audioFallbackDecodeSuccessCount = 0;
     conn->_audioPrimaryReprobeAttempted = preferCompatibility714Topology;
+
+    {
+        MLAudioStreamPlan *plan = conn->_audioPlan;
+        int packetMs = MAX(1, opusConfig.samplesPerFrame / MAX(1, opusConfig.sampleRate / 1000));
+        Log(LOG_I, @"[audio] Stream start: codec requested=%@ effective=%@ negotiated=%@ channels=%d packetMs=%d samplesPerFrame=%d expectedPacketBytes=%d wireKbps=%d payloadKbps=%d fallback=%@",
+            plan != nil ? plan.requestedCodecName : @"opus",
+            plan != nil ? plan.effectiveCodecName : @"opus",
+            [MLAudioStreamPlan codecName:conn->_audioCodec],
+            opusConfig.channelCount,
+            packetMs,
+            opusConfig.samplesPerFrame,
+            conn->_pcmExpectedBytes,
+            plan != nil ? (int)plan.wireKbps : 0,
+            plan != nil ? (int)plan.payloadKbps : 0,
+            plan != nil ? plan.fallbackLogText : @"none");
+    }
 
     Log(LOG_I, @"Audio renderer init request: backendMode=%d audioConfiguration=0x%08X channels=%d streams=%d coupled=%d samplesPerFrame=%d disableHighQuality714=%d",
         (int)conn->_audioOutputMode,
@@ -959,6 +1049,10 @@ void ArCleanup(void)
 
     [conn cleanupSelectedAudioRenderer];
 
+    if (conn->_audioCodec == MLAudioCodecPcm) {
+        MLPcmReportStats(conn, LiGetMillis(), YES);
+    }
+
     if (conn->_opusDecoder != NULL) {
         opus_multistream_decoder_destroy(conn->_opusDecoder);
         conn->_opusDecoder = NULL;
@@ -981,10 +1075,118 @@ void ArCleanup(void)
 #endif
 }
 
+// Reports PCM validation counters. Decode thread only; silent while nothing went
+// wrong, and at most one line per ML_PCM_STATS_INTERVAL_MS unless forced.
+static void MLPcmReportStats(Connection *conn, uint64_t nowMs, BOOL force)
+{
+    if (!force && nowMs - conn->_pcmLastReportMs < ML_PCM_STATS_INTERVAL_MS) {
+        return;
+    }
+    uint64_t invalid = conn->_pcmInvalidPackets - conn->_pcmReportedInvalid;
+    uint64_t loss = conn->_pcmLossPlaceholders - conn->_pcmReportedLoss;
+    uint64_t valid = conn->_pcmValidPackets - conn->_pcmReportedValid;
+    if (invalid > 0 || loss > 0) {
+        Log(LOG_W, @"[audio] PCM packets since last report: valid=%llu sizeMismatch=%llu lossPlaceholders=%llu (session totals valid=%llu sizeMismatch=%llu lossPlaceholders=%llu)",
+            (unsigned long long)valid,
+            (unsigned long long)invalid,
+            (unsigned long long)loss,
+            (unsigned long long)conn->_pcmValidPackets,
+            (unsigned long long)conn->_pcmInvalidPackets,
+            (unsigned long long)conn->_pcmLossPlaceholders);
+    }
+    conn->_pcmReportedInvalid = conn->_pcmInvalidPackets;
+    conn->_pcmReportedLoss = conn->_pcmLossPlaceholders;
+    conn->_pcmReportedValid = conn->_pcmValidPackets;
+    conn->_pcmLastReportMs = nowMs;
+}
+
+// Handles one packet of a PCM session on the audio decode thread. Only packets of
+// exactly samplesPerFrame * channels * 2 bytes are ever copied into the ring;
+// everything else becomes silence (or nothing), never raw bytes.
+//
+// - (NULL, 0) is the library's placeholder for a packet it could not recover: one
+//   frame of silence keeps the timeline continuous.
+// - If the very first packet has the wrong size, the host is not sending PCM (it
+//   ignores the codec attribute and sends Opus). The session is muted for good.
+// - After the first valid packet a wrong size is damage, not a codec mismatch: the
+//   packet is replaced by one frame of silence and counted. A burst of
+//   ML_PCM_LATE_INVALID_BURST consecutive bad packets is reported once to the
+//   user; audio resumes by itself as soon as valid packets arrive again.
+static void MLPcmHandleSample(Connection *conn, const char *sampleData, int sampleLength)
+{
+    const uint64_t nowMs = LiGetMillis();
+    const BOOL isPlaceholder = (sampleData == NULL || sampleLength == 0);
+
+    if (conn->_pcmState == MLPcmStateMuted) {
+        if (isPlaceholder) {
+            conn->_pcmLossPlaceholders++;
+        } else {
+            conn->_pcmInvalidPackets++;
+        }
+        MLPcmReportStats(conn, nowMs, NO);
+        return;
+    }
+
+    short *entry = &conn->_audioCircularBuffer[conn->_audioBufferWriteIndex * conn->_audioBufferStride];
+    const size_t entryBytes = (size_t)conn->_audioBufferStride * sizeof(short);
+
+    if (isPlaceholder) {
+        conn->_pcmLossPlaceholders++;
+        memset(entry, 0, entryBytes);
+    } else if (sampleLength == conn->_pcmExpectedBytes) {
+        memcpy(entry, sampleData, entryBytes);
+        conn->_pcmValidPackets++;
+        conn->_pcmConsecutiveInvalid = 0;
+        if (conn->_pcmState == MLPcmStateAwaitingFirstPacket) {
+            conn->_pcmState = MLPcmStateStreaming;
+            Log(LOG_I, @"[audio] First PCM packet validated: bytes=%d channels=%d samplesPerFrame=%d",
+                sampleLength, conn->_channelCount, conn->_audioSamplesPerFrame);
+        }
+        const float volume = conn->_audioVolumeMultiplier;
+        if (volume != 1.0f) {
+            for (int i = 0; i < conn->_audioBufferStride; i++) {
+                float scaled = (float)entry[i] * volume;
+                if (scaled > 32767.0f) scaled = 32767.0f;
+                if (scaled < -32768.0f) scaled = -32768.0f;
+                entry[i] = (short)scaled;
+            }
+        }
+    } else {
+        conn->_pcmInvalidPackets++;
+        conn->_pcmConsecutiveInvalid++;
+        if (conn->_pcmState == MLPcmStateAwaitingFirstPacket) {
+            conn->_pcmState = MLPcmStateMuted;
+            Log(LOG_E, @"[audio] First audio packet has %d bytes, PCM needs exactly %d: the host is not sending PCM. Audio is muted for this session and the host is remembered as not supporting PCM",
+                sampleLength, conn->_pcmExpectedBytes);
+            [conn noteAudioCodecProblemWithNoticeKey:@"The host did not send PCM audio. Audio is muted; Opus will be used next time."
+                                     markUnsupported:YES];
+            MLPcmReportStats(conn, nowMs, NO);
+            return;
+        }
+        memset(entry, 0, entryBytes);
+        if (conn->_pcmConsecutiveInvalid == ML_PCM_LATE_INVALID_BURST) {
+            Log(LOG_E, @"[audio] %d consecutive PCM packets with the wrong size (expected %d, last %d). Audio stays silent until valid packets resume",
+                ML_PCM_LATE_INVALID_BURST, conn->_pcmExpectedBytes, sampleLength);
+            [conn noteAudioCodecProblemWithNoticeKey:@"PCM audio is damaged. Audio is silent until it recovers."
+                                     markUnsupported:NO];
+        }
+    }
+
+    // Same ring discipline as the Opus path: write the entry, then publish it.
+    __sync_synchronize();
+    conn->_audioBufferWriteIndex = (conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries;
+    __atomic_store_n(&conn->_lastAudioSampleMs, nowMs, __ATOMIC_RELAXED);
+    MLPcmReportStats(conn, nowMs, NO);
+}
+
 void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 {
     Connection *conn = CurrentConnection();
-    if (conn == nil || conn->_opusDecoder == NULL) {
+    if (conn == nil) {
+        return;
+    }
+    const BOOL usePcm = conn->_audioCodec == MLAudioCodecPcm;
+    if (!usePcm && conn->_opusDecoder == NULL) {
         return;
     }
 
@@ -1006,6 +1208,11 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     // Check if there is space for this sample in the buffer. Again, this can race
     // but in the worst case, we'll not see the sample callback having consumed a sample.
     if (conn->_audioBufferEntries == 0 || ((conn->_audioBufferWriteIndex + 1) % conn->_audioBufferEntries) == conn->_audioBufferReadIndex) {
+        return;
+    }
+
+    if (usePcm) {
+        MLPcmHandleSample(conn, sampleData, sampleLength);
         return;
     }
     
@@ -1083,6 +1290,26 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
                 (unsigned long long)conn->_audioDecodeFailureCount);
         }
     }
+}
+
+// Tells the user once per session that the audio transport misbehaved and, when
+// the host clearly cannot deliver the codec, remembers that for the next session.
+// Called from the audio decode thread, so the work is handed to another queue.
+- (void)noteAudioCodecProblemWithNoticeKey:(NSString *)noticeKey markUnsupported:(BOOL)markUnsupported {
+    if (__atomic_exchange_n(&_audioNoticeSent, 1, __ATOMIC_RELAXED) != 0) {
+        return;
+    }
+    const int codec = _audioCodec;
+    NSString *hostKey = _audioHostKey;
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(self);
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        if (markUnsupported && hostKey.length > 0) {
+            [SettingsClass markAudioCodecFailed:codec forHost:hostKey];
+        }
+        if (callbacks != nil && [callbacks respondsToSelector:@selector(audioCodecNotice:)]) {
+            [callbacks audioCodecNotice:[[LanguageManager shared] localize:noticeKey]];
+        }
+    });
 }
 
 - (void)updateVolume {
@@ -2671,6 +2898,39 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         _streamConfig.streamingRemotely == STREAM_CFG_REMOTE ? 1 : 0,
         routeThroughTunnel ? 1 : 0);
     
+    // Audio transport. Everything except Opus is a Foundation Sunshine extension and
+    // the host never acknowledges the codec, so the effective choice is made here
+    // and ArInit cross-checks it against what the library actually requests.
+    _audioHostKey = [config.hostUUID copy];
+    if (_audioHostKey.length > 0) {
+        [SettingsClass recordFoundationHost:config.foundationHost forHost:_audioHostKey];
+    }
+    NSInteger userAudioCodec = _audioHostKey.length > 0 ? [SettingsClass audioCodecFor:_audioHostKey]
+                                                        : config.audioCodec;
+    BOOL userAudioCodecFailed = _audioHostKey.length > 0 &&
+        [SettingsClass audioCodecFailed:userAudioCodec forHost:_audioHostKey];
+    _audioPlan = [MLAudioStreamPlan planWithRequestedCodec:userAudioCodec
+                                              channelCount:CHANNEL_COUNT_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)
+                                          videoBitrateKbps:_streamConfig.bitrate
+                                disableHighQualitySurround:config.disableHighQualitySurround
+                                            foundationHost:config.foundationHost ? 1 : 0
+                                               codecFailed:userAudioCodecFailed];
+    _audioRequestedCodec = (int)userAudioCodec;
+    _audioCodec = (int)_audioPlan.effectiveCodec;
+#if defined(AUDIO_CODEC_PCM_S16)
+    _streamConfig.audioCodec = _audioCodec;
+    _streamConfig.audioBitrate = 0; // host default for AC3/E-AC3, fixed for PCM
+#else
+    if (_audioCodec != MLAudioCodecOpus) {
+        Log(LOG_W, @"[audio] This build of the protocol library has no audio codec selection; using opus");
+        _audioCodec = MLAudioCodecOpus;
+    }
+#endif
+    if (_audioPlan.fallbackReason != MLAudioFallbackReasonNone) {
+        Log(LOG_W, @"[audio] Requested codec %@ replaced by opus: %@",
+            _audioPlan.requestedCodecName, _audioPlan.fallbackLogText);
+    }
+
     // HDR implies HEVC allowed
     if (config.enableHdr || config.enable10BitSdr) {
         config.allowHevc = YES;

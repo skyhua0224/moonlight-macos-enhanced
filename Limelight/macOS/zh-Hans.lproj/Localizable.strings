@@ -1321,3 +1321,14 @@
 "The host does not support that display scale" = "主机不支持该显示缩放比例";
 "The host refused to change the display scale" = "主机拒绝了更改显示缩放的请求";
 "The host display for the scale was not found" = "未找到要设置缩放的主机显示器";
+"Audio Codec" = "音频编码";
+"Opus" = "Opus";
+"Lossless (PCM)" = "无损 (PCM)";
+"Audio codec hint PCM" = "无损音频在立体声下约需 %@ Mbps 带宽，5.1 环绕声约需 %@ Mbps，均在视频码率之外。如果网络承载不了，会出现音频中断和画面卡顿。";
+"Audio codec fallback: channels" = "此编码最多支持 5.1 声道，当前音频配置将使用 Opus。";
+"Audio codec fallback: host" = "此主机不是 Foundation Sunshine，因此使用 Opus。";
+"Audio codec fallback: failed" = "此主机上次没有送出这种编码，因此使用 Opus。先选择 Opus 再重新选择该编码即可重试。";
+"The host did not send PCM audio. Audio is muted; Opus will be used next time." = "主机没有发送 PCM 音频，本次已静音，下次将使用 Opus。";
+"PCM audio is damaged. Audio is silent until it recovers." = "PCM 音频数据异常，恢复前将保持静音。";
+"%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps). Without enough bandwidth, audio drops out and video stutters." = "%@ 音频在视频码率之外约需 %@ Mbps（预计总计 %@ Mbps）。带宽不足时会出现音频中断和画面卡顿。";
+"%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter." = "%@ 音频在视频码率之外约需 %@ Mbps（预计总计 %@ Mbps），而当前链路不是有线局域网。带宽不足会导致音频中断和画面卡顿。";

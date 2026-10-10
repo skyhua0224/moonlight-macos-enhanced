@@ -164,6 +164,17 @@
     return YES;
 }
 
+#pragma mark - Audio transport notice
+
+- (void)audioCodecNotice:(NSString *)message {
+    if (message.length == 0) {
+        return;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self showNotification:message forSeconds:8.0];
+    });
+}
+
 #pragma mark - Host resolution notice
 
 - (void)streamResolutionChanged:(uint32_t)width height:(uint32_t)height {

@@ -29,7 +29,13 @@ extension SettingsModel {
       bitrateKbps: bitrateKbps,
       codecName: selectedVideoCodec,
       enableYUV444: effectiveStreamYUV444,
-      autoMode: autoAdjustBitrate
+      autoMode: autoAdjustBitrate,
+      audioCodec: AudioCodecChoice(selection: selectedAudioCodec).codecId,
+      audioChannels: MLAudioStreamPlan.channelCount(
+        forAudioConfigurationIndex: Self.getInt(
+          from: selectedAudioConfiguration, in: Self.audioConfigurations)),
+      disableHighQualitySurround: selectedAudioOutputMode == "Audio Enhancement"
+        && selectedAudioConfiguration == "7.1.4 surround sound"
     )
   }
 

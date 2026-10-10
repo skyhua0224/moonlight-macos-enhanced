@@ -30,6 +30,19 @@ struct AudioView: View {
             .frame(width: 190, alignment: .trailing)
           }
 
+          AudioCompactRow(title: "Audio Codec", hint: audioCodecHint) {
+            Picker("", selection: $settingsModel.selectedAudioCodec) {
+              ForEach(SettingsModel.audioCodecs, id: \.self) { value in
+                Text(languageManager.localize(value)).tag(value)
+              }
+            }
+            .labelsHidden()
+            .controllerPicker(selection: $settingsModel.selectedAudioCodec, options: SettingsModel.audioCodecs, title: { value in languageManager.localize(value) })
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .frame(width: 190, alignment: .trailing)
+          }
+
           AudioCompactRow(title: "Play Sound on Host") {
             Toggle("", isOn: $settingsModel.audioOnPC)
               .labelsHidden()
@@ -156,6 +169,49 @@ struct AudioView: View {
       .frame(maxWidth: .infinity, alignment: .center)
     }
     .onDisappear { microphoneManager.stopTest() }
+    .onReceive(NotificationCenter.default.publisher(for: SettingsModel.audioCodecFailureChangedNotification)) { _ in
+      settingsModel.reloadAudioCodecFailures()
+    }
+    .onAppear { settingsModel.reloadAudioCodecFailures() }
+  }
+
+  /// Explains the bandwidth cost of the selected codec, or why Opus is used instead.
+  private var audioCodecHint: String? {
+    let choice = AudioCodecChoice(selection: settingsModel.selectedAudioCodec)
+    guard choice != .opus else { return nil }
+
+    let channels = MLAudioStreamPlan.channelCount(
+      forAudioConfigurationIndex: SettingsModel.getInt(
+        from: settingsModel.selectedAudioConfiguration, in: SettingsModel.audioConfigurations))
+    let foundationFlag: Int
+    switch settingsModel.audioHostIsFoundation {
+    case .some(true): foundationFlag = 1
+    case .some(false): foundationFlag = 0
+    case .none: foundationFlag = -1
+    }
+    func plan(_ channelCount: Int) -> MLAudioStreamPlan {
+      MLAudioStreamPlan.make(
+        requestedCodec: choice.codecId, channelCount: channelCount, videoBitrateKbps: 0,
+        disableHighQualitySurround: false, foundationHost: foundationFlag,
+        codecFailed: settingsModel.audioCodecFailedIds.contains(choice.codecId))
+    }
+
+    let current = plan(channels)
+    switch current.fallbackReason {
+    case .tooManyChannels:
+      return languageManager.localize("Audio codec fallback: channels")
+    case .notFoundationHost:
+      return languageManager.localize("Audio codec fallback: host")
+    case .previouslyFailed:
+      return languageManager.localize("Audio codec fallback: failed")
+    case .none:
+      break
+    }
+
+    let stereo = MLAudioStreamPlan.mbpsText(plan(2).wireKbps)
+    let surround = MLAudioStreamPlan.mbpsText(plan(6).wireKbps)
+    return String(
+      format: languageManager.localize("Audio codec hint PCM"), stereo, surround)
   }
 
   private var microphoneStatus: String {
@@ -197,22 +253,36 @@ private struct AudioCompactGroup<Content: View>: View {
 
 private struct AudioCompactRow<Content: View>: View {
   let title: String
+  let hint: String?
   let content: Content
   let showsSeparator: Bool
 
-  init(title: String, showsSeparator: Bool = true, @ViewBuilder content: () -> Content) {
+  init(
+    title: String, hint: String? = nil, showsSeparator: Bool = true,
+    @ViewBuilder content: () -> Content
+  ) {
     self.title = title
+    self.hint = hint
     self.showsSeparator = showsSeparator
     self.content = content()
   }
 
   var body: some View {
-    HStack(spacing: 16) {
-      Text(LocalizedStringKey(title))
-        .frame(maxWidth: .infinity, alignment: .leading)
-      content
+    VStack(alignment: .leading, spacing: 4) {
+      HStack(spacing: 16) {
+        Text(LocalizedStringKey(title))
+          .frame(maxWidth: .infinity, alignment: .leading)
+        content
+      }
+      .frame(minHeight: 38)
+      if let hint, !hint.isEmpty {
+        Text(hint)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.bottom, 8)
+      }
     }
-    .frame(minHeight: 38)
     .overlay(alignment: .bottom) {
       if showsSeparator {
         Divider().opacity(0.45)

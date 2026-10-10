@@ -191,6 +191,10 @@ class SettingsModel: ObservableObject {
   static let controllerCalibrationKeyPrefix = "settings.controller.calibration."
   static let keyMappingModeKeyPrefix = "settings.keyboard.keyMappingMode."
   static let controllerShortcutProfileKeyPrefix = "settings.controller.shortcuts."
+  static let audioCodecKeyPrefix = "settings.audio.codec."
+  static let audioCodecFailureKeyPrefix = "settings.audio.codecFailure."
+  static let foundationHostKeyPrefix = "settings.sunshine.foundationHost."
+  static let audioCodecFailureChangedNotification = Notification.Name("MoonlightAudioCodecFailureDidChange")
   static let sunshineVddCapabilityKeyPrefix = "settings.sunshine.vddCapability."
   static let sunshineVddStateKeyPrefix = "settings.sunshine.vddState."
   static let mouseSettingsChangedNotification = Notification.Name("MoonlightMouseSettingsDidChange")
@@ -699,6 +703,19 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  // Per-host audio transport settings. Stored in UserDefaults next to the
+  // controller settings (host key with a global fallback), not in Core Data.
+  @Published var selectedAudioCodec: String = SettingsModel.defaultAudioCodec {
+    didSet {
+      guard !isLoading, oldValue != selectedAudioCodec else { return }
+      persistAudioCodecSettings()
+      // Choosing a codec again is the way to retry one the host rejected.
+      clearAudioCodecFailures()
+    }
+  }
+  // Codec ids (AUDIO_CODEC_*) this host failed to deliver in an earlier session.
+  @Published var audioCodecFailedIds: [Int] = []
+  @Published var audioHostIsFoundation: Bool? = nil
   @Published var selectedAudioOutputMode: String {
     didSet {
       guard !isLoading else { return }
@@ -1595,6 +1612,7 @@ class SettingsModel: ObservableObject {
 
     audioOnPC = Self.defaultAudioOnPC
     selectedAudioConfiguration = Self.defaultAudioConfiguration
+    selectedAudioCodec = Self.defaultAudioCodec
     selectedAudioOutputMode = Self.defaultAudioOutputMode
     selectedEnhancedAudioOutputTarget = Self.defaultEnhancedAudioOutputTarget
     selectedEnhancedAudioPreset = Self.defaultEnhancedAudioPreset

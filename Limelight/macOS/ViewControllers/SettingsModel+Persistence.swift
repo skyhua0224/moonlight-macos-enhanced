@@ -137,6 +137,40 @@ extension SettingsModel {
         prefix: Self.keyMappingModeKeyPrefix, hostId: hostId, as: Int.self)).displayKey
   }
 
+  func persistAudioCodecSettings() {
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    let defaults = UserDefaults.standard
+    defaults.set(selectedAudioCodec, forKey: Self.audioCodecKeyPrefix + hostId)
+  }
+
+  func loadAudioCodecSettings(for hostId: String) {
+    let defaults = UserDefaults.standard
+    let globalKey = Self.audioCodecKeyPrefix + Self.globalHostId
+    let stored = defaults.string(forKey: Self.audioCodecKeyPrefix + hostId)
+      ?? (hostId == Self.globalHostId ? nil : defaults.string(forKey: globalKey))
+    selectedAudioCodec = AudioCodecChoice(selection: stored ?? Self.defaultAudioCodec).displayKey
+    reloadAudioCodecFailures(for: hostId)
+  }
+
+  /// Re-reads what the last sessions learned about this host (rejected codecs,
+  /// whether it is a Foundation Sunshine build).
+  func reloadAudioCodecFailures(for hostId: String? = nil) {
+    let hostId = hostId ?? selectedHost?.id ?? Self.globalHostId
+    let failed = AudioCodecChoice.allCases.map(\.codecId).filter {
+      SettingsClass.audioCodecFailed($0, for: hostId)
+    }
+    if failed != audioCodecFailedIds { audioCodecFailedIds = failed }
+    let known = UserDefaults.standard.object(
+      forKey: Self.foundationHostKeyPrefix + hostId) as? Bool
+    if known != audioHostIsFoundation { audioHostIsFoundation = known }
+  }
+
+  func clearAudioCodecFailures() {
+    let hostId = selectedHost?.id ?? Self.globalHostId
+    SettingsClass.clearAudioCodecFailures(for: hostId)
+    reloadAudioCodecFailures(for: hostId)
+  }
+
   func resetControllerCalibration() {
     controllerCalibration = .default
   }
@@ -245,6 +279,7 @@ extension SettingsModel {
 
     audioOnPC = Self.defaultAudioOnPC
     selectedAudioConfiguration = Self.defaultAudioConfiguration
+    selectedAudioCodec = Self.defaultAudioCodec
     selectedAudioOutputMode = Self.defaultAudioOutputMode
     selectedEnhancedAudioOutputTarget = Self.defaultEnhancedAudioOutputTarget
     selectedEnhancedAudioPreset = Self.defaultEnhancedAudioPreset
@@ -323,6 +358,7 @@ extension SettingsModel {
     loadDefaultSettings()
     persistKeyMappingMode()
     saveSettings()
+    persistAudioCodecSettings()
   }
 
   func loadSettings() {
@@ -344,6 +380,7 @@ extension SettingsModel {
       forKey: SettingsModel.controllerDualSensePrecisionTouchpadKeyPrefix + hostId) as? Bool ?? false
     loadControllerSettings(for: hostId)
     loadKeyMappingMode(for: hostId)
+    loadAudioCodecSettings(for: hostId)
     if let settings = Settings.getSettings(for: hostId) {
       selectedResolution = settings.resolution
 

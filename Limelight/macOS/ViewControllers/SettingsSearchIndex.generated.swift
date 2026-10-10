@@ -99,6 +99,7 @@ extension SettingsSearchIndex {
   static let generatedAudioEntries: [SettingsSearchEntry] = [
     SettingsSearchEntry(id: "audio/pane", pane: .audio, kind: .pane, sectionKey: "Media", titleKey: "Audio & Microphone", detailKey: "Audio settings subtitle", keywords: []),
     SettingsSearchEntry(id: "audio/Audio/Audio Configuration", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Audio Configuration", detailKey: nil, keywords: ["Stereo", "5.1 surround sound", "7.1 surround sound", "7.1.4 surround sound"]),
+    SettingsSearchEntry(id: "audio/Audio/Audio Codec", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Audio Codec", detailKey: nil, keywords: ["Opus", "Lossless (PCM)"]),
     SettingsSearchEntry(id: "audio/Audio/Play Sound on Host", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Play Sound on Host", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio/Sound Mode", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Sound Mode", detailKey: nil, keywords: ["Default", "Audio Enhancement"]),
     SettingsSearchEntry(id: "audio/Audio/Volume", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Volume", detailKey: nil, keywords: []),

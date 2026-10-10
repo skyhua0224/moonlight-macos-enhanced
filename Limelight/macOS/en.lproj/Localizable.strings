@@ -1266,3 +1266,14 @@
 "The host does not support that display scale" = "The host does not support that display scale";
 "The host refused to change the display scale" = "The host refused to change the display scale";
 "The host display for the scale was not found" = "The host display for the scale was not found";
+"Audio Codec" = "Audio Codec";
+"Opus" = "Opus";
+"Lossless (PCM)" = "Lossless (PCM)";
+"Audio codec hint PCM" = "Lossless audio needs about %@ Mbps of bandwidth for stereo and %@ Mbps for 5.1 surround, on top of the video bitrate. If the link cannot carry it, audio drops out and video stutters.";
+"Audio codec fallback: channels" = "This codec supports up to 5.1 channels, so Opus is used with this audio configuration.";
+"Audio codec fallback: host" = "This host is not Foundation Sunshine, so Opus is used.";
+"Audio codec fallback: failed" = "This host did not deliver this codec last time, so Opus is used. Choose Opus and then this codec again to retry.";
+"The host did not send PCM audio. Audio is muted; Opus will be used next time." = "The host did not send PCM audio. Audio is muted; Opus will be used next time.";
+"PCM audio is damaged. Audio is silent until it recovers." = "PCM audio is damaged. Audio is silent until it recovers.";
+"%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps). Without enough bandwidth, audio drops out and video stutters." = "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps). Without enough bandwidth, audio drops out and video stutters.";
+"%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter." = "%@ audio needs about %@ Mbps on top of the video bitrate (estimated total %@ Mbps), and this link is not a wired LAN. Insufficient bandwidth causes audio dropouts and video stutter.";

@@ -223,10 +223,21 @@ static const double kProbeCapTolerance = 1.15;
         return;
     }
 
-    _config.probedBitrateCeilingKbps = safeKbps;
-    if (_config.bitRate > safeKbps * kProbeCapTolerance) {
-        Log(LOG_I, @"[netprobe] capping bitrate %d -> %dkbps", _config.bitRate, safeKbps);
-        _config.bitRate = safeKbps;
+    // The probe measures what the whole link carries. Audio that goes beyond the
+    // share the host holds back from the video bitrate (PCM, AC3) uses part of it.
+    int audioExtraKbps = MAX(0, _config.audioExcessBitrateKbps);
+    int videoCeilingKbps = safeKbps;
+    if (audioExtraKbps > 0) {
+        videoCeilingKbps = MAX(kProbeBitrateStepKbps, safeKbps - audioExtraKbps);
+        videoCeilingKbps = videoCeilingKbps / kProbeBitrateStepKbps * kProbeBitrateStepKbps;
+        Log(LOG_I, @"[netprobe] audio uses %dkbps beyond the host reserve: video ceiling %d -> %dkbps",
+            audioExtraKbps, safeKbps, videoCeilingKbps);
+    }
+
+    _config.probedBitrateCeilingKbps = videoCeilingKbps;
+    if (_config.bitRate > videoCeilingKbps * kProbeCapTolerance) {
+        Log(LOG_I, @"[netprobe] capping bitrate %d -> %dkbps", _config.bitRate, videoCeilingKbps);
+        _config.bitRate = videoCeilingKbps;
     }
 }
 
