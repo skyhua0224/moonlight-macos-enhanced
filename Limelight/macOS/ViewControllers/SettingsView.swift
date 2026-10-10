@@ -171,7 +171,7 @@ enum SettingsSearchIndex {
     "Microphone Permission": ["permission", "权限"],
     "Start Test": ["Test Microphone", "输入测试"],
     "Connected Controllers": ["gamepad", "手柄", "DualSense", "DS5"],
-    "Host Controller Type": ["DS5", "DS4", "PlayStation", "手柄类型"],
+    "Host Controller Type": ["DS5", "DS4", "PlayStation", "DualShock", "PS4", "PS5", "手柄类型"],
     "Haptic Feedback": ["rumble", "震动", "触觉"],
     "Rumble": ["haptic", "震动"],
     "Motion Sensor": ["motion", "陀螺仪", "动作"],

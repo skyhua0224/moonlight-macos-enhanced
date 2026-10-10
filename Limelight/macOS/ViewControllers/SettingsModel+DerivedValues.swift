@@ -556,8 +556,10 @@ extension SettingsModel {
       switch self {
       case .automatic: return "Automatic"
       case .xbox360: return "Xbox 360"
-      case .playStation: return "PlayStation"
-      case .dualSense: return "DualSense"
+      // The host only knows ds4 (DualShock 4) and ds5 (DualSense), so the labels
+      // name the console generation to keep the two entries unambiguous.
+      case .playStation: return "DualShock 4 (PS4)"
+      case .dualSense: return "DualSense (PS5)"
       }
     }
 
@@ -571,7 +573,18 @@ extension SettingsModel {
     }
 
     init(selection: String) {
-      self = Self.allCases.first { $0.displayKey == selection } ?? .automatic
+      // The selection is persisted as its display string, so values stored before
+      // the labels were renamed ("PlayStation" meant DualShock 4, "DualSense" is
+      // unchanged in meaning) must keep mapping to the same host type.
+      if let match = Self.allCases.first(where: { $0.displayKey == selection }) {
+        self = match
+      } else if selection == "PlayStation" {
+        self = .playStation
+      } else if selection == "DualSense" {
+        self = .dualSense
+      } else {
+        self = .automatic
+      }
     }
   }
 

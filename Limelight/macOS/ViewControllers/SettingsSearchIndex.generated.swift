@@ -131,7 +131,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "input/Controller/Controller Deadzone", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Controller Deadzone", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "input/Controller/Emulate Guide Button", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Emulate Guide Button", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "input/Controller/Gamepad Mouse Emulation", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Gamepad Mouse Emulation", detailKey: "Gamepad Mouse Hint", keywords: []),
-    SettingsSearchEntry(id: "input/Controller/Host Controller Type", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Host Controller Type", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "input/Controller/Host Controller Type", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Host Controller Type", detailKey: "Host Controller Type detail", keywords: []),
     SettingsSearchEntry(id: "input/Controller/Connected Controllers", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Connected Controllers", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "input/Controller Shortcuts/Controller Shortcuts", pane: .input, kind: .section, sectionKey: "Controller Shortcuts", titleKey: "Controller Shortcuts", detailKey: nil, keywords: []),
   ]

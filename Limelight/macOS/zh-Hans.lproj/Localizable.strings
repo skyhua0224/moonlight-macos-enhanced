@@ -333,10 +333,10 @@
 "Feedback Controller" = "反馈手柄";
 "Feedback Controller detail" = "选择接收主机反馈的本地手柄。自动模式跟随主机手柄编号。";
 "Host Controller Type" = "主机控制器类型";
-"Host Controller Type detail" = "选择发送给主机的控制器类型。主机支持时，DualSense 会保留触控板、运动、扳机和反馈能力。";
+"Host Controller Type detail" = "设置主机为你的手柄创建哪种虚拟手柄；选择“自动”则由主机决定。";
 "Xbox 360" = "Xbox 360";
-"PlayStation" = "PlayStation";
-"DualSense" = "DualSense";
+"DualShock 4 (PS4)" = "DualShock 4 (PS4)";
+"DualSense (PS5)" = "DualSense (PS5)";
 "Controller 1" = "手柄 1";
 "Controller 2" = "手柄 2";
 "Controller 3" = "手柄 3";

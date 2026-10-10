@@ -552,12 +552,13 @@ struct SettingsSliderRow: View {
 
 struct SettingsChoiceRow: View {
   let title: String
+  var detail: String? = nil
   @Binding var selection: String
   let options: [String]
   @ObservedObject private var languageManager = LanguageManager.shared
 
   var body: some View {
-    SettingsRow(title: title) {
+    SettingsRow(title: title, detail: detail) {
       Picker("", selection: $selection) {
         ForEach(options, id: \.self) { value in
           Text(languageManager.localize(value)).tag(value)

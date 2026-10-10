@@ -169,7 +169,7 @@ private struct ControllerSettingsSection: View {
       ControllerDeadzoneRow(value: $settingsModel.controllerDeadzone)
       ToggleCell(title: "Emulate Guide Button", boolBinding: $settingsModel.emulateGuide)
       ToggleCell(title: "Gamepad Mouse Emulation", hintKey: "Gamepad Mouse Hint", boolBinding: $settingsModel.gamepadMouseMode)
-      SettingsChoiceRow(title: "Host Controller Type", selection: $settingsModel.selectedControllerVirtualType,
+      SettingsChoiceRow(title: "Host Controller Type", detail: "Host Controller Type detail", selection: $settingsModel.selectedControllerVirtualType,
                         options: SettingsModel.controllerVirtualTypes)
       SettingsRow(title: "Connected Controllers") {
         Text("\(GCController.controllers().count)")
