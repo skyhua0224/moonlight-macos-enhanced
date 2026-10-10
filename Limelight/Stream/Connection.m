@@ -372,6 +372,11 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     //    back needs nothing new.
     MLAudioBitstreamOutput *_bitstreamOutput;
     int32_t _audioAnyPacketSeen;              // atomic; set by the decode thread on the first packet
+    // Held from connection start to stop (guarded by @synchronized(self)). Without
+    // it macOS throttles the app's timers and network threads as soon as another
+    // app is in front (App Nap, timer coalescing), and audio blocks start going
+    // missing: measured 6.8 unrecoverable blocks/min in the background vs 2.9 in front.
+    id<NSObject> _streamActivity;
     int32_t _audioPassthroughActive;          // atomic
     int32_t _audioPassthroughEverStarted;     // atomic
     int32_t _audioPassthroughFallbackRequested; // atomic; decode thread asks at most once
@@ -3879,6 +3884,14 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         LiStopConnectionCtx(ctx);
         os_unfair_lock_unlock(&gConnectionLifecycleLock);
         UnregisterConnection(ctx);
+        id<NSObject> activity = nil;
+        @synchronized (conn) {
+            activity = conn->_streamActivity;
+            conn->_streamActivity = nil;
+        }
+        if (activity != nil) {
+            [[NSProcessInfo processInfo] endActivity:activity];
+        }
         // conn is released here after the block completes, ensuring
         // the Connection object stays alive throughout cleanup
     });
@@ -5085,6 +5098,13 @@ static void FillOutputBuffer(void *aqData,
     // Advertising the remote text context makes the host stream caret updates,
     // so it is only requested when the local input method wants them.
     LiSetRemoteTextContextCallbackCtx(&_connectionContext, _wantsRemoteTextContext ? ClRemoteTextContext : NULL);
+    @synchronized (self) {
+        if (_streamActivity == nil) {
+            _streamActivity = [[NSProcessInfo processInfo]
+                beginActivityWithOptions:(NSActivityUserInitiated | NSActivityLatencyCritical)
+                                  reason:@"Receiving a live stream"];
+        }
+    }
     _rendererStreamConfig.startupConnectMs = LiGetMillis();
     Log(LOG_I, @"LiStartConnectionCtx: connCtx=%p globalCtx=%p inputCtx=%p", &_connectionContext, LiGetGlobalConnectionContextPtr(), LiGetInputContextFromConnectionCtx(&_connectionContext));
     LiStartConnectionCtx(&_connectionContext,
