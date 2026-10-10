@@ -359,6 +359,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     //  - The converter, FIFO and ring are prepared in ArInit regardless, so falling
     //    back needs nothing new.
     MLAudioBitstreamOutput *_bitstreamOutput;
+    int32_t _audioAnyPacketSeen;              // atomic; set by the decode thread on the first packet
     int32_t _audioPassthroughActive;          // atomic
     int32_t _audioPassthroughEverStarted;     // atomic
     int32_t _audioPassthroughFallbackRequested; // atomic; decode thread asks at most once
@@ -1662,6 +1663,10 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     if (!usePcm && !useCompressed && conn->_opusDecoder == NULL) {
         return;
     }
+    if (sampleData != NULL && sampleLength > 0 &&
+        __atomic_load_n(&conn->_audioAnyPacketSeen, __ATOMIC_RELAXED) == 0) {
+        __atomic_store_n(&conn->_audioAnyPacketSeen, 1, __ATOMIC_RELAXED);
+    }
 
     int decodeLen;
 
@@ -2875,27 +2880,34 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
 
     Log(LOG_I, @"[audio] Output start scheduled in the background; the stream does not wait for the audio device");
 
-    // PCM surround packets are larger than one network packet and depend on IP
-    // fragmentation. When none has arrived after a while, say what the likely
-    // reason is; the host also sends nothing while it is silent, so this is a
-    // hint, not a failure, and nothing is remembered.
+    // Nothing in the protocol says "the host has no audio for you": a host that
+    // cannot open its audio device for the requested layout, or whose oversized
+    // packets are dropped on the way, simply sends nothing. When no audio packet at
+    // all has arrived after a while, name the likely reason. The host also sends
+    // nothing while it is silent (unless asked to keep the stream active), so this
+    // is a hint, not a failure, and nothing is remembered.
+    NSString *silenceHintKey = nil;
     if (_audioCodec == MLAudioCodecPcm && _pcmExpectedBytes > _streamConfig.packetSize) {
-        const int expectedBytes = _pcmExpectedBytes;
+        // PCM surround packets are larger than one network packet and depend on IP fragmentation.
+        silenceHintKey = @"No lossless audio has arrived yet. If the host is playing sound, the network is dropping its large audio packets; use stereo, AC3 or Opus instead.";
+    } else if (_channelCount > 8) {
+        // 7.1.4 needs a host audio device that accepts 12 channels; common virtual
+        // sinks stop at 7.1 and the host then streams without audio.
+        silenceHintKey = @"No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead.";
+    }
+    __atomic_store_n(&_audioAnyPacketSeen, 0, __ATOMIC_RELAXED);
+    if (silenceHintKey != nil) {
+        const int channels = _channelCount;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(12 * NSEC_PER_SEC)), _audioOutputQueue, ^{
             Connection *strongSelf = weakSelf;
             if (strongSelf == nil ||
-                __atomic_load_n(&strongSelf->_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation) {
+                __atomic_load_n(&strongSelf->_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation ||
+                __atomic_load_n(&strongSelf->_audioAnyPacketSeen, __ATOMIC_RELAXED) != 0) {
                 return;
             }
-            // Racy read of decode-thread counters; only zero vs. non-zero matters.
-            if (strongSelf->_audioRxValidPackets + strongSelf->_audioRxInvalidPackets +
-                strongSelf->_audioRxLossPlaceholders != 0) {
-                return;
-            }
-            Log(LOG_W, @"[audio] No PCM packet has arrived 12 s into the stream (each is %d bytes, larger than one network packet); the path may not carry fragmented or oversized packets",
-                expectedBytes);
-            [strongSelf postAudioOutputNoticeWithKey:@"No lossless audio has arrived yet. If the host is playing sound, the network is dropping its large audio packets; use stereo, AC3 or Opus instead."
-                                          deviceName:nil];
+            Log(LOG_W, @"[audio] No audio packet has arrived 12 s into the stream (codec=%@ channels=%d); the host may be streaming without audio or its packets are not getting through",
+                [MLAudioStreamPlan codecName:strongSelf->_audioCodec], channels);
+            [strongSelf postAudioOutputNoticeWithKey:silenceHintKey deviceName:nil];
         });
     }
     dispatch_async(_audioOutputQueue, ^{

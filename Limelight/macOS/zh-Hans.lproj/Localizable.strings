@@ -1331,6 +1331,7 @@
 "Audio codec conflict keep channels" = "保留“%@”，改用 Opus";
 "Audio codec conflict notice" = "%1$@ 最多支持 5.1 声道，本次串流按“%2$@”使用 Opus。可在“设置 > 音频”里选择组合。";
 "No lossless audio has arrived yet. If the host is playing sound, the network is dropping its large audio packets; use stereo, AC3 or Opus instead." = "还没有收到无损音频。如果主机正在播放声音，说明网络丢掉了较大的音频包；请改用立体声、AC3 或 Opus。";
+"No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead." = "还没有收到音频。如果主机正在播放声音，说明主机的音频设备不支持 7.1.4；请改用 7.1 环绕声。";
 "Audio codec fallback: host" = "此主机不是 Foundation Sunshine，因此使用 Opus。";
 "Audio codec fallback: failed" = "此主机上次没有送出这种编码，因此使用 Opus。先选择 Opus 再重新选择该编码即可重试。";
 "The host did not send %@ audio. Audio is muted; Opus will be used next time." = "主机没有发送 %@ 音频，本次已静音，下次将使用 Opus。";
