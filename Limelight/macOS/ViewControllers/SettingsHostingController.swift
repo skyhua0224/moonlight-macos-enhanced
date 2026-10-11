@@ -405,6 +405,12 @@ final class WelcomePermissionsHostingController: NSWindowController, NSWindowDel
   /// use, so its view takes the host from here when it first appears.
   static var requestedHostId: String?
 
+  /// Builds one settings page that has not been shown yet. False when there is none left
+  /// (or no settings window that keeps pages).
+  @objc class func prewarmNextSettingsPage() -> Bool {
+    SettingsPaneContainerView.current?.prewarmNextPage() ?? false
+  }
+
   /// Makes the file dialog of the equalizer ahead of its first use.
   @objc class func prewarmImportPanel() {
     _ = EqualizerImportPanel.shared

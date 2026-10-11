@@ -33,7 +33,8 @@ typedef enum : NSUInteger {
 
 @interface AppDelegateForAppKit () <NSApplicationDelegate, NSWindowDelegate>
 @property (nonatomic, strong) NSWindowController *preferencesWC;
-@property (nonatomic) BOOL importPanelPrewarmed;
+@property (nonatomic) BOOL settingsPagesPrewarmed;
+@property (nonatomic) BOOL settingsPrewarmDone;
 @property (nonatomic) NSInteger settingsPrewarmChecks;
 @property (nonatomic, strong) NSWindowController *aboutWC;
 @property (nonatomic, strong) NSWindowController *welcomePermissionsWC;
@@ -210,15 +211,12 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 }
 
 // Building the settings window takes around two seconds of the main thread the first time, and
-// the equalizer's file dialog one more. Both are done ahead in a quiet moment (nobody at the
-// keyboard or mouse, or the app in the background; never during a stream), one per moment, so
-// that the first click on Settings shows a window that already exists.
+// the equalizer's file dialog one more, and every settings page some more when it is first
+// shown. All of it is done ahead in quiet moments (nobody at the keyboard or mouse, or the app
+// in the background; never during a stream), a piece per moment, so that the first click on
+// Settings, and on each of its pages, shows what already exists.
 - (void)prewarmSettingsWhenQuiet {
-    const BOOL windowDone = _preferencesWC != nil;
-    if (windowDone && self.importPanelPrewarmed) {
-        return;
-    }
-    if (++self.settingsPrewarmChecks > 400) {
+    if (self.settingsPrewarmDone || ++self.settingsPrewarmChecks > 600) {
         return;
     }
 
@@ -227,19 +225,26 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
         [StreamingSessionManager shared].state == StreamingStateIdle &&
         NSApp.modalWindow == nil;
     if (quiet) {
-        if (!windowDone) {
+        // One piece of work per quiet moment: the window with the page it opens on, then the
+        // other pages one by one, then the file dialog.
+        if (_preferencesWC == nil) {
             _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindowWithHostId:nil];
             _preferencesWC.window.delegate = self;
             [_preferencesWC.window layoutIfNeeded];
             [SettingsWindowObjCBridge settingsWindowVisibilityChanged:NO];
+        } else if (!self.settingsPagesPrewarmed) {
+            if (![SettingsWindowObjCBridge prewarmNextSettingsPage]) {
+                self.settingsPagesPrewarmed = YES;
+            }
         } else {
             [SettingsWindowObjCBridge prewarmImportPanel];
-            self.importPanelPrewarmed = YES;
+            self.settingsPrewarmDone = YES;
+            return;
         }
     }
 
     __weak typeof(self) weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((quiet ? 0.4 : 1.5) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [weakSelf prewarmSettingsWhenQuiet];
     });
 }

@@ -252,8 +252,9 @@ private struct ModernSettingsRoot: View {
       SettingsSidebar(selection: $selectedPane, settingsModel: settingsModel)
         .navigationSplitViewColumnWidth(min: 188, ideal: 208, max: 228)
     } detail: {
-      SettingsDetail(pane: selectedPane)
-        .environmentObject(settingsModel)
+      SettingsPaneHost(pane: selectedPane, settingsModel: settingsModel)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
     .navigationSplitViewStyle(.balanced)
     .onChange(of: columnVisibility) { value in
@@ -389,6 +390,103 @@ private struct SettingsSidebarCategory: View {
         Text(languageManager.localize(titleKey))
       }
     }
+  }
+}
+
+/// Holds the settings pages that were shown and puts the selected one in the window.
+///
+/// With the pages in the window's own SwiftUI tree, going from one to another threw the
+/// views of the first away and built those of the second, several hundred each time: a
+/// visible wait on every click. Here every page has a hosting view of its own. One that is
+/// not showing is out of the window, where it costs nothing while settings change, and it
+/// comes back as it was left. Pages can also be built ahead (see prewarmNextPage).
+final class SettingsPaneContainerView: NSView {
+  /// The container of the settings window, for building pages ahead.
+  static weak var current: SettingsPaneContainerView?
+
+  var makePage: ((SettingsPaneType) -> NSView)?
+  private var pages: [SettingsPaneType: NSView] = [:]
+  private var shown: SettingsPaneType?
+
+  private func page(for pane: SettingsPaneType) -> NSView? {
+    if let page = pages[pane] {
+      return page
+    }
+    guard let page = makePage?(pane) else { return nil }
+    page.autoresizingMask = [.width, .height]
+    pages[pane] = page
+    return page
+  }
+
+  func show(_ pane: SettingsPaneType) {
+    guard shown != pane, let page = page(for: pane) else { return }
+    if let shown {
+      pages[shown]?.removeFromSuperview()
+    }
+    page.isHidden = false
+    page.frame = bounds
+    addSubview(page)
+    shown = pane
+  }
+
+  /// Builds one page that has not been asked for yet, so that it is there when it is.
+  /// Returns false when every page exists.
+  func prewarmNextPage() -> Bool {
+    guard window != nil,
+      let pane = SettingsPaneType.allCases.first(where: { pages[$0] == nil }),
+      let page = page(for: pane)
+    else { return false }
+    // In the window for one layout, which is what creates its views; hidden meanwhile.
+    page.isHidden = true
+    page.frame = bounds
+    addSubview(page)
+    page.layoutSubtreeIfNeeded()
+    page.removeFromSuperview()
+    page.isHidden = false
+    return true
+  }
+}
+
+@available(macOS 13.0, *)
+private struct SettingsPaneHost: NSViewRepresentable {
+  let pane: SettingsPaneType
+  let settingsModel: SettingsModel
+
+  func makeNSView(context: Context) -> SettingsPaneContainerView {
+    let view = SettingsPaneContainerView()
+    let model = settingsModel
+    view.makePage = { pane in
+      let host = NSHostingView(rootView: SettingsPaneRoot(pane: pane, settingsModel: model))
+      // The page fills the column; it has no say in the size of the window.
+      host.sizingOptions = []
+      return host
+    }
+    SettingsPaneContainerView.current = view
+    return view
+  }
+
+  func updateNSView(_ view: SettingsPaneContainerView, context: Context) {
+    switch pane {
+    case .legacy: view.show(.app)
+    case .updates: view.show(.about)
+    default: view.show(pane)
+    }
+  }
+}
+
+/// A settings page with what it used to take from the window's SwiftUI tree around it.
+private struct SettingsPaneRoot: View {
+  let pane: SettingsPaneType
+  let settingsModel: SettingsModel
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    SettingsDetail(pane: pane)
+      .environmentObject(settingsModel)
+      // Default-style buttons become controller focus targets.
+      .controllerButtonStyle(.automatic)
+      .environment(\.locale, languageManager.currentLanguage == .system ? .current
+        : Locale(identifier: languageManager.currentLanguage == .chinese ? "zh-Hans" : "en"))
   }
 }
 
