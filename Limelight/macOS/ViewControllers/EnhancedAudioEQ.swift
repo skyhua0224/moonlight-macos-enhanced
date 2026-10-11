@@ -463,9 +463,13 @@ enum EnhancedAudioEQ {
   ///     Filter 1: ON LSC Fc 105 Hz Gain 5.6 dB Q 0.70
   ///     Filter 2: ON PK Fc 189 Hz Gain -2.9 dB Q 0.58
   ///
+  /// Lines that are neither are skipped, so the files of spinorama.org (speakers), which
+  /// begin with a few lines of description, read the same way.
+  ///
   /// Returns nil when no line is a filter this equalizer has.
   static func parseParametricText(_ text: String) -> ImportedProfile? {
-    let number = #"(-?\d+(?:[.,]\d+)?)"#
+    // With an optional sign either way: some tools write "Gain +2.59 dB".
+    let number = #"([-+]?\d+(?:[.,]\d+)?)"#
     let preampPattern = try? NSRegularExpression(
       pattern: #"^\s*Preamp\s*:\s*"# + number + #"\s*dB"#, options: [.caseInsensitive])
     let filterPattern = try? NSRegularExpression(
