@@ -24,13 +24,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Xcode 27 is only provided on the Apple Silicon xcode-27 image, so
+          # the Intel package is cross-built there.
           - variant: arm64
-            runner: macos-26
+            runner: xcode-27
             destination: 'platform=macOS,arch=arm64'
             archs: 'arm64'
             display_name: Apple Silicon
           - variant: x86_64
-            runner: macos-26-intel
+            runner: xcode-27
             destination: 'platform=macOS,arch=x86_64'
             archs: 'x86_64'
             display_name: Intel
@@ -42,10 +44,8 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
-    - name: Setup Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: latest
+    - name: Select Xcode 27.0
+      run: sudo xcode-select -s /Applications/Xcode_27.0.app/Contents/Developer
 
     - name: Show Build Environment
       run: |
@@ -178,7 +178,7 @@ jobs:
   build_universal:
     name: Build universal
     needs: build_arch
-    runs-on: macos-26
+    runs-on: xcode-27
 
     steps:
     - name: Checkout signing tools
