@@ -1515,8 +1515,21 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     if (_activeRendererMode == MLActiveVideoRendererModeEnhanced) {
         return _videoStats.renderedFrames > 0;
     }
-    return displayLayer != nil && displayLayer.readyForDisplay &&
+    return [self displayLayerReadyForDisplay] &&
         [self sampleBufferRenderingStatus] != AVQueuedSampleBufferRenderingStatusFailed;
+}
+
+// -readyForDisplay on the layer needs macOS 14.4. Older systems only report
+// the rendering status, which turns to Rendering once frames are shown.
+- (BOOL)displayLayerReadyForDisplay
+{
+    if (displayLayer == nil) {
+        return NO;
+    }
+    if (@available(macOS 14.4, *)) {
+        return displayLayer.readyForDisplay;
+    }
+    return [self sampleBufferRenderingStatus] == AVQueuedSampleBufferRenderingStatusRendering;
 }
 
 - (AVQueuedSampleBufferRenderingStatus)sampleBufferRenderingStatus
@@ -3551,7 +3564,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     }
 
     [self enqueueSampleBufferForDisplay:sampleBuffer];
-    if (displayLayer.readyForDisplay && [self sampleBufferRenderingStatus] != AVQueuedSampleBufferRenderingStatusFailed) {
+    if ([self displayLayerReadyForDisplay] && [self sampleBufferRenderingStatus] != AVQueuedSampleBufferRenderingStatusFailed) {
         [self recordRenderedFrameSampleAtTimeMs:LiGetMillis()
                                  enqueueTimeMs:frameContext != NULL ? frameContext->enqueueTimeMs : 0];
     }
@@ -5607,7 +5620,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             uint64_t renderSampleNowMs = LiGetMillis();
             if (![self usesDecompressionSession]) self->_activeWndVideoStats.decodedFrames++;
             self->_activeWndVideoStats.totalDecodeTime += LiGetMillis() - decodeStart;
-            if (self->_activeRendererMode == MLActiveVideoRendererModeCompatibility && self->displayLayer.readyForDisplay) {
+            if (self->_activeRendererMode == MLActiveVideoRendererModeCompatibility && [self displayLayerReadyForDisplay]) {
                 [self recordRenderedFrameSampleAtTimeMs:renderSampleNowMs
                                           enqueueTimeMs:enqueueTimeMs];
             }
@@ -6062,7 +6075,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         _activeWndVideoStats.totalDecodeTime += LiGetMillis() - now;
         if (result == DR_OK && ![self usesDecompressionSession]) {
             _activeWndVideoStats.decodedFrames++;
-            if (displayLayer.readyForDisplay) [self recordRenderedFrameSampleAtTimeMs:LiGetMillis() enqueueTimeMs:unit->enqueueTimeMs];
+            if ([self displayLayerReadyForDisplay]) [self recordRenderedFrameSampleAtTimeMs:LiGetMillis() enqueueTimeMs:unit->enqueueTimeMs];
         }
     }
     return result;
