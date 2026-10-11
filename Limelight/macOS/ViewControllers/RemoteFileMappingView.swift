@@ -8,7 +8,7 @@ struct RemoteFileMappingView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @StateObject private var model = RemoteFileMappingViewModel()
-  @State private var selectedEntryID: String?
+  @SwiftUI.State private var selectedEntryID: String?
 
   var body: some View {
     SettingsContent {
