@@ -794,7 +794,19 @@ class SettingsModel: ObservableObject {
       if EnhancedAudioEQ.Mode(title: selectedEnhancedAudioEQMode) == .parametric,
         enhancedAudioEQBands.isEmpty
       {
-        enhancedAudioEQBands = EnhancedAudioEQ.starterBands()
+        // The first time, the free bands start as the fixed curve that was playing (with the
+        // trim the fixed bands give themselves), so the sound does not jump.
+        let fixed = EnhancedAudioEQ.graphicFilters(
+          frequencies: Self.enhancedAudioEQFrequencies(for: selectedEnhancedAudioEQLayout),
+          gains: enhancedAudioEQGains)
+        enhancedAudioEQBands = fixed.map {
+          EnhancedAudioEQBand(
+            kind: .peak, frequency: $0.frequency, gain: $0.gain, q: ($0.q * 100).rounded() / 100)
+        }
+        if enhancedAudioEQPreamp == 0 {
+          let trim = min(2.5, max(0, fixed.map(\.gain).max() ?? 0) * 0.2)
+          enhancedAudioEQPreamp = -CGFloat((trim * 10).rounded() / 10)
+        }
       }
       saveEnhancedAudioSettings()
     }
@@ -811,7 +823,7 @@ class SettingsModel: ObservableObject {
       saveEnhancedAudioSettings()
     }
   }
-  // Name of the imported correction the bands came from, shown until they are edited away.
+  // Name of the correction the bands came from; kept until they are reset or replaced.
   @Published var enhancedAudioEQProfileName: String? = nil {
     didSet {
       guard !isLoading, oldValue != enhancedAudioEQProfileName else { return }

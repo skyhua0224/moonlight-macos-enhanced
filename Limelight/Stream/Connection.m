@@ -195,6 +195,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 - (BOOL)enhancedRenderHoldsForFrameCount:(UInt32)frameCount;
 - (BOOL)enhancedAudioWantsBinauralForChannelCount:(int)channelCount;
 - (void)updateEnhancedSpectrumTap;
+- (void)reconcileEnhancedRenderPathForGeneration:(int32_t)generation;
 - (BOOL)recreateAudioDecoderWithConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
                                 reason:(NSString *)reason;
 - (BOOL)attempt714DecoderTopologyFallbackAfterDecodeError:(int)decodeError;
@@ -2693,6 +2694,7 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
     const CGFloat reverb = [SettingsClass enhancedAudioReverbAmountFor:uuid];
     NSDictionary *eqState = [SettingsClass enhancedAudioEQStateFor:uuid];
     const int spatialMode = (int)[SettingsClass enhancedAudioSpatialModeFor:uuid];
+    const int32_t generation = __atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST);
     __weak Connection *weakSelf = self;
     dispatch_async(queue, ^{
         Connection *strongSelf = weakSelf;
@@ -2712,15 +2714,8 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
         strongSelf->_enhancedAudioReverbAmount = reverb;
         strongSelf->_enhancedAudioEQState = eqState;
         strongSelf->_enhancedAudioSpatialMode = spatialMode;
-        // Binaural and stereo rendering are different graphs: changing between them starts the
-        // output again, like a change of the output device does.
-        if (strongSelf->_enhancedAudioEngine != nil &&
-            strongSelf->_enhancedAudioBinauralActive != [strongSelf enhancedAudioWantsBinauralForChannelCount:strongSelf->_channelCount]) {
-            const int32_t generation = __atomic_load_n(&strongSelf->_audioOutputGeneration, __ATOMIC_SEQ_CST);
-            [strongSelf restartAudioOutputOnOutputQueueForGeneration:generation reason:@"spatial rendering change"];
-            return;
-        }
         [strongSelf configureEnhancedAudioUnits];
+        [strongSelf reconcileEnhancedRenderPathForGeneration:generation];
     });
 }
 
@@ -2905,6 +2900,32 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
     return NO;
 }
 
+// Output queue. Binaural and stereo rendering are different graphs: when the running one is not
+// the one the settings ask for, the output starts again, like after a change of the output
+// device. Restarts are limited to one a second, so a change that comes sooner is tried again
+// when that second is over instead of being dropped.
+- (void)reconcileEnhancedRenderPathForGeneration:(int32_t)generation
+{
+    if (__atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation ||
+        _enhancedAudioEngine == nil ||
+        _enhancedAudioBinauralActive == [self enhancedAudioWantsBinauralForChannelCount:_channelCount]) {
+        return;
+    }
+    const uint64_t nowMs = LiGetMillis();
+    if (_audioDeviceRestartLastMs != 0 && nowMs - _audioDeviceRestartLastMs < 1000) {
+        const uint64_t waitMs = 1000 - (nowMs - _audioDeviceRestartLastMs) + 50;
+        __weak Connection *weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(waitMs * NSEC_PER_MSEC)), _audioOutputQueue, ^{
+            [weakSelf reconcileEnhancedRenderPathForGeneration:generation];
+        });
+        return;
+    }
+    // Not a new device: a passthrough that was given up stays given up.
+    const BOOL passthroughGivenUp = _audioPassthroughGivenUp;
+    [self restartAudioOutputOnOutputQueueForGeneration:generation reason:@"spatial rendering change"];
+    _audioPassthroughGivenUp = passthroughGivenUp;
+}
+
 // Output queue. Taps the end of the enhanced chain while the settings pane shows the spectrum,
 // and only then: the analysis costs a little for every buffer.
 - (void)updateEnhancedSpectrumTap
@@ -2926,6 +2947,7 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
             [[MLEnhancedAudioSpectrum shared] reset];
         }
         _enhancedSpectrumTapInstalled = wanted;
+        Log(LOG_I, @"[audio] Spectrum tap %@", wanted ? @"installed" : @"removed");
     } @catch (NSException *exception) {
         Log(LOG_W, @"Enhanced audio spectrum tap could not be %@: %@", wanted ? @"installed" : @"removed", exception.reason);
     }
@@ -2977,11 +2999,14 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
         AVAudioFormat *sourceFormat = binaural ? surroundFormat : renderFormat;
         if (binaural) {
             // The stream is FL FR C LFE BL BR SL SR (+ four top channels); the 7.1 and 7.1.4
-            // layouts used here have the side pair before the back pair.
+            // layouts used here have the side pair before the back pair. The Opus decoder
+            // already swaps the pairs of a 7.1 stream (MLPrepareOpusDecoderConfig), but not
+            // those of a 7.1.4 one.
             for (int i = 0; i < ML_ENHANCED_SURROUND_MAX_CHANNELS; i++) {
                 _enhancedSurroundChannelMap[i] = i < opusConfig->channelCount ? i : -1;
             }
-            if (opusConfig->channelCount >= 8) {
+            if (opusConfig->channelCount == 12 ||
+                (opusConfig->channelCount == 8 && _audioCodec != MLAudioCodecOpus)) {
                 _enhancedSurroundChannelMap[4] = 6;
                 _enhancedSurroundChannelMap[5] = 7;
                 _enhancedSurroundChannelMap[6] = 4;
@@ -3049,6 +3074,22 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
             [_enhancedAudioEngine connect:_enhancedAudioLimiter to:_enhancedAudioEngine.mainMixerNode format:renderFormat];
             _enhancedAudioBinauralActive = binaural;
             [self configureEnhancedAudioUnits];
+
+            [_enhancedAudioEngine prepare];
+            [self discardBufferedAudio];
+            NSError *error = nil;
+            if (![_enhancedAudioEngine startAndReturnError:&error]) {
+                const OSStatus startStatus = error != nil ? (OSStatus)error.code : kAudioHardwareUnspecifiedError;
+                Log(LOG_W, @"Failed to start enhanced audio renderer (binaural=%d): %@", binaural ? 1 : 0, error.localizedDescription);
+                [self cleanupSelectedAudioRenderer];
+                // A device whose clock is not running fails every graph alike.
+                if (binaural && !MLAudioStatusIsDeviceNotRunning(startStatus)) {
+                    _enhancedAudioBinauralUnavailable = YES;
+                    return [self initializeEnhancedAudioRendererWithOpusConfig:opusConfig];
+                }
+                _audioOutputStartStatus = startStatus;
+                return NO;
+            }
         } @catch (NSException *exception) {
             Log(LOG_W, @"Enhanced audio graph could not be built (binaural=%d): %@", binaural ? 1 : 0, exception.reason);
             [self cleanupSelectedAudioRenderer];
@@ -3057,17 +3098,6 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
                 _enhancedAudioBinauralUnavailable = YES;
                 return [self initializeEnhancedAudioRendererWithOpusConfig:opusConfig];
             }
-            return NO;
-        }
-
-        [_enhancedAudioEngine prepare];
-
-        NSError *error = nil;
-        [self discardBufferedAudio];
-        if (![_enhancedAudioEngine startAndReturnError:&error]) {
-            _audioOutputStartStatus = error != nil ? (OSStatus)error.code : kAudioHardwareUnspecifiedError;
-            Log(LOG_W, @"Failed to start enhanced audio renderer: %@", error.localizedDescription);
-            [self cleanupSelectedAudioRenderer];
             return NO;
         }
 
@@ -3085,7 +3115,8 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
         }];
 
         _audioRenderChannelCount = 2;
-        Log(LOG_I, @"Enhanced renderer using stereo virtualizer: streamChannels=%d target=%d preset=%d spatial=%.2f width=%.2f reverb=%.2f",
+        Log(LOG_I, @"Enhanced renderer using %@: streamChannels=%d target=%d preset=%d spatial=%.2f width=%.2f reverb=%.2f",
+            binaural ? @"binaural renderer" : @"stereo virtualizer",
             opusConfig->channelCount,
             _enhancedAudioOutputTarget,
             _enhancedAudioPreset,
@@ -4264,6 +4295,8 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateVolume) name:@"volumeSettingChanged" object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateEnhancedAudioSettings) name:@"enhancedAudioSettingChanged" object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(enhancedSpectrumRequestChanged) name:@"enhancedAudioSpectrumRequestChanged" object:nil];
+    // The audio settings changed the default output device; the control center calls the method itself.
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(restartAudioOutputForDeviceChange) name:@"audioOutputDeviceChosen" object:nil];
     
     // Use a lock to ensure that only one thread is initializing
     // or deinitializing a connection at a time.

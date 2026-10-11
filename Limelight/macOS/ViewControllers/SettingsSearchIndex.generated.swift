@@ -96,6 +96,7 @@ extension SettingsSearchIndex {
 
   static let generatedAudioEntries: [SettingsSearchEntry] = [
     SettingsSearchEntry(id: "audio/pane", pane: .audio, kind: .pane, sectionKey: "Media", titleKey: "Audio & Microphone", detailKey: "Audio settings subtitle", keywords: []),
+    SettingsSearchEntry(id: "audio/Audio/Output Device", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Output Device", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio/Audio Configuration", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Audio Configuration", detailKey: nil, keywords: ["Stereo", "5.1 surround sound", "7.1 surround sound", "7.1.4 surround sound"]),
     SettingsSearchEntry(id: "audio/Audio/Audio Codec", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Audio Codec", detailKey: nil, keywords: ["Opus", "Lossless (PCM)", "AC3", "E-AC3"]),
     SettingsSearchEntry(id: "audio/Audio/Dolby Output", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Dolby Output", detailKey: nil, keywords: ["Automatic", "Decode on This Mac"]),
@@ -110,9 +111,9 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "audio/Audio Enhancement/Soundstage Width", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Soundstage Width", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio Enhancement/Reverb", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Reverb", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/EQ/Enable Equalizer", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "Enable Equalizer", detailKey: nil, keywords: []),
-    SettingsSearchEntry(id: "audio/EQ/EQ Mode", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "EQ Mode", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "audio/EQ/Headphone Correction", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "Headphone Correction", detailKey: "Headphone Correction hint", keywords: []),
+    SettingsSearchEntry(id: "audio/EQ/EQ Bands", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "EQ Bands", detailKey: nil, keywords: ["12-Band", "24-Band"]),
     SettingsSearchEntry(id: "audio/EQ/EQ Preamp", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "EQ Preamp", detailKey: nil, keywords: []),
-    SettingsSearchEntry(id: "audio/EQ/EQ Detail", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "EQ Detail", detailKey: nil, keywords: ["12-Band", "24-Band"]),
     SettingsSearchEntry(id: "audio/Microphone/Enable Microphone", pane: .audio, kind: .row, sectionKey: "Microphone", titleKey: "Enable Microphone", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Microphone/Microphone Permission", pane: .audio, kind: .row, sectionKey: "Microphone", titleKey: "Microphone Permission", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Microphone/Microphone Device", pane: .audio, kind: .row, sectionKey: "Microphone", titleKey: "Microphone Device", detailKey: nil, keywords: ["System Default"]),

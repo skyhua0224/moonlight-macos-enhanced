@@ -27,6 +27,10 @@ This repository is an enhanced macOS distribution in the Moonlight ecosystem. Th
 - **[`OpenSSL`](https://www.openssl.org/)** — Cryptography / 加密能力
 - **[`MASPreferences`](https://github.com/shpakovski/MASPreferences)** — Preferences window infrastructure / 设置窗口基础设施
 
+## Bundled Data / 随应用附带的数据
+
+- **[`AutoEq`](https://github.com/jaakkopasanen/AutoEq)** (MIT License, Copyright © 2018-2022 Jaakko Pasanen) — Parametric equalizer results used for headphone correction; the license text is kept at the top of `HeadphoneCorrections.tsv` / 耳机校正使用的参数均衡结果；许可证全文保留在 `HeadphoneCorrections.tsv` 文件开头
+
 ## Scope Note / 范围说明
 
 This file highlights the major upstream projects and ecosystem references that materially shaped this repository. It is not intended to replace full license texts or every transitive dependency notice. For complete legal terms, please also refer to `LICENSE.txt`, bundled third-party license files, package manifests, and submodule histories.

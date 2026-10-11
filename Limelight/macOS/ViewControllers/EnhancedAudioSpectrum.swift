@@ -25,6 +25,8 @@ final class EnhancedAudioSpectrum: NSObject, ObservableObject {
   // Read by the stream (any thread).
   private let requestLock = NSLock()
   private var requested = false
+  // Counts resets, so a measurement that was under way when one happened is not shown after it.
+  private var epoch = 0
 
   // Tap thread only.
   private static let log2Size = vDSP_Length(12)
@@ -75,7 +77,16 @@ final class EnhancedAudioSpectrum: NSObject, ObservableObject {
 
   /// The stream stopped measuring (it ended, or its output is being rebuilt).
   @objc func reset() {
+    requestLock.lock()
+    epoch += 1
+    requestLock.unlock()
     DispatchQueue.main.async { self.levels = [] }
+  }
+
+  private var currentEpoch: Int {
+    requestLock.lock()
+    defer { requestLock.unlock() }
+    return epoch
   }
 
   static func frequency(ofBand index: Int) -> Double {
@@ -85,6 +96,7 @@ final class EnhancedAudioSpectrum: NSObject, ObservableObject {
   /// Tap thread. Buffers arrive every 20 ms or so; each one moves a 4096 sample window on.
   @objc func process(_ buffer: AVAudioPCMBuffer) {
     guard let fftSetup, let channels = buffer.floatChannelData else { return }
+    let startedIn = currentEpoch
     let frames = min(Int(buffer.frameLength), Self.size)
     guard frames > 0 else { return }
     let channelCount = Int(buffer.format.channelCount)
@@ -137,7 +149,7 @@ final class EnhancedAudioSpectrum: NSObject, ObservableObject {
     lastPublish = now
     let snapshot = smoothed
     DispatchQueue.main.async {
-      guard self.isRequested else { return }
+      guard self.isRequested, self.currentEpoch == startedIn else { return }
       self.levels = snapshot
     }
   }

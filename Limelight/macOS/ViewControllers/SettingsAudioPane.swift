@@ -3,29 +3,129 @@ import CoreAudio
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Re-renders the audio pane when the system default output device changes, so a hint that
-/// names the device (Dolby passthrough) never shows the one from when the pane was opened.
-private final class DefaultOutputDeviceObserver: ObservableObject {
+/// The Mac's output devices and which of them is the system default. Also re-renders the
+/// audio pane when the default changes, so a hint that names the device (Dolby passthrough)
+/// never shows the one from when the pane was opened.
+private final class AudioOutputDeviceList: ObservableObject {
+  struct Device: Identifiable, Equatable {
+    let id: AudioDeviceID
+    let name: String
+  }
+
+  @Published private(set) var devices: [Device] = []
+  @Published private(set) var current = AudioDeviceID(kAudioObjectUnknown)
+
   private var listener: AudioObjectPropertyListenerBlock?
-  private var address = AudioObjectPropertyAddress(
-    mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-    mScope: kAudioObjectPropertyScopeGlobal,
-    mElement: kAudioObjectPropertyElementMain)
+  private static let selectors: [AudioObjectPropertySelector] = [
+    kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDevices,
+  ]
 
   init() {
     let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-      self?.objectWillChange.send()
+      self?.refresh()
     }
     listener = block
-    AudioObjectAddPropertyListenerBlock(
-      AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
+    for selector in Self.selectors {
+      var address = Self.address(selector)
+      AudioObjectAddPropertyListenerBlock(
+        AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
+    }
+    refresh()
   }
 
   deinit {
     guard let block = listener else { return }
-    var removeAddress = address
-    AudioObjectRemovePropertyListenerBlock(
-      AudioObjectID(kAudioObjectSystemObject), &removeAddress, DispatchQueue.main, block)
+    for selector in Self.selectors {
+      var address = Self.address(selector)
+      AudioObjectRemovePropertyListenerBlock(
+        AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
+    }
+  }
+
+  private static func address(
+    _ selector: AudioObjectPropertySelector,
+    scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal
+  ) -> AudioObjectPropertyAddress {
+    AudioObjectPropertyAddress(
+      mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+  }
+
+  private static func flag(_ device: AudioDeviceID, _ selector: AudioObjectPropertySelector) -> Bool? {
+    var address = Self.address(selector)
+    var value: UInt32 = 0
+    var size = UInt32(MemoryLayout<UInt32>.size)
+    guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr else {
+      return nil
+    }
+    return value != 0
+  }
+
+  private static func name(_ device: AudioDeviceID) -> String? {
+    var address = Self.address(kAudioObjectPropertyName)
+    var value: Unmanaged<CFString>?
+    var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr else {
+      return nil
+    }
+    return value?.takeRetainedValue() as String?
+  }
+
+  private static func hasOutput(_ device: AudioDeviceID) -> Bool {
+    var address = Self.address(kAudioDevicePropertyStreams, scope: kAudioDevicePropertyScopeOutput)
+    var size: UInt32 = 0
+    return AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr
+      && size >= UInt32(MemoryLayout<AudioStreamID>.size)
+  }
+
+  private func refresh() {
+    let system = AudioObjectID(kAudioObjectSystemObject)
+
+    var defaultAddress = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
+    var defaultDevice = AudioDeviceID(kAudioObjectUnknown)
+    var defaultSize = UInt32(MemoryLayout<AudioDeviceID>.size)
+    AudioObjectGetPropertyData(system, &defaultAddress, 0, nil, &defaultSize, &defaultDevice)
+
+    var listAddress = Self.address(kAudioHardwarePropertyDevices)
+    var listSize: UInt32 = 0
+    var ids: [AudioDeviceID] = []
+    if AudioObjectGetPropertyDataSize(system, &listAddress, 0, nil, &listSize) == noErr {
+      ids = [AudioDeviceID](
+        repeating: AudioDeviceID(kAudioObjectUnknown),
+        count: Int(listSize) / MemoryLayout<AudioDeviceID>.size)
+      if AudioObjectGetPropertyData(system, &listAddress, 0, nil, &listSize, &ids) != noErr {
+        ids = []
+      }
+    }
+    // The same devices as the Audio Output menu of the control center: alive, with output, not hidden.
+    let found = ids.compactMap { id -> Device? in
+      guard Self.hasOutput(id), Self.flag(id, kAudioDevicePropertyDeviceIsAlive) == true,
+        Self.flag(id, kAudioDevicePropertyIsHidden) != true
+      else { return nil }
+      return Device(id: id, name: Self.name(id) ?? "?")
+    }
+    if found != devices { devices = found }
+    // Published even when unchanged: the hints that depend on the device are worked out again.
+    current = defaultDevice
+  }
+
+  /// Makes a device the system default output, like the sound menu of the menu bar, and has a
+  /// running stream start its output again on it.
+  func select(_ device: AudioDeviceID) {
+    guard device != current, device != AudioDeviceID(kAudioObjectUnknown) else { return }
+    // Before the change, so a passthrough session that ends because of it does not undo it.
+    MLAudioBitstreamOutput.noteUserChoseDefaultOutputDevice()
+    var address = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
+    var value = device
+    let status = AudioObjectSetPropertyData(
+      AudioObjectID(kAudioObjectSystemObject), &address, 0, nil,
+      UInt32(MemoryLayout<AudioDeviceID>.size), &value)
+    guard status == noErr else {
+      refresh()
+      return
+    }
+    current = device
+    NotificationCenter.default.post(
+      name: Notification.Name("audioOutputDeviceChosen"), object: nil)
   }
 }
 
@@ -33,7 +133,7 @@ struct AudioView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var microphoneManager = MicrophoneManager.shared
-  @StateObject private var outputDeviceObserver = DefaultOutputDeviceObserver()
+  @StateObject private var outputDevices = AudioOutputDeviceList()
 
   var body: some View {
     SettingsSearchScrollView {
@@ -46,6 +146,24 @@ struct AudioView: View {
         )
 
         AudioCompactGroup(title: "Audio") {
+          AudioCompactRow(
+            title: "Output Device", hint: languageManager.localize("Output Device hint")
+          ) {
+            Picker("", selection: outputDeviceSelection) {
+              ForEach(outputDevices.devices) { device in
+                Text(device.name).tag(device.id)
+              }
+            }
+            .labelsHidden()
+            .controllerPicker(
+              selection: outputDeviceSelection,
+              choices: outputDevices.devices.map { (value: $0.id, title: $0.name) }
+            )
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .frame(width: 230, alignment: .trailing)
+          }
+
           AudioCompactRow(title: "Audio Configuration") {
             Picker("", selection: $settingsModel.selectedAudioConfiguration) {
               ForEach(SettingsModel.audioConfigurations, id: \.self) { value in
@@ -126,7 +244,25 @@ struct AudioView: View {
           AudioCompactSliderRow(title: "Volume", value: $settingsModel.volumeLevel, showsSeparator: false)
         }
 
-        if settingsModel.selectedAudioOutputMode == "Audio Enhancement" {
+        // Always shown, so what the enhancement offers can be seen before it is turned on.
+        if !audioEnhancementOn {
+          HStack(spacing: 10) {
+            Image(systemName: "wand.and.stars")
+              .foregroundStyle(.secondary)
+            Text(languageManager.localize("Audio Enhancement off note"))
+              .font(.callout)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button(languageManager.localize("Turn On Audio Enhancement")) {
+              settingsModel.selectedAudioOutputMode = "Audio Enhancement"
+            }
+            .controlSize(.small)
+          }
+          .padding(.horizontal, 2)
+        }
+
+        Group {
           AudioCompactGroup(title: "Audio Enhancement") {
             AudioCompactRow(title: "Listening Device") {
               Picker("", selection: $settingsModel.selectedEnhancedAudioOutputTarget) {
@@ -177,6 +313,8 @@ struct AudioView: View {
           }
           AudioEqualizerSection()
         }
+        .disabled(!audioEnhancementOn)
+        .opacity(audioEnhancementOn ? 1 : 0.5)
 
         AudioCompactGroup(title: "Microphone") {
           AudioCompactRow(title: "Enable Microphone") {
@@ -335,6 +473,14 @@ struct AudioView: View {
       keepChannelsTitle: String(
         format: languageManager.localize("Audio codec conflict keep channels"), layoutName)
     )
+  }
+
+  private var audioEnhancementOn: Bool {
+    settingsModel.selectedAudioOutputMode == "Audio Enhancement"
+  }
+
+  private var outputDeviceSelection: Binding<AudioDeviceID> {
+    Binding(get: { outputDevices.current }, set: { outputDevices.select($0) })
   }
 
   private var spatialAudioOff: Bool {
@@ -497,12 +643,79 @@ private struct AudioEqualizerSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @State private var importNote: String?
+  @State private var showsHeadphonePicker = false
+
+  /// The bands choice that is not one of the fixed layouts.
+  private static let customBands = "EQ Bands Custom"
 
   private var frequencies: [Double] {
     SettingsModel.enhancedAudioEQFrequencies(for: settingsModel.selectedEnhancedAudioEQLayout)
   }
   private var isParametric: Bool {
     EnhancedAudioEQ.Mode(title: settingsModel.selectedEnhancedAudioEQMode) == .parametric
+  }
+
+  /// One choice for the fixed layouts and the free bands.
+  private var bandsSelection: Binding<String> {
+    Binding(
+      get: { isParametric ? Self.customBands : settingsModel.selectedEnhancedAudioEQLayout },
+      set: { value in
+        if value == Self.customBands {
+          settingsModel.selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.parametric.title
+        } else {
+          settingsModel.selectedEnhancedAudioEQLayout = value
+          settingsModel.selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.graphic.title
+        }
+      })
+  }
+
+  /// The points of the curve: the free bands move both ways, the fixed ones up and down.
+  private var curveHandles: [AudioEQCurveView.Handle] {
+    if isParametric {
+      return settingsModel.enhancedAudioEQBands.enumerated().map { index, band in
+        AudioEQCurveView.Handle(
+          id: index, frequency: band.frequency, gain: band.kind.usesGain ? band.gain : 0,
+          enabled: band.enabled, movesFrequency: true, movesGain: band.kind.usesGain,
+          gainLimit: EnhancedAudioEQBand.gainRange.upperBound)
+      }
+    }
+    let gains = settingsModel.enhancedAudioEQGains
+    return frequencies.enumerated().map { index, frequency in
+      AudioEQCurveView.Handle(
+        id: index, frequency: frequency, gain: gains.indices.contains(index) ? gains[index] : 0,
+        enabled: true, movesFrequency: false, movesGain: true, gainLimit: 12)
+    }
+  }
+
+  private func moveHandle(_ index: Int, frequency: Double, gain: Double) {
+    guard isParametric else {
+      // The same half-decibel steps as the sliders below.
+      settingsModel.setEnhancedAudioEQGain((gain * 2).rounded() / 2, at: index)
+      return
+    }
+    guard settingsModel.enhancedAudioEQBands.indices.contains(index) else { return }
+    var band = settingsModel.enhancedAudioEQBands[index]
+    band.frequency = frequency
+    if band.kind.usesGain { band.gain = gain }
+    if band != settingsModel.enhancedAudioEQBands[index] {
+      settingsModel.enhancedAudioEQBands[index] = band
+    }
+  }
+
+  /// Rows are bound by id: a row that is being removed must not write to whichever band
+  /// took its place.
+  private func bandBinding(_ id: UUID) -> Binding<EnhancedAudioEQBand> {
+    Binding(
+      get: {
+        settingsModel.enhancedAudioEQBands.first { $0.id == id }
+          ?? EnhancedAudioEQBand(kind: .peak, frequency: 1000)
+      },
+      set: { newValue in
+        guard let index = settingsModel.enhancedAudioEQBands.firstIndex(where: { $0.id == id }),
+          settingsModel.enhancedAudioEQBands[index] != newValue
+        else { return }
+        settingsModel.enhancedAudioEQBands[index] = newValue
+      })
   }
 
   var body: some View {
@@ -513,18 +726,49 @@ private struct AudioEqualizerSection: View {
           .toggleStyle(.switch)
           .controlSize(.small)
       }
-      SettingsChoiceRow(
-        title: "EQ Mode", selection: $settingsModel.selectedEnhancedAudioEQMode,
-        options: EnhancedAudioEQ.Mode.allCases.map(\.title))
+      SettingsRow(title: "Headphone Correction", detail: "Headphone Correction hint") {
+        Button(headphoneButtonTitle) { showsHeadphonePicker = true }
+          .controlSize(.small)
+          .popover(isPresented: $showsHeadphonePicker, arrowEdge: .bottom) {
+            HeadphoneCorrectionPicker { entry in
+              settingsModel.applyImportedEnhancedAudioEQ(
+                HeadphoneCorrectionLibrary.shared.profile(for: entry), name: entry.name)
+              importNote = nil
+              showsHeadphonePicker = false
+            }
+          }
+      }
 
       AudioEQCurveView(
-        filters: settingsModel.enhancedAudioEQFilters,
-        bands: isParametric ? $settingsModel.enhancedAudioEQBands : nil
+        filters: settingsModel.enhancedAudioEQFilters, handles: curveHandles, onMove: moveHandle
       )
-      .frame(height: 190)
-      .padding(.vertical, 10)
+      .frame(height: 200)
+      .padding(.top, 10)
       .opacity(settingsModel.enhancedAudioEQEnabled ? 1 : 0.45)
 
+      HStack(spacing: 8) {
+        Button(languageManager.localize("EQ Import File")) { importFromFile() }
+        Button(languageManager.localize("EQ Paste")) {
+          applyImport(NSPasteboard.general.string(forType: .string), name: nil)
+        }
+        Spacer()
+        Button(languageManager.localize("EQ Reset Bands")) { reset() }
+      }
+      .controlSize(.small)
+      .frame(minHeight: 38)
+      Text(importNote ?? languageManager.localize("EQ Import Hint"))
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 8)
+        .overlay(alignment: .bottom) {
+          Divider().opacity(0.45)
+        }
+
+      SettingsChoiceRow(
+        title: "EQ Bands", selection: bandsSelection,
+        options: SettingsModel.enhancedAudioEQLayouts + [Self.customBands])
       SettingsValueSliderRow(
         title: "EQ Preamp", value: $settingsModel.enhancedAudioEQPreamp,
         range: CGFloat(EnhancedAudioEQ.preampRange.lowerBound)...CGFloat(
@@ -532,9 +776,22 @@ private struct AudioEqualizerSection: View {
         step: 0.5, suffix: " dB")
 
       if isParametric {
-        parametricEditor
+        ForEach(settingsModel.enhancedAudioEQBands) { band in
+          AudioEQBandRow(band: bandBinding(band.id)) {
+            settingsModel.enhancedAudioEQBands.removeAll { $0.id == band.id }
+          }
+        }
+        HStack {
+          Button(languageManager.localize("EQ Add Band")) {
+            settingsModel.enhancedAudioEQBands.append(
+              EnhancedAudioEQBand(kind: .peak, frequency: 1000, q: 1))
+          }
+          .controlSize(.small)
+          .disabled(settingsModel.enhancedAudioEQBands.count >= EnhancedAudioEQ.maxBands)
+          Spacer()
+        }
+        .frame(minHeight: 38)
       } else {
-        SettingsChoiceRow(title: "EQ Detail", selection: $settingsModel.selectedEnhancedAudioEQLayout, options: SettingsModel.enhancedAudioEQLayouts)
         ForEach(frequencies, id: \.self) { frequency in
           SettingsValueSliderRow(title: String(format: "%g Hz", frequency), value: Binding(
             get: {
@@ -548,45 +805,23 @@ private struct AudioEqualizerSection: View {
     }
   }
 
-  @ViewBuilder
-  private var parametricEditor: some View {
-    if let name = settingsModel.enhancedAudioEQProfileName, !name.isEmpty {
-      Text(String(format: languageManager.localize("EQ Correction %@"), name))
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 8)
+  private var headphoneButtonTitle: String {
+    if isParametric, let name = settingsModel.enhancedAudioEQProfileName, !name.isEmpty {
+      return name
     }
-    ForEach($settingsModel.enhancedAudioEQBands) { $band in
-      AudioEQBandRow(band: $band) {
-        settingsModel.enhancedAudioEQBands.removeAll { $0.id == band.id }
-      }
+    return languageManager.localize("Choose Headphones…")
+  }
+
+  /// Back to a flat equalizer of the kind that is showing.
+  private func reset() {
+    if isParametric {
+      settingsModel.enhancedAudioEQBands = EnhancedAudioEQ.starterBands()
+    } else {
+      settingsModel.enhancedAudioEQGains = [Double](repeating: 0, count: frequencies.count)
     }
-    HStack(spacing: 8) {
-      Button(languageManager.localize("EQ Add Band")) {
-        settingsModel.enhancedAudioEQBands.append(EnhancedAudioEQBand(kind: .peak, frequency: 1000, q: 1))
-      }
-      .disabled(settingsModel.enhancedAudioEQBands.count >= EnhancedAudioEQ.maxBands)
-      Button(languageManager.localize("EQ Import File")) { importFromFile() }
-      Button(languageManager.localize("EQ Paste")) {
-        applyImport(NSPasteboard.general.string(forType: .string), name: nil)
-      }
-      Spacer()
-      Button(languageManager.localize("EQ Reset Bands")) {
-        settingsModel.enhancedAudioEQBands = EnhancedAudioEQ.starterBands()
-        settingsModel.enhancedAudioEQPreamp = 0
-        settingsModel.enhancedAudioEQProfileName = nil
-        importNote = nil
-      }
-    }
-    .controlSize(.small)
-    .frame(minHeight: 38)
-    Text(importNote ?? languageManager.localize("EQ Import Hint"))
-      .font(.caption)
-      .foregroundStyle(.secondary)
-      .fixedSize(horizontal: false, vertical: true)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.bottom, 8)
+    settingsModel.enhancedAudioEQPreamp = 0
+    settingsModel.enhancedAudioEQProfileName = nil
+    importNote = nil
   }
 
   private func importFromFile() {
@@ -622,6 +857,60 @@ private struct AudioEqualizerSection: View {
   }
 }
 
+/// Search over the headphone corrections that ship with the app; picking one applies it.
+private struct HeadphoneCorrectionPicker: View {
+  let onPick: (HeadphoneCorrectionLibrary.Entry) -> Void
+  @ObservedObject private var library = HeadphoneCorrectionLibrary.shared
+  @ObservedObject private var languageManager = LanguageManager.shared
+  @State private var query = ""
+
+  var body: some View {
+    let results = library.search(query)
+    VStack(alignment: .leading, spacing: 8) {
+      TextField(languageManager.localize("Search headphones"), text: $query)
+        .textFieldStyle(.roundedBorder)
+      if results.isEmpty {
+        Text(
+          languageManager.localize(
+            query.trimmingCharacters(in: .whitespaces).isEmpty
+              ? "Headphone search hint" : "Headphone search empty")
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+      } else {
+        List(results) { entry in
+          Button {
+            onPick(entry)
+          } label: {
+            VStack(alignment: .leading, spacing: 2) {
+              Text(verbatim: entry.name)
+              Text(verbatim: entry.form.isEmpty ? entry.source : "\(entry.form) · \(entry.source)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+        }
+        .listStyle(.plain)
+      }
+      Text(
+        String(
+          format: languageManager.localize("Headphone corrections attribution"),
+          library.entries.count)
+      )
+      .font(.caption2)
+      .foregroundStyle(.secondary)
+    }
+    .padding(12)
+    .frame(width: 380, height: 420)
+    .onAppear { library.loadIfNeeded() }
+  }
+}
+
 /// One parametric band: on/off, filter kind, frequency, gain and Q.
 private struct AudioEQBandRow: View {
   @Binding var band: EnhancedAudioEQBand
@@ -649,8 +938,13 @@ private struct AudioEQBandRow: View {
       numberField(clamped(\.frequency, EnhancedAudioEQBand.frequencyRange), fraction: 0...1, width: 62)
       Text("Hz").foregroundStyle(.secondary)
 
-      Slider(value: clamped(\.gain, EnhancedAudioEQBand.gainRange), in: -15...15, step: 0.1)
-        .controllerSlider(value: clamped(\.gain, EnhancedAudioEQBand.gainRange), in: -15...15, step: 0.5)
+      Slider(
+        value: clamped(\.gain, EnhancedAudioEQBand.gainRange), in: EnhancedAudioEQBand.gainRange,
+        step: 0.1
+      )
+      .controllerSlider(
+        value: clamped(\.gain, EnhancedAudioEQBand.gainRange), in: EnhancedAudioEQBand.gainRange,
+        step: 0.5)
         .frame(minWidth: 70, maxWidth: .infinity)
         .disabled(!band.kind.usesGain)
       Text(band.kind.usesGain ? String(format: "%+.1f dB", band.gain) : "—")
@@ -693,13 +987,33 @@ private struct AudioEQBandRow: View {
   }
 }
 
-/// The frequency response the equalizer is set to, 20 Hz to 20 kHz on a log axis. With `bands`
-/// (the parametric equalizer) every band has a handle that drags its frequency and gain.
+/// The frequency response the equalizer is set to, 20 Hz to 20 kHz on a log axis, with a point
+/// for every band that can be dragged, and the live spectrum of a running stream behind it.
 private struct AudioEQCurveView: View {
+  struct Handle: Identifiable, Equatable {
+    let id: Int
+    var frequency: Double
+    var gain: Double
+    var enabled: Bool
+    /// The fixed bands only move up and down.
+    var movesFrequency: Bool
+    var movesGain: Bool
+    var gainLimit: Double
+  }
+
+  private struct Drag: Equatable {
+    var start: CGPoint
+    /// nil when the drag did not begin on a point.
+    var handle: Int?
+    /// The gain axis as it was when the drag began. It stays put until the drag ends: an axis
+    /// that grew with the value being dragged would run away from the pointer.
+    var span: Double
+  }
+
   let filters: [EnhancedAudioEQ.Filter]
-  let bands: Binding<[EnhancedAudioEQBand]>?
-  @State private var draggedBandID: UUID?
-  @State private var dragMissed = false
+  let handles: [Handle]
+  let onMove: (_ id: Int, _ frequency: Double, _ gain: Double) -> Void
+  @State private var drag: Drag?
   // What a running stream plays right now; empty without one in the enhanced sound mode.
   @ObservedObject private var spectrum = EnhancedAudioSpectrum.shared
 
@@ -721,8 +1035,8 @@ private struct AudioEQCurveView: View {
   /// Half the height of the gain axis, in dB: 12, or more when the curve or a band needs it.
   private func gainSpan(_ samples: [(frequency: Double, gain: Double)]) -> Double {
     var peak = samples.map { abs($0.gain) }.max() ?? 0
-    for band in bands?.wrappedValue ?? [] where band.kind.usesGain {
-      peak = max(peak, abs(band.gain))
+    for handle in handles {
+      peak = max(peak, abs(handle.gain))
     }
     if peak <= 11.5 { return 12 }
     if peak <= 17.5 { return 18 }
@@ -732,7 +1046,7 @@ private struct AudioEQCurveView: View {
   var body: some View {
     GeometryReader { proxy in
       let samples = self.samples
-      let span = gainSpan(samples)
+      let span = drag?.span ?? gainSpan(samples)
       let plot = CGRect(
         x: Self.leftInset, y: 4, width: max(1, proxy.size.width - Self.leftInset - 4),
         height: max(1, proxy.size.height - Self.bottomInset - 4))
@@ -740,7 +1054,7 @@ private struct AudioEQCurveView: View {
         draw(in: &context, plot: plot, samples: samples, span: span)
       }
       .contentShape(Rectangle())
-      .gesture(dragGesture(plot: plot, span: span), including: bands == nil ? .none : .all)
+      .gesture(dragGesture(plot: plot, span: span))
     }
     .onAppear { spectrum.addViewer() }
     .onDisappear { spectrum.removeViewer() }
@@ -757,8 +1071,8 @@ private struct AudioEQCurveView: View {
     return plot.midY - CGFloat(clampedGain / span) * plot.height / 2
   }
 
-  private func handlePoint(_ band: EnhancedAudioEQBand, _ plot: CGRect, _ span: Double) -> CGPoint {
-    CGPoint(x: x(band.frequency, plot), y: y(band.kind.usesGain ? band.gain : 0, plot, span))
+  private func point(_ handle: Handle, _ plot: CGRect, _ span: Double) -> CGPoint {
+    CGPoint(x: x(handle.frequency, plot), y: y(handle.gain, plot, span))
   }
 
   private func draw(
@@ -818,59 +1132,70 @@ private struct AudioEQCurveView: View {
     context.fill(area, with: .color(Color.accentColor.opacity(0.16)))
     context.stroke(curve, with: .color(.accentColor), lineWidth: 2)
 
-    for band in bands?.wrappedValue ?? [] {
-      let point = handlePoint(band, plot, span)
-      let radius: CGFloat = band.id == draggedBandID ? 7 : 5
+    // Many fixed bands sit close together at the low end: smaller points there.
+    let baseRadius: CGFloat = handles.count > 16 ? 3.5 : 5
+    for handle in handles {
+      let center = point(handle, plot, span)
+      let radius = handle.id == drag?.handle ? baseRadius + 2 : baseRadius
       let circle = Path(
         ellipseIn: CGRect(
-          x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2))
+          x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
       context.fill(
-        circle, with: .color(band.enabled ? Color.accentColor : Color(nsColor: .controlBackgroundColor)))
-      context.stroke(circle, with: .color(band.enabled ? Color.white : Color.secondary), lineWidth: 1.5)
+        circle,
+        with: .color(handle.enabled ? Color.accentColor : Color(nsColor: .controlBackgroundColor)))
+      context.stroke(
+        circle, with: .color(handle.enabled ? Color.white : Color.secondary), lineWidth: 1.5)
     }
   }
 
   private func dragGesture(plot: CGRect, span: Double) -> some Gesture {
     DragGesture(minimumDistance: 0)
       .onChanged { value in
-        guard let bands, !dragMissed else { return }
-        if draggedBandID == nil {
-          // The handle under the pointer, when the drag starts within reach of one.
-          let nearest = bands.wrappedValue
-            .map { band -> (id: UUID, distance: CGFloat) in
-              let point = handlePoint(band, plot, span)
-              return (band.id, hypot(point.x - value.startLocation.x, point.y - value.startLocation.y))
+        var current = drag
+        if current?.start != value.startLocation {
+          // A new drag. A cancelled one never reports its end, so this is also where what it
+          // left behind goes.
+          let nearest = handles
+            .map { handle -> (id: Int, distance: CGFloat) in
+              let center = point(handle, plot, span)
+              return (
+                handle.id,
+                hypot(center.x - value.startLocation.x, center.y - value.startLocation.y)
+              )
             }
             .min { $0.distance < $1.distance }
-          guard let nearest, nearest.distance <= 14 else {
-            dragMissed = true
-            return
+          var grabbed: Int?
+          if let nearest, nearest.distance <= 14 {
+            grabbed = nearest.id
           }
-          draggedBandID = nearest.id
+          current = Drag(start: value.startLocation, handle: grabbed, span: span)
+          drag = current
         }
-        guard let index = bands.wrappedValue.firstIndex(where: { $0.id == draggedBandID }) else {
-          return
+        guard let active = current, let id = active.handle,
+          let handle = handles.first(where: { $0.id == id })
+        else { return }
+
+        var frequency = handle.frequency
+        if handle.movesFrequency {
+          let position = Double(min(max((value.location.x - plot.minX) / plot.width, 0), 1))
+          let raw = Self.minFrequency * pow(Self.maxFrequency / Self.minFrequency, position)
+          // Three significant digits, like the values people type.
+          let magnitude = pow(10, floor(log10(raw)) - 2)
+          frequency = EnhancedAudioEQBand.clamp(
+            (raw / magnitude).rounded() * magnitude, to: EnhancedAudioEQBand.frequencyRange)
         }
-        let position = Double(min(max((value.location.x - plot.minX) / plot.width, 0), 1))
-        let frequency =
-          Self.minFrequency * pow(Self.maxFrequency / Self.minFrequency, position)
-        var band = bands.wrappedValue[index]
-        // Two to three significant digits, like the values people type.
-        let magnitude = pow(10, floor(log10(frequency)) - 2)
-        band.frequency = EnhancedAudioEQBand.clamp(
-          (frequency / magnitude).rounded() * magnitude, to: EnhancedAudioEQBand.frequencyRange)
-        if band.kind.usesGain {
-          let gain = Double((plot.midY - value.location.y) / (plot.height / 2)) * span
-          band.gain = EnhancedAudioEQBand.clamp(
-            (gain * 10).rounded() / 10, to: -span...span)
+        var gain = handle.gain
+        if handle.movesGain {
+          let limit = min(active.span, handle.gainLimit)
+          let raw = Double((plot.midY - value.location.y) / (plot.height / 2)) * active.span
+          gain = min(max((raw * 10).rounded() / 10, -limit), limit)
         }
-        if band != bands.wrappedValue[index] {
-          bands.wrappedValue[index] = band
+        if frequency != handle.frequency || gain != handle.gain {
+          onMove(id, frequency, gain)
         }
       }
       .onEnded { _ in
-        draggedBandID = nil
-        dragMissed = false
+        drag = nil
       }
   }
 }

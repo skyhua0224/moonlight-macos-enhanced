@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// One filter of the parametric equalizer.
@@ -142,6 +143,104 @@ struct EnhancedAudioExtras: Codable, Equatable {
       eqBands: value([EnhancedAudioEQBand].self, .eqBands) ?? [],
       eqProfileName: value(String.self, .eqProfileName),
       spatialMode: value(Int.self, .spatialMode) ?? EnhancedAudioSpatialMode.automatic.rawValue)
+  }
+}
+
+/// The headphone corrections that ship with the app: the parametric results of the AutoEq
+/// project, one per headphone (see scripts/build_headphone_corrections.py).
+final class HeadphoneCorrectionLibrary: ObservableObject {
+  struct Entry: Identifiable {
+    let id: Int
+    let name: String
+    /// over-ear, in-ear or earbud.
+    let form: String
+    /// Who measured it.
+    let source: String
+    let preamp: Double
+    /// "K frequency gain q" joined by ";", K being P, L or H.
+    let filters: String
+    let searchKey: String
+    /// The search key without spaces and dashes, so "hd650" finds "HD 650".
+    let compactKey: String
+  }
+
+  static let shared = HeadphoneCorrectionLibrary()
+
+  @Published private(set) var entries: [Entry] = []
+  private var isLoading = false
+
+  private static func compact(_ text: String) -> String {
+    text.filter { $0 != " " && $0 != "-" }
+  }
+
+  /// Main thread. Reads the list in the background the first time it is needed.
+  func loadIfNeeded() {
+    guard entries.isEmpty, !isLoading else { return }
+    isLoading = true
+    DispatchQueue.global(qos: .userInitiated).async {
+      let loaded = Self.load()
+      DispatchQueue.main.async {
+        self.entries = loaded
+        self.isLoading = false
+      }
+    }
+  }
+
+  private static func load() -> [Entry] {
+    guard let url = Bundle.main.url(forResource: "HeadphoneCorrections", withExtension: "tsv"),
+      let text = try? String(contentsOf: url, encoding: .utf8)
+    else { return [] }
+    var result: [Entry] = []
+    result.reserveCapacity(6500)
+    for line in text.split(separator: "\n") where !line.hasPrefix("#") {
+      let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+      guard fields.count == 5, let preamp = Double(fields[3]) else { continue }
+      let name = String(fields[0])
+      let key = name.lowercased()
+      result.append(
+        Entry(
+          id: result.count, name: name, form: String(fields[1]), source: String(fields[2]),
+          preamp: preamp, filters: String(fields[4]), searchKey: key, compactKey: compact(key)))
+    }
+    return result
+  }
+
+  /// Headphones whose name has every word of the query; the ones that begin with it come first.
+  func search(_ query: String, limit: Int = 80) -> [Entry] {
+    let words = query.lowercased().split(separator: " ").map(String.init)
+    guard !words.isEmpty else { return [] }
+    let joined = words.joined(separator: " ")
+    let compactQuery = Self.compact(joined)
+    var leading: [Entry] = []
+    var others: [Entry] = []
+    for entry in entries {
+      guard
+        words.allSatisfy({ entry.searchKey.contains($0) })
+          || entry.compactKey.contains(compactQuery)
+      else { continue }
+      if entry.searchKey.hasPrefix(joined) {
+        leading.append(entry)
+        if leading.count >= limit { break }
+      } else if others.count < limit {
+        others.append(entry)
+      }
+    }
+    return Array((leading + others).prefix(limit))
+  }
+
+  func profile(for entry: Entry) -> EnhancedAudioEQ.ImportedProfile {
+    let bands = entry.filters.split(separator: ";").compactMap { item -> EnhancedAudioEQBand? in
+      let parts = item.split(separator: " ")
+      guard parts.count == 4, let frequency = Double(parts[1]), let gain = Double(parts[2]),
+        let q = Double(parts[3])
+      else { return nil }
+      let kind: EnhancedAudioEQBand.Kind =
+        parts[0] == "L" ? .lowShelf : (parts[0] == "H" ? .highShelf : .peak)
+      return EnhancedAudioEQBand(kind: kind, frequency: frequency, gain: gain, q: q)
+    }
+    return EnhancedAudioEQ.ImportedProfile(
+      preamp: EnhancedAudioEQBand.clamp(entry.preamp, to: EnhancedAudioEQ.preampRange),
+      bands: Array(bands.prefix(EnhancedAudioEQ.maxBands)), skippedLines: 0)
   }
 }
 

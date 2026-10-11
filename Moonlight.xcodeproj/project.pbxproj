@@ -178,6 +178,7 @@
 				macOS/ViewControllers/MLEdgeMenuUI.m,
 				macOS/ViewControllers/Settings.swift,
 				macOS/ViewControllers/SettingsAppPane.swift,
+				"macOS/Supporting Files/HeadphoneCorrections.tsv",
 				macOS/ViewControllers/EnhancedAudioEQ.swift,
 				macOS/ViewControllers/EnhancedAudioSpectrum.swift,
 				macOS/ViewControllers/SettingsAudioPane.swift,
