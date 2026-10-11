@@ -2033,18 +2033,29 @@ extension SettingsModel {
   }
 
   /// The tonal curves that used to be a list of their own (and also set the spatial sliders),
-  /// as presets of the equalizer: the curve of the 12 fixed bands, band for band, with a
-  /// preamp that takes back its highest point. Bands left at 0 dB are not carried along.
+  /// as presets of the equalizer. Each was ten values an octave apart; here they are ten
+  /// bands an octave wide, fitted so that the curve goes through those values and is smooth
+  /// in between. Bands that end up at 0 dB are not carried along.
   static let soundEQPresets: [EnhancedAudioEQ.GeneralPreset] =
     enhancedAudioPresets.map { name in
-      let layout = "12-Band"
-      let fixed = EnhancedAudioEQ.graphicFilters(
-        frequencies: enhancedAudioEQFrequencies(for: layout),
-        gains: enhancedAudioPresetValues(for: name, layout: layout).eqGains)
-      var bands = fixed.filter { abs($0.gain) >= 0.05 }.map {
-        EnhancedAudioEQBand(
-          kind: .peak, frequency: $0.frequency, gain: ($0.gain * 10).rounded() / 10,
-          q: ($0.q * 100).rounded() / 100)
+      let anchors = legacyEnhancedAudioEQAnchorFrequencies
+      // Asking for the old 12 band layout and reading it at the ten anchors gives the ten
+      // values back (the 12 bands contain all ten).
+      let twelve = enhancedAudioEQFrequencies(for: "12-Band")
+      let twelveGains = enhancedAudioPresetValues(for: name, layout: "12-Band").eqGains
+      let values = anchors.map { anchor -> Double in
+        twelve.firstIndex(of: anchor).map { twelveGains[$0] } ?? 0
+      }
+      // One band per value at exactly that height would add up to more where bands
+      // overlap, so the heights are fitted.
+      let fitted = EnhancedAudioEQ.gainsThrough(values: values, at: anchors)
+      let qs = EnhancedAudioEQ.graphicQs(anchors)
+      var bands = anchors.indices.compactMap { index -> EnhancedAudioEQBand? in
+        abs(fitted[index]) < 0.05
+          ? nil
+          : EnhancedAudioEQBand(
+            kind: .peak, frequency: anchors[index], gain: fitted[index],
+            q: (qs[index] * 100).rounded() / 100)
       }
       if bands.isEmpty {
         bands = [EnhancedAudioEQBand(kind: .peak, frequency: 1000, q: 1)]

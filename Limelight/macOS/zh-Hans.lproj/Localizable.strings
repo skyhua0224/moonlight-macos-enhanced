@@ -1895,7 +1895,7 @@
 "EQ Import File" = "导入…";
 "EQ Paste" = "从剪贴板粘贴";
 "EQ Reset Bands" = "重置";
-"EQ Import Hint" = "拖动曲线上的圆点来调整，点一下圆点可以输入精确数值。也可以导入 AutoEq、Squiglink、Equalizer APO 导出的参数均衡文本。";
+"EQ Import Hint" = "拖动曲线上的圆点来调整，点一下圆点可以输入精确数值。预设和导入的文件在 12 段、24 段、自由频段下都能用：自由频段原样保留，固定频段尽量贴合同一条曲线。";
 "EQ Import Failed" = "这段文本里没有可用的滤波器。";
 "EQ Import Done %d" = "已导入 %d 个滤波器。";
 "EQ Import Skipped %d %d" = "已导入 %1$d 个滤波器，另有 %2$d 行的滤波器类型不支持，已跳过。";
@@ -1948,9 +1948,10 @@
 "AV1 Decode software detail" = "这台 Mac 没有 AV1 硬件解码。选择 AV1 时使用软件解码（dav1d），更耗电，高分辨率高帧率下可能跟不上。HDR 和 10 位色仍需要硬件解码。";
 "Preset EQ By Device" = "按设备";
 "Preset EQ By Sound" = "按音色";
-"Video codec warning AV1 software" = "这台 Mac 没有 AV1 硬件解码，AV1 会用软件解码：更耗电，高分辨率高帧率下可能跟不上，HDR、10 位色和 4:4:4 也用不了。没有特别需要的话建议选 H.265。";
+"Video codec warning AV1 software" = "这台 Mac 没有 AV1 硬件解码，AV1 会用软件解码：耗电明显更高，大致适用于 1440p 120 帧或 4K 60 帧以内，4K 120 帧跟不上。HDR、10 位色和 4:4:4 不可用。没有特别需要的话建议选 H.265。";
 "Video codec warning HEVC unavailable" = "这台 Mac 没有 H.265 硬件解码。串流会改用 H.264，HDR 和 10 位色不可用。";
 "Output Device Follow System" = "跟随系统输出";
 "Output Device hint" = "串流声音从哪个设备播放。只对 Moonlight 生效，不改变系统输出，所以不会被接管系统输出的均衡器应用影响。";
 "Audio codec hint passthrough unavailable" = "%1$@ 不接受 %2$@ 位流，所以不会直通，音频改在这台 Mac 上解码。如果系统输出被虚拟设备接管（比如 eqMac 这类均衡器应用），请在上面的“输出设备”里直接选择电视或功放。";
 "Dolby passthrough unavailable notice" = "杜比直通未启用：%1$@ 不接受 %2$@，音频改在这台 Mac 上解码。要直通，请在 设置 > 音频 > 输出设备 里选择电视或功放。";
+"Video codec warning AV1 no HDR" = "这台 Mac 上 AV1 走软件解码，不支持 HDR、10 位色和 4:4:4：选择 AV1 期间下面这三项不生效。需要它们请选 H.265。";

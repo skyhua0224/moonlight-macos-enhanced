@@ -702,6 +702,22 @@ extension SettingsModel {
       ?? EnhancedAudioEQ.Mode.graphic.title
     enhancedAudioEQPreamp = CGFloat(extras.eqPreamp)
     enhancedAudioEQInactivePreamp = CGFloat(extras.eqInactivePreamp)
+    enhancedAudioEQInSync = extras.eqInSync
+    enhancedAudioEQBeforePreset = nil
+    // Gains saved for bands of the first, fixed width: the same curve on bands as wide as
+    // their spacing, so that what was set keeps sounding as it did. (Written back with the
+    // next save; until then the stream reads the old gains with the old width.)
+    if extras.eqFixedWidthVersion < EnhancedAudioEQ.currentFixedWidthVersion,
+      enhancedAudioEQGains.contains(where: { $0 != 0 })
+    {
+      let frequencies = Self.enhancedAudioEQFrequencies(for: selectedEnhancedAudioEQLayout)
+      enhancedAudioEQGains = EnhancedAudioEQ.fittedGraphicGains(
+        frequencies: frequencies,
+        following: EnhancedAudioEQ.graphicFilters(
+          frequencies: frequencies, gains: enhancedAudioEQGains, legacyWidth: true))
+      enhancedAudioEQInSync = false
+      DispatchQueue.main.async { [weak self] in self?.saveEnhancedAudioSettings() }
+    }
     enhancedAudioEQBands = extras.eqBands
     enhancedAudioEQProfileName = extras.eqProfileName
     selectedEnhancedAudioSpatialMode =
@@ -918,7 +934,10 @@ extension SettingsModel {
         eqBands: enhancedAudioEQBands,
         eqProfileName: enhancedAudioEQProfileName,
         spatialMode: EnhancedAudioSpatialMode(title: selectedEnhancedAudioSpatialMode).rawValue,
-        eqInactivePreamp: Double(enhancedAudioEQInactivePreamp)),
+        eqInactivePreamp: Double(enhancedAudioEQInactivePreamp),
+        eqInSync: enhancedAudioEQInSync,
+        // Whatever is saved from here was loaded, and with that brought to the current widths.
+        eqFixedWidthVersion: EnhancedAudioEQ.currentFixedWidthVersion),
       enableVsync: enableVsync,
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,

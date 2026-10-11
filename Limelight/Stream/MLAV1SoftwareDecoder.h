@@ -22,16 +22,26 @@ FOUNDATION_EXPORT BOOL MLAV1SoftwareDecodeNeeded(void);
 /// Threads the decoder works with.
 @property (nonatomic, readonly) int threadCount;
 
-/// Opens a decoder set up for the lowest delay: every frame comes out before the next goes in.
-/// nil when the library refuses.
-- (nullable instancetype)init NS_DESIGNATED_INITIALIZER;
+/// Frames the decoder works on at a time; a picture comes out this many frames, less one,
+/// after its data went in. 0 until the first frame was seen.
+@property (nonatomic, readonly) int frameDelay;
 
-/// Decodes one frame as the stream delivers it and returns the picture as a pixel buffer the
-/// renderer can show (IOSurface backed, bi-planar 4:2:0 or 4:4:4, 8 or 10 bit, with its
-/// colour description attached). NULL with *errorOut 0 when the data held no picture to show;
-/// NULL with a negative *errorOut when decoding failed and a key frame is needed.
+/// frameRate is what the stream was asked to deliver. Together with the size found in the
+/// first frame it decides how many frames are decoded at a time: one where that keeps up
+/// (no added delay), several for large, fast streams, which one frame at a time cannot follow.
+- (instancetype)initWithFrameRate:(int)frameRate NS_DESIGNATED_INITIALIZER;
+- (instancetype)init;
+
+/// Takes one frame as the stream delivers it and returns the next finished picture as a pixel
+/// buffer the renderer can show (IOSurface backed, bi-planar 4:2:0 or 4:4:4, 8 or 10 bit, with
+/// its colour description attached). With a frame delay above one that is the picture of an
+/// earlier frame: *tagOut is the tag that frame was handed in with. NULL with *errorOut 0 when
+/// no picture is ready yet; NULL with a negative *errorOut when decoding failed and a key
+/// frame is needed.
 - (nullable CVPixelBufferRef)copyDecodedFrame:(const uint8_t *)data
                                         length:(size_t)length
+                                           tag:(int64_t)tag
+                                        tagOut:(nullable int64_t *)tagOut
                                          error:(int *)errorOut CF_RETURNS_RETAINED;
 
 /// Drops what the decoder holds; the next frame must be a key frame.

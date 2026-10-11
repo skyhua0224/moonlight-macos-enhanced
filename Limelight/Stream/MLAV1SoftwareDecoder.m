@@ -30,6 +30,8 @@ static void MLDav1dLogNothing(void *cookie, const char *format, va_list argument
 
 @implementation MLAV1SoftwareDecoder {
     Dav1dContext *_context;
+    int _frameRate;
+    BOOL _openFailed;
     CVPixelBufferPoolRef _pool;
     OSType _poolFormat;
     int _poolWidth;
@@ -43,28 +45,61 @@ static void MLDav1dLogNothing(void *cookie, const char *format, va_list argument
 
 - (instancetype)init
 {
+    return [self initWithFrameRate:60];
+}
+
+- (instancetype)initWithFrameRate:(int)frameRate
+{
     self = [super init];
-    if (self == nil) {
-        return nil;
+    if (self != nil) {
+        _frameRate = frameRate > 0 ? frameRate : 60;
+        // All cores: a stream has to be decoded as fast as it arrives.
+        _threadCount = (int)MAX(1, MIN(NSProcessInfo.processInfo.activeProcessorCount, 16));
+    }
+    return self;
+}
+
+// How many frames to work on at a time, from how much picture arrives per second. One frame at
+// a time adds no delay but only spreads a single frame over the cores; several at a time decode
+// two to three times as much (measured on an M1 with a 4K stream: 148 pictures a second with
+// one, 282 with two, 363 with four) and show each picture that many frames, less one, later.
+// So: no delay where one frame at a time is enough, and throughput where it is not.
+static int MLFrameDelayForStream(int width, int height, int frameRate)
+{
+    const double pixelsPerSecond = (double)width * (double)height * (double)MAX(frameRate, 1);
+    if (pixelsPerSecond <= 1920.0 * 1080.0 * 62.0) {
+        return 1;
+    }
+    if (pixelsPerSecond <= 2560.0 * 1440.0 * 62.0) {
+        return 2;
+    }
+    return 4;
+}
+
+// Opens the decoder for the stream this first frame belongs to. NO: no decoder (the data has no
+// sequence header yet, or the library refuses).
+- (BOOL)openForFirstFrame:(const uint8_t *)bytes length:(size_t)length
+{
+    Dav1dSequenceHeader sequence;
+    if (dav1d_parse_sequence_header(&sequence, bytes, length) < 0) {
+        return NO;
     }
 
     Dav1dSettings settings;
     dav1d_default_settings(&settings);
-    // All cores: a stream has to be decoded as fast as it arrives, and the decoder spreads one
-    // frame over them (rows and tiles) without holding frames back.
-    _threadCount = (int)MAX(1, MIN(NSProcessInfo.processInfo.activeProcessorCount, 16));
     settings.n_threads = _threadCount;
-    // One frame in, the same frame out. The default lets several frames be in flight, which
-    // decodes faster and shows every one of them later.
-    settings.max_frame_delay = 1;
+    settings.max_frame_delay = MIN(MLFrameDelayForStream(sequence.max_width, sequence.max_height, _frameRate), _threadCount);
     // A stream has one layer; without this the decoder would output each layer of one that had more.
     settings.all_layers = 0;
     settings.logger.callback = MLDav1dLogNothing;
 
     if (dav1d_open(&_context, &settings) < 0) {
-        return nil;
+        _context = NULL;
+        _openFailed = YES;
+        return NO;
     }
-    return self;
+    _frameDelay = settings.max_frame_delay;
+    return YES;
 }
 
 - (void)dealloc
@@ -310,18 +345,39 @@ static void MLAttachColorDescription(CVPixelBufferRef buffer, const Dav1dPicture
     const int chromaRows = (int)MIN((size_t)chromaHeight, CVPixelBufferGetHeightOfPlane(buffer, 1));
     const int chromaColumns = (int)MIN((size_t)chromaWidth, CVPixelBufferGetWidthOfPlane(buffer, 1));
 
-    if (wide) {
-        MLCopyLuma10((uint16_t *)lumaDst, lumaDstStride, picture->data[0], picture->stride[0], width, height);
-    } else {
-        MLCopyLuma8(lumaDst, lumaDstStride, picture->data[0], picture->stride[0], width, height);
-    }
-    if (picture->p.layout == DAV1D_PIXEL_LAYOUT_I400) {
-        MLFillChroma(chromaDst, chromaDstStride, chromaColumns * 2 * (wide ? 2 : 1), chromaRows, picture->p.bpc);
-    } else if (wide) {
-        MLInterleaveChroma10((uint16_t *)chromaDst, chromaDstStride, picture->data[1], picture->data[2], picture->stride[1], chromaColumns, chromaRows);
-    } else {
-        MLInterleaveChroma8(chromaDst, chromaDstStride, picture->data[1], picture->data[2], picture->stride[1], chromaColumns, chromaRows);
-    }
+    // A 4K picture is 12 MB to move; in stripes on several cores it takes a fraction of the
+    // time, which counts at 120 pictures a second. Small pictures go in one piece.
+    const int stripes = height >= 1440 ? 4 : 1;
+    const uint8_t *lumaSrc = picture->data[0];
+    const uint8_t *uSrc = picture->data[1];
+    const uint8_t *vSrc = picture->data[2];
+    const ptrdiff_t lumaSrcStride = picture->stride[0];
+    const ptrdiff_t chromaSrcStride = picture->stride[1];
+    const BOOL monochrome = picture->p.layout == DAV1D_PIXEL_LAYOUT_I400;
+    const int bpc = picture->p.bpc;
+    dispatch_apply((size_t)stripes, DISPATCH_APPLY_AUTO, ^(size_t stripe) {
+        const int lumaFrom = (int)((int64_t)height * (int64_t)stripe / stripes);
+        const int lumaTo = (int)((int64_t)height * (int64_t)(stripe + 1) / stripes);
+        const int chromaFrom = (int)((int64_t)chromaRows * (int64_t)stripe / stripes);
+        const int chromaTo = (int)((int64_t)chromaRows * (int64_t)(stripe + 1) / stripes);
+        uint8_t *lumaTarget = lumaDst + lumaDstStride * lumaFrom;
+        uint8_t *chromaTarget = chromaDst + chromaDstStride * chromaFrom;
+        if (wide) {
+            MLCopyLuma10((uint16_t *)lumaTarget, lumaDstStride, (const uint16_t *)(lumaSrc + lumaSrcStride * lumaFrom), lumaSrcStride, width, lumaTo - lumaFrom);
+        } else {
+            MLCopyLuma8(lumaTarget, lumaDstStride, lumaSrc + lumaSrcStride * lumaFrom, lumaSrcStride, width, lumaTo - lumaFrom);
+        }
+        if (monochrome) {
+            MLFillChroma(chromaTarget, chromaDstStride, chromaColumns * 2 * (wide ? 2 : 1), chromaTo - chromaFrom, bpc);
+        } else if (wide) {
+            MLInterleaveChroma10((uint16_t *)chromaTarget, chromaDstStride,
+                                 (const uint16_t *)(uSrc + chromaSrcStride * chromaFrom), (const uint16_t *)(vSrc + chromaSrcStride * chromaFrom),
+                                 chromaSrcStride, chromaColumns, chromaTo - chromaFrom);
+        } else {
+            MLInterleaveChroma8(chromaTarget, chromaDstStride, uSrc + chromaSrcStride * chromaFrom, vSrc + chromaSrcStride * chromaFrom,
+                                chromaSrcStride, chromaColumns, chromaTo - chromaFrom);
+        }
+    });
 
     CVPixelBufferUnlockBaseAddress(buffer, 0);
     MLAttachColorDescription(buffer, picture);
@@ -330,12 +386,21 @@ static void MLAttachColorDescription(CVPixelBufferRef buffer, const Dav1dPicture
 
 #pragma mark - Decoding
 
-- (CVPixelBufferRef)copyDecodedFrame:(const uint8_t *)bytes length:(size_t)length error:(int *)errorOut
+- (CVPixelBufferRef)copyDecodedFrame:(const uint8_t *)bytes
+                              length:(size_t)length
+                                 tag:(int64_t)tag
+                              tagOut:(int64_t *)tagOut
+                               error:(int *)errorOut
 {
     if (errorOut != NULL) {
         *errorOut = 0;
     }
-    if (_context == NULL || bytes == NULL || length == 0) {
+    if (bytes == NULL || length == 0 || _openFailed) {
+        if (errorOut != NULL) *errorOut = -EINVAL;
+        return NULL;
+    }
+    if (_context == NULL && ![self openForFirstFrame:bytes length:length]) {
+        // Not a key frame (no sequence header to size the decoder by): ask for one.
         if (errorOut != NULL) *errorOut = -EINVAL;
         return NULL;
     }
@@ -348,6 +413,8 @@ static void MLAttachColorDescription(CVPixelBufferRef buffer, const Dav1dPicture
         return NULL;
     }
     memcpy(copy, bytes, length);
+    // Comes back with the picture this frame becomes.
+    data.m.timestamp = tag;
 
     Dav1dPicture shown = { 0 };
     BOOL haveShown = NO;
@@ -401,6 +468,9 @@ static void MLAttachColorDescription(CVPixelBufferRef buffer, const Dav1dPicture
         return NULL;
     }
 
+    if (tagOut != NULL) {
+        *tagOut = shown.m.timestamp;
+    }
     CVPixelBufferRef buffer = [self newPixelBufferFromPicture:&shown];
     dav1d_picture_unref(&shown);
     if (buffer == NULL && errorOut != NULL) {

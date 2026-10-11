@@ -772,8 +772,9 @@ private struct AudioEqualizerSection: View {
       ? EnhancedAudioEQ.parametricFilters(shownBands)
       : EnhancedAudioEQ.graphicFilters(frequencies: frequencies, gains: shownGains)
   }
+  /// A preset was applied (to whichever bands are showing) and not taken off since.
   private var presetActive: Bool {
-    isParametric && !(settingsModel.enhancedAudioEQProfileName ?? "").isEmpty
+    !(settingsModel.enhancedAudioEQProfileName ?? "").isEmpty
   }
 
   /// One choice for the fixed layouts and the free bands.
@@ -884,7 +885,7 @@ private struct AudioEqualizerSection: View {
       SettingsRow(title: "Preset EQ", detail: "Preset EQ hint") {
         HStack(spacing: 8) {
           if presetActive {
-            // Back to the fixed bands, which are as they were before the preset.
+            // Back to the equalizer as it was before the preset.
             Button(languageManager.localize("Preset EQ Remove")) {
               settingsModel.removeEnhancedAudioEQPreset()
               importNote = nil

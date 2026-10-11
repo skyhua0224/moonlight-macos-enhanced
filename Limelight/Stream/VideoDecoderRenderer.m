@@ -1357,6 +1357,11 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     // AV1 on a Mac without an AV1 hardware decoder. Decode thread only.
     MLAV1SoftwareDecoder *_av1SoftwareDecoder;
     uint64_t _av1SoftwareDecodeFailures;
+    // With several frames decoded at a time a picture comes out after later frames went in:
+    // what was known about each frame waits here under its tag.
+    MLDecodeFrameContext _av1PendingContexts[16];
+    int64_t _av1NextTag;
+    BOOL _av1FrameDelayLogged;
     CVImageBufferRef _currentFrame;
     CMTime _currentFramePresentationTimeStamp;
     uint64_t _currentFrameEnqueueTimeMs;
@@ -6170,29 +6175,34 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
                            blockSource:(CMBlockBufferCustomBlockSource *)blockSource
 {
     if (_av1SoftwareDecoder == nil) {
-        _av1SoftwareDecoder = [[MLAV1SoftwareDecoder alloc] init];
-        if (_av1SoftwareDecoder != nil) {
-            Log(LOG_I, @"[video] AV1 is decoded in software: dav1d %@, %d threads (this Mac has no AV1 hardware decoder)",
-                MLAV1SoftwareDecoder.libraryVersion, _av1SoftwareDecoder.threadCount);
-        } else {
-            Log(LOG_E, @"[video] The AV1 software decoder could not be opened");
-        }
+        _av1SoftwareDecoder = [[MLAV1SoftwareDecoder alloc] initWithFrameRate:self.frameRate];
+        _av1FrameDelayLogged = NO;
     }
 
-    int decodeError = -1;
-    CVPixelBufferRef frame = NULL;
-    if (_av1SoftwareDecoder != nil) {
-        frame = [_av1SoftwareDecoder copyDecodedFrame:data length:(size_t)length error:&decodeError];
-    }
+    const int64_t tag = _av1NextTag++;
+    _av1PendingContexts[tag % 16] = (MLDecodeFrameContext){ .enqueueTimeMs = enqueueTimeMs, .frameNumber = frameNumber };
+
+    int decodeError = 0;
+    int64_t shownTag = tag;
+    CVPixelBufferRef frame = [_av1SoftwareDecoder copyDecodedFrame:data
+                                                            length:(size_t)length
+                                                               tag:tag
+                                                            tagOut:&shownTag
+                                                             error:&decodeError];
     if (blockSource != NULL && blockSource->FreeBlock != NULL) {
         blockSource->FreeBlock(blockSource->refCon, data, length);
     } else {
         free(data);
     }
+    if (!_av1FrameDelayLogged && _av1SoftwareDecoder.frameDelay > 0) {
+        _av1FrameDelayLogged = YES;
+        Log(LOG_I, @"[video] AV1 is decoded in software: dav1d %@, %d threads, %d frame(s) at a time (this Mac has no AV1 hardware decoder)",
+            MLAV1SoftwareDecoder.libraryVersion, _av1SoftwareDecoder.threadCount, _av1SoftwareDecoder.frameDelay);
+    }
 
     if (frame == NULL) {
         if (decodeError == 0) {
-            // Data without a picture to show.
+            // No picture ready yet: with several frames at a time the first ones come later.
             return DR_OK;
         }
         _av1SoftwareDecodeFailures++;
@@ -6200,12 +6210,13 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
             Log(LOG_W, @"[video] AV1 software decoding failed: %d (failures=%llu); asking for a key frame",
                 decodeError, (unsigned long long)_av1SoftwareDecodeFailures);
         }
-        [_av1SoftwareDecoder flush];
+        // A new decoder for the key frame: it sizes itself by what the stream is then.
+        _av1SoftwareDecoder = nil;
         return DR_NEED_IDR;
     }
 
     @synchronized (self) { self->_activeWndVideoStats.decodedFrames++; }
-    MLDecodeFrameContext frameContext = { .enqueueTimeMs = enqueueTimeMs, .frameNumber = frameNumber };
+    MLDecodeFrameContext frameContext = _av1PendingContexts[((shownTag % 16) + 16) % 16];
     if (_activeRendererMode == MLActiveVideoRendererModeEnhanced || _activeRendererMode == MLActiveVideoRendererModeNative) {
         [self handleDecompressionOutput:frame
                    presentationTimeStamp:kCMTimeInvalid

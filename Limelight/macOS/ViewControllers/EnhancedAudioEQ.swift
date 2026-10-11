@@ -1,4 +1,5 @@
 import Combine
+import CoreGraphics
 import Foundation
 
 /// One filter of the parametric equalizer.
@@ -113,12 +114,21 @@ struct EnhancedAudioExtras: Codable, Equatable {
   var spatialMode = EnhancedAudioSpatialMode.automatic.rawValue
   /// Preamp of the equalizer kind that is not in use (fixed and custom bands keep their own).
   var eqInactivePreamp = 0.0
+  /// The fixed bands and the custom bands describe the same curve (a preset was applied, or
+  /// one was made from the other, and neither was edited since).
+  var eqInSync = false
+  /// 2 once the fixed gains belong to bands as wide as their spacing; profiles from before
+  /// have none and are read as 1 (EnhancedAudioEQ.legacyGraphicBandwidth).
+  var eqFixedWidthVersion = 1
 
   init(
     eqEnabled: Bool = true, eqMode: Int = EnhancedAudioEQ.Mode.graphic.rawValue,
     eqPreamp: Double = 0, eqBands: [EnhancedAudioEQBand] = [], eqProfileName: String? = nil,
-    spatialMode: Int = EnhancedAudioSpatialMode.automatic.rawValue, eqInactivePreamp: Double = 0
+    spatialMode: Int = EnhancedAudioSpatialMode.automatic.rawValue, eqInactivePreamp: Double = 0,
+    eqInSync: Bool = false, eqFixedWidthVersion: Int = 1
   ) {
+    self.eqInSync = eqInSync
+    self.eqFixedWidthVersion = eqFixedWidthVersion
     self.spatialMode = spatialMode
     self.eqInactivePreamp = EnhancedAudioEQBand.clamp(
       eqInactivePreamp, to: EnhancedAudioEQ.preampRange)
@@ -131,6 +141,7 @@ struct EnhancedAudioExtras: Codable, Equatable {
 
   private enum CodingKeys: String, CodingKey {
     case eqEnabled, eqMode, eqPreamp, eqBands, eqProfileName, spatialMode, eqInactivePreamp
+    case eqInSync, eqFixedWidthVersion
   }
 
   // Never throws, for the same reason as the band.
@@ -147,8 +158,20 @@ struct EnhancedAudioExtras: Codable, Equatable {
       eqBands: value([EnhancedAudioEQBand].self, .eqBands) ?? [],
       eqProfileName: value(String.self, .eqProfileName),
       spatialMode: value(Int.self, .spatialMode) ?? EnhancedAudioSpatialMode.automatic.rawValue,
-      eqInactivePreamp: value(Double.self, .eqInactivePreamp) ?? 0)
+      eqInactivePreamp: value(Double.self, .eqInactivePreamp) ?? 0,
+      eqInSync: value(Bool.self, .eqInSync) ?? false,
+      eqFixedWidthVersion: value(Int.self, .eqFixedWidthVersion) ?? 1)
   }
+}
+
+/// Everything a preset replaces, for taking it off again.
+struct EnhancedAudioEQSnapshot {
+  var gains: [Double]
+  var bands: [EnhancedAudioEQBand]
+  var preamp: CGFloat
+  var inactivePreamp: CGFloat
+  var name: String?
+  var inSync: Bool
 }
 
 /// Equalizer presets the user saved. They are kept for the app, not per host.
@@ -355,8 +378,13 @@ enum EnhancedAudioEQ {
   static let preampRange: ClosedRange<Double> = -24...12
   /// Every audio stream is 48 kHz.
   static let sampleRate = 48000.0
-  /// Width of one fixed band, in octaves.
-  static let graphicBandwidth = 0.7
+  /// Width of one fixed band, in octaves, as the fixed bands were first made: the same for
+  /// every band. At an octave between bands that is too narrow, and the curve sags between
+  /// them; at a third of an octave it is far too wide. Kept for profiles saved with it.
+  static let legacyGraphicBandwidth = 0.7
+  /// What Settings.enhancedAudioExtras.eqFixedWidthVersion is once the gains belong to bands
+  /// that are as wide as the way to their neighbours.
+  static let currentFixedWidthVersion = 2
 
   /// Q of a filter the equalizer unit was given this bandwidth for. The unit pre-warps the
   /// bandwidth, so the same width is a lower Q towards the top of the spectrum.
@@ -365,13 +393,66 @@ enum EnhancedAudioEQ {
     return 1 / (2 * sinh(log(2.0) / 2 * octaves * w0 / sin(w0)))
   }
 
-  static func graphicFilters(frequencies: [Double], gains: [Double]) -> [Filter] {
-    frequencies.enumerated().map { index, frequency in
+  /// Q of each fixed band: as wide as the way to its neighbours, so that bands next to each
+  /// other add up to a smooth curve whatever their spacing is.
+  static func graphicQs(_ frequencies: [Double]) -> [Double] {
+    frequencies.indices.map { index in
+      var spacings: [Double] = []
+      if index > 0 { spacings.append(log2(frequencies[index] / frequencies[index - 1])) }
+      if index + 1 < frequencies.count {
+        spacings.append(log2(frequencies[index + 1] / frequencies[index]))
+      }
+      let octaves = spacings.isEmpty ? 1 : spacings.reduce(0, +) / Double(spacings.count)
+      return 1 / (2 * sinh(log(2.0) / 2 * min(max(octaves, 0.2), 2)))
+    }
+  }
+
+  static func graphicFilters(frequencies: [Double], gains: [Double], legacyWidth: Bool = false)
+    -> [Filter]
+  {
+    let qs = legacyWidth ? [] : graphicQs(frequencies)
+    return frequencies.enumerated().map { index, frequency in
       Filter(
         kind: .peak, frequency: frequency,
         gain: gains.indices.contains(index) ? gains[index] : 0,
-        q: q(forBandwidth: graphicBandwidth, frequency: frequency))
+        q: legacyWidth
+          ? q(forBandwidth: legacyGraphicBandwidth, frequency: frequency) : qs[index])
     }
+  }
+
+  /// What the fixed bands take off their own level: a fifth of the largest boost.
+  static func graphicTrim(_ gains: [Double]) -> Double {
+    min(2.5, max(0, gains.max() ?? 0) * 0.2)
+  }
+
+  /// Gains for the fixed bands at these frequencies whose curve follows a given one.
+  static func fittedGraphicGains(
+    frequencies: [Double], following target: [Filter], limit: Double = 12
+  ) -> [Double] {
+    gainsThrough(
+      values: frequencies.map { response(of: target, at: $0) }, at: frequencies, limit: limit)
+  }
+
+  /// Gains for bands at these frequencies (each as wide as its spacing) whose curve goes
+  /// through the given values there. Bands overlap, so a gain is not the value at its band:
+  /// each is corrected by what is still missing at its frequency, a few rounds over all bands.
+  static func gainsThrough(values: [Double], at frequencies: [Double], limit: Double = 12)
+    -> [Double]
+  {
+    let qs = graphicQs(frequencies)
+    var gains = values.map { min(max($0, -limit), limit) }
+    for _ in 0..<30 {
+      for index in frequencies.indices {
+        var now = 0.0
+        for other in frequencies.indices where gains[other] != 0 {
+          now += response(
+            of: Filter(kind: .peak, frequency: frequencies[other], gain: gains[other], q: qs[other]),
+            at: frequencies[index])
+        }
+        gains[index] = min(max(gains[index] + 0.8 * (values[index] - now), -limit), limit)
+      }
+    }
+    return gains.map { ($0 * 10).rounded() / 10 }
   }
 
   static func parametricFilters(_ bands: [EnhancedAudioEQBand]) -> [Filter] {

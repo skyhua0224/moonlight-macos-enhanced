@@ -15,6 +15,11 @@ struct VideoView: View {
     !compatibilitySelected
   }
 
+  /// AV1 is chosen and this Mac can only decode it in software.
+  private var av1SoftwareSelected: Bool {
+    settingsModel.selectedVideoCodec == "AV1" && !SettingsModel.av1HardwareDecodeSupported
+  }
+
   private var videoCodecWarningKey: String? {
     switch settingsModel.selectedVideoCodec {
     case "AV1":
@@ -74,9 +79,25 @@ struct VideoView: View {
           .frame(width: 220, alignment: .trailing)
         }
 
+        // AV1 in software is 8-bit SDR: the two switches below do nothing then, and say so.
+        if av1SoftwareSelected {
+          HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.orange)
+            Text(languageManager.localize("Video codec warning AV1 no HDR"))
+              .font(.caption)
+              .foregroundStyle(.orange)
+              .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+          }
+          .padding(.vertical, 6)
+        }
         ToggleCell(title: "HDR", hintKey: "HDR detail", boolBinding: $settingsModel.hdr)
+          .disabled(av1SoftwareSelected)
         ToggleCell(title: "YUV 4:4:4", hintKey: "YUV444 detail", boolBinding: $settingsModel.enableYUV444)
+          .disabled(av1SoftwareSelected)
         ToggleCell(title: "10-bit SDR", hintKey: "10-bit SDR detail", boolBinding: $settingsModel.enable10BitSdr)
+          .disabled(av1SoftwareSelected)
 
 
         SettingsRow(title: "Transfer Function") {

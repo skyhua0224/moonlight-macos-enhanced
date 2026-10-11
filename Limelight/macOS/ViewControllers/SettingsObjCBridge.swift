@@ -1228,7 +1228,9 @@ class SettingsClass: NSObject {
         ?? SettingsModel.enhancedAudioEQFrequencies(for: SettingsModel.defaultEnhancedAudioEQLayout)
       filters = EnhancedAudioEQ.graphicFilters(
         frequencies: frequencies,
-        gains: gains.count == frequencies.count ? gains : [])
+        gains: gains.count == frequencies.count ? gains : [],
+        // A profile not opened in the settings since the bands changed width plays as saved.
+        legacyWidth: extras.eqFixedWidthVersion < EnhancedAudioEQ.currentFixedWidthVersion)
     }
     return [
       "enabled": extras.eqEnabled,

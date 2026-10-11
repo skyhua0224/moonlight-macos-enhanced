@@ -1840,7 +1840,7 @@
 "EQ Import File" = "Import…";
 "EQ Paste" = "Paste from Clipboard";
 "EQ Reset Bands" = "Reset";
-"EQ Import Hint" = "Drag the points on the curve; click one to type exact values. Or import the parametric EQ text written by AutoEq, Squiglink or Equalizer APO.";
+"EQ Import Hint" = "Drag the points on the curve; click one for exact values. Presets and imported files work with 12, 24 and custom bands alike: custom bands hold them exactly, fixed bands follow the same curve as closely as they can.";
 "EQ Import Failed" = "No usable filters were found in this text.";
 "EQ Import Done %d" = "Imported %d filters.";
 "EQ Import Skipped %d %d" = "Imported %1$d filters. %2$d lines use a filter type that is not supported and were skipped.";
@@ -1893,9 +1893,10 @@
 "AV1 Decode software detail" = "This Mac has no AV1 hardware decoder. When AV1 is chosen it is decoded in software (dav1d), which uses more power and may not keep up at high resolutions and frame rates. HDR and 10-bit color still need the hardware decoder.";
 "Preset EQ By Device" = "By Device";
 "Preset EQ By Sound" = "By Sound";
-"Video codec warning AV1 software" = "This Mac has no AV1 hardware decoder, so AV1 is decoded in software: it uses more power, may not keep up at high resolutions and frame rates, and HDR, 10-bit color and 4:4:4 are not available. H.265 is the better choice unless you need AV1.";
+"Video codec warning AV1 software" = "This Mac has no AV1 hardware decoder, so AV1 is decoded in software: it uses much more power and is meant for up to about 1440p at 120 or 4K at 60 frames per second; 4K at 120 will not keep up. HDR, 10-bit color and 4:4:4 are not available. H.265 is the better choice unless you need AV1.";
 "Video codec warning HEVC unavailable" = "This Mac has no H.265 hardware decoder. The stream will use H.264, and HDR and 10-bit color are not available.";
 "Output Device Follow System" = "Same as System Output";
 "Output Device hint" = "Where the stream's sound plays. It is only for Moonlight and leaves the system output alone, so an equalizer app that takes the system output over does not get in the way.";
 "Audio codec hint passthrough unavailable" = "%1$@ does not accept a %2$@ bitstream, so it is not passed through: the sound is decoded on this Mac. If the system output is taken over by a virtual device (an equalizer app such as eqMac), choose the TV or receiver itself under Output Device above.";
 "Dolby passthrough unavailable notice" = "Dolby passthrough is off: %1$@ does not accept %2$@, so the sound is decoded on this Mac. To pass it through, choose the TV or receiver under Settings > Audio > Output Device.";
+"Video codec warning AV1 no HDR" = "AV1 is decoded in software on this Mac, which has no HDR, no 10-bit color and no 4:4:4: the three options below are off while AV1 is chosen. Choose H.265 for them.";
