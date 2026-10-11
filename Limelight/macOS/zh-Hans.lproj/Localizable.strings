@@ -1895,7 +1895,7 @@
 "EQ Import File" = "导入…";
 "EQ Paste" = "从剪贴板粘贴";
 "EQ Reset Bands" = "重置";
-"EQ Import Hint" = "直接拖动曲线上的圆点，或导入 AutoEq、Squiglink、Equalizer APO 导出的参数均衡文本。导入后会切换到自由频段。";
+"EQ Import Hint" = "拖动曲线上的圆点来调整，点一下圆点可以输入精确数值。也可以导入 AutoEq、Squiglink、Equalizer APO 导出的参数均衡文本。";
 "EQ Import Failed" = "这段文本里没有可用的滤波器。";
 "EQ Import Done %d" = "已导入 %d 个滤波器。";
 "EQ Import Skipped %d %d" = "已导入 %1$d 个滤波器，另有 %2$d 行的滤波器类型不支持，已跳过。";

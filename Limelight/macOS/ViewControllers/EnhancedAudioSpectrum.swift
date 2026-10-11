@@ -22,6 +22,8 @@ final class EnhancedAudioSpectrum: NSObject, ObservableObject {
 
   // Main thread.
   private var viewers = 0
+  // The settings window keeps its views while it is closed; nothing is measured for them then.
+  private var windowVisible = true
   // Read by the stream (any thread).
   private let requestLock = NSLock()
   private var requested = false
@@ -56,12 +58,17 @@ final class EnhancedAudioSpectrum: NSObject, ObservableObject {
 
   func addViewer() {
     viewers += 1
-    setRequested(viewers > 0)
+    setRequested(viewers > 0 && windowVisible)
   }
 
   func removeViewer() {
     viewers = max(0, viewers - 1)
-    setRequested(viewers > 0)
+    setRequested(viewers > 0 && windowVisible)
+  }
+
+  func setWindowVisible(_ visible: Bool) {
+    windowVisible = visible
+    setRequested(viewers > 0 && windowVisible)
   }
 
   private func setRequested(_ value: Bool) {

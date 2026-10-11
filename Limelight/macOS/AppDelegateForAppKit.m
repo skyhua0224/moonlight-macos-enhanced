@@ -188,44 +188,40 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     });
 }
 
+// The settings window is built once and kept: building it lays the whole settings tree out,
+// which took more than a second every time it was opened. Shown again, it selects the host's
+// profile and reads it afresh, since the stream and the control center write settings too.
 - (NSWindowController *)preferencesWCWithHostId:(NSString *)hostId {
     if (_preferencesWC != nil) {
-        [_preferencesWC close];
-        _preferencesWC = nil;
+        [SettingsWindowObjCBridge prepareSettingsWindowForShowingWithHostId:hostId];
+        return _preferencesWC;
     }
 
-    // Always recreate to ensure state is clean and correct host is selected
     _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindowWithHostId:hostId];
     _preferencesWC.window.delegate = self;
-
     return _preferencesWC;
 }
 
-- (void)showPreferencesForHost:(NSString *)hostId {
+- (void)showPreferencesWindowForHost:(NSString *)hostId {
+    const BOOL firstTime = _preferencesWC == nil;
     NSWindowController *prefsWC = [self preferencesWCWithHostId:hostId];
-    prefsWC.window.frameAutosaveName = @"Preferences Window";
-    [prefsWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
-
+    if (firstTime || !prefsWC.window.isVisible) {
+        [prefsWC.window setContentSize:NSMakeSize(960.0, 680.0)];
+        [prefsWC.window setMinSize:NSMakeSize(820.0, 560.0)];
+        [prefsWC.window center];
+    }
+    [SettingsWindowObjCBridge settingsWindowVisibilityChanged:YES];
     [prefsWC showWindow:nil];
-    [prefsWC.window setContentSize:NSMakeSize(960.0, 680.0)];
-    [prefsWC.window setMinSize:NSMakeSize(820.0, 560.0)];
-    [prefsWC.window center];
     [prefsWC.window makeKeyAndOrderFront:nil];
+}
+
+- (void)showPreferencesForHost:(NSString *)hostId {
+    [self showPreferencesWindowForHost:hostId];
 }
 
 - (IBAction)showPreferences:(id)sender {
     NSViewController *contentVC = NSApplication.sharedApplication.mainWindow.contentViewController;
-    NSString *hostId = [self hostUUIDFromViewControllerTree:contentVC];
-
-    NSWindowController *prefsWC = [self preferencesWCWithHostId:hostId];
-    prefsWC.window.frameAutosaveName = @"Preferences Window";
-    [prefsWC.window moonlight_centerWindowOnFirstRunWithSize:CGSizeZero];
-
-    [prefsWC showWindow:nil];
-    [prefsWC.window setContentSize:NSMakeSize(960.0, 680.0)];
-    [prefsWC.window setMinSize:NSMakeSize(820.0, 560.0)];
-    [prefsWC.window center];
-    [prefsWC.window makeKeyAndOrderFront:nil];
+    [self showPreferencesWindowForHost:[self hostUUIDFromViewControllerTree:contentVC]];
 }
 
 - (IBAction)showAbout:(id)sender {
@@ -403,7 +399,8 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 
 - (void)windowWillClose:(NSNotification *)notification {
     if (notification.object == self.preferencesWC.window) {
-        self.preferencesWC = nil;
+        // Kept for the next time it is shown; what only matters while it is seen stops.
+        [SettingsWindowObjCBridge settingsWindowVisibilityChanged:NO];
     } else if (notification.object == self.aboutWC.window) {
         self.aboutWC = nil;
     } else if (notification.object == self.welcomePermissionsWC.window && self.welcomePermissionsWC.window.sheetParent == nil) {

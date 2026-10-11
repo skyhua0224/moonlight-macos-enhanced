@@ -667,6 +667,8 @@ private struct AudioEqualizerSection: View {
   @State private var showsSavePreset = false
   @State private var newPresetName = ""
   @State private var curveDrag: CurveDrag?
+  // The band whose point was last touched on the curve; its controls show under the curve.
+  @State private var selectedHandle: Int?
   // The rows of single bands are many controls and the curve does the same job, so they are
   // only built when asked for.
   @AppStorage("settings.audio.eqBandDetails") private var showsBandDetails = false
@@ -711,6 +713,8 @@ private struct AudioEqualizerSection: View {
     Binding(
       get: { isParametric ? Self.customBands : settingsModel.selectedEnhancedAudioEQLayout },
       set: { value in
+        curveDrag = nil
+        selectedHandle = nil
         if value == Self.customBands {
           settingsModel.selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.parametric.title
         } else {
@@ -816,6 +820,7 @@ private struct AudioEqualizerSection: View {
               PresetEQPicker(currentProfile: { settingsModel.enhancedAudioEQAsProfile }) {
                 profile, name in
                 curveDrag = nil
+                selectedHandle = nil
                 settingsModel.applyImportedEnhancedAudioEQ(profile, name: name)
                 importNote = nil
                 showsPresetPicker = false
@@ -825,17 +830,30 @@ private struct AudioEqualizerSection: View {
         .controlSize(.small)
       }
 
-      AudioEQCurveView(
-        filters: shownFilters, handles: curveHandles, onMove: moveHandle, onEnd: endCurveDrag
-      )
-      .frame(height: 200)
-      .padding(.top, 10)
-      .opacity(settingsModel.enhancedAudioEQEnabled ? 1 : 0.45)
+      VStack(spacing: 0) {
+        AudioEQCurveView(
+          filters: shownFilters, handles: curveHandles, selected: selectedHandle,
+          onSelect: { selectedHandle = $0 }, onMove: moveHandle, onEnd: endCurveDrag
+        )
+        .frame(height: 200)
+        .padding(.top, 10)
+        .opacity(settingsModel.enhancedAudioEQEnabled ? 1 : 0.45)
+        selectedBandEditor
+      }
 
       HStack(spacing: 8) {
         Button(languageManager.localize("EQ Import File")) { importFromFile() }
         Button(languageManager.localize("EQ Paste")) {
           applyImport(NSPasteboard.general.string(forType: .string), name: nil)
+        }
+        if isParametric {
+          Button(languageManager.localize("EQ Add Band")) {
+            curveDrag = nil
+            settingsModel.enhancedAudioEQBands.append(
+              EnhancedAudioEQBand(kind: .peak, frequency: 1000, q: 1))
+            selectedHandle = settingsModel.enhancedAudioEQBands.count - 1
+          }
+          .disabled(settingsModel.enhancedAudioEQBands.count >= EnhancedAudioEQ.maxBands)
         }
         Button(languageManager.localize("Preset EQ Save As")) { showsSavePreset = true }
           .popover(isPresented: $showsSavePreset, arrowEdge: .bottom) {
@@ -893,19 +911,11 @@ private struct AudioEqualizerSection: View {
         if isParametric {
           ForEach(shownBands) { band in
             AudioEQBandRow(band: bandBinding(band.id)) {
+              curveDrag = nil
+              selectedHandle = nil
               settingsModel.enhancedAudioEQBands.removeAll { $0.id == band.id }
             }
           }
-          HStack {
-            Button(languageManager.localize("EQ Add Band")) {
-              settingsModel.enhancedAudioEQBands.append(
-                EnhancedAudioEQBand(kind: .peak, frequency: 1000, q: 1))
-            }
-            .controlSize(.small)
-            .disabled(settingsModel.enhancedAudioEQBands.count >= EnhancedAudioEQ.maxBands)
-            Spacer()
-          }
-          .frame(minHeight: 38)
         } else {
           ForEach(frequencies, id: \.self) { frequency in
             SettingsValueSliderRow(title: String(format: "%g Hz", frequency), value: Binding(
@@ -923,6 +933,32 @@ private struct AudioEqualizerSection: View {
     }
     // Read ahead of the first search, which would otherwise wait for it.
     .onAppear { HeadphoneCorrectionLibrary.shared.loadIfNeeded() }
+  }
+
+  /// The controls of the band that was touched on the curve: one row, instead of a row for
+  /// every band.
+  @ViewBuilder
+  private var selectedBandEditor: some View {
+    if isParametric {
+      if let index = selectedHandle, shownBands.indices.contains(index) {
+        let id = shownBands[index].id
+        AudioEQBandRow(band: bandBinding(id)) {
+          curveDrag = nil
+          selectedHandle = nil
+          settingsModel.enhancedAudioEQBands.removeAll { $0.id == id }
+        }
+      }
+    } else if let index = selectedHandle, frequencies.indices.contains(index) {
+      let frequency = frequencies[index]
+      SettingsValueSliderRow(title: String(format: "%g Hz", frequency), value: Binding(
+        get: {
+          let gains = shownGains
+          return gains.indices.contains(index) ? CGFloat(gains[index]) : 0
+        }, set: { value in
+          curveDrag = nil
+          settingsModel.setEnhancedAudioEQGain(Double(value), at: index)
+        }), range: -12...12, step: 0.5, suffix: " dB")
+    }
   }
 
   private var presetButtonTitle: String {
@@ -948,6 +984,7 @@ private struct AudioEqualizerSection: View {
   /// Back to a flat equalizer of the kind that is showing.
   private func reset() {
     curveDrag = nil
+    selectedHandle = nil
     if isParametric {
       settingsModel.enhancedAudioEQBands = EnhancedAudioEQ.starterBands()
     } else {
@@ -958,11 +995,18 @@ private struct AudioEqualizerSection: View {
     importNote = nil
   }
 
-  private func importFromFile() {
+  // Kept: creating an open panel starts a system service, which takes about a second the
+  // first time.
+  private static let importPanel: NSOpenPanel = {
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [.plainText]
     panel.allowsMultipleSelection = false
     panel.canChooseDirectories = false
+    return panel
+  }()
+
+  private func importFromFile() {
+    let panel = Self.importPanel
     guard panel.runModal() == .OK, let url = panel.url else { return }
     let text =
       (try? String(contentsOf: url, encoding: .utf8))
@@ -982,6 +1026,7 @@ private struct AudioEqualizerSection: View {
       return
     }
     curveDrag = nil
+    selectedHandle = nil
     settingsModel.applyImportedEnhancedAudioEQ(
       profile, name: name ?? languageManager.localize("EQ Imported Name"))
     importNote =
@@ -1249,6 +1294,9 @@ private struct AudioEQCurveView: View {
 
   let filters: [EnhancedAudioEQ.Filter]
   let handles: [Handle]
+  /// The point whose band is being edited under the curve.
+  let selected: Int?
+  let onSelect: (Int) -> Void
   let onMove: (_ id: Int, _ frequency: Double, _ gain: Double) -> Void
   /// The drag is over: what it changed can be handed on.
   let onEnd: () -> Void
@@ -1366,7 +1414,8 @@ private struct AudioEQCurveView: View {
     let baseRadius: CGFloat = handles.count > 16 ? 3.5 : 5
     for handle in handles {
       let center = point(handle, plot, span)
-      let radius = handle.id == drag?.handle ? baseRadius + 2 : baseRadius
+      let isSelected = handle.id == selected
+      let radius = (handle.id == drag?.handle || isSelected) ? baseRadius + 2 : baseRadius
       let circle = Path(
         ellipseIn: CGRect(
           x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
@@ -1374,7 +1423,8 @@ private struct AudioEQCurveView: View {
         circle,
         with: .color(handle.enabled ? Color.accentColor : Color(nsColor: .controlBackgroundColor)))
       context.stroke(
-        circle, with: .color(handle.enabled ? Color.white : Color.secondary), lineWidth: 1.5)
+        circle, with: .color(handle.enabled ? Color.white : Color.secondary),
+        lineWidth: isSelected ? 2.5 : 1.5)
     }
   }
 
@@ -1398,6 +1448,7 @@ private struct AudioEQCurveView: View {
           var grabbed: Int?
           if let nearest, nearest.distance <= 14 {
             grabbed = nearest.id
+            onSelect(nearest.id)
           }
           current = Drag(start: value.startLocation, handle: grabbed, span: span)
           drag = current

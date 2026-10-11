@@ -217,6 +217,7 @@ class SettingsModel: ObservableObject {
 
   var latencyCache: [String: [String: Any]] = [:]
   var selectedProfileObserver: NSObjectProtocol?
+  var settingsWindowObserver: NSObjectProtocol?
   var hasLoadedPersistedSettings = false
 
   private func postMouseSettingsChanged(_ setting: String) {
@@ -1764,6 +1765,25 @@ class SettingsModel: ObservableObject {
       self?.selectHost(id: hostId)
     }
 
+    // The settings window is kept between uses. When it is shown again the profile may have
+    // changed in the store (a stream, the control center), so it is read again.
+    settingsWindowObserver = NotificationCenter.default.addObserver(
+      forName: Notification.Name("MoonlightSettingsWindowWillShow"),
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard let self, let hostId = notification.userInfo?["hostId"] as? String else { return }
+      self.flushPendingEnhancedAudioSave()
+      let before = self.selectedHost?.id
+      self.selectHost(id: hostId)
+      if self.selectedHost?.id == before {
+        // Same profile: selecting it did not load anything.
+        self.loadSettings()
+        self.refreshVideoDiagnosticsState()
+        self.refreshSunshineDisplays(force: false)
+      }
+    }
+
     refreshVideoDiagnosticsState()
     refreshSunshineDisplays(force: false)
   }
@@ -1771,6 +1791,9 @@ class SettingsModel: ObservableObject {
   deinit {
     if let selectedProfileObserver {
       NotificationCenter.default.removeObserver(selectedProfileObserver)
+    }
+    if let settingsWindowObserver {
+      NotificationCenter.default.removeObserver(settingsWindowObserver)
     }
   }
 

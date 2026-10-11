@@ -44,9 +44,20 @@ class SettingsHostingController<RootView: View>: NSWindowController {
 
   convenience init(rootView: RootView) {
     let hostingController = NSHostingController(rootView: rootView)
+    if #available(macOS 13.0, *) {
+      // The window has a size of its own. Left on, the hosting view asks the whole settings
+      // tree for its ideal size, more than once, while the window is being set up.
+      hostingController.sizingOptions = []
+    }
 
-    let window = NSWindow(contentViewController: SettingsControllerInputBoundary(contentController: hostingController))
-    window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 960, height: 680),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+      backing: .buffered, defer: true)
+    // The window is kept and shown again (see AppDelegateForAppKit).
+    window.isReleasedWhenClosed = false
+    window.contentViewController = SettingsControllerInputBoundary(
+      contentController: hostingController)
     window.identifier = NSUserInterfaceItemIdentifier("ClientSettingsWindow")
     window.collectionBehavior = [.fullScreenNone]
     window.tabbingMode = .disallowed
@@ -386,6 +397,25 @@ final class WelcomePermissionsHostingController: NSWindowController, NSWindowDel
   @objc class func makeSettingsWindow(hostId: String?) -> NSWindowController {
     let settingsView = SettingsView(hostId: hostId)
     return SettingsHostingController(rootView: settingsView)
+  }
+
+  /// The window that already exists is about to be shown again: select the profile of this
+  /// host and read it from the store again.
+  @objc class func prepareSettingsWindowForShowing(hostId: String?) {
+    let resolvedHostId = (hostId?.isEmpty == false ? hostId : nil) ?? SettingsModel.globalHostId
+    UserDefaults.standard.set(resolvedHostId, forKey: "selectedSettingsProfile")
+    NotificationCenter.default.post(
+      name: Notification.Name("MoonlightSettingsWindowWillShow"), object: nil,
+      userInfo: ["hostId": resolvedHostId])
+  }
+
+  /// The window stays alive while it is closed, and so do its views: what is only worth
+  /// doing while they are seen is stopped here.
+  @objc class func settingsWindowVisibilityChanged(_ visible: Bool) {
+    EnhancedAudioSpectrum.shared.setWindowVisible(visible)
+    if !visible {
+      MicrophoneManager.shared.stopTest()
+    }
   }
 
   @objc class func syncSelectedProfile(hostId: String?) {

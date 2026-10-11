@@ -1840,7 +1840,7 @@
 "EQ Import File" = "Import…";
 "EQ Paste" = "Paste from Clipboard";
 "EQ Reset Bands" = "Reset";
-"EQ Import Hint" = "Drag the points on the curve, or import the parametric EQ text written by AutoEq, Squiglink or Equalizer APO. Importing switches to custom bands.";
+"EQ Import Hint" = "Drag the points on the curve; click one to type exact values. Or import the parametric EQ text written by AutoEq, Squiglink or Equalizer APO.";
 "EQ Import Failed" = "No usable filters were found in this text.";
 "EQ Import Done %d" = "Imported %d filters.";
 "EQ Import Skipped %d %d" = "Imported %1$d filters. %2$d lines use a filter type that is not supported and were skipped.";

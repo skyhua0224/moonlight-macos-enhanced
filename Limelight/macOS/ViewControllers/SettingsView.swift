@@ -200,6 +200,7 @@ struct SettingsView: View {
   @ObservedObject private var languageManager = LanguageManager.shared
   @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .stream
   let hostId: String?
+  @State private var selectedInitialHost = false
 
   init(hostId: String? = nil) {
     self.hostId = hostId
@@ -215,6 +216,10 @@ struct SettingsView: View {
     .frame(minWidth: 820, minHeight: 560)
     .onAppear {
       if selectedPane == .legacy { selectedPane = .app }
+      // Once: the window is kept and shown again, and then the host comes from
+      // SettingsWindowObjCBridge.prepareSettingsWindowForShowing, not from when it was made.
+      guard !selectedInitialHost else { return }
+      selectedInitialHost = true
       settingsModel.selectHost(id: hostId ?? SettingsModel.globalHostId)
     }
   }
