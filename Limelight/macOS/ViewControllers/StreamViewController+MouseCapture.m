@@ -1810,8 +1810,27 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     [self captureMouse];
 }
 
+/**
+ * Applies a host-filtered settings notification to this active stream on main.
+ * Touchpad tuning updates both controller backends without resetting contacts; other settings
+ * refresh their existing mouse/shortcut paths. Stopping or reconnecting streams defer to setup.
+ * @param setting Persisted mouse/input setting name, or nil for a general refresh.
+ */
 - (void)applyLiveMouseSettingsRefreshForSetting:(NSString *)setting {
     if (self.stopStreamInProgress || self.reconnectInProgress) {
+        return;
+    }
+
+    if ([setting isEqualToString:@"pointerSensitivity"] ||
+        [setting isEqualToString:@"gestureScrollSpeed"] ||
+        [setting isEqualToString:@"reverseScrollDirection"]) {
+        [self.hidSupport refreshControllerTouchpadConfiguration];
+        self.controllerSupport.gamepadTrackpadPointerSensitivity =
+            [SettingsClass pointerSensitivityFor:self.app.host.uuid];
+        self.controllerSupport.gamepadTrackpadScrollSpeed =
+            [SettingsClass gestureScrollSpeedFor:self.app.host.uuid];
+        self.controllerSupport.gamepadTrackpadReverseScroll =
+            [SettingsClass reverseScrollDirectionFor:self.app.host.uuid];
         return;
     }
 

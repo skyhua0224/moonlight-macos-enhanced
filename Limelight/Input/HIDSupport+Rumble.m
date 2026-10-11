@@ -62,23 +62,28 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     }
 }
 
+/**
+ * Processes motor updates on the dedicated HID queue using existing USB/Bluetooth encodings.
+ * Shutdown sends a final neutral report if needed before returning; teardown drains this worker
+ * before closing the HID manager. Never wait synchronously for main from this queue.
+ */
 - (void)runRumbleLoop {
     while (YES) {
         // wait for signal
         dispatch_semaphore_wait(self.rumbleSemaphore, DISPATCH_TIME_FOREVER);
         
-        if (self.closeRumble) {
-            break;
-        }
+        BOOL closing = self.closeRumble;
+        if (closing && self.previousLowFreqMotor == 0 && self.previousHighFreqMotor == 0) break;
         
         IOHIDDeviceRef device = [self getFirstDevice];
         if (device == nil) {
+            if (closing) break;
             continue;
         }
         
         // get next value
-        UInt16 lowFreqMotor = self.nextLowFreqMotor;
-        UInt16 highFreqMotor = self.nextHighFreqMotor;
+        UInt16 lowFreqMotor = closing ? 0 : self.nextLowFreqMotor;
+        UInt16 highFreqMotor = closing ? 0 : self.nextHighFreqMotor;
         
         if (isXbox(device) || isKingKong(device)) {
             UInt8 rumble_packet[] = { 0x03, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xEB };
@@ -194,6 +199,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
                 dispatch_semaphore_signal(self.rumbleSemaphore);
             }
         }
+        if (closing) break;
     }
 }
 
@@ -399,11 +405,20 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 }
 
 
+/**
+ * Copies ordered authored feedback into a bounded mailbox while controller delivery is enabled.
+ * The receive thread schedules main-thread output; suspension clears pending amplitudes and timers.
+ * @param low Low-frequency intensity in the protocol's 16-bit range.
+ * @param high High-frequency intensity in the protocol's 16-bit range.
+ * @param sequence Wrap-aware source sequence number.
+ * @param discontinuity Whether this frame starts a new sequence.
+ */
 - (void)submitAuthoredRumbleLow:(unsigned short)low high:(unsigned short)high
                      sequence:(uint32_t)sequence discontinuity:(BOOL)discontinuity {
     // A bounded mailbox separates the receive thread from device output.
     BOOL schedule = NO;
     @synchronized (self) {
+        if (!self.shouldSendControllerEvents) return;
         if (!discontinuity && self.hasAuthoredRumbleSequence &&
             (int32_t)(sequence - self.authoredRumbleSequence) <= 0) return;
         self.hasAuthoredRumbleSequence = YES;
@@ -427,15 +442,16 @@ SwitchCommonOutputPacket_t switchRumblePacket;
             high = support.authoredRumbleHigh;
             support.authoredRumbleDeliveryScheduled = NO;
         }
-        if (!support.shouldSendInputEvents) low = high = 0;
-        [support rumbleLowFreqMotor:low highFreqMotor:high];
+        if (!support.shouldSendControllerEvents) low = high = 0;
+        if (low || high || support.nextLowFreqMotor || support.nextHighFreqMotor)
+            [support rumbleLowFreqMotor:low highFreqMotor:high];
         if (support.authoredRumbleTimer == nil && (low || high)) {
             support.authoredRumbleTimer = [NSTimer timerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
                 HIDSupport *current = weakSelf;
                 if (!current) { [timer invalidate]; return; }
                 BOOL expired;
                 @synchronized (current) {
-                    expired = !current.shouldSendInputEvents ||
+                    expired = !current.shouldSendControllerEvents ||
                         NSProcessInfo.processInfo.systemUptime - current.authoredRumbleUpdatedAt >= 0.25;
                 }
                 if (expired) {
@@ -449,12 +465,20 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     });
 }
 
+/**
+ * Queues motor amplitudes for the HID output worker, serializing with controller suspension.
+ * Zero feedback is always allowed for initialization/stop; paused nonzero feedback is discarded.
+ * @param lowFreqMotor Low-frequency intensity in the protocol's 16-bit range.
+ * @param highFreqMotor High-frequency intensity in the protocol's 16-bit range.
+ */
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
-    self.nextLowFreqMotor = lowFreqMotor;
-    self.nextHighFreqMotor = highFreqMotor;
-
-    self.isRumbleTimer = NO;
-    dispatch_semaphore_signal(self.rumbleSemaphore);
+    @synchronized (self) {
+        if (!self.shouldSendControllerEvents && (lowFreqMotor || highFreqMotor)) return;
+        self.nextLowFreqMotor = lowFreqMotor;
+        self.nextHighFreqMotor = highFreqMotor;
+        self.isRumbleTimer = NO;
+        dispatch_semaphore_signal(self.rumbleSemaphore);
+    }
 }
 
 @end

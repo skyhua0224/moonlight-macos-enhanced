@@ -557,7 +557,8 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
  * Changes the HID controller-delivery gate and resets motion filters and touchpad gestures.
  *
  * Pausing synchronously drains the input queue and sends neutral gamepad, touch, gyro and mouse
- * releases when a direct-HID context is initialized. Resuming advertises PlayStation capabilities before
+ * releases when a direct-HID context is initialized, and stops device feedback including HID fallback.
+ * Resuming advertises PlayStation capabilities before
  * resending physical state. Host motion rates survive this transition. Call on main for menu
  * timers, never from inputQueue because disabling performs dispatch_sync onto that queue.
  * @param enabled Whether controller input may be delivered to the current stream.
@@ -574,6 +575,11 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         self.ps4GyroStationarySinceUs = 0;
         self.ps4GyroMovingSinceUs = 0;
         if (!enabled) {
+            [self.authoredRumbleTimer invalidate];
+            self.authoredRumbleTimer = nil;
+            self.authoredRumbleLow = self.authoredRumbleHigh = 0;
+            if (self.nextLowFreqMotor || self.nextHighFreqMotor)
+                [self rumbleLowFreqMotor:0 highFreqMotor:0];
             ControllerMenuGesture gesture = self.controller.menuGesture;
             ControllerMenuGestureInterrupt(&gesture, self.gamepadMenuPressed);
             self.controller.menuGesture = gesture;
@@ -622,6 +628,18 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
             }
             [self sendControllerEvent];
         }
+    }
+}
+
+/**
+ * Reloads touchpad mouse tuning for this stream's host on main under the HID monitor.
+ * Existing contacts and click ownership survive sensitivity/direction changes.
+ */
+- (void)refreshControllerTouchpadConfiguration {
+    @synchronized (self) {
+        self.trackpadPointerSensitivity = [SettingsClass pointerSensitivityFor:self.host.uuid];
+        self.trackpadScrollSpeed = [SettingsClass gestureScrollSpeedFor:self.host.uuid];
+        self.trackpadReverseScroll = [SettingsClass reverseScrollDirectionFor:self.host.uuid];
     }
 }
 
@@ -1061,9 +1079,11 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
                 NSString *changedHost = note.userInfo[@"hostId"];
                 if (!me || (![changedHost isEqualToString:me.host.uuid] && ![changedHost isEqualToString:@"__global__"])) return;
                 @synchronized (me) {
+                    BOOL native = [SettingsClass nativeTouchpadFor:me.host.uuid];
+                    if ([changedHost isEqualToString:@"__global__"] && native == me.nativeTouchpadEnabled) return;
                     [me releaseTrackpadState];
                     me.controller.hasTouchpadModeOverride = NO;
-                    me.nativeTouchpadEnabled = [SettingsClass nativeTouchpadFor:me.host.uuid];
+                    me.nativeTouchpadEnabled = native;
                     if (me.controllerDriver == 0) [me sendControllerEvent];
                 }
             }];
@@ -3371,7 +3391,8 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
  * Clears physical direct-HID controller state when a device is removed.
  *
  * Cancels menu tracking and resets arrival, calibration, filters and contacts under the HID
- * monitor, preserving host motion rates across physical reconnects. Drains queued input and
+ * monitor, preserving host motion rates across physical reconnects. Clears pending device feedback
+ * so reconnect cannot replay the removed pad's rumble. Drains queued input and
  * releases delivered gamepad, mouse, touch and gyro state before clearing local caches.
  * Runs on the HID manager's main run loop, never on inputQueue.
  * @param context Borrowed HIDSupport callback context.
@@ -3390,6 +3411,11 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.gamepadMenuPressed = NO;
     self.controller.menuGesture = (ControllerMenuGesture){0};
     @synchronized (self) {
+        [self.authoredRumbleTimer invalidate];
+        self.authoredRumbleTimer = nil;
+        self.authoredRumbleLow = self.authoredRumbleHigh = 0;
+        if (self.nextLowFreqMotor || self.nextHighFreqMotor)
+            [self rumbleLowFreqMotor:0 highFreqMotor:0];
         if (self.controllerDriver == 0) {
             PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
             if (self.shouldSendControllerEvents && input && LiInputContextIsInitialized(input)) {
@@ -3725,6 +3751,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 
 /**
  * Removes HID and touchpad preference observers, stops timers and closes devices on main.
+ * Drains the rumble worker after its final neutral output before invalidating the HID manager.
  * Controller delivery must be disabled before teardown to release remote touch/mouse state.
  */
 - (void)tearDownHidManagerOnMainThread {
@@ -3755,6 +3782,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     self.isRumbleTimer = NO;
     dispatch_semaphore_signal(self.rumbleSemaphore);
 
+    if (self.rumbleQueue) dispatch_sync(self.rumbleQueue, ^{});
     self.rumbleQueue = nil;
 
     if (self.hidManager != NULL) {

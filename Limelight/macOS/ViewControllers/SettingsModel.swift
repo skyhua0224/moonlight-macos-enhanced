@@ -1164,12 +1164,14 @@ class SettingsModel: ObservableObject {
     didSet {
       guard !isLoading else { return }
       saveSettings()
+      postMouseSettingsChanged("reverseScrollDirection")
     }
   }
   @Published var pointerSensitivity: CGFloat {
     didSet {
       guard !isLoading else { return }
       saveSettings()
+      postMouseSettingsChanged("pointerSensitivity")
     }
   }
   @Published var wheelScrollSpeed: CGFloat {
@@ -1188,6 +1190,7 @@ class SettingsModel: ObservableObject {
     didSet {
       guard !isLoading else { return }
       saveSettings()
+      postMouseSettingsChanged("gestureScrollSpeed")
     }
   }
   @Published var physicalWheelHighPrecisionScale: CGFloat {
