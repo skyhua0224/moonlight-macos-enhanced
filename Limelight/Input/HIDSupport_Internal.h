@@ -222,7 +222,7 @@ typedef struct {
 - (BOOL)touchpadUsesMouse;
 - (void)resetTrackpadState;
 - (void)releaseTrackpadState;
-- (void)setTrackpadMouseButton:(int)button;
+- (void)refreshControllerMouseOutputWithRouting:(uint64_t)routing;
 - (void)handlePlayStationTouchpad:(const UInt8 *)primary secondary:(const UInt8 *)secondary
                          height:(float)height pressed:(BOOL)pressed;
 - (void)handlePS4TouchpadState:(PS4StatePacket_t *)state;
