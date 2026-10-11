@@ -77,8 +77,10 @@
 @property(nonatomic) BOOL isMouseMode;
 @property(nonatomic) int lastMouseModeButtonFlags;
 
-// Motion sensor reports the host asked for (0 = off) and when each was last sent.
-// Guarded by ControllerSupport's stream lock.
+// Motion state is guarded by ControllerSupport's stream lock.
+// Invalidates handlers detached by cleanup, reconfiguration or physical owner reuse.
+@property(nonatomic) NSUInteger motionGeneration;
+// Sensor requests (0 = off) and monotonic callback/delivery times of the last reports.
 @property(nonatomic) unsigned short accelReportRateHz;
 @property(nonatomic) unsigned short gyroReportRateHz;
 @property(nonatomic) NSTimeInterval lastAccelReportTime;

@@ -874,7 +874,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 }
 
 /**
- * Detaches sensor callbacks and clears requested rates under the stream lock on main.
+ * Detaches sensor callbacks, invalidates retained handlers and clears requested rates under
+ * the stream lock on main.
  * Does not emit packets; suspension/removal neutralizes the previous gyro before cleanup.
  * @param controller Physical source whose GameController sensor ownership is released.
  */
@@ -883,6 +884,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     controller.gamepad.motion.valueChangedHandler = nil;
     [_controllerStreamLock lock];
     {
+        controller.motionGeneration++;
         controller.accelReportRateHz = 0;
         controller.gyroReportRateHz = 0;
         controller.lastAccelReportTime = 0;
@@ -953,7 +955,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * touch state and neutralizes active gyro reporting when the context is initialized, then clears
  * delivered-state caches. Resuming republishes physical A/B mouse and touchpad button state,
  * current controller state and deferred removals for slots that remain absent. Motion callbacks
- * remain installed but gate sample delivery. Gate transitions invalidate pending sensor snapshots.
+ * remain installed but gate inline sample delivery; they retain no pending sample snapshots.
  * Call on the main thread for sensor and touch state.
  * @param enabled Whether controller input may be delivered to the current stream.
  */
@@ -1621,10 +1623,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 /**
  * Configures a physical owner's sensors on main using upstream's hardware-validated sample callback.
- * Each sensor keeps its requested rate. Samples are captured at callback time and delivered on main,
- * rejecting paused delivery, snapshots crossing gate transitions, removed/reused owners and stale
- * contexts under the stream lock. Axes, units and rate scheduling follow upstream without filtering;
- * no timer resamples the hardware.
+ * GameController invokes this handler on the device's main handlerQueue, so delivery is inline:
+ * no per-sample dispatch, retained historical samples, drain or timer is needed. Independent sensor
+ * limits use monotonic callback/delivery time (the profile exposes no sensor capture timestamp).
+ * Context and handler generations plus physical slot ownership reject obsolete callbacks under the
+ * stream lock. Axes, units and half-interval scheduling retain upstream's hardware-tested behavior.
  * @param controller Connected physical owner supporting motion.
  * @param motionType Accelerometer or gyro; other values are ignored.
  * @param reportRateHz Requested Hz, or zero to disable the selected sensor.
@@ -1654,6 +1657,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 
     NSUInteger generation = _inputContextGeneration;
+    NSUInteger motionGeneration = ++controller.motionGeneration;
     [_controllerStreamLock unlock];
 
     if (!anyRequested) {
@@ -1666,79 +1670,72 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     __weak Controller *weakController = controller;
     __weak GCController *weakGamepad = controller.gamepad;
     motion.valueChangedHandler = ^(GCMotion *sample) {
-        __strong typeof(weakSelf) samplingSelf = weakSelf;
-        if (samplingSelf == nil) return;
-        [samplingSelf->_controllerStreamLock lock];
-        BOOL deliveryEnabled = samplingSelf->_shouldSendInputEvents;
-        NSUInteger deliveryGeneration = samplingSelf->_controllerDeliveryGeneration;
-        [samplingSelf->_controllerStreamLock unlock];
-        if (!deliveryEnabled) return;
-        // Snapshot on the framework callback, then serialize owner state with main-thread teardown.
-        GCAcceleration acceleration = sample.acceleration;
-        GCRotationRate rotation = sample.rotationRate;
-        BOOL hasRotationRate = sample.hasRotationRate;
-        NSTimeInterval now = [NSProcessInfo processInfo].systemUptime;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            Controller *strongController = weakController;
-            if (strongSelf == nil || strongController == nil) {
-                return;
-            }
-            [strongSelf->_controllerStreamLock lock];
-            PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(strongSelf);
-            // Nothing is sent while controller delivery is paused; the pause itself sends a zero
-            // rotation so the host does not keep turning at the last rate.
-            if (inputCtx == NULL || !LiInputContextIsInitialized(inputCtx) || !strongSelf->_shouldSendInputEvents ||
-                strongSelf->_inputContextGeneration != generation || !strongController.controllerAnnounced ||
-                strongSelf->_controllerDeliveryGeneration != deliveryGeneration ||
-                weakGamepad == nil || strongController.gamepad != weakGamepad ||
-                [strongSelf controllerForRemoteNumber:[strongSelf remoteControllerNumber:strongController]] != strongController) {
-                [strongSelf->_controllerStreamLock unlock];
-                return;
-            }
-
-            // Send at about the rate the host asked for. A sample is due once half the interval has
-            // passed: a DualSense over Bluetooth reports every 7.7 ms with some jitter, and anything
-            // stricter skips samples and sends at an uneven rate.
-            BOOL sendAccel = NO;
-            BOOL sendGyro = NO;
-            {
-                unsigned short accelRate = strongController.accelReportRateHz;
-                if (accelRate > 0 && now - strongController.lastAccelReportTime >= 0.5 / accelRate) {
-                    strongController.lastAccelReportTime = now;
-                    sendAccel = YES;
-                }
-                unsigned short gyroRate = strongController.gyroReportRateHz;
-                if (gyroRate > 0 && now - strongController.lastGyroReportTime >= 0.5 / gyroRate) {
-                    strongController.lastGyroReportTime = now;
-                    sendGyro = YES;
-                }
-            }
-
-            // The protocol wants what SDL reports: acceleration in m/s² as the force holding the
-            // controller up (+g on Y when it lies flat) and rotation in deg/s, on SDL's gamepad axes
-            // (X right, Y out of the face, Z toward the player).
-            // GameController reports both sensors on one right-handed frame with X right, Y toward
-            // the top edge and Z out of the face, acceleration as the direction of gravity in g and
-            // rotation in rad/s. Measured on a DualSense: lying flat reads (0, 0, -1), standing on its
-            // grips reads (0, -1, 0), and integrating the rotation rate on these axes reproduces how
-            // the gravity reading moves. So both vectors take the same change of axes, (x, z, -y),
-            // and the acceleration is negated on top of it.
-            if (sendAccel) {
-                LiSendControllerMotionEventCtx(inputCtx, [strongSelf remoteControllerNumber:strongController], LI_MOTION_TYPE_ACCEL,
-                                               (float)(-acceleration.x * 9.80665),
-                                               (float)(-acceleration.z * 9.80665),
-                                               (float)(acceleration.y * 9.80665));
-            }
-            if (sendGyro && hasRotationRate) {
-                static const double kRadiansToDegrees = 57.29577951308232;
-                LiSendControllerMotionEventCtx(inputCtx, [strongSelf remoteControllerNumber:strongController], LI_MOTION_TYPE_GYRO,
-                                               (float)(rotation.x * kRadiansToDegrees),
-                                               (float)(rotation.z * kRadiansToDegrees),
-                                               (float)(-rotation.y * kRadiansToDegrees));
-            }
+        // assignController: selects main for all device handlers, including GCMotion.
+        // Read the current profile only when a sensor is due; never queue captured samples.
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        Controller *strongController = weakController;
+        if (strongSelf == nil || strongController == nil) {
+            return;
+        }
+        [strongSelf->_controllerStreamLock lock];
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(strongSelf);
+        // Nothing is sent while controller delivery is paused; the pause itself sends a zero
+        // rotation so the host does not keep turning at the last rate.
+        if (inputCtx == NULL || !LiInputContextIsInitialized(inputCtx) || !strongSelf->_shouldSendInputEvents ||
+            strongSelf->_inputContextGeneration != generation || !strongController.controllerAnnounced ||
+            strongController.motionGeneration != motionGeneration ||
+            weakGamepad == nil || strongController.gamepad != weakGamepad ||
+            [strongSelf controllerForRemoteNumber:[strongSelf remoteControllerNumber:strongController]] != strongController) {
             [strongSelf->_controllerStreamLock unlock];
-        });
+            return;
+        }
+
+        NSTimeInterval now = [NSProcessInfo processInfo].systemUptime;
+        // Send at about the rate the host asked for. A sample is due once half the interval has
+        // passed: a DualSense over Bluetooth reports every 7.7 ms with some jitter, and anything
+        // stricter skips samples and sends at an uneven rate.
+        BOOL sendAccel = NO;
+        BOOL sendGyro = NO;
+        {
+            unsigned short accelRate = strongController.accelReportRateHz;
+            if (accelRate > 0 && now - strongController.lastAccelReportTime >= 0.5 / accelRate) {
+                strongController.lastAccelReportTime = now;
+                sendAccel = YES;
+            }
+            unsigned short gyroRate = strongController.gyroReportRateHz;
+            if (gyroRate > 0 && now - strongController.lastGyroReportTime >= 0.5 / gyroRate) {
+                strongController.lastGyroReportTime = now;
+                sendGyro = YES;
+            }
+        }
+
+        GCAcceleration acceleration = sendAccel ? sample.acceleration : (GCAcceleration){0};
+        BOOL hasRotationRate = sendGyro && sample.hasRotationRate;
+        GCRotationRate rotation = hasRotationRate ? sample.rotationRate : (GCRotationRate){0};
+
+        // The protocol wants what SDL reports: acceleration in m/s² as the force holding the
+        // controller up (+g on Y when it lies flat) and rotation in deg/s, on SDL's gamepad axes
+        // (X right, Y out of the face, Z toward the player).
+        // GameController reports both sensors on one right-handed frame with X right, Y toward
+        // the top edge and Z out of the face, acceleration as the direction of gravity in g and
+        // rotation in rad/s. Measured on a DualSense: lying flat reads (0, 0, -1), standing on its
+        // grips reads (0, -1, 0), and integrating the rotation rate on these axes reproduces how
+        // the gravity reading moves. So both vectors take the same change of axes, (x, z, -y),
+        // and the acceleration is negated on top of it.
+        if (sendAccel) {
+            LiSendControllerMotionEventCtx(inputCtx, [strongSelf remoteControllerNumber:strongController], LI_MOTION_TYPE_ACCEL,
+                                           (float)(-acceleration.x * 9.80665),
+                                           (float)(-acceleration.z * 9.80665),
+                                           (float)(acceleration.y * 9.80665));
+        }
+        if (sendGyro && hasRotationRate) {
+            static const double kRadiansToDegrees = 57.29577951308232;
+            LiSendControllerMotionEventCtx(inputCtx, [strongSelf remoteControllerNumber:strongController], LI_MOTION_TYPE_GYRO,
+                                           (float)(rotation.x * kRadiansToDegrees),
+                                           (float)(rotation.z * kRadiansToDegrees),
+                                           (float)(-rotation.y * kRadiansToDegrees));
+        }
+        [strongSelf->_controllerStreamLock unlock];
     };
     motion.sensorsActive = YES;
 }
