@@ -71,6 +71,10 @@ extern NSString * const MLAudioBitstreamErrorStatusKey;
 + (MLAudioBitstreamSupport *)supportForCodecOnDefaultDevice:(int)codec
     NS_SWIFT_NAME(supportOnDefaultDevice(forCodec:));
 
+// The live device a stored UID stands for, or kAudioObjectUnknown when it is gone (or the UID
+// is empty). For the setting that sends the bitstream to a device other than the system output.
++ (AudioDeviceID)deviceForUID:(NSString *)uid NS_SWIFT_NAME(device(forUID:));
+
 // A crash or kill while the device is in an encoded format can leave other
 // apps without working PCM output. start persists the original format and
 // stop clears it; this puts a leftover back. Call at launch and before a

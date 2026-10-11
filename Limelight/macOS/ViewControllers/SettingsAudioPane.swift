@@ -10,6 +10,7 @@ private final class AudioOutputDeviceList: ObservableObject {
   struct Device: Identifiable, Equatable {
     let id: AudioDeviceID
     let name: String
+    let uid: String
   }
 
   @Published private(set) var devices: [Device] = []
@@ -70,6 +71,16 @@ private final class AudioOutputDeviceList: ObservableObject {
     return value?.takeRetainedValue() as String?
   }
 
+  private static func uid(_ device: AudioDeviceID) -> String? {
+    var address = Self.address(kAudioDevicePropertyDeviceUID)
+    var value: Unmanaged<CFString>?
+    var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr else {
+      return nil
+    }
+    return value?.takeRetainedValue() as String?
+  }
+
   private static func hasOutput(_ device: AudioDeviceID) -> Bool {
     var address = Self.address(kAudioDevicePropertyStreams, scope: kAudioDevicePropertyScopeOutput)
     var size: UInt32 = 0
@@ -79,14 +90,21 @@ private final class AudioOutputDeviceList: ObservableObject {
 
   // What the default device accepts as a bitstream, asked once per device change: the hint
   // under Audio Codec is worked out every time the pane is drawn.
-  private var bitstreamSupportByCodec: [Int32: MLAudioBitstreamSupport] = [:]
+  private var bitstreamSupportByCodec: [String: MLAudioBitstreamSupport] = [:]
 
-  func bitstreamSupport(forCodec codec: Int32) -> MLAudioBitstreamSupport {
-    if let known = bitstreamSupportByCodec[codec] {
+  /// What the device Dolby passthrough goes to accepts: the one with this UID, or the system
+  /// output when the UID is empty or its device is gone (the rule the stream follows).
+  func bitstreamSupport(forCodec codec: Int32, deviceUID: String) -> MLAudioBitstreamSupport {
+    let key = "\(codec)|\(deviceUID)"
+    if let known = bitstreamSupportByCodec[key] {
       return known
     }
-    let support = MLAudioBitstreamOutput.supportOnDefaultDevice(forCodec: codec)
-    bitstreamSupportByCodec[codec] = support
+    let device = MLAudioBitstreamOutput.device(forUID: deviceUID)
+    let support =
+      device != AudioDeviceID(kAudioObjectUnknown)
+      ? MLAudioBitstreamOutput.support(forCodec: codec, onDevice: device)
+      : MLAudioBitstreamOutput.supportOnDefaultDevice(forCodec: codec)
+    bitstreamSupportByCodec[key] = support
     return support
   }
 
@@ -115,7 +133,7 @@ private final class AudioOutputDeviceList: ObservableObject {
       guard Self.hasOutput(id), Self.flag(id, kAudioDevicePropertyDeviceIsAlive) == true,
         Self.flag(id, kAudioDevicePropertyIsHidden) != true
       else { return nil }
-      return Device(id: id, name: Self.name(id) ?? "?")
+      return Device(id: id, name: Self.name(id) ?? "?", uid: Self.uid(id) ?? "")
     }
     if found != devices { devices = found }
     // Published even when unchanged: the hints that depend on the device are worked out again.
@@ -148,6 +166,8 @@ struct AudioView: View {
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var microphoneManager = MicrophoneManager.shared
   @StateObject private var outputDevices = AudioOutputDeviceList()
+  // Where Dolby passthrough goes; empty: the system output. See SettingsClass.audioPassthroughDeviceUID.
+  @AppStorage("audioPassthroughDeviceUID") private var passthroughDeviceUID = ""
   @State private var createdAt = DispatchTime.now()
   // The pane comes up in steps: what is on screen first, then the sections below it, each in
   // a turn of its own, so that opening or switching to the pane does not wait for all of it.
@@ -230,6 +250,31 @@ struct AudioView: View {
               .pickerStyle(.menu)
               .controlSize(.small)
               .frame(width: 190, alignment: .trailing)
+            }
+          }
+
+          if dolbyOutputApplies, settingsModel.selectedDolbyOutput != "Decode on This Mac" {
+            AudioCompactRow(title: "Dolby Output Device") {
+              Picker("", selection: $passthroughDeviceUID) {
+                Text(languageManager.localize("Dolby Output Device Follow System")).tag("")
+                ForEach(outputDevices.devices.filter { !$0.uid.isEmpty }) { device in
+                  Text(device.name).tag(device.uid)
+                }
+              }
+              .labelsHidden()
+              .controllerPicker(
+                selection: $passthroughDeviceUID,
+                choices: [(value: "", title: languageManager.localize("Dolby Output Device Follow System"))]
+                  + outputDevices.devices.filter { !$0.uid.isEmpty }.map { (value: $0.uid, title: $0.name) }
+              )
+              .pickerStyle(.menu)
+              .controlSize(.small)
+              .frame(width: 230, alignment: .trailing)
+              .onChange(of: passthroughDeviceUID) { _ in
+                // A running stream starts its output again and tries passthrough on the device.
+                NotificationCenter.default.post(
+                  name: Notification.Name("audioOutputDeviceChosen"), object: nil)
+              }
             }
           }
 
@@ -462,7 +507,19 @@ struct AudioView: View {
     // AC3 / E-AC3 run at a fixed bitrate whatever the channel count.
     let mbps = MLAudioStreamPlan.mbpsText(current.wireKbps)
     if settingsModel.selectedDolbyOutput != "Decode on This Mac" {
-      let support = outputDevices.bitstreamSupport(forCodec: Int32(choice.codecId))
+      let support = outputDevices.bitstreamSupport(
+        forCodec: Int32(choice.codecId), deviceUID: passthroughDeviceUID)
+      if !support.available {
+        // Asked for and not possible: say so, and what to do about it. The usual reason is a
+        // system output taken over by a virtual device.
+        return String(
+          format: languageManager.localize("Audio codec hint passthrough unavailable"),
+          support.deviceName, MLAudioStreamPlan.codecDisplayName(choice.codecId))
+          + " "
+          + String(
+            format: languageManager.localize("Audio codec hint compressed"),
+            MLAudioStreamPlan.codecDisplayName(choice.codecId), mbps)
+      }
       if support.available {
         let dolbyName = languageManager.localize(
           choice == .eac3 ? "Dolby Digital Plus" : "Dolby Digital")

@@ -213,6 +213,8 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 - (void)discardBufferedAudio;
 - (UInt32)bufferedRingFrames;
 - (NSString *)audioPassthroughRejectionReason;
+- (MLAudioBitstreamSupport *)audioPassthroughSupport;
+- (void)noteAudioPassthroughUnavailable;
 - (BOOL)startAudioPassthroughOnOutputQueue;
 - (void)stopAudioPassthroughOnOutputQueue;
 - (void)audioPassthroughLostWithDetail:(NSString *)detail generation:(int32_t)generation;
@@ -249,6 +251,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     BOOL _continuousAudio;
     int _audioRequestedCodec;
     int32_t _audioNoticeSent;
+    int32_t _audioPassthroughNoticeSent;
     // Packet validation counters of the non-Opus paths, touched by the audio decode thread only.
     int _pcmExpectedBytes;
     int _audioRxState;
@@ -3486,6 +3489,9 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
         } else if ([self audioCodecUsesPassthroughPath]) {
             // Not latched: the default device may change before a later attempt.
             Log(LOG_I, @"[audio] Passthrough not used: %@; decoding on this Mac", rejection);
+            if ([rejection containsString:@"does not accept"]) {
+                [self noteAudioPassthroughUnavailable];
+            }
         }
     }
 
@@ -3588,7 +3594,7 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     if (_channelCount > 6) {
         return @"more than 5.1 channels";
     }
-    MLAudioBitstreamSupport *support = [MLAudioBitstreamOutput supportForCodecOnDefaultDevice:_audioCodec];
+    MLAudioBitstreamSupport *support = [self audioPassthroughSupport];
     if (!support.available) {
         return [NSString stringWithFormat:@"%@ does not accept %@", support.deviceName,
                 [MLAudioStreamPlan codecDisplayName:_audioCodec]];
@@ -3596,13 +3602,48 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     return nil;
 }
 
+// The device Dolby passthrough goes to: the one set for it, or the system output. A system
+// output taken over by a virtual device (an equalizer app that routes all sound through its own
+// device) never accepts a bitstream, which is what the separate setting is for.
+static AudioDeviceID MLChosenPassthroughDevice(void)
+{
+    return [MLAudioBitstreamOutput deviceForUID:[SettingsClass audioPassthroughDeviceUID]];
+}
+
+- (MLAudioBitstreamSupport *)audioPassthroughSupport
+{
+    const AudioDeviceID chosen = MLChosenPassthroughDevice();
+    return chosen != kAudioObjectUnknown
+        ? [MLAudioBitstreamOutput supportForCodec:_audioCodec onDevice:chosen]
+        : [MLAudioBitstreamOutput supportForCodecOnDefaultDevice:_audioCodec];
+}
+
+// Once per session: passthrough was asked for and the device does not take it. Otherwise the
+// only sign would be that the receiver shows PCM.
+- (void)noteAudioPassthroughUnavailable
+{
+    if (__atomic_exchange_n(&_audioPassthroughNoticeSent, 1, __ATOMIC_RELAXED) != 0) {
+        return;
+    }
+    NSString *deviceName = [self audioPassthroughSupport].deviceName ?: @"";
+    NSString *codecName = [MLAudioStreamPlan codecDisplayName:_audioCodec];
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(self);
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        if (callbacks != nil && [callbacks respondsToSelector:@selector(audioCodecNotice:)]) {
+            NSString *format = [[LanguageManager shared] localize:@"Dolby passthrough unavailable notice"];
+            [callbacks audioCodecNotice:[NSString stringWithFormat:format, deviceName, codecName]];
+        }
+    });
+}
+
 // Output queue only. YES when the bitstream output is running; on failure the
 // output is torn down by the class itself and passthrough is given up.
 - (BOOL)startAudioPassthroughOnOutputQueue
 {
     const int32_t generation = _audioAttemptGeneration;
+    // kAudioObjectUnknown (nothing set, or the device is gone) follows the system output.
     MLAudioBitstreamOutput *output = [[MLAudioBitstreamOutput alloc] initWithCodec:_audioCodec
-                                                                            device:kAudioObjectUnknown];
+                                                                            device:MLChosenPassthroughDevice()];
     __weak Connection *weakSelf = self;
     // Called on the output's own queue. Only hops to ours: stopping from there
     // would wait on the very callback that is running.

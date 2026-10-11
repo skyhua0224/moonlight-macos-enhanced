@@ -1897,3 +1897,7 @@
 "EQ General Softer Treble" = "Softer Treble";
 "EQ General Softer Treble detail" = "Takes the edge off bright speakers";
 "AV1 Decode software detail" = "This Mac has no AV1 hardware decoder. When AV1 is chosen it is decoded in software (dav1d), which uses more power and may not keep up at high resolutions and frame rates. HDR and 10-bit color still need the hardware decoder.";
+"Dolby Output Device" = "Dolby Output Device";
+"Dolby Output Device Follow System" = "Same as System Output";
+"Audio codec hint passthrough unavailable" = "%1$@ does not accept a %2$@ bitstream, so it is not passed through. If the system output is taken over by a virtual device (an equalizer app such as eqMac), choose the TV or receiver itself under Dolby Output Device.";
+"Dolby passthrough unavailable notice" = "Dolby passthrough is off: %1$@ does not accept %2$@, so the sound is decoded on this Mac. To pass it through, choose the TV or receiver under Settings > Audio > Dolby Output Device.";

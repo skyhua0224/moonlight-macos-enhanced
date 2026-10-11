@@ -589,6 +589,14 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
     return support;
 }
 
++ (AudioDeviceID)deviceForUID:(NSString *)uid {
+    if (uid.length == 0) {
+        return kAudioObjectUnknown;
+    }
+    AudioDeviceID device = MLDeviceForUID(uid);
+    return (device != kAudioObjectUnknown && MLDeviceIsAlive(device)) ? device : kAudioObjectUnknown;
+}
+
 + (MLAudioBitstreamSupport *)supportForCodecOnDefaultDevice:(int)codec {
     return [self supportForCodec:codec onDevice:MLDefaultOutputDeviceID()];
 }

@@ -1952,3 +1952,7 @@
 "EQ General Softer Treble" = "高频柔和";
 "EQ General Softer Treble detail" = "让偏亮的音箱不那么刺";
 "AV1 Decode software detail" = "这台 Mac 没有 AV1 硬件解码。选择 AV1 时使用软件解码（dav1d），更耗电，高分辨率高帧率下可能跟不上。HDR 和 10 位色仍需要硬件解码。";
+"Dolby Output Device" = "杜比输出设备";
+"Dolby Output Device Follow System" = "跟随系统输出";
+"Audio codec hint passthrough unavailable" = "%1$@ 不接受 %2$@ 位流，所以不会直通。如果系统输出被虚拟设备接管（比如 eqMac 这类均衡器应用），请在“杜比输出设备”里直接选择电视或功放。";
+"Dolby passthrough unavailable notice" = "杜比直通未启用：%1$@ 不接受 %2$@，音频改在这台 Mac 上解码。要直通，请在 设置 > 音频 > 杜比输出设备 里选择电视或功放。";
