@@ -191,7 +191,7 @@ public class LanguageManager: NSObject, ObservableObject {
     "Dialogue Clarity": "Dialogue Clarity",
     "Bass Boost": "Bass Boost",
     "Reverb": "Reverb",
-    "Harman Inspired": "Harman Inspired",
+    "Harman Inspired": "Full Bass",
     "Music Warmth": "Music Warmth",
     "Vocal Presence": "Vocal Presence",
     "Air & Detail": "Air & Detail",
@@ -204,7 +204,7 @@ public class LanguageManager: NSObject, ObservableObject {
     "Adds fuller low end for music and cinematic impact without going too muddy.":
       "Adds fuller low end for music and cinematic impact without going too muddy.",
     "A tasteful bass shelf and upper-mid lift inspired by popular headphone targets.":
-      "A tasteful bass shelf and upper-mid lift inspired by popular headphone targets.",
+      "A fuller low end with a slight lift in the upper mids.",
     "Smoother low mids and gentler highs for relaxed long-session listening.":
       "Smoother low mids and gentler highs for relaxed long-session listening.",
     "Lifts vocals and lead instruments for clearer mids and cleaner focus.":
@@ -604,7 +604,7 @@ public class LanguageManager: NSObject, ObservableObject {
     "Dialogue Clarity": "对白清晰",
     "Bass Boost": "低频增强",
     "Reverb": "混响",
-    "Harman Inspired": "哈曼灵感",
+    "Harman Inspired": "低频饱满",
     "Music Warmth": "音乐暖感",
     "Vocal Presence": "人声临场",
     "Air & Detail": "空气感与细节",
@@ -617,7 +617,7 @@ public class LanguageManager: NSObject, ObservableObject {
     "Adds fuller low end for music and cinematic impact without going too muddy.":
       "补足低频量感，更适合音乐和电影，同时尽量避免发闷。",
     "A tasteful bass shelf and upper-mid lift inspired by popular headphone targets.":
-      "参考常见耳机目标曲线，加入克制的低频棚架和上中频提亮。",
+      "低频更饱满，中高频略微提亮。",
     "Smoother low mids and gentler highs for relaxed long-session listening.":
       "让低中频更顺滑、高频更柔和，更适合长时间听音。",
     "Lifts vocals and lead instruments for clearer mids and cleaner focus.":

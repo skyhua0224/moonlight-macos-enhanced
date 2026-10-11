@@ -452,6 +452,9 @@ extension SettingsModel {
     "Headphones",
     "Speakers",
   ]
+  // These are identifiers as well as keys of the names shown: "Harman Inspired" is shown as
+  // Full Bass. It never was the Harman target, which is a target for a headphone's measured
+  // response and not a curve to add; the name kept being read as one.
   static var enhancedAudioPresets: [String] = [
     "Reference",
     "Immersive Gaming",
