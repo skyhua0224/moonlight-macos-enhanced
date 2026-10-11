@@ -202,6 +202,14 @@ static uint32_t ControllerShortcutPhysicalButtons(GCExtendedGamepad *pad) {
         (pad.dpad.left.pressed ? LEFT_FLAG : 0) | (pad.dpad.right.pressed ? RIGHT_FLAG : 0);
 }
 
+/**
+ * Recognizes taps using upstream gesture thresholds and preserves existing mouse-button owners.
+ * Runs on main after a contact snapshot; repeated-tap state retains upstream drag behavior.
+ * @param support Backend providing delivery and shared mouse-button ownership.
+ * @param controller Physical source whose tap history is updated.
+ * @param previousContacts Contact mask before the current snapshot.
+ * @param state Current gesture snapshot, including maximum travel and contact count.
+ */
 static void UpdateControllerTrackpadTap(ControllerSupport *support, Controller *controller,
                                         unsigned previousContacts, ControllerTrackpadGesture state) {
     NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
@@ -223,10 +231,17 @@ static void UpdateControllerTrackpadTap(ControllerSupport *support, Controller *
             !state.scrollMotionStarted &&
             !controller.trackpadPhysicalClickConsumed;
         PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(support);
-        if (tap && support.shouldSendInputEvents && input != NULL) {
+        if (tap && support.shouldSendInputEvents && input != NULL && LiInputContextIsInitialized(input) &&
+            [support controllerOwnsRemoteSlot:controller]) {
             int button = state.maximumContacts == 2 ? BUTTON_RIGHT : BUTTON_LEFT;
-            LiSendMouseButtonEventCtx(input, BUTTON_ACTION_PRESS, button);
-            LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, button);
+            int flag = button == BUTTON_LEFT ? A_FLAG : B_FLAG;
+            int held = controller.lastMouseModeButtonFlags;
+            if (controller.trackpadMouseButton == button) held |= flag;
+            if (!(held & flag)) {
+                int saved = controller.lastMouseModeButtonFlags;
+                [support setMouseButtons:saved | flag trackpadButton:controller.trackpadMouseButton forController:controller];
+                [support setMouseButtons:saved trackpadButton:controller.trackpadMouseButton forController:controller];
+            }
             unsigned finger = previousContacts == 2 ? 1 : 0;
             controller.trackpadLastTapEnded = button == BUTTON_LEFT ? now : 0;
             controller.trackpadLastTapX = state.x[finger];
@@ -729,7 +744,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 /**
  * Gates controller-derived output by physical identity, rejecting removed or unselected pads.
- * OSC delivery is allowed only without a physical owner. Callbacks and timers run on main;
+ * OSC delivery is allowed only without a physical owner. Controller state updates run on main;
  * the dictionary monitor also protects lookup against native feedback callbacks.
  * @param controller Physical source (or the shared on-screen controller).
  * @return Whether this source may alter its remote slot or emulated mouse state.
@@ -747,7 +762,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 /**
  * Applies cached slot-zero sensor rates after owner removal/initial assignment on main.
  * Removal releases the previous owner's remote state before this call. Existing owners and
- * their timers/caches survive unrelated hot-plug; multi-controller configuration is unchanged.
+ * their sensor requests survive unrelated hot-plug; multi-controller configuration is unchanged.
  */
 - (void)refreshSingleControllerMotion {
     if (_multiController) return;
@@ -805,7 +820,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
-/** Stops sensor reporting and detaches the borrowed GameController callback during teardown. */
+/**
+ * Detaches sensor callbacks and clears requested rates under the stream lock on main.
+ * Does not emit packets; suspension/removal neutralizes the previous gyro before cleanup.
+ * @param controller Physical source whose GameController sensor ownership is released.
+ */
 -(void) cleanupControllerMotion:(Controller*)controller
 {
     controller.gamepad.motion.valueChangedHandler = nil;
@@ -824,11 +843,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * Binds the system-controller backend to a stream input context.
  *
  * A changed context clears deferred removals under the stream lock, invalidates each controller's
- * arrival announcement, and stops motion timers. Reassigning the same pointer is a no-op.
+ * arrival announcement, and detaches motion callbacks. Reassigning the same pointer is a no-op.
  * Keeps the connected slot-zero owner in single-controller mode while clearing session sensor
  * rates; unrelated hot-plug must not reinitialize that owner's motion. Multi-controller mode
  * has no shared motion owner. Owner lookup rejects disconnected physical controllers.
- * Pointer invalidation is synchronous under the stream lock; timer/button cleanup is dispatched
+ * Pointer invalidation is synchronous under the stream lock; sensor/button cleanup is dispatched
  * to main during native-thread teardown and rejects superseded generations.
  * @param inputContext Borrowed native input context, or NULL to detach; ownership is not transferred.
  */
@@ -871,8 +890,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  *
  * Pausing releases gamepad, mouse and native touch state and neutralizes active gyro reporting
  * when the context is initialized, then clears delivered-state caches. Resuming republishes
- * current controller state and deferred removals for slots that remain absent. Motion timers
- * remain installed but gate sample delivery. Call on the main thread for timer and touch state.
+ * current controller state and deferred removals for slots that remain absent. Motion callbacks
+ * remain installed but gate sample delivery. Call on the main thread for sensor and touch state.
  * @param enabled Whether controller input may be delivered to the current stream.
  */
 - (void)setShouldSendInputEvents:(BOOL)enabled {
@@ -921,8 +940,6 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         for (Controller *controller in _controllers.allValues) {
             controller.lastMouseModeButtonFlags = 0;
             controller.hasSentGamepadState = NO;
-            controller.lastGyroSample = (GCRotationRate){};
-            controller.lastAccelSample = (GCAcceleration){};
             ResetControllerTrackpadMouseState(controller);
         }
     } else if (!wasEnabled && enabled) {
@@ -1340,8 +1357,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 }
 
 /**
- * Configures independent host sensor rates on the GameController sample callback.
- * Uses upstream's hardware-validated axes, units and sample timing; paused delivery sends no samples.
+ * Queues independent host sensor requests on main, rejecting superseded stream generations.
+ * Cached slot-zero rates follow the persistent owner. Paused delivery still accepts requests;
+ * samples use upstream's hardware-validated axes, units and sample timing.
  * @param controllerNumber Remote controller slot requested by the host.
  * @param motionType Accelerometer or gyro; other values are ignored.
  * @param reportRateHz Requested frequency in Hz, or zero to disable that sensor.
@@ -1377,15 +1395,16 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 /**
  * Configures a physical owner's sensors on main using upstream's hardware-validated sample callback.
- * Each sensor keeps its requested rate. Emission rejects paused delivery, removed owners and stale
- * contexts under the stream lock; axes, units and rate scheduling follow upstream without filtering.
+ * Each sensor keeps its requested rate. Samples are captured at callback time and delivered on main,
+ * rejecting paused delivery, removed/reused owners and stale contexts under the stream lock. Axes,
+ * units and rate scheduling follow upstream without filtering; no timer resamples the hardware.
  * @param controller Connected physical owner supporting motion.
  * @param motionType Accelerometer or gyro; other values are ignored.
  * @param reportRateHz Requested Hz, or zero to disable the selected sensor.
  */
 - (void)configureMotionForController:(Controller *)controller motionType:(uint8_t)motionType reportRateHz:(uint16_t)reportRateHz {
     GCMotion *motion = controller.gamepad.motion;
-    if (motion == nil) {
+    if (motion == nil || ![self controllerOwnsRemoteSlot:controller] || self.controllerMotionMode == 2) {
         return;
     }
 
@@ -1418,67 +1437,73 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
     __weak typeof(self) weakSelf = self;
     __weak Controller *weakController = controller;
+    __weak GCController *weakGamepad = controller.gamepad;
     motion.valueChangedHandler = ^(GCMotion *sample) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        Controller *strongController = weakController;
-        if (strongSelf == nil || strongController == nil) {
-            return;
-        }
-        [strongSelf->_controllerStreamLock lock];
-        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(strongSelf);
-        // Nothing is sent while controller delivery is paused; the pause itself sends a zero
-        // rotation so the host does not keep turning at the last rate.
-        if (inputCtx == NULL || !LiInputContextIsInitialized(inputCtx) || !strongSelf->_shouldSendInputEvents ||
-            strongSelf->_inputContextGeneration != generation || !strongController.controllerAnnounced ||
-            [strongSelf controllerForRemoteNumber:[strongSelf remoteControllerNumber:strongController]] != strongController) {
-            [strongSelf->_controllerStreamLock unlock];
-            return;
-        }
-
-        // Send at about the rate the host asked for. A sample is due once half the interval has
-        // passed: a DualSense over Bluetooth reports every 7.7 ms with some jitter, and anything
-        // stricter skips samples and sends at an uneven rate.
+        // Snapshot on the framework callback, then serialize owner state with main-thread teardown.
+        GCAcceleration acceleration = sample.acceleration;
+        GCRotationRate rotation = sample.rotationRate;
+        BOOL hasRotationRate = sample.hasRotationRate;
         NSTimeInterval now = [NSProcessInfo processInfo].systemUptime;
-        BOOL sendAccel = NO;
-        BOOL sendGyro = NO;
-        {
-            unsigned short accelRate = strongController.accelReportRateHz;
-            if (accelRate > 0 && now - strongController.lastAccelReportTime >= 0.5 / accelRate) {
-                strongController.lastAccelReportTime = now;
-                sendAccel = YES;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            Controller *strongController = weakController;
+            if (strongSelf == nil || strongController == nil) {
+                return;
             }
-            unsigned short gyroRate = strongController.gyroReportRateHz;
-            if (gyroRate > 0 && now - strongController.lastGyroReportTime >= 0.5 / gyroRate) {
-                strongController.lastGyroReportTime = now;
-                sendGyro = YES;
+            [strongSelf->_controllerStreamLock lock];
+            PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(strongSelf);
+            // Nothing is sent while controller delivery is paused; the pause itself sends a zero
+            // rotation so the host does not keep turning at the last rate.
+            if (inputCtx == NULL || !LiInputContextIsInitialized(inputCtx) || !strongSelf->_shouldSendInputEvents ||
+                strongSelf->_inputContextGeneration != generation || !strongController.controllerAnnounced ||
+                weakGamepad == nil || strongController.gamepad != weakGamepad ||
+                [strongSelf controllerForRemoteNumber:[strongSelf remoteControllerNumber:strongController]] != strongController) {
+                [strongSelf->_controllerStreamLock unlock];
+                return;
             }
-        }
 
-        // The protocol wants what SDL reports: acceleration in m/s² as the force holding the
-        // controller up (+g on Y when it lies flat) and rotation in deg/s, on SDL's gamepad axes
-        // (X right, Y out of the face, Z toward the player).
-        // GameController reports both sensors on one right-handed frame with X right, Y toward
-        // the top edge and Z out of the face, acceleration as the direction of gravity in g and
-        // rotation in rad/s. Measured on a DualSense: lying flat reads (0, 0, -1), standing on its
-        // grips reads (0, -1, 0), and integrating the rotation rate on these axes reproduces how
-        // the gravity reading moves. So both vectors take the same change of axes, (x, z, -y),
-        // and the acceleration is negated on top of it.
-        if (sendAccel) {
-            GCAcceleration acceleration = sample.acceleration;
-            LiSendControllerMotionEventCtx(inputCtx, [strongSelf remoteControllerNumber:strongController], LI_MOTION_TYPE_ACCEL,
-                                           (float)(-acceleration.x * 9.80665),
-                                           (float)(-acceleration.z * 9.80665),
-                                           (float)(acceleration.y * 9.80665));
-        }
-        if (sendGyro && sample.hasRotationRate) {
-            static const double kRadiansToDegrees = 57.29577951308232;
-            GCRotationRate rotation = sample.rotationRate;
-            LiSendControllerMotionEventCtx(inputCtx, [strongSelf remoteControllerNumber:strongController], LI_MOTION_TYPE_GYRO,
-                                           (float)(rotation.x * kRadiansToDegrees),
-                                           (float)(rotation.z * kRadiansToDegrees),
-                                           (float)(-rotation.y * kRadiansToDegrees));
-        }
-        [strongSelf->_controllerStreamLock unlock];
+            // Send at about the rate the host asked for. A sample is due once half the interval has
+            // passed: a DualSense over Bluetooth reports every 7.7 ms with some jitter, and anything
+            // stricter skips samples and sends at an uneven rate.
+            BOOL sendAccel = NO;
+            BOOL sendGyro = NO;
+            {
+                unsigned short accelRate = strongController.accelReportRateHz;
+                if (accelRate > 0 && now - strongController.lastAccelReportTime >= 0.5 / accelRate) {
+                    strongController.lastAccelReportTime = now;
+                    sendAccel = YES;
+                }
+                unsigned short gyroRate = strongController.gyroReportRateHz;
+                if (gyroRate > 0 && now - strongController.lastGyroReportTime >= 0.5 / gyroRate) {
+                    strongController.lastGyroReportTime = now;
+                    sendGyro = YES;
+                }
+            }
+
+            // The protocol wants what SDL reports: acceleration in m/s² as the force holding the
+            // controller up (+g on Y when it lies flat) and rotation in deg/s, on SDL's gamepad axes
+            // (X right, Y out of the face, Z toward the player).
+            // GameController reports both sensors on one right-handed frame with X right, Y toward
+            // the top edge and Z out of the face, acceleration as the direction of gravity in g and
+            // rotation in rad/s. Measured on a DualSense: lying flat reads (0, 0, -1), standing on its
+            // grips reads (0, -1, 0), and integrating the rotation rate on these axes reproduces how
+            // the gravity reading moves. So both vectors take the same change of axes, (x, z, -y),
+            // and the acceleration is negated on top of it.
+            if (sendAccel) {
+                LiSendControllerMotionEventCtx(inputCtx, [strongSelf remoteControllerNumber:strongController], LI_MOTION_TYPE_ACCEL,
+                                               (float)(-acceleration.x * 9.80665),
+                                               (float)(-acceleration.z * 9.80665),
+                                               (float)(acceleration.y * 9.80665));
+            }
+            if (sendGyro && hasRotationRate) {
+                static const double kRadiansToDegrees = 57.29577951308232;
+                LiSendControllerMotionEventCtx(inputCtx, [strongSelf remoteControllerNumber:strongController], LI_MOTION_TYPE_GYRO,
+                                               (float)(rotation.x * kRadiansToDegrees),
+                                               (float)(rotation.z * kRadiansToDegrees),
+                                               (float)(-rotation.y * kRadiansToDegrees));
+            }
+            [strongSelf->_controllerStreamLock unlock];
+        });
     };
     motion.sensorsActive = YES;
 }
@@ -2080,23 +2105,22 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                                 dispatch_async(dispatch_get_main_queue(), ^{
                                     if (generation != touchController.trackpadGestureGeneration ||
                                         !self.shouldSendInputEvents ||
+                                        ![self controllerOwnsRemoteSlot:touchController] ||
                                         !ControllerTouchpadUsesMouse(self, touchController)) return;
                                     PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
-                                    if (input == NULL) return;
+                                    if (input == NULL || !LiInputContextIsInitialized(input)) return;
+                                    int click = touchController.trackpadMouseButton;
                                     if (pressed) {
                                         ControllerTrackpadGesture state = touchController.trackpadGesture;
                                         BOOL twoFingers = ControllerTrackpadSecondaryClick(state,
                                             NSProcessInfo.processInfo.systemUptime, touchController.trackpadTouchEnded);
-                                        touchController.trackpadMouseButton = twoFingers ? BUTTON_RIGHT : BUTTON_LEFT;
+                                        click = twoFingers ? BUTTON_RIGHT : BUTTON_LEFT;
                                         Log(LOG_I, @"[controller-touch] Physical click player=%d contacts=%u button=%d",
-                                            touchController.playerIndex, state.contacts, touchController.trackpadMouseButton);
+                                            touchController.playerIndex, state.contacts, click);
                                     }
-                                    int buttonCode = touchController.trackpadMouseButton;
-                                    if (buttonCode == 0) return;
-                                    LiSendMouseButtonEventCtx(input,
-                                        pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, buttonCode);
+                                    [self setMouseButtons:touchController.lastMouseModeButtonFlags
+                                        trackpadButton:pressed ? click : 0 forController:touchController];
                                     if (!pressed) {
-                                        touchController.trackpadMouseButton = 0;
                                         touchController.trackpadClickMovementSuppressedUntil = NSProcessInfo.processInfo.systemUptime + 0.10;
                                     }
                                 });
@@ -2485,10 +2509,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             // Whatever the previous output still holds on the host is let go before the switch.
             for (Controller *controller in me->_controllers.allValues) {
                 if (input && controller.trackpadMouseButton)
-                    LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, controller.trackpadMouseButton);
-                if (input && controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, controller.playerIndex,
+                    [me setMouseButtons:controller.lastMouseModeButtonFlags trackpadButton:0 forController:controller];
+                if (input && [me controllerOwnsRemoteSlot:controller] && controller.primaryTouchActive) LiSendControllerTouchEventCtx(input, [me remoteControllerNumber:controller],
                     LI_TOUCH_EVENT_UP, controller.playerIndex * 2, controller.lastPrimaryTouchX, controller.lastPrimaryTouchY, 0);
-                if (input && controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, controller.playerIndex,
+                if (input && [me controllerOwnsRemoteSlot:controller] && controller.secondaryTouchActive) LiSendControllerTouchEventCtx(input, [me remoteControllerNumber:controller],
                     LI_TOUCH_EVENT_UP, controller.playerIndex * 2 + 1, controller.lastSecondaryTouchX, controller.lastSecondaryTouchY, 0);
                 if (input && (controller.lastButtonFlags & TOUCHPAD_FLAG) != 0) {
                     [me clearButtonFlag:controller flags:TOUCHPAD_FLAG];
@@ -2785,6 +2809,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     }
 }
 
+/**
+ * Toggles only the DS4/DualSense touch surface, retaining ordinary gamepad controls.
+ * Other controllers toggle full mouse emulation. Releases previous touch/mouse state on main.
+ * @param player Physical index selected by the controller shortcut runtime.
+ */
 - (void)toggleControllerMouseModeForPlayer:(unsigned short)player {
     Controller *controller = _controllers[@(player)];
     if (!controller) return;
@@ -2830,6 +2859,12 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     if (controller) { [self evaluateControllerShortcuts:controller]; [self updateFinished:controller]; }
 }
 
+/**
+ * Polls controller mouse emulation and fallback Menu holds on the main run loop.
+ * The configured shortcut runtime takes precedence over legacy hold recognition. Only connected
+ * remote-slot owners emit movement or scrolling through the enabled controller gate.
+ * @param timer Repeating mouse timer; its value is unused.
+ */
 -(void) mouseTimerCallback:(NSTimer*)timer {
     for (Controller *controller in _controllers.allValues) [self evaluateControllerShortcuts:controller];
     if (!self.shouldSendInputEvents || !ControllerInputContext(self)) return;

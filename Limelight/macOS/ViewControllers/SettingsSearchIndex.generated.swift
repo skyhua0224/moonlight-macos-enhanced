@@ -124,6 +124,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "input/Controller/Controller Driver", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Controller Driver", detailKey: nil, keywords: ["HID", "MFi"]),
     SettingsSearchEntry(id: "input/Controller/Controller Count", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Controller Count", detailKey: nil, keywords: ["Single", "Auto"]),
     SettingsSearchEntry(id: "input/Controller/Rumble", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Rumble", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "input/Controller/Background Controller Input", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Background Controller Input", detailKey: "Background Controller Input detail", keywords: []),
     SettingsSearchEntry(id: "input/Controller/Swap Buttons", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Swap Buttons", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "input/Controller/DualSense Touchpad Mode", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "DualSense Touchpad Mode", detailKey: nil, keywords: ["Host Touchpad", "Mac-style Trackpad", "Native Touchpad detail"]),
     SettingsSearchEntry(id: "input/Controller/DualSense Touchpad Output", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "DualSense Touchpad Output", detailKey: nil, keywords: ["DualSense Touchpad Output Controller", "DualSense Touchpad Output Precision", "DualSense Touchpad Output detail"]),

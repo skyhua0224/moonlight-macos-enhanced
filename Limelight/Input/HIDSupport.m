@@ -3465,7 +3465,26 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     // send gamepad packets unless HID owns gamepad input.
     if (self.controllerDriver == 0) [self sendControllerEvent];
 }
-- (void)toggleControllerMouseMode { [self setGamepadMouseModeActive:!self.controller.isMouseMode]; }
+/**
+ * Toggles Sony touchpad output from the shortcut runtime without suppressing gamepad controls.
+ * Other devices toggle full mouse emulation. Runs on main and releases old touch/mouse state.
+ */
+- (void)toggleControllerMouseMode {
+    IOHIDDeviceRef device = [self getFirstDevice];
+    if (device == NULL || !isPlayStation(device)) {
+        [self setGamepadMouseModeActive:!self.controller.isMouseMode];
+        return;
+    }
+    @synchronized (self) {
+        BOOL wasMouse = [self touchpadUsesMouse];
+        [self releaseTrackpadState];
+        self.controller.hasTouchpadModeOverride = YES;
+        self.controller.touchpadMouseMode = !wasMouse;
+        [self sendControllerEvent];
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:HIDMouseModeToggledNotification
+        object:nil userInfo:@{@"enabled": @([self touchpadUsesMouse])}];
+}
 
 
 /**
@@ -3513,7 +3532,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
  * Advances the direct-HID menu hold and toggles the touchpad or legacy mouse mode.
  *
  * Requires the direct driver, hold setting and enabled controller delivery. Sony pads switch
- * only their touch surface; other pads require the legacy mouse setting. Installs a
+ * only their touch surface; other pads use full mouse emulation. Installs a
  * one-shot main-run-loop timer for devices that report only button edges; cancellation clears
  * the timer and a consumed hold removes the menu bit. Call on the main thread.
  */
@@ -3542,17 +3561,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
     if (toggle) {
         self.controller.lastButtonFlags &= ~PLAY_FLAG;
-        if (hasTouchpad) {
-            @synchronized (self) {
-                BOOL wasMouse = [self touchpadUsesMouse];
-                [self releaseTrackpadState];
-                self.controller.hasTouchpadModeOverride = YES;
-                self.controller.touchpadMouseMode = !wasMouse;
-                [self sendControllerEvent];
-            }
-            [[NSNotificationCenter defaultCenter] postNotificationName:HIDMouseModeToggledNotification
-                object:nil userInfo:@{@"enabled": @([self touchpadUsesMouse])}];
-        } else [self setGamepadMouseModeActive:!self.controller.isMouseMode];
+        [self toggleControllerMouseMode];
     }
 }
 
