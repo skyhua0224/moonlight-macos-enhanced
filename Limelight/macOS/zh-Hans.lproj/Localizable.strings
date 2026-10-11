@@ -1926,3 +1926,6 @@
 "Preset EQ bands %d" = "%d 个频段";
 "Preset EQ attribution" = "设备库：%d 款耳机的实测数据，来自 AutoEq 项目（MIT 许可）";
 "EQ Imported Name" = "导入的均衡";
+"EQ Band Details" = "逐个频段";
+"Preset EQ Save As" = "保存为预设…";
+"Preset EQ Saved Note %@" = "已保存为“%@”，在预设 EQ 的“我的预设”里。";

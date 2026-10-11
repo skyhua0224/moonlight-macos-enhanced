@@ -1871,3 +1871,6 @@
 "Preset EQ bands %d" = "%d bands";
 "Preset EQ attribution" = "Library: measurements of %d headphones from the AutoEq project (MIT License)";
 "EQ Imported Name" = "Imported";
+"EQ Band Details" = "Single Bands";
+"Preset EQ Save As" = "Save as Preset…";
+"Preset EQ Saved Note %@" = "Saved as %@. It is under My Presets in Preset EQ.";

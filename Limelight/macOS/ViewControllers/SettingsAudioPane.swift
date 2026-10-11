@@ -148,6 +148,7 @@ struct AudioView: View {
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var microphoneManager = MicrophoneManager.shared
   @StateObject private var outputDevices = AudioOutputDeviceList()
+  @State private var createdAt = DispatchTime.now()
 
   var body: some View {
     SettingsSearchScrollView {
@@ -398,6 +399,11 @@ struct AudioView: View {
       .frame(maxWidth: .infinity, alignment: .center)
     }
     .onDisappear { microphoneManager.stopTest() }
+    .onAppear {
+      let elapsedMs =
+        Double(DispatchTime.now().uptimeNanoseconds &- createdAt.uptimeNanoseconds) / 1e6
+      LogMessage(LOG_I, String(format: "[diag] audio settings pane built in %.0f ms", elapsedMs))
+    }
     .onReceive(NotificationCenter.default.publisher(for: SettingsModel.audioCodecFailureChangedNotification)) { _ in
       settingsModel.reloadAudioCodecFailures()
     }
@@ -658,7 +664,12 @@ private struct AudioEqualizerSection: View {
   @ObservedObject private var languageManager = LanguageManager.shared
   @State private var importNote: String?
   @State private var showsPresetPicker = false
+  @State private var showsSavePreset = false
+  @State private var newPresetName = ""
   @State private var curveDrag: CurveDrag?
+  // The rows of single bands are many controls and the curve does the same job, so they are
+  // only built when asked for.
+  @AppStorage("settings.audio.eqBandDetails") private var showsBandDetails = false
 
   /// What a drag on the curve has changed. While it lasts only this section is drawn again
   /// for every move of the pointer; the settings, and with them the rest of the pane and the
@@ -826,6 +837,18 @@ private struct AudioEqualizerSection: View {
         Button(languageManager.localize("EQ Paste")) {
           applyImport(NSPasteboard.general.string(forType: .string), name: nil)
         }
+        Button(languageManager.localize("Preset EQ Save As")) { showsSavePreset = true }
+          .popover(isPresented: $showsSavePreset, arrowEdge: .bottom) {
+            HStack(spacing: 8) {
+              TextField(languageManager.localize("Preset EQ Name"), text: $newPresetName)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 220)
+                .onSubmit { saveAsPreset() }
+              Button(languageManager.localize("Preset EQ Save")) { saveAsPreset() }
+                .disabled(newPresetName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(12)
+          }
         Spacer()
         Button(languageManager.localize("EQ Reset Bands")) { reset() }
       }
@@ -850,33 +873,51 @@ private struct AudioEqualizerSection: View {
           EnhancedAudioEQ.preampRange.upperBound),
         step: 0.5, suffix: " dB")
 
-      if isParametric {
-        ForEach(shownBands) { band in
-          AudioEQBandRow(band: bandBinding(band.id)) {
-            settingsModel.enhancedAudioEQBands.removeAll { $0.id == band.id }
-          }
-        }
-        HStack {
-          Button(languageManager.localize("EQ Add Band")) {
-            settingsModel.enhancedAudioEQBands.append(
-              EnhancedAudioEQBand(kind: .peak, frequency: 1000, q: 1))
-          }
-          .controlSize(.small)
-          .disabled(settingsModel.enhancedAudioEQBands.count >= EnhancedAudioEQ.maxBands)
+      Button {
+        showsBandDetails.toggle()
+      } label: {
+        HStack(spacing: 6) {
+          Image(systemName: showsBandDetails ? "chevron.down" : "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: 12)
+          Text(languageManager.localize("EQ Band Details"))
           Spacer()
         }
-        .frame(minHeight: 38)
-      } else {
-        ForEach(frequencies, id: \.self) { frequency in
-          SettingsValueSliderRow(title: String(format: "%g Hz", frequency), value: Binding(
-            get: {
-              let gains = shownGains
-              guard let index = frequencies.firstIndex(of: frequency), gains.indices.contains(index) else { return 0 }
-              return CGFloat(gains[index])
-            }, set: { value in
-              curveDrag = nil
-              if let index = frequencies.firstIndex(of: frequency) { settingsModel.setEnhancedAudioEQGain(Double(value), at: index) }
-            }), range: -12...12, step: 0.5, suffix: " dB")
+        .frame(minHeight: 36)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+
+      if showsBandDetails {
+        if isParametric {
+          ForEach(shownBands) { band in
+            AudioEQBandRow(band: bandBinding(band.id)) {
+              settingsModel.enhancedAudioEQBands.removeAll { $0.id == band.id }
+            }
+          }
+          HStack {
+            Button(languageManager.localize("EQ Add Band")) {
+              settingsModel.enhancedAudioEQBands.append(
+                EnhancedAudioEQBand(kind: .peak, frequency: 1000, q: 1))
+            }
+            .controlSize(.small)
+            .disabled(settingsModel.enhancedAudioEQBands.count >= EnhancedAudioEQ.maxBands)
+            Spacer()
+          }
+          .frame(minHeight: 38)
+        } else {
+          ForEach(frequencies, id: \.self) { frequency in
+            SettingsValueSliderRow(title: String(format: "%g Hz", frequency), value: Binding(
+              get: {
+                let gains = shownGains
+                guard let index = frequencies.firstIndex(of: frequency), gains.indices.contains(index) else { return 0 }
+                return CGFloat(gains[index])
+              }, set: { value in
+                curveDrag = nil
+                if let index = frequencies.firstIndex(of: frequency) { settingsModel.setEnhancedAudioEQGain(Double(value), at: index) }
+              }), range: -12...12, step: 0.5, suffix: " dB")
+          }
         }
       }
     }
@@ -889,6 +930,19 @@ private struct AudioEqualizerSection: View {
       return name
     }
     return languageManager.localize("Preset EQ Choose")
+  }
+
+  /// Saves what is playing under the typed name and makes it the chosen preset.
+  private func saveAsPreset() {
+    let name = newPresetName.trimmingCharacters(in: .whitespaces)
+    guard !name.isEmpty else { return }
+    let profile = settingsModel.enhancedAudioEQAsProfile
+    EnhancedAudioEQUserPresets.shared.save(name: name, profile: profile)
+    curveDrag = nil
+    settingsModel.applyImportedEnhancedAudioEQ(profile, name: name)
+    importNote = String(format: languageManager.localize("Preset EQ Saved Note %@"), name)
+    newPresetName = ""
+    showsSavePreset = false
   }
 
   /// Back to a flat equalizer of the kind that is showing.
@@ -1083,10 +1137,8 @@ private struct AudioEQBandRow: View {
       numberField(clamped(\.frequency, EnhancedAudioEQBand.frequencyRange), fraction: 0...1, width: 62)
       Text("Hz").foregroundStyle(.secondary)
 
-      Slider(
-        value: clamped(\.gain, EnhancedAudioEQBand.gainRange), in: EnhancedAudioEQBand.gainRange,
-        step: 0.1
-      )
+      // No step: a stepped slider draws a tick mark for each one, 481 of them here.
+      Slider(value: gainTenths, in: EnhancedAudioEQBand.gainRange)
       .controllerSlider(
         value: clamped(\.gain, EnhancedAudioEQBand.gainRange), in: EnhancedAudioEQBand.gainRange,
         step: 0.5)
@@ -1111,6 +1163,16 @@ private struct AudioEQBandRow: View {
     .overlay(alignment: .bottom) {
       Divider().opacity(0.45)
     }
+  }
+
+  /// The gain in tenths of a decibel.
+  private var gainTenths: Binding<Double> {
+    Binding(
+      get: { band.gain },
+      set: {
+        band.gain = EnhancedAudioEQBand.clamp(
+          ($0 * 10).rounded() / 10, to: EnhancedAudioEQBand.gainRange)
+      })
   }
 
   private func clamped(
