@@ -437,8 +437,8 @@ final class WelcomePermissionsHostingController: NSWindowController, NSWindowDel
     EnhancedAudioSpectrum.shared.setWindowVisible(visible)
     if !visible {
       MicrophoneManager.shared.stopTest()
-      SettingsPaneContainerView.current?.releasePagesNotShowing()
     }
+    SettingsPaneContainerView.current?.windowVisibilityChanged(visible)
   }
 
   @objc class func syncSelectedProfile(hostId: String?) {

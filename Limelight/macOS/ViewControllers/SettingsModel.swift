@@ -873,6 +873,10 @@ class SettingsModel: ObservableObject {
   @Published var enhancedAudioEQPreamp: CGFloat = 0 {
     didSet {
       guard !isLoading, oldValue != enhancedAudioEQPreamp else { return }
+      // The same curve on the other kind of bands is turned up or down with it.
+      if enhancedAudioEQInSync, !isSyncingEnhancedAudioEQ {
+        enhancedAudioEQInactivePreamp += enhancedAudioEQPreamp - oldValue
+      }
       saveEnhancedAudioSettings()
     }
   }
@@ -1852,6 +1856,7 @@ class SettingsModel: ObservableObject {
     DispatchQueue.main.async {
       self.latencyCache[uuid] = userInfo as? [String: Any]
       if self.selectedHost?.id == uuid {
+        self.reloadIfStoreChanged()
         self.announceStatus {
           self.ensureConnectionMethodValid()
           self.objectWillChange.send()
@@ -1867,6 +1872,7 @@ class SettingsModel: ObservableObject {
 
     DispatchQueue.main.async {
       if self.selectedHost?.id == uuid {
+        self.reloadIfStoreChanged()
         self.announceStatus {
           self.ensureConnectionMethodValid()
           self.objectWillChange.send()
@@ -1883,6 +1889,7 @@ class SettingsModel: ObservableObject {
 
     DispatchQueue.main.async {
       if self.selectedHost?.id == uuid {
+        self.reloadIfStoreChanged()
         self.announceStatus {
           self.selectedConnectionMethod = method
           self.ensureConnectionMethodValid()
@@ -1941,8 +1948,17 @@ class SettingsModel: ObservableObject {
   }
 
   func refreshVideoDiagnosticsState() {
-    refreshVideoCapabilityMatrix()
-    refreshVideoRuntimeStatus()
+    announceStatus {
+      refreshVideoCapabilityMatrix()
+      refreshVideoRuntimeStatus()
+    }
+  }
+
+  /// The model outlives the settings window now, and what it holds is written back whole.
+  /// Before something other than the user changes it, a profile that the stream or the
+  /// control center wrote in the meantime is read again.
+  func reloadIfStoreChanged() {
+    if seenStoreGeneration != Settings.storeGeneration { loadSettings() }
   }
 
   func refreshVideoCapabilityMatrix() {
@@ -2023,6 +2039,7 @@ class SettingsModel: ObservableObject {
 
   private var enhancedAudioEQSnapshot: EnhancedAudioEQSnapshot {
     EnhancedAudioEQSnapshot(
+      layout: selectedEnhancedAudioEQLayout, mode: selectedEnhancedAudioEQMode,
       gains: enhancedAudioEQGains, bands: enhancedAudioEQBands, preamp: enhancedAudioEQPreamp,
       inactivePreamp: enhancedAudioEQInactivePreamp, name: enhancedAudioEQProfileName,
       inSync: enhancedAudioEQInSync)
@@ -2030,6 +2047,9 @@ class SettingsModel: ObservableObject {
 
   private func restoreEnhancedAudioEQ(_ snapshot: EnhancedAudioEQSnapshot) {
     isSyncingEnhancedAudioEQ = true
+    // First the layout and kind of bands the values belong to.
+    selectedEnhancedAudioEQLayout = snapshot.layout
+    selectedEnhancedAudioEQMode = snapshot.mode
     enhancedAudioEQGains = snapshot.gains
     enhancedAudioEQBands = snapshot.bands
     enhancedAudioEQPreamp = snapshot.preamp

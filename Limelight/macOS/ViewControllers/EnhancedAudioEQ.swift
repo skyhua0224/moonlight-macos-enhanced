@@ -166,6 +166,8 @@ struct EnhancedAudioExtras: Codable, Equatable {
 
 /// Everything a preset replaces, for taking it off again.
 struct EnhancedAudioEQSnapshot {
+  var layout: String
+  var mode: String
   var gains: [Double]
   var bands: [EnhancedAudioEQBand]
   var preamp: CGFloat

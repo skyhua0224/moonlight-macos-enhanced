@@ -725,7 +725,11 @@ extension SettingsModel {
           frequencies: frequencies, gains: enhancedAudioEQGains,
           widthVersion: extras.eqFixedWidthVersion))
       enhancedAudioEQInSync = false
-      DispatchQueue.main.async { [weak self] in self?.saveEnhancedAudioSettings() }
+      // Written back only into a profile that exists: a host that takes its settings from
+      // the default profile would get one of its own by this, and stop following it.
+      if Settings.persistedSettings(for: selectedHost?.id ?? Self.globalHostId) != nil {
+        DispatchQueue.main.async { [weak self] in self?.saveEnhancedAudioSettings() }
+      }
     }
     enhancedAudioEQBands = extras.eqBands
     enhancedAudioEQProfileName = extras.eqProfileName

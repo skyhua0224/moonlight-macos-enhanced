@@ -173,6 +173,11 @@ struct AudioView: View {
               ForEach(outputDevices.devices.filter { !$0.uid.isEmpty }) { device in
                 Text(device.name).tag(device.uid)
               }
+              if !outputDeviceUID.isEmpty,
+                !outputDevices.devices.contains(where: { $0.uid == outputDeviceUID })
+              {
+                Text(languageManager.localize("Chosen device (not connected)")).tag(outputDeviceUID)
+              }
             }
             .labelsHidden()
             .controllerPicker(
@@ -1047,6 +1052,11 @@ private struct AudioEqualizerSection: View {
     }
     // Read ahead of the first search, which would otherwise wait for it.
     .onAppear { HeadphoneCorrectionLibrary.shared.loadIfNeeded() }
+    .onChange(of: settingsModel.selectedHost?.id) { _ in
+      curveDrag = nil
+      selectedHandle = nil
+      importNote = nil
+    }
   }
 
   /// The controls of the band that was touched on the curve: one row, instead of a row for

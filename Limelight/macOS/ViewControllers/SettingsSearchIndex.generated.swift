@@ -96,7 +96,7 @@ extension SettingsSearchIndex {
 
   static let generatedAudioEntries: [SettingsSearchEntry] = [
     SettingsSearchEntry(id: "audio/pane", pane: .audio, kind: .pane, sectionKey: "Media", titleKey: "Audio & Microphone", detailKey: "Audio settings subtitle", keywords: []),
-    SettingsSearchEntry(id: "audio/Audio/Output Device", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Output Device", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "audio/Audio/Output Device", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Output Device", detailKey: nil, keywords: ["Chosen device (not connected)"]),
     SettingsSearchEntry(id: "audio/Audio/Audio Configuration", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Audio Configuration", detailKey: nil, keywords: ["Stereo", "5.1 surround sound", "7.1 surround sound", "7.1.4 surround sound"]),
     SettingsSearchEntry(id: "audio/Audio/Audio Codec", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Audio Codec", detailKey: nil, keywords: ["Opus", "Lossless (PCM)", "AC3", "E-AC3"]),
     SettingsSearchEntry(id: "audio/Audio/Dolby Output", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Dolby Output", detailKey: nil, keywords: ["Automatic", "Decode on This Mac"]),

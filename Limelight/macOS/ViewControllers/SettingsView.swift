@@ -495,6 +495,20 @@ final class SettingsPaneContainerView: NSView {
     lastSwitch = ProcessInfo.processInfo.systemUptime
   }
 
+  /// The window closed or is about to open. The page that was showing leaves a closed
+  /// window like the others, so that it is told: what it keeps open stops, and it looks at
+  /// things afresh when the window opens.
+  func windowVisibilityChanged(_ visible: Bool) {
+    guard let shown, let page = pages[shown] else { return }
+    if !visible {
+      releasePagesNotShowing()
+      page.removeFromSuperview()
+    } else if page.superview == nil {
+      page.frame = bounds
+      addSubview(page)
+    }
+  }
+
   /// Builds one page that has not been asked for yet, so that it is there when it is.
   /// Returns false when every page exists.
   func prewarmNextPage() -> Bool {

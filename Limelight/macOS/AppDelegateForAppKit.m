@@ -448,6 +448,8 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 - (void)windowWillClose:(NSNotification *)notification {
     if (notification.object == self.preferencesWC.window) {
         // Kept for the next time it is shown; what only matters while it is seen stops.
+        // A text field left in edit is committed now, into the profile it was typed for.
+        [self.preferencesWC.window makeFirstResponder:nil];
         [SettingsWindowObjCBridge settingsWindowVisibilityChanged:NO];
     } else if (notification.object == self.aboutWC.window) {
         self.aboutWC = nil;
