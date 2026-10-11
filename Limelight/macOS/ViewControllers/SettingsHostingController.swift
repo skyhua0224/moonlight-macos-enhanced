@@ -401,8 +401,18 @@ final class WelcomePermissionsHostingController: NSWindowController, NSWindowDel
 
   /// The window that already exists is about to be shown again: select the profile of this
   /// host and read it from the store again.
+  /// The host the window was last asked to show. The window may be built ahead of its first
+  /// use, so its view takes the host from here when it first appears.
+  static var requestedHostId: String?
+
+  /// Makes the file dialog of the equalizer ahead of its first use.
+  @objc class func prewarmImportPanel() {
+    _ = EqualizerImportPanel.shared
+  }
+
   @objc class func prepareSettingsWindowForShowing(hostId: String?) {
     let resolvedHostId = (hostId?.isEmpty == false ? hostId : nil) ?? SettingsModel.globalHostId
+    requestedHostId = resolvedHostId
     UserDefaults.standard.set(resolvedHostId, forKey: "selectedSettingsProfile")
     NotificationCenter.default.post(
       name: Notification.Name("MoonlightSettingsWindowWillShow"), object: nil,

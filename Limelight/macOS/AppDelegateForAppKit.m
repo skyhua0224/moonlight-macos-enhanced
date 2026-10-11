@@ -21,6 +21,7 @@
 #import "TemporaryHost.h"
 #import "Logger.h"
 #import "MLAudioBitstreamOutput.h"
+#import "StreamingSessionManager.h"
 #import "MoonlightEnhanced-Swift.h"
 #import <objc/runtime.h>
 
@@ -32,6 +33,8 @@ typedef enum : NSUInteger {
 
 @interface AppDelegateForAppKit () <NSApplicationDelegate, NSWindowDelegate>
 @property (nonatomic, strong) NSWindowController *preferencesWC;
+@property (nonatomic) BOOL importPanelPrewarmed;
+@property (nonatomic) NSInteger settingsPrewarmChecks;
 @property (nonatomic, strong) NSWindowController *aboutWC;
 @property (nonatomic, strong) NSWindowController *welcomePermissionsWC;
 @property (nonatomic, strong) ControllerNavigation *controllerNavigation;
@@ -94,6 +97,11 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     // format; put it back. Switching a format can take seconds, so not on the main thread.
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         [MLAudioBitstreamOutput restoreLeftoverDeviceFormatIfNeeded];
+    });
+
+    __weak typeof(self) prewarmSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [prewarmSelf prewarmSettingsWhenQuiet];
     });
 
     
@@ -192,14 +200,48 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 // which took more than a second every time it was opened. Shown again, it selects the host's
 // profile and reads it afresh, since the stream and the control center write settings too.
 - (NSWindowController *)preferencesWCWithHostId:(NSString *)hostId {
-    if (_preferencesWC != nil) {
-        [SettingsWindowObjCBridge prepareSettingsWindowForShowingWithHostId:hostId];
-        return _preferencesWC;
+    if (_preferencesWC == nil) {
+        _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindowWithHostId:hostId];
+        _preferencesWC.window.delegate = self;
+    }
+    // Also for a window that was just made: it may have been made ahead, for no host.
+    [SettingsWindowObjCBridge prepareSettingsWindowForShowingWithHostId:hostId];
+    return _preferencesWC;
+}
+
+// Building the settings window takes around two seconds of the main thread the first time, and
+// the equalizer's file dialog one more. Both are done ahead in a quiet moment (nobody at the
+// keyboard or mouse, or the app in the background; never during a stream), one per moment, so
+// that the first click on Settings shows a window that already exists.
+- (void)prewarmSettingsWhenQuiet {
+    const BOOL windowDone = _preferencesWC != nil;
+    if (windowDone && self.importPanelPrewarmed) {
+        return;
+    }
+    if (++self.settingsPrewarmChecks > 400) {
+        return;
     }
 
-    _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindowWithHostId:hostId];
-    _preferencesWC.window.delegate = self;
-    return _preferencesWC;
+    const CFTimeInterval idle = CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateCombinedSessionState, kCGAnyInputEventType);
+    const BOOL quiet = (idle >= 2.0 || !NSApp.isActive) &&
+        [StreamingSessionManager shared].state == StreamingStateIdle &&
+        NSApp.modalWindow == nil;
+    if (quiet) {
+        if (!windowDone) {
+            _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindowWithHostId:nil];
+            _preferencesWC.window.delegate = self;
+            [_preferencesWC.window layoutIfNeeded];
+            [SettingsWindowObjCBridge settingsWindowVisibilityChanged:NO];
+        } else {
+            [SettingsWindowObjCBridge prewarmImportPanel];
+            self.importPanelPrewarmed = YES;
+        }
+    }
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [weakSelf prewarmSettingsWhenQuiet];
+    });
 }
 
 - (void)showPreferencesWindowForHost:(NSString *)hostId {

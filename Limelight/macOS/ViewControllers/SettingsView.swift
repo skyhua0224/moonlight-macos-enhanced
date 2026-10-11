@@ -220,7 +220,8 @@ struct SettingsView: View {
       // SettingsWindowObjCBridge.prepareSettingsWindowForShowing, not from when it was made.
       guard !selectedInitialHost else { return }
       selectedInitialHost = true
-      settingsModel.selectHost(id: hostId ?? SettingsModel.globalHostId)
+      settingsModel.selectHost(
+        id: SettingsWindowObjCBridge.requestedHostId ?? hostId ?? SettingsModel.globalHostId)
     }
   }
 

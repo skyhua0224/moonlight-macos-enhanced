@@ -149,6 +149,10 @@ struct AudioView: View {
   @ObservedObject private var microphoneManager = MicrophoneManager.shared
   @StateObject private var outputDevices = AudioOutputDeviceList()
   @State private var createdAt = DispatchTime.now()
+  // The pane comes up in steps: what is on screen first, then the sections below it, each in
+  // a turn of its own, so that opening or switching to the pane does not wait for all of it.
+  // A search result may be in any section, so with one pending everything is built at once.
+  @State private var loadedSections = SettingsSearchNavigator.shared.request == nil ? 0 : 2
 
   var body: some View {
     SettingsSearchScrollView {
@@ -260,7 +264,7 @@ struct AudioView: View {
         }
 
         // Always shown, so what the enhancement offers can be seen before it is turned on.
-        if !audioEnhancementOn {
+        if loadedSections >= 1, !audioEnhancementOn {
           HStack(spacing: 10) {
             Image(systemName: "wand.and.stars")
               .foregroundStyle(.secondary)
@@ -277,6 +281,7 @@ struct AudioView: View {
           .padding(.horizontal, 2)
         }
 
+        if loadedSections >= 1 {
         Group {
           AudioCompactGroup(title: "Audio Enhancement") {
             AudioCompactRow(title: "Listening Device") {
@@ -330,7 +335,9 @@ struct AudioView: View {
         }
         .disabled(!audioEnhancementOn)
         .opacity(audioEnhancementOn ? 1 : 0.5)
+        }
 
+        if loadedSections >= 2 {
         AudioCompactGroup(title: "Microphone") {
           AudioCompactRow(title: "Enable Microphone") {
             Toggle("", isOn: $settingsModel.enableMicrophone)
@@ -392,6 +399,7 @@ struct AudioView: View {
               .padding(.vertical, 8)
           }
         }
+        }
       }
       .frame(maxWidth: 760, alignment: .leading)
       .padding(.horizontal, 28)
@@ -403,6 +411,7 @@ struct AudioView: View {
       let elapsedMs =
         Double(DispatchTime.now().uptimeNanoseconds &- createdAt.uptimeNanoseconds) / 1e6
       LogMessage(LOG_I, String(format: "[diag] audio settings pane built in %.0f ms", elapsedMs))
+      loadNextSection()
     }
     .onReceive(NotificationCenter.default.publisher(for: SettingsModel.audioCodecFailureChangedNotification)) { _ in
       settingsModel.reloadAudioCodecFailures()
@@ -493,6 +502,14 @@ struct AudioView: View {
       keepChannelsTitle: String(
         format: languageManager.localize("Audio codec conflict keep channels"), layoutName)
     )
+  }
+
+  private func loadNextSection() {
+    guard loadedSections < 2 else { return }
+    DispatchQueue.main.async {
+      loadedSections += 1
+      loadNextSection()
+    }
   }
 
   private var audioEnhancementOn: Bool {
@@ -658,6 +675,19 @@ private struct AudioCompactSliderRow: View {
   }
 }
 
+
+/// The file dialog of the equalizer's Import. Kept, and made ahead of its first use when the
+/// app has a quiet moment: creating an open panel starts a system service, which blocks for
+/// about a second the first time.
+enum EqualizerImportPanel {
+  static let shared: NSOpenPanel = {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.plainText]
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    return panel
+  }()
+}
 
 private struct AudioEqualizerSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
@@ -907,26 +937,27 @@ private struct AudioEqualizerSection: View {
       }
       .buttonStyle(.plain)
 
+      // One line of text per band; its controls are the row under the curve.
       if showsBandDetails {
         if isParametric {
-          ForEach(shownBands) { band in
-            AudioEQBandRow(band: bandBinding(band.id)) {
-              curveDrag = nil
-              selectedHandle = nil
-              settingsModel.enhancedAudioEQBands.removeAll { $0.id == band.id }
-            }
+          ForEach(Array(shownBands.enumerated()), id: \.element.id) { index, band in
+            bandSummaryRow(
+              index: index,
+              title: String(
+                format: "%@  %@ Hz", languageManager.localize(band.kind.titleKey),
+                Self.frequencyText(band.frequency)),
+              detail: band.kind.usesGain
+                ? String(format: "%+.1f dB   Q %.2f", band.gain, band.q)
+                : String(format: "Q %.2f", band.q),
+              enabled: band.enabled)
           }
         } else {
-          ForEach(frequencies, id: \.self) { frequency in
-            SettingsValueSliderRow(title: String(format: "%g Hz", frequency), value: Binding(
-              get: {
-                let gains = shownGains
-                guard let index = frequencies.firstIndex(of: frequency), gains.indices.contains(index) else { return 0 }
-                return CGFloat(gains[index])
-              }, set: { value in
-                curveDrag = nil
-                if let index = frequencies.firstIndex(of: frequency) { settingsModel.setEnhancedAudioEQGain(Double(value), at: index) }
-              }), range: -12...12, step: 0.5, suffix: " dB")
+          ForEach(Array(frequencies.enumerated()), id: \.element) { index, frequency in
+            bandSummaryRow(
+              index: index, title: String(format: "%g Hz", frequency),
+              detail: String(
+                format: "%+.1f dB", shownGains.indices.contains(index) ? shownGains[index] : 0),
+              enabled: true)
           }
         }
       }
@@ -958,6 +989,35 @@ private struct AudioEqualizerSection: View {
           curveDrag = nil
           settingsModel.setEnhancedAudioEQGain(Double(value), at: index)
         }), range: -12...12, step: 0.5, suffix: " dB")
+    }
+  }
+
+  private static func frequencyText(_ frequency: Double) -> String {
+    frequency >= 100 ? String(format: "%.0f", frequency) : String(format: "%g", frequency)
+  }
+
+  private func bandSummaryRow(index: Int, title: String, detail: String, enabled: Bool) -> some View {
+    Button {
+      selectedHandle = index
+    } label: {
+      HStack(spacing: 8) {
+        Circle()
+          .fill(selectedHandle == index ? Color.accentColor : Color.secondary.opacity(0.35))
+          .frame(width: 7, height: 7)
+        Text(verbatim: title)
+        Spacer()
+        Text(verbatim: detail)
+          .monospacedDigit()
+          .foregroundStyle(.secondary)
+      }
+      .frame(minHeight: 28)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .controllerFocusTarget { selectedHandle = index }
+    .opacity(enabled ? 1 : 0.5)
+    .overlay(alignment: .bottom) {
+      Divider().opacity(0.3)
     }
   }
 
@@ -995,18 +1055,8 @@ private struct AudioEqualizerSection: View {
     importNote = nil
   }
 
-  // Kept: creating an open panel starts a system service, which takes about a second the
-  // first time.
-  private static let importPanel: NSOpenPanel = {
-    let panel = NSOpenPanel()
-    panel.allowedContentTypes = [.plainText]
-    panel.allowsMultipleSelection = false
-    panel.canChooseDirectories = false
-    return panel
-  }()
-
   private func importFromFile() {
-    let panel = Self.importPanel
+    let panel = EqualizerImportPanel.shared
     guard panel.runModal() == .OK, let url = panel.url else { return }
     let text =
       (try? String(contentsOf: url, encoding: .utf8))
