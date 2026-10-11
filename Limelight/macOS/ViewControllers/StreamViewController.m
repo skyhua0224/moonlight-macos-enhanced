@@ -1190,7 +1190,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
  * background preference. Deferred mouse uncapture cannot extend controller focus permission.
  * Registers that preference for shared GameController background monitoring until teardown
  * begins, updates both
- * controller gates and logs the decision. A late refresh cannot restore monitoring while
+ * controller gates on every refresh and logs changed decision inputs. A late refresh cannot restore monitoring while
  * stopping. Off-main calls asynchronously reschedule themselves on main.
  */
 - (void)refreshControllerInputSendingState {
@@ -1214,11 +1214,18 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     self.hidSupport.shouldSendControllerEvents = shouldSendControllerInput;
     self.controllerSupport.shouldSendInputEvents = shouldSendControllerInput;
-    Log(LOG_I, @"Controller input state updated: enabled=%d focusedInput=%d background=%d ready=%d",
-        shouldSendControllerInput ? 1 : 0,
-        focusedInputEnabled ? 1 : 0,
-        backgroundInputEnabled ? 1 : 0,
-        streamCanSendInput ? 1 : 0);
+    // The marker records the first refresh even when all four inputs are false.
+    NSUInteger logState = 0x10 | (shouldSendControllerInput ? 0x01 : 0) |
+        (focusedInputEnabled ? 0x02 : 0) | (backgroundInputEnabled ? 0x04 : 0) |
+        (streamCanSendInput ? 0x08 : 0);
+    if (self.controllerInputLogState != logState) {
+        self.controllerInputLogState = logState;
+        Log(LOG_I, @"Controller input state updated: enabled=%d focusedInput=%d background=%d ready=%d",
+            shouldSendControllerInput ? 1 : 0,
+            focusedInputEnabled ? 1 : 0,
+            backgroundInputEnabled ? 1 : 0,
+            streamCanSendInput ? 1 : 0);
+    }
 }
 
 /**

@@ -114,6 +114,18 @@ static void ResetControllerTrackpadMouseState(Controller *controller) {
     controller.trackpadClickMovementSuppressedUntil = 0;
 }
 
+/**
+ * Clears delivered gestures on main while retaining the selected held mechanical mouse button.
+ * Used for suspension, session replacement and route changes; physical removal uses the clearing reset.
+ * @param controller Physical source whose gesture generation must advance without losing click selection.
+ */
+static void ResetControllerTrackpadMouseStatePreservingClick(Controller *controller) {
+    int heldClick = controller.trackpadPhysicalMouseButton;
+    ResetControllerTrackpadMouseState(controller);
+    controller.trackpadPhysicalMouseButton = heldClick;
+}
+
+
 static void LogControllerMappingDiagnostics(Controller *controller,
                                             uint8_t controllerType,
                                             uint32_t supportedButtonFlags,
@@ -190,10 +202,25 @@ static BOOL ControllerTouchpadUsesMouse(ControllerSupport *support, Controller *
         ? controller.touchpadMouseMode : !support.nativeTouchpadEnabled);
 }
 
+/**
+ * Returns the physical Sony touchpad button for a system-controller profile on main.
+ * @param pad Current extended profile; nil and non-Sony profiles are supported.
+ * @return Borrowed button, or nil when the profile has no Sony touchpad button.
+ */
+static GCControllerButtonInput *ControllerTouchpadButton(GCExtendedGamepad *pad) {
+    if ([pad isKindOfClass:GCDualSenseGamepad.class]) return ((GCDualSenseGamepad *)pad).touchpadButton;
+    if ([pad isKindOfClass:GCDualShockGamepad.class]) return ((GCDualShockGamepad *)pad).touchpadButton;
+    return nil;
+}
+
+/**
+ * Samples all physical buttons and analog-trigger shortcut thresholds from a live profile on main.
+ * @param pad Current extended profile; nil produces an empty physical mask.
+ * @return Protocol button mask plus local analog-trigger recognition markers.
+ */
 static uint32_t ControllerShortcutPhysicalButtons(GCExtendedGamepad *pad) {
     if (pad == nil) return 0;
-    GCControllerButtonInput *touch = [pad isKindOfClass:GCDualSenseGamepad.class] ? [(GCDualSenseGamepad *)pad touchpadButton] :
-        ([pad isKindOfClass:GCDualShockGamepad.class] ? [(GCDualShockGamepad *)pad touchpadButton] : nil);
+    GCControllerButtonInput *touch = ControllerTouchpadButton(pad);
     return (touch.pressed ? TOUCHPAD_FLAG : 0) |
         (pad.leftTrigger.value >= 30.0f / 255.0f ? CONTROLLER_SHORTCUT_LEFT_TRIGGER_MARKER : 0) |
         (pad.rightTrigger.value >= 30.0f / 255.0f ? CONTROLLER_SHORTCUT_RIGHT_TRIGGER_MARKER : 0) | (pad.buttonOptions.pressed ? BACK_FLAG : 0) | (pad.buttonMenu.pressed ? PLAY_FLAG : 0) |
@@ -847,9 +874,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     int flags = controller.isMouseMode ?
         ((gamepad.buttonA.pressed && !(consumed & A_FLAG) ? A_FLAG : 0) |
          (gamepad.buttonB.pressed && !(consumed & B_FLAG) ? B_FLAG : 0)) : 0;
-    GCControllerButtonInput *touchButton = nil;
-    if ([gamepad isKindOfClass:GCDualSenseGamepad.class]) touchButton = ((GCDualSenseGamepad *)gamepad).touchpadButton;
-    else if ([gamepad isKindOfClass:GCDualShockGamepad.class]) touchButton = ((GCDualShockGamepad *)gamepad).touchpadButton;
+    GCControllerButtonInput *touchButton = ControllerTouchpadButton(gamepad);
     BOOL pressed = touchButton.pressed && !(consumed & TOUCHPAD_FLAG);
     int click = pressed && ControllerTouchpadUsesMouse(self, controller) && ![_dualSenseTouchpad claimsTouchpad] ?
         controller.trackpadPhysicalMouseButton : 0;
@@ -866,9 +891,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  */
 - (void)synchronizeTouchpadButtonForController:(Controller *)controller {
     GCExtendedGamepad *gamepad = controller.gamepad.extendedGamepad;
-    GCControllerButtonInput *button = nil;
-    if ([gamepad isKindOfClass:GCDualSenseGamepad.class]) button = ((GCDualSenseGamepad *)gamepad).touchpadButton;
-    else if ([gamepad isKindOfClass:GCDualShockGamepad.class]) button = ((GCDualShockGamepad *)gamepad).touchpadButton;
+    GCControllerButtonInput *button = ControllerTouchpadButton(gamepad);
     if (button.pressedChangedHandler) button.pressedChangedHandler(button, button.value, button.pressed);
     [self updateFinished:controller];
 }
@@ -934,9 +957,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             controller.hasHapticsSequence = NO;
             controller.lastAuthoredHapticsTime = 0;
             controller.lastMouseModeButtonFlags = 0;
-            int heldClick = controller.trackpadPhysicalMouseButton;
-            ResetControllerTrackpadMouseState(controller);
-            controller.trackpadPhysicalMouseButton = heldClick;
+            ResetControllerTrackpadMouseStatePreservingClick(controller);
             [self resetDebouncersForController:controller remove:NO];
             [self cleanupControllerMotion:controller];
         }
@@ -1016,9 +1037,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         for (Controller *controller in _controllers.allValues) {
             controller.lastMouseModeButtonFlags = 0;
             controller.hasSentGamepadState = NO;
-            int heldClick = controller.trackpadPhysicalMouseButton;
-            ResetControllerTrackpadMouseState(controller);
-            controller.trackpadPhysicalMouseButton = heldClick;
+            ResetControllerTrackpadMouseStatePreservingClick(controller);
         }
     } else if (!wasEnabled && enabled) {
         for (Controller *controller in _controllers.allValues) {
@@ -1026,9 +1045,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             // Reuse the physical-click path to restore held native/mouse/precision buttons.
             // Native contact positions stay reset; mouse click selection uses the fresh snapshot.
             GCExtendedGamepad *gamepad = controller.gamepad.extendedGamepad;
-            GCControllerButtonInput *touchButton = nil;
-            if ([gamepad isKindOfClass:GCDualSenseGamepad.class]) touchButton = ((GCDualSenseGamepad *)gamepad).touchpadButton;
-            else if ([gamepad isKindOfClass:GCDualShockGamepad.class]) touchButton = ((GCDualShockGamepad *)gamepad).touchpadButton;
+            GCControllerButtonInput *touchButton = ControllerTouchpadButton(gamepad);
             if (touchButton.pressedChangedHandler && [self controllerOwnsRemoteSlot:controller])
                 touchButton.pressedChangedHandler(touchButton, touchButton.value, touchButton.pressed);
             [self updateFinished:controller];
@@ -2722,9 +2739,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     [me updateFinished:controller];
                 }
                 controller.hasTouchpadModeOverride = NO;
-                int heldClick = controller.trackpadPhysicalMouseButton;
-                ResetControllerTrackpadMouseState(controller);
-                controller.trackpadPhysicalMouseButton = heldClick;
+                ResetControllerTrackpadMouseStatePreservingClick(controller);
             }
             me.nativeTouchpadEnabled = native;
             for (Controller *controller in me->_controllers.allValues)
@@ -2761,9 +2776,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     [me clearButtonFlag:controller flags:TOUCHPAD_FLAG];
                     [me updateFinished:controller];
                 }
-                int heldClick = controller.trackpadPhysicalMouseButton;
-                ResetControllerTrackpadMouseState(controller);
-                controller.trackpadPhysicalMouseButton = heldClick;
+                ResetControllerTrackpadMouseStatePreservingClick(controller);
             }
             me->_dualSenseTouchpad.enabled = precision;
             for (Controller *controller in me->_controllers.allValues)
@@ -3098,9 +3111,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 controller.touchpadMouseMode = !wasMouse;
                 controller.hasTouchpadModeOverride = YES;
             } else [self setGamepadMouseModeActive:!controller.isMouseMode forController:controller];
-            int heldClick = controller.trackpadPhysicalMouseButton;
-            ResetControllerTrackpadMouseState(controller);
-            controller.trackpadPhysicalMouseButton = heldClick;
+            ResetControllerTrackpadMouseStatePreservingClick(controller);
             [self synchronizeTouchpadButtonForController:controller];
             [self clearButtonFlag:controller flags:PLAY_FLAG];
             [self updateFinished:controller];

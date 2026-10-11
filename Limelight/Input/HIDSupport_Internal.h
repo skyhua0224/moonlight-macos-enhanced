@@ -40,6 +40,14 @@ typedef struct {
 } PS4GyroMedianFilter;
 
 @interface HIDSupport () <CoreHIDMouseDriverDelegate>
+
+- (void)sendControllerEventWithRouting:(uint64_t)routing;
+- (void)updatePlayStationTouchpadButton:(BOOL)pressed secondaryActive:(BOOL)secondaryActive;
+- (uint64_t)updatePlayStationButtons:(const UInt8 *)buttons hasTouchpad:(BOOL)hasTouchpad
+                  secondaryActive:(BOOL)secondaryActive;
+- (void)handlePlayStationTouchpad:(const UInt8 *)primary secondary:(const UInt8 *)secondary
+                         height:(float)height pressed:(BOOL)pressed routing:(uint64_t)routing;
+
 @property (nonatomic) unsigned short authoredRumbleLow;
 @property (nonatomic) unsigned short authoredRumbleHigh;
 @property (nonatomic) uint32_t authoredRumbleSequence;
