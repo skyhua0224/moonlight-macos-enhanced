@@ -1897,7 +1897,7 @@
 "AV1 Decode software detail" = "This Mac has no AV1 hardware decoder. When AV1 is chosen it is decoded in software (dav1d), which uses more power and may not keep up at high resolutions and frame rates. HDR and 10-bit color still need the hardware decoder.";
 "Preset EQ By Device" = "By Device";
 "Preset EQ By Sound" = "By Sound";
-"Video codec warning AV1 software" = "This Mac has no AV1 hardware decoder, so AV1 is decoded in software: it uses much more power and is meant for up to about 1440p at 120 or 4K at 60 frames per second; 4K at 120 will not keep up. HDR, 10-bit color and 4:4:4 are not available. H.265 is the better choice unless you need AV1.";
+"Video codec warning AV1 software" = "This Mac has no AV1 hardware decoder, so AV1 is decoded in software: it uses much more power and keeps up to about 1080p at 120 or 1440p at 60 frames per second; 4K will not keep up. HDR, 10-bit color and 4:4:4 are not available. H.265 is the better choice unless you need AV1.";
 "Video codec warning HEVC unavailable" = "This Mac has no H.265 hardware decoder. The stream will use H.264, and HDR and 10-bit color are not available.";
 "Output Device Follow System" = "Same as System Output";
 "Output Device hint" = "Where the stream's sound plays. It is only for Moonlight and leaves the system output alone, so an equalizer app that takes the system output over does not get in the way.";

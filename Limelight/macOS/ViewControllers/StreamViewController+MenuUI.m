@@ -2581,7 +2581,7 @@ static NSArray<NSDictionary<NSString *, id> *> *MLAudioOutputDevices(void) {
 // passthrough again). An empty UID is the system output.
 - (void)selectAudioOutputFromMenu:(NSMenuItem *)sender {
     NSString *uid = [sender.representedObject isKindOfClass:[NSString class]] ? sender.representedObject : nil;
-    if (uid == nil || [uid isEqualToString:[SettingsClass audioOutputDeviceUID]]) {
+    if (uid == nil) {
         return;
     }
     [SettingsClass setAudioOutputDeviceUID:uid];

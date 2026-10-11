@@ -174,7 +174,7 @@ extension SettingsModel {
       SettingsClass.audioCodecFailed($0, for: hostId)
     }
     if failed != audioCodecFailedIds { audioCodecFailedIds = failed }
-    let no714 = SettingsClass.surround714Unavailable(for: hostId)
+    let no714 = SettingsClass.surround714UnavailableShown(for: hostId)
     if no714 != surround714Unavailable { surround714Unavailable = no714 }
     let known = UserDefaults.standard.object(
       forKey: Self.foundationHostKeyPrefix + hostId) as? Bool

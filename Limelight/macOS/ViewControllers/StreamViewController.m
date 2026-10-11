@@ -1465,6 +1465,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
     BOOL dolbyVisionUsable = streamConfig.enableHdr &&
         MLAppleDolbyVisionDirectSurfaceAvailable(streamConfig.hdrTargetDisplayID);
+    if (streamConfig.videoCodecPreference == 2 && !av1DecodeSupported) {
+        // AV1 in software is 4:2:0 only; the setting is shown as off there.
+        enableYuv444 = NO;
+    }
     StreamChromaDecision *chromaDecision =
         [StreamChromaDecision resolveWithHdrEnabled:streamConfig.enableHdr
                                videoCodecPreference:streamConfig.videoCodecPreference
@@ -1530,6 +1534,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
         Log(LOG_W, @"[audio] 7.1.4 was not delivered by this host before; asking for 7.1 surround");
         audioConfigSelection = 2;
         surround714Replaced = YES;
+    } else if (audioConfigSelection == 3) {
+        // 7.1.4 is really asked for (first time, or after Retry): the fallback may happen again.
+        self.surroundLayoutFallbackState = 0;
     }
     int audioConfig = AUDIO_CONFIGURATION_STEREO;
     if (audioConfigSelection == 1) {

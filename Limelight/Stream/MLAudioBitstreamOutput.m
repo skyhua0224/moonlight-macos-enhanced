@@ -1107,7 +1107,7 @@ static OSStatus MLBitstreamIOProc(AudioObjectID device,
             event = MLAudioBitstreamEventFormatChanged;
             detail = [NSString stringWithFormat:@"the stream format changed to %@", MLDescribeFormat(&current)];
         }
-    } else if (selector == kAudioHardwarePropertyDefaultOutputDevice) {
+    } else if (selector == kAudioHardwarePropertyDefaultOutputDevice && _followsDefault) {
         // Not "is it still our device": while we hold the device CoreAudio parks the default
         // elsewhere on its own. Only a device nobody expected counts as someone choosing it.
         const AudioDeviceID now = MLDefaultOutputDeviceID();

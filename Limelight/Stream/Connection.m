@@ -298,6 +298,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     int _enhancedAudioOutputTargetConfigured;
     id _enhancedAudioConfigObserver;
     uint64_t _audioDeviceRestartLastMs;       // output queue
+    BOOL _audioDeviceRestartRecheckPending;   // output queue
     int _enhancedAudioPreset;
     CGFloat _enhancedAudioSpatialIntensity;
     CGFloat _enhancedAudioSoundstageWidth;
@@ -784,7 +785,8 @@ static UInt32 MLDefaultOutputTransportType(void) {
     return transportType;
 }
 
-static BOOL MLDefaultOutputLooksLikeHeadphones(NSString *deviceName, UInt32 transportType, int channelCount) {
+// The device says by its name that it is worn on the head.
+static BOOL MLOutputNameSaysHeadphones(NSString *deviceName) {
     NSString *normalized = deviceName.lowercaseString ?: @"";
     NSArray<NSString *> *headphoneHints = @[
         @"airpods", @"headphone", @"headset", @"earbud", @"耳机", @"buds", @"qc ", @"wh-", @"wf-"
@@ -793,6 +795,14 @@ static BOOL MLDefaultOutputLooksLikeHeadphones(NSString *deviceName, UInt32 tran
         if ([normalized containsString:hint]) {
             return YES;
         }
+    }
+    return NO;
+}
+
+static BOOL MLDefaultOutputLooksLikeHeadphones(NSString *deviceName, UInt32 transportType, int channelCount) {
+    NSString *normalized = deviceName.lowercaseString ?: @"";
+    if (MLOutputNameSaysHeadphones(deviceName)) {
+        return YES;
     }
 
     NSArray<NSString *> *speakerHints = @[
@@ -2997,10 +3007,17 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
 // set to something else. A stereo stream has nothing to place and keeps the stereo path.
 - (BOOL)enhancedAudioWantsBinauralForChannelCount:(int)channelCount
 {
-    return !_enhancedAudioBinauralUnavailable &&
-        _enhancedAudioSpatialMode == MLAudioEnhancedSpatialModeAutomatic &&
-        _enhancedAudioOutputTarget == MLAudioEnhancedOutputTargetHeadphones &&
-        (channelCount == 6 || channelCount == 8 || channelCount == 12);
+    if (_enhancedAudioBinauralUnavailable ||
+        _enhancedAudioSpatialMode != MLAudioEnhancedSpatialModeAutomatic ||
+        _enhancedAudioOutputTarget != MLAudioEnhancedOutputTargetHeadphones ||
+        !(channelCount == 6 || channelCount == 8 || channelCount == 12)) {
+        return NO;
+    }
+    // The automatic guess takes any small USB or Bluetooth device for headphones. That will do
+    // for tuning the stereo path, but sound placed around the head is wrong on loudspeakers:
+    // for this the device has to say that it is headphones, or the user.
+    return _enhancedAudioOutputTargetConfigured == MLAudioEnhancedOutputTargetHeadphones ||
+        MLOutputNameSaysHeadphones(MLDefaultOutputDeviceName());
 }
 
 - (BOOL)initializeEnhancedAudioRendererWithOpusConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
@@ -3125,7 +3142,12 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
                 // A device whose clock is not running fails every graph alike.
                 if (binaural && !MLAudioStatusIsDeviceNotRunning(startStatus)) {
                     _enhancedAudioBinauralUnavailable = YES;
-                    return [self initializeEnhancedAudioRendererWithOpusConfig:opusConfig];
+                    if ([self initializeEnhancedAudioRendererWithOpusConfig:opusConfig]) {
+                        return YES;
+                    }
+                    // Stereo failed alike: the device was the reason, not the binaural graph.
+                    _enhancedAudioBinauralUnavailable = NO;
+                    return NO;
                 }
                 _audioOutputStartStatus = startStatus;
                 return NO;
@@ -3437,12 +3459,13 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
         // sinks stop at 7.1 and the host then streams without audio.
         silenceHintKey = @"No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead.";
     }
-    // A host that was asked to keep sending while nothing plays has no reason to send
-    // nothing: there the answer is known after a few seconds, and for 7.1.4 it is
-    // remembered, so that the next stream asks for a layout the host can deliver.
-    const BOOL silenceIsConclusive = _continuousAudio;
+    // A host that was asked to keep sending while nothing plays, and is known to do so
+    // (Foundation Sunshine), has no reason to send nothing: there the answer is known after
+    // a few seconds, and for 7.1.4 it is remembered, so that the next stream asks for a
+    // layout the host can deliver.
+    const BOOL silenceIsConclusive = _continuousAudio && _foundationHost;
     NSString *hostKey = _audioHostKey;
-    if (silenceIsConclusive && _channelCount > 8) {
+    if (silenceIsConclusive && _channelCount > 8 && hostKey.length > 0) {
         silenceHintKey = @"The host is not sending 7.1.4 audio. Switching to 7.1 surround…";
     }
     __atomic_store_n(&_audioAnyPacketSeen, 0, __ATOMIC_RELAXED);
@@ -3480,10 +3503,12 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
         return;
     }
     if (_audioOutputRunning) {
-        // Playing on a device of its own choice that is gone now: start again, on what is there.
-        if (_audioOutputDeviceUID.length > 0 &&
-            [MLAudioBitstreamOutput deviceForUID:_audioOutputDeviceUID] == kAudioObjectUnknown) {
-            [self restartAudioOutputOnOutputQueueForGeneration:generation reason:@"chosen output device removed"];
+        // The device to be on now: the chosen one while it is there, else the system output.
+        // Different from the one in use when the chosen device went away, or came back.
+        NSString *wantedUID = MLChosenOutputDevice() != kAudioObjectUnknown ? [SettingsClass audioOutputDeviceUID] : @"";
+        if (![wantedUID isEqualToString:_audioOutputDeviceUID ?: @""]) {
+            [self restartAudioOutputOnOutputQueueForGeneration:generation
+                                                        reason:wantedUID.length > 0 ? @"chosen output device available" : @"chosen output device removed"];
         }
         return;
     }
@@ -3564,7 +3589,9 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
         } else if ([self audioCodecUsesPassthroughPath]) {
             // Not latched: the default device may change before a later attempt.
             Log(LOG_I, @"[audio] Passthrough not used: %@; decoding on this Mac", rejection);
-            if ([rejection containsString:@"does not accept"]) {
+            // Said for a device that was chosen for the stream; on the system output this is
+            // the ordinary case (speakers, headphones) and was silent before.
+            if ([rejection containsString:@"does not accept"] && _audioOutputDeviceUID.length > 0) {
                 [self noteAudioPassthroughUnavailable];
             }
         }
@@ -3827,6 +3854,20 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     // output may report one more; one restart per second is plenty.
     const uint64_t nowMs = LiGetMillis();
     if (_audioDeviceRestartLastMs != 0 && nowMs - _audioDeviceRestartLastMs < 1000) {
+        // Not forgotten: once the second is over, look whether the output is where it should be.
+        if (!_audioDeviceRestartRecheckPending) {
+            _audioDeviceRestartRecheckPending = YES;
+            __weak Connection *weakSelf = self;
+            const int64_t waitMs = 1000 - (int64_t)(nowMs - _audioDeviceRestartLastMs) + 50;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitMs * NSEC_PER_MSEC), _audioOutputQueue, ^{
+                Connection *strongSelf = weakSelf;
+                if (strongSelf == nil) {
+                    return;
+                }
+                strongSelf->_audioDeviceRestartRecheckPending = NO;
+                [strongSelf audioOutputEnvironmentChangedForGeneration:generation];
+            });
+        }
         return;
     }
     _audioDeviceRestartLastMs = nowMs;

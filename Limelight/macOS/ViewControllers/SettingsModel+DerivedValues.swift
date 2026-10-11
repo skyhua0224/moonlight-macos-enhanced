@@ -1120,7 +1120,8 @@ extension SettingsModel {
       hdrEnabled: hdr,
       videoCodecPreference: Self.getInt(from: selectedVideoCodec, in: Self.videoCodecs),
       dynamicHdrPreference: Self.dynamicHdrPreferenceRawValue(for: selectedDynamicHdrPreference),
-      requestedYUV444: enableYUV444,
+      // AV1 in software is 4:2:0 only, whatever the stored setting says.
+      requestedYUV444: enableYUV444 && !(selectedVideoCodec == "AV1" && !Self.av1HardwareDecodeSupported),
       dolbyVisionUsable: dolbyVisionUsable)
   }
 

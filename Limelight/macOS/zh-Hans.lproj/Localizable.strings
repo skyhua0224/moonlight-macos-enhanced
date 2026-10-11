@@ -1952,7 +1952,7 @@
 "AV1 Decode software detail" = "这台 Mac 没有 AV1 硬件解码。选择 AV1 时使用软件解码（dav1d），更耗电，高分辨率高帧率下可能跟不上。HDR 和 10 位色仍需要硬件解码。";
 "Preset EQ By Device" = "按设备";
 "Preset EQ By Sound" = "按音色";
-"Video codec warning AV1 software" = "这台 Mac 没有 AV1 硬件解码，AV1 会用软件解码：耗电明显更高，大致适用于 1440p 120 帧或 4K 60 帧以内，4K 120 帧跟不上。HDR、10 位色和 4:4:4 不可用。没有特别需要的话建议选 H.265。";
+"Video codec warning AV1 software" = "这台 Mac 没有 AV1 硬件解码，AV1 会用软件解码：耗电明显更高，大致能跟上 1080p 120 帧或 1440p 60 帧，4K 跟不上。HDR、10 位色和 4:4:4 不可用。没有特别需要的话建议选 H.265。";
 "Video codec warning HEVC unavailable" = "这台 Mac 没有 H.265 硬件解码。串流会改用 H.264，HDR 和 10 位色不可用。";
 "Output Device Follow System" = "跟随系统输出";
 "Output Device hint" = "串流声音从哪个设备播放。只对 Moonlight 生效，不改变系统输出，所以不会被接管系统输出的均衡器应用影响。";

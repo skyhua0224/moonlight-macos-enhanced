@@ -1160,9 +1160,28 @@ class SettingsClass: NSObject {
     }
   }
 
+  /// The mark is kept per host, also for hosts that take their settings from the global
+  /// profile: with the global profile showing, it stands for every host.
   @objc(clearSurround714UnavailableForHost:)
   static func clearSurround714Unavailable(for key: String) {
-    UserDefaults.standard.removeObject(forKey: SettingsModel.surround714UnavailableKeyPrefix + key)
+    let defaults = UserDefaults.standard
+    guard key == SettingsModel.globalHostId else {
+      defaults.removeObject(forKey: SettingsModel.surround714UnavailableKeyPrefix + key)
+      return
+    }
+    for stored in surround714UnavailableKeys() { defaults.removeObject(forKey: stored) }
+  }
+
+  static func surround714UnavailableShown(for key: String) -> Bool {
+    key == SettingsModel.globalHostId
+      ? !surround714UnavailableKeys().isEmpty : surround714Unavailable(for: key)
+  }
+
+  private static func surround714UnavailableKeys() -> [String] {
+    UserDefaults.standard.dictionaryRepresentation().keys.filter {
+      $0.hasPrefix(SettingsModel.surround714UnavailableKeyPrefix)
+        && UserDefaults.standard.bool(forKey: $0)
+    }
   }
 
   @objc static func audioConfiguration(for key: String) -> Int {

@@ -249,6 +249,10 @@ cd moonlight-macos-enhanced
 
 curl -L -o xcframeworks.zip "https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip"
 unzip -o xcframeworks.zip -d xcframeworks/
+
+# AV1 软件解码用的 dav1d（需要 meson、ninja、nasm）
+brew install meson ninja nasm
+scripts/build_dav1d.sh
 ```
 
 然后：

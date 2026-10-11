@@ -6201,8 +6201,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     }
     if (!_av1FrameDelayLogged && _av1SoftwareDecoder.frameDelay > 0) {
         _av1FrameDelayLogged = YES;
-        Log(LOG_I, @"[video] AV1 is decoded in software: dav1d %@, %d threads, %d frame(s) at a time (this Mac has no AV1 hardware decoder)",
-            MLAV1SoftwareDecoder.libraryVersion, _av1SoftwareDecoder.threadCount, _av1SoftwareDecoder.frameDelay);
+        Log(LOG_I, @"[video] AV1 is decoded in software: dav1d %@, %d threads (this Mac has no AV1 hardware decoder)",
+            MLAV1SoftwareDecoder.libraryVersion, _av1SoftwareDecoder.threadCount);
     }
 
     if (frame == NULL) {

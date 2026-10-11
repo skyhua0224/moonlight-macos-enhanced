@@ -59,21 +59,13 @@ static void MLDav1dLogNothing(void *cookie, const char *format, va_list argument
     return self;
 }
 
-// How many frames to work on at a time, from how much picture arrives per second. One frame at
-// a time adds no delay but only spreads a single frame over the cores; several at a time decode
-// two to three times as much (measured on an M1 with a 4K stream: 148 pictures a second with
-// one, 282 with two, 363 with four) and show each picture that many frames, less one, later.
-// So: no delay where one frame at a time is enough, and throughput where it is not.
+// One frame at a time, spread over the cores: every picture is asked for right after its data
+// went in, which leaves the decoder nothing to work ahead on. Several frames at a time would
+// decode more per second, but only with the output taken later and drained when the stream
+// goes idle; that is not done here.
 static int MLFrameDelayForStream(int width, int height, int frameRate)
 {
-    const double pixelsPerSecond = (double)width * (double)height * (double)MAX(frameRate, 1);
-    if (pixelsPerSecond <= 1920.0 * 1080.0 * 62.0) {
-        return 1;
-    }
-    if (pixelsPerSecond <= 2560.0 * 1440.0 * 62.0) {
-        return 2;
-    }
-    return 4;
+    return 1;
 }
 
 // Opens the decoder for the stream this first frame belongs to. NO: no decoder (the data has no

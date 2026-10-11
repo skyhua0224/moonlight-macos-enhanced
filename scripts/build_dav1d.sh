@@ -53,8 +53,8 @@ INI
   meson setup "$WORK/build-$arch" "$SRC" --cross-file "$WORK/$arch.ini" \
     --buildtype=release --default-library=static \
     -Denable_tools=false -Denable_tests=false -Denable_examples=false -Denable_docs=false \
-    -Dbitdepths=8,16 >/dev/null
-  ninja -C "$WORK/build-$arch" >/dev/null
+    -Dbitdepths=8,16
+  ninja -C "$WORK/build-$arch"
 done
 
 rm -rf "$OUT"
