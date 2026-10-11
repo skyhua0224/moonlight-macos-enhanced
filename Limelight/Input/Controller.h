@@ -65,6 +65,9 @@
 @property(nonatomic) NSTimeInterval trackpadClickMovementSuppressedUntil;
 @property(nonatomic) BOOL hasSentGamepadState;
 @property(nonatomic) ControllerGamepadState sentGamepadState;
+// Selected mechanical click while physically held; independent of shortcut consumption/output.
+@property(nonatomic) int trackpadPhysicalMouseButton;
+// Delivered aggregate mouse source, cleared on consumption/suspension.
 @property(nonatomic) int trackpadMouseButton;
 
 @property(nonatomic) HapticContext *_Nullable lowFreqMotor;
