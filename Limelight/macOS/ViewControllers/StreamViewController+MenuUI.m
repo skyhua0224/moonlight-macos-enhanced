@@ -2521,17 +2521,6 @@ static UInt32 MLAudioDeviceOutputChannels(AudioDeviceID device) {
     return channels;
 }
 
-// The system default output device: what apps play on, and what the menu-bar sound picker sets.
-static AudioDeviceID MLAudioDefaultOutputDevice(void) {
-    AudioDeviceID device = kAudioObjectUnknown;
-    UInt32 size = sizeof(device);
-    AudioObjectPropertyAddress address = { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
-    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, &size, &device) != noErr) {
-        return kAudioObjectUnknown;
-    }
-    return device;
-}
-
 // Live output devices (output channels, alive, not hidden) as @{ @"id": AudioDeviceID, @"name": NSString }.
 static NSArray<NSDictionary<NSString *, id> *> *MLAudioOutputDevices(void) {
     AudioObjectPropertyAddress address = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
