@@ -727,8 +727,8 @@ private struct AudioEqualizerSection: View {
   private var shownGains: [Double] {
     curveDrag?.gains ?? settingsModel.enhancedAudioEQGains
   }
+  // Also with the equalizer switched off: the curve is then shown dimmed, not flat.
   private var shownFilters: [EnhancedAudioEQ.Filter] {
-    guard settingsModel.enhancedAudioEQEnabled else { return [] }
     return isParametric
       ? EnhancedAudioEQ.parametricFilters(shownBands)
       : EnhancedAudioEQ.graphicFilters(frequencies: frequencies, gains: shownGains)
@@ -754,11 +754,17 @@ private struct AudioEqualizerSection: View {
   }
 
   /// The points of the curve: the free bands move both ways, the fixed ones up and down.
+  /// A point sits on the curve, at its band's frequency. The curve is the sum of all bands,
+  /// so that is not the band's own gain where bands overlap, and a shelf is at half its gain
+  /// at its corner.
   private var curveHandles: [AudioEQCurveView.Handle] {
+    let filters = shownFilters
     if isParametric {
       return shownBands.enumerated().map { index, band in
         AudioEQCurveView.Handle(
           id: index, frequency: band.frequency, gain: band.kind.usesGain ? band.gain : 0,
+          displayGain: EnhancedAudioEQ.response(of: filters, at: band.frequency),
+          gainFactor: band.kind == .peak ? 1 : 2,
           enabled: band.enabled, movesFrequency: true, movesGain: band.kind.usesGain,
           gainLimit: EnhancedAudioEQBand.gainRange.upperBound)
       }
@@ -767,6 +773,7 @@ private struct AudioEqualizerSection: View {
     return frequencies.enumerated().map { index, frequency in
       AudioEQCurveView.Handle(
         id: index, frequency: frequency, gain: gains.indices.contains(index) ? gains[index] : 0,
+        displayGain: EnhancedAudioEQ.response(of: filters, at: frequency), gainFactor: 1,
         enabled: true, movesFrequency: false, movesGain: true, gainLimit: 12)
     }
   }
@@ -1412,7 +1419,12 @@ private struct AudioEQCurveView: View {
   struct Handle: Identifiable, Equatable {
     let id: Int
     var frequency: Double
+    /// The band's own gain.
     var gain: Double
+    /// Where the curve is at the band's frequency: where the point is drawn.
+    var displayGain: Double
+    /// How much the band's gain has to change to move the curve by 1 dB there.
+    var gainFactor: Double
     var enabled: Bool
     /// The fixed bands only move up and down.
     var movesFrequency: Bool
@@ -1458,7 +1470,7 @@ private struct AudioEQCurveView: View {
   private func gainSpan(_ samples: [(frequency: Double, gain: Double)]) -> Double {
     var peak = samples.map { abs($0.gain) }.max() ?? 0
     for handle in handles {
-      peak = max(peak, abs(handle.gain))
+      peak = max(peak, abs(handle.displayGain))
     }
     if peak <= 11.5 { return 12 }
     if peak <= 17.5 { return 18 }
@@ -1502,7 +1514,7 @@ private struct AudioEQCurveView: View {
   }
 
   private func point(_ handle: Handle, _ plot: CGRect, _ span: Double) -> CGPoint {
-    CGPoint(x: x(handle.frequency, plot), y: y(handle.gain, plot, span))
+    CGPoint(x: x(handle.frequency, plot), y: y(handle.displayGain, plot, span))
   }
 
   private func draw(
@@ -1605,9 +1617,11 @@ private struct AudioEQCurveView: View {
         }
         var gain = handle.gain
         if handle.movesGain {
-          let limit = min(active.span, handle.gainLimit)
-          let raw = Double((plot.midY - value.location.y) / (plot.height / 2)) * active.span
-          gain = min(max((raw * 10).rounded() / 10, -limit), limit)
+          // The pointer says where the curve should be; the band changes by what is missing.
+          let pointer = Double((plot.midY - value.location.y) / (plot.height / 2)) * active.span
+          let target = min(max(pointer, -active.span), active.span)
+          let raw = handle.gain + (target - handle.displayGain) * handle.gainFactor
+          gain = min(max((raw * 10).rounded() / 10, -handle.gainLimit), handle.gainLimit)
         }
         if frequency != handle.frequency || gain != handle.gain {
           onMove(id, frequency, gain)
