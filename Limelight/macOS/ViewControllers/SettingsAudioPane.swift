@@ -208,12 +208,7 @@ struct AudioView: View {
             }
           }
 
-          AudioCompactRow(
-            title: "Audio Configuration",
-            hint: settingsModel.surround714Unavailable
-              && settingsModel.selectedAudioConfiguration == "7.1.4 surround sound"
-              ? languageManager.localize("This host sent no 7.1.4 audio last time, so streams use 7.1. Choose 7.1.4 again to retry.") : nil
-          ) {
+          AudioCompactRow(title: "Audio Configuration") {
             Picker("", selection: $settingsModel.selectedAudioConfiguration) {
               ForEach(SettingsModel.audioConfigurations, id: \.self) { value in
                 Text(languageManager.localize(value)).tag(value)
@@ -224,6 +219,15 @@ struct AudioView: View {
             .pickerStyle(.menu)
             .controlSize(.small)
             .frame(width: 190, alignment: .trailing)
+          }
+
+          if settingsModel.surround714Unavailable
+            && settingsModel.selectedAudioConfiguration == "7.1.4 surround sound"
+          {
+            Surround714FallbackRow(
+              message: languageManager.localize("This host sent no 7.1.4 audio last time, so streams use 7.1 surround."),
+              retryTitle: languageManager.localize("Retry 7.1.4"),
+              retry: { settingsModel.retrySurround714() })
           }
 
           AudioCompactRow(title: "Audio Codec", hint: audioCodecHint) {
@@ -634,6 +638,30 @@ private struct AudioCodecConflictRow: View {
         Button(keepChannelsTitle, action: keepChannels)
       }
       .controlSize(.small)
+    }
+    .padding(.vertical, 8)
+    .overlay(alignment: .bottom) {
+      Divider().opacity(0.45)
+    }
+  }
+}
+
+/// Shown under Audio Configuration while streams to this host use 7.1 in place of 7.1.4.
+private struct Surround714FallbackRow: View {
+  let message: String
+  let retryTitle: String
+  let retry: () -> Void
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 6) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundStyle(.orange)
+      Text(message)
+        .font(.caption)
+        .fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: 8)
+      Button(retryTitle, action: retry)
+        .controlSize(.small)
     }
     .padding(.vertical, 8)
     .overlay(alignment: .bottom) {

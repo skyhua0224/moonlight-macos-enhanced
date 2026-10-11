@@ -1338,7 +1338,8 @@
 "No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead." = "还没有收到音频。如果主机正在播放声音，说明主机的音频设备不支持 7.1.4；请改用 7.1 环绕声。";
 "The host is not sending 7.1.4 audio. Switching to 7.1 surround…" = "主机没有送出 7.1.4 音频，正在切换到 7.1 环绕声…";
 "Using 7.1 surround: the host is not sending 7.1.4 audio." = "已改用 7.1 环绕声：主机没有送出 7.1.4 音频。";
-"This host sent no 7.1.4 audio last time, so streams use 7.1. Choose 7.1.4 again to retry." = "这台主机上次没有送出 7.1.4 音频，串流时改用 7.1。重新选择一次 7.1.4 可再试。";
+"This host sent no 7.1.4 audio last time, so streams use 7.1 surround." = "这台主机上次没有送出 7.1.4 音频，串流时改用 7.1 环绕声。";
+"Retry 7.1.4" = "重试 7.1.4";
 "Audio codec fallback: host" = "此主机不是 Foundation Sunshine，因此使用 Opus。";
 "Audio codec fallback: failed" = "此主机上次没有送出这种编码，因此使用 Opus。先选择 Opus 再重新选择该编码即可重试。";
 "The host did not send %@ audio. Audio is muted; Opus will be used next time." = "主机没有发送 %@ 音频，本次已静音，下次将使用 Opus。";

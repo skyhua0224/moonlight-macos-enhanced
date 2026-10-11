@@ -1283,7 +1283,8 @@
 "No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead." = "No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead.";
 "The host is not sending 7.1.4 audio. Switching to 7.1 surround…" = "The host is not sending 7.1.4 audio. Switching to 7.1 surround…";
 "Using 7.1 surround: the host is not sending 7.1.4 audio." = "Using 7.1 surround: the host is not sending 7.1.4 audio.";
-"This host sent no 7.1.4 audio last time, so streams use 7.1. Choose 7.1.4 again to retry." = "This host sent no 7.1.4 audio last time, so streams use 7.1. Choose 7.1.4 again to retry.";
+"This host sent no 7.1.4 audio last time, so streams use 7.1 surround." = "This host sent no 7.1.4 audio last time, so streams use 7.1 surround.";
+"Retry 7.1.4" = "Retry 7.1.4";
 "Audio codec fallback: host" = "This host is not Foundation Sunshine, so Opus is used.";
 "Audio codec fallback: failed" = "This host did not deliver this codec last time, so Opus is used. Choose Opus and then this codec again to retry.";
 "The host did not send %@ audio. Audio is muted; Opus will be used next time." = "The host did not send %@ audio. Audio is muted; Opus will be used next time.";

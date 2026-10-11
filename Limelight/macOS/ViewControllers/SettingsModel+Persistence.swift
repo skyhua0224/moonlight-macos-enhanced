@@ -181,6 +181,12 @@ extension SettingsModel {
     if known != audioHostIsFoundation { audioHostIsFoundation = known }
   }
 
+  /// Forgets that this host had no audio for 7.1.4: the next stream asks for it again.
+  func retrySurround714() {
+    SettingsClass.clearSurround714Unavailable(for: selectedHost?.id ?? Self.globalHostId)
+    if surround714Unavailable { surround714Unavailable = false }
+  }
+
   func clearAudioCodecFailures() {
     let hostId = selectedHost?.id ?? Self.globalHostId
     SettingsClass.clearAudioCodecFailures(for: hostId)
