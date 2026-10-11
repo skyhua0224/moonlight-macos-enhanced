@@ -109,11 +109,14 @@ struct EnhancedAudioExtras: Codable, Equatable {
   var eqPreamp = 0.0
   var eqBands: [EnhancedAudioEQBand] = []
   var eqProfileName: String?
+  var spatialMode = EnhancedAudioSpatialMode.automatic.rawValue
 
   init(
     eqEnabled: Bool = true, eqMode: Int = EnhancedAudioEQ.Mode.graphic.rawValue,
-    eqPreamp: Double = 0, eqBands: [EnhancedAudioEQBand] = [], eqProfileName: String? = nil
+    eqPreamp: Double = 0, eqBands: [EnhancedAudioEQBand] = [], eqProfileName: String? = nil,
+    spatialMode: Int = EnhancedAudioSpatialMode.automatic.rawValue
   ) {
+    self.spatialMode = spatialMode
     self.eqEnabled = eqEnabled
     self.eqMode = eqMode
     self.eqPreamp = EnhancedAudioEQBand.clamp(eqPreamp, to: EnhancedAudioEQ.preampRange)
@@ -122,7 +125,7 @@ struct EnhancedAudioExtras: Codable, Equatable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case eqEnabled, eqMode, eqPreamp, eqBands, eqProfileName
+    case eqEnabled, eqMode, eqPreamp, eqBands, eqProfileName, spatialMode
   }
 
   // Never throws, for the same reason as the band.
@@ -137,7 +140,28 @@ struct EnhancedAudioExtras: Codable, Equatable {
       eqMode: value(Int.self, .eqMode) ?? EnhancedAudioEQ.Mode.graphic.rawValue,
       eqPreamp: value(Double.self, .eqPreamp) ?? 0,
       eqBands: value([EnhancedAudioEQBand].self, .eqBands) ?? [],
-      eqProfileName: value(String.self, .eqProfileName))
+      eqProfileName: value(String.self, .eqProfileName),
+      spatialMode: value(Int.self, .spatialMode) ?? EnhancedAudioSpatialMode.automatic.rawValue)
+  }
+}
+
+/// MLAudioEnhancedSpatialMode in Connection.m.
+enum EnhancedAudioSpatialMode: Int, CaseIterable {
+  /// Surround streams are rendered binaurally for headphones; everything else is widened stereo.
+  case automatic = 0
+  case wideStereo = 1
+  case off = 2
+
+  var title: String {
+    switch self {
+    case .automatic: return "Spatial Audio Automatic"
+    case .wideStereo: return "Spatial Audio Wide Stereo"
+    case .off: return "Spatial Audio Off"
+    }
+  }
+
+  init(title: String) {
+    self = EnhancedAudioSpatialMode.allCases.first(where: { $0.title == title }) ?? .automatic
   }
 }
 

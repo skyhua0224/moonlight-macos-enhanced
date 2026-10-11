@@ -105,6 +105,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "audio/Audio/Volume", pane: .audio, kind: .row, sectionKey: "Audio", titleKey: "Volume", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio Enhancement/Listening Device", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Listening Device", detailKey: nil, keywords: ["Automatic", "Headphones", "Speakers"]),
     SettingsSearchEntry(id: "audio/Audio Enhancement/Preset", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Preset", detailKey: nil, keywords: ["Reference", "Immersive Gaming", "Dialogue Clarity", "Bass Boost", "Harman Inspired", "Music Warmth", "Vocal Presence", "Air & Detail"]),
+    SettingsSearchEntry(id: "audio/Audio Enhancement/Spatial Audio", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Spatial Audio", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio Enhancement/Spatial Intensity", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Spatial Intensity", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio Enhancement/Soundstage Width", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Soundstage Width", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio Enhancement/Reverb", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Reverb", detailKey: nil, keywords: []),

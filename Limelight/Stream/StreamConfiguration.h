@@ -49,6 +49,9 @@
 // The equalizer as the settings resolved it: "enabled", "preamp" (dB), "autoHeadroom" and
 // "bands" (dictionaries of "type" (AVAudioUnitEQFilterType), "frequency", "gain" and "q").
 @property(nonatomic, copy) NSDictionary *enhancedAudioEQState;
+// 0: binaural for headphones on surround streams, widened stereo otherwise; 1: always widened
+// stereo; 2: plain downmix.
+@property(nonatomic) int enhancedAudioSpatialMode;
 @property(nonatomic) BOOL enableHdr;
 @property(nonatomic) BOOL enable10BitSdr;
 @property(nonatomic) int videoRendererMode;

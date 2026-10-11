@@ -84,6 +84,9 @@ static const float kEnhancedRendererOutputGain = 1.08f;
 // The equalizer node is created with this many filters; the ones not in use are bypassed, so
 // the number of bands can change while the stream plays.
 static const NSUInteger kEnhancedEQMaxBands = 32;
+// The binaural renderer gives a front channel about 2 dB at the near ear; this takes it back.
+static const float kEnhancedBinauralInputGain = 0.8f;
+#define ML_ENHANCED_SURROUND_MAX_CHANNELS 12
 
 static int MLResolvedDynamicRangeModeForPreference(BOOL hdrEnabled, int hdrTransferFunction) {
     if (!hdrEnabled) {
@@ -153,6 +156,14 @@ typedef NS_ENUM(NSInteger, MLAudioEnhancedOutputTarget) {
     MLAudioEnhancedOutputTargetAutomatic = 2,
 };
 
+// What the audio enhancement does with the placement of sound.
+typedef NS_ENUM(NSInteger, MLAudioEnhancedSpatialMode) {
+    // Surround streams are rendered binaurally (HRTF) for headphones; everything else is widened stereo.
+    MLAudioEnhancedSpatialModeAutomatic = 0,
+    MLAudioEnhancedSpatialModeWideStereo = 1,
+    MLAudioEnhancedSpatialModeOff = 2,
+};
+
 typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     MLAudioRendererBackendLegacyQueue = 0,
     MLAudioRendererBackendDirect = 1,
@@ -179,6 +190,10 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
  expectedChannels:(UInt32)expectedChannels;
 - (void)renderEnhancedStereoPCMFrames:(UInt32)frameCount
                     toFloatBufferList:(AudioBufferList *)outputData;
+- (void)renderEnhancedSurroundPCMFrames:(UInt32)frameCount
+                      toFloatBufferList:(AudioBufferList *)outputData;
+- (BOOL)enhancedRenderHoldsForFrameCount:(UInt32)frameCount;
+- (BOOL)enhancedAudioWantsBinauralForChannelCount:(int)channelCount;
 - (BOOL)recreateAudioDecoderWithConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
                                 reason:(NSString *)reason;
 - (BOOL)attempt714DecoderTopologyFallbackAfterDecodeError:(int)decodeError;
@@ -285,6 +300,12 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     // only done when the listening target changes.
     NSInteger _enhancedAudioLoadedReverbPreset;
     double _enhancedAudioSampleRate;
+    int _enhancedAudioSpatialMode;
+    // The running engine renders the stream's channels binaurally instead of the stereo downmix.
+    // Output queue.
+    BOOL _enhancedAudioBinauralActive;
+    // Stream channel that feeds each channel of the environment node's layout (-1: none).
+    int _enhancedSurroundChannelMap[ML_ENHANCED_SURROUND_MAX_CHANNELS];
     int _audioDeviceChannelCount;
     int _audioRenderChannelCount;
     MLAudioRendererBackend _audioRendererBackend;
@@ -297,6 +318,9 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     AVAudioSourceNode *_enhancedAudioSourceNode;
     AVAudioUnitReverb *_enhancedAudioReverb;
     AVAudioUnitEQ *_enhancedAudioEQ;
+    AVAudioEnvironmentNode *_enhancedAudioEnvironment;
+    // Last in the chain: equalizer boosts and the binaural sum of many channels can pass full scale.
+    AVAudioUnitEffect *_enhancedAudioLimiter;
     AVAudioConverter *_enhancedDownmixConverter;
     AVAudioPCMBuffer *_enhancedDownmixInputBuffer;
     AVAudioPCMBuffer *_enhancedDownmixOutputBuffer;
@@ -2302,6 +2326,97 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     return (UInt32)entries * (UInt32)_audioSamplesPerFrame - _audioBufferReadFrameOffset;
 }
 
+// Render thread. YES while the enhanced output plays silence to build its cushion; the ring is
+// not read then.
+//
+// Large pulls (seen on DisplayPort output: 2048 frames, twice back to back) leave no
+// slack when the ring is read down to empty on every burst, because the stream only
+// delivers as much as one burst per burst: every small delay then cuts a piece out of
+// the audio. Hold the output until the ring holds two pulls plus 20 ms, then play on;
+// an emptied ring while audio is still arriving builds the cushion again. Small pulls
+// (512 frames) keep reading immediately, as they always did.
+- (BOOL)enhancedRenderHoldsForFrameCount:(UInt32)frameCount
+{
+    if (frameCount > _audioMaxPullFrames) {
+        _audioMaxPullFrames = frameCount;
+    }
+    if (_audioMaxPullFrames <= 1024 || _audioSamplesPerFrame <= 0 || _audioBufferEntries <= 2) {
+        return NO;
+    }
+
+    const UInt32 usableLimit = (UInt32)(_audioBufferEntries - 2) * (UInt32)_audioSamplesPerFrame;
+    const UInt32 wanted = MIN(2 * _audioMaxPullFrames + 960, usableLimit);
+    const UInt32 buffered = [self bufferedRingFrames];
+    const uint64_t lastSampleMs = __atomic_load_n(&_lastAudioSampleMs, __ATOMIC_RELAXED);
+    const BOOL audioArriving = lastSampleMs != 0 && LiGetMillis() - lastSampleMs <= 50;
+
+    if (!_enhancedHoldingForBuffer && buffered == 0 && audioArriving) {
+        _enhancedHoldingForBuffer = YES;
+        _enhancedRebufferCount++;
+    }
+    if (!_enhancedHoldingForBuffer) {
+        return NO;
+    }
+    // A stream that went quiet (the host sends nothing while nothing plays) must
+    // still get its last, shorter than the cushion, sound out.
+    const BOOL streamPaused = lastSampleMs != 0 && !audioArriving;
+    if (buffered >= wanted || (streamPaused && buffered > 0)) {
+        _enhancedHoldingForBuffer = NO;
+        return NO;
+    }
+    return YES;
+}
+
+// Render thread. The binaural path: hands the stream's channels to the environment node, as
+// float and in the channel order of the layout that node was given.
+- (void)renderEnhancedSurroundPCMFrames:(UInt32)frameCount
+                      toFloatBufferList:(AudioBufferList *)outputData
+{
+    if (outputData == NULL || _audioRenderScratchBuffer == NULL) {
+        return;
+    }
+
+    const UInt32 bufferCount = outputData->mNumberBuffers;
+    const BOOL hold = [self enhancedRenderHoldsForFrameCount:frameCount];
+    // The 7.1.4 compatibility decoder only delivers the front channels properly.
+    const BOOL fallbackDecoderActive = _usingAudioFallbackDecoderConfig;
+
+    UInt32 frameOffset = 0;
+    while (frameOffset < frameCount) {
+        const UInt32 chunkFrames = MIN(frameCount - frameOffset, (UInt32)AUDIO_RENDER_SCRATCH_FRAMES);
+        if (!hold) {
+            [self copyPCMFrames:chunkFrames toInterleavedBuffer:_audioRenderScratchBuffer];
+        }
+        for (UInt32 bufferIndex = 0; bufferIndex < bufferCount; bufferIndex++) {
+            float *dst = (float *)outputData->mBuffers[bufferIndex].mData;
+            if (dst == NULL) {
+                continue;
+            }
+            dst += frameOffset;
+            const int srcChannel = bufferIndex < ML_ENHANCED_SURROUND_MAX_CHANNELS
+                ? _enhancedSurroundChannelMap[bufferIndex]
+                : -1;
+            if (hold || srcChannel < 0 || srcChannel >= _channelCount) {
+                memset(dst, 0, chunkFrames * sizeof(float));
+                continue;
+            }
+            float gain = kEnhancedBinauralInputGain / 32768.0f;
+            if (fallbackDecoderActive && srcChannel >= 3) {
+                gain *= (srcChannel == 3) ? 0.35f : 0.05f;
+            }
+            const short *src = _audioRenderScratchBuffer + srcChannel;
+            for (UInt32 frame = 0; frame < chunkFrames; frame++) {
+                dst[frame] = src[frame * _channelCount] * gain;
+            }
+        }
+        frameOffset += chunkFrames;
+    }
+
+    for (UInt32 bufferIndex = 0; bufferIndex < bufferCount; bufferIndex++) {
+        outputData->mBuffers[bufferIndex].mDataByteSize = frameCount * sizeof(float);
+    }
+}
+
 - (void)renderEnhancedStereoPCMFrames:(UInt32)frameCount
                     toFloatBufferList:(AudioBufferList *)outputData
 {
@@ -2319,52 +2434,25 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
         return;
     }
 
-    if (frameCount > _audioMaxPullFrames) {
-        _audioMaxPullFrames = frameCount;
-    }
-
-    // Large pulls (seen on DisplayPort output: 2048 frames, twice back to back) leave no
-    // slack when the ring is read down to empty on every burst, because the stream only
-    // delivers as much as one burst per burst: every small delay then cuts a piece out of
-    // the audio. Hold the output until the ring holds two pulls plus 20 ms, then play on;
-    // an emptied ring while audio is still arriving builds the cushion again. Small pulls
-    // (512 frames) keep reading immediately, as they always did.
-    if (_audioMaxPullFrames > 1024 && _audioSamplesPerFrame > 0 && _audioBufferEntries > 2) {
-        const UInt32 usableLimit = (UInt32)(_audioBufferEntries - 2) * (UInt32)_audioSamplesPerFrame;
-        const UInt32 wanted = MIN(2 * _audioMaxPullFrames + 960, usableLimit);
-        const UInt32 buffered = [self bufferedRingFrames];
-        const uint64_t lastSampleMs = __atomic_load_n(&_lastAudioSampleMs, __ATOMIC_RELAXED);
-        const BOOL audioArriving = lastSampleMs != 0 && LiGetMillis() - lastSampleMs <= 50;
-
-        if (!_enhancedHoldingForBuffer && buffered == 0 && audioArriving) {
-            _enhancedHoldingForBuffer = YES;
-            _enhancedRebufferCount++;
+    if ([self enhancedRenderHoldsForFrameCount:frameCount]) {
+        if (interleaved) {
+            memset(interleavedDst, 0, frameCount * 2 * sizeof(float));
+            outputData->mBuffers[0].mDataByteSize = frameCount * 2 * sizeof(float);
+        } else {
+            memset(leftDst, 0, frameCount * sizeof(float));
+            memset(rightDst, 0, frameCount * sizeof(float));
+            outputData->mBuffers[0].mDataByteSize = frameCount * sizeof(float);
+            outputData->mBuffers[1].mDataByteSize = frameCount * sizeof(float);
         }
-        if (_enhancedHoldingForBuffer) {
-            // A stream that went quiet (the host sends nothing while nothing plays) must
-            // still get its last, shorter than the cushion, sound out.
-            const BOOL streamPaused = lastSampleMs != 0 && !audioArriving;
-            if (buffered >= wanted || (streamPaused && buffered > 0)) {
-                _enhancedHoldingForBuffer = NO;
-            } else {
-                if (interleaved) {
-                    memset(interleavedDst, 0, frameCount * 2 * sizeof(float));
-                    outputData->mBuffers[0].mDataByteSize = frameCount * 2 * sizeof(float);
-                } else {
-                    memset(leftDst, 0, frameCount * sizeof(float));
-                    memset(rightDst, 0, frameCount * sizeof(float));
-                    outputData->mBuffers[0].mDataByteSize = frameCount * sizeof(float);
-                    outputData->mBuffers[1].mDataByteSize = frameCount * sizeof(float);
-                }
-                return;
-            }
-        }
+        return;
     }
 
     const BOOL headphones = _enhancedAudioOutputTarget == MLAudioEnhancedOutputTargetHeadphones;
     const BOOL fallbackDecoderActive = _usingAudioFallbackDecoderConfig;
-    const float spatial = MAX(0.0f, MIN(1.0f, (float)_enhancedAudioSpatialIntensity));
-    const float width = MAX(0.0f, MIN(1.0f, (float)_enhancedAudioSoundstageWidth));
+    // Spatial audio off is the same downmix without the widening.
+    const BOOL spatialOff = _enhancedAudioSpatialMode == MLAudioEnhancedSpatialModeOff;
+    const float spatial = spatialOff ? 0.0f : MAX(0.0f, MIN(1.0f, (float)_enhancedAudioSpatialIntensity));
+    const float width = spatialOff ? 0.0f : MAX(0.0f, MIN(1.0f, (float)_enhancedAudioSoundstageWidth));
     const float centerGain = headphones ? (0.84f - (width * 0.05f)) : (0.86f - (width * 0.04f));
     const float lfeGain = fallbackDecoderActive ? 0.03f : (headphones ? 0.08f : 0.12f);
     const float sideSame = fallbackDecoderActive ? 0.02f : (0.22f + (spatial * 0.28f));
@@ -2599,6 +2687,7 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
     const CGFloat width = [SettingsClass enhancedAudioSoundstageWidthFor:uuid];
     const CGFloat reverb = [SettingsClass enhancedAudioReverbAmountFor:uuid];
     NSDictionary *eqState = [SettingsClass enhancedAudioEQStateFor:uuid];
+    const int spatialMode = (int)[SettingsClass enhancedAudioSpatialModeFor:uuid];
     __weak Connection *weakSelf = self;
     dispatch_async(queue, ^{
         Connection *strongSelf = weakSelf;
@@ -2617,6 +2706,15 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
         strongSelf->_enhancedAudioSoundstageWidth = width;
         strongSelf->_enhancedAudioReverbAmount = reverb;
         strongSelf->_enhancedAudioEQState = eqState;
+        strongSelf->_enhancedAudioSpatialMode = spatialMode;
+        // Binaural and stereo rendering are different graphs: changing between them starts the
+        // output again, like a change of the output device does.
+        if (strongSelf->_enhancedAudioEngine != nil &&
+            strongSelf->_enhancedAudioBinauralActive != [strongSelf enhancedAudioWantsBinauralForChannelCount:strongSelf->_channelCount]) {
+            const int32_t generation = __atomic_load_n(&strongSelf->_audioOutputGeneration, __ATOMIC_SEQ_CST);
+            [strongSelf restartAudioOutputOnOutputQueueForGeneration:generation reason:@"spatial rendering change"];
+            return;
+        }
         [strongSelf configureEnhancedAudioUnits];
     });
 }
@@ -2802,6 +2900,15 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
     return NO;
 }
 
+// Output queue. Surround streams are rendered binaurally for headphones, unless spatial audio is
+// set to something else. A stereo stream has nothing to place and keeps the stereo path.
+- (BOOL)enhancedAudioWantsBinauralForChannelCount:(int)channelCount
+{
+    return _enhancedAudioSpatialMode == MLAudioEnhancedSpatialModeAutomatic &&
+        _enhancedAudioOutputTarget == MLAudioEnhancedOutputTargetHeadphones &&
+        (channelCount == 6 || channelCount == 8 || channelCount == 12);
+}
+
 - (BOOL)initializeEnhancedAudioRendererWithOpusConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
 {
     if (opusConfig == NULL) {
@@ -2809,11 +2916,35 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
     }
 
     if (@available(macOS 10.15, *)) {
-        AVAudioFormat *sourceFormat = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:opusConfig->sampleRate
-                                                                                     channels:2];
         AVAudioFormat *renderFormat = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:opusConfig->sampleRate
                                                                                      channels:2];
-        [self prepareEnhancedDownmixConverterWithOpusConfig:opusConfig];
+        // Binaural: the source hands every channel of the stream to an environment node, which
+        // places them around the listener (HRTF). Otherwise the source downmixes to stereo itself.
+        AVAudioFormat *surroundFormat = nil;
+        if ([self enhancedAudioWantsBinauralForChannelCount:opusConfig->channelCount]) {
+            AVAudioChannelLayout *surroundLayout = MLCreateAVAudioChannelLayout(opusConfig->channelCount);
+            if (surroundLayout != nil) {
+                surroundFormat = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:opusConfig->sampleRate
+                                                                           channelLayout:surroundLayout];
+            }
+        }
+        const BOOL binaural = surroundFormat != nil;
+        AVAudioFormat *sourceFormat = binaural ? surroundFormat : renderFormat;
+        if (binaural) {
+            // The stream is FL FR C LFE BL BR SL SR (+ four top channels); the 7.1 and 7.1.4
+            // layouts used here have the side pair before the back pair.
+            for (int i = 0; i < ML_ENHANCED_SURROUND_MAX_CHANNELS; i++) {
+                _enhancedSurroundChannelMap[i] = i < opusConfig->channelCount ? i : -1;
+            }
+            if (opusConfig->channelCount >= 8) {
+                _enhancedSurroundChannelMap[4] = 6;
+                _enhancedSurroundChannelMap[5] = 7;
+                _enhancedSurroundChannelMap[6] = 4;
+                _enhancedSurroundChannelMap[7] = 5;
+            }
+        } else {
+            [self prepareEnhancedDownmixConverterWithOpusConfig:opusConfig];
+        }
         __weak Connection *weakSelf = self;
         _enhancedAudioSourceNode = [[AVAudioSourceNode alloc] initWithFormat:sourceFormat renderBlock:^OSStatus(BOOL * _Nonnull isSilence,
                                                                                                                 const AudioTimeStamp * _Nonnull timestamp,
@@ -2824,8 +2955,13 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
                 return noErr;
             }
 
-            [strongSelf renderEnhancedStereoPCMFrames:frameCount
-                                    toFloatBufferList:outputData];
+            if (binaural) {
+                [strongSelf renderEnhancedSurroundPCMFrames:frameCount
+                                          toFloatBufferList:outputData];
+            } else {
+                [strongSelf renderEnhancedStereoPCMFrames:frameCount
+                                        toFloatBufferList:outputData];
+            }
             *isSilence = NO;
             return noErr;
         }];
@@ -2836,13 +2972,35 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
         _enhancedAudioEQ = [[AVAudioUnitEQ alloc] initWithNumberOfBands:(uint32_t)kEnhancedEQMaxBands];
         _enhancedAudioSampleRate = opusConfig->sampleRate;
 
+        AudioComponentDescription limiterDescription = {0};
+        limiterDescription.componentType = kAudioUnitType_Effect;
+        limiterDescription.componentSubType = kAudioUnitSubType_PeakLimiter;
+        limiterDescription.componentManufacturer = kAudioUnitManufacturer_Apple;
+        _enhancedAudioLimiter = [[AVAudioUnitEffect alloc] initWithAudioComponentDescription:limiterDescription];
+
         [_enhancedAudioEngine attachNode:_enhancedAudioSourceNode];
         [_enhancedAudioEngine attachNode:_enhancedAudioReverb];
         [_enhancedAudioEngine attachNode:_enhancedAudioEQ];
+        [_enhancedAudioEngine attachNode:_enhancedAudioLimiter];
 
-        [_enhancedAudioEngine connect:_enhancedAudioSourceNode to:_enhancedAudioReverb format:sourceFormat];
+        if (binaural) {
+            _enhancedAudioEnvironment = [[AVAudioEnvironmentNode alloc] init];
+            [_enhancedAudioEngine attachNode:_enhancedAudioEnvironment];
+            [_enhancedAudioEngine connect:_enhancedAudioSourceNode to:_enhancedAudioEnvironment format:sourceFormat];
+            [_enhancedAudioEngine connect:_enhancedAudioEnvironment to:_enhancedAudioReverb format:renderFormat];
+            // Headphones whatever the device looks like: the listening device setting decides.
+            _enhancedAudioEnvironment.outputType = AVAudioEnvironmentOutputTypeHeadphones;
+            // A bed: every channel is a far source at its place in the layout, not one point.
+            _enhancedAudioSourceNode.sourceMode = AVAudio3DMixingSourceModeAmbienceBed;
+            _enhancedAudioSourceNode.renderingAlgorithm = AVAudio3DMixingRenderingAlgorithmAuto;
+        } else {
+            [_enhancedAudioEngine connect:_enhancedAudioSourceNode to:_enhancedAudioReverb format:sourceFormat];
+        }
         [_enhancedAudioEngine connect:_enhancedAudioReverb to:_enhancedAudioEQ format:renderFormat];
-        [_enhancedAudioEngine connect:_enhancedAudioEQ to:_enhancedAudioEngine.mainMixerNode format:renderFormat];
+        // The limiter leaves everything below full scale alone and adds 2 ms.
+        [_enhancedAudioEngine connect:_enhancedAudioEQ to:_enhancedAudioLimiter format:renderFormat];
+        [_enhancedAudioEngine connect:_enhancedAudioLimiter to:_enhancedAudioEngine.mainMixerNode format:renderFormat];
+        _enhancedAudioBinauralActive = binaural;
         [self configureEnhancedAudioUnits];
 
         [_enhancedAudioEngine prepare];
@@ -2875,7 +3033,9 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
             _enhancedAudioSpatialIntensity,
             _enhancedAudioSoundstageWidth,
             _enhancedAudioReverbAmount);
-        if (_enhancedUsesCoreAudioDownmix) {
+        if (binaural) {
+            Log(LOG_I, @"Enhanced renderer binaural rendering active: streamChannels=%d -> headphones", opusConfig->channelCount);
+        } else if (_enhancedUsesCoreAudioDownmix) {
             Log(LOG_I, @"Enhanced renderer Core Audio downmix active: streamChannels=%d -> stereo", opusConfig->channelCount);
         } else if (opusConfig->channelCount > 2) {
             Log(LOG_I, @"Enhanced renderer using manual surround virtualization: streamChannels=%d -> stereo", opusConfig->channelCount);
@@ -2933,6 +3093,9 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
         _enhancedAudioSourceNode = nil;
         _enhancedAudioReverb = nil;
         _enhancedAudioEQ = nil;
+        _enhancedAudioEnvironment = nil;
+        _enhancedAudioLimiter = nil;
+        _enhancedAudioBinauralActive = NO;
     }
 
     _enhancedDownmixConverter = nil;
@@ -4055,6 +4218,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _enhancedAudioSoundstageWidth = config.enhancedAudioSoundstageWidth;
     _enhancedAudioReverbAmount = config.enhancedAudioReverbAmount;
     _enhancedAudioEQState = [config.enhancedAudioEQState copy];
+    _enhancedAudioSpatialMode = config.enhancedAudioSpatialMode;
     _enhancedAudioLoadedReverbPreset = -1;
     _audioRendererBackend = MLAudioRendererBackendLegacyQueue;
     _audioDeviceChannelCount = 2;

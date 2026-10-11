@@ -1903,3 +1903,10 @@
 "EQ Import Done %d" = "已导入 %d 个滤波器。";
 "EQ Import Skipped %d %d" = "已导入 %1$d 个滤波器，另有 %2$d 行的滤波器类型不支持，已跳过。";
 "EQ Correction %@" = "来源：%@";
+"Spatial Audio" = "空间音频";
+"Spatial Audio Automatic" = "自动";
+"Spatial Audio Wide Stereo" = "宽声场立体声";
+"Spatial Audio Off" = "关闭";
+"Spatial Audio Automatic hint" = "耳机上，5.1、7.1、7.1.4 串流会按声道方位做双耳渲染（任何耳机都适用），此时强度和宽度不起作用。音箱以及立体声串流使用宽声场立体声。";
+"Spatial Audio Wide Stereo hint" = "在任何设备上都把环绕声道混入加宽的立体声，由强度和宽度调节。";
+"Spatial Audio Off hint" = "普通立体声下混，不做加宽。";

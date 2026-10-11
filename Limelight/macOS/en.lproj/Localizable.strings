@@ -1848,3 +1848,10 @@
 "EQ Import Done %d" = "Imported %d filters.";
 "EQ Import Skipped %d %d" = "Imported %1$d filters. %2$d lines use a filter type that is not supported and were skipped.";
 "EQ Correction %@" = "Based on: %@";
+"Spatial Audio" = "Spatial Audio";
+"Spatial Audio Automatic" = "Automatic";
+"Spatial Audio Wide Stereo" = "Wide Stereo";
+"Spatial Audio Off" = "Off";
+"Spatial Audio Automatic hint" = "With headphones, a 5.1, 7.1 or 7.1.4 stream is placed around you (binaural rendering, works with any headphones); intensity and width do not apply then. Speakers and stereo streams get the widened stereo.";
+"Spatial Audio Wide Stereo hint" = "Surround channels are mixed into a widened stereo image on any device. Intensity and width shape it.";
+"Spatial Audio Off hint" = "A plain stereo downmix without widening.";

@@ -154,8 +154,25 @@ struct AudioView: View {
               .frame(width: 190, alignment: .trailing)
             }
 
+            AudioCompactRow(
+              title: "Spatial Audio", hint: languageManager.localize(spatialAudioHintKey)
+            ) {
+              Picker("", selection: $settingsModel.selectedEnhancedAudioSpatialMode) {
+                ForEach(EnhancedAudioSpatialMode.allCases.map(\.title), id: \.self) { value in
+                  Text(languageManager.localize(value)).tag(value)
+                }
+              }
+              .labelsHidden()
+              .controllerPicker(selection: $settingsModel.selectedEnhancedAudioSpatialMode, options: EnhancedAudioSpatialMode.allCases.map(\.title), title: { value in languageManager.localize(value) })
+              .pickerStyle(.menu)
+              .controlSize(.small)
+              .frame(width: 190, alignment: .trailing)
+            }
+
             AudioCompactSliderRow(title: "Spatial Intensity", value: $settingsModel.enhancedAudioSpatialIntensity)
+              .disabled(spatialAudioOff)
             AudioCompactSliderRow(title: "Soundstage Width", value: $settingsModel.enhancedAudioSoundstageWidth)
+              .disabled(spatialAudioOff)
             AudioCompactSliderRow(title: "Reverb", value: $settingsModel.enhancedAudioReverbAmount, showsSeparator: false)
           }
           AudioEqualizerSection()
@@ -318,6 +335,18 @@ struct AudioView: View {
       keepChannelsTitle: String(
         format: languageManager.localize("Audio codec conflict keep channels"), layoutName)
     )
+  }
+
+  private var spatialAudioOff: Bool {
+    EnhancedAudioSpatialMode(title: settingsModel.selectedEnhancedAudioSpatialMode) == .off
+  }
+
+  private var spatialAudioHintKey: String {
+    switch EnhancedAudioSpatialMode(title: settingsModel.selectedEnhancedAudioSpatialMode) {
+    case .automatic: return "Spatial Audio Automatic hint"
+    case .wideStereo: return "Spatial Audio Wide Stereo hint"
+    case .off: return "Spatial Audio Off hint"
+    }
   }
 
   /// The Dolby Output choice only matters for the codecs that can be passed through.

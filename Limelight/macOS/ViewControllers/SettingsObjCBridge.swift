@@ -1206,6 +1206,12 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultEnhancedAudioReverbAmount
   }
 
+  /// MLAudioEnhancedSpatialMode.
+  @objc static func enhancedAudioSpatialMode(for key: String) -> Int {
+    let stored = Settings.getSettings(for: key)?.enhancedAudioExtras?.spatialMode
+    return (stored.flatMap(EnhancedAudioSpatialMode.init(rawValue:)) ?? .automatic).rawValue
+  }
+
   /// The equalizer for the renderer: see StreamConfiguration.enhancedAudioEQState.
   @objc static func enhancedAudioEQState(for key: String) -> [String: Any] {
     let settings = Settings.getSettings(for: key)

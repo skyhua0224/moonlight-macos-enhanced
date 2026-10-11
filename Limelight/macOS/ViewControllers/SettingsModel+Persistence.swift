@@ -702,6 +702,8 @@ extension SettingsModel {
     enhancedAudioEQPreamp = CGFloat(extras.eqPreamp)
     enhancedAudioEQBands = extras.eqBands
     enhancedAudioEQProfileName = extras.eqProfileName
+    selectedEnhancedAudioSpatialMode =
+      (EnhancedAudioSpatialMode(rawValue: extras.spatialMode) ?? .automatic).title
   }
 
   func saveSettings() {
@@ -912,7 +914,8 @@ extension SettingsModel {
         eqMode: EnhancedAudioEQ.Mode(title: selectedEnhancedAudioEQMode).rawValue,
         eqPreamp: Double(enhancedAudioEQPreamp),
         eqBands: enhancedAudioEQBands,
-        eqProfileName: enhancedAudioEQProfileName),
+        eqProfileName: enhancedAudioEQProfileName,
+        spatialMode: EnhancedAudioSpatialMode(title: selectedEnhancedAudioSpatialMode).rawValue),
       enableVsync: enableVsync,
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,

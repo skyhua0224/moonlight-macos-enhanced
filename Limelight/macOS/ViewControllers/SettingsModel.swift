@@ -775,6 +775,12 @@ class SettingsModel: ObservableObject {
       saveEnhancedAudioSettings()
     }
   }
+  @Published var selectedEnhancedAudioSpatialMode: String = EnhancedAudioSpatialMode.automatic.title {
+    didSet {
+      guard !isLoading, oldValue != selectedEnhancedAudioSpatialMode else { return }
+      saveEnhancedAudioSettings()
+    }
+  }
   @Published var enhancedAudioEQEnabled: Bool = true {
     didSet {
       guard !isLoading, oldValue != enhancedAudioEQEnabled else { return }
