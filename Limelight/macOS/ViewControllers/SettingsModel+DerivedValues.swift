@@ -1490,6 +1490,17 @@ extension SettingsModel {
     }
   }
 
+  /// The frequencies stored fixed-band gains belong to. Profiles saved before the 12-band
+  /// layout existed hold ten gains.
+  static func enhancedAudioEQFrequencies(forGainCount count: Int) -> [Double]? {
+    switch count {
+    case enhancedAudioEQFrequencies24Band.count: return enhancedAudioEQFrequencies24Band
+    case enhancedAudioEQFrequencies12Band.count: return enhancedAudioEQFrequencies12Band
+    case legacyEnhancedAudioEQAnchorFrequencies.count: return legacyEnhancedAudioEQAnchorFrequencies
+    default: return nil
+    }
+  }
+
   static func normalizedEnhancedAudioEQLayout(_ value: String?) -> String {
     guard let value, enhancedAudioEQLayouts.contains(value) else {
       return defaultEnhancedAudioEQLayout

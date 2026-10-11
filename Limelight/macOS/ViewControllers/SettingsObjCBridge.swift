@@ -363,6 +363,7 @@ class SettingsClass: NSObject {
       enhancedAudioSoundstageWidth: settings.enhancedAudioSoundstageWidth,
       enhancedAudioReverbAmount: settings.enhancedAudioReverbAmount,
       enhancedAudioEQGains: settings.enhancedAudioEQGains,
+      enhancedAudioExtras: settings.enhancedAudioExtras,
       enableVsync: settings.enableVsync,
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
@@ -476,6 +477,7 @@ class SettingsClass: NSObject {
         enhancedAudioSoundstageWidth: updated.enhancedAudioSoundstageWidth,
         enhancedAudioReverbAmount: updated.enhancedAudioReverbAmount,
         enhancedAudioEQGains: updated.enhancedAudioEQGains,
+        enhancedAudioExtras: updated.enhancedAudioExtras,
         enableVsync: updated.enableVsync,
         showPerformanceOverlay: updated.showPerformanceOverlay,
         showConnectionWarnings: updated.showConnectionWarnings,
@@ -589,6 +591,7 @@ class SettingsClass: NSObject {
       enhancedAudioSoundstageWidth: settings.enhancedAudioSoundstageWidth,
       enhancedAudioReverbAmount: settings.enhancedAudioReverbAmount,
       enhancedAudioEQGains: settings.enhancedAudioEQGains,
+      enhancedAudioExtras: settings.enhancedAudioExtras,
       enableVsync: settings.enableVsync,
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
@@ -1203,11 +1206,37 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultEnhancedAudioReverbAmount
   }
 
-  @objc static func enhancedAudioEQGains(for key: String) -> [NSNumber] {
-    let gains =
-      Settings.getSettings(for: key)?.enhancedAudioEQGains
-      ?? SettingsModel.defaultEnhancedAudioEQGains
-    return gains.map { NSNumber(value: $0) }
+  /// The equalizer for the renderer: see StreamConfiguration.enhancedAudioEQState.
+  @objc static func enhancedAudioEQState(for key: String) -> [String: Any] {
+    let settings = Settings.getSettings(for: key)
+    let extras = settings?.enhancedAudioExtras ?? EnhancedAudioExtras()
+    let parametric = EnhancedAudioEQ.Mode(rawValue: extras.eqMode) == .parametric
+    let filters: [EnhancedAudioEQ.Filter]
+    if parametric {
+      filters = EnhancedAudioEQ.parametricFilters(extras.eqBands)
+    } else {
+      let gains = settings?.enhancedAudioEQGains ?? SettingsModel.defaultEnhancedAudioEQGains
+      // A gain list of an unknown length plays flat, as it always did.
+      let frequencies =
+        SettingsModel.enhancedAudioEQFrequencies(forGainCount: gains.count)
+        ?? SettingsModel.enhancedAudioEQFrequencies(for: SettingsModel.defaultEnhancedAudioEQLayout)
+      filters = EnhancedAudioEQ.graphicFilters(
+        frequencies: frequencies,
+        gains: gains.count == frequencies.count ? gains : [])
+    }
+    return [
+      "enabled": extras.eqEnabled,
+      "preamp": extras.eqPreamp,
+      "autoHeadroom": !parametric,
+      "bands": filters.map { filter -> [String: Any] in
+        [
+          "type": filter.kind.unitFilterType,
+          "frequency": filter.frequency,
+          "gain": filter.gain,
+          "q": filter.q,
+        ]
+      },
+    ]
   }
 
   @objc static func videoCodec(for key: String) -> Int {

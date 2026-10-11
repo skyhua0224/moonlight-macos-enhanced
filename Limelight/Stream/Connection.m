@@ -81,19 +81,9 @@ static void MLAudioRxReportStats(Connection *conn, uint64_t nowMs, BOOL force);
 static const float kDirectRendererMakeupGain = 1.24f;
 static const float kEnhancedRendererOutputGain = 1.08f;
 
-static const double kLegacyEnhancedEQFrequencies[] = {
-    32.0, 64.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0,
-};
-static const NSUInteger kLegacyEnhancedEQBandCount = sizeof(kLegacyEnhancedEQFrequencies) / sizeof(kLegacyEnhancedEQFrequencies[0]);
-static const double kEnhancedEQFrequencies12Band[] = {
-    32.0, 64.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 6000.0, 8000.0, 12000.0, 16000.0,
-};
-static const NSUInteger kEnhancedEQBandCount12 = sizeof(kEnhancedEQFrequencies12Band) / sizeof(kEnhancedEQFrequencies12Band[0]);
-static const double kEnhancedEQFrequencies24Band[] = {
-    20.0, 25.0, 32.0, 40.0, 50.0, 63.0, 80.0, 100.0, 125.0, 160.0, 200.0, 250.0,
-    315.0, 400.0, 500.0, 630.0, 800.0, 1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0,
-};
-static const NSUInteger kEnhancedEQBandCount24 = sizeof(kEnhancedEQFrequencies24Band) / sizeof(kEnhancedEQFrequencies24Band[0]);
+// The equalizer node is created with this many filters; the ones not in use are bypassed, so
+// the number of bands can change while the stream plays.
+static const NSUInteger kEnhancedEQMaxBands = 32;
 
 static int MLResolvedDynamicRangeModeForPreference(BOOL hdrEnabled, int hdrTransferFunction) {
     if (!hdrEnabled) {
@@ -288,7 +278,13 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     CGFloat _enhancedAudioSpatialIntensity;
     CGFloat _enhancedAudioSoundstageWidth;
     CGFloat _enhancedAudioReverbAmount;
-    NSArray<NSNumber *> *_enhancedAudioEQGains;
+    // The equalizer as the settings resolved it: enabled, preamp, autoHeadroom and bands
+    // (type, frequency, gain, q). Set before the output starts, afterwards on the output queue.
+    NSDictionary *_enhancedAudioEQState;
+    // Reverb preset the unit has loaded (-1: none yet). Loading one resets the unit, so it is
+    // only done when the listening target changes.
+    NSInteger _enhancedAudioLoadedReverbPreset;
+    double _enhancedAudioSampleRate;
     int _audioDeviceChannelCount;
     int _audioRenderChannelCount;
     MLAudioRendererBackend _audioRendererBackend;
@@ -794,28 +790,6 @@ static MLAudioEnhancedOutputTarget MLResolveEnhancedOutputTarget(MLAudioEnhanced
         channelCount,
         headphones ? @"Headphones" : @"Speakers");
     return headphones ? MLAudioEnhancedOutputTargetHeadphones : MLAudioEnhancedOutputTargetSpeakers;
-}
-
-static const double *MLEnhancedEQFrequencyTable(NSUInteger bandCount, NSUInteger *resolvedBandCount) {
-    switch (bandCount) {
-        case 24:
-            if (resolvedBandCount != NULL) {
-                *resolvedBandCount = kEnhancedEQBandCount24;
-            }
-            return kEnhancedEQFrequencies24Band;
-        case 12:
-        case 0:
-            if (resolvedBandCount != NULL) {
-                *resolvedBandCount = kEnhancedEQBandCount12;
-            }
-            return kEnhancedEQFrequencies12Band;
-        case 10:
-        default:
-            if (resolvedBandCount != NULL) {
-                *resolvedBandCount = kLegacyEnhancedEQBandCount;
-            }
-            return kLegacyEnhancedEQFrequencies;
-    }
 }
 
 static AudioChannelLayoutTag MLChannelLayoutTagForChannelCount(int channelCount) {
@@ -2543,46 +2517,108 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
     }
 }
 
+// Bandwidth, in octaves, that makes an AVAudioUnitEQ filter respond like a filter of the given Q.
+// The unit follows the audio EQ cookbook with the bandwidth pre-warped (measured: within 0.02 dB
+// for every filter type), so the conversion depends on the frequency.
+static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sampleRate)
+{
+    if (!(q > 0.0) || !(sampleRate > 0.0) || !(frequency > 0.0)) {
+        return 0.7f;
+    }
+    const double w0 = 2.0 * M_PI * frequency / sampleRate;
+    const double bandwidth = (2.0 / M_LN2) * asinh(1.0 / (2.0 * q)) * (sin(w0) / w0);
+    return (float)MAX(0.05, MIN(5.0, bandwidth));
+}
+
+// Output queue (also while the engine runs: the settings can change during the stream).
 - (void)configureEnhancedAudioUnits
 {
     if (_enhancedAudioEQ == nil || _enhancedAudioReverb == nil || _enhancedAudioSourceNode == nil) {
         return;
     }
 
-    NSArray<NSNumber *> *gains = _enhancedAudioEQGains;
-    NSUInteger resolvedBandCount = 0;
-    const double *frequencies = MLEnhancedEQFrequencyTable(gains.count, &resolvedBandCount);
-    if (gains.count != resolvedBandCount) {
-        frequencies = MLEnhancedEQFrequencyTable(kEnhancedEQBandCount12, &resolvedBandCount);
-        gains = nil;
-    }
+    NSDictionary *state = _enhancedAudioEQState;
+    NSArray *bands = [state[@"bands"] isKindOfClass:[NSArray class]] ? state[@"bands"] : @[];
+    const BOOL eqEnabled = state[@"enabled"] == nil || [state[@"enabled"] boolValue];
+    const BOOL autoHeadroom = [state[@"autoHeadroom"] boolValue];
+    const float preamp = MAX(-24.0f, MIN(12.0f, [state[@"preamp"] floatValue]));
+    const double sampleRate = _enhancedAudioSampleRate > 0.0 ? _enhancedAudioSampleRate : 48000.0;
 
     float maxPositiveGain = 0.0f;
-    for (NSUInteger i = 0; i < MIN((NSUInteger)_enhancedAudioEQ.bands.count, resolvedBandCount); i++) {
-        AVAudioUnitEQFilterParameters *band = _enhancedAudioEQ.bands[i];
-        band.filterType = AVAudioUnitEQFilterTypeParametric;
-        band.frequency = frequencies[i];
-        band.bandwidth = 0.7f;
-        band.gain = (float)(i < gains.count ? gains[i].doubleValue : 0.0);
-        maxPositiveGain = MAX(maxPositiveGain, band.gain);
-        band.bypass = NO;
+    const NSUInteger filterCount = _enhancedAudioEQ.bands.count;
+    for (NSUInteger i = 0; i < filterCount; i++) {
+        AVAudioUnitEQFilterParameters *filter = _enhancedAudioEQ.bands[i];
+        NSDictionary *band = (eqEnabled && i < bands.count && [bands[i] isKindOfClass:[NSDictionary class]]) ? bands[i] : nil;
+        if (band == nil) {
+            filter.bypass = YES;
+            continue;
+        }
+        const NSInteger type = [band[@"type"] integerValue];
+        const double frequency = MAX(20.0, MIN(sampleRate * 0.45, [band[@"frequency"] doubleValue]));
+        filter.filterType = (type >= AVAudioUnitEQFilterTypeParametric && type <= AVAudioUnitEQFilterTypeResonantHighShelf)
+            ? (AVAudioUnitEQFilterType)type
+            : AVAudioUnitEQFilterTypeParametric;
+        filter.frequency = (float)frequency;
+        filter.bandwidth = MLEnhancedEQBandwidthForQ([band[@"q"] doubleValue], frequency, sampleRate);
+        filter.gain = MAX(-24.0f, MIN(24.0f, [band[@"gain"] floatValue]));
+        maxPositiveGain = MAX(maxPositiveGain, filter.gain);
+        filter.bypass = NO;
     }
 
     float clampedReverb = MAX(0.0f, MIN(1.0f, (float)_enhancedAudioReverbAmount));
-    [_enhancedAudioReverb loadFactoryPreset:
-        (_enhancedAudioOutputTarget == MLAudioEnhancedOutputTargetHeadphones)
-        ? AVAudioUnitReverbPresetSmallRoom
-        : AVAudioUnitReverbPresetMediumRoom];
-    _enhancedAudioReverb.wetDryMix =
-        clampedReverb *
-        (_enhancedAudioOutputTarget == MLAudioEnhancedOutputTargetHeadphones ? 10.0f : 18.0f);
+    const BOOL headphones = _enhancedAudioOutputTarget == MLAudioEnhancedOutputTargetHeadphones;
+    const NSInteger reverbPreset = headphones ? AVAudioUnitReverbPresetSmallRoom : AVAudioUnitReverbPresetMediumRoom;
+    if (_enhancedAudioLoadedReverbPreset != reverbPreset) {
+        [_enhancedAudioReverb loadFactoryPreset:(AVAudioUnitReverbPreset)reverbPreset];
+        _enhancedAudioLoadedReverbPreset = reverbPreset;
+    }
+    _enhancedAudioReverb.wetDryMix = clampedReverb * (headphones ? 10.0f : 18.0f);
 
-    _enhancedAudioEQ.globalGain =
-        -MIN(2.5f,
-             MAX(0.0f, maxPositiveGain) * 0.20f +
-             clampedReverb * 0.8f);
+    // The fixed-band equalizer trims itself by a fifth of its largest boost; the parametric one
+    // leaves the level to the preamp, as an imported headphone correction states its own.
+    const float eqTrim = (eqEnabled && autoHeadroom) ? MAX(0.0f, maxPositiveGain) * 0.20f : 0.0f;
+    _enhancedAudioEQ.globalGain = (eqEnabled ? preamp : 0.0f) - MIN(2.5f, eqTrim + clampedReverb * 0.8f);
 
     _enhancedAudioSourceNode.volume = 1.0f;
+}
+
+// Main thread, from the settings notification. Reads this host's audio enhancement settings
+// again and applies them to the running enhanced renderer. The other backends do not process
+// the sound, and the sound mode itself still takes effect with the next stream.
+- (void)updateEnhancedAudioSettings
+{
+    NSString *uuid = _audioHostKey;
+    dispatch_queue_t queue = _audioOutputQueue;
+    if (uuid.length == 0 || queue == nil || _audioOutputMode != MLAudioOutputModeEnhanced) {
+        return;
+    }
+
+    const int configuredTarget = (int)[SettingsClass enhancedAudioOutputTargetFor:uuid];
+    const int preset = (int)[SettingsClass enhancedAudioPresetFor:uuid];
+    const CGFloat spatial = [SettingsClass enhancedAudioSpatialIntensityFor:uuid];
+    const CGFloat width = [SettingsClass enhancedAudioSoundstageWidthFor:uuid];
+    const CGFloat reverb = [SettingsClass enhancedAudioReverbAmountFor:uuid];
+    NSDictionary *eqState = [SettingsClass enhancedAudioEQStateFor:uuid];
+    __weak Connection *weakSelf = self;
+    dispatch_async(queue, ^{
+        Connection *strongSelf = weakSelf;
+        if (strongSelf == nil) {
+            return;
+        }
+        // Stored even while no engine runs (the output is restarting, or has not started yet):
+        // the next start configures itself from these.
+        if (strongSelf->_enhancedAudioOutputTargetConfigured != configuredTarget) {
+            strongSelf->_enhancedAudioOutputTargetConfigured = configuredTarget;
+            strongSelf->_enhancedAudioOutputTarget =
+                (int)MLResolveEnhancedOutputTarget((MLAudioEnhancedOutputTarget)configuredTarget);
+        }
+        strongSelf->_enhancedAudioPreset = preset;
+        strongSelf->_enhancedAudioSpatialIntensity = spatial;
+        strongSelf->_enhancedAudioSoundstageWidth = width;
+        strongSelf->_enhancedAudioReverbAmount = reverb;
+        strongSelf->_enhancedAudioEQState = eqState;
+        [strongSelf configureEnhancedAudioUnits];
+    });
 }
 
 - (BOOL)prepareEnhancedDownmixConverterWithOpusConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
@@ -2794,11 +2830,11 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
             return noErr;
         }];
 
-        NSUInteger resolvedBandCount = 0;
-        MLEnhancedEQFrequencyTable(_enhancedAudioEQGains.count, &resolvedBandCount);
         _enhancedAudioEngine = [[AVAudioEngine alloc] init];
         _enhancedAudioReverb = [[AVAudioUnitReverb alloc] init];
-        _enhancedAudioEQ = [[AVAudioUnitEQ alloc] initWithNumberOfBands:(uint32_t)resolvedBandCount];
+        _enhancedAudioLoadedReverbPreset = -1;
+        _enhancedAudioEQ = [[AVAudioUnitEQ alloc] initWithNumberOfBands:(uint32_t)kEnhancedEQMaxBands];
+        _enhancedAudioSampleRate = opusConfig->sampleRate;
 
         [_enhancedAudioEngine attachNode:_enhancedAudioSourceNode];
         [_enhancedAudioEngine attachNode:_enhancedAudioReverb];
@@ -4000,6 +4036,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         offsetof(ML_CONNECTION_CONTEXT, inputContext), offsetof(ML_CONNECTION_CONTEXT, stage));
 
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateVolume) name:@"volumeSettingChanged" object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateEnhancedAudioSettings) name:@"enhancedAudioSettingChanged" object:nil];
     
     // Use a lock to ensure that only one thread is initializing
     // or deinitializing a connection at a time.
@@ -4017,7 +4054,8 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _enhancedAudioSpatialIntensity = config.enhancedAudioSpatialIntensity;
     _enhancedAudioSoundstageWidth = config.enhancedAudioSoundstageWidth;
     _enhancedAudioReverbAmount = config.enhancedAudioReverbAmount;
-    _enhancedAudioEQGains = [config.enhancedAudioEQGains copy];
+    _enhancedAudioEQState = [config.enhancedAudioEQState copy];
+    _enhancedAudioLoadedReverbPreset = -1;
     _audioRendererBackend = MLAudioRendererBackendLegacyQueue;
     _audioDeviceChannelCount = 2;
     _audioRenderChannelCount = 0;

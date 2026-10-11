@@ -46,7 +46,9 @@
 @property(nonatomic) CGFloat enhancedAudioSpatialIntensity;
 @property(nonatomic) CGFloat enhancedAudioSoundstageWidth;
 @property(nonatomic) CGFloat enhancedAudioReverbAmount;
-@property(nonatomic, copy) NSArray<NSNumber *> *enhancedAudioEQGains;
+// The equalizer as the settings resolved it: "enabled", "preamp" (dB), "autoHeadroom" and
+// "bands" (dictionaries of "type" (AVAudioUnitEQFilterType), "frequency", "gain" and "q").
+@property(nonatomic, copy) NSDictionary *enhancedAudioEQState;
 @property(nonatomic) BOOL enableHdr;
 @property(nonatomic) BOOL enable10BitSdr;
 @property(nonatomic) int videoRendererMode;

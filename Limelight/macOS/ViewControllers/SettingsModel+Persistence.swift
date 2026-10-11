@@ -302,6 +302,7 @@ extension SettingsModel {
     enhancedAudioSoundstageWidth = Self.defaultEnhancedAudioSoundstageWidth
     enhancedAudioReverbAmount = Self.defaultEnhancedAudioReverbAmount
     enhancedAudioEQGains = Self.defaultEnhancedAudioEQGains
+    applyEnhancedAudioExtras(EnhancedAudioExtras())
     enableVsync = Self.defaultEnableVsync
     selectedTimingBufferLevel = Self.defaultTimingBufferLevel
     timingPrioritizeResponsiveness = Self.defaultTimingPrioritizeResponsiveness
@@ -489,6 +490,7 @@ extension SettingsModel {
       enhancedAudioEQGains = Self.sanitizedEnhancedAudioEQGains(
         settings.enhancedAudioEQGains,
         layout: selectedEnhancedAudioEQLayout)
+      applyEnhancedAudioExtras(settings.enhancedAudioExtras ?? EnhancedAudioExtras())
       enableVsync = settings.enableVsync ?? SettingsModel.defaultEnableVsync
       selectedTimingBufferLevel = Self.getString(
         from: settings.timingBufferLevel ?? Self.getInt(from: Self.defaultTimingBufferLevel, in: Self.timingBufferLevels),
@@ -690,6 +692,16 @@ extension SettingsModel {
     } else {
       loadAndSaveDefaultSettings()
     }
+  }
+
+  /// Only ever called while loading (or resetting), so nothing is saved from here.
+  func applyEnhancedAudioExtras(_ extras: EnhancedAudioExtras) {
+    enhancedAudioEQEnabled = extras.eqEnabled
+    selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode(rawValue: extras.eqMode)?.title
+      ?? EnhancedAudioEQ.Mode.graphic.title
+    enhancedAudioEQPreamp = CGFloat(extras.eqPreamp)
+    enhancedAudioEQBands = extras.eqBands
+    enhancedAudioEQProfileName = extras.eqProfileName
   }
 
   func saveSettings() {
@@ -895,6 +907,12 @@ extension SettingsModel {
       enhancedAudioEQGains: Self.sanitizedEnhancedAudioEQGains(
         enhancedAudioEQGains,
         layout: selectedEnhancedAudioEQLayout),
+      enhancedAudioExtras: EnhancedAudioExtras(
+        eqEnabled: enhancedAudioEQEnabled,
+        eqMode: EnhancedAudioEQ.Mode(title: selectedEnhancedAudioEQMode).rawValue,
+        eqPreamp: Double(enhancedAudioEQPreamp),
+        eqBands: enhancedAudioEQBands,
+        eqProfileName: enhancedAudioEQProfileName),
       enableVsync: enableVsync,
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,

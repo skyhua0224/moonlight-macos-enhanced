@@ -1611,7 +1611,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.enhancedAudioSpatialIntensity = [SettingsClass enhancedAudioSpatialIntensityFor:self.app.host.uuid];
     streamConfig.enhancedAudioSoundstageWidth = [SettingsClass enhancedAudioSoundstageWidthFor:self.app.host.uuid];
     streamConfig.enhancedAudioReverbAmount = [SettingsClass enhancedAudioReverbAmountFor:self.app.host.uuid];
-    streamConfig.enhancedAudioEQGains = [SettingsClass enhancedAudioEQGainsFor:self.app.host.uuid];
+    streamConfig.enhancedAudioEQState = [SettingsClass enhancedAudioEQStateFor:self.app.host.uuid];
     if (streamConfig.disableHighQualitySurround) {
         Log(LOG_I, @"[diag] Using 7.1.4 compatibility audio topology for Enhanced mode");
     }

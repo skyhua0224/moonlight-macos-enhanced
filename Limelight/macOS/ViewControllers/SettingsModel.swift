@@ -722,14 +722,14 @@ class SettingsModel: ObservableObject {
   @Published var selectedEnhancedAudioOutputTarget: String {
     didSet {
       guard !isLoading else { return }
-      saveSettings()
+      saveEnhancedAudioSettings()
     }
   }
   @Published var selectedEnhancedAudioPreset: String {
     didSet {
       guard !isLoading, !isApplyingEnhancedAudioPreset else { return }
       applyEnhancedAudioPresetIfNeeded()
-      saveSettings()
+      saveEnhancedAudioSettings()
     }
   }
   @Published var selectedEnhancedAudioEQLayout: String {
@@ -748,31 +748,68 @@ class SettingsModel: ObservableObject {
       if remapped != enhancedAudioEQGains {
         enhancedAudioEQGains = remapped
       }
-      saveSettings()
+      saveEnhancedAudioSettings()
     }
   }
   @Published var enhancedAudioSpatialIntensity: CGFloat {
     didSet {
       guard !isLoading else { return }
-      saveSettings()
+      saveEnhancedAudioSettings()
     }
   }
   @Published var enhancedAudioSoundstageWidth: CGFloat {
     didSet {
       guard !isLoading else { return }
-      saveSettings()
+      saveEnhancedAudioSettings()
     }
   }
   @Published var enhancedAudioReverbAmount: CGFloat {
     didSet {
       guard !isLoading else { return }
-      saveSettings()
+      saveEnhancedAudioSettings()
     }
   }
   @Published var enhancedAudioEQGains: [Double] {
     didSet {
       guard !isLoading else { return }
-      saveSettings()
+      saveEnhancedAudioSettings()
+    }
+  }
+  @Published var enhancedAudioEQEnabled: Bool = true {
+    didSet {
+      guard !isLoading, oldValue != enhancedAudioEQEnabled else { return }
+      saveEnhancedAudioSettings()
+    }
+  }
+  // "Graphic" keeps the fixed bands above; "Parametric" uses enhancedAudioEQBands.
+  @Published var selectedEnhancedAudioEQMode: String = EnhancedAudioEQ.Mode.graphic.title {
+    didSet {
+      guard !isLoading, oldValue != selectedEnhancedAudioEQMode else { return }
+      if EnhancedAudioEQ.Mode(title: selectedEnhancedAudioEQMode) == .parametric,
+        enhancedAudioEQBands.isEmpty
+      {
+        enhancedAudioEQBands = EnhancedAudioEQ.starterBands()
+      }
+      saveEnhancedAudioSettings()
+    }
+  }
+  @Published var enhancedAudioEQPreamp: CGFloat = 0 {
+    didSet {
+      guard !isLoading, oldValue != enhancedAudioEQPreamp else { return }
+      saveEnhancedAudioSettings()
+    }
+  }
+  @Published var enhancedAudioEQBands: [EnhancedAudioEQBand] = [] {
+    didSet {
+      guard !isLoading, oldValue != enhancedAudioEQBands else { return }
+      saveEnhancedAudioSettings()
+    }
+  }
+  // Name of the imported correction the bands came from, shown until they are edited away.
+  @Published var enhancedAudioEQProfileName: String? = nil {
+    didSet {
+      guard !isLoading, oldValue != enhancedAudioEQProfileName else { return }
+      saveEnhancedAudioSettings()
     }
   }
   @Published var enableVsync: Bool {
@@ -1828,7 +1865,36 @@ class SettingsModel: ObservableObject {
     enhancedAudioSoundstageWidth = values.soundstageWidth
     enhancedAudioReverbAmount = values.reverbAmount
     enhancedAudioEQGains = values.eqGains
+    // A preset is a curve of the fixed bands, so it is what plays from here on.
+    selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.graphic.title
     isApplyingEnhancedAudioPreset = false
+  }
+
+  /// Saves, then lets a running stream pick the audio enhancement up again.
+  func saveEnhancedAudioSettings() {
+    saveSettings()
+    NotificationCenter.default.post(
+      name: Notification.Name("enhancedAudioSettingChanged"), object: nil)
+  }
+
+  /// The equalizer as it is set right now, for the response curve.
+  var enhancedAudioEQFilters: [EnhancedAudioEQ.Filter] {
+    guard enhancedAudioEQEnabled else { return [] }
+    if EnhancedAudioEQ.Mode(title: selectedEnhancedAudioEQMode) == .parametric {
+      return EnhancedAudioEQ.parametricFilters(enhancedAudioEQBands)
+    }
+    return EnhancedAudioEQ.graphicFilters(
+      frequencies: Self.enhancedAudioEQFrequencies(for: selectedEnhancedAudioEQLayout),
+      gains: enhancedAudioEQGains)
+  }
+
+  /// Replaces the parametric bands with an imported correction and switches to them.
+  func applyImportedEnhancedAudioEQ(_ imported: EnhancedAudioEQ.ImportedProfile, name: String?) {
+    enhancedAudioEQBands = imported.bands
+    enhancedAudioEQPreamp = CGFloat(imported.preamp)
+    enhancedAudioEQProfileName = name
+    selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.parametric.title
+    enhancedAudioEQEnabled = true
   }
 
   func setEnhancedAudioEQGain(_ value: Double, at index: Int) {

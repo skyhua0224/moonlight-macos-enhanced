@@ -77,6 +77,9 @@ struct Settings: Encodable, Decodable {
   let enhancedAudioSoundstageWidth: CGFloat?
   let enhancedAudioReverbAmount: CGFloat?
   let enhancedAudioEQGains: [Double]?
+  // Equalizer on/off, mode, preamp and parametric bands. One value, so later additions to
+  // the audio enhancement do not grow this list again.
+  let enhancedAudioExtras: EnhancedAudioExtras?
   let enableVsync: Bool?
   let showPerformanceOverlay: Bool?
   let showConnectionWarnings: Bool?
@@ -234,6 +237,7 @@ struct Settings: Encodable, Decodable {
       enhancedAudioSoundstageWidth: enhancedAudioSoundstageWidth,
       enhancedAudioReverbAmount: enhancedAudioReverbAmount,
       enhancedAudioEQGains: enhancedAudioEQGains,
+      enhancedAudioExtras: enhancedAudioExtras,
       enableVsync: enableVsync,
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,
@@ -486,6 +490,7 @@ extension SettingsClass {
       enhancedAudioSoundstageWidth: settings.enhancedAudioSoundstageWidth,
       enhancedAudioReverbAmount: settings.enhancedAudioReverbAmount,
       enhancedAudioEQGains: settings.enhancedAudioEQGains,
+      enhancedAudioExtras: settings.enhancedAudioExtras,
       enableVsync: settings.enableVsync,
       showPerformanceOverlay: settings.showPerformanceOverlay,
       showConnectionWarnings: settings.showConnectionWarnings,
