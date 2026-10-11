@@ -417,8 +417,8 @@ final class SettingsPaneContainerView: NSView {
   private var lastChange: TimeInterval = 0
 
   /// The settings are about to change. A reload of the whole profile is let through to
-  /// every page (it happens once). So is what a page does in the moment it appears. Anything
-  /// else is someone editing: the other pages go.
+  /// every page (it happens once). So is a status that is announced, and what a page does
+  /// by itself. What is left is someone editing: the other pages go.
   func settingsWillChange(isLoading: Bool) {
     // The pages are views: they are only let go on the main thread. A change announced
     // anywhere else is a mistake of whoever made it, and is named in the log.
@@ -433,9 +433,10 @@ final class SettingsPaneContainerView: NSView {
       DispatchQueue.main.async { [weak self] in self?.settingsWillChange(isLoading: isLoading) }
       return
     }
+    guard !isLoading, someoneIsEditing else { return }
     let now = ProcessInfo.processInfo.systemUptime
     lastChange = now
-    guard !isLoading, now - lastSwitch > 0.35, pages.count > 1, !releaseScheduled else { return }
+    guard now - lastSwitch > 0.35, pages.count > 1, !releaseScheduled else { return }
     // Not here: this runs inside the announcement of the change, which may come from one of
     // these very pages (something it does when a notification arrives, or when it appears),
     // and a page must not be taken apart under its own update. Right after it.
@@ -447,6 +448,20 @@ final class SettingsPaneContainerView: NSView {
   }
 
   private var releaseScheduled = false
+
+  /// Whether a change that is going on now can be somebody editing the settings. A page
+  /// changes the model by itself too, when it appears and when something it asked for
+  /// arrives; taken for edits, those let the pages built ahead go as soon as they were
+  /// built, and they were built again, without end.
+  private var someoneIsEditing: Bool {
+    // What a controller does is not seen here; with one connected every change counts
+    // (and no page is built ahead, see prewarmNextPage).
+    if ControllerPresence.shared.isConnected { return true }
+    guard NSApp.isActive else { return false }
+    let sinceInput = CGEventSource.secondsSinceLastEventType(
+      .combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+    return sinceInput < 0.5
+  }
   private static var reportedBackgroundChange = false
 
   /// Lets every page go but the one in the window. Also when the window closes: nobody is
@@ -487,7 +502,7 @@ final class SettingsPaneContainerView: NSView {
     guard ProcessInfo.processInfo.systemUptime - lastChange > 3 else { return false }
     // Only while the window is open: that is when a page may be clicked next. Behind a
     // closed window the pages would be built, and let go at the next change, for nobody.
-    guard window?.isVisible == true,
+    guard window?.isVisible == true, !ControllerPresence.shared.isConnected,
       let pane = SettingsPaneType.allCases.first(where: { pages[$0] == nil }),
       let page = page(for: pane)
     else { return false }
