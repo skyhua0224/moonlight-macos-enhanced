@@ -1515,6 +1515,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
 
     NSInteger audioConfigSelection = [SettingsClass audioConfigurationFor:self.app.host.uuid];
+    BOOL surround714Replaced = NO;
+    if (audioConfigSelection == 3 && self.app.host.uuid.length > 0 &&
+        [SettingsClass surround714UnavailableForHost:self.app.host.uuid]) {
+        // An earlier stream got no audio at all for 7.1.4 from this host.
+        Log(LOG_W, @"[audio] 7.1.4 was not delivered by this host before; asking for 7.1 surround");
+        audioConfigSelection = 2;
+        surround714Replaced = YES;
+    }
     int audioConfig = AUDIO_CONFIGURATION_STEREO;
     if (audioConfigSelection == 1) {
         audioConfig = AUDIO_CONFIGURATION_51_SURROUND;
@@ -1558,6 +1566,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 [NSString stringWithFormat:[[LanguageManager shared] localize:@"Audio codec conflict notice"],
                  [MLAudioStreamPlan codecDisplayName:requestedAudioCodec], layoutName];
         }
+    }
+    if (surround714Replaced && self.pendingAudioPlanNotice.length == 0) {
+        self.pendingAudioPlanNotice = [[LanguageManager shared] localize:
+            @"This host had no audio for 7.1.4 last time, so 7.1 surround is used. Choose the audio configuration again in the settings to retry 7.1.4."];
     }
 
     NSString *codecName = @"H.264";

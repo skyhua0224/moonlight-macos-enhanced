@@ -187,6 +187,7 @@ class SettingsModel: ObservableObject {
   static let controllerShortcutProfileKeyPrefix = "settings.controller.shortcuts."
   static let audioCodecKeyPrefix = "settings.audio.codec."
   static let audioCodecFailureKeyPrefix = "settings.audio.codecFailure."
+  static let surround714UnavailableKeyPrefix = "settings.audio.surround714Unavailable."
   static let continuousAudioKeyPrefix = "settings.audio.continuous."
   static let dolbyOutputKeyPrefix = "settings.audio.dolbyOutput."
   static let foundationHostKeyPrefix = "settings.sunshine.foundationHost."
@@ -714,6 +715,8 @@ class SettingsModel: ObservableObject {
     didSet {
       guard !isLoading else { return }
       saveSettings()
+      // Choosing a layout again is the way to retry 7.1.4 on a host that had no audio for it.
+      SettingsClass.clearSurround714Unavailable(for: selectedHost?.id ?? Self.globalHostId)
     }
   }
   // Per-host audio transport settings. Stored in UserDefaults next to the

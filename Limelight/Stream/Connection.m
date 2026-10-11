@@ -3437,18 +3437,30 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
         // sinks stop at 7.1 and the host then streams without audio.
         silenceHintKey = @"No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead.";
     }
+    // A host that was asked to keep sending while nothing plays has no reason to send
+    // nothing: there the answer is known after a few seconds, and for 7.1.4 it is
+    // remembered, so that the next stream asks for a layout the host can deliver.
+    const BOOL silenceIsConclusive = _continuousAudio;
+    NSString *hostKey = _audioHostKey;
+    if (silenceIsConclusive && _channelCount > 8) {
+        silenceHintKey = @"The host has no 7.1.4 audio: its audio device does not accept 12 channels. This stream stays silent; the next one will use 7.1 surround.";
+    }
     __atomic_store_n(&_audioAnyPacketSeen, 0, __ATOMIC_RELAXED);
     if (silenceHintKey != nil) {
         const int channels = _channelCount;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(12 * NSEC_PER_SEC)), _audioOutputQueue, ^{
+        const int waitSec = silenceIsConclusive ? 3 : 12;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(waitSec * NSEC_PER_SEC)), _audioOutputQueue, ^{
             Connection *strongSelf = weakSelf;
             if (strongSelf == nil ||
                 __atomic_load_n(&strongSelf->_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation ||
                 __atomic_load_n(&strongSelf->_audioAnyPacketSeen, __ATOMIC_RELAXED) != 0) {
                 return;
             }
-            Log(LOG_W, @"[audio] No audio packet has arrived 12 s into the stream (codec=%@ channels=%d); the host may be streaming without audio or its packets are not getting through",
-                [MLAudioStreamPlan codecName:strongSelf->_audioCodec], channels);
+            Log(LOG_W, @"[audio] No audio packet has arrived %d s into the stream (codec=%@ channels=%d continuousAudio=%d); the host may be streaming without audio or its packets are not getting through",
+                waitSec, [MLAudioStreamPlan codecName:strongSelf->_audioCodec], channels, silenceIsConclusive ? 1 : 0);
+            if (silenceIsConclusive && channels > 8 && hostKey.length > 0) {
+                [SettingsClass markSurround714UnavailableForHost:hostKey];
+            }
             [strongSelf postAudioOutputNoticeWithKey:silenceHintKey deviceName:nil];
         });
     }

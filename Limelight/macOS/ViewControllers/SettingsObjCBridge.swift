@@ -1143,6 +1143,24 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultVolumeLevel
   }
 
+  /// True when an earlier stream learned that this host sends no audio for 7.1.4 (its audio
+  /// device does not take 12 channels). Streams ask for 7.1 then, until the layout is chosen
+  /// again in the settings.
+  @objc(surround714UnavailableForHost:)
+  static func surround714Unavailable(for key: String) -> Bool {
+    UserDefaults.standard.bool(forKey: SettingsModel.surround714UnavailableKeyPrefix + key)
+  }
+
+  @objc(markSurround714UnavailableForHost:)
+  static func markSurround714Unavailable(for key: String) {
+    UserDefaults.standard.set(true, forKey: SettingsModel.surround714UnavailableKeyPrefix + key)
+  }
+
+  @objc(clearSurround714UnavailableForHost:)
+  static func clearSurround714Unavailable(for key: String) {
+    UserDefaults.standard.removeObject(forKey: SettingsModel.surround714UnavailableKeyPrefix + key)
+  }
+
   @objc static func audioConfiguration(for key: String) -> Int {
     if let settings = Settings.getSettings(for: key) {
       return settings.audioConfiguration

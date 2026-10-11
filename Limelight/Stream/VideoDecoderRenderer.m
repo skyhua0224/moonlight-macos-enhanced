@@ -5717,6 +5717,11 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     [self clearCurrentFrame];
     [self teardownDecompressionSession];
     [self teardownDolbyVisionMetadataSession];
+    // The software decoder goes with the stream, like the session above: its threads and
+    // picture memory are not left to whenever this renderer is released.
+    _av1SoftwareDecoder = nil;
+    _av1NextTag = 0;
+    _av1FrameDelayLogged = NO;
     if (_baseHEVCFormatDesc != NULL) {
         CFRelease(_baseHEVCFormatDesc);
         _baseHEVCFormatDesc = NULL;
