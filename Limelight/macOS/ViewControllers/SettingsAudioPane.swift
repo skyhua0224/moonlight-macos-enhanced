@@ -687,6 +687,14 @@ enum EqualizerImportPanel {
     panel.canChooseDirectories = false
     return panel
   }()
+
+  /// The dialog of Export, made when it is first used.
+  static let sharedSave: NSSavePanel = {
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.plainText]
+    panel.canCreateDirectories = true
+    return panel
+  }()
 }
 
 private struct AudioEqualizerSection: View {
@@ -879,6 +887,7 @@ private struct AudioEqualizerSection: View {
 
       HStack(spacing: 8) {
         Button(languageManager.localize("EQ Import File")) { importFromFile() }
+        Button(languageManager.localize("EQ Export File")) { exportToFile() }
         Button(languageManager.localize("EQ Paste")) {
           applyImport(NSPasteboard.general.string(forType: .string), name: nil)
         }
@@ -1103,6 +1112,23 @@ private struct AudioEqualizerSection: View {
     importNote = nil
   }
 
+  /// Writes what is playing as parametric text, the format Import reads.
+  private func exportToFile() {
+    let profile = settingsModel.enhancedAudioEQAsProfile
+    let panel = EqualizerImportPanel.sharedSave
+    let name = presetActive ? (settingsModel.enhancedAudioEQProfileName ?? "") : ""
+    panel.nameFieldStringValue = (name.isEmpty ? "Moonlight EQ" : name) + " ParametricEQ.txt"
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    let text = EnhancedAudioEQ.parametricText(preamp: profile.preamp, bands: profile.bands)
+    do {
+      try text.write(to: url, atomically: true, encoding: .utf8)
+      importNote = String(
+        format: languageManager.localize("EQ Export Done %@"), url.lastPathComponent)
+    } catch {
+      importNote = languageManager.localize("EQ Export Failed")
+    }
+  }
+
   private func importFromFile() {
     let panel = EqualizerImportPanel.shared
     guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -1153,6 +1179,10 @@ private struct PresetEQPicker: View {
       trimmed.isEmpty || $0.name.localizedCaseInsensitiveContains(trimmed)
     }
     let results = library.search(query)
+    let general = EnhancedAudioEQ.generalPresets.filter {
+      trimmed.isEmpty
+        || languageManager.localize($0.nameKey).localizedCaseInsensitiveContains(trimmed)
+    }
     VStack(alignment: .leading, spacing: 8) {
       TextField(languageManager.localize("Preset EQ Search"), text: $query)
         .textFieldStyle(.roundedBorder)
@@ -1160,6 +1190,8 @@ private struct PresetEQPicker: View {
           // Return takes the first match.
           if let preset = saved.first {
             onPick(preset.profile, preset.name)
+          } else if !trimmed.isEmpty, let preset = general.first {
+            onPick(preset.profile, languageManager.localize(preset.nameKey))
           } else if let entry = results.first {
             onPick(library.profile(for: entry), entry.name)
           }
@@ -1187,6 +1219,17 @@ private struct PresetEQPicker: View {
               }
             }
           }
+          if !general.isEmpty {
+            sectionTitle("Preset EQ General")
+            ForEach(general) { preset in
+              row(
+                languageManager.localize(preset.nameKey),
+                languageManager.localize(preset.detailKey)
+              ) {
+                onPick(preset.profile, languageManager.localize(preset.nameKey))
+              }
+            }
+          }
           if !results.isEmpty {
             sectionTitle("Preset EQ Library")
             ForEach(results) { entry in
@@ -1194,7 +1237,7 @@ private struct PresetEQPicker: View {
                 onPick(library.profile(for: entry), entry.name)
               }
             }
-          } else if trimmed.isEmpty || saved.isEmpty {
+          } else if trimmed.isEmpty || (saved.isEmpty && general.isEmpty) {
             Text(
               languageManager.localize(
                 trimmed.isEmpty ? "Preset EQ search hint" : "Preset EQ search empty")

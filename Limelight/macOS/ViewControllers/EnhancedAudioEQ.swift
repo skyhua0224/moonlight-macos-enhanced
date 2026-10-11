@@ -455,6 +455,119 @@ enum EnhancedAudioEQ {
     filters.reduce(0) { $0 + response(of: $1, at: frequency) }
   }
 
+  // MARK: Presets by kind of device
+
+  /// A preset that is not for one model but for a kind of speaker or a way of listening.
+  /// These are written for this app from what such devices usually need. They are a starting
+  /// point, not a measurement. Each preamp takes back the highest point of its curve.
+  struct GeneralPreset: Identifiable {
+    let id: String
+    var nameKey: String { "EQ General " + id }
+    var detailKey: String { "EQ General " + id + " detail" }
+    let preamp: Double
+    let bands: [EnhancedAudioEQBand]
+
+    var profile: ImportedProfile {
+      // Fresh ids every time: a preset applied twice must not share bands.
+      ImportedProfile(
+        preamp: preamp,
+        bands: bands.map {
+          EnhancedAudioEQBand(kind: $0.kind, frequency: $0.frequency, gain: $0.gain, q: $0.q)
+        }, skippedLines: 0)
+    }
+  }
+
+  private static func band(
+    _ kind: EnhancedAudioEQBand.Kind, _ frequency: Double, _ gain: Double = 0, q: Double = 0.7
+  ) -> EnhancedAudioEQBand {
+    EnhancedAudioEQBand(kind: kind, frequency: frequency, gain: gain, q: q)
+  }
+
+  static let generalPresets: [GeneralPreset] = [
+    // Two small boxes on a desk: little bass, a boxy lower midrange, some edge up high.
+    GeneralPreset(
+      id: "Small Desktop Speakers", preamp: -3,
+      bands: [
+        band(.highPass, 45), band(.lowShelf, 120, 4), band(.peak, 250, -2, q: 1.2),
+        band(.peak, 3000, -1.5, q: 1.5), band(.highShelf, 10000, 1.5),
+      ]),
+    // Satellites with a subwoofer: a boomy subwoofer, a gap where it hands over, bright satellites.
+    GeneralPreset(
+      id: "2.1 Speakers", preamp: -2.5,
+      bands: [
+        band(.peak, 80, -3, q: 1), band(.peak, 220, 2.5, q: 1), band(.peak, 5000, -2, q: 2),
+        band(.highShelf, 10000, 1.5),
+      ]),
+    // Larger speakers on a desk or near a wall: the surface and the room pile up the upper bass.
+    GeneralPreset(
+      id: "Bookshelf Speakers", preamp: -1,
+      bands: [
+        band(.peak, 120, -3, q: 1.4), band(.peak, 200, -1.5, q: 1.5), band(.highShelf, 10000, 1),
+      ]),
+    // Flat panel speakers: thin, voices buried, and no deep bass to boost.
+    GeneralPreset(
+      id: "TV Speakers", preamp: -3,
+      bands: [
+        band(.highPass, 70), band(.lowShelf, 150, 3), band(.peak, 400, -2, q: 1),
+        band(.peak, 2500, 2.5, q: 1), band(.peak, 7000, -1.5, q: 2),
+      ]),
+    GeneralPreset(
+      id: "Laptop Speakers", preamp: -2,
+      bands: [
+        band(.highPass, 100), band(.lowShelf, 200, 4), band(.peak, 500, -2.5, q: 1),
+        band(.peak, 3500, -2, q: 1.5), band(.highShelf, 9000, 2),
+      ]),
+    // At low volume the ear loses bass and treble first.
+    GeneralPreset(
+      id: "Night Listening", preamp: -5,
+      bands: [band(.lowShelf, 100, 5), band(.peak, 3000, -1, q: 1), band(.highShelf, 8000, 3)]),
+    GeneralPreset(
+      id: "Clear Dialogue", preamp: -3.5,
+      bands: [
+        band(.highPass, 80), band(.peak, 250, -2, q: 1), band(.peak, 2000, 3, q: 0.9),
+        band(.peak, 4000, 1.5, q: 1.2),
+      ]),
+    GeneralPreset(id: "More Bass", preamp: -5, bands: [band(.lowShelf, 90, 5)]),
+    GeneralPreset(
+      id: "Softer Treble", preamp: 0,
+      bands: [band(.peak, 3500, -1.5, q: 1.2), band(.highShelf, 6000, -3)]),
+  ]
+
+  // MARK: Export
+
+  /// The text that parseParametricText reads back, which is also what Equalizer APO and the
+  /// apps that take AutoEq results accept.
+  static func parametricText(preamp: Double, bands: [EnhancedAudioEQBand]) -> String {
+    func number(_ value: Double, _ digits: Int) -> String {
+      var text = String(format: "%.\(digits)f", value)
+      if text.contains(".") {
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
+      }
+      return text == "-0" ? "0" : text
+    }
+    var lines = ["Preamp: \(number(preamp, 1)) dB"]
+    for (index, band) in bands.enumerated() {
+      let state = band.enabled ? "ON" : "OFF"
+      let frequency = number(band.frequency, 1)
+      let q = String(format: "%.2f", band.q)
+      let head = "Filter \(index + 1): \(state)"
+      switch band.kind {
+      case .peak:
+        lines.append("\(head) PK Fc \(frequency) Hz Gain \(number(band.gain, 1)) dB Q \(q)")
+      case .lowShelf:
+        lines.append("\(head) LSC Fc \(frequency) Hz Gain \(number(band.gain, 1)) dB Q \(q)")
+      case .highShelf:
+        lines.append("\(head) HSC Fc \(frequency) Hz Gain \(number(band.gain, 1)) dB Q \(q)")
+      case .lowPass:
+        lines.append("\(head) LPQ Fc \(frequency) Hz Q \(q)")
+      case .highPass:
+        lines.append("\(head) HPQ Fc \(frequency) Hz Q \(q)")
+      }
+    }
+    return lines.joined(separator: "\n") + "\n"
+  }
+
   // MARK: Import
 
   /// Reads the parametric text that AutoEq, Squiglink and Equalizer APO write:
