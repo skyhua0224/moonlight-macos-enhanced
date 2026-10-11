@@ -10,6 +10,7 @@
 #import "Ticks.h"
 #import "HIDSupportRumbleTypes.h"
 #import "MLPrecisionTouchpad.h"
+#import "MLDualSenseTouchpad.h"
 
 #import "MoonlightEnhanced-Swift.h"
 #include <limits.h>
@@ -71,6 +72,8 @@ typedef struct {
 @property (nonatomic) float trackpadScrollSpeed;
 @property (nonatomic) BOOL trackpadReverseScroll;
 @property (nonatomic, strong) id touchpadSettingsObserver;
+@property (nonatomic, strong) id controllerPrecisionSettingsObserver;
+@property (nonatomic, strong) MLDualSenseTouchpad *controllerPrecisionTouchpad;
 @property (nonatomic, strong) NSTimer *gamepadMenuTimer;
 @property (nonatomic) CVDisplayLinkRef displayLink;
 @property (atomic) CGFloat mouseDeltaX;

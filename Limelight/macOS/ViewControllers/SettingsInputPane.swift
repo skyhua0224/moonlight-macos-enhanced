@@ -129,16 +129,16 @@ private struct ControllerSettingsSection: View {
           .frame(width: 190, alignment: .trailing)
         }
       }
-      SettingsRow(title: "DualSense Touchpad Output") {
+      SettingsRow(title: "PlayStation Touchpad Output") {
         HStack(spacing: 6) {
-          InfoHintButton(hintKey: "DualSense Touchpad Output detail")
+          InfoHintButton(hintKey: "PlayStation Touchpad Output detail")
           Picker("", selection: $settingsModel.dualSensePrecisionTouchpad) {
-            Text(languageManager.localize("DualSense Touchpad Output Controller")).tag(false)
-            Text(languageManager.localize("DualSense Touchpad Output Precision")).tag(true)
+            Text(languageManager.localize("PlayStation Touchpad Output Controller")).tag(false)
+            Text(languageManager.localize("PlayStation Touchpad Output Precision")).tag(true)
           }
           .labelsHidden()
           .controllerPicker(selection: $settingsModel.dualSensePrecisionTouchpad, options: [false, true], title: { value in
-            languageManager.localize(value ? "DualSense Touchpad Output Precision" : "DualSense Touchpad Output Controller")
+            languageManager.localize(value ? "PlayStation Touchpad Output Precision" : "PlayStation Touchpad Output Controller")
           })
           .frame(width: 250, alignment: .trailing)
         }

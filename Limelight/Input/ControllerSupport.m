@@ -974,7 +974,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  *
  * Pausing stops feedback without destroying haptic engines, releases gamepad, mouse and native
  * touch state and neutralizes active gyro reporting when the context is initialized, then clears
- * delivered-state caches. Resuming republishes physical A/B mouse and touchpad button state,
+ * delivered-state caches. Only announced gamepads receive neutral state, preserving arrival ordering
+ * after failed or pending announcements. Resuming republishes physical A/B mouse and touchpad button state,
  * current controller state and deferred removals for slots that remain absent. Motion callbacks
  * remain installed but gate inline sample delivery; they retain no pending sample snapshots.
  * Call on the main thread for sensor and touch state.
@@ -1018,8 +1019,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                     LiSendControllerMotionEventCtx(input, [self remoteControllerNumber:controller],
                                                    LI_MOTION_TYPE_GYRO, 0.0f, 0.0f, 0.0f);
                 }
-                LiSendMultiControllerEventCtx(input, [self remoteControllerNumber:controller],
-                    _multiController ? (unsigned char)_controllerNumbers : 1, 0, 0, 0, 0, 0, 0, 0);
+                // A failed/pending arrival has no remote gamepad state to release.
+                if (controller.controllerAnnounced)
+                    LiSendMultiControllerEventCtx(input, [self remoteControllerNumber:controller],
+                        _multiController ? (unsigned char)_controllerNumbers : 1, 0, 0, 0, 0, 0, 0, 0);
                 // Release native contacts before resetting their last delivered positions.
                 if (!ControllerTouchpadUsesMouse(self, controller)) {
                     if (controller.primaryTouchActive)
@@ -1907,7 +1910,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 /**
  * Advertises capabilities and flushes changed gamepad state to the active stream.
  *
- * Requires slot ownership, enabled delivery and a valid context, and skips ordinary packets in mouse mode.
+ * Requires slot ownership, enabled delivery and an initialized context. Announces capabilities even
+ * in full mouse mode before suppressing ordinary state, so later pause packets cannot allocate an untyped pad.
  * Uses the controller monitor and stream lock, suppresses duplicate states, and sends the live
  * assigned-slot mask; single-controller mode uses remote slot zero. The quit chord posts its
  * notification asynchronously on main and clears the outgoing buttons.
@@ -1935,16 +1939,10 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             controller.lastButtonFlags = 0;
         }
 
-        if (controller.isMouseMode) {
-            // Don't send controller events while in mouse mode
-            return;
-        }
-
-        // Standard Controller Mode
         [_controllerStreamLock lock];
 
         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-        if (!inputCtx) {
+        if (!inputCtx || !LiInputContextIsInitialized(inputCtx)) {
             [_controllerStreamLock unlock];
             return;
         }
@@ -2021,6 +2019,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
                 LiSendControllerBatteryEventCtx(inputCtx, [self remoteControllerNumber:controller],
                                                 batteryState, percentage);
             }
+        }
+
+        // Capability arrival must also precede a later neutral packet when full
+        // mouse emulation is active. Only ordinary gamepad state is suppressed.
+        if (controller.isMouseMode) {
+            [_controllerStreamLock unlock];
+            return;
         }
 
         ControllerGamepadState state = {
@@ -2671,7 +2676,8 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * Removal releases delivered touch, mouse, gamepad and sensor state before advertising a replacement;
  * native feedback snapshots use stream -> dictionary/mailbox locking, with device I/O on main.
  * High-rate feedback is buffered before dispatch; live touch-route changes resynchronize held
- * hardware clicks while preserving their selection. Call on main; cleanup removes observers,
+ * hardware clicks while preserving their selection. Removal sends neutral state only for an announced
+ * pad; an empty or failed arrival must not allocate a virtual gamepad. Call on main; cleanup removes observers,
  * handlers and timers.
  * @param streamConfig Stream configuration supplying controller behavior and player policy.
  * @param delegate Recipient of input-device presence changes.
@@ -2919,7 +2925,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             // removal boundary, including snapshots captured during device cleanup and OSC reuse.
             if (ownedRemoteSlot) self->_controllerDeliveryGeneration++;
             PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
-            if (ownedRemoteSlot && self.shouldSendInputEvents && inputCtx && LiInputContextIsInitialized(inputCtx)) {
+            if (ownedRemoteSlot && limeController.controllerAnnounced && self.shouldSendInputEvents && inputCtx && LiInputContextIsInitialized(inputCtx)) {
                 LiSendMultiControllerEventCtx(inputCtx, [self remoteControllerNumber:limeController],
                     self->_multiController ? (unsigned char)self->_controllerNumbers : 1,
                     0, 0, 0, 0, 0, 0, 0);

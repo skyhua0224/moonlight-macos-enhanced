@@ -2,7 +2,7 @@
 //  MLDualSenseTouchpad.h
 //  Moonlight for macOS
 //
-//  Sends a DualSense touchpad to the host as a Windows precision touchpad
+//  Sends a DualShock 4 or DualSense touchpad to the host as a Windows precision touchpad
 //  (the same touchpad frames the Mac trackpad uses) instead of as controller
 //  touch input or pointer events.
 //

@@ -1249,7 +1249,8 @@ class SettingsModel: ObservableObject {
         userInfo: ["hostId": hostId, "native": nativeTouchpad])
     }
   }
-  // Send the DualSense touchpad to the host as a Windows precision touchpad instead of controller touch input.
+  /// Sends DS4/DS5 fingers and clicks as a Windows precision touchpad on either controller backend.
+  /// Main-thread edits persist the legacy key and notify live streams; profile loading has no side effects.
   @Published var dualSensePrecisionTouchpad: Bool {
     didSet {
       guard !isLoading else { return }

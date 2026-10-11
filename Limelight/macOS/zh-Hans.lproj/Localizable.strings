@@ -1316,10 +1316,10 @@
 "Precision Touchpad Gesture Permission Message" = "触控板发送给 Windows 时，Moonlight 可以阻止调度中心、切换桌面等三/四指 macOS 手势同时在这台 Mac 上触发。这需要辅助功能权限。未授权时精确式触控板仍可使用，但这些手势也会在 Mac 上触发。";
 "Open Accessibility Settings" = "打开辅助功能设置";
 "Not Now" = "暂不";
-"DualSense Touchpad Output" = "DualSense 触控板输出";
-"DualSense Touchpad Output detail" = "“手柄触控板”按上方设置把触控板作为游戏手柄触摸或 Mac 风格触控板发送；“Windows 精确式触控板”则把手指和按压作为精确式触控板发送，需要支持该功能的 Windows 11 主机，不支持时自动使用手柄触控板。DualSense 触控板最多识别两根手指，因此只支持单指和双指手势，不支持三指和四指手势。";
-"DualSense Touchpad Output Controller" = "手柄触控板（默认）";
-"DualSense Touchpad Output Precision" = "Windows 精确式触控板";
+"PlayStation Touchpad Output" = "PlayStation 触控板输出";
+"PlayStation Touchpad Output detail" = "“手柄触控板”按上方设置把触控板作为游戏手柄触摸或 Mac 风格触控板发送；“Windows 精确式触控板”则把手指和按压作为精确式触控板发送，需要支持该功能的 Windows 11 主机，不支持时自动使用手柄触控板。DualShock 4 和 DualSense 触控板最多识别两根手指，因此只支持单指和双指手势，不支持三指和四指手势。";
+"PlayStation Touchpad Output Controller" = "手柄触控板（默认）";
+"PlayStation Touchpad Output Precision" = "Windows 精确式触控板";
 "Type Text with the macOS Input Method" = "使用 macOS 输入法输入文字";
 "Type Text with the macOS Input Method Hint" = "使用拼音等 Mac 输入法时，在本机完成组字，并把确认后的文字以 UTF-8 发送到主机。普通按键和快捷键仍作为按键事件发送。";
 "Live stream change failed, reconnecting" = "实时调整未生效，正在重新连接";

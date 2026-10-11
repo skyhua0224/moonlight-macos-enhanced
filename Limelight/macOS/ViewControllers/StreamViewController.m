@@ -930,8 +930,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
  * Initializes the visible stream view and installs session settings/lifecycle observers.
  *
  * AppKit calls this on main. Creates input backends, subscribes to live controller preference
- * changes for the active/global profile, and starts stream/window setup. Teardown must remove
- * these observers and timers before replacing or closing the session.
+ * changes for the active/global profile, and starts stream/window setup.
+ * Defaults changes also refresh controller delivery, covering profile writes outside the settings UI.
+ * Teardown must remove these observers and timers before replacing or closing the session.
  */
 - (void)viewDidAppear {
     [super viewDidAppear];
@@ -1019,6 +1020,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.settingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [weakSelf updateWindowSubtitle];
         [weakSelf refreshInputDiagnosticsPreference];
+        [weakSelf refreshControllerInputSendingState];
     }];
     self.streamShortcutSettingsDidChangeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"MoonlightStreamShortcutsDidChange" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         __strong typeof(weakSelf) strongSelf = weakSelf;

@@ -1553,9 +1553,16 @@ class SettingsClass: NSObject {
     return SettingsModel.defaultGamepadMouseMode
   }
 
+  /// Resolves DS4/DS5 precision output from the legacy host key, then the global preference.
+  /// - Parameter key: Host UUID or global profile ID; an explicit host false overrides global true.
+  /// - Returns: Whether either controller backend should attempt precision output; defaults to false.
   @objc static func dualSensePrecisionTouchpad(for key: String) -> Bool {
-    UserDefaults.standard.object(
-      forKey: SettingsModel.controllerDualSensePrecisionTouchpadKeyPrefix + key) as? Bool ?? false
+    let defaults = UserDefaults.standard
+    let prefix = SettingsModel.controllerDualSensePrecisionTouchpadKeyPrefix
+    if let override = defaults.object(forKey: prefix + key) as? Bool {
+      return override
+    }
+    return defaults.object(forKey: prefix + SettingsModel.globalHostId) as? Bool ?? false
   }
 
   @objc static func nativeTouchpad(for key: String) -> Bool {

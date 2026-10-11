@@ -333,12 +333,16 @@ extension SettingsClass {
     return profileKey
   }
 
+  /// Encodes a profile and publishes its cache before UserDefaults emits change notifications.
+  /// - Parameters:
+  ///   - settings: Complete profile to save; encoding failure leaves storage and cache unchanged.
+  ///   - key: Host UUID or the global profile identifier. Call on main with other profile mutations.
   static func persist(_ settings: Settings, for key: String) {
     let profileKey = SettingsClass.profileKey(for: key)
     if let data = try? PropertyListEncoder().encode(settings) {
-      UserDefaults.standard.set(data, forKey: profileKey)
       Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
       Settings.storeGeneration += 1
+      UserDefaults.standard.set(data, forKey: profileKey)
     }
   }
 

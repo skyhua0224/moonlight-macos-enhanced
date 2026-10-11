@@ -592,8 +592,9 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 /**
  * Changes the HID controller-delivery gate and resets motion filters and touchpad gestures.
  *
- * Pausing synchronously drains the input queue and sends neutral gamepad, touch, gyro and mouse
- * releases when a direct-HID context is initialized, and stops device feedback including HID fallback.
+ * Pausing first cancels controller precision contacts, then synchronously drains the input queue
+ * and sends neutral gamepad, touch, gyro and mouse releases when a direct-HID context is initialized, and stops device feedback including HID fallback.
+ * Unannounced Sony pads receive no neutral gamepad packet, preserving capability arrival ordering.
  * Resuming advertises PlayStation capabilities before
  * resending physical state. Host motion rates survive this transition. Call on main for menu
  * timers, never from inputQueue because disabling performs dispatch_sync onto that queue.
@@ -602,6 +603,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 - (void)setShouldSendControllerEvents:(BOOL)enabled {
     @synchronized (self) {
         if (_shouldSendControllerEvents == enabled) return;
+        if (!enabled) [self.controllerPrecisionTouchpad releaseAll];
         _shouldSendControllerEvents = enabled;
         ResetHIDGyroFilterState(self);
         if (!enabled) {
@@ -621,6 +623,8 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
             PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
             if (self.controllerDriver == 0 && input && LiInputContextIsInitialized(input)) {
                 int player = self.controller.playerIndex;
+                IOHIDDeviceRef device = [self getFirstDevice];
+                BOOL releaseGamepad = device && (!isPlayStation(device) || self.reportedPlayStationArrival);
                 BOOL stopGyro = self.reportedPlayStationArrival && self.requestedGyroRateHz > 0;
                 BOOL primaryTouchActive = self.ps4PrimaryTouchActive;
                 BOOL secondaryTouchActive = self.ps4SecondaryTouchActive;
@@ -629,7 +633,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
                 // Finish queued input and release state before teardown can clear the context.
                 dispatch_sync(self.inputQueue, ^{
                     LiSetThreadConnectionContext(input->connectionContext);
-                    LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
+                    if (releaseGamepad) LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
                     if (primaryTouchActive)
                         LiSendControllerTouchEventCtx(input, player, LI_TOUCH_EVENT_UP, 0, primaryX, primaryY, 0.0f);
                     if (secondaryTouchActive)
@@ -676,6 +680,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 /**
  * Replaces the borrowed stream context and resets session-specific PlayStation input state.
  *
+ * Releases controller precision contacts against the old context before replacing its borrowed pointer.
  * A changed pointer clears arrival, requested motion rates, filter history, mode overrides and gestures,
  * and delivered mouse sources, then synchronizes scroll diagnostics. Physical buttons and selected
  * click survive for reconciliation with the new session. The HID monitor serializes this reset with motion
@@ -689,6 +694,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
             return;
         }
 
+        [self.controllerPrecisionTouchpad releaseAll];
         _inputContext = inputContext;
         self.inputContextGeneration++;
         self.reportedPlayStationArrival = NO;
@@ -1059,6 +1065,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
  * preferences.
  * Registers device/preference observers and input queues on main; cleanup must unregister them.
  * Live touchpad preferences resend controller state only when the direct-HID driver is active.
+ * DS4/DS5 precision output shares the GameController encoder and releases its previous route on changes.
  * @param host Host profile whose input settings apply to this stream.
  * @return Initialized input backend.
  */
@@ -1098,6 +1105,27 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         self.trackpadReverseScroll = [SettingsClass reverseScrollDirectionFor:host.uuid];
         [self refreshGamepadMouseModeConfiguration];
         __weak HIDSupport *weakSelf = self;
+        self.controllerPrecisionTouchpad = [[MLDualSenseTouchpad alloc] init];
+        self.controllerPrecisionTouchpad.contextProvider = ^PML_INPUT_STREAM_CONTEXT {
+            HIDSupport *me = weakSelf;
+            PML_INPUT_STREAM_CONTEXT input = me ? HIDInputContext(me) : NULL;
+            return input && LiInputContextIsInitialized(input) ? input : NULL;
+        };
+        self.controllerPrecisionTouchpad.enabled = [SettingsClass dualSensePrecisionTouchpadFor:host.uuid];
+        self.controllerPrecisionSettingsObserver = [[NSNotificationCenter defaultCenter]
+            addObserverForName:@"ControllerDualSensePrecisionTouchpadDidChange" object:nil queue:NSOperationQueue.mainQueue
+            usingBlock:^(NSNotification *note) {
+                HIDSupport *me = weakSelf;
+                NSString *changedHost = note.userInfo[@"hostId"];
+                if (!me || (![changedHost isEqualToString:me.host.uuid] && ![changedHost isEqualToString:@"__global__"])) return;
+                @synchronized (me) {
+                    BOOL precision = [SettingsClass dualSensePrecisionTouchpadFor:me.host.uuid];
+                    if (precision == me.controllerPrecisionTouchpad.enabled) return;
+                    [me releaseTrackpadState];
+                    me.controllerPrecisionTouchpad.enabled = precision;
+                    if (me.controllerDriver == 0) [me sendControllerEvent];
+                }
+            }];
         self.touchpadSettingsObserver = [[NSNotificationCenter defaultCenter]
             addObserverForName:@"ControllerTouchpadModeDidChange" object:nil queue:NSOperationQueue.mainQueue
             usingBlock:^(NSNotification *note) {
@@ -1183,6 +1211,9 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
  * Publishes ordinary and aggregate mouse state using a previously evaluated shortcut snapshot.
  * Caller uses the serialized HID state-update path; Sony report parsing passes the routing word
  * from its complete physical snapshot so recognition is not repeated during publication.
+ * An empty physical slot sends no gamepad packets. Sony arrival is guaranteed even in full mouse mode, and before ordinary state from value callbacks, mode changes or refreshes,
+ * so the host allocates touch/motion capabilities even before the first complete input report.
+ * Precision output owns the mechanical touchpad click and suppresses its native gamepad bit.
  * @param routing Shortcut consumption/replay decision for the current physical state.
  */
 - (void)sendControllerEventWithRouting:(uint64_t)routing {
@@ -1191,7 +1222,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         // Capture state
         int playerIndex = self.controller.playerIndex;
         int lastButtonFlags = self.controller.lastButtonFlags;
-        if (![self touchpadUsesMouse] && (self.controllerShortcutPhysicalButtons & TOUCHPAD_FLAG))
+        if (![self.controllerPrecisionTouchpad claimsTouchpad] && ![self touchpadUsesMouse] && (self.controllerShortcutPhysicalButtons & TOUCHPAD_FLAG))
             lastButtonFlags |= TOUCHPAD_FLAG;
         else lastButtonFlags &= ~TOUCHPAD_FLAG;
         uint32_t consumed = ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(routing));
@@ -1219,14 +1250,18 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         short lastRightStickX = self.controller.lastRightStickX;
         short lastRightStickY = self.controller.lastRightStickY;
         
+        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+        if (!inputCtx || !LiInputContextIsInitialized(inputCtx)) {
+            return;
+        }
+        IOHIDDeviceRef device = [self getFirstDevice];
+        // Value callbacks, live mode changes and shortcut refreshes can precede the
+        // first complete Sony report. Never let ordinary state allocate an untyped pad.
+        if (!device || (isPlayStation(device) && ![self reportPlayStationControllerArrival])) return;
         if (self.controller.isMouseMode) {
             return;
         }
 
-        PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-        if (!inputCtx) {
-            return;
-        }
         HIDDispatchInput(self, inputCtx, ^{
             LiSendMultiControllerEventCtx(inputCtx, playerIndex, 1, lastButtonFlags, lastLeftTrigger, lastRightTrigger, lastLeftStickX, lastLeftStickY, lastRightStickX, lastRightStickY);
         });
@@ -1567,11 +1602,12 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 }
 
 /**
- * Releases native contacts or a touchpad mouse click before resetting local gestures.
+ * Releases precision/native contacts or a touchpad mouse click before resetting local gestures.
  * Runs on main under the HID monitor, never inputQueue; synchronously drains queued input.
  * A/B mouse sources are preserved when releasing the mechanical touchpad button.
  */
 - (void)releaseTrackpadState {
+    [self.controllerPrecisionTouchpad releaseAll];
     PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
     if (self.controllerDriver == 0 && self.shouldSendControllerEvents && input && LiInputContextIsInitialized(input)) {
         BOOL primary = self.ps4PrimaryTouchActive, secondary = self.ps4SecondaryTouchActive;
@@ -1593,6 +1629,7 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 
 /**
  * Projects physical A/B and mechanical touchpad sources through the current shortcut route.
+ * Precision output owns the mechanical click; ordinary mouse mode retains its separate A/B sources.
  * Emits only aggregate mouse edges, preserving overlapping sources. Held click selection survives
  * consumption, gesture resets and suspension; a physical release or device removal clears it.
  * Call under the HID monitor on main; output is ordered on inputQueue.
@@ -1605,7 +1642,8 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
     uint32_t physical = self.controllerShortcutPhysicalButtons;
     uint32_t consumed = ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(routing));
     int flags = self.controller.isMouseMode ? (physical & ~consumed & (A_FLAG | B_FLAG)) : 0;
-    int button = (physical & TOUCHPAD_FLAG) && !(consumed & TOUCHPAD_FLAG) && [self touchpadUsesMouse] ?
+    int button = ![self.controllerPrecisionTouchpad claimsTouchpad] &&
+        (physical & TOUCHPAD_FLAG) && !(consumed & TOUCHPAD_FLAG) && [self touchpadUsesMouse] ?
         self.controller.trackpadPhysicalMouseButton : 0;
     int old = self.controller.lastMouseModeButtonFlags;
     if (self.controller.trackpadMouseButton == BUTTON_LEFT) old |= A_FLAG;
@@ -1666,6 +1704,8 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 
 /**
  * Delivers a validated Sony contact pair using its complete report's shortcut decision.
+ * Supported precision output forwards both normalized contacts and the unconsumed mechanical click
+ * through the shared encoder, taking precedence over native touch and mouse gestures.
  * Gesture thresholds, native-contact behavior and input-queue ordering match the standalone
  * touchpad entry point. Runs on main under the HID monitor; paused delivery retains no contacts.
  * @param primary Borrowed four-byte primary contact.
@@ -1688,6 +1728,14 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
             const UInt8 *c = contacts[i];
             x[i] = MIN(1.0f, (c[1] | ((c[2] & 0x0F) << 8)) / 1920.0f);
             y[i] = MIN(1.0f, ((c[2] >> 4) | (c[3] << 4)) / height);
+        }
+        if ([self.controllerPrecisionTouchpad claimsTouchpad]) {
+            for (NSUInteger i = 0; i < 2; i++)
+                [self.controllerPrecisionTouchpad setContact:i active:active[i]
+                    x:x[i] * 2.0f - 1.0f y:1.0f - y[i] * 2.0f player:0];
+            BOOL click = pressed && !(ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(routing)) & TOUCHPAD_FLAG);
+            [self.controllerPrecisionTouchpad setButtonPressed:click player:0];
+            return;
         }
         if (![self touchpadUsesMouse]) {
             if (self.controllerVirtualType == 1) return;
@@ -3489,10 +3537,12 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
 /**
  * Clears physical direct-HID controller state when a device is removed.
  *
- * Cancels menu tracking and resets arrival, calibration, filters and contacts under the HID
+ * Releases precision contacts before changing owners. Cancels menu tracking and resets arrival,
+ * calibration, filters and contacts under the HID
  * monitor, preserving host motion rates across physical reconnects. Clears pending device feedback
  * so reconnect cannot replay the removed pad's rumble. Drains queued input and
  * releases delivered gamepad, mouse, touch and gyro state before clearing local caches.
+ * Unannounced Sony pads skip neutral gamepad packets to avoid allocating an untyped replacement.
  * Runs on the HID manager's main run loop, never on inputQueue.
  * Ignores non-owner removal. After releasing the old owner, selects a remaining eligible pad
  * and reloads its calibration; session replacement retains the physical owner.
@@ -3509,6 +3559,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 
     if (![self isActiveHIDControllerDevice:device]) return;
 
+    [self.controllerPrecisionTouchpad releaseAll];
     [self.gamepadMenuTimer invalidate];
     self.gamepadMenuTimer = nil;
     self.gamepadMenuPressed = NO;
@@ -3523,6 +3574,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
             PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
             if (self.shouldSendControllerEvents && input && LiInputContextIsInitialized(input)) {
                 int player = self.controller.playerIndex;
+                BOOL releaseGamepad = !isPlayStation(device) || self.reportedPlayStationArrival;
                 BOOL primary = self.ps4PrimaryTouchActive, secondary = self.ps4SecondaryTouchActive;
                 float primaryX = self.ps4PrimaryTouchX, primaryY = self.ps4PrimaryTouchY;
                 float secondaryX = self.ps4SecondaryTouchX, secondaryY = self.ps4SecondaryTouchY;
@@ -3531,7 +3583,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
                 int trackpadButton = self.controller.trackpadMouseButton;
                 dispatch_sync(self.inputQueue, ^{
                     LiSetThreadConnectionContext(input->connectionContext);
-                    LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
+                    if (releaseGamepad) LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
                     if (primary)
                         LiSendControllerTouchEventCtx(input, player, LI_TOUCH_EVENT_UP, 0, primaryX, primaryY, 0);
                     if (secondary)
@@ -3648,7 +3700,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 /**
  * Switches direct-HID gamepad mouse mode, releasing delivered mouse buttons as needed.
  *
- * Entering mouse mode sends neutral gamepad state; leaving replaces A/B bits from physical state and flushes
+ * Entering mouse mode sends neutral gamepad state only for an already announced Sony pad (or non-Sony);
+ * leaving replaces A/B bits from physical state and flushes
  * ordinary state. Releases the touch surface and resets gestures under the HID monitor.
  * Posts HIDMouseModeToggledNotification after the transition.
  * Call on main, where mode and menu gesture state are managed.
@@ -3660,14 +3713,16 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
         [self releaseTrackpadState];
         PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
         int heldMouseButtons = self.controller.lastMouseModeButtonFlags;
-        if (input && self.shouldSendControllerEvents) {
+        if (input && LiInputContextIsInitialized(input) && self.shouldSendControllerEvents) {
+            IOHIDDeviceRef device = [self getFirstDevice];
+            BOOL releaseGamepad = device && (!isPlayStation(device) || self.reportedPlayStationArrival);
             int player = self.controller.playerIndex;
             HIDDispatchInput(self, input, ^{
                 if (heldMouseButtons & A_FLAG)
                     LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
                 if (heldMouseButtons & B_FLAG)
                     LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
-                if (active)
+                if (active && releaseGamepad)
                     LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
             });
         }
@@ -3874,7 +3929,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 }
 
 /**
- * Removes HID and touchpad preference observers, stops timers and closes devices on main.
+ * Removes HID and native/precision touchpad preference observers, releases precision contacts,
+ * stops timers and closes devices on main.
  * Drains the rumble worker after its final neutral output before invalidating the HID manager
  * and releasing the retained physical owner.
  * Controller delivery must be disabled before teardown to release remote touch/mouse state.
@@ -3888,6 +3944,9 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 
     [[NSNotificationCenter defaultCenter] removeObserver:self.touchpadSettingsObserver];
     self.touchpadSettingsObserver = nil;
+    [[NSNotificationCenter defaultCenter] removeObserver:self.controllerPrecisionSettingsObserver];
+    self.controllerPrecisionSettingsObserver = nil;
+    [self.controllerPrecisionTouchpad releaseAll];
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseConnectObserver];
     [[NSNotificationCenter defaultCenter] removeObserver:self.mouseDisconnectObserver];
     self.mouseConnectObserver = nil;
