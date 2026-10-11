@@ -1200,7 +1200,10 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
  * only after a successful protocol call so failures may be retried. Call from the serialized
  * HID controller path before sending extended input. Explicit Xbox emulation advertises Xbox
  * controls without PlayStation extensions. DS4 and DS5 otherwise advertise touch and motion;
- * Disabled motion omits sensor capabilities.
+ * Disabled motion omits sensor capabilities. These describe hardware support, not the current
+ * report format: Bluetooth initialization may deliver simple reports before extended data.
+ * Sunshine allocates on the first arrival and ignores repeat arrivals for an allocated slot,
+ * so temporary report availability must not remove capabilities that become usable later.
  * @return YES if arrival was already advertised or was successfully sent; otherwise NO.
  */
 - (BOOL)reportPlayStationControllerArrival {
@@ -3043,6 +3046,8 @@ void myHIDReportCallback (
     };
     
     if (isPS4(device)) {
+        // Hardware support is independent of this packet's sensor/touch availability.
+        // Never read extended fields from the simple Bluetooth format below.
         self.playStationHasMotion = YES;
         NSUInteger stateOffset;
         switch (report[0]) {
@@ -3149,6 +3154,8 @@ void myHIDReportCallback (
             [self handlePS4MotionState:state];
         }
     } else if (isPS5(device)) {
+        // Hardware support is independent of this packet's sensor/touch availability.
+        // Never read extended fields from the simple Bluetooth format below.
         self.playStationHasMotion = YES;
         NSUInteger stateOffset;
         BOOL simple = report[0] == k_EPS5ReportIdState && reportLength == 10;

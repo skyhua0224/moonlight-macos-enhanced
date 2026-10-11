@@ -2510,9 +2510,15 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self.controllerSupport setAdaptiveTriggers:controllerNumber eventFlags:eventFlags typeLeft:typeLeft typeRight:typeRight left:left right:right];
 }
 
+/**
+ * Routes borrowed authored IR feedback to the selected backend under the controller delivery gate.
+ * Background controller input permits feedback while keyboard/mouse capture remains disabled.
+ * Native callers consume/copy the frame in the backend before returning; paused delivery drops it.
+ * @param frame Borrowed protocol frame; NULL and disabled rumble are ignored.
+ */
 - (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame {
     if (frame == NULL || ![SettingsClass rumbleFor:self.app.host.uuid] ||
-        !self.hidSupport.shouldSendInputEvents) return;
+        !self.hidSupport.shouldSendControllerEvents) return;
     if (self.controllerSupport != nil) {
         [self.controllerSupport ds5HapticsIrV2:frame];
     } else if (frame->controllerNumber == 0) {
