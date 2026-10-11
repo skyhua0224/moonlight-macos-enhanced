@@ -2,178 +2,174 @@
 
 <div align="center">
 
-[![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)]() [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
+[![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
 **Moonlight macOS / Moonlight for macOS 原生增强版客户端**
 
-`Moonlight macOS Enhanced` 是一个面向 Sunshine、Foundation Sunshine 与兼容 GameStream 主机的原生 macOS 串流客户端，使用 AppKit / SwiftUI 构建，并针对 Apple Silicon 与 Intel Mac 做了持续优化。
+`Moonlight macOS Enhanced` 是一个原生 macOS 串流客户端，用于连接 Sunshine、Foundation Sunshine 与兼容 GameStream 的主机。界面使用 AppKit / SwiftUI 构建，支持 Apple Silicon 与 Intel Mac，要求 macOS 12 或更高版本。
 
 简体中文 | [English](README.en.md)
 
+[下载](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [更新说明](.github/release-notes/v1.3.9-rc.3.md) · [问题反馈](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
+
+<img src="readme-assets/images/app-list.png" width="760" alt="应用列表">
+
 </div>
 
----
+**目录**：[当前版本](#当前版本) · [快速开始](#快速开始) · [功能概览](#功能概览) · [截图](#截图) · [主机端兼容性](#主机端兼容性) · [安装](#安装) · [视频与 HDR](#视频与-hdr) · [音频](#音频) · [键盘、鼠标与触控板](#键盘鼠标与触控板) · [手柄](#手柄) · [控制中心](#串流中的控制中心) · [Foundation Sunshine 协作](#foundation-sunshine-协作) · [连接与诊断](#连接与诊断) · [更新](#更新) · [从源码构建](#从源码构建) · [问题反馈](#问题反馈)
 
-## 1.3.9 候选版本
+## 当前版本
 
-**1.3.9 是原生架构重建前最后一个版本。** 当前候选版重点改进设置界面、输入、连接与 Foundation Sunshine 协作；完整变更和已知限制见 [1.3.9 RC2 更新说明](.github/release-notes/v1.3.9-rc.2.md)。
+最新版本是 **1.3.9 RC3**（预发布），变更见 [1.3.9 RC3 更新说明](.github/release-notes/v1.3.9-rc.3.md)。1.3.9 是原生架构重建前最后一个版本。
 
-- 设置支持搜索具体选项；剪贴板同步入口位于 `设置 → 串流 → 剪贴板`。
-- 视频设置提供独立的 `10-bit SDR` 选项；Metal 专用调节仅在选择 Metal 渲染器时显示。
-- DualSense 提供远端触控板和 Mac 风格模式，支持长按 Options 切换；支持轻点、自然滚动和双指手势。
-- 关于与更新页接入 Sparkle，采用 GitHub 优先、同版本 CNB 下载镜像回退；测试版使用独立更新渠道。
-- USB 转发、主机文件和动态 HDR 的可用范围与限制以更新说明为准，需要对应的系统、硬件和主机配置支持。
+- 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载。安装包有 `universal`、`arm64`、`x86_64` 三种，不确定时选 `universal`。
+- 已安装 1.3.9 的用户可以在 `设置 → 关于与更新` 检查更新。
+- 首次打开被 macOS 拦截时，见下文“安装”一节。
 
-## ✨ 核心特性
+1.3.9 相比 1.3.8 的主要变化：
 
-- **原生 macOS 客户端** — AppKit / SwiftUI 界面、Apple Silicon / Intel 双支持、深色模式与双语界面
-- **完整串流能力** — 自定义分辨率与帧率、AV1 / HEVC / H.264 解码、HDR、10-bit SDR、YUV 4:4:4、MetalFX / VT 增强与自动码率
-- **多渲染链路** — 提供 `原生渲染器`、`Metal 渲染器` 与 `兼容渲染器`；`原生渲染器` 为默认推荐选项，`Metal 渲染器` 提供更深的 HDR / 色彩调节
-- **剪贴板支持** — 配合 Foundation Sunshine，支持文本与单张图片的双向复制粘贴，并按串流窗口焦点自动接管当前会话
-- **输入与控制增强** — 支持以 `CoreHID` 为核心的低延迟、高回报率鼠标输入链路，带来更直接、更细腻的相对移动响应；自由鼠标模式可无缝切换到其他屏幕继续操作，锁定鼠标模式更适合游戏与持续相对移动场景，并提供可自定义串流快捷键与手柄增强
-- **DualSense / DS5** — 按键、摇杆、扳机、震动、灯光、电量与动作输入，以及主机触控板 / Mac 风格触控板两种模式
-- **视音频体验升级** — 采用更低延迟的 `Core Audio` 本地播放链路，支持多通道接收与播放，以及客户端侧音效增强、EQ 调节与麦克风链路增强
-- **连接与稳定性** — 每台主机独立连接方式、自定义端口 / IPv6 / 域名、性能浮窗、诊断日志、AWDL 稳定性辅助
+- 设置界面重新设计，可以搜索具体选项，也可以用手柄操作整个应用。
+- 音频新增无损 PCM、AC3、E-AC3 与杜比直通，串流中可切换输出设备。
+- 输入新增精确式触控板、macOS 输入法输入文字和按字符的按键映射；DualSense 支持触控板、灯光、电量与触觉反馈。
+- 视频新增独立的 10-bit SDR、动态 HDR 偏好，以及 Dolby Vision 与 HDR10+ 的协商和回退。
+- 配合 Foundation Sunshine：显示器与虚拟显示器配置，串流中不重连调整码率、帧率和分辨率，自适应码率，主机显示缩放与主机命令。
+- 新增应用内更新、性能报告导出和中英文日志查看器。
 
-<details>
-<summary><strong>视频 / HDR / 渲染链路</strong></summary>
+## 快速开始
 
-- 视频协商覆盖 `AV1 / HEVC / H.264`、HDR、YUV `4:4:4`、远端分辨率 / FPS 覆盖与自动码率调节
-- 提供 `原生渲染器`、`Metal 渲染器` 与 `兼容渲染器` 三种视频播放链路
-- `原生渲染器` 使用 `VideoToolbox 解码 + 原生 Sample Buffer 呈现`，作为默认推荐选择，主打更低延迟、更高默认色准与稳定 HDR 播放体验
-- `Metal 渲染器` 使用更深的 `Metal / EDR` 呈现链路，提供 `HLG / PQ`、HDR 元数据来源、本机显示器 HDR 档案、亮度参数、光学输出倍率、HLG 观看环境、EDR 策略、色调映射策略等专业调节
-- `Metal 渲染器` 同时提供显示同步、帧队列目标、响应倾向与 drawable timeout 等呈现时序调节项
-- `兼容渲染器` 保留旧视频链路，用于旧系统、兼容性问题或异常恢复场景
-- 画质增强链路可按能力与场景使用 `VT 低延迟超分`、`VT 高质量超分`、`MetalFX`、`基础缩放` 与 `VT 低延迟插帧`，并在不可用时自动回退
+1. 在要串流的电脑上安装并运行 [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) 或 [Sunshine](https://github.com/LizardByte/Sunshine)。
+2. 在 Mac 上安装本应用并打开。首次启动时允许“本地网络”权限，同一局域网内的主机会自动出现；也可以手动添加主机地址。
+3. 点击主机开始配对：应用会显示一个 PIN，在主机的 Sunshine 网页界面中输入它。
+4. 配对完成后选择一个应用开始串流。按 `Ctrl` + `Option` 释放鼠标；全屏时按 `Ctrl` + `Option` + `C` 打开控制中心。
 
-</details>
+## 功能概览
 
-<details>
-<summary><strong>音频 / 麦克风链路</strong></summary>
+| 方面 | 内容 |
+| --- | --- |
+| 视频 | AV1 / HEVC / H.264，自定义分辨率与帧率，YUV 4:4:4，10-bit SDR；原生、Metal、兼容三种渲染器；VT 超分、MetalFX 与插帧 |
+| HDR | HDR10（PQ / HLG）；Dolby Vision 8.1 / 8.4 与 HDR10+ 的协商和回退；主机中途开关 HDR 时画面随之切换 |
+| 音频 | Opus 立体声、5.1、7.1、7.1.4；无损 PCM、AC3、E-AC3；杜比直通到 HDMI 设备；客户端音效增强与 EQ；麦克风 |
+| 键盘、鼠标、触控板 | 锁定鼠标与自由鼠标；CoreHID 高回报率鼠标；精确式触控板；macOS 输入法输入文字；按位置或按字符的按键映射；快捷键翻译 |
+| 手柄 | 多手柄、震动、动作输入、手柄鼠标；DualSense 触控板、灯光、电量与触觉反馈；用手柄操作应用界面 |
+| 串流控制 | 串流中的控制中心；不重连调整码率、帧率和分辨率；自适应码率；视频 FEC 偏好 |
+| 主机协作 | 双向剪贴板、显示器与虚拟显示器配置、主机显示缩放、主机命令、休眠主机、USB 映射、主机文件 |
+| 诊断与更新 | 性能浮窗、性能报告导出、中英文日志查看器、应用内更新 |
 
-- 默认播放路径已经升级为更贴近 `Core Audio` 的低延迟本地播放链路，在保证稳定性的同时减少额外缓冲与不必要搬运
-- 支持接收主机侧 `Opus multistream` 音频，并完成 `2ch / 5.1 / 7.1 / 7.1.4` 的本地解码、协商与播放
-- 当输出设备本身支持多通道时，优先保留真实多通道语义；在耳机与 `2.0 / 2.1` 音箱上可切换 `音效增强`，由客户端侧完成更适合立体声设备的重渲染
-- `音效增强` 提供预设、EQ、空间感、音场与其他听感调节，适合耳机和立体声设备按偏好做本地优化
-- 配合支持相关能力的 Foundation Sunshine，可使用更完整的多通道协商、麦克风 uplink 与相关增强链路
+其中一部分需要 Foundation Sunshine，见下一节。
 
-</details>
+## 截图
 
-<details>
-<summary><strong>主机协作 / 输入 / 诊断</strong></summary>
+串流中的性能浮窗：
 
-- 鼠标输入围绕 `CoreHID` 低延迟、高回报率链路构建，让相对移动更直接、更跟手，也更适合追求灵敏度与持续操控的场景
-- `自由鼠标` 模式更适合远控、桌面应用与多屏环境，可无缝切换到其他显示器继续操作；`锁定鼠标` 模式更适合游戏、FPS 与需要持续相对移动的场景
-- 输入链路覆盖 `自由鼠标 / 锁定鼠标`、键盘与快捷键翻译、物理滚轮 / 平滑滚轮 / 触控板分流策略、多手柄、震动、Guide 模拟与手柄鼠标
-- 可向 Foundation Sunshine 发送主机显示扩展参数，并在开始串流时或主机设置中选择串流显示器、串流模式、`display_name`、`useVdd`、`customScreenMode` 与 HDR 显示参数覆盖
-- 配合 Foundation Sunshine，可在支持的主机上启用双向剪贴板同步，当前支持文本与单张图片，并按串流窗口焦点自动接管当前会话
-- 网络与主机协作支持自定义端口、IPv6、域名连接、每台主机独立连接方式，以及 `AWDL`、连接警告、性能浮窗、输入诊断、原始 / 浓缩日志等稳定性工具
+<img src="readme-assets/images/performance-overlay.png" alt="性能浮窗">
 
-</details>
+| 主机列表 | 音频与麦克风设置 |
+|:--------:|:----------------:|
+| <img src="readme-assets/images/host-list.png" width="420" alt="主机列表"> | <img src="readme-assets/images/settings-audio.png" width="420" alt="音频与麦克风设置"> |
 
-## 🖥️ 主机端兼容性
+| 键盘与鼠标设置 | 串流中的控制中心 |
+|:--------------:|:----------------:|
+| <img src="readme-assets/images/settings-keyboard-mouse.png" width="440" alt="键盘与鼠标设置"> | <img src="readme-assets/images/control-center.png" width="360" alt="串流中的控制中心"> |
+
+截图中的主机名称和地址已做模糊处理。
+
+## 主机端兼容性
 
 | 主机软件 | 兼容性 | 备注 |
 |----------|--------|------|
-| [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) | ⭐ 推荐 | 支持麦克风、YUV 4:4:4、多通道音频，以及双向剪贴板、手柄反馈与显示器配置；具体能力取决于主机版本和配置 |
-| [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ 支持 | 大部分功能可用，部分增强能力受限 |
-| GeForce Experience | ⚠️ 基础支持 | 已停止维护，不支持麦克风等新能力 |
+| [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) | ⭐ 推荐 | 可使用本客户端的全部功能；具体能力取决于主机版本和配置 |
+| [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ 支持 | 视频、Opus 音频、键鼠和手柄可用；下列增强功能不可用 |
+| GeForce Experience | ⚠️ 基础支持 | 已停止维护，仅基础串流 |
 
-> 💡 麦克风、YUV 4:4:4、部分输入与音频增强能力更适合配合 [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) 使用。
+以下功能需要 Foundation Sunshine，并且主机端启用了对应能力：
 
-## 📦 下载
+- 麦克风、7.1.4 声道、无损 PCM、AC3 与 E-AC3 音频
+- 双向剪贴板、显示器与虚拟显示器（VDD）配置、主机显示缩放
+- 串流中不重连调整码率、帧率和分辨率，自适应码率，视频 FEC 偏好
+- DualSense 的触控板、灯光与触觉反馈，精确式触控板
+- 主机命令、休眠主机、USB 映射、主机文件
 
-1.3.9 RC2 为预发布版本，请从发布页手动下载安装；应用内自动更新渠道正在部署。
+## 安装
 
-- 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载最新版本
-- 发布页提供三种安装包：`universal`、`arm64`、`x86_64`
-- 如果你不清楚它们之间的区别，默认推荐下载 `universal`
+系统要求：macOS 12 或更高版本，Apple Silicon 或 Intel Mac；主机端运行 Sunshine 或 Foundation Sunshine。
 
-## 📸 截图
+从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载 `.dmg`，打开后把 `MoonlightEnhanced.app` 拖到“应用程序”。应用使用独立的名称和标识，可以与 Moonlight QT 版本同时安装。
 
-以下截图来自 1.3.8；1.3.9 的设置页面已重新设计。
+> ⚠️ 此应用当前未做 Apple 公证。若 macOS 提示“MoonlightEnhanced.app 已损坏”或阻止打开，通常是 Gatekeeper 拦截未公证应用，并不代表文件损坏。
+>
+> 首次启动建议按这个顺序尝试：
+> 1. 右键应用，选择“打开”
+> 2. 前往 **系统设置 → 隐私与安全性**，选择“仍要打开”
+> 3. 若仍被拦截，执行：
+>    `xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app`
 
-| 主机列表 | 应用列表 |
-|:--------:|:--------:|
-| <img src="readme-assets/images/host-list.png" width="400" alt="主机列表"> | <img src="readme-assets/images/app-list.png" width="400" alt="应用列表"> |
+## 视频与 HDR
 
-| 性能浮窗 | 连接管理 |
-|:--------:|:--------:|
-| <img src="readme-assets/images/performance-overlay.png" width="400" alt="性能浮窗"> | <img src="readme-assets/images/connection-manager.png" width="400" alt="连接管理"> |
+### 渲染器
 
-| 串流中遮罩 | 连接错误 |
-|:----------:|:--------:|
-| <img src="readme-assets/images/streaming-overlay.png" width="400" alt="串流中遮罩"> | <img src="readme-assets/images/connection-error.png" width="400" alt="连接错误"> |
+在 `设置 → 视频` 选择渲染器：
 
-| 视频设置 | 串流设置 |
-|:--------:|:--------:|
-| <img src="readme-assets/images/settings-video.png" width="400" alt="视频设置"> | <img src="readme-assets/images/settings-streaming.png" width="400" alt="串流设置"> |
-
-## 🔊 视音频能力
-
-### 视频链路
-- 支持自定义分辨率、帧率、远端分辨率与远端帧率覆盖
-- 视频协商覆盖 `AV1 / HEVC / H.264`、HDR、YUV `4:4:4` 与自动码率调节
-- 提供 `原生渲染器 / Metal 渲染器 / 兼容渲染器` 三条视频呈现链路
-- `原生渲染器` 面向最低延迟与最高默认色准；`Metal 渲染器` 面向更深的 HDR 与色彩调节；`兼容渲染器` 面向旧系统和异常恢复
-
-### HDR / 色彩 / 画质增强
-- `设置 → 视频 → 10-bit SDR` 可独立请求 10-bit SDR，不需要通过开启 HDR 间接请求；主机与解码器需支持相应 10-bit 格式
-- macOS 上 HDR10+ 支持受限：当前公共 API 和呈现链路不能保证完整保留动态元数据，可能使用基础 HDR 输出
-- Dolby Vision 8.1/8.4 提供能力探测、适配与安全回退，最终输出受系统、硬件和显示链路约束；HDR Vivid 当前不可用
-- HDR 传输函数支持 `HLG / PQ / Auto`，并提供更贴近当前显示器的客户端侧 HDR 呈现策略
-- `Metal 渲染器` 支持 HDR 元数据来源、本机显示器 HDR 配置、亮度参数、光学输出倍率、HLG 观看环境、EDR 策略与色调映射策略
-- 画质增强链路支持 `VT 低延迟超分`、`VT 高质量超分`、`MetalFX` 与 `基础缩放`
-- `VT 低延迟插帧` 也已接入到 Metal 视频链路中，用于高刷新率显示器下的画面节奏增强
-
-### 音频链路
-- 默认音频链路使用更贴近 `Core Audio` 的低延迟本地播放路径
-- 支持 `2ch / 5.1 / 7.1 / 7.1.4` 多通道音频接收、协商与本地播放
-- 当输出设备本身支持多通道时，优先保留真实多通道播放；当输出设备为耳机或 `2.0 / 2.1` 音箱时，可切换 `音效增强`
-- `音效增强` 面向耳机与立体声设备提供客户端侧 EQ、空间感、音场与预设调节
-- 配合支持相关能力的 [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) 时，可使用增强后的麦克风 uplink 与更完整的多通道协商路径
-
-## 🖱️ 输入与控制
-
-### 默认行为
-- **鼠标模式默认：自由鼠标**
-- **鼠标驱动默认：Automatic**
-- **Automatic 顺序：CoreHID → HID → MFI**
-
-### 鼠标模式
-- **锁定鼠标**：更适合游戏、FPS、需要持续相对移动的场景
-- **自由鼠标**：更适合远控、多屏切换与桌面应用操作，可无缝切换到其他显示器继续使用
-
-### 鼠标 / 滚轮链路
-- `CoreHID` 负责更低延迟、更高回报率的相对鼠标输入体验，让鼠标操作更直接、更细腻，也更适合追求灵敏度与稳定操控的场景
-- 支持本地光标、指针速度、左右键交换、反转滚动与 `CoreHID` 报告率上限
-- 滚轮链路按来源拆分为 `物理滚轮`、`改写 / 平滑滚轮` 与 `触控板` 三类独立策略
-- 物理滚轮支持自动、高精度、分段等模式，并可独立调节距离、速度与尾迹过滤
-
-### 键盘 / 手柄 / 快捷键
-- 键盘链路支持常用 Windows 快捷键翻译、自定义快捷键翻译规则与 Moonlight 自定义串流快捷键
-- 手柄链路支持多手柄、震动、Guide 模拟与手柄模拟鼠标
-- 鼠标、键盘、手柄设置页已经按使用场景重整，常用输入选项更集中
-
-### DualSense / DS5
-
-DS5 可通过蓝牙或 USB 连接 Mac，由客户端向支持相应能力的 Foundation Sunshine 发送输入并接收反馈。
-
-| 能力 | 使用方式 |
+| 渲染器 | 适用场景 |
 | --- | --- |
-| 按键、摇杆与扳机 | 使用标准 PlayStation 映射；可在控制器设置中选择主机控制器类型、按键交换与摇杆死区 |
-| 震动与触觉反馈 | 接收主机反馈，按设备能力使用原生触觉或震动回退；增强触觉效果取决于主机、系统和连接方式 |
-| 灯光与电量 | 同步主机灯光反馈并向主机报告控制器电量 |
-| 动作输入 | 支持陀螺仪和加速度传感器，可在设置中调整动作传感器模式 |
-| 主机触控板 | 将触控位置和按压发送给远端虚拟 PlayStation 控制器，供游戏使用 |
-| Mac 风格触控板 | 单指移动指针、轻点点击、双指滚动和双指轻点右键；滚动跟随 macOS 自然滚动偏好，可额外反转 |
+| 原生渲染器（默认） | VideoToolbox 解码后由系统直接呈现，延迟低，色彩与 HDR 由系统处理 |
+| Metal 渲染器 | 需要手动调节 HDR 与色彩时使用：传输函数、元数据来源、显示器亮度参数、EDR 与色调映射策略，以及显示同步和帧队列等呈现时序 |
+| 兼容渲染器 | 保留的旧链路，用于旧系统或排查问题 |
 
-在 `设置 → 控制器` 选择 `DualSense 触控板模式`。开启 `长按 Options 切换触控板模式` 后，串流中长按 DS5 的 **Options 键约 2 秒**，即可在两种触控板模式之间切换。游戏按键、摇杆和扳机继续作为手柄输入。
+只适用于某个渲染器的设置项只在选中它时显示。画质增强可使用 `VT 低延迟超分`、`VT 高质量超分`、`MetalFX`、`基础缩放` 和 `VT 低延迟插帧`，不可用时自动回退。
 
-主机还需支持 PlayStation 虚拟控制器及对应反馈能力。蓝牙、USB 和不同主机版本的增强触觉效果可能不同；普通手柄输入不要求启用 USB 映射。
+### HDR 与色彩
+
+- `10-bit SDR` 是独立选项，不需要开启 HDR；主机与解码器需支持对应的 10-bit 格式。
+- `动态 HDR 偏好` 可选自动、Dolby Vision、HDR10+ 或仅 HDR10。性能浮窗会显示实际协商到的格式，以及回退时的原因。
+- Dolby Vision 8.1 / 8.4 与 HDR10+ 提供能力探测、协商与安全回退，最终输出取决于系统、硬件和显示链路。macOS 的公共接口不能保证完整保留 HDR10+ 动态元数据，此时使用基础 HDR 输出。
+- 开启 HDR 且未手动填写亮度参数时，客户端按当前屏幕自动上报亮度；主机在串流中开关 HDR，画面会随之切换。
+
+## 音频
+
+在 `设置 → 音频与麦克风` 选择声道布局和音频编码：
+
+| 音频编码 | 说明 |
+| --- | --- |
+| Opus（默认） | 支持立体声、5.1、7.1 与 7.1.4，占用带宽最小，所有主机可用 |
+| 无损 (PCM) | 不经压缩，最多 5.1 声道；占用带宽明显更高，建议在有线局域网使用 |
+| AC3 / E-AC3 | 最多 5.1 声道；可直通给能接收杜比码流的 HDMI 功放或电视，也可在本机解码 |
+
+- `杜比输出` 决定 AC3 / E-AC3 是直通给输出设备还是在本机解码。直通期间该设备由串流独占，音量在设备上调节；直通失败或更换设备时自动改为本机解码。
+- 音频编码与声道布局冲突（例如 PCM 配 7.1）时，设置页会让你选择保留哪一个。主机不支持所选编码时回退到 Opus 并提示。
+- 输出设备是耳机或立体声音箱时可开启 `音效增强`，提供预设、EQ、空间感与音场调节。
+- `静音时保持音频流` 让主机在无声时继续发送静音，避免安静一段时间后第一声被截断。
+- 串流中可在控制中心切换音频输出设备和调节音量。
+
+## 键盘、鼠标与触控板
+
+### 鼠标
+
+- **自由鼠标**（默认）：适合远程桌面和多屏环境，指针可以移出串流窗口到其他显示器。
+- **锁定鼠标**：适合游戏等需要持续相对移动的场景。
+- 鼠标驱动默认为自动，按 `CoreHID → HID → MFI` 的顺序选择。`CoreHID` 提供高回报率的相对移动，可设置回报率上限。
+- 支持本地光标、指针速度、左右键交换和反转滚动。滚轮按 `物理滚轮`、`改写 / 平滑滚轮`、`触控板` 三种来源分别设置。
+
+### 触控板
+
+`精确式触控板` 把 Mac 触控板上的手指触点直接交给 Windows，由 Windows 处理手势与滚动：
+
+| 选项 | 行为 |
+| --- | --- |
+| 关闭 | 触控板作为鼠标使用 |
+| 开启 – 屏蔽 macOS 触控板指针事件 | 指针完全由 Windows 控制。本机指针位置不再同步，全屏悬浮球和移到其他显示器会受影响 |
+| 开启 – 同时使用 | 单指移动仍走 Mac 的指针路径，多指手势交给 Windows |
+
+授予辅助功能权限后，串流期间会屏蔽 macOS 的系统手势（如调度中心），避免与 Windows 手势冲突。
+
+### 键盘
+
+- `按键映射` 默认按物理按键位置发送。使用 Dvorak、Colemak 等布局时可改为 `输入的字符`，按当前 Mac 布局实际输入的字符发送。
+- `使用 macOS 输入法输入文字`：拼音等输入法在本机完成组字，确认后的文字发送到主机；普通按键和快捷键仍作为按键发送。
+- 支持常用 Windows 快捷键翻译和自定义翻译规则；单独按 Command 可作为 Windows 键。
 
 ### 串流快捷键
-以下 Moonlight 自定义串流快捷键支持在 `设置 → 键盘与鼠标` 中调整：
+
+以下快捷键可在 `设置 → 键盘与鼠标` 中调整：
 
 | 快捷键 | 功能 | 说明 |
 |--------|------|------|
@@ -186,54 +182,66 @@ DS5 可通过蓝牙或 USB 连接 Mac，由客户端向支持相应能力的 Fou
 | `Ctrl` + `Option` + `C` | 打开控制中心 | 仅全屏 / 无边框 |
 | `Ctrl` + `Option` + `Command` + `B` | 无边框 / 窗口切换 | 高级排障快捷键 |
 
-> 💡 这里列的是 Moonlight 自定义串流快捷键；标准 macOS 快捷键如 `⌘W`、`⌃⌘F` 不在此表内。
+标准 macOS 快捷键（如 `⌘W`、`⌃⌘F`）不在此表内。
 
-## 🔗 Foundation Sunshine 协作
+## 手柄
 
-### 剪贴板
+- 支持多手柄、震动、Guide 模拟、按键交换、摇杆死区和手柄模拟鼠标。
+- `主机控制器类型` 可选自动、Xbox 360、DualShock 4 或 DualSense，启动和恢复串流时告知主机。
+- 可以用手柄操作应用本身：浏览应用列表和设置、打开菜单、调整滑块与选择器、用屏幕键盘输入，串流中打开控制中心。
+- `手柄快捷键` 可为按键组合和触控板手势指定动作。
 
-在 `设置 → 串流 → 剪贴板` 开启同步，并在 Foundation Sunshine 主机端启用剪贴板。支持文本与单张 PNG 图片的双向复制粘贴；当前前台串流窗口接管同步会话。该功能不等同于文件传输。
+### DualSense / DS5
 
-### 显示器与虚拟显示器
+DS5 可通过蓝牙或 USB 连接 Mac。除普通手柄输入外，以下能力需要主机提供 PlayStation 虚拟控制器及对应反馈：
 
-`设置 → 显示与 HDR` 提供目标显示器、虚拟显示器（VDD）、屏幕模式和显示参数。可按应用保存显示配置，连接或重连时交给 Foundation Sunshine 应用；VDD 需要主机驱动及对应能力已启用。
+| 能力 | 使用方式 |
+| --- | --- |
+| 震动与触觉反馈 | 接收主机反馈，按设备能力使用原生触觉或震动回退；效果取决于主机、系统和连接方式 |
+| 灯光与电量 | 同步主机灯光反馈并向主机报告电量 |
+| 动作输入 | 陀螺仪和加速度传感器，可在设置中调整动作传感器模式 |
+| 主机触控板 | 把触控位置和按压发送给远端虚拟控制器，供游戏使用 |
+| Mac 风格触控板 | 单指移动指针、轻点点击、双指滚动和双指轻点右键；滚动跟随 macOS 自然滚动偏好 |
+| 精确式触控板 | 把触点交给 Windows 作为触控板使用；DualSense 触控板最多识别两指 |
 
-### USB 映射与主机文件
+在 `设置 → 手柄设置` 选择 `DualSense 触控板模式`。开启 `长按 Options 切换触控板模式` 后，串流中长按 **Options 键约 2 秒**即可切换；按键、摇杆和扳机始终作为手柄输入。
 
-- `设置 → USB 映射` 将所选本机 USB 设备转发给主机，串流停止时释放转发；主机必须支持并启用 USB 转发。
-- `设置 → 主机文件` 访问 Foundation Sunshine 共享的远端目录，当前为只读。Finder 挂载要求支持相应 App Group 的签名版本。
-- 这些入口会展示主机能力及不可用原因。USB 映射和主机文件属于实验性能力，具体可用范围以主机与系统条件为准。
+## 串流中的控制中心
 
-## 🔧 连接、诊断与稳定性
+全屏或无边框时按 `Ctrl` + `Option` + `C`，或通过全屏悬浮球、手柄打开控制中心。菜单按用途分组：
 
-`设置 → 应用与诊断` 提供性能数据与报告导出，可查看接收、解码、呈现帧率、1% low、网络和帧呈现抖动、丢帧及音频欠载。
+- **屏幕**：分辨率、帧率和主机显示缩放。配合 Foundation Sunshine 时分辨率与帧率直接生效，否则通过重新连接应用。客户端不会在开始串流时改动主机的缩放，只有在这里手动调整才会改变。
+- **画质与网络**：码率等串流参数。
+- **音频**：切换输出设备、调节音量。
+- **主机命令**：运行主机为当前应用配置的命令。
+- **鼠标与光标、窗口、日志**：切换鼠标模式和窗口方式，打开日志查看器。
+- **重连**与**退出串流**。
 
-- 每台主机支持独立连接方式管理
-- 支持自定义端口、IPv6 与域名连接
-- 提供性能浮窗、连接警告与输入诊断
-- 同时提供原始日志与浓缩日志，便于排障
-- 提供 AWDL 稳定性辅助项、自动重连与超时恢复能力
+`设置 → 串流` 另有 `自适应码率`（默认关闭）：开启后在串流前探测带宽，并在串流中由主机根据丢包和延迟调整码率。`视频 FEC` 可保持主机默认、自动或指定比例。
 
-## 🔄 关于与更新
+## Foundation Sunshine 协作
 
-`设置 → 关于与更新` 展示应用版本并提供检查更新入口。更新优先使用 GitHub，下载失败时可尝试同版本的 CNB 镜像，并由 Sparkle 验证更新包签名。
+- **剪贴板**：在 `设置 → 串流 → 剪贴板` 开启，并在主机端启用剪贴板。支持文本与单张 PNG 图片的双向复制粘贴，由当前前台的串流窗口接管。它不是文件传输。
+- **显示器与虚拟显示器**：`设置 → 显示与 HDR` 提供目标显示器、虚拟显示器（VDD）、屏幕模式和显示参数，可按应用保存，连接或重连时交给主机应用。VDD 需要主机驱动已启用。
+- **主机操作**：正在运行的应用的右键菜单可运行主机命令，主机的右键菜单提供“休眠主机”。
+- **USB 映射**（实验性）：`设置 → USB 映射` 把所选本机 USB 设备转发给主机，串流停止时释放。
+- **主机文件**（实验性）：`设置 → 主机文件` 浏览主机共享的目录，只读。Finder 挂载需要支持相应 App Group 的签名版本。
 
-当前 1.3.9 RC2 请从发布页手动下载安装，应用内更新源正在部署。测试版更新渠道与稳定版分开。
+USB 映射和主机文件的页面会显示主机能力及不可用原因。
 
-## 🛠️ 安装
+## 连接与诊断
 
-### 下载发布版
-从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载最新 `.dmg`。
+- 每台主机可单独设置连接方式，支持自定义端口、IPv6 和域名；首选地址不可用时继续尝试其他已知地址。
+- 性能浮窗显示帧率、码率、延迟、网络丢帧、FEC 结果和协商到的 HDR 格式。
+- `设置 → 应用与诊断` 可查看并导出性能报告：接收、解码、呈现帧率，1% low，网络与呈现抖动，丢帧和音频欠载。
+- 日志查看器提供浓缩与原始两种视图，支持中英文、筛选和搜索，也可以在串流窗口内打开。
+- 提供连接警告、自动重连、超时恢复和 AWDL 稳定性辅助。
 
-> ⚠️ 此应用当前未做 Apple 公证。若 macOS 提示“MoonlightEnhanced.app 已损坏”或阻止打开，通常是 Gatekeeper 拦截未公证应用，并不一定代表文件真的损坏。
->
-> 首次启动建议按这个顺序尝试：
-> 1. 右键应用，选择“打开”
-> 2. 前往 **系统设置 → 隐私与安全性**，选择“仍要打开”
-> 3. 若仍被拦截，执行：
->    `xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app`
+## 更新
 
-### 从源码构建
+`设置 → 关于与更新` 显示当前版本并可检查更新，应用菜单中也有“检查更新”。更新优先从 GitHub 下载，失败时尝试同版本的 CNB 镜像，更新包签名由 Sparkle 验证。也可以随时从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 手动下载安装。
+
+## 从源码构建
 
 ```bash
 git clone --recursive https://github.com/skyhua0224/moonlight-macos-enhanced.git
@@ -249,36 +257,35 @@ unzip -o xcframeworks.zip -d xcframeworks/
 3. 按需修改 Bundle Identifier
 4. 选择 **Moonlight for macOS** scheme 后运行
 
-## 🐛 问题反馈
+## 问题反馈
 
-提交 Bug 时建议包含：
-- macOS 版本
-- 机型 / 芯片类型
+提交 Bug 时请包含：
+- macOS 版本、机型与芯片类型
 - 主机端软件及版本
-- 是否使用了 Mos、BetterMouse、SteerMouse 等第三方鼠标工具
 - 复现步骤
-- 日志或截图
+- `设置 → 应用与诊断` 导出的调试日志，必要时附截图
 
-若是输入 / 滚轮 / 鼠标问题，建议附带：
-- `设置 → App → Debug Log` 导出的日志
-- 你使用的是 **自由鼠标** 还是 **锁定鼠标**
-- 你使用的是 **Automatic / CoreHID / HID / MFI** 中哪条路径
+输入类问题请另外说明：
+- 使用的是 **自由鼠标** 还是 **锁定鼠标**，鼠标驱动是 **自动 / CoreHID / HID / MFI** 中的哪一个
+- 是否开启了精确式触控板，以及所选的方式
+- 是否使用了 Mos、BetterMouse、SteerMouse 等第三方鼠标工具
+- 手柄型号与连接方式（蓝牙或 USB）
 
-## 🤝 贡献
+## 贡献
 
 欢迎提交 Issue 和 PR。建议：
 - 保持中英文用户文案同步
 - 提交前至少验证核心串流与输入路径
-- PR 描述优先写用户可感知变化，而不是只贴 commit 标题
+- PR 描述写用户可感知的变化，而不是只贴 commit 标题
 
-## 📬 联系方式
+## 联系方式
 
 - 📧 Email: [dev@sky-hua.xyz](mailto:dev@sky-hua.xyz)
 - 💬 Telegram: [@skyhua](https://t.me/skyhua)
 - 🐧 QQ: 2110591491
 - 🔗 GitHub Issues: [提交 Issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
-## 🙏 致谢
+## 致谢
 
 完整致谢、上游来源与生态参考请见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
 
@@ -287,6 +294,6 @@ unzip -o xcframeworks.zip -d xcframeworks/
 - 主机端生态参考：`Sunshine`、`foundation-sunshine`
 - 输入与滚轮体验参考：`Mos`、`Mouser`
 
-## 📄 许可证
+## 许可证
 
 本项目采用 [GPLv3 许可证](LICENSE.txt)。
