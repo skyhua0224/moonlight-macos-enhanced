@@ -210,9 +210,10 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 
 // Building the settings window takes around two seconds of the main thread the first time, and
 // the equalizer's file dialog one more, and every settings page some more when it is first
-// shown. All of it is done ahead in quiet moments (nobody at the keyboard or mouse, or the app
-// in the background; never during a stream), a piece per moment, so that the first click on
-// Settings, and on each of its pages, shows what already exists.
+// shown. The window and the dialog are made ahead in quiet moments (nobody at the keyboard or
+// mouse, or the app in the background; never during a stream), a piece per moment, so that
+// the first click on Settings shows what already exists. The other pages are made the same
+// way, but only while the window is open.
 - (void)prewarmSettingsWhenQuiet {
     BOOL builtSomething = NO;
 
@@ -220,25 +221,29 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     const BOOL quiet = (idle >= 2.0 || !NSApp.isActive) &&
         [StreamingSessionManager shared].state == StreamingStateIdle &&
         NSApp.modalWindow == nil;
+    if ([StreamingSessionManager shared].state != StreamingStateIdle) {
+        [SettingsWindowObjCBridge releaseSettingsPagesNotShowing];
+    }
     if (quiet) {
-        // One piece of work per quiet moment: the window with the page it opens on, then the
-        // other pages one by one, then the file dialog.
+        // One piece of work per quiet moment: the window with the page it opens on, the file
+        // dialog, and, while the window is open, the other pages one by one.
         if (_preferencesWC == nil) {
             _preferencesWC = [SettingsWindowObjCBridge makeSettingsWindowWithHostId:nil];
             _preferencesWC.window.delegate = self;
             [_preferencesWC.window layoutIfNeeded];
             [SettingsWindowObjCBridge settingsWindowVisibilityChanged:NO];
             builtSomething = YES;
-        } else if ([SettingsWindowObjCBridge prewarmNextSettingsPage]) {
-            builtSomething = YES;
         } else if (!self.settingsPrewarmDone) {
             [SettingsWindowObjCBridge prewarmImportPanel];
             self.settingsPrewarmDone = YES;
+            builtSomething = YES;
+        } else if (_preferencesWC.window.isVisible && [SettingsWindowObjCBridge prewarmNextSettingsPage]) {
+            builtSomething = YES;
         }
     }
 
-    // This keeps looking: pages are released when settings are edited and built again here.
-    // A look that finds nothing to do costs nothing to speak of.
+    // This keeps looking: pages are released when settings are edited, and when the window
+    // closes, and built again here. A look that finds nothing to do costs nothing to speak of.
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((builtSomething ? 0.4 : 2.0) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [weakSelf prewarmSettingsWhenQuiet];

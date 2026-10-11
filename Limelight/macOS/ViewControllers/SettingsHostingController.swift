@@ -411,6 +411,12 @@ final class WelcomePermissionsHostingController: NSWindowController, NSWindowDel
     SettingsPaneContainerView.current?.prewarmNextPage() ?? false
   }
 
+  /// Lets the pages that were built ahead go. For the time of a stream: every kept page
+  /// works each status the stream announces through, on the main thread.
+  @objc class func releaseSettingsPagesNotShowing() {
+    SettingsPaneContainerView.current?.releasePagesNotShowing()
+  }
+
   /// Makes the file dialog of the equalizer ahead of its first use.
   @objc class func prewarmImportPanel() {
     _ = EqualizerImportPanel.shared
@@ -431,6 +437,7 @@ final class WelcomePermissionsHostingController: NSWindowController, NSWindowDel
     EnhancedAudioSpectrum.shared.setWindowVisible(visible)
     if !visible {
       MicrophoneManager.shared.stopTest()
+      SettingsPaneContainerView.current?.releasePagesNotShowing()
     }
   }
 

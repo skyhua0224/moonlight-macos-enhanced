@@ -30,7 +30,9 @@ final class EnhancedAudioSpectrum: NSObject, ObservableObject {
   // Counts resets, so a measurement that was under way when one happened is not shown after it.
   private var epoch = 0
 
-  // Tap thread only.
+  // Tap thread only, one buffer at a time: a tap that is being removed may still be
+  // delivering when the next one starts.
+  private let processLock = NSLock()
   private static let log2Size = vDSP_Length(12)
   private static let size = 1 << 12
   private let fftSetup = vDSP_create_fftsetup(EnhancedAudioSpectrum.log2Size, FFTRadix(kFFTRadix2))
@@ -103,6 +105,8 @@ final class EnhancedAudioSpectrum: NSObject, ObservableObject {
   /// Tap thread. Buffers arrive every 20 ms or so; each one moves a 4096 sample window on.
   @objc func process(_ buffer: AVAudioPCMBuffer) {
     guard let fftSetup, let channels = buffer.floatChannelData else { return }
+    guard processLock.try() else { return }
+    defer { processLock.unlock() }
     let startedIn = currentEpoch
     let frames = min(Int(buffer.frameLength), Self.size)
     guard frames > 0 else { return }

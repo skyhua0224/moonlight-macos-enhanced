@@ -420,10 +420,42 @@ final class SettingsPaneContainerView: NSView {
   /// every page (it happens once). So is what a page does in the moment it appears. Anything
   /// else is someone editing: the other pages go.
   func settingsWillChange(isLoading: Bool) {
+    // The pages are views: they are only let go on the main thread. A change announced
+    // anywhere else is a mistake of whoever made it, and is named in the log.
+    guard Thread.isMainThread else {
+      if !Self.reportedBackgroundChange {
+        Self.reportedBackgroundChange = true
+        LogMessage(
+          LOG_W,
+          "[diag] settings changed off the main thread: "
+            + Thread.callStackSymbols.dropFirst(2).prefix(8).joined(separator: " | "))
+      }
+      DispatchQueue.main.async { [weak self] in self?.settingsWillChange(isLoading: isLoading) }
+      return
+    }
     let now = ProcessInfo.processInfo.systemUptime
     lastChange = now
-    guard !isLoading, now - lastSwitch > 0.35, pages.count > 1 else { return }
+    guard !isLoading, now - lastSwitch > 0.35, pages.count > 1, !releaseScheduled else { return }
+    // Not here: this runs inside the announcement of the change, which may come from one of
+    // these very pages (something it does when a notification arrives, or when it appears),
+    // and a page must not be taken apart under its own update. Right after it.
+    releaseScheduled = true
+    DispatchQueue.main.async { [weak self] in
+      self?.releaseScheduled = false
+      self?.releasePagesNotShowing()
+    }
+  }
+
+  private var releaseScheduled = false
+  private static var reportedBackgroundChange = false
+
+  /// Lets every page go but the one in the window. Also when the window closes: nobody is
+  /// about to click a page then, and a kept page works every change of the settings through.
+  func releasePagesNotShowing() {
+    guard pages.count > 1 else { return }
+    let released = pages.count - 1
     pages = pages.filter { $0.key == shown }
+    LogMessage(LOG_I, "[diag] settings pages released: \(released)")
   }
 
   private func page(for pane: SettingsPaneType) -> NSView? {
@@ -453,7 +485,9 @@ final class SettingsPaneContainerView: NSView {
   func prewarmNextPage() -> Bool {
     // Not while settings are being edited: the page would be released by the next change.
     guard ProcessInfo.processInfo.systemUptime - lastChange > 3 else { return false }
-    guard window != nil,
+    // Only while the window is open: that is when a page may be clicked next. Behind a
+    // closed window the pages would be built, and let go at the next change, for nobody.
+    guard window?.isVisible == true,
       let pane = SettingsPaneType.allCases.first(where: { pages[$0] == nil }),
       let page = page(for: pane)
     else { return false }
@@ -483,7 +517,9 @@ private struct SettingsPaneHost: NSViewRepresentable {
     let view = SettingsPaneContainerView()
     let model = settingsModel
     context.coordinator.changes = model.objectWillChange.sink { [weak view, weak model] _ in
-      view?.settingsWillChange(isLoading: model?.isLoading ?? false)
+      // A reload of the profile and a status that is announced are not edits.
+      view?.settingsWillChange(
+        isLoading: (model?.isLoading ?? false) || (model?.isAnnouncingStatus ?? false))
     }
     view.makePage = { pane in
       let host = NSHostingView(rootView: SettingsPaneRoot(pane: pane, settingsModel: model))

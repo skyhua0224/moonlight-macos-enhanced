@@ -267,10 +267,11 @@ extension SettingsModel {
     let endpoints = ConnectionEndpointStore.allEndpoints(for: host)
     if endpoints.isEmpty { return }
 
+    // Read here: the cache is written on the main thread.
+    let cached = latencyCache[hostId]
     DispatchQueue.global(qos: .userInitiated).async {
       let group = DispatchGroup()
       let lock = NSLock()
-      let cached = self.latencyCache[hostId]
       var latencies: [String: NSNumber] = cached?["latencies"] as? [String: NSNumber]
         ?? host.addressLatencies ?? [:]
       var states: [String: NSNumber] = cached?["states"] as? [String: NSNumber]
@@ -358,8 +359,10 @@ extension SettingsModel {
           userInfo: ["uuid": hostId, "latencies": latencies, "states": states]
         )
 
-        self.ensureConnectionMethodValid()
-        self.objectWillChange.send()
+        self.announceStatus {
+          self.ensureConnectionMethodValid()
+          self.objectWillChange.send()
+        }
       }
     }
   }

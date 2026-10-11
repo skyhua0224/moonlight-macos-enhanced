@@ -3218,6 +3218,11 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
     }
 
     if (_enhancedAudioEngine != nil) {
+        if (_enhancedSpectrumTapInstalled && _enhancedAudioLimiter != nil) {
+            // Before the engine goes, so that no buffer is on its way to the spectrum
+            // when the next engine starts sending its own.
+            [_enhancedAudioLimiter removeTapOnBus:0];
+        }
         [_enhancedAudioEngine stop];
         _enhancedAudioEngine = nil;
         _enhancedAudioSourceNode = nil;
@@ -3298,7 +3303,8 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     }
     if (MLChosenOutputDevice() != kAudioObjectUnknown) {
         // A queue takes its device by UID.
-        CFStringRef deviceUID = (__bridge CFStringRef)[SettingsClass audioOutputDeviceUID];
+        NSString *chosenUID = [SettingsClass audioOutputDeviceUID];
+        CFStringRef deviceUID = (__bridge CFStringRef)chosenUID;
         OSStatus deviceStatus = AudioQueueSetProperty(_audioQueue, kAudioQueueProperty_CurrentDevice, &deviceUID, sizeof(deviceUID));
         if (deviceStatus != noErr) {
             Log(LOG_W, @"[audio] The chosen output device could not be set on the audio queue: %d; using the system output", (int)deviceStatus);

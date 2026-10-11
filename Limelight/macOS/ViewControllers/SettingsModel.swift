@@ -333,6 +333,16 @@ class SettingsModel: ObservableObject {
   }
 
   var isLoading = false
+  /// True while the model announces something that is not an edit of the settings: a
+  /// measurement, the state of a stream. The settings window keeps its pages through those.
+  private(set) var isAnnouncingStatus = false
+
+  func announceStatus(_ change: () -> Void) {
+    let was = isAnnouncingStatus
+    isAnnouncingStatus = true
+    change()
+    isAnnouncingStatus = was
+  }
   var isAdjustingBitrate = false
   var isApplyingSmoothnessLatencyPreset = false
   var isSyncingSmoothnessLatencyMode = false
@@ -1836,8 +1846,10 @@ class SettingsModel: ObservableObject {
     DispatchQueue.main.async {
       self.latencyCache[uuid] = userInfo as? [String: Any]
       if self.selectedHost?.id == uuid {
-        self.ensureConnectionMethodValid()
-        self.objectWillChange.send()
+        self.announceStatus {
+          self.ensureConnectionMethodValid()
+          self.objectWillChange.send()
+        }
       }
     }
   }
@@ -1849,8 +1861,10 @@ class SettingsModel: ObservableObject {
 
     DispatchQueue.main.async {
       if self.selectedHost?.id == uuid {
-        self.ensureConnectionMethodValid()
-        self.objectWillChange.send()
+        self.announceStatus {
+          self.ensureConnectionMethodValid()
+          self.objectWillChange.send()
+        }
       }
     }
   }
@@ -1863,56 +1877,60 @@ class SettingsModel: ObservableObject {
 
     DispatchQueue.main.async {
       if self.selectedHost?.id == uuid {
-        self.selectedConnectionMethod = method
-        self.ensureConnectionMethodValid()
-        self.objectWillChange.send()
+        self.announceStatus {
+          self.selectedConnectionMethod = method
+          self.ensureConnectionMethodValid()
+          self.objectWillChange.send()
+        }
       }
     }
   }
 
   @objc func handleScreenParametersUpdate(_ notification: Notification) {
     DispatchQueue.main.async {
-      self.refreshVideoCapabilityMatrix()
+      self.announceStatus { self.refreshVideoCapabilityMatrix() }
     }
   }
 
   @objc func handleVideoRuntimeStatusUpdate(_ notification: Notification) {
     let hostKey = notification.userInfo?["hostKey"] as? String
-    let selectedHostId = selectedHost?.id ?? Self.globalHostId
-    guard hostKey == nil || hostKey == selectedHostId || hostKey == Self.globalHostId else {
-      return
-    }
-
+    // Posted from a stream's threads too; the model is only read on the main thread.
     DispatchQueue.main.async {
-      self.refreshVideoRuntimeStatus()
+      let selectedHostId = self.selectedHost?.id ?? Self.globalHostId
+      guard hostKey == nil || hostKey == selectedHostId || hostKey == Self.globalHostId else {
+        return
+      }
+      self.announceStatus { self.refreshVideoRuntimeStatus() }
     }
   }
 
   @objc func handleSunshineDisplayRuntimeUpdate(_ notification: Notification) {
     let hostKey = notification.userInfo?["hostKey"] as? String
-    let selectedHostId = selectedHost?.id ?? Self.globalHostId
-    guard hostKey == nil || hostKey == selectedHostId else { return }
 
     let phase = notification.userInfo?["phase"] as? String ?? "idle"
     let displayName = notification.userInfo?["displayName"] as? String ?? ""
     let useVdd = notification.userInfo?["useVdd"] as? Bool ?? false
     let screenMode = notification.userInfo?["screenMode"] as? Int ?? -1
     DispatchQueue.main.async {
-      switch phase {
-      case "active":
-        self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Active"
-      case "reconnected":
-        self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Reconnected"
-      case "failed":
-        self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Failed"
-      default:
-        self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Idle"
+      let selectedHostId = self.selectedHost?.id ?? Self.globalHostId
+      guard hostKey == nil || hostKey == selectedHostId else { return }
+      self.announceStatus {
+        switch phase {
+        case "active":
+          self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Active"
+        case "reconnected":
+          self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Reconnected"
+        case "failed":
+          self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Failed"
+        default:
+          self.sunshineDisplayRuntimeStateKey = "Sunshine Display Runtime Idle"
+        }
+        self.sunshineDisplayRuntimeDetail = String(
+          format: "display=%@ · useVdd=%@ · customScreenMode=%d",
+          displayName.isEmpty ? "Host Default" : displayName,
+          useVdd ? "true" : "false",
+          screenMode)
       }
-      self.sunshineDisplayRuntimeDetail = String(
-        format: "display=%@ · useVdd=%@ · customScreenMode=%d",
-        displayName.isEmpty ? "Host Default" : displayName,
-        useVdd ? "true" : "false",
-        screenMode)
     }
   }
 

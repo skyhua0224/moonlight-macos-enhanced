@@ -1345,12 +1345,15 @@ class SettingsClass: NSObject {
     }
   }
 
+  // The table is read here, inside the lock, and not where the call is written: streams
+  // write these tables from their own threads.
   private static func runtimeStatus(
     for key: String,
-    from store: [String: InputRuntimeStatusSnapshot]
+    from store: @autoclosure () -> [String: InputRuntimeStatusSnapshot]
   ) -> InputRuntimeStatusSnapshot? {
     inputRuntimeStatusLock.lock()
-    let snapshot = store[key] ?? store[SettingsModel.globalHostId]
+    let table = store()
+    let snapshot = table[key] ?? table[SettingsModel.globalHostId]
     inputRuntimeStatusLock.unlock()
     return snapshot
   }
