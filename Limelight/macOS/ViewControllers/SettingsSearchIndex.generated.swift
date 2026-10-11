@@ -111,7 +111,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "audio/Audio Enhancement/Soundstage Width", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Soundstage Width", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Audio Enhancement/Reverb", pane: .audio, kind: .row, sectionKey: "Audio Enhancement", titleKey: "Reverb", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/EQ/Enable Equalizer", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "Enable Equalizer", detailKey: nil, keywords: []),
-    SettingsSearchEntry(id: "audio/EQ/Headphone Correction", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "Headphone Correction", detailKey: "Headphone Correction hint", keywords: []),
+    SettingsSearchEntry(id: "audio/EQ/Preset EQ", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "Preset EQ", detailKey: "Preset EQ hint", keywords: ["Preset EQ Remove"]),
     SettingsSearchEntry(id: "audio/EQ/EQ Bands", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "EQ Bands", detailKey: nil, keywords: ["12-Band", "24-Band"]),
     SettingsSearchEntry(id: "audio/EQ/EQ Preamp", pane: .audio, kind: .row, sectionKey: "EQ", titleKey: "EQ Preamp", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "audio/Microphone/Enable Microphone", pane: .audio, kind: .row, sectionKey: "Microphone", titleKey: "Enable Microphone", detailKey: nil, keywords: []),

@@ -111,13 +111,17 @@ struct EnhancedAudioExtras: Codable, Equatable {
   var eqBands: [EnhancedAudioEQBand] = []
   var eqProfileName: String?
   var spatialMode = EnhancedAudioSpatialMode.automatic.rawValue
+  /// Preamp of the equalizer kind that is not in use (fixed and custom bands keep their own).
+  var eqInactivePreamp = 0.0
 
   init(
     eqEnabled: Bool = true, eqMode: Int = EnhancedAudioEQ.Mode.graphic.rawValue,
     eqPreamp: Double = 0, eqBands: [EnhancedAudioEQBand] = [], eqProfileName: String? = nil,
-    spatialMode: Int = EnhancedAudioSpatialMode.automatic.rawValue
+    spatialMode: Int = EnhancedAudioSpatialMode.automatic.rawValue, eqInactivePreamp: Double = 0
   ) {
     self.spatialMode = spatialMode
+    self.eqInactivePreamp = EnhancedAudioEQBand.clamp(
+      eqInactivePreamp, to: EnhancedAudioEQ.preampRange)
     self.eqEnabled = eqEnabled
     self.eqMode = eqMode
     self.eqPreamp = EnhancedAudioEQBand.clamp(eqPreamp, to: EnhancedAudioEQ.preampRange)
@@ -126,7 +130,7 @@ struct EnhancedAudioExtras: Codable, Equatable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case eqEnabled, eqMode, eqPreamp, eqBands, eqProfileName, spatialMode
+    case eqEnabled, eqMode, eqPreamp, eqBands, eqProfileName, spatialMode, eqInactivePreamp
   }
 
   // Never throws, for the same reason as the band.
@@ -142,7 +146,57 @@ struct EnhancedAudioExtras: Codable, Equatable {
       eqPreamp: value(Double.self, .eqPreamp) ?? 0,
       eqBands: value([EnhancedAudioEQBand].self, .eqBands) ?? [],
       eqProfileName: value(String.self, .eqProfileName),
-      spatialMode: value(Int.self, .spatialMode) ?? EnhancedAudioSpatialMode.automatic.rawValue)
+      spatialMode: value(Int.self, .spatialMode) ?? EnhancedAudioSpatialMode.automatic.rawValue,
+      eqInactivePreamp: value(Double.self, .eqInactivePreamp) ?? 0)
+  }
+}
+
+/// Equalizer presets the user saved. They are kept for the app, not per host.
+struct EnhancedAudioEQUserPreset: Codable, Identifiable, Equatable {
+  var id = UUID()
+  var name: String
+  var preamp: Double
+  var bands: [EnhancedAudioEQBand]
+
+  var profile: EnhancedAudioEQ.ImportedProfile {
+    EnhancedAudioEQ.ImportedProfile(preamp: preamp, bands: bands, skippedLines: 0)
+  }
+}
+
+final class EnhancedAudioEQUserPresets: ObservableObject {
+  static let shared = EnhancedAudioEQUserPresets()
+  private static let storageKey = "enhancedAudioEQUserPresets"
+
+  @Published private(set) var presets: [EnhancedAudioEQUserPreset] = []
+
+  private init() {
+    if let data = UserDefaults.standard.data(forKey: Self.storageKey),
+      let stored = try? PropertyListDecoder().decode([EnhancedAudioEQUserPreset].self, from: data)
+    {
+      presets = stored
+    }
+  }
+
+  /// Saves under a name; a preset that already has the name is replaced.
+  func save(name: String, profile: EnhancedAudioEQ.ImportedProfile) {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !profile.bands.isEmpty else { return }
+    var updated = presets.filter { $0.name.caseInsensitiveCompare(trimmed) != .orderedSame }
+    updated.append(
+      EnhancedAudioEQUserPreset(name: trimmed, preamp: profile.preamp, bands: profile.bands))
+    updated.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    store(updated)
+  }
+
+  func delete(_ id: UUID) {
+    store(presets.filter { $0.id != id })
+  }
+
+  private func store(_ updated: [EnhancedAudioEQUserPreset]) {
+    presets = updated
+    if let data = try? PropertyListEncoder().encode(updated) {
+      UserDefaults.standard.set(data, forKey: Self.storageKey)
+    }
   }
 }
 
@@ -206,7 +260,7 @@ final class HeadphoneCorrectionLibrary: ObservableObject {
   }
 
   /// Headphones whose name has every word of the query; the ones that begin with it come first.
-  func search(_ query: String, limit: Int = 80) -> [Entry] {
+  func search(_ query: String, limit: Int = 50) -> [Entry] {
     let words = query.lowercased().split(separator: " ").map(String.init)
     guard !words.isEmpty else { return [] }
     let joined = words.joined(separator: " ")

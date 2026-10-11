@@ -77,7 +77,21 @@ private final class AudioOutputDeviceList: ObservableObject {
       && size >= UInt32(MemoryLayout<AudioStreamID>.size)
   }
 
+  // What the default device accepts as a bitstream, asked once per device change: the hint
+  // under Audio Codec is worked out every time the pane is drawn.
+  private var bitstreamSupportByCodec: [Int32: MLAudioBitstreamSupport] = [:]
+
+  func bitstreamSupport(forCodec codec: Int32) -> MLAudioBitstreamSupport {
+    if let known = bitstreamSupportByCodec[codec] {
+      return known
+    }
+    let support = MLAudioBitstreamOutput.supportOnDefaultDevice(forCodec: codec)
+    bitstreamSupportByCodec[codec] = support
+    return support
+  }
+
   private func refresh() {
+    bitstreamSupportByCodec = [:]
     let system = AudioObjectID(kAudioObjectSystemObject)
 
     var defaultAddress = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
@@ -433,7 +447,7 @@ struct AudioView: View {
     // AC3 / E-AC3 run at a fixed bitrate whatever the channel count.
     let mbps = MLAudioStreamPlan.mbpsText(current.wireKbps)
     if settingsModel.selectedDolbyOutput != "Decode on This Mac" {
-      let support = MLAudioBitstreamOutput.supportOnDefaultDevice(forCodec: Int32(choice.codecId))
+      let support = outputDevices.bitstreamSupport(forCodec: Int32(choice.codecId))
       if support.available {
         let dolbyName = languageManager.localize(
           choice == .eac3 ? "Dolby Digital Plus" : "Dolby Digital")
@@ -643,7 +657,17 @@ private struct AudioEqualizerSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @State private var importNote: String?
-  @State private var showsHeadphonePicker = false
+  @State private var showsPresetPicker = false
+  @State private var curveDrag: CurveDrag?
+
+  /// What a drag on the curve has changed. While it lasts only this section is drawn again
+  /// for every move of the pointer; the settings, and with them the rest of the pane and the
+  /// stream, follow 25 times a second and when the drag ends.
+  private struct CurveDrag {
+    var bands: [EnhancedAudioEQBand]
+    var gains: [Double]
+    var lastCommit: DispatchTime
+  }
 
   /// The bands choice that is not one of the fixed layouts.
   private static let customBands = "EQ Bands Custom"
@@ -653,6 +677,22 @@ private struct AudioEqualizerSection: View {
   }
   private var isParametric: Bool {
     EnhancedAudioEQ.Mode(title: settingsModel.selectedEnhancedAudioEQMode) == .parametric
+  }
+
+  private var shownBands: [EnhancedAudioEQBand] {
+    curveDrag?.bands ?? settingsModel.enhancedAudioEQBands
+  }
+  private var shownGains: [Double] {
+    curveDrag?.gains ?? settingsModel.enhancedAudioEQGains
+  }
+  private var shownFilters: [EnhancedAudioEQ.Filter] {
+    guard settingsModel.enhancedAudioEQEnabled else { return [] }
+    return isParametric
+      ? EnhancedAudioEQ.parametricFilters(shownBands)
+      : EnhancedAudioEQ.graphicFilters(frequencies: frequencies, gains: shownGains)
+  }
+  private var presetActive: Bool {
+    isParametric && !(settingsModel.enhancedAudioEQProfileName ?? "").isEmpty
   }
 
   /// One choice for the fixed layouts and the free bands.
@@ -672,14 +712,14 @@ private struct AudioEqualizerSection: View {
   /// The points of the curve: the free bands move both ways, the fixed ones up and down.
   private var curveHandles: [AudioEQCurveView.Handle] {
     if isParametric {
-      return settingsModel.enhancedAudioEQBands.enumerated().map { index, band in
+      return shownBands.enumerated().map { index, band in
         AudioEQCurveView.Handle(
           id: index, frequency: band.frequency, gain: band.kind.usesGain ? band.gain : 0,
           enabled: band.enabled, movesFrequency: true, movesGain: band.kind.usesGain,
           gainLimit: EnhancedAudioEQBand.gainRange.upperBound)
       }
     }
-    let gains = settingsModel.enhancedAudioEQGains
+    let gains = shownGains
     return frequencies.enumerated().map { index, frequency in
       AudioEQCurveView.Handle(
         id: index, frequency: frequency, gain: gains.indices.contains(index) ? gains[index] : 0,
@@ -688,18 +728,42 @@ private struct AudioEqualizerSection: View {
   }
 
   private func moveHandle(_ index: Int, frequency: Double, gain: Double) {
-    guard isParametric else {
+    var drag =
+      curveDrag
+      ?? CurveDrag(
+        bands: settingsModel.enhancedAudioEQBands, gains: settingsModel.enhancedAudioEQGains,
+        lastCommit: DispatchTime(uptimeNanoseconds: 0))
+    if isParametric {
+      guard drag.bands.indices.contains(index) else { return }
+      drag.bands[index].frequency = frequency
+      if drag.bands[index].kind.usesGain { drag.bands[index].gain = gain }
+    } else {
+      guard drag.gains.indices.contains(index) else { return }
       // The same half-decibel steps as the sliders below.
-      settingsModel.setEnhancedAudioEQGain((gain * 2).rounded() / 2, at: index)
-      return
+      drag.gains[index] = (gain * 2).rounded() / 2
     }
-    guard settingsModel.enhancedAudioEQBands.indices.contains(index) else { return }
-    var band = settingsModel.enhancedAudioEQBands[index]
-    band.frequency = frequency
-    if band.kind.usesGain { band.gain = gain }
-    if band != settingsModel.enhancedAudioEQBands[index] {
-      settingsModel.enhancedAudioEQBands[index] = band
+    let now = DispatchTime.now()
+    if now.uptimeNanoseconds &- drag.lastCommit.uptimeNanoseconds >= 40_000_000 {
+      drag.lastCommit = now
+      commit(drag)
     }
+    curveDrag = drag
+  }
+
+  private func commit(_ drag: CurveDrag) {
+    if isParametric {
+      if settingsModel.enhancedAudioEQBands != drag.bands {
+        settingsModel.enhancedAudioEQBands = drag.bands
+      }
+    } else if settingsModel.enhancedAudioEQGains != drag.gains {
+      settingsModel.enhancedAudioEQGains = drag.gains
+    }
+  }
+
+  private func endCurveDrag() {
+    guard let drag = curveDrag else { return }
+    commit(drag)
+    curveDrag = nil
   }
 
   /// Rows are bound by id: a row that is being removed must not write to whichever band
@@ -707,10 +771,11 @@ private struct AudioEqualizerSection: View {
   private func bandBinding(_ id: UUID) -> Binding<EnhancedAudioEQBand> {
     Binding(
       get: {
-        settingsModel.enhancedAudioEQBands.first { $0.id == id }
-          ?? EnhancedAudioEQBand(kind: .peak, frequency: 1000)
+        shownBands.first { $0.id == id } ?? EnhancedAudioEQBand(kind: .peak, frequency: 1000)
       },
       set: { newValue in
+        // An edit in a row ends whatever a drag left behind.
+        curveDrag = nil
         guard let index = settingsModel.enhancedAudioEQBands.firstIndex(where: { $0.id == id }),
           settingsModel.enhancedAudioEQBands[index] != newValue
         else { return }
@@ -726,21 +791,31 @@ private struct AudioEqualizerSection: View {
           .toggleStyle(.switch)
           .controlSize(.small)
       }
-      SettingsRow(title: "Headphone Correction", detail: "Headphone Correction hint") {
-        Button(headphoneButtonTitle) { showsHeadphonePicker = true }
-          .controlSize(.small)
-          .popover(isPresented: $showsHeadphonePicker, arrowEdge: .bottom) {
-            HeadphoneCorrectionPicker { entry in
-              settingsModel.applyImportedEnhancedAudioEQ(
-                HeadphoneCorrectionLibrary.shared.profile(for: entry), name: entry.name)
+      SettingsRow(title: "Preset EQ", detail: "Preset EQ hint") {
+        HStack(spacing: 8) {
+          if presetActive {
+            // Back to the fixed bands, which are as they were before the preset.
+            Button(languageManager.localize("Preset EQ Remove")) {
+              settingsModel.removeEnhancedAudioEQPreset()
               importNote = nil
-              showsHeadphonePicker = false
             }
           }
+          Button(presetButtonTitle) { showsPresetPicker = true }
+            .popover(isPresented: $showsPresetPicker, arrowEdge: .bottom) {
+              PresetEQPicker(currentProfile: { settingsModel.enhancedAudioEQAsProfile }) {
+                profile, name in
+                curveDrag = nil
+                settingsModel.applyImportedEnhancedAudioEQ(profile, name: name)
+                importNote = nil
+                showsPresetPicker = false
+              }
+            }
+        }
+        .controlSize(.small)
       }
 
       AudioEQCurveView(
-        filters: settingsModel.enhancedAudioEQFilters, handles: curveHandles, onMove: moveHandle
+        filters: shownFilters, handles: curveHandles, onMove: moveHandle, onEnd: endCurveDrag
       )
       .frame(height: 200)
       .padding(.top, 10)
@@ -776,7 +851,7 @@ private struct AudioEqualizerSection: View {
         step: 0.5, suffix: " dB")
 
       if isParametric {
-        ForEach(settingsModel.enhancedAudioEQBands) { band in
+        ForEach(shownBands) { band in
           AudioEQBandRow(band: bandBinding(band.id)) {
             settingsModel.enhancedAudioEQBands.removeAll { $0.id == band.id }
           }
@@ -795,25 +870,30 @@ private struct AudioEqualizerSection: View {
         ForEach(frequencies, id: \.self) { frequency in
           SettingsValueSliderRow(title: String(format: "%g Hz", frequency), value: Binding(
             get: {
-              guard let index = frequencies.firstIndex(of: frequency), settingsModel.enhancedAudioEQGains.indices.contains(index) else { return 0 }
-              return CGFloat(settingsModel.enhancedAudioEQGains[index])
+              let gains = shownGains
+              guard let index = frequencies.firstIndex(of: frequency), gains.indices.contains(index) else { return 0 }
+              return CGFloat(gains[index])
             }, set: { value in
+              curveDrag = nil
               if let index = frequencies.firstIndex(of: frequency) { settingsModel.setEnhancedAudioEQGain(Double(value), at: index) }
             }), range: -12...12, step: 0.5, suffix: " dB")
         }
       }
     }
+    // Read ahead of the first search, which would otherwise wait for it.
+    .onAppear { HeadphoneCorrectionLibrary.shared.loadIfNeeded() }
   }
 
-  private var headphoneButtonTitle: String {
-    if isParametric, let name = settingsModel.enhancedAudioEQProfileName, !name.isEmpty {
+  private var presetButtonTitle: String {
+    if presetActive, let name = settingsModel.enhancedAudioEQProfileName {
       return name
     }
-    return languageManager.localize("Choose Headphones…")
+    return languageManager.localize("Preset EQ Choose")
   }
 
   /// Back to a flat equalizer of the kind that is showing.
   private func reset() {
+    curveDrag = nil
     if isParametric {
       settingsModel.enhancedAudioEQBands = EnhancedAudioEQ.starterBands()
     } else {
@@ -847,7 +927,9 @@ private struct AudioEqualizerSection: View {
       importNote = languageManager.localize("EQ Import Failed")
       return
     }
-    settingsModel.applyImportedEnhancedAudioEQ(profile, name: name)
+    curveDrag = nil
+    settingsModel.applyImportedEnhancedAudioEQ(
+      profile, name: name ?? languageManager.localize("EQ Imported Name"))
     importNote =
       profile.skippedLines > 0
       ? String(
@@ -857,57 +939,120 @@ private struct AudioEqualizerSection: View {
   }
 }
 
-/// Search over the headphone corrections that ship with the app; picking one applies it.
-private struct HeadphoneCorrectionPicker: View {
-  let onPick: (HeadphoneCorrectionLibrary.Entry) -> Void
+/// Saved presets and the library of measured headphones, searched together; picking one
+/// applies it. The current equalizer can be saved under a name from here.
+private struct PresetEQPicker: View {
+  let currentProfile: () -> EnhancedAudioEQ.ImportedProfile
+  let onPick: (EnhancedAudioEQ.ImportedProfile, String) -> Void
   @ObservedObject private var library = HeadphoneCorrectionLibrary.shared
+  @ObservedObject private var userPresets = EnhancedAudioEQUserPresets.shared
   @ObservedObject private var languageManager = LanguageManager.shared
   @State private var query = ""
+  @State private var newName = ""
 
   var body: some View {
+    let trimmed = query.trimmingCharacters(in: .whitespaces)
+    let saved = userPresets.presets.filter {
+      trimmed.isEmpty || $0.name.localizedCaseInsensitiveContains(trimmed)
+    }
     let results = library.search(query)
     VStack(alignment: .leading, spacing: 8) {
-      TextField(languageManager.localize("Search headphones"), text: $query)
+      TextField(languageManager.localize("Preset EQ Search"), text: $query)
         .textFieldStyle(.roundedBorder)
-      if results.isEmpty {
-        Text(
-          languageManager.localize(
-            query.trimmingCharacters(in: .whitespaces).isEmpty
-              ? "Headphone search hint" : "Headphone search empty")
-        )
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-      } else {
-        List(results) { entry in
-          Button {
-            onPick(entry)
-          } label: {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(verbatim: entry.name)
-              Text(verbatim: entry.form.isEmpty ? entry.source : "\(entry.form) · \(entry.source)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+        .onSubmit {
+          // Return takes the first match.
+          if let preset = saved.first {
+            onPick(preset.profile, preset.name)
+          } else if let entry = results.first {
+            onPick(library.profile(for: entry), entry.name)
           }
-          .buttonStyle(.plain)
         }
-        .listStyle(.plain)
+
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 0) {
+          if !saved.isEmpty {
+            sectionTitle("Preset EQ Saved")
+            ForEach(saved) { preset in
+              HStack(spacing: 4) {
+                row(
+                  preset.name,
+                  String(
+                    format: languageManager.localize("Preset EQ bands %d"), preset.bands.count)
+                ) {
+                  onPick(preset.profile, preset.name)
+                }
+                Button {
+                  userPresets.delete(preset.id)
+                } label: {
+                  Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+              }
+            }
+          }
+          if !results.isEmpty {
+            sectionTitle("Preset EQ Library")
+            ForEach(results) { entry in
+              row(entry.name, entry.form.isEmpty ? entry.source : "\(entry.form) · \(entry.source)") {
+                onPick(library.profile(for: entry), entry.name)
+              }
+            }
+          } else if trimmed.isEmpty || saved.isEmpty {
+            Text(
+              languageManager.localize(
+                trimmed.isEmpty ? "Preset EQ search hint" : "Preset EQ search empty")
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 24)
+          }
+        }
+      }
+
+      Divider()
+      HStack(spacing: 8) {
+        TextField(languageManager.localize("Preset EQ Name"), text: $newName)
+          .textFieldStyle(.roundedBorder)
+        Button(languageManager.localize("Preset EQ Save")) {
+          userPresets.save(name: newName, profile: currentProfile())
+          newName = ""
+        }
+        .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
       }
       Text(
         String(
-          format: languageManager.localize("Headphone corrections attribution"),
-          library.entries.count)
+          format: languageManager.localize("Preset EQ attribution"), library.entries.count)
       )
       .font(.caption2)
       .foregroundStyle(.secondary)
     }
     .padding(12)
-    .frame(width: 380, height: 420)
+    .frame(width: 400, height: 460)
     .onAppear { library.loadIfNeeded() }
+  }
+
+  private func sectionTitle(_ key: String) -> some View {
+    Text(languageManager.localize(key))
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(.secondary)
+      .padding(.top, 6)
+      .padding(.bottom, 2)
+  }
+
+  private func row(_ title: String, _ subtitle: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      VStack(alignment: .leading, spacing: 1) {
+        Text(verbatim: title)
+        Text(verbatim: subtitle)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.vertical, 4)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 }
 
@@ -987,6 +1132,36 @@ private struct AudioEQBandRow: View {
   }
 }
 
+/// The live spectrum of a running stream, behind the curve. A view of its own, so that its 30
+/// updates a second draw nothing else again.
+private struct AudioEQSpectrumLayer: View {
+  // What a running stream plays right now; empty without one in the enhanced sound mode.
+  @ObservedObject private var spectrum = EnhancedAudioSpectrum.shared
+
+  var body: some View {
+    Canvas { context, size in
+      let levels = spectrum.levels
+      guard levels.count > 1 else { return }
+      let plot = AudioEQCurveView.plotRect(in: size)
+      // The bottom of the plot is -90 dB, the top full scale.
+      var shape = Path()
+      shape.move(to: CGPoint(x: plot.minX, y: plot.maxY))
+      for (index, level) in levels.enumerated() {
+        let frequency = EnhancedAudioSpectrum.frequency(ofBand: index)
+        let height = CGFloat(min(max((Double(level) + 90) / 90, 0), 1)) * plot.height
+        shape.addLine(
+          to: CGPoint(x: AudioEQCurveView.x(frequency, plot), y: plot.maxY - height))
+      }
+      shape.addLine(to: CGPoint(x: plot.maxX, y: plot.maxY))
+      shape.closeSubpath()
+      context.fill(shape, with: .color(Color.secondary.opacity(0.22)))
+    }
+    .allowsHitTesting(false)
+    .onAppear { spectrum.addViewer() }
+    .onDisappear { spectrum.removeViewer() }
+  }
+}
+
 /// The frequency response the equalizer is set to, 20 Hz to 20 kHz on a log axis, with a point
 /// for every band that can be dragged, and the live spectrum of a running stream behind it.
 private struct AudioEQCurveView: View {
@@ -1013,9 +1188,9 @@ private struct AudioEQCurveView: View {
   let filters: [EnhancedAudioEQ.Filter]
   let handles: [Handle]
   let onMove: (_ id: Int, _ frequency: Double, _ gain: Double) -> Void
+  /// The drag is over: what it changed can be handed on.
+  let onEnd: () -> Void
   @State private var drag: Drag?
-  // What a running stream plays right now; empty without one in the enhanced sound mode.
-  @ObservedObject private var spectrum = EnhancedAudioSpectrum.shared
 
   private static let minFrequency = 20.0
   private static let maxFrequency = 20000.0
@@ -1044,26 +1219,34 @@ private struct AudioEQCurveView: View {
   }
 
   var body: some View {
-    GeometryReader { proxy in
-      let samples = self.samples
-      let span = drag?.span ?? gainSpan(samples)
-      let plot = CGRect(
-        x: Self.leftInset, y: 4, width: max(1, proxy.size.width - Self.leftInset - 4),
-        height: max(1, proxy.size.height - Self.bottomInset - 4))
-      Canvas { context, _ in
-        draw(in: &context, plot: plot, samples: samples, span: span)
+    ZStack {
+      AudioEQSpectrumLayer()
+      GeometryReader { proxy in
+        let samples = self.samples
+        let span = drag?.span ?? gainSpan(samples)
+        let plot = Self.plotRect(in: proxy.size)
+        Canvas { context, _ in
+          draw(in: &context, plot: plot, samples: samples, span: span)
+        }
+        .contentShape(Rectangle())
+        .gesture(dragGesture(plot: plot, span: span))
       }
-      .contentShape(Rectangle())
-      .gesture(dragGesture(plot: plot, span: span))
     }
-    .onAppear { spectrum.addViewer() }
-    .onDisappear { spectrum.removeViewer() }
+  }
+
+  static func plotRect(in size: CGSize) -> CGRect {
+    CGRect(
+      x: leftInset, y: 4, width: max(1, size.width - leftInset - 4),
+      height: max(1, size.height - bottomInset - 4))
+  }
+
+  static func x(_ frequency: Double, _ plot: CGRect) -> CGFloat {
+    let position = log10(frequency / minFrequency) / log10(maxFrequency / minFrequency)
+    return plot.minX + CGFloat(position) * plot.width
   }
 
   private func x(_ frequency: Double, _ plot: CGRect) -> CGFloat {
-    let position =
-      log10(frequency / Self.minFrequency) / log10(Self.maxFrequency / Self.minFrequency)
-    return plot.minX + CGFloat(position) * plot.width
+    Self.x(frequency, plot)
   }
 
   private func y(_ gain: Double, _ plot: CGRect, _ span: Double) -> CGFloat {
@@ -1105,21 +1288,6 @@ private struct AudioEQCurveView: View {
         at: CGPoint(x: plot.minX - 4, y: y(gain, plot, span)), anchor: .trailing)
     }
 
-    // The live spectrum, behind the curve: the bottom of the plot is -90 dB, the top full scale.
-    let levels = spectrum.levels
-    if levels.count > 1 {
-      var shape = Path()
-      shape.move(to: CGPoint(x: plot.minX, y: plot.maxY))
-      for (index, level) in levels.enumerated() {
-        let frequency = EnhancedAudioSpectrum.frequency(ofBand: index)
-        let height = CGFloat(min(max((Double(level) + 90) / 90, 0), 1)) * plot.height
-        shape.addLine(to: CGPoint(x: x(frequency, plot), y: plot.maxY - height))
-      }
-      shape.addLine(to: CGPoint(x: plot.maxX, y: plot.maxY))
-      shape.closeSubpath()
-      context.fill(shape, with: .color(Color.secondary.opacity(0.22)))
-    }
-
     var curve = Path()
     for (index, sample) in samples.enumerated() {
       let point = CGPoint(x: x(sample.frequency, plot), y: y(sample.gain, plot, span))
@@ -1155,6 +1323,7 @@ private struct AudioEQCurveView: View {
         if current?.start != value.startLocation {
           // A new drag. A cancelled one never reports its end, so this is also where what it
           // left behind goes.
+          if current != nil { onEnd() }
           let nearest = handles
             .map { handle -> (id: Int, distance: CGFloat) in
               let center = point(handle, plot, span)
@@ -1196,6 +1365,7 @@ private struct AudioEQCurveView: View {
       }
       .onEnded { _ in
         drag = nil
+        onEnd()
       }
   }
 }

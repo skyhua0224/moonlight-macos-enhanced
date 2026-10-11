@@ -268,6 +268,10 @@ class SettingsModel: ObservableObject {
   }
 
   @Published var selectedHost: Host? {
+    willSet {
+      // A change that is still waiting to be written belongs to the profile being left.
+      flushPendingEnhancedAudioSave()
+    }
     didSet {
       guard !isLoading else { return }
       UserDefaults.standard.set(selectedHost?.id, forKey: "selectedSettingsProfile")
@@ -330,6 +334,13 @@ class SettingsModel: ObservableObject {
   var isApplyingSmoothnessLatencyPreset = false
   var isSyncingSmoothnessLatencyMode = false
   var isApplyingEnhancedAudioPreset = false
+  // Audio enhancement changes come in bursts (a drag, a preset that sets five values): they are
+  // written and announced together. See saveEnhancedAudioSettings().
+  var enhancedAudioSavePending = false
+  var lastEnhancedAudioSave = DispatchTime(uptimeNanoseconds: 0)
+  // The fixed bands and the custom bands each have a preamp; this is the one of the kind that
+  // is not showing.
+  var enhancedAudioEQInactivePreamp: CGFloat = 0
   var sunshineDisplayFetchGeneration = 0
   var loadedSunshineDisplaysHostId: String?
 
@@ -791,6 +802,9 @@ class SettingsModel: ObservableObject {
   @Published var selectedEnhancedAudioEQMode: String = EnhancedAudioEQ.Mode.graphic.title {
     didSet {
       guard !isLoading, oldValue != selectedEnhancedAudioEQMode else { return }
+      let otherPreamp = enhancedAudioEQInactivePreamp
+      enhancedAudioEQInactivePreamp = enhancedAudioEQPreamp
+      enhancedAudioEQPreamp = otherPreamp
       if EnhancedAudioEQ.Mode(title: selectedEnhancedAudioEQMode) == .parametric,
         enhancedAudioEQBands.isEmpty
       {
@@ -1888,30 +1902,60 @@ class SettingsModel: ObservableObject {
     isApplyingEnhancedAudioPreset = false
   }
 
-  /// Saves, then lets a running stream pick the audio enhancement up again.
+  /// Saves, then lets a running stream pick the audio enhancement up again. Changes made in
+  /// the same moment are written once, and a continuous one (a drag) at most 25 times a
+  /// second: writing a profile is the expensive part of a change.
   func saveEnhancedAudioSettings() {
+    guard !isLoading, !enhancedAudioSavePending else { return }
+    enhancedAudioSavePending = true
+    let elapsed =
+      Double(DispatchTime.now().uptimeNanoseconds &- lastEnhancedAudioSave.uptimeNanoseconds) / 1e9
+    DispatchQueue.main.asyncAfter(deadline: .now() + max(0, 0.04 - elapsed)) { [weak self] in
+      self?.flushPendingEnhancedAudioSave()
+    }
+  }
+
+  func flushPendingEnhancedAudioSave() {
+    guard enhancedAudioSavePending else { return }
+    enhancedAudioSavePending = false
+    lastEnhancedAudioSave = .now()
     saveSettings()
     NotificationCenter.default.post(
       name: Notification.Name("enhancedAudioSettingChanged"), object: nil)
   }
 
-  /// The equalizer as it is set right now, for the response curve.
-  var enhancedAudioEQFilters: [EnhancedAudioEQ.Filter] {
-    guard enhancedAudioEQEnabled else { return [] }
+  /// The equalizer that is playing, as custom bands: what a saved preset holds. The fixed
+  /// bands become peaks, with the trim they give themselves added to the preamp.
+  var enhancedAudioEQAsProfile: EnhancedAudioEQ.ImportedProfile {
     if EnhancedAudioEQ.Mode(title: selectedEnhancedAudioEQMode) == .parametric {
-      return EnhancedAudioEQ.parametricFilters(enhancedAudioEQBands)
+      return EnhancedAudioEQ.ImportedProfile(
+        preamp: Double(enhancedAudioEQPreamp), bands: enhancedAudioEQBands, skippedLines: 0)
     }
-    return EnhancedAudioEQ.graphicFilters(
+    let fixed = EnhancedAudioEQ.graphicFilters(
       frequencies: Self.enhancedAudioEQFrequencies(for: selectedEnhancedAudioEQLayout),
       gains: enhancedAudioEQGains)
+    let trim = min(2.5, max(0, fixed.map(\.gain).max() ?? 0) * 0.2)
+    return EnhancedAudioEQ.ImportedProfile(
+      preamp: ((Double(enhancedAudioEQPreamp) - trim) * 10).rounded() / 10,
+      bands: fixed.map {
+        EnhancedAudioEQBand(
+          kind: .peak, frequency: $0.frequency, gain: $0.gain, q: ($0.q * 100).rounded() / 100)
+      }, skippedLines: 0)
   }
 
-  /// Replaces the parametric bands with an imported correction and switches to them.
+  /// Goes back to the fixed bands, which are as they were before a preset was chosen. The
+  /// preset stays in the custom bands.
+  func removeEnhancedAudioEQPreset() {
+    selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.graphic.title
+  }
+
+  /// Replaces the custom bands with a preset and switches to them.
   func applyImportedEnhancedAudioEQ(_ imported: EnhancedAudioEQ.ImportedProfile, name: String?) {
     enhancedAudioEQBands = imported.bands
+    // Before the preamp: switching brings the custom bands' own preamp back.
+    selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.parametric.title
     enhancedAudioEQPreamp = CGFloat(imported.preamp)
     enhancedAudioEQProfileName = name
-    selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.parametric.title
     enhancedAudioEQEnabled = true
   }
 

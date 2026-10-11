@@ -700,6 +700,7 @@ extension SettingsModel {
     selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode(rawValue: extras.eqMode)?.title
       ?? EnhancedAudioEQ.Mode.graphic.title
     enhancedAudioEQPreamp = CGFloat(extras.eqPreamp)
+    enhancedAudioEQInactivePreamp = CGFloat(extras.eqInactivePreamp)
     enhancedAudioEQBands = extras.eqBands
     enhancedAudioEQProfileName = extras.eqProfileName
     selectedEnhancedAudioSpatialMode =
@@ -915,7 +916,8 @@ extension SettingsModel {
         eqPreamp: Double(enhancedAudioEQPreamp),
         eqBands: enhancedAudioEQBands,
         eqProfileName: enhancedAudioEQProfileName,
-        spatialMode: EnhancedAudioSpatialMode(title: selectedEnhancedAudioSpatialMode).rawValue),
+        spatialMode: EnhancedAudioSpatialMode(title: selectedEnhancedAudioSpatialMode).rawValue,
+        eqInactivePreamp: Double(enhancedAudioEQInactivePreamp)),
       enableVsync: enableVsync,
       showPerformanceOverlay: showPerformanceOverlay,
       showConnectionWarnings: showConnectionWarnings,
