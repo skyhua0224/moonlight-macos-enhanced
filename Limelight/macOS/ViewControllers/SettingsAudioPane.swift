@@ -699,9 +699,8 @@ private struct AudioEqualizerSection: View {
   @State private var curveDrag: CurveDrag?
   // The band whose point was last touched on the curve; its controls show under the curve.
   @State private var selectedHandle: Int?
-  // The rows of single bands are many controls and the curve does the same job, so they are
-  // only built when asked for.
-  @AppStorage("settings.audio.eqBandDetails") private var showsBandDetails = false
+  // The list of single bands, each with a slider as it always had. It can be folded away.
+  @AppStorage("settings.audio.eqBandList") private var showsBandDetails = true
 
   /// What a drag on the curve has changed. While it lasts only this section is drawn again
   /// for every move of the pointer; the settings, and with them the rest of the pane and the
@@ -937,24 +936,27 @@ private struct AudioEqualizerSection: View {
       }
       .buttonStyle(.plain)
 
-      // One line of text per band; its controls are the row under the curve.
+      // A slider for every band. The sliders are drawn here instead of being system controls:
+      // a row then costs next to nothing to build, however many bands there are.
       if showsBandDetails {
         if isParametric {
           ForEach(Array(shownBands.enumerated()), id: \.element.id) { index, band in
-            bandSummaryRow(
+            bandSliderRow(
               index: index,
               title: String(
-                format: "%@  %@ Hz", languageManager.localize(band.kind.titleKey),
+                format: "%@ %@ Hz", languageManager.localize(band.kind.titleKey),
                 Self.frequencyText(band.frequency)),
+              gain: band.kind.usesGain ? customGainBinding(band.id) : nil,
+              range: EnhancedAudioEQBand.gainRange, step: 0.1,
               detail: band.kind.usesGain
-                ? String(format: "%+.1f dB   Q %.2f", band.gain, band.q)
-                : String(format: "Q %.2f", band.q),
+                ? String(format: "%+.1f dB", band.gain) : String(format: "Q %.2f", band.q),
               enabled: band.enabled)
           }
         } else {
           ForEach(Array(frequencies.enumerated()), id: \.element) { index, frequency in
-            bandSummaryRow(
+            bandSliderRow(
               index: index, title: String(format: "%g Hz", frequency),
+              gain: fixedGainBinding(index), range: -12...12, step: 0.5,
               detail: String(
                 format: "%+.1f dB", shownGains.indices.contains(index) ? shownGains[index] : 0),
               enabled: true)
@@ -996,25 +998,64 @@ private struct AudioEqualizerSection: View {
     frequency >= 100 ? String(format: "%.0f", frequency) : String(format: "%g", frequency)
   }
 
-  private func bandSummaryRow(index: Int, title: String, detail: String, enabled: Bool) -> some View {
-    Button {
-      selectedHandle = index
-    } label: {
-      HStack(spacing: 8) {
-        Circle()
-          .fill(selectedHandle == index ? Color.accentColor : Color.secondary.opacity(0.35))
-          .frame(width: 7, height: 7)
-        Text(verbatim: title)
-        Spacer()
-        Text(verbatim: detail)
-          .monospacedDigit()
-          .foregroundStyle(.secondary)
+  private func fixedGainBinding(_ index: Int) -> Binding<Double> {
+    Binding(
+      get: {
+        let gains = shownGains
+        return gains.indices.contains(index) ? gains[index] : 0
+      },
+      set: { value in
+        curveDrag = nil
+        settingsModel.setEnhancedAudioEQGain(value, at: index)
+      })
+  }
+
+  private func customGainBinding(_ id: UUID) -> Binding<Double> {
+    Binding(
+      get: { shownBands.first { $0.id == id }?.gain ?? 0 },
+      set: { value in
+        curveDrag = nil
+        guard let index = settingsModel.enhancedAudioEQBands.firstIndex(where: { $0.id == id }),
+          settingsModel.enhancedAudioEQBands[index].gain != value
+        else { return }
+        settingsModel.enhancedAudioEQBands[index].gain = value
+      })
+  }
+
+  /// One band: its name (touching it brings the band's other controls up under the curve),
+  /// a gain slider and the value.
+  private func bandSliderRow(
+    index: Int, title: String, gain: Binding<Double>?, range: ClosedRange<Double>, step: Double,
+    detail: String, enabled: Bool
+  ) -> some View {
+    HStack(spacing: 10) {
+      Button {
+        selectedHandle = index
+      } label: {
+        HStack(spacing: 6) {
+          Circle()
+            .fill(selectedHandle == index ? Color.accentColor : Color.secondary.opacity(0.35))
+            .frame(width: 7, height: 7)
+          Text(verbatim: title)
+            .lineLimit(1)
+        }
+        .frame(width: isParametric ? 170 : 84, alignment: .leading)
+        .contentShape(Rectangle())
       }
-      .frame(minHeight: 28)
-      .contentShape(Rectangle())
+      .buttonStyle(.plain)
+
+      if let gain {
+        AudioEQGainSlider(value: gain, range: range, step: step)
+          .controllerSlider(value: gain, in: range, step: max(step, 0.5))
+      } else {
+        Spacer()
+      }
+      Text(verbatim: detail)
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+        .frame(width: 66, alignment: .trailing)
     }
-    .buttonStyle(.plain)
-    .controllerFocusTarget { selectedHandle = index }
+    .frame(minHeight: 30)
     .opacity(enabled ? 1 : 0.5)
     .overlay(alignment: .bottom) {
       Divider().opacity(0.3)
@@ -1202,6 +1243,52 @@ private struct PresetEQPicker: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+  }
+}
+
+/// A gain slider drawn with plain shapes. The system slider is a control of its own for every
+/// row (and draws a tick mark per step); this one costs nothing to make. The bar grows from
+/// 0 dB towards the value, which shows boost and cut at a glance.
+private struct AudioEQGainSlider: View {
+  @Binding var value: Double
+  let range: ClosedRange<Double>
+  let step: Double
+
+  private static let knob: CGFloat = 14
+
+  var body: some View {
+    GeometryReader { proxy in
+      let span = range.upperBound - range.lowerBound
+      let travel = max(1, proxy.size.width - Self.knob)
+      let position = CGFloat((min(max(value, range.lowerBound), range.upperBound) - range.lowerBound) / span)
+      let zero = CGFloat((0 - range.lowerBound) / span)
+      ZStack(alignment: .leading) {
+        Capsule()
+          .fill(Color.secondary.opacity(0.25))
+          .frame(height: 4)
+          .padding(.horizontal, Self.knob / 2)
+        Capsule()
+          .fill(Color.accentColor)
+          .frame(width: abs(position - zero) * travel, height: 4)
+          .offset(x: Self.knob / 2 + min(position, zero) * travel)
+        Circle()
+          .fill(Color.white)
+          .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
+          .frame(width: Self.knob, height: Self.knob)
+          .offset(x: position * travel)
+      }
+      .frame(maxHeight: .infinity)
+      .contentShape(Rectangle())
+      .gesture(
+        DragGesture(minimumDistance: 0)
+          .onChanged { drag in
+            let fraction = Double(min(max((drag.location.x - Self.knob / 2) / travel, 0), 1))
+            let stepped = ((range.lowerBound + fraction * span) / step).rounded() * step
+            let clamped = min(max(stepped, range.lowerBound), range.upperBound)
+            if clamped != value { value = clamped }
+          })
+    }
+    .frame(height: 22)
   }
 }
 
