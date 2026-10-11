@@ -2560,47 +2560,43 @@ static NSArray<NSDictionary<NSString *, id> *> *MLAudioOutputDevices(void) {
 }
 
 // Fills the Audio Output submenu from the devices that exist right now. Main thread.
+// The choice is the app's own (the same setting as Output Device in the audio settings): the
+// stream plays on that device and the system output stays as it is.
 - (void)populateAudioOutputMenu:(NSMenu *)menu {
-    AudioDeviceID current = MLAudioDefaultOutputDevice();
+    NSString *chosenUID = [SettingsClass audioOutputDeviceUID];
+    const BOOL chosenAlive = chosenUID.length > 0 &&
+        [MLAudioBitstreamOutput deviceForUID:chosenUID] != kAudioObjectUnknown;
     NSMutableArray<NSDictionary<NSString *, id> *> *specs = [NSMutableArray array];
+    [specs addObject:@{
+        @"title": MLString(@"Output Device Follow System", nil),
+        @"action": NSStringFromSelector(@selector(selectAudioOutputFromMenu:)),
+        @"rep": @"",
+        @"state": @(chosenAlive ? NSControlStateValueOff : NSControlStateValueOn),
+    }];
     for (NSDictionary<NSString *, id> *entry in MLAudioOutputDevices()) {
+        NSString *uid = MLAudioDeviceString((AudioDeviceID)[entry[@"id"] unsignedIntValue], kAudioDevicePropertyDeviceUID);
+        if (uid.length == 0) {
+            continue;
+        }
         [specs addObject:@{
             @"title": entry[@"name"],
             @"action": NSStringFromSelector(@selector(selectAudioOutputFromMenu:)),
-            @"rep": entry[@"id"],
-            @"state": @([entry[@"id"] unsignedIntValue] == current ? NSControlStateValueOn : NSControlStateValueOff),
+            @"rep": uid,
+            @"state": @((chosenAlive && [uid isEqualToString:chosenUID]) ? NSControlStateValueOn : NSControlStateValueOff),
         }];
-    }
-    if (specs.count == 0) {
-        [specs addObject:@{ @"title": MLString(@"No audio output devices", nil), @"enabled": @NO, @"state": @(NSControlStateValueOff) }];
     }
     MLSyncMenuItems(menu, specs, self);
 }
 
-// Sets the system default output device (like the menu-bar sound picker) and makes the stream's
-// output follow it. The direct and legacy backends would follow by themselves, but not with the
-// new device's channel setup, the enhanced one stops, and passthrough only plays on the device
-// it took over; the stream restarts its output on the new device (and may try passthrough again).
+// Sets the device the stream plays on and starts its output again there (which may also try
+// passthrough again). An empty UID is the system output.
 - (void)selectAudioOutputFromMenu:(NSMenuItem *)sender {
-    NSNumber *deviceNumber = [sender.representedObject isKindOfClass:[NSNumber class]] ? sender.representedObject : nil;
-    if (deviceNumber == nil) {
+    NSString *uid = [sender.representedObject isKindOfClass:[NSString class]] ? sender.representedObject : nil;
+    if (uid == nil || [uid isEqualToString:[SettingsClass audioOutputDeviceUID]]) {
         return;
     }
-    AudioDeviceID device = (AudioDeviceID)deviceNumber.unsignedIntValue;
-    if (device == MLAudioDefaultOutputDevice()) {
-        return;
-    }
-
-    // Before the change, so a passthrough session that ends because of it does not undo it.
-    [MLAudioBitstreamOutput noteUserChoseDefaultOutputDevice];
-    AudioObjectPropertyAddress address = { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
-    OSStatus status = AudioObjectSetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, sizeof(device), &device);
-    if (status != noErr) {
-        Log(LOG_W, @"[audio] Could not switch the default output device from the control center: device=%@ status=%d", sender.title, (int)status);
-        [self showNotification:MLString(@"Couldn't switch the audio output", nil) forSeconds:3.0];
-        return;
-    }
-    Log(LOG_I, @"[audio] Default output device switched from the control center: %@", sender.title);
+    [SettingsClass setAudioOutputDeviceUID:uid];
+    Log(LOG_I, @"[audio] Output device chosen from the control center: %@", sender.title);
     [self.streamMan.connection restartAudioOutputForDeviceChange];
     [self showNotification:[NSString stringWithFormat:MLString(@"Audio output: %@", nil), sender.title]];
 }

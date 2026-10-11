@@ -1596,10 +1596,16 @@ class SettingsClass: NSObject {
   /// Whether AC3 / E-AC3 may be sent to the output device as a bitstream.
   /// Only "Decode on This Mac" forbids it; whether the device can take it is
   /// decided when the stream starts.
-  /// UID of the device Dolby passthrough goes to. Empty: the system output. It is a setting
-  /// of this Mac, not of a host: the device is here.
-  @objc static func audioPassthroughDeviceUID() -> String {
-    UserDefaults.standard.string(forKey: "audioPassthroughDeviceUID") ?? ""
+  static let audioOutputDeviceKey = "audioOutputDeviceUID"
+
+  /// UID of the device the stream's sound goes to, decoded or passed through. Empty: the
+  /// system output. It is a setting of this Mac, not of a host: the device is here.
+  @objc static func audioOutputDeviceUID() -> String {
+    UserDefaults.standard.string(forKey: audioOutputDeviceKey) ?? ""
+  }
+
+  @objc static func setAudioOutputDeviceUID(_ uid: String) {
+    UserDefaults.standard.set(uid, forKey: audioOutputDeviceKey)
   }
 
   @objc static func audioBitstreamPassthroughAllowed(for key: String) -> Bool {

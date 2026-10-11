@@ -2032,6 +2032,28 @@ extension SettingsModel {
     }
   }
 
+  /// The tonal curves that used to be a list of their own (and also set the spatial sliders),
+  /// as presets of the equalizer: the curve of the 12 fixed bands, band for band, with a
+  /// preamp that takes back its highest point. Bands left at 0 dB are not carried along.
+  static let soundEQPresets: [EnhancedAudioEQ.GeneralPreset] =
+    enhancedAudioPresets.map { name in
+      let layout = "12-Band"
+      let fixed = EnhancedAudioEQ.graphicFilters(
+        frequencies: enhancedAudioEQFrequencies(for: layout),
+        gains: enhancedAudioPresetValues(for: name, layout: layout).eqGains)
+      var bands = fixed.filter { abs($0.gain) >= 0.05 }.map {
+        EnhancedAudioEQBand(
+          kind: .peak, frequency: $0.frequency, gain: ($0.gain * 10).rounded() / 10,
+          q: ($0.q * 100).rounded() / 100)
+      }
+      if bands.isEmpty {
+        bands = [EnhancedAudioEQBand(kind: .peak, frequency: 1000, q: 1)]
+      }
+      return EnhancedAudioEQ.GeneralPreset(
+        id: name, nameKey: name, detailKey: enhancedAudioPresetDescription(for: name),
+        preamp: EnhancedAudioEQ.preamp(for: bands), bands: bands)
+    } + EnhancedAudioEQ.usagePresets
+
   static func enhancedAudioPresetDescription(for preset: String) -> String {
     switch preset {
     case "Immersive Gaming":

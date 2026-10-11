@@ -252,6 +252,9 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     int _audioRequestedCodec;
     int32_t _audioNoticeSent;
     int32_t _audioPassthroughNoticeSent;
+    // UID of the chosen device the running output was started on ("" for the system output).
+    // Output queue.
+    NSString *_audioOutputDeviceUID;
     // Packet validation counters of the non-Opus paths, touched by the audio decode thread only.
     int _pcmExpectedBytes;
     int _audioRxState;
@@ -582,6 +585,16 @@ static OSStatus RenderDirectAudioUnit(void *inRefCon,
                                       UInt32 inNumberFrames,
                                       AudioBufferList *ioData);
 
+// The device set for the stream's sound in the audio settings, or kAudioObjectUnknown: nothing
+// set, or the device is gone, and the stream plays on the system output. A stream does not
+// have to follow the system output, which an equalizer app may have taken over with a virtual
+// device of its own (and takes back when it is changed).
+static AudioDeviceID MLChosenOutputDevice(void)
+{
+    return [MLAudioBitstreamOutput deviceForUID:[SettingsClass audioOutputDeviceUID]];
+}
+
+// The "default output" queries below are about the device the stream plays on.
 static int MLDefaultOutputChannelCount(void) {
     AudioDeviceID deviceID = kAudioObjectUnknown;
     UInt32 propertySize = sizeof(deviceID);
@@ -591,12 +604,10 @@ static int MLDefaultOutputChannelCount(void) {
         kAudioObjectPropertyElementMain
     };
 
-    if (AudioObjectGetPropertyData(kAudioObjectSystemObject,
-                                   &address,
-                                   0,
-                                   NULL,
-                                   &propertySize,
-                                   &deviceID) != noErr || deviceID == kAudioObjectUnknown) {
+    deviceID = MLChosenOutputDevice();
+    if (deviceID == kAudioObjectUnknown &&
+        (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, &propertySize, &deviceID) != noErr ||
+         deviceID == kAudioObjectUnknown)) {
         return 2;
     }
 
@@ -648,12 +659,10 @@ static NSString *MLDefaultOutputDeviceName(void) {
         kAudioObjectPropertyElementMain
     };
 
-    if (AudioObjectGetPropertyData(kAudioObjectSystemObject,
-                                   &deviceAddress,
-                                   0,
-                                   NULL,
-                                   &propertySize,
-                                   &deviceID) != noErr || deviceID == kAudioObjectUnknown) {
+    deviceID = MLChosenOutputDevice();
+    if (deviceID == kAudioObjectUnknown &&
+        (AudioObjectGetPropertyData(kAudioObjectSystemObject, &deviceAddress, 0, NULL, &propertySize, &deviceID) != noErr ||
+         deviceID == kAudioObjectUnknown)) {
         return @"Unknown Output";
     }
 
@@ -686,8 +695,10 @@ static UInt32 MLDefaultOutputBufferFrames(void) {
         kAudioObjectPropertyScopeGlobal,
         kAudioObjectPropertyElementMain
     };
-    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &deviceAddress, 0, NULL,
-                                   &propertySize, &deviceID) != noErr || deviceID == kAudioObjectUnknown) {
+    deviceID = MLChosenOutputDevice();
+    if (deviceID == kAudioObjectUnknown &&
+        (AudioObjectGetPropertyData(kAudioObjectSystemObject, &deviceAddress, 0, NULL, &propertySize, &deviceID) != noErr ||
+         deviceID == kAudioObjectUnknown)) {
         return 0;
     }
 
@@ -747,12 +758,10 @@ static UInt32 MLDefaultOutputTransportType(void) {
         kAudioObjectPropertyElementMain
     };
 
-    if (AudioObjectGetPropertyData(kAudioObjectSystemObject,
-                                   &deviceAddress,
-                                   0,
-                                   NULL,
-                                   &propertySize,
-                                   &deviceID) != noErr || deviceID == kAudioObjectUnknown) {
+    deviceID = MLChosenOutputDevice();
+    if (deviceID == kAudioObjectUnknown &&
+        (AudioObjectGetPropertyData(kAudioObjectSystemObject, &deviceAddress, 0, NULL, &propertySize, &deviceID) != noErr ||
+         deviceID == kAudioObjectUnknown)) {
         return 0;
     }
 
@@ -2183,7 +2192,9 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
 
         AudioComponentDescription desc = {0};
         desc.componentType = kAudioUnitType_Output;
-        desc.componentSubType = kAudioUnitSubType_DefaultOutput;
+        // The unit that follows the system output, or the one that is given a device.
+        const AudioDeviceID chosenDevice = MLChosenOutputDevice();
+        desc.componentSubType = chosenDevice != kAudioObjectUnknown ? kAudioUnitSubType_HALOutput : kAudioUnitSubType_DefaultOutput;
         desc.componentManufacturer = kAudioUnitManufacturer_Apple;
 
         AudioComponent component = AudioComponentFindNext(NULL, &desc);
@@ -2196,6 +2207,18 @@ void ArDecodeAndPlaySample(char* sampleData, int sampleLength)
             _audioOutputStartStatus = status;
             _audioUnit = NULL;
             return NO;
+        }
+        if (chosenDevice != kAudioObjectUnknown) {
+            AudioDeviceID device = chosenDevice;
+            status = AudioUnitSetProperty(_audioUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                          kAudioUnitScope_Global, 0, &device, sizeof(device));
+            if (status != noErr) {
+                Log(LOG_W, @"[audio] The chosen output device could not be set on the direct renderer: %d", (int)status);
+                _audioOutputStartStatus = status;
+                AudioComponentInstanceDispose(_audioUnit);
+                _audioUnit = NULL;
+                return NO;
+            }
         }
 
         AURenderCallbackStruct callback = {0};
@@ -3043,6 +3066,19 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
         // Building the graph raises instead of returning an error when a node rejects a format.
         @try {
             _enhancedAudioEngine = [[AVAudioEngine alloc] init];
+            const AudioDeviceID chosenDevice = MLChosenOutputDevice();
+            if (chosenDevice != kAudioObjectUnknown) {
+                // Before anything is connected: the device decides the format of the output.
+                AudioDeviceID device = chosenDevice;
+                AudioUnit outputUnit = _enhancedAudioEngine.outputNode.audioUnit;
+                OSStatus deviceStatus = outputUnit != NULL
+                    ? AudioUnitSetProperty(outputUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                           kAudioUnitScope_Global, 0, &device, sizeof(device))
+                    : kAudioUnitErr_Uninitialized;
+                if (deviceStatus != noErr) {
+                    Log(LOG_W, @"[audio] The chosen output device could not be set on the enhanced renderer: %d; using the system output", (int)deviceStatus);
+                }
+            }
             _enhancedAudioReverb = [[AVAudioUnitReverb alloc] init];
             _enhancedAudioLoadedReverbPreset = -1;
             _enhancedAudioEQ = [[AVAudioUnitEQ alloc] initWithNumberOfBands:(uint32_t)kEnhancedEQMaxBands];
@@ -3260,6 +3296,14 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
         }
         return status;
     }
+    if (MLChosenOutputDevice() != kAudioObjectUnknown) {
+        // A queue takes its device by UID.
+        CFStringRef deviceUID = (__bridge CFStringRef)[SettingsClass audioOutputDeviceUID];
+        OSStatus deviceStatus = AudioQueueSetProperty(_audioQueue, kAudioQueueProperty_CurrentDevice, &deviceUID, sizeof(deviceUID));
+        if (deviceStatus != noErr) {
+            Log(LOG_W, @"[audio] The chosen output device could not be set on the audio queue: %d; using the system output", (int)deviceStatus);
+        }
+    }
 
     // We need to specify a channel layout for surround sound configurations
     status = AudioQueueSetProperty(_audioQueue, kAudioQueueProperty_ChannelLayout, channelLayout, sizeof(AudioChannelLayout));
@@ -3410,7 +3454,15 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
 // Output queue only.
 - (void)audioOutputEnvironmentChangedForGeneration:(int32_t)generation
 {
-    if (__atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation || _audioOutputRunning) {
+    if (__atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation) {
+        return;
+    }
+    if (_audioOutputRunning) {
+        // Playing on a device of its own choice that is gone now: start again, on what is there.
+        if (_audioOutputDeviceUID.length > 0 &&
+            [MLAudioBitstreamOutput deviceForUID:_audioOutputDeviceUID] == kAudioObjectUnknown) {
+            [self restartAudioOutputOnOutputQueueForGeneration:generation reason:@"chosen output device removed"];
+        }
         return;
     }
     Log(LOG_I, @"[audio] Audio devices changed while the output is not running; retrying in %.1fs",
@@ -3475,6 +3527,7 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     BOOL started = NO;
     MLAudioRendererBackend backend = MLAudioRendererBackendLegacyQueue;
     const MLAudioOutputMode mode = (MLAudioOutputMode)_audioOutputMode;
+    _audioOutputDeviceUID = MLChosenOutputDevice() != kAudioObjectUnknown ? [SettingsClass audioOutputDeviceUID] : @"";
 
     // Passthrough first. If it cannot start it is given up for the session and
     // this same attempt carries on with the normal backends (local decode), so
@@ -3602,17 +3655,9 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     return nil;
 }
 
-// The device Dolby passthrough goes to: the one set for it, or the system output. A system
-// output taken over by a virtual device (an equalizer app that routes all sound through its own
-// device) never accepts a bitstream, which is what the separate setting is for.
-static AudioDeviceID MLChosenPassthroughDevice(void)
-{
-    return [MLAudioBitstreamOutput deviceForUID:[SettingsClass audioPassthroughDeviceUID]];
-}
-
 - (MLAudioBitstreamSupport *)audioPassthroughSupport
 {
-    const AudioDeviceID chosen = MLChosenPassthroughDevice();
+    const AudioDeviceID chosen = MLChosenOutputDevice();
     return chosen != kAudioObjectUnknown
         ? [MLAudioBitstreamOutput supportForCodec:_audioCodec onDevice:chosen]
         : [MLAudioBitstreamOutput supportForCodecOnDefaultDevice:_audioCodec];
@@ -3643,7 +3688,7 @@ static AudioDeviceID MLChosenPassthroughDevice(void)
     const int32_t generation = _audioAttemptGeneration;
     // kAudioObjectUnknown (nothing set, or the device is gone) follows the system output.
     MLAudioBitstreamOutput *output = [[MLAudioBitstreamOutput alloc] initWithCodec:_audioCodec
-                                                                            device:MLChosenPassthroughDevice()];
+                                                                            device:MLChosenOutputDevice()];
     __weak Connection *weakSelf = self;
     // Called on the output's own queue. Only hops to ours: stopping from there
     // would wait on the very callback that is running.

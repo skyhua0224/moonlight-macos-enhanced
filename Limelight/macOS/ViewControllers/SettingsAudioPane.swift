@@ -139,26 +139,6 @@ private final class AudioOutputDeviceList: ObservableObject {
     // Published even when unchanged: the hints that depend on the device are worked out again.
     current = defaultDevice
   }
-
-  /// Makes a device the system default output, like the sound menu of the menu bar, and has a
-  /// running stream start its output again on it.
-  func select(_ device: AudioDeviceID) {
-    guard device != current, device != AudioDeviceID(kAudioObjectUnknown) else { return }
-    // Before the change, so a passthrough session that ends because of it does not undo it.
-    MLAudioBitstreamOutput.noteUserChoseDefaultOutputDevice()
-    var address = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
-    var value = device
-    let status = AudioObjectSetPropertyData(
-      AudioObjectID(kAudioObjectSystemObject), &address, 0, nil,
-      UInt32(MemoryLayout<AudioDeviceID>.size), &value)
-    guard status == noErr else {
-      refresh()
-      return
-    }
-    current = device
-    NotificationCenter.default.post(
-      name: Notification.Name("audioOutputDeviceChosen"), object: nil)
-  }
 }
 
 struct AudioView: View {
@@ -166,8 +146,8 @@ struct AudioView: View {
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var microphoneManager = MicrophoneManager.shared
   @StateObject private var outputDevices = AudioOutputDeviceList()
-  // Where Dolby passthrough goes; empty: the system output. See SettingsClass.audioPassthroughDeviceUID.
-  @AppStorage("audioPassthroughDeviceUID") private var passthroughDeviceUID = ""
+  // Where the stream's sound goes; empty: the system output. See SettingsClass.audioOutputDeviceUID.
+  @AppStorage("audioOutputDeviceUID") private var outputDeviceUID = ""
   @State private var createdAt = DispatchTime.now()
   // The pane comes up in steps: what is on screen first, then the sections below it, each in
   // a turn of its own, so that opening or switching to the pane does not wait for all of it.
@@ -188,19 +168,44 @@ struct AudioView: View {
           AudioCompactRow(
             title: "Output Device", hint: languageManager.localize("Output Device hint")
           ) {
-            Picker("", selection: outputDeviceSelection) {
-              ForEach(outputDevices.devices) { device in
-                Text(device.name).tag(device.id)
+            Picker("", selection: $outputDeviceUID) {
+              Text(followSystemTitle).tag("")
+              ForEach(outputDevices.devices.filter { !$0.uid.isEmpty }) { device in
+                Text(device.name).tag(device.uid)
               }
             }
             .labelsHidden()
             .controllerPicker(
-              selection: outputDeviceSelection,
-              choices: outputDevices.devices.map { (value: $0.id, title: $0.name) }
+              selection: $outputDeviceUID,
+              choices: [(value: "", title: followSystemTitle)]
+                + outputDevices.devices.filter { !$0.uid.isEmpty }.map { (value: $0.uid, title: $0.name) }
             )
             .pickerStyle(.menu)
             .controlSize(.small)
-            .frame(width: 230, alignment: .trailing)
+            .frame(width: 250, alignment: .trailing)
+            .onChange(of: outputDeviceUID) { _ in
+              // A running stream starts its output again, on the device.
+              NotificationCenter.default.post(
+                name: Notification.Name("audioOutputDeviceChosen"), object: nil)
+            }
+          }
+
+          // Passthrough is asked for and the device does not take the bitstream: its own
+          // warning, right under the device it is about.
+          if let warning = passthroughUnavailableWarning {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+              Text(warning)
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+              Spacer(minLength: 0)
+            }
+            .padding(.vertical, 8)
+            .overlay(alignment: .bottom) {
+              Divider().opacity(0.45)
+            }
           }
 
           AudioCompactRow(title: "Audio Configuration") {
@@ -250,31 +255,6 @@ struct AudioView: View {
               .pickerStyle(.menu)
               .controlSize(.small)
               .frame(width: 190, alignment: .trailing)
-            }
-          }
-
-          if dolbyOutputApplies, settingsModel.selectedDolbyOutput != "Decode on This Mac" {
-            AudioCompactRow(title: "Dolby Output Device") {
-              Picker("", selection: $passthroughDeviceUID) {
-                Text(languageManager.localize("Dolby Output Device Follow System")).tag("")
-                ForEach(outputDevices.devices.filter { !$0.uid.isEmpty }) { device in
-                  Text(device.name).tag(device.uid)
-                }
-              }
-              .labelsHidden()
-              .controllerPicker(
-                selection: $passthroughDeviceUID,
-                choices: [(value: "", title: languageManager.localize("Dolby Output Device Follow System"))]
-                  + outputDevices.devices.filter { !$0.uid.isEmpty }.map { (value: $0.uid, title: $0.name) }
-              )
-              .pickerStyle(.menu)
-              .controlSize(.small)
-              .frame(width: 230, alignment: .trailing)
-              .onChange(of: passthroughDeviceUID) { _ in
-                // A running stream starts its output again and tries passthrough on the device.
-                NotificationCenter.default.post(
-                  name: Notification.Name("audioOutputDeviceChosen"), object: nil)
-              }
             }
           }
 
@@ -337,19 +317,6 @@ struct AudioView: View {
               }
               .labelsHidden()
               .controllerPicker(selection: $settingsModel.selectedEnhancedAudioOutputTarget, options: SettingsModel.enhancedAudioOutputTargetDisplayOrder, title: { value in languageManager.localize(value) })
-              .pickerStyle(.menu)
-              .controlSize(.small)
-              .frame(width: 190, alignment: .trailing)
-            }
-
-            AudioCompactRow(title: "Preset") {
-              Picker("", selection: $settingsModel.selectedEnhancedAudioPreset) {
-                ForEach(SettingsModel.enhancedAudioPresets, id: \.self) { value in
-                  Text(languageManager.localize(value)).tag(value)
-                }
-              }
-              .labelsHidden()
-              .controllerPicker(selection: $settingsModel.selectedEnhancedAudioPreset, options: SettingsModel.enhancedAudioPresets, title: { value in languageManager.localize(value) })
               .pickerStyle(.menu)
               .controlSize(.small)
               .frame(width: 190, alignment: .trailing)
@@ -508,18 +475,7 @@ struct AudioView: View {
     let mbps = MLAudioStreamPlan.mbpsText(current.wireKbps)
     if settingsModel.selectedDolbyOutput != "Decode on This Mac" {
       let support = outputDevices.bitstreamSupport(
-        forCodec: Int32(choice.codecId), deviceUID: passthroughDeviceUID)
-      if !support.available {
-        // Asked for and not possible: say so, and what to do about it. The usual reason is a
-        // system output taken over by a virtual device.
-        return String(
-          format: languageManager.localize("Audio codec hint passthrough unavailable"),
-          support.deviceName, MLAudioStreamPlan.codecDisplayName(choice.codecId))
-          + " "
-          + String(
-            format: languageManager.localize("Audio codec hint compressed"),
-            MLAudioStreamPlan.codecDisplayName(choice.codecId), mbps)
-      }
+        forCodec: Int32(choice.codecId), deviceUID: outputDeviceUID)
       if support.available {
         let dolbyName = languageManager.localize(
           choice == .eac3 ? "Dolby Digital Plus" : "Dolby Digital")
@@ -573,8 +529,11 @@ struct AudioView: View {
     settingsModel.selectedAudioOutputMode == "Audio Enhancement"
   }
 
-  private var outputDeviceSelection: Binding<AudioDeviceID> {
-    Binding(get: { outputDevices.current }, set: { outputDevices.select($0) })
+  /// "Same as System Output", with the device that is at the moment.
+  private var followSystemTitle: String {
+    let name = outputDevices.devices.first { $0.id == outputDevices.current }?.name
+    let title = languageManager.localize("Output Device Follow System")
+    return name.map { "\(title) (\($0))" } ?? title
   }
 
   private var spatialAudioOff: Bool {
@@ -587,6 +546,21 @@ struct AudioView: View {
     case .wideStereo: return "Spatial Audio Wide Stereo hint"
     case .off: return "Spatial Audio Off hint"
     }
+  }
+
+  /// Set while Dolby passthrough is wanted (AC3 or E-AC3, not "Decode on This Mac") and the
+  /// device it would go to does not accept the bitstream.
+  private var passthroughUnavailableWarning: String? {
+    let choice = AudioCodecChoice(selection: settingsModel.selectedAudioCodec)
+    guard choice == .ac3 || choice == .eac3,
+      settingsModel.selectedDolbyOutput != "Decode on This Mac"
+    else { return nil }
+    let support = outputDevices.bitstreamSupport(
+      forCodec: Int32(choice.codecId), deviceUID: outputDeviceUID)
+    guard !support.available else { return nil }
+    return String(
+      format: languageManager.localize("Audio codec hint passthrough unavailable"),
+      support.deviceName, MLAudioStreamPlan.codecDisplayName(choice.codecId))
   }
 
   /// The Dolby Output choice only matters for the codecs that can be passed through.
@@ -1236,10 +1210,9 @@ private struct PresetEQPicker: View {
       trimmed.isEmpty || $0.name.localizedCaseInsensitiveContains(trimmed)
     }
     let results = library.search(query)
-    let general = EnhancedAudioEQ.generalPresets.filter {
-      trimmed.isEmpty
-        || languageManager.localize($0.nameKey).localizedCaseInsensitiveContains(trimmed)
-    }
+    let byDevice = matching(EnhancedAudioEQ.devicePresets, trimmed)
+    let bySound = matching(SettingsModel.soundEQPresets, trimmed)
+    let general = byDevice + bySound
     VStack(alignment: .leading, spacing: 8) {
       TextField(languageManager.localize("Preset EQ Search"), text: $query)
         .textFieldStyle(.roundedBorder)
@@ -1276,9 +1249,20 @@ private struct PresetEQPicker: View {
               }
             }
           }
-          if !general.isEmpty {
-            sectionTitle("Preset EQ General")
-            ForEach(general) { preset in
+          if !byDevice.isEmpty {
+            sectionTitle("Preset EQ By Device")
+            ForEach(byDevice) { preset in
+              row(
+                languageManager.localize(preset.nameKey),
+                languageManager.localize(preset.detailKey)
+              ) {
+                onPick(preset.profile, languageManager.localize(preset.nameKey))
+              }
+            }
+          }
+          if !bySound.isEmpty {
+            sectionTitle("Preset EQ By Sound")
+            ForEach(bySound) { preset in
               row(
                 languageManager.localize(preset.nameKey),
                 languageManager.localize(preset.detailKey)
@@ -1327,6 +1311,14 @@ private struct PresetEQPicker: View {
     .padding(12)
     .frame(width: 400, height: 460)
     .onAppear { library.loadIfNeeded() }
+  }
+
+  private func matching(_ presets: [EnhancedAudioEQ.GeneralPreset], _ text: String)
+    -> [EnhancedAudioEQ.GeneralPreset]
+  {
+    presets.filter {
+      text.isEmpty || languageManager.localize($0.nameKey).localizedCaseInsensitiveContains(text)
+    }
   }
 
   private func sectionTitle(_ key: String) -> some View {

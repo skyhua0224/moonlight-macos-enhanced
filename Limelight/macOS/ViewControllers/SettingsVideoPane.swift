@@ -15,6 +15,17 @@ struct VideoView: View {
     !compatibilitySelected
   }
 
+  private var videoCodecWarningKey: String? {
+    switch settingsModel.selectedVideoCodec {
+    case "AV1":
+      return SettingsModel.av1HardwareDecodeSupported ? nil : "Video codec warning AV1 software"
+    case "H.265":
+      return SettingsModel.hevcHardwareDecodeSupported ? nil : "Video codec warning HEVC unavailable"
+    default:
+      return nil
+    }
+  }
+
   var body: some View {
     SettingsContent {
       SettingsPageHero(
@@ -34,6 +45,21 @@ struct VideoView: View {
           .labelsHidden()
           .controllerPicker(selection: $settingsModel.selectedVideoCodec, options: SettingsModel.videoCodecs, title: { codec in languageManager.localize(codec) })
           .frame(width: 190, alignment: .trailing)
+        }
+        // The chosen codec has no hardware decoder in this Mac: say what happens instead.
+        if let warning = videoCodecWarningKey {
+          HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundStyle(.orange)
+            Text(languageManager.localize(warning))
+              .font(.caption)
+              .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+          }
+          .padding(.vertical, 6)
+          .overlay(alignment: .bottom) {
+            Divider().opacity(0.45)
+          }
         }
 
 

@@ -462,10 +462,24 @@ enum EnhancedAudioEQ {
   /// point, not a measurement. Each preamp takes back the highest point of its curve.
   struct GeneralPreset: Identifiable {
     let id: String
-    var nameKey: String { "EQ General " + id }
-    var detailKey: String { "EQ General " + id + " detail" }
+    let nameKey: String
+    let detailKey: String
     let preamp: Double
     let bands: [EnhancedAudioEQBand]
+
+    init(id: String, preamp: Double, bands: [EnhancedAudioEQBand]) {
+      self.init(
+        id: id, nameKey: "EQ General " + id, detailKey: "EQ General " + id + " detail",
+        preamp: preamp, bands: bands)
+    }
+
+    init(id: String, nameKey: String, detailKey: String, preamp: Double, bands: [EnhancedAudioEQBand]) {
+      self.id = id
+      self.nameKey = nameKey
+      self.detailKey = detailKey
+      self.preamp = preamp
+      self.bands = bands
+    }
 
     var profile: ImportedProfile {
       // Fresh ids every time: a preset applied twice must not share bands.
@@ -483,7 +497,8 @@ enum EnhancedAudioEQ {
     EnhancedAudioEQBand(kind: kind, frequency: frequency, gain: gain, q: q)
   }
 
-  static let generalPresets: [GeneralPreset] = [
+  /// By kind of device.
+  static let devicePresets: [GeneralPreset] = [
     // Two small boxes on a desk: little bass, a boxy lower midrange, some edge up high.
     GeneralPreset(
       id: "Small Desktop Speakers", preamp: -3,
@@ -517,21 +532,29 @@ enum EnhancedAudioEQ {
         band(.highPass, 100), band(.lowShelf, 200, 4), band(.peak, 500, -2.5, q: 1),
         band(.peak, 3500, -2, q: 1.5), band(.highShelf, 9000, 2),
       ]),
+  ]
+
+  /// By what one wants to hear, next to the tonal curves the app always had (see
+  /// SettingsModel.soundEQPresets).
+  static let usagePresets: [GeneralPreset] = [
     // At low volume the ear loses bass and treble first.
     GeneralPreset(
       id: "Night Listening", preamp: -5,
       bands: [band(.lowShelf, 100, 5), band(.peak, 3000, -1, q: 1), band(.highShelf, 8000, 3)]),
     GeneralPreset(
-      id: "Clear Dialogue", preamp: -3.5,
-      bands: [
-        band(.highPass, 80), band(.peak, 250, -2, q: 1), band(.peak, 2000, 3, q: 0.9),
-        band(.peak, 4000, 1.5, q: 1.2),
-      ]),
-    GeneralPreset(id: "More Bass", preamp: -5, bands: [band(.lowShelf, 90, 5)]),
-    GeneralPreset(
       id: "Softer Treble", preamp: 0,
       bands: [band(.peak, 3500, -1.5, q: 1.2), band(.highShelf, 6000, -3)]),
   ]
+
+  /// The preamp that takes back the highest point of a curve.
+  static func preamp(for bands: [EnhancedAudioEQBand]) -> Double {
+    let filters = parametricFilters(bands)
+    var peak = 0.0
+    for step in 0...160 {
+      peak = max(peak, response(of: filters, at: 20 * pow(1000, Double(step) / 160)))
+    }
+    return -(peak * 10).rounded() / 10
+  }
 
   // MARK: Export
 
