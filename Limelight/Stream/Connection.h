@@ -50,6 +50,9 @@
 - (void)remoteTextContextUpdated:(const LI_REMOTE_TEXT_CONTEXT *)context;
 // The audio transport failed in a way the user should know about. May arrive on any thread.
 - (void)audioCodecNotice:(NSString *)message;
+// The host sends no audio for the surround layout that was asked for; a layout it can deliver
+// has been noted for this host, and connecting again gets it. May arrive on any thread.
+- (void)audioLayoutUnavailable;
 
 @end
 

@@ -884,6 +884,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (BOOL)applyLiveResolutionWidth:(int)width height:(int)height;
 - (void)streamResolutionChanged:(uint32_t)width height:(uint32_t)height;
 - (void)audioCodecNotice:(NSString *)message;
+- (void)audioLayoutUnavailable;
 - (void)applyHostStreamResolutionWidth:(int)width height:(int)height;
 @end
 

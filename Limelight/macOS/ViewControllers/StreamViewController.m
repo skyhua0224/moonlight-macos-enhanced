@@ -410,6 +410,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
 }
 
+- (void)audioLayoutUnavailable {
+    [self forwardIfCurrentNamed:@"audioLayoutUnavailable" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(audioLayoutUnavailable)]) {
+            [owner audioLayoutUnavailable];
+        }
+    }];
+}
+
 - (void)remoteTextContextUpdated:(const LI_REMOTE_TEXT_CONTEXT *)context {
     // The context is only valid during the callback, so hand over a copy.
     NSData *snapshot = context != NULL ? [NSData dataWithBytes:context length:sizeof(*context)] : nil;

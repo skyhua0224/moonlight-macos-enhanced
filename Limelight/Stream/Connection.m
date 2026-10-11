@@ -3443,7 +3443,7 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     const BOOL silenceIsConclusive = _continuousAudio;
     NSString *hostKey = _audioHostKey;
     if (silenceIsConclusive && _channelCount > 8) {
-        silenceHintKey = @"The host has no 7.1.4 audio: its audio device does not accept 12 channels. This stream stays silent; the next one will use 7.1 surround.";
+        silenceHintKey = @"The host has no 7.1.4 audio: its audio device does not accept 12 channels. Connecting again with 7.1 surround.";
     }
     __atomic_store_n(&_audioAnyPacketSeen, 0, __ATOMIC_RELAXED);
     if (silenceHintKey != nil) {
@@ -3458,10 +3458,14 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
             }
             Log(LOG_W, @"[audio] No audio packet has arrived %d s into the stream (codec=%@ channels=%d continuousAudio=%d); the host may be streaming without audio or its packets are not getting through",
                 waitSec, [MLAudioStreamPlan codecName:strongSelf->_audioCodec], channels, silenceIsConclusive ? 1 : 0);
+            [strongSelf postAudioOutputNoticeWithKey:silenceHintKey deviceName:nil];
             if (silenceIsConclusive && channels > 8 && hostKey.length > 0) {
                 [SettingsClass markSurround714UnavailableForHost:hostKey];
+                id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(strongSelf);
+                if ([callbacks respondsToSelector:@selector(audioLayoutUnavailable)]) {
+                    [callbacks audioLayoutUnavailable];
+                }
             }
-            [strongSelf postAudioOutputNoticeWithKey:silenceHintKey deviceName:nil];
         });
     }
     dispatch_async(_audioOutputQueue, ^{

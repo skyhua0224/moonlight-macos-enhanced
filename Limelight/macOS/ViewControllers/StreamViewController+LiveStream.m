@@ -7,6 +7,7 @@
 //
 
 #import "StreamViewController_Internal.h"
+#import <objc/runtime.h>
 
 @implementation StreamViewController (LiveStream)
 
@@ -172,6 +173,20 @@
     }
     dispatch_async(dispatch_get_main_queue(), ^{
         [self showNotification:message forSeconds:8.0];
+    });
+}
+
+// The stream has no sound and will not get any: connect again, which asks for the layout
+// that was noted for this host. Once per stream window, so it cannot go round in circles.
+- (void)audioLayoutUnavailable {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        static char retriedKey;
+        if (objc_getAssociatedObject(self, &retriedKey) != nil) {
+            return;
+        }
+        objc_setAssociatedObject(self, &retriedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        Log(LOG_W, @"[audio] Reconnecting for a surround layout the host can deliver");
+        [self attemptReconnectWithReason:@"surround-layout-unavailable"];
     });
 }
 
