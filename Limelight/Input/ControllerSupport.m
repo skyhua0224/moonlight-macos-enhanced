@@ -688,6 +688,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     Controller *_singleControllerOwner;
     Controller *_singleControllerMotionOwner;
     NSUInteger _inputContextGeneration;
+    NSUInteger _controllerDeliveryGeneration;
     uint16_t _singleControllerGyroRateHz;
     uint16_t _singleControllerAccelRateHz;
     BOOL _gamepadMouseModeEnabled;
@@ -891,12 +892,16 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
  * Pausing releases gamepad, mouse and native touch state and neutralizes active gyro reporting
  * when the context is initialized, then clears delivered-state caches. Resuming republishes
  * current controller state and deferred removals for slots that remain absent. Motion callbacks
- * remain installed but gate sample delivery. Call on the main thread for sensor and touch state.
+ * remain installed but gate sample delivery. Gate transitions invalidate pending sensor snapshots.
+ * Call on the main thread for sensor and touch state.
  * @param enabled Whether controller input may be delivered to the current stream.
  */
 - (void)setShouldSendInputEvents:(BOOL)enabled {
+    [_controllerStreamLock lock];
     BOOL wasEnabled = _shouldSendInputEvents;
     _shouldSendInputEvents = enabled;
+    if (wasEnabled != enabled) _controllerDeliveryGeneration++;
+    [_controllerStreamLock unlock];
     if (wasEnabled && !enabled) {
         [_dualSenseTouchpad releaseAll];
         for (Controller *controller in _controllers.allValues) {
@@ -1396,8 +1401,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 /**
  * Configures a physical owner's sensors on main using upstream's hardware-validated sample callback.
  * Each sensor keeps its requested rate. Samples are captured at callback time and delivered on main,
- * rejecting paused delivery, removed/reused owners and stale contexts under the stream lock. Axes,
- * units and rate scheduling follow upstream without filtering; no timer resamples the hardware.
+ * rejecting paused delivery, snapshots crossing gate transitions, removed/reused owners and stale
+ * contexts under the stream lock. Axes, units and rate scheduling follow upstream without filtering;
+ * no timer resamples the hardware.
  * @param controller Connected physical owner supporting motion.
  * @param motionType Accelerometer or gyro; other values are ignored.
  * @param reportRateHz Requested Hz, or zero to disable the selected sensor.
@@ -1439,6 +1445,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
     __weak Controller *weakController = controller;
     __weak GCController *weakGamepad = controller.gamepad;
     motion.valueChangedHandler = ^(GCMotion *sample) {
+        __strong typeof(weakSelf) samplingSelf = weakSelf;
+        if (samplingSelf == nil) return;
+        [samplingSelf->_controllerStreamLock lock];
+        BOOL deliveryEnabled = samplingSelf->_shouldSendInputEvents;
+        NSUInteger deliveryGeneration = samplingSelf->_controllerDeliveryGeneration;
+        [samplingSelf->_controllerStreamLock unlock];
+        if (!deliveryEnabled) return;
         // Snapshot on the framework callback, then serialize owner state with main-thread teardown.
         GCAcceleration acceleration = sample.acceleration;
         GCRotationRate rotation = sample.rotationRate;
@@ -1456,6 +1469,7 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             // rotation so the host does not keep turning at the last rate.
             if (inputCtx == NULL || !LiInputContextIsInitialized(inputCtx) || !strongSelf->_shouldSendInputEvents ||
                 strongSelf->_inputContextGeneration != generation || !strongController.controllerAnnounced ||
+                strongSelf->_controllerDeliveryGeneration != deliveryGeneration ||
                 weakGamepad == nil || strongController.gamepad != weakGamepad ||
                 [strongSelf controllerForRemoteNumber:[strongSelf remoteControllerNumber:strongController]] != strongController) {
                 [strongSelf->_controllerStreamLock unlock];

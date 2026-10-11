@@ -631,6 +631,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
  * A changed pointer clears arrival, requested motion rates, filter history, mode overrides and gestures,
  * then synchronizes scroll diagnostics. The HID monitor serializes this reset with motion
  * processing and requests, including context invalidation on the connection callback thread.
+ * Advances a generation so queued requests cannot target a new session at a reused address.
  * @param inputContext Native input context, or NULL to detach; the pointer is not retained or freed.
  */
 - (void)setInputContext:(void *)inputContext {
@@ -640,6 +641,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         }
 
         _inputContext = inputContext;
+        self.inputContextGeneration++;
         self.reportedPlayStationArrival = NO;
         self.requestedGyroRateHz = 0;
         self.requestedAccelRateHz = 0;
@@ -1009,7 +1011,8 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 }
 
 /**
- * Creates the HID backend and snapshots effective host/global motion and touchpad preferences.
+ * Creates the HID backend and snapshots effective host/global motion, virtual-type and touchpad
+ * preferences.
  * Registers device/preference observers and input queues on main; cleanup must unregister them.
  * Live touchpad preferences resend controller state only when the direct-HID driver is active.
  * @param host Host profile whose input settings apply to this stream.
@@ -1020,6 +1023,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     if (self) {
         self.host = host;
         self.controllerMotionMode = [SettingsClass controllerMotionModeFor:host.uuid];
+        self.controllerVirtualType = [SettingsClass controllerVirtualTypeFor:host.uuid];
         self.inputQueue = dispatch_queue_create("com.moonlight.input", DISPATCH_QUEUE_SERIAL);
         _pressedKeyPairs = [NSMutableDictionary dictionary];
         _pressedKeyPairsLock = [[NSLock alloc] init];
@@ -1122,7 +1126,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
  *
  * Skips mouse mode or a missing context and translates Start+Select to the Guide button.
  * Captures state before dispatching to the serial input queue; call from the serialized HID
- * state-update path.
+ * state-update path. Explicit Xbox emulation omits PlayStation touchpad buttons.
  */
 - (void)sendControllerEvent {
     uint64_t routing = [self evaluateControllerShortcuts];
@@ -1135,6 +1139,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         lastButtonFlags &= ~consumed;
         lastButtonFlags |= replayed & ~(CONTROLLER_SHORTCUT_LEFT_TRIGGER_MARKER | CONTROLLER_SHORTCUT_RIGHT_TRIGGER_MARKER);
         if (ControllerShortcutRouteTouchpad(routing)) lastButtonFlags |= TOUCHPAD_FLAG;
+        if (self.controllerVirtualType == 1) lastButtonFlags &= ~TOUCHPAD_FLAG;
         
         // Guide Button Emulation (Start + Select)
         // If both Start and Select are pressed, convert to Guide
@@ -1173,7 +1178,9 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
  *
  * Requires the direct driver, enabled controller delivery and a valid context. Marks arrival
  * only after a successful protocol call so failures may be retried. Call from the serialized
- * HID controller path before sending extended input. DS4 and DS5 advertise motion; Disabled motion omits sensor capabilities.
+ * HID controller path before sending extended input. Explicit Xbox emulation advertises Xbox
+ * controls without PlayStation extensions. DS4 and DS5 otherwise advertise touch and motion;
+ * Disabled motion omits sensor capabilities.
  * @return YES if arrival was already advertised or was successfully sent; otherwise NO.
  */
 - (BOOL)reportPlayStationControllerArrival {
@@ -1195,11 +1202,15 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     uint32_t buttons = PLAY_FLAG | BACK_FLAG | UP_FLAG | DOWN_FLAG | LEFT_FLAG | RIGHT_FLAG |
                        LB_FLAG | RB_FLAG | LS_CLK_FLAG | RS_CLK_FLAG | SPECIAL_FLAG |
                        A_FLAG | B_FLAG | X_FLAG | Y_FLAG | TOUCHPAD_FLAG;
-    uint16_t capabilities = LI_CCAP_ANALOG_TRIGGERS | LI_CCAP_RUMBLE | LI_CCAP_TOUCHPAD;
-    if (self.playStationHasMotion && self.controllerMotionMode != 2) {
+    BOOL allowsPlayStationExtensions = self.controllerVirtualType != 1;
+    uint8_t controllerType = allowsPlayStationExtensions ? LI_CTYPE_PS : LI_CTYPE_XBOX;
+    uint16_t capabilities = LI_CCAP_ANALOG_TRIGGERS | LI_CCAP_RUMBLE;
+    if (allowsPlayStationExtensions) capabilities |= LI_CCAP_TOUCHPAD;
+    else buttons &= ~TOUCHPAD_FLAG;
+    if (allowsPlayStationExtensions && self.playStationHasMotion && self.controllerMotionMode != 2) {
         capabilities |= LI_CCAP_ACCEL | LI_CCAP_GYRO;
     }
-    int err = LiSendControllerArrivalEventCtx(inputCtx, 0, 1, LI_CTYPE_PS, buttons, capabilities);
+    int err = LiSendControllerArrivalEventCtx(inputCtx, 0, 1, controllerType, buttons, capabilities);
     if (err != 0) {
         return NO;
     }
@@ -1210,12 +1221,13 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 }
 
 /**
- * Queues a host motion request on main and rejects requests for a replaced stream context.
+ * Queues a host motion request on main and rejects superseded stream generations, including
+ * address reuse.
  *
  * Only slot zero is supported. Under the HID monitor, updates sensor rates even while delivery
  * is paused and resets gyro filters when its rate changes. Stopping an active gyro sends a
  * zero only when controller arrival and delivery permit it. Disabled motion ignores requests.
- * May be called from a native callback.
+ * Explicit Xbox emulation ignores sensor requests. May be called from a native callback.
  * @param controllerNumber Host controller slot; nonzero slots are ignored.
  * @param motionType LI_MOTION_TYPE_GYRO or LI_MOTION_TYPE_ACCEL.
  * @param reportRateHz Requested maximum outgoing frequency in Hz, or zero to stop that sensor.
@@ -1224,14 +1236,16 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
                  motionType:(uint8_t)motionType
                reportRateHz:(uint16_t)reportRateHz {
     void *requestedInputContext;
+    NSUInteger generation;
     @synchronized (self) {
         requestedInputContext = _inputContext;
+        generation = self.inputContextGeneration;
     }
     dispatch_async(dispatch_get_main_queue(), ^{
         // Context replacement also resets motion state. Reject queued old requests.
         @synchronized (self) {
-            if (self.controllerMotionMode == 2 || controllerNumber != 0 || requestedInputContext == NULL ||
-                self.inputContext != requestedInputContext) {
+            if (self.controllerMotionMode == 2 || self.controllerVirtualType == 1 || controllerNumber != 0 || requestedInputContext == NULL ||
+                self.inputContext != requestedInputContext || self.inputContextGeneration != generation) {
                 return;
             }
 
@@ -1527,7 +1541,8 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
 /**
  * Consumes a complete DS4/DS5 contact pair on the main HID callback run loop.
  * Reuses the shared gesture engine for pointer, two-finger scroll and tap clicks. Native mode
- * preserves normalized controller-touch events. Both contacts are updated before consuming
+ * preserves normalized controller-touch events when PlayStation extensions are supported.
+ * Explicit Xbox emulation still allows mouse gestures. Both contacts are updated before consuming
  * their centroid; contact transitions reanchor to the final pair to prevent pointer/scroll jumps.
  * @param primary Four bytes containing the primary activity/ID byte and packed X/Y coordinates.
  * @param secondary Four bytes for the secondary contact; both arrays are borrowed for this call.
@@ -1549,6 +1564,7 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
             y[i] = MIN(1.0f, ((c[2] >> 4) | (c[3] << 4)) / height);
         }
         if (![self touchpadUsesMouse]) {
+            if (self.controllerVirtualType == 1) return;
             if (![self reportPlayStationControllerArrival]) return;
             [self sendPS4TouchWithActive:active[0] x:x[0] y:y[0]
                 wasActive:self.ps4PrimaryTouchActive lastX:self.ps4PrimaryTouchX lastY:self.ps4PrimaryTouchY pointerId:0];
@@ -1687,13 +1703,13 @@ static inline short PS4NormalizeStickAxis(UInt8 value, BOOL inverted) {
  * Calibrates and sends DS4/DS5 samples using the existing native-rate gyro filter and rest hysteresis.
  * Gyro is degrees/s and acceleration is m/s² in the raw PlayStation/protocol axis convention.
  * Both devices use nominal 16 gyro units per degree/s and 8192 acceleration units per g.
- * Requires permitted arrival, enabled motion and an initialized context; outgoing rates follow
- * host requests. Shared calibration/filter fields retain their historical PS4 names.
+ * Requires PlayStation emulation, permitted arrival, enabled motion and an initialized context;
+ * outgoing rates follow host requests. Shared calibration/filter fields retain their historical PS4 names.
  * @param samples Non-NULL array of gyro XYZ followed by acceleration XYZ; consumed synchronously.
  * Caller must hold the HID object's monitor through processing and protocol emission.
  */
 - (void)processPlayStationMotionSamples:(const int16_t *)samples {
-    if (self.controllerMotionMode == 2) {
+    if (self.controllerMotionMode == 2 || self.controllerVirtualType == 1) {
         return;
     }
     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);

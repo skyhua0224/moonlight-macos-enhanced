@@ -77,11 +77,14 @@ typedef struct {
 @property (nonatomic) PS5StatePacket_t lastPS5State;
 @property (nonatomic) NSInteger controllerDriver;
 @property (nonatomic) NSInteger controllerMotionMode;
+@property (nonatomic) NSInteger controllerVirtualType;
 @property (nonatomic) BOOL isPS5Bluetooth;
 @property (nonatomic) uint8_t ds5OutputSequence;
 @property (atomic) BOOL reportedPlayStationArrival;
 @property (atomic) uint16_t requestedGyroRateHz;
 @property (atomic) uint16_t requestedAccelRateHz;
+// Protected by the HID monitor; distinguishes stream lifetimes even when pointers are reused.
+@property (nonatomic) NSUInteger inputContextGeneration;
 @property (atomic) uint64_t lastGyroReportUs;
 @property (atomic) uint64_t lastAccelReportUs;
 @property (nonatomic) PS4MotionCalibration ps4MotionCalibration;
