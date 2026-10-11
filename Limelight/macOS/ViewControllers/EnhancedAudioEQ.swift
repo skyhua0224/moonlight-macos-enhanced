@@ -382,9 +382,14 @@ enum EnhancedAudioEQ {
   /// every band. At an octave between bands that is too narrow, and the curve sags between
   /// them; at a third of an octave it is far too wide. Kept for profiles saved with it.
   static let legacyGraphicBandwidth = 0.7
-  /// What Settings.enhancedAudioExtras.eqFixedWidthVersion is once the gains belong to bands
-  /// that are as wide as the way to their neighbours.
-  static let currentFixedWidthVersion = 2
+  /// Settings.enhancedAudioExtras.eqFixedWidthVersion says which bands the saved fixed gains
+  /// belong to: 1 the first ones (legacyGraphicBandwidth), 2 bands as wide as their spacing
+  /// (a few test builds), 3 the present ones (graphicWidthFactor).
+  static let currentFixedWidthVersion = 3
+  /// A fixed band is this many times as wide as the way to its neighbours. At 1 the curve
+  /// still dips between two bands set alike (measured 0.56 dB on a 3 dB plateau, 0.2 dB at
+  /// 1.4, and no better beyond); the fitting takes care of the overlap.
+  static let graphicWidthFactor = 1.4
 
   /// Q of a filter the equalizer unit was given this bandwidth for. The unit pre-warps the
   /// bandwidth, so the same width is a lower Q towards the top of the spectrum.
@@ -393,30 +398,35 @@ enum EnhancedAudioEQ {
     return 1 / (2 * sinh(log(2.0) / 2 * octaves * w0 / sin(w0)))
   }
 
-  /// Q of each fixed band: as wide as the way to its neighbours, so that bands next to each
-  /// other add up to a smooth curve whatever their spacing is.
-  static func graphicQs(_ frequencies: [Double]) -> [Double] {
+  /// Q of each fixed band: wide in proportion to the way to its neighbours, so that bands
+  /// next to each other add up to a smooth curve whatever their spacing is.
+  static func graphicQs(_ frequencies: [Double], widthFactor: Double = graphicWidthFactor)
+    -> [Double]
+  {
     frequencies.indices.map { index in
       var spacings: [Double] = []
       if index > 0 { spacings.append(log2(frequencies[index] / frequencies[index - 1])) }
       if index + 1 < frequencies.count {
         spacings.append(log2(frequencies[index + 1] / frequencies[index]))
       }
-      let octaves = spacings.isEmpty ? 1 : spacings.reduce(0, +) / Double(spacings.count)
-      return 1 / (2 * sinh(log(2.0) / 2 * min(max(octaves, 0.2), 2)))
+      let octaves =
+        (spacings.isEmpty ? 1 : spacings.reduce(0, +) / Double(spacings.count)) * widthFactor
+      return 1 / (2 * sinh(log(2.0) / 2 * min(max(octaves, 0.2), 3)))
     }
   }
 
-  static func graphicFilters(frequencies: [Double], gains: [Double], legacyWidth: Bool = false)
-    -> [Filter]
-  {
-    let qs = legacyWidth ? [] : graphicQs(frequencies)
+  /// widthVersion: which bands the gains were saved for (see currentFixedWidthVersion).
+  static func graphicFilters(
+    frequencies: [Double], gains: [Double], widthVersion: Int = currentFixedWidthVersion
+  ) -> [Filter] {
+    let qs =
+      widthVersion <= 1
+      ? frequencies.map { q(forBandwidth: legacyGraphicBandwidth, frequency: $0) }
+      : graphicQs(frequencies, widthFactor: widthVersion == 2 ? 1 : graphicWidthFactor)
     return frequencies.enumerated().map { index, frequency in
       Filter(
         kind: .peak, frequency: frequency,
-        gain: gains.indices.contains(index) ? gains[index] : 0,
-        q: legacyWidth
-          ? q(forBandwidth: legacyGraphicBandwidth, frequency: frequency) : qs[index])
+        gain: gains.indices.contains(index) ? gains[index] : 0, q: qs[index])
     }
   }
 
@@ -441,7 +451,8 @@ enum EnhancedAudioEQ {
   {
     let qs = graphicQs(frequencies)
     var gains = values.map { min(max($0, -limit), limit) }
-    for _ in 0..<30 {
+    // Wide bands overlap a lot, so small steps and enough of them.
+    for _ in 0..<120 {
       for index in frequencies.indices {
         var now = 0.0
         for other in frequencies.indices where gains[other] != 0 {
@@ -449,7 +460,7 @@ enum EnhancedAudioEQ {
             of: Filter(kind: .peak, frequency: frequencies[other], gain: gains[other], q: qs[other]),
             at: frequencies[index])
         }
-        gains[index] = min(max(gains[index] + 0.8 * (values[index] - now), -limit), limit)
+        gains[index] = min(max(gains[index] + 0.5 * (values[index] - now), -limit), limit)
       }
     }
     return gains.map { ($0 * 10).rounded() / 10 }

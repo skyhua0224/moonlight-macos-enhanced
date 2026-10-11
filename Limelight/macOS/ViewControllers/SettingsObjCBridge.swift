@@ -1230,7 +1230,7 @@ class SettingsClass: NSObject {
         frequencies: frequencies,
         gains: gains.count == frequencies.count ? gains : [],
         // A profile not opened in the settings since the bands changed width plays as saved.
-        legacyWidth: extras.eqFixedWidthVersion < EnhancedAudioEQ.currentFixedWidthVersion)
+        widthVersion: extras.eqFixedWidthVersion)
     }
     return [
       "enabled": extras.eqEnabled,

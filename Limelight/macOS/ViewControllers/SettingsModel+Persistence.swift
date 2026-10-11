@@ -704,8 +704,8 @@ extension SettingsModel {
     enhancedAudioEQInactivePreamp = CGFloat(extras.eqInactivePreamp)
     enhancedAudioEQInSync = extras.eqInSync
     enhancedAudioEQBeforePreset = nil
-    // Gains saved for bands of the first, fixed width: the same curve on bands as wide as
-    // their spacing, so that what was set keeps sounding as it did. (Written back with the
+    // Gains saved for bands of an earlier width: the same curve on the present bands, so
+    // that what was set keeps sounding as it did. (Written back with the
     // next save; until then the stream reads the old gains with the old width.)
     if extras.eqFixedWidthVersion < EnhancedAudioEQ.currentFixedWidthVersion,
       enhancedAudioEQGains.contains(where: { $0 != 0 })
@@ -714,7 +714,8 @@ extension SettingsModel {
       enhancedAudioEQGains = EnhancedAudioEQ.fittedGraphicGains(
         frequencies: frequencies,
         following: EnhancedAudioEQ.graphicFilters(
-          frequencies: frequencies, gains: enhancedAudioEQGains, legacyWidth: true))
+          frequencies: frequencies, gains: enhancedAudioEQGains,
+          widthVersion: extras.eqFixedWidthVersion))
       enhancedAudioEQInSync = false
       DispatchQueue.main.async { [weak self] in self?.saveEnhancedAudioSettings() }
     }
