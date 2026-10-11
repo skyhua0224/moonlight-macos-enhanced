@@ -12,6 +12,7 @@
 #include "DolbyVisionConfiguration.h"
 #include <stdatomic.h>
 #import "RendererLayerContainer.h"
+#import "MLAV1SoftwareDecoder.h"
 
 #include "Limelight.h"
 #include <math.h>
@@ -1353,6 +1354,9 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     MLActiveVideoFrameInterpolationEngine _activeFrameInterpolationEngine;
     MLActiveVideoFrameInterpolationEngine _lastLoggedFrameInterpolationEngine;
     VTDecompressionSessionRef _decompressionSession;
+    // AV1 on a Mac without an AV1 hardware decoder. Decode thread only.
+    MLAV1SoftwareDecoder *_av1SoftwareDecoder;
+    uint64_t _av1SoftwareDecodeFailures;
     CVImageBufferRef _currentFrame;
     CMTime _currentFramePresentationTimeStamp;
     uint64_t _currentFrameEnqueueTimeMs;
@@ -6156,6 +6160,68 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 }
 
 // This function must free data for bufferType == BUFFER_TYPE_PICDATA (if blockSource is NULL)
+// AV1 without a hardware decoder: the frame is decoded here, on the thread that delivers it,
+// and the picture goes the way a hardware decoded one does. Takes ownership of data, like the
+// caller.
+- (int)submitAV1FrameToSoftwareDecoder:(unsigned char *)data
+                                length:(int)length
+                           frameNumber:(uint32_t)frameNumber
+                         enqueueTimeMs:(uint64_t)enqueueTimeMs
+                           blockSource:(CMBlockBufferCustomBlockSource *)blockSource
+{
+    if (_av1SoftwareDecoder == nil) {
+        _av1SoftwareDecoder = [[MLAV1SoftwareDecoder alloc] init];
+        if (_av1SoftwareDecoder != nil) {
+            Log(LOG_I, @"[video] AV1 is decoded in software: dav1d %@, %d threads (this Mac has no AV1 hardware decoder)",
+                MLAV1SoftwareDecoder.libraryVersion, _av1SoftwareDecoder.threadCount);
+        } else {
+            Log(LOG_E, @"[video] The AV1 software decoder could not be opened");
+        }
+    }
+
+    int decodeError = -1;
+    CVPixelBufferRef frame = NULL;
+    if (_av1SoftwareDecoder != nil) {
+        frame = [_av1SoftwareDecoder copyDecodedFrame:data length:(size_t)length error:&decodeError];
+    }
+    if (blockSource != NULL && blockSource->FreeBlock != NULL) {
+        blockSource->FreeBlock(blockSource->refCon, data, length);
+    } else {
+        free(data);
+    }
+
+    if (frame == NULL) {
+        if (decodeError == 0) {
+            // Data without a picture to show.
+            return DR_OK;
+        }
+        _av1SoftwareDecodeFailures++;
+        if (_av1SoftwareDecodeFailures <= 5 || (_av1SoftwareDecodeFailures % 100) == 0) {
+            Log(LOG_W, @"[video] AV1 software decoding failed: %d (failures=%llu); asking for a key frame",
+                decodeError, (unsigned long long)_av1SoftwareDecodeFailures);
+        }
+        [_av1SoftwareDecoder flush];
+        return DR_NEED_IDR;
+    }
+
+    @synchronized (self) { self->_activeWndVideoStats.decodedFrames++; }
+    MLDecodeFrameContext frameContext = { .enqueueTimeMs = enqueueTimeMs, .frameNumber = frameNumber };
+    if (_activeRendererMode == MLActiveVideoRendererModeEnhanced || _activeRendererMode == MLActiveVideoRendererModeNative) {
+        [self handleDecompressionOutput:frame
+                   presentationTimeStamp:kCMTimeInvalid
+                                duration:kCMTimeInvalid
+                            frameContext:&frameContext];
+    } else {
+        // The mode that hands compressed frames to the display layer: here it gets pictures.
+        [self enqueueDecodedImageBuffer:frame
+                   presentationTimeStamp:kCMTimeInvalid
+                                duration:kCMTimeInvalid
+                            frameContext:&frameContext];
+    }
+    CVPixelBufferRelease(frame);
+    return DR_OK;
+}
+
 - (int)submitDecodeBuffer:(unsigned char *)data
                    length:(int)length
                bufferType:(int)bufferType
@@ -6382,6 +6448,14 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
         // No frame data to submit for these NALUs
         return DR_OK;
+    }
+
+    if ((videoFormat & VIDEO_FORMAT_MASK_AV1) && MLAV1SoftwareDecodeNeeded()) {
+        return [self submitAV1FrameToSoftwareDecoder:data
+                                              length:length
+                                         frameNumber:frameNumber
+                                       enqueueTimeMs:enqueueTimeMs
+                                         blockSource:blockSource];
     }
 
     if ((videoFormat & VIDEO_FORMAT_MASK_AV1) && frameType != FRAME_TYPE_PFRAME) {

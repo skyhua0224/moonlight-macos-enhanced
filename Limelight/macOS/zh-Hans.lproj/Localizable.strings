@@ -1951,3 +1951,4 @@
 "EQ General More Bass detail" = "90 Hz 以下整体抬升";
 "EQ General Softer Treble" = "高频柔和";
 "EQ General Softer Treble detail" = "让偏亮的音箱不那么刺";
+"AV1 Decode software detail" = "这台 Mac 没有 AV1 硬件解码。选择 AV1 时使用软件解码（dav1d），更耗电，高分辨率高帧率下可能跟不上。HDR 和 10 位色仍需要硬件解码。";

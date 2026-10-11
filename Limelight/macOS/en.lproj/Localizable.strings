@@ -1896,3 +1896,4 @@
 "EQ General More Bass detail" = "A broad lift below 90 Hz";
 "EQ General Softer Treble" = "Softer Treble";
 "EQ General Softer Treble detail" = "Takes the edge off bright speakers";
+"AV1 Decode software detail" = "This Mac has no AV1 hardware decoder. When AV1 is chosen it is decoded in software (dav1d), which uses more power and may not keep up at high resolutions and frame rates. HDR and 10-bit color still need the hardware decoder.";

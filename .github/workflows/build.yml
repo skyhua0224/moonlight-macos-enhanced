@@ -61,6 +61,11 @@ jobs:
         unzip -o xcframeworks.zip -d xcframeworks/
         ls -la xcframeworks/
 
+    - name: Build dav1d
+      run: |
+        brew install meson ninja nasm
+        bash scripts/build_dav1d.sh
+
     - name: Configure version and update channel
       shell: bash
       run: |

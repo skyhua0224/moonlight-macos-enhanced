@@ -830,7 +830,7 @@ extension SettingsModel {
           id: "decode.av1",
           titleKey: "AV1 Decode",
           availability: av1HardwareDecodeSupported ? .available : .limited,
-          detailKey: "AV1 Decode detail"
+          detailKey: av1HardwareDecodeSupported ? "AV1 Decode detail" : "AV1 Decode software detail"
         ),
         VideoCapabilityItem(
           id: "decode.hevc",

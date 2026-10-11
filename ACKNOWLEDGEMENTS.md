@@ -26,6 +26,7 @@ This repository is an enhanced macOS distribution in the Moonlight ecosystem. Th
 - **[`SDL2`](https://www.libsdl.org/)** — Input and platform integration / 输入与平台集成
 - **[`OpenSSL`](https://www.openssl.org/)** — Cryptography / 加密能力
 - **[`MASPreferences`](https://github.com/shpakovski/MASPreferences)** — Preferences window infrastructure / 设置窗口基础设施
+- **[`dav1d`](https://code.videolan.org/videolan/dav1d)** (BSD 2-Clause, © VideoLAN and dav1d authors) — AV1 decoding on Macs without an AV1 hardware decoder; the license text is in the app as `ThirdPartyLicenses.txt` / 在没有 AV1 硬件解码的 Mac 上解码 AV1；许可证全文随应用附带（`ThirdPartyLicenses.txt`）
 
 ## Bundled Data / 随应用附带的数据
 

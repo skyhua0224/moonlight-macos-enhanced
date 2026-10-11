@@ -9,6 +9,7 @@
 #import "Connection.h"
 #import "Ds5HapticsAudioRenderer.h"
 #import "MLAudioBitstreamOutput.h"
+#import "MLAV1SoftwareDecoder.h"
 #import "Logger.h"
 #import "Utils.h"
 
@@ -4578,7 +4579,9 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         hevcDecodeSupported = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
     }
     BOOL hevcSupported = codecPreference >= 1 && hevcDecodeSupported;
-    BOOL av1Supported = codecPreference >= 2 && VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1);
+    // Without an AV1 hardware decoder (before Apple M3) AV1 is decoded in software.
+    const BOOL av1SoftwareOnly = MLAV1SoftwareDecodeNeeded();
+    BOOL av1Supported = codecPreference >= 2;
 
     // If HDR is requested, at least one 10-bit codec path must be available.
     assert(!(config.enableHdr || config.enable10BitSdr) || hevcSupported || av1Supported);
@@ -4613,7 +4616,9 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
             supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN8;
         }
 
-        if (enableYuv444) {
+        // 4:4:4 stays with the hardware decoder: the software path has only been through the
+        // renderer with 4:2:0 pictures.
+        if (enableYuv444 && !av1SoftwareOnly) {
             supportedVideoFormats |= VIDEO_FORMAT_AV1_HIGH8_444;
             if (config.enableHdr || config.enable10BitSdr) {
                 supportedVideoFormats |= VIDEO_FORMAT_AV1_HIGH10_444;
@@ -4622,9 +4627,10 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     }
 
     _streamConfig.supportedVideoFormats = supportedVideoFormats;
-    Log(LOG_I, @"[diag] Codec preference resolved: pref=%d av1=%d hevc=%d hdr=%d yuv444=%d formats=0x%X",
+    Log(LOG_I, @"[diag] Codec preference resolved: pref=%d av1=%d(software=%d) hevc=%d hdr=%d yuv444=%d formats=0x%X",
         codecPreference,
         av1Supported ? 1 : 0,
+        av1SoftwareOnly ? 1 : 0,
         hevcSupported ? 1 : 0,
         (config.enableHdr || config.enable10BitSdr) ? 1 : 0,
         enableYuv444 ? 1 : 0,

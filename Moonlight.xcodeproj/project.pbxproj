@@ -128,6 +128,7 @@
 				"Input/HIDSupport+Rumble.m",
 				"Input/HIDSupport+Scroll.m",
 				Input/Ticks.m,
+				Stream/MLAV1SoftwareDecoder.m,
 				Stream/MLAudioBitstreamOutput.m,
 				Stream/MLAdaptiveBitrateController.m,
 				Stream/MLIEC61937.c,
@@ -179,6 +180,7 @@
 				macOS/ViewControllers/Settings.swift,
 				macOS/ViewControllers/SettingsAppPane.swift,
 				"macOS/Supporting Files/HeadphoneCorrections.tsv",
+				"macOS/Supporting Files/ThirdPartyLicenses.txt",
 				macOS/ViewControllers/EnhancedAudioEQ.swift,
 				macOS/ViewControllers/EnhancedAudioSpectrum.swift,
 				macOS/ViewControllers/SettingsAudioPane.swift,
@@ -622,6 +624,7 @@
 					"$(SDKROOT)/usr/include/libxml2",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/enet/include",
+					"$(PROJECT_DIR)/xcframeworks/dav1d/include",
 				);
 				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -637,6 +640,7 @@
 					"$(inherited)",
 					"-weak_framework",
 					MetalFX,
+					"$(PROJECT_DIR)/xcframeworks/dav1d/lib/libdav1d.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMacEnhanced;
 				PRODUCT_NAME = MoonlightEnhanced;
@@ -687,6 +691,7 @@
 					"$(SDKROOT)/usr/include/libxml2",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/enet/include",
+					"$(PROJECT_DIR)/xcframeworks/dav1d/include",
 				);
 				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -702,6 +707,7 @@
 					"$(inherited)",
 					"-weak_framework",
 					MetalFX,
+					"$(PROJECT_DIR)/xcframeworks/dav1d/lib/libdav1d.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMacEnhanced;
 				PRODUCT_NAME = MoonlightEnhanced;
