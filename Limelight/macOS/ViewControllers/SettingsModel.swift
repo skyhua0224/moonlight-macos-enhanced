@@ -2098,6 +2098,7 @@ class SettingsModel: ObservableObject {
     let count = Self.enhancedAudioEQFrequencies(for: selectedEnhancedAudioEQLayout).count
     restoreEnhancedAudioEQ(
       EnhancedAudioEQSnapshot(
+        layout: selectedEnhancedAudioEQLayout, mode: selectedEnhancedAudioEQMode,
         gains: [Double](repeating: 0, count: count), bands: EnhancedAudioEQ.starterBands(),
         preamp: 0, inactivePreamp: 0, name: nil, inSync: false))
   }
