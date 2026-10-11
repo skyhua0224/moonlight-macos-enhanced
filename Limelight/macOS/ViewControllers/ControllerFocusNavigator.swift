@@ -1,4 +1,5 @@
 import AppKit
+import GameController
 import SwiftUI
 
 // Controller focus for AppKit/SwiftUI windows that were built for the pointer.
@@ -36,7 +37,51 @@ final class ControllerFocusAnchorView: NSView {
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-private struct ControllerFocusAnchor: NSViewRepresentable {
+/// Whether a game controller is connected, which is when ControllerNavigation drives the
+/// focus (it uses the same list of controllers).
+final class ControllerPresence: ObservableObject {
+  static let shared = ControllerPresence()
+
+  @Published private(set) var isConnected = !GCController.controllers().isEmpty
+  private var observers: [NSObjectProtocol] = []
+
+  private init() {
+    for name in [Notification.Name.GCControllerDidConnect, .GCControllerDidDisconnect] {
+      observers.append(
+        NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) {
+          [weak self] _ in
+          let connected = !GCController.controllers().isEmpty
+          if self?.isConnected != connected { self?.isConnected = connected }
+        })
+    }
+  }
+}
+
+/// The marker behind a control, present only while a controller is connected. Every marker
+/// is an AppKit view inside the SwiftUI tree, and a settings page has one per control: they
+/// are much of what building the page, scrolling it and finding what is under the pointer
+/// cost. Without a controller nothing looks for them.
+private struct ControllerFocusAnchor: View {
+  let enabled: Bool
+  var trigger: (() -> Void)?
+  var adjust: ((Int) -> Void)?
+  var choices: (() -> ControllerFocusChoices)?
+  var menuProvider: (() -> (title: String, menu: NSMenu))?
+  @ObservedObject private var presence = ControllerPresence.shared
+
+  var body: some View {
+    if presence.isConnected {
+      ControllerFocusAnchorRepresentable(
+        enabled: enabled, trigger: trigger, adjust: adjust, choices: choices,
+        menuProvider: menuProvider
+      )
+      // The marker never takes a click; saying so keeps it out of pointer hit testing.
+      .allowsHitTesting(false)
+    }
+  }
+}
+
+private struct ControllerFocusAnchorRepresentable: NSViewRepresentable {
   let enabled: Bool
   var trigger: (() -> Void)?
   var adjust: ((Int) -> Void)?
