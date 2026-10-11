@@ -448,6 +448,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) StreamRiskAssessment *currentStreamRiskAssessment;
 // Shown once the stream is up: the audio codec the user picked could not be used with the chosen channel layout.
 @property (nonatomic, copy) NSString *pendingAudioPlanNotice;
+// 0: nothing happened; 1: connecting again for a surround layout the host delivers; 2: done.
+@property (nonatomic) NSInteger surroundLayoutFallbackState;
 
 @property (nonatomic) NSInteger connectWatchdogToken;
 @property (nonatomic) uint64_t connectWatchdogStartMs;

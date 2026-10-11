@@ -3443,7 +3443,7 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
     const BOOL silenceIsConclusive = _continuousAudio;
     NSString *hostKey = _audioHostKey;
     if (silenceIsConclusive && _channelCount > 8) {
-        silenceHintKey = @"The host has no 7.1.4 audio: its audio device does not accept 12 channels. Connecting again with 7.1 surround.";
+        silenceHintKey = @"The host is not sending 7.1.4 audio. Switching to 7.1 surround…";
     }
     __atomic_store_n(&_audioAnyPacketSeen, 0, __ATOMIC_RELAXED);
     if (silenceHintKey != nil) {

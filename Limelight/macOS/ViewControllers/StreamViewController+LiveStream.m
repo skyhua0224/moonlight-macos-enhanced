@@ -7,7 +7,6 @@
 //
 
 #import "StreamViewController_Internal.h"
-#import <objc/runtime.h>
 
 @implementation StreamViewController (LiveStream)
 
@@ -178,15 +177,19 @@
 
 // The stream has no sound and will not get any: connect again, which asks for the layout
 // that was noted for this host. Once per stream window, so it cannot go round in circles.
+// What is on screen meanwhile says why, so that it does not read as a lost connection.
 - (void)audioLayoutUnavailable {
     dispatch_async(dispatch_get_main_queue(), ^{
-        static char retriedKey;
-        if (objc_getAssociatedObject(self, &retriedKey) != nil) {
+        if (self.surroundLayoutFallbackState != 0) {
             return;
         }
-        objc_setAssociatedObject(self, &retriedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        self.surroundLayoutFallbackState = 1;
         Log(LOG_W, @"[audio] Reconnecting for a surround layout the host can deliver");
         [self attemptReconnectWithReason:@"surround-layout-unavailable"];
+        if (self.reconnectInProgress) {
+            [self showReconnectOverlayWithMessage:
+                [[LanguageManager shared] localize:@"The host is not sending 7.1.4 audio. Switching to 7.1 surround…"]];
+        }
     });
 }
 

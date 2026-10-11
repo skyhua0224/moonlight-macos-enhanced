@@ -1575,9 +1575,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
                  [MLAudioStreamPlan codecDisplayName:requestedAudioCodec], layoutName];
         }
     }
-    if (surround714Replaced && self.pendingAudioPlanNotice.length == 0) {
-        self.pendingAudioPlanNotice = [[LanguageManager shared] localize:
-            @"This host had no audio for 7.1.4 last time, so 7.1 surround is used. Choose the audio configuration again in the settings to retry 7.1.4."];
+    // Said once, on the connection that follows finding out; later streams just use 7.1
+    // (the audio settings say so next to the choice).
+    if (surround714Replaced && self.surroundLayoutFallbackState == 1) {
+        self.surroundLayoutFallbackState = 2;
+        if (self.pendingAudioPlanNotice.length == 0) {
+            self.pendingAudioPlanNotice = [[LanguageManager shared] localize:@"Using 7.1 surround: the host is not sending 7.1.4 audio."];
+        }
     }
 
     NSString *codecName = @"H.264";

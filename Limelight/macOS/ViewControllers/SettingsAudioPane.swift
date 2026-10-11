@@ -208,7 +208,12 @@ struct AudioView: View {
             }
           }
 
-          AudioCompactRow(title: "Audio Configuration") {
+          AudioCompactRow(
+            title: "Audio Configuration",
+            hint: settingsModel.surround714Unavailable
+              && settingsModel.selectedAudioConfiguration == "7.1.4 surround sound"
+              ? languageManager.localize("This host sent no 7.1.4 audio last time, so streams use 7.1. Choose 7.1.4 again to retry.") : nil
+          ) {
             Picker("", selection: $settingsModel.selectedAudioConfiguration) {
               ForEach(SettingsModel.audioConfigurations, id: \.self) { value in
                 Text(languageManager.localize(value)).tag(value)

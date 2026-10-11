@@ -1154,6 +1154,10 @@ class SettingsClass: NSObject {
   @objc(markSurround714UnavailableForHost:)
   static func markSurround714Unavailable(for key: String) {
     UserDefaults.standard.set(true, forKey: SettingsModel.surround714UnavailableKeyPrefix + key)
+    DispatchQueue.main.async {
+      NotificationCenter.default.post(
+        name: SettingsModel.audioCodecFailureChangedNotification, object: nil)
+    }
   }
 
   @objc(clearSurround714UnavailableForHost:)

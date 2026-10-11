@@ -1281,8 +1281,9 @@
 "Audio codec conflict notice" = "%1$@ carries at most 5.1 channels, so this stream uses Opus with %2$@. Choose the combination in Settings > Audio.";
 "No lossless audio has arrived yet. If the host is playing sound, the network is dropping its large audio packets; use stereo, AC3 or Opus instead." = "No lossless audio has arrived yet. If the host is playing sound, the network is dropping its large audio packets; use stereo, AC3 or Opus instead.";
 "No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead." = "No audio has arrived yet. If the host is playing sound, its audio device does not support 7.1.4; choose 7.1 surround instead.";
-"The host has no 7.1.4 audio: its audio device does not accept 12 channels. Connecting again with 7.1 surround." = "The host has no 7.1.4 audio: its audio device does not accept 12 channels. Connecting again with 7.1 surround.";
-"This host had no audio for 7.1.4 last time, so 7.1 surround is used. Choose the audio configuration again in the settings to retry 7.1.4." = "This host had no audio for 7.1.4 last time, so 7.1 surround is used. Choose the audio configuration again in the settings to retry 7.1.4.";
+"The host is not sending 7.1.4 audio. Switching to 7.1 surround…" = "The host is not sending 7.1.4 audio. Switching to 7.1 surround…";
+"Using 7.1 surround: the host is not sending 7.1.4 audio." = "Using 7.1 surround: the host is not sending 7.1.4 audio.";
+"This host sent no 7.1.4 audio last time, so streams use 7.1. Choose 7.1.4 again to retry." = "This host sent no 7.1.4 audio last time, so streams use 7.1. Choose 7.1.4 again to retry.";
 "Audio codec fallback: host" = "This host is not Foundation Sunshine, so Opus is used.";
 "Audio codec fallback: failed" = "This host did not deliver this codec last time, so Opus is used. Choose Opus and then this codec again to retry.";
 "The host did not send %@ audio. Audio is muted; Opus will be used next time." = "The host did not send %@ audio. Audio is muted; Opus will be used next time.";

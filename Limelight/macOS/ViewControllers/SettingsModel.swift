@@ -717,6 +717,7 @@ class SettingsModel: ObservableObject {
       saveSettings()
       // Choosing a layout again is the way to retry 7.1.4 on a host that had no audio for it.
       SettingsClass.clearSurround714Unavailable(for: selectedHost?.id ?? Self.globalHostId)
+      if surround714Unavailable { surround714Unavailable = false }
     }
   }
   // Per-host audio transport settings. Stored in UserDefaults next to the
@@ -745,6 +746,8 @@ class SettingsModel: ObservableObject {
   }
   // Codec ids (AUDIO_CODEC_*) this host failed to deliver in an earlier session.
   @Published var audioCodecFailedIds: [Int] = []
+  /// An earlier stream got no audio for 7.1.4 from this host; streams use 7.1 meanwhile.
+  @Published var surround714Unavailable = false
   @Published var audioHostIsFoundation: Bool? = nil
   @Published var selectedAudioOutputMode: String {
     didSet {
