@@ -33,9 +33,7 @@ typedef enum : NSUInteger {
 
 @interface AppDelegateForAppKit () <NSApplicationDelegate, NSWindowDelegate>
 @property (nonatomic, strong) NSWindowController *preferencesWC;
-@property (nonatomic) BOOL settingsPagesPrewarmed;
 @property (nonatomic) BOOL settingsPrewarmDone;
-@property (nonatomic) NSInteger settingsPrewarmChecks;
 @property (nonatomic, strong) NSWindowController *aboutWC;
 @property (nonatomic, strong) NSWindowController *welcomePermissionsWC;
 @property (nonatomic, strong) ControllerNavigation *controllerNavigation;
@@ -216,9 +214,7 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 // in the background; never during a stream), a piece per moment, so that the first click on
 // Settings, and on each of its pages, shows what already exists.
 - (void)prewarmSettingsWhenQuiet {
-    if (self.settingsPrewarmDone || ++self.settingsPrewarmChecks > 600) {
-        return;
-    }
+    BOOL builtSomething = NO;
 
     const CFTimeInterval idle = CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateCombinedSessionState, kCGAnyInputEventType);
     const BOOL quiet = (idle >= 2.0 || !NSApp.isActive) &&
@@ -232,19 +228,19 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
             _preferencesWC.window.delegate = self;
             [_preferencesWC.window layoutIfNeeded];
             [SettingsWindowObjCBridge settingsWindowVisibilityChanged:NO];
-        } else if (!self.settingsPagesPrewarmed) {
-            if (![SettingsWindowObjCBridge prewarmNextSettingsPage]) {
-                self.settingsPagesPrewarmed = YES;
-            }
-        } else {
+            builtSomething = YES;
+        } else if ([SettingsWindowObjCBridge prewarmNextSettingsPage]) {
+            builtSomething = YES;
+        } else if (!self.settingsPrewarmDone) {
             [SettingsWindowObjCBridge prewarmImportPanel];
             self.settingsPrewarmDone = YES;
-            return;
         }
     }
 
+    // This keeps looking: pages are released when settings are edited and built again here.
+    // A look that finds nothing to do costs nothing to speak of.
     __weak typeof(self) weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((quiet ? 0.4 : 1.5) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((builtSomething ? 0.4 : 2.0) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [weakSelf prewarmSettingsWhenQuiet];
     });
 }

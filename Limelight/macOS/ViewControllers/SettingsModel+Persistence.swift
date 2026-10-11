@@ -380,6 +380,7 @@ extension SettingsModel {
     var shouldPersistMigratedMouseSettings = false
     var shouldPersistMigratedShortcutSettings = false
     isLoading = true
+    seenStoreGeneration = Settings.storeGeneration
     defer {
       isLoading = false
       hasLoadedPersistedSettings = true
@@ -981,6 +982,9 @@ extension SettingsModel {
     if let data = try? PropertyListEncoder().encode(settings) {
       UserDefaults.standard.set(data, forKey: profileKey)
       Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
+      Settings.storeGeneration += 1
+      // This model wrote it: what it shows is what is stored.
+      seenStoreGeneration = Settings.storeGeneration
     }
     persistKeyboardTranslationRules(for: hostId)
   }

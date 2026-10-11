@@ -218,6 +218,8 @@ class SettingsModel: ObservableObject {
   var latencyCache: [String: [String: Any]] = [:]
   var selectedProfileObserver: NSObjectProtocol?
   var settingsWindowObserver: NSObjectProtocol?
+  // Settings.storeGeneration when this model last read or wrote its profile.
+  var seenStoreGeneration = -1
   var hasLoadedPersistedSettings = false
 
   private func postMouseSettingsChanged(_ setting: String) {
@@ -1776,8 +1778,9 @@ class SettingsModel: ObservableObject {
       self.flushPendingEnhancedAudioSave()
       let before = self.selectedHost?.id
       self.selectHost(id: hostId)
-      if self.selectedHost?.id == before {
-        // Same profile: selecting it did not load anything.
+      if self.selectedHost?.id == before, self.seenStoreGeneration != Settings.storeGeneration {
+        // Same profile, and something (a stream, the control center) wrote settings while
+        // the window was closed: selecting the profile did not load it again.
         self.loadSettings()
         self.refreshVideoDiagnosticsState()
         self.refreshSunshineDisplays(force: false)

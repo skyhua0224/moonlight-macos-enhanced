@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Native macOS settings information architecture. The split view is kept
@@ -397,9 +398,14 @@ private struct SettingsSidebarCategory: View {
 ///
 /// With the pages in the window's own SwiftUI tree, going from one to another threw the
 /// views of the first away and built those of the second, several hundred each time: a
-/// visible wait on every click. Here every page has a hosting view of its own. One that is
-/// not showing is out of the window, where it costs nothing while settings change, and it
-/// comes back as it was left. Pages can also be built ahead (see prewarmNextPage).
+/// visible wait on every click (measured: three to four times what bringing a kept page
+/// back costs). Here every page has a hosting view of its own, and the ones that are not
+/// showing wait outside the window. Pages are also built ahead (see prewarmNextPage).
+///
+/// Kept pages are not free, though: every one of them works a change of the settings
+/// through, in the window or not (measured: 32 ms for a change with one page, 250 ms and
+/// more with ten). So they are only kept while nothing changes. The first real change
+/// releases the pages that are not showing; they are built again once things are quiet.
 final class SettingsPaneContainerView: NSView {
   /// The container of the settings window, for building pages ahead.
   static weak var current: SettingsPaneContainerView?
@@ -407,6 +413,18 @@ final class SettingsPaneContainerView: NSView {
   var makePage: ((SettingsPaneType) -> NSView)?
   private var pages: [SettingsPaneType: NSView] = [:]
   private var shown: SettingsPaneType?
+  private var lastSwitch: TimeInterval = 0
+  private var lastChange: TimeInterval = 0
+
+  /// The settings are about to change. A reload of the whole profile is let through to
+  /// every page (it happens once). So is what a page does in the moment it appears. Anything
+  /// else is someone editing: the other pages go.
+  func settingsWillChange(isLoading: Bool) {
+    let now = ProcessInfo.processInfo.systemUptime
+    lastChange = now
+    guard !isLoading, now - lastSwitch > 0.35, pages.count > 1 else { return }
+    pages = pages.filter { $0.key == shown }
+  }
 
   private func page(for pane: SettingsPaneType) -> NSView? {
     if let page = pages[pane] {
@@ -427,11 +445,14 @@ final class SettingsPaneContainerView: NSView {
     page.frame = bounds
     addSubview(page)
     shown = pane
+    lastSwitch = ProcessInfo.processInfo.systemUptime
   }
 
   /// Builds one page that has not been asked for yet, so that it is there when it is.
   /// Returns false when every page exists.
   func prewarmNextPage() -> Bool {
+    // Not while settings are being edited: the page would be released by the next change.
+    guard ProcessInfo.processInfo.systemUptime - lastChange > 3 else { return false }
     guard window != nil,
       let pane = SettingsPaneType.allCases.first(where: { pages[$0] == nil }),
       let page = page(for: pane)
@@ -452,9 +473,18 @@ private struct SettingsPaneHost: NSViewRepresentable {
   let pane: SettingsPaneType
   let settingsModel: SettingsModel
 
+  final class Coordinator {
+    var changes: AnyCancellable?
+  }
+
+  func makeCoordinator() -> Coordinator { Coordinator() }
+
   func makeNSView(context: Context) -> SettingsPaneContainerView {
     let view = SettingsPaneContainerView()
     let model = settingsModel
+    context.coordinator.changes = model.objectWillChange.sink { [weak view, weak model] _ in
+      view?.settingsWillChange(isLoading: model?.isLoading ?? false)
+    }
     view.makePage = { pane in
       let host = NSHostingView(rootView: SettingsPaneRoot(pane: pane, settingsModel: model))
       // The page fills the column; it has no say in the size of the window.

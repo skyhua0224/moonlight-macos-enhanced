@@ -171,6 +171,10 @@ struct Settings: Encodable, Decodable {
     return decoded
   }
 
+  /// Counts writes of any profile to the store (main thread). A settings window that was
+  /// closed and is shown again reads its profile again only when this moved meanwhile.
+  static var storeGeneration = 0
+
   static func updateCachedPersistedSettings(_ settings: Self?, forProfileKey profileKey: String) {
     cachedSettingsLock.lock()
     if let settings {
@@ -329,6 +333,7 @@ extension SettingsClass {
     if let data = try? PropertyListEncoder().encode(settings) {
       UserDefaults.standard.set(data, forKey: profileKey)
       Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
+      Settings.storeGeneration += 1
     }
   }
 
