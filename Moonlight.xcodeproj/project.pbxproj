@@ -179,6 +179,7 @@
 				macOS/ViewControllers/Settings.swift,
 				macOS/ViewControllers/SettingsAppPane.swift,
 				macOS/ViewControllers/EnhancedAudioEQ.swift,
+				macOS/ViewControllers/EnhancedAudioSpectrum.swift,
 				macOS/ViewControllers/SettingsAudioPane.swift,
 				macOS/ViewControllers/SettingsHostingController.swift,
 				macOS/ViewControllers/SettingsInputPane.swift,

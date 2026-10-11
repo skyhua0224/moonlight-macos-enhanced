@@ -700,6 +700,8 @@ private struct AudioEQCurveView: View {
   let bands: Binding<[EnhancedAudioEQBand]>?
   @State private var draggedBandID: UUID?
   @State private var dragMissed = false
+  // What a running stream plays right now; empty without one in the enhanced sound mode.
+  @ObservedObject private var spectrum = EnhancedAudioSpectrum.shared
 
   private static let minFrequency = 20.0
   private static let maxFrequency = 20000.0
@@ -740,6 +742,8 @@ private struct AudioEQCurveView: View {
       .contentShape(Rectangle())
       .gesture(dragGesture(plot: plot, span: span), including: bands == nil ? .none : .all)
     }
+    .onAppear { spectrum.addViewer() }
+    .onDisappear { spectrum.removeViewer() }
   }
 
   private func x(_ frequency: Double, _ plot: CGRect) -> CGFloat {
@@ -785,6 +789,21 @@ private struct AudioEQCurveView: View {
       context.draw(
         Text(String(format: "%+.0f", gain)).font(labelFont).foregroundColor(.secondary),
         at: CGPoint(x: plot.minX - 4, y: y(gain, plot, span)), anchor: .trailing)
+    }
+
+    // The live spectrum, behind the curve: the bottom of the plot is -90 dB, the top full scale.
+    let levels = spectrum.levels
+    if levels.count > 1 {
+      var shape = Path()
+      shape.move(to: CGPoint(x: plot.minX, y: plot.maxY))
+      for (index, level) in levels.enumerated() {
+        let frequency = EnhancedAudioSpectrum.frequency(ofBand: index)
+        let height = CGFloat(min(max((Double(level) + 90) / 90, 0), 1)) * plot.height
+        shape.addLine(to: CGPoint(x: x(frequency, plot), y: plot.maxY - height))
+      }
+      shape.addLine(to: CGPoint(x: plot.maxX, y: plot.maxY))
+      shape.closeSubpath()
+      context.fill(shape, with: .color(Color.secondary.opacity(0.22)))
     }
 
     var curve = Path()

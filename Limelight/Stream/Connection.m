@@ -194,6 +194,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
                       toFloatBufferList:(AudioBufferList *)outputData;
 - (BOOL)enhancedRenderHoldsForFrameCount:(UInt32)frameCount;
 - (BOOL)enhancedAudioWantsBinauralForChannelCount:(int)channelCount;
+- (void)updateEnhancedSpectrumTap;
 - (BOOL)recreateAudioDecoderWithConfig:(const OPUS_MULTISTREAM_CONFIGURATION *)opusConfig
                                 reason:(NSString *)reason;
 - (BOOL)attempt714DecoderTopologyFallbackAfterDecodeError:(int)decodeError;
@@ -304,6 +305,10 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     // The running engine renders the stream's channels binaurally instead of the stereo downmix.
     // Output queue.
     BOOL _enhancedAudioBinauralActive;
+    BOOL _enhancedAudioBinauralUnavailable;
+    // The settings pane is drawing the spectrum and the limiter's output is tapped for it.
+    // Output queue.
+    BOOL _enhancedSpectrumTapInstalled;
     // Stream channel that feeds each channel of the environment node's layout (-1: none).
     int _enhancedSurroundChannelMap[ML_ENHANCED_SURROUND_MAX_CHANNELS];
     int _audioDeviceChannelCount;
@@ -2900,11 +2905,51 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
     return NO;
 }
 
+// Output queue. Taps the end of the enhanced chain while the settings pane shows the spectrum,
+// and only then: the analysis costs a little for every buffer.
+- (void)updateEnhancedSpectrumTap
+{
+    if (_enhancedAudioEngine == nil || _enhancedAudioLimiter == nil) {
+        return;
+    }
+    const BOOL wanted = [MLEnhancedAudioSpectrum shared].isRequested;
+    if (wanted == _enhancedSpectrumTapInstalled) {
+        return;
+    }
+    @try {
+        if (wanted) {
+            [_enhancedAudioLimiter installTapOnBus:0 bufferSize:1024 format:nil block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
+                [[MLEnhancedAudioSpectrum shared] process:buffer];
+            }];
+        } else {
+            [_enhancedAudioLimiter removeTapOnBus:0];
+            [[MLEnhancedAudioSpectrum shared] reset];
+        }
+        _enhancedSpectrumTapInstalled = wanted;
+    } @catch (NSException *exception) {
+        Log(LOG_W, @"Enhanced audio spectrum tap could not be %@: %@", wanted ? @"installed" : @"removed", exception.reason);
+    }
+}
+
+// Any thread, from the notification the settings pane posts when it starts or stops showing the spectrum.
+- (void)enhancedSpectrumRequestChanged
+{
+    dispatch_queue_t queue = _audioOutputQueue;
+    if (queue == nil) {
+        return;
+    }
+    __weak Connection *weakSelf = self;
+    dispatch_async(queue, ^{
+        [weakSelf updateEnhancedSpectrumTap];
+    });
+}
+
 // Output queue. Surround streams are rendered binaurally for headphones, unless spatial audio is
 // set to something else. A stereo stream has nothing to place and keeps the stereo path.
 - (BOOL)enhancedAudioWantsBinauralForChannelCount:(int)channelCount
 {
-    return _enhancedAudioSpatialMode == MLAudioEnhancedSpatialModeAutomatic &&
+    return !_enhancedAudioBinauralUnavailable &&
+        _enhancedAudioSpatialMode == MLAudioEnhancedSpatialModeAutomatic &&
         _enhancedAudioOutputTarget == MLAudioEnhancedOutputTargetHeadphones &&
         (channelCount == 6 || channelCount == 8 || channelCount == 12);
 }
@@ -2966,42 +3011,54 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
             return noErr;
         }];
 
-        _enhancedAudioEngine = [[AVAudioEngine alloc] init];
-        _enhancedAudioReverb = [[AVAudioUnitReverb alloc] init];
-        _enhancedAudioLoadedReverbPreset = -1;
-        _enhancedAudioEQ = [[AVAudioUnitEQ alloc] initWithNumberOfBands:(uint32_t)kEnhancedEQMaxBands];
-        _enhancedAudioSampleRate = opusConfig->sampleRate;
+        // Building the graph raises instead of returning an error when a node rejects a format.
+        @try {
+            _enhancedAudioEngine = [[AVAudioEngine alloc] init];
+            _enhancedAudioReverb = [[AVAudioUnitReverb alloc] init];
+            _enhancedAudioLoadedReverbPreset = -1;
+            _enhancedAudioEQ = [[AVAudioUnitEQ alloc] initWithNumberOfBands:(uint32_t)kEnhancedEQMaxBands];
+            _enhancedAudioSampleRate = opusConfig->sampleRate;
 
-        AudioComponentDescription limiterDescription = {0};
-        limiterDescription.componentType = kAudioUnitType_Effect;
-        limiterDescription.componentSubType = kAudioUnitSubType_PeakLimiter;
-        limiterDescription.componentManufacturer = kAudioUnitManufacturer_Apple;
-        _enhancedAudioLimiter = [[AVAudioUnitEffect alloc] initWithAudioComponentDescription:limiterDescription];
+            AudioComponentDescription limiterDescription = {0};
+            limiterDescription.componentType = kAudioUnitType_Effect;
+            limiterDescription.componentSubType = kAudioUnitSubType_PeakLimiter;
+            limiterDescription.componentManufacturer = kAudioUnitManufacturer_Apple;
+            _enhancedAudioLimiter = [[AVAudioUnitEffect alloc] initWithAudioComponentDescription:limiterDescription];
 
-        [_enhancedAudioEngine attachNode:_enhancedAudioSourceNode];
-        [_enhancedAudioEngine attachNode:_enhancedAudioReverb];
-        [_enhancedAudioEngine attachNode:_enhancedAudioEQ];
-        [_enhancedAudioEngine attachNode:_enhancedAudioLimiter];
+            [_enhancedAudioEngine attachNode:_enhancedAudioSourceNode];
+            [_enhancedAudioEngine attachNode:_enhancedAudioReverb];
+            [_enhancedAudioEngine attachNode:_enhancedAudioEQ];
+            [_enhancedAudioEngine attachNode:_enhancedAudioLimiter];
 
-        if (binaural) {
-            _enhancedAudioEnvironment = [[AVAudioEnvironmentNode alloc] init];
-            [_enhancedAudioEngine attachNode:_enhancedAudioEnvironment];
-            [_enhancedAudioEngine connect:_enhancedAudioSourceNode to:_enhancedAudioEnvironment format:sourceFormat];
-            [_enhancedAudioEngine connect:_enhancedAudioEnvironment to:_enhancedAudioReverb format:renderFormat];
-            // Headphones whatever the device looks like: the listening device setting decides.
-            _enhancedAudioEnvironment.outputType = AVAudioEnvironmentOutputTypeHeadphones;
-            // A bed: every channel is a far source at its place in the layout, not one point.
-            _enhancedAudioSourceNode.sourceMode = AVAudio3DMixingSourceModeAmbienceBed;
-            _enhancedAudioSourceNode.renderingAlgorithm = AVAudio3DMixingRenderingAlgorithmAuto;
-        } else {
-            [_enhancedAudioEngine connect:_enhancedAudioSourceNode to:_enhancedAudioReverb format:sourceFormat];
+            if (binaural) {
+                _enhancedAudioEnvironment = [[AVAudioEnvironmentNode alloc] init];
+                [_enhancedAudioEngine attachNode:_enhancedAudioEnvironment];
+                [_enhancedAudioEngine connect:_enhancedAudioSourceNode to:_enhancedAudioEnvironment format:sourceFormat];
+                [_enhancedAudioEngine connect:_enhancedAudioEnvironment to:_enhancedAudioReverb format:renderFormat];
+                // Headphones whatever the device looks like: the listening device setting decides.
+                _enhancedAudioEnvironment.outputType = AVAudioEnvironmentOutputTypeHeadphones;
+                // A bed: every channel is a far source at its place in the layout, not one point.
+                _enhancedAudioSourceNode.sourceMode = AVAudio3DMixingSourceModeAmbienceBed;
+                _enhancedAudioSourceNode.renderingAlgorithm = AVAudio3DMixingRenderingAlgorithmAuto;
+            } else {
+                [_enhancedAudioEngine connect:_enhancedAudioSourceNode to:_enhancedAudioReverb format:sourceFormat];
+            }
+            [_enhancedAudioEngine connect:_enhancedAudioReverb to:_enhancedAudioEQ format:renderFormat];
+            // The limiter leaves everything below full scale alone and adds 2 ms.
+            [_enhancedAudioEngine connect:_enhancedAudioEQ to:_enhancedAudioLimiter format:renderFormat];
+            [_enhancedAudioEngine connect:_enhancedAudioLimiter to:_enhancedAudioEngine.mainMixerNode format:renderFormat];
+            _enhancedAudioBinauralActive = binaural;
+            [self configureEnhancedAudioUnits];
+        } @catch (NSException *exception) {
+            Log(LOG_W, @"Enhanced audio graph could not be built (binaural=%d): %@", binaural ? 1 : 0, exception.reason);
+            [self cleanupSelectedAudioRenderer];
+            if (binaural) {
+                // Once is enough to know: the stereo path is used for the rest of the session.
+                _enhancedAudioBinauralUnavailable = YES;
+                return [self initializeEnhancedAudioRendererWithOpusConfig:opusConfig];
+            }
+            return NO;
         }
-        [_enhancedAudioEngine connect:_enhancedAudioReverb to:_enhancedAudioEQ format:renderFormat];
-        // The limiter leaves everything below full scale alone and adds 2 ms.
-        [_enhancedAudioEngine connect:_enhancedAudioEQ to:_enhancedAudioLimiter format:renderFormat];
-        [_enhancedAudioEngine connect:_enhancedAudioLimiter to:_enhancedAudioEngine.mainMixerNode format:renderFormat];
-        _enhancedAudioBinauralActive = binaural;
-        [self configureEnhancedAudioUnits];
 
         [_enhancedAudioEngine prepare];
 
@@ -3013,6 +3070,8 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
             [self cleanupSelectedAudioRenderer];
             return NO;
         }
+
+        [self updateEnhancedSpectrumTap];
 
         // AVAudioEngine follows the system default output, but when that changes it stops itself
         // and posts this notification: nothing restarts it unless we do.
@@ -3096,6 +3155,10 @@ static float MLEnhancedEQBandwidthForQ(double q, double frequency, double sample
         _enhancedAudioEnvironment = nil;
         _enhancedAudioLimiter = nil;
         _enhancedAudioBinauralActive = NO;
+        if (_enhancedSpectrumTapInstalled) {
+            _enhancedSpectrumTapInstalled = NO;
+            [[MLEnhancedAudioSpectrum shared] reset];
+        }
     }
 
     _enhancedDownmixConverter = nil;
@@ -4200,6 +4263,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateVolume) name:@"volumeSettingChanged" object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateEnhancedAudioSettings) name:@"enhancedAudioSettingChanged" object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(enhancedSpectrumRequestChanged) name:@"enhancedAudioSpectrumRequestChanged" object:nil];
     
     // Use a lock to ensure that only one thread is initializing
     // or deinitializing a connection at a time.
