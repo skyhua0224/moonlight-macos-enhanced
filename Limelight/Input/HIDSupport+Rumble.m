@@ -65,7 +65,8 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 /**
  * Processes motor updates on the dedicated HID queue using existing USB/Bluetooth encodings.
  * Shutdown sends a final neutral report if needed before returning; teardown drains this worker
- * before closing the HID manager. Never wait synchronously for main from this queue.
+ * before closing the HID manager. Retains the selected physical owner for each iteration.
+ * Never wait synchronously for main from this queue.
  */
 - (void)runRumbleLoop {
     while (YES) {
@@ -75,7 +76,11 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         BOOL closing = self.closeRumble;
         if (closing && self.previousLowFreqMotor == 0 && self.previousHighFreqMotor == 0) break;
         
-        IOHIDDeviceRef device = [self getFirstDevice];
+        __attribute__((objc_precise_lifetime)) id deviceOwner;
+        @synchronized (self) {
+            deviceOwner = self.activeHIDDevice;
+        }
+        IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)deviceOwner;
         if (device == nil) {
             if (closing) break;
             continue;
@@ -203,20 +208,15 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     }
 }
 
+/**
+ * Returns the borrowed physical owner of direct-HID slot zero under the HID monitor.
+ * Callers on worker queues must retain a snapshot through their device operations.
+ * @return Active device, or NULL when no eligible pad owns the slot.
+ */
 - (IOHIDDeviceRef)getFirstDevice {
-    NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
-    if (devices.count == 0) {
-        return nil;
+    @synchronized (self) {
+        return (__bridge IOHIDDeviceRef)self.activeHIDDevice;
     }
-    for (NSObject *device in devices) {
-        IOHIDDeviceRef hidDevice = (__bridge IOHIDDeviceRef)device;
-        UInt16 productId = usbIdFromDevice(hidDevice, @kIOHIDProductIDKey);
-        if (productId != 0x028E) {
-            return hidDevice;
-        }
-    }
-    
-    return nil;
 }
 
 
@@ -255,6 +255,15 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     return [self writeSubcommand:k_eSwitchSubcommandIDs_EnableVibration pBuf:&enabled ucLen:sizeof(enabled) ppReply:nil];
 }
 
+/**
+ * Sends a Nintendo subcommand from the feedback queue and waits for its HID reply.
+ * Retains each physical-owner snapshot while using it; returns NO if ownership is absent.
+ * @param ucCommandID Nintendo subcommand identifier.
+ * @param pBuf Borrowed payload bytes.
+ * @param ucLen Payload byte count.
+ * @param ppReply Legacy reply output parameter; unused.
+ * @return YES when a reply acknowledges the command within the existing retry policy.
+ */
 - (BOOL)writeSubcommand:(ESwitchSubcommandIDs)ucCommandID pBuf:(UInt8 *)pBuf ucLen:(UInt8)ucLen ppReply:(SwitchSubcommandInputPacket_t **)ppReply {
     int nRetries = 5;
     BOOL success = NO;
@@ -263,7 +272,10 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         SwitchSubcommandOutputPacket_t commandPacket;
         [self constructSubcommand:ucCommandID pBuf:pBuf ucLen:ucLen outPacket:&commandPacket];
 
-        IOHIDDeviceRef device = [self getFirstDevice];
+        __attribute__((objc_precise_lifetime)) id deviceOwner;
+        @synchronized (self) { deviceOwner = self.activeHIDDevice; }
+        IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)deviceOwner;
+        if (device == NULL) return NO;
         
         self.waitingForVibrationEnable = YES;
         self.startedWaitingForVibrationEnable = [self.ticks getTicks];

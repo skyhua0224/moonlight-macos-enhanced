@@ -1201,9 +1201,21 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 }
 
 /**
+ * Tests physical ownership of the sole direct-HID controller slot under the HID monitor.
+ * Called on the manager's main run loop before parsing value/report callbacks.
+ * @param device Borrowed callback device; NULL never owns the slot.
+ * @return YES only for the retained active physical device.
+ */
+- (BOOL)isActiveHIDControllerDevice:(IOHIDDeviceRef)device {
+    @synchronized (self) {
+        return device != NULL && (__bridge IOHIDDeviceRef)self.activeHIDDevice == device;
+    }
+}
+
+/**
  * Advertises direct-HID PlayStation buttons and motion/touch capabilities once per session.
  *
- * Requires the direct driver, enabled controller delivery and a valid context. Marks arrival
+ * Requires an active DS4/DS5 owner, the direct driver, enabled delivery and a valid context. Marks arrival
  * only after a successful protocol call so failures may be retried. Call from the serialized
  * HID controller path before sending extended input. Explicit Xbox emulation advertises Xbox
  * controls without PlayStation extensions. DS4 and DS5 otherwise advertise touch and motion;
@@ -1225,6 +1237,9 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         return NO;
     }
 
+    IOHIDDeviceRef device = [self getFirstDevice];
+    if (device == NULL || (!isPS4(device) && !isPS5(device))) return NO;
+
     if (self.reportedPlayStationArrival) {
         return YES;
     }
@@ -1237,7 +1252,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     uint16_t capabilities = LI_CCAP_ANALOG_TRIGGERS | LI_CCAP_RUMBLE;
     if (allowsPlayStationExtensions) capabilities |= LI_CCAP_TOUCHPAD;
     else buttons &= ~TOUCHPAD_FLAG;
-    if (allowsPlayStationExtensions && self.playStationHasMotion && self.controllerMotionMode != 2) {
+    if (allowsPlayStationExtensions && self.controllerMotionMode != 2) {
         capabilities |= LI_CCAP_ACCEL | LI_CCAP_GYRO;
     }
     int err = LiSendControllerArrivalEventCtx(inputCtx, 0, 1, controllerType, buttons, capabilities);
@@ -2786,6 +2801,13 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
     }
 }
 
+/**
+ * Updates ordinary controls only from the active direct-HID owner on the main run loop.
+ * @param context Borrowed HIDSupport instance.
+ * @param result IOKit status; unused.
+ * @param sender Callback sender; device identity is obtained from the value's element.
+ * @param value Borrowed HID element value, valid for this callback.
+ */
 void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef value) {
     IOHIDElementRef elem = IOHIDValueGetElement(value);
     uint32_t usagePage = IOHIDElementGetUsagePage(elem);
@@ -2794,7 +2816,8 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
     
     HIDSupport *self = (__bridge HIDSupport *)context;
     
-    IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
+    IOHIDDeviceRef device = IOHIDElementGetDevice(elem);
+    if (![self isActiveHIDControllerDevice:device]) return;
     
     if (isXbox(device)) {
         switch (usagePage) {
@@ -3037,7 +3060,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
 /**
  * Parses supported PlayStation/Nintendo HID reports and updates controller input state.
  *
- * Rejects missing, truncated and unsupported PlayStation reports before accessing their fields.
+ * Ignores non-owner devices and rejects missing, truncated or unsupported Sony reports.
  * DS5 simple Bluetooth keeps its compact control layout; complete reports also deliver touch and motion.
  * DS5 advertises touch and motion capabilities before ordinary or extended input, retrying failed arrival.
  * DS4 processing normalizes sticks, ignores report-counter-only changes and forwards touch/motion
@@ -3066,6 +3089,7 @@ void myHIDReportCallback (
     }
     
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
+    if (![self isActiveHIDControllerDevice:device]) return;
     if (!isPlayStation(device) && !isNintendo(device)) {
         return;
     };
@@ -3073,7 +3097,6 @@ void myHIDReportCallback (
     if (isPS4(device)) {
         // Hardware support is independent of this packet's sensor/touch availability.
         // Never read extended fields from the simple Bluetooth format below.
-        self.playStationHasMotion = YES;
         NSUInteger stateOffset;
         switch (report[0]) {
             case k_EPS4ReportIdUsbState:
@@ -3179,7 +3202,6 @@ void myHIDReportCallback (
     } else if (isPS5(device)) {
         // Hardware support is independent of this packet's sensor/touch availability.
         // Never read extended fields from the simple Bluetooth format below.
-        self.playStationHasMotion = YES;
         NSUInteger stateOffset;
         BOOL simple = report[0] == k_EPS5ReportIdState && reportLength == 10;
         switch (report[0]) {
@@ -3390,7 +3412,9 @@ void myHIDReportCallback (
 }
 
 /**
- * Initializes DS4/DS5 motion calibration, enables direct-HID DS5 extended reports and syncs rumble.
+ * Claims an empty direct-HID slot, loads Sony calibration and initializes feedback.
+ * Existing ownership survives unrelated matches. Only recognized controller models are eligible;
+ * GameController mode does not claim HID devices.
  *
  * Called on the HID manager's main run loop; calibration feature-report reads are synchronous.
  * @param context Borrowed HIDSupport callback context.
@@ -3404,7 +3428,18 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
                                 IOHIDDeviceRef          device) {
     HIDSupport *self = (__bridge HIDSupport *)context;
 
-    self.playStationHasMotion = isPS4(device) || isPS5(device);
+    // The legacy direct backend has one Controller and one remote slot. Never let
+    // a second physical pad replace its input, calibration or feedback state.
+    if (self.controllerDriver != 0 || device == NULL ||
+        usbIdFromDevice(device, @kIOHIDProductIDKey) == 0x028E ||
+        (!isXbox(device) && !isKingKong(device) && !isPS4(device) &&
+         !isPS5(device) && !isNintendo(device))) return;
+    @synchronized (self) {
+        if (self.activeHIDDevice != nil) return;
+        self.activeHIDDevice = (__bridge id)device;
+        self.isPS5Bluetooth = NO;
+        self.ds5OutputSequence = 0;
+    }
     if (self.controllerDriver == 0 && isPS5(device)) {
         // Reading Sony's serial-number feature report enables Bluetooth reports with touch data.
         UInt8 feature[64] = {0x09};
@@ -3425,16 +3460,20 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
  * so reconnect cannot replay the removed pad's rumble. Drains queued input and
  * releases delivered gamepad, mouse, touch and gyro state before clearing local caches.
  * Runs on the HID manager's main run loop, never on inputQueue.
+ * Ignores non-owner removal. After releasing the old owner, selects a remaining eligible pad
+ * and reloads its calibration; session replacement retains the physical owner.
  * @param context Borrowed HIDSupport callback context.
  * @param result IOKit removal status; unused.
  * @param sender IOKit callback sender; unused.
- * @param device Removed HID device; state reset is backend-wide rather than device-specific.
+ * @param device Removed HID device; only the active owner resets slot state.
  */
 void myHIDDeviceRemovalCallback(void * _Nullable        context,
                                 IOReturn                result,
                                 void * _Nullable        sender,
                                 IOHIDDeviceRef          device) {
     HIDSupport *self = (__bridge HIDSupport *)context;
+
+    if (![self isActiveHIDControllerDevice:device]) return;
 
     [self.gamepadMenuTimer invalidate];
     self.gamepadMenuTimer = nil;
@@ -3506,8 +3545,19 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
             self.controller.lastLeftStickY = 0;
             self.controller.lastRightStickX = 0;
             self.controller.lastRightStickY = 0;
-
+            self.lastSimpleSwitchState = (SwitchSimpleStatePacket_t){};
+            self.lastSwitchState = (SwitchStatePacket_t){};
+            self.isPS5Bluetooth = NO;
+            self.ds5OutputSequence = 0;
         }
+        self.activeHIDDevice = nil;
+    }
+    // The removed device may still be present in IOKit's callback-time snapshot.
+    NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
+    for (id candidate in devices) {
+        IOHIDDeviceRef next = (__bridge IOHIDDeviceRef)candidate;
+        if (next != device) myHIDDeviceMatchingCallback(context, kIOReturnSuccess, NULL, next);
+        if (self.activeHIDDevice != nil) break;
     }
 }
 
@@ -3694,6 +3744,11 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
     }
 }
 
+/**
+ * Opens the gamepad/joystick/multiaxis manager and serial feedback queues on main.
+ * Claims one initially enumerated device before startup feedback; later matches never preempt it.
+ * Teardown must drain the worker before closing this manager.
+ */
 - (void)setupHidManager {
     self.hidManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
     IOHIDManagerOpen(self.hidManager, kIOHIDOptionsTypeNone);
@@ -3724,6 +3779,12 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
         [weakSelf runRumbleLoop];
     });
 
+    NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
+    for (id candidate in devices) {
+        myHIDDeviceMatchingCallback((__bridge void *)self, kIOReturnSuccess, NULL,
+                                   (__bridge IOHIDDeviceRef)candidate);
+        if (self.activeHIDDevice != nil) break;
+    }
     IOHIDDeviceRef device = [self getFirstDevice];
     if (device != nil) {
         if (isNintendo(device)) {
@@ -3749,7 +3810,8 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
 
 /**
  * Removes HID and touchpad preference observers, stops timers and closes devices on main.
- * Drains the rumble worker after its final neutral output before invalidating the HID manager.
+ * Drains the rumble worker after its final neutral output before invalidating the HID manager
+ * and releasing the retained physical owner.
  * Controller delivery must be disabled before teardown to release remote touch/mouse state.
  */
 - (void)tearDownHidManagerOnMainThread {
@@ -3789,6 +3851,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
         CFRelease(self.hidManager);
         self.hidManager = NULL;
     }
+    @synchronized (self) { self.activeHIDDevice = nil; }
 }
 
 

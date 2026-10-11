@@ -57,7 +57,8 @@ typedef struct {
 @property (nonatomic) BOOL gamepadMenuPressed;
 @property (atomic) BOOL trackpadOwnsPointer;
 @property (nonatomic) BOOL nativeTouchpadEnabled;
-@property (nonatomic) BOOL playStationHasMotion;
+// Retains the sole physical owner of direct-HID slot zero; protected by the HID monitor.
+@property (nonatomic, strong) id activeHIDDevice;
 @property (nonatomic) float trackpadPointerSensitivity;
 @property (nonatomic) float trackpadScrollSpeed;
 @property (nonatomic) BOOL trackpadReverseScroll;
@@ -218,6 +219,7 @@ typedef struct {
 - (void)handleDpad:(NSInteger)intValue;
 - (void)updateButtonFlags:(int)flag state:(BOOL)set;
 - (void)setupHidManager;
+- (BOOL)isActiveHIDControllerDevice:(IOHIDDeviceRef)device;
 - (BOOL)reportPlayStationControllerArrival;
 - (BOOL)touchpadUsesMouse;
 - (void)resetTrackpadState;
