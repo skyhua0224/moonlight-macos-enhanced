@@ -1914,7 +1914,7 @@
 "Output Device" = "输出设备";
 "EQ Bands" = "频段";
 "EQ Bands Custom" = "自由频段";
-"Audio Enhancement off note" = "以下设置在“音频增强”声音模式下生效。";
+"Audio Enhancement off note" = "以下设置在“音效增强”音效模式下生效。";
 "Turn On Audio Enhancement" = "开启";
 "Preset EQ" = "预设 EQ";
 "Preset EQ hint" = "从设备库里选你的型号，或者用自己保存的预设。";

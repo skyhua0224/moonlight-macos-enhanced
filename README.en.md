@@ -10,7 +10,7 @@
 
 [简体中文](README.md) | English
 
-[Download](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [Release notes](.github/release-notes/v1.3.9-rc.3.md) · [Report an issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
+[Download](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [Release notes](.github/release-notes/v1.3.9-rc.4.md) · [Report an issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
 <img src="readme-assets/images/en/app-list.png" width="760" alt="App list">
 
@@ -20,7 +20,7 @@
 
 ## Current Release
 
-The latest release is **1.3.9 RC3** (prerelease); see the [1.3.9 RC3 release notes](.github/release-notes/v1.3.9-rc.3.md) for what changed. 1.3.9 is the final release before the native architecture rebuild.
+The latest release is **1.3.9 RC4** (prerelease); see the [1.3.9 RC4 release notes](.github/release-notes/v1.3.9-rc.4.md) for what changed. 1.3.9 is the final release before the native architecture rebuild.
 
 - Download it from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). Packages come as `universal`, `arm64`, and `x86_64`; choose `universal` if unsure.
 - If 1.3.9 is already installed, check for updates in `Settings → About & Updates`.
@@ -29,9 +29,9 @@ The latest release is **1.3.9 RC3** (prerelease); see the [1.3.9 RC3 release not
 What changed in 1.3.9 compared with 1.3.8:
 
 - Settings were redesigned and can be searched down to individual options; the whole app can be driven with a controller.
-- Audio gained lossless PCM, AC3, E-AC3, and Dolby passthrough, and the output device can be switched during a stream.
+- Audio gained lossless PCM, AC3, E-AC3, and Dolby passthrough, and the output device can be switched during a stream; Audio Enhancement gained a parametric equalizer, headphone correction presets, and binaural surround on headphones.
 - Input gained Precision Touchpad, text entry through macOS input methods, and key mapping by typed character; DualSense supports its touchpad, lighting, battery, and haptics.
-- Video gained a separate 10-bit SDR option, a Dynamic HDR Preference, and Dolby Vision and HDR10+ negotiation with fallback.
+- Video gained a separate 10-bit SDR option, a Dynamic HDR Preference, and Dolby Vision and HDR10+ negotiation with fallback; Macs without an AV1 hardware decoder can decode AV1 in software.
 - With Foundation Sunshine: display and virtual display configuration, bitrate, frame rate, and resolution changes without reconnecting, adaptive bitrate, host display scale, and Host Commands.
 - Added in-app updates, performance report export, and a bilingual log viewer.
 
@@ -46,9 +46,9 @@ What changed in 1.3.9 compared with 1.3.8:
 
 | Area | What is included |
 | --- | --- |
-| Video | AV1 / HEVC / H.264, custom resolution and frame rate, YUV 4:4:4, 10-bit SDR; Native, Metal, and Compatibility renderers; VT super resolution, MetalFX, and frame interpolation |
+| Video | AV1 (in software where there is no hardware decoder) / HEVC / H.264, custom resolution and frame rate, YUV 4:4:4, 10-bit SDR; Native, Metal, and Compatibility renderers; VT super resolution, MetalFX, and frame interpolation |
 | HDR | HDR10 (PQ / HLG); Dolby Vision 8.1 / 8.4 and HDR10+ negotiation with fallback; the picture follows the host when HDR is toggled mid-stream |
-| Audio | Opus stereo, 5.1, 7.1, and 7.1.4; lossless PCM, AC3, and E-AC3; Dolby passthrough to HDMI devices; client-side audio enhancement and EQ; microphone |
+| Audio | Opus stereo, 5.1, 7.1, and 7.1.4; lossless PCM, AC3, and E-AC3; Dolby passthrough to HDMI devices; an output device of its own; Audio Enhancement with a parametric equalizer, headphone correction presets, and binaural surround; microphone |
 | Keyboard, mouse, trackpad | Locked and Free Mouse; high-polling CoreHID mouse input; Precision Touchpad; text entry through macOS input methods; key mapping by position or by character; shortcut translation |
 | Controllers | Multiple controllers, rumble, motion, controller mouse; DualSense touchpad, lighting, battery, and haptics; controller navigation of the app itself |
 | Stream control | In-stream control center; bitrate, frame rate, and resolution changes without reconnecting; adaptive bitrate; video FEC preference |
@@ -136,7 +136,9 @@ Choose the channel layout and audio codec in `Settings → Audio & Microphone`:
 
 - `Dolby Output` decides whether AC3 / E-AC3 is passed through to the output device or decoded on the Mac. During passthrough the device is used exclusively by the stream and volume is set on the device; a failed passthrough or a device change falls back to local decoding.
 - When the codec and channel layout conflict (for example PCM with 7.1), the settings page asks which one to keep. If the host does not support the chosen codec, the client falls back to Opus and says so.
-- With headphones or stereo speakers, `Audio Enhancement` offers presets, EQ, spatial, and soundstage controls.
+- `Output Device` plays the stream on a device of your choice without changing the system output; Dolby passthrough goes to that device too.
+- With headphones or stereo speakers, `Audio Enhancement` offers a parametric equalizer (12 bands, 24 bands, or custom bands, adjusted by dragging the curve), `Preset EQ` (general presets, corrections for more than 6,000 headphones, and your own saved presets, with import and export), `Spatial Audio` (binaural rendering of 5.1 / 7.1 / 7.1.4 on headphones), and soundstage controls.
+- When the host sends no 7.1.4 audio, the client says so and reconnects with 7.1, which that host then uses from the start; 7.1.4 can be retried in the audio settings.
 - `Keep Audio Stream Active During Silence` has the host send silence while nothing plays, so the first sound after a quiet period is not cut off.
 - During a stream, the control center can switch the audio output device and adjust volume.
 
