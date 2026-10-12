@@ -42,6 +42,9 @@ typedef struct {
 
 @interface HIDSupport () <CoreHIDMouseDriverDelegate>
 
+- (id)feedbackDeviceOwner;
+- (void)handleNintendoVibrationReply:(const uint8_t *)report length:(CFIndex)reportLength;
+
 - (void)sendControllerEventWithRouting:(uint64_t)routing;
 - (void)updatePlayStationTouchpadButton:(BOOL)pressed secondaryActive:(BOOL)secondaryActive;
 - (uint64_t)updatePlayStationButtons:(const UInt8 *)buttons hasTouchpad:(BOOL)hasTouchpad

@@ -63,9 +63,28 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 }
 
 /**
+ * Returns a retained feedback endpoint without assigning direct-HID input ownership.
+ * Direct HID uses its selected physical owner. GameController fallback preserves the legacy
+ * first-device selection (excluding the unsupported 0x028E interface). Callers retain the
+ * result throughout device I/O; the manager is closed only after feedback queues are drained.
+ * @return Physical device snapshot, or nil when no fallback endpoint is connected.
+ */
+- (id)feedbackDeviceOwner {
+    @synchronized (self) {
+        if (self.controllerDriver == 0) return self.activeHIDDevice;
+        NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
+        for (id candidate in devices) {
+            if (usbIdFromDevice((__bridge IOHIDDeviceRef)candidate, @kIOHIDProductIDKey) != 0x028E)
+                return candidate;
+        }
+        return nil;
+    }
+}
+
+/**
  * Processes motor updates on the dedicated HID queue using existing USB/Bluetooth encodings.
  * Shutdown sends a final neutral report if needed before returning; teardown drains this worker
- * before closing the HID manager. Retains the selected physical owner for each iteration.
+ * before closing the HID manager. Retains the direct owner or legacy fallback endpoint for each iteration.
  * Never wait synchronously for main from this queue.
  */
 - (void)runRumbleLoop {
@@ -76,10 +95,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         BOOL closing = self.closeRumble;
         if (closing && self.previousLowFreqMotor == 0 && self.previousHighFreqMotor == 0) break;
         
-        __attribute__((objc_precise_lifetime)) id deviceOwner;
-        @synchronized (self) {
-            deviceOwner = self.activeHIDDevice;
-        }
+        __attribute__((objc_precise_lifetime)) id deviceOwner = [self feedbackDeviceOwner];
         IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)deviceOwner;
         if (device == nil) {
             if (closing) break;
@@ -209,14 +225,13 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 }
 
 /**
- * Returns the borrowed physical owner of direct-HID slot zero under the HID monitor.
- * Callers on worker queues must retain a snapshot through their device operations.
- * @return Active device, or NULL when no eligible pad owns the slot.
+ * Returns the borrowed direct-HID owner or legacy GameController feedback endpoint.
+ * Main-run-loop callers use this for initialization/replies; workers retain feedbackDeviceOwner
+ * through their device operations instead. Does not enable direct-HID input for GameController.
+ * @return Selected device, or NULL when no endpoint is connected.
  */
 - (IOHIDDeviceRef)getFirstDevice {
-    @synchronized (self) {
-        return (__bridge IOHIDDeviceRef)self.activeHIDDevice;
-    }
+    return (__bridge IOHIDDeviceRef)[self feedbackDeviceOwner];
 }
 
 
@@ -272,8 +287,7 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         SwitchSubcommandOutputPacket_t commandPacket;
         [self constructSubcommand:ucCommandID pBuf:pBuf ucLen:ucLen outPacket:&commandPacket];
 
-        __attribute__((objc_precise_lifetime)) id deviceOwner;
-        @synchronized (self) { deviceOwner = self.activeHIDDevice; }
+        __attribute__((objc_precise_lifetime)) id deviceOwner = [self feedbackDeviceOwner];
         IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)deviceOwner;
         if (device == NULL) return NO;
         

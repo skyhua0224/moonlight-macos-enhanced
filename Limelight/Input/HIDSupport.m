@@ -3163,6 +3163,31 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
 }
 
 /**
+ * Handles a Nintendo vibration-enable acknowledgement on the HID manager's main run loop.
+ * Available to the direct owner and the GameController feedback endpoint without processing
+ * ordinary input. Truncated replies cannot acknowledge a command; expiry wakes the feedback worker.
+ * @param report Borrowed input report, including its report ID; may be NULL.
+ * @param reportLength Number of available report bytes.
+ */
+- (void)handleNintendoVibrationReply:(const uint8_t *)report length:(CFIndex)reportLength {
+    if (!self.waitingForVibrationEnable) return;
+    if (TICKS_PASSED([self.ticks getTicks], self.startedWaitingForVibrationEnable + 100)) {
+        self.vibrationEnableResponded = NO;
+        self.waitingForVibrationEnable = NO;
+        dispatch_semaphore_signal(self.hidReadSemaphore);
+        return;
+    }
+    const size_t required = 1 + offsetof(SwitchSubcommandInputPacket_t, ucSubcommandID) + sizeof(UInt8);
+    if (report == NULL || reportLength < (CFIndex)required || report[0] != k_eSwitchInputReportIDs_SubcommandReply) return;
+    const SwitchSubcommandInputPacket_t *reply = (const SwitchSubcommandInputPacket_t *)&report[1];
+    if (reply->ucSubcommandID == k_eSwitchSubcommandIDs_EnableVibration && (reply->ucSubcommandAck & 0x80)) {
+        self.vibrationEnableResponded = YES;
+        self.waitingForVibrationEnable = NO;
+        dispatch_semaphore_signal(self.hidReadSemaphore);
+    }
+}
+
+/**
  * Parses supported PlayStation/Nintendo HID reports and updates controller input state.
  *
  * Ignores non-owner devices and rejects missing, truncated or unsupported Sony reports.
@@ -3172,6 +3197,7 @@ void myHIDCallback(void* context, IOReturn result, void* sender, IOHIDValueRef v
  * through their delivery gates. Sony buttons, triggers and physical clicks form one complete
  * shortcut snapshot, whose routing is reused for gamepad/mouse/touch publication. Runs on the HID
  * manager's main run loop; ordinary state is queued on the serial input queue.
+ * GameController mode processes only vibration-enable replies from its legacy HID fallback endpoint.
  * @param context Borrowed HIDSupport callback context.
  * @param result IOKit report status; not inspected by this callback.
  * @param sender HID device that produced the report.
@@ -3195,6 +3221,11 @@ void myHIDReportCallback (
     }
     
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
+    if (self.controllerDriver != 0) {
+        if (isNintendo(device) && device == [self getFirstDevice])
+            [self handleNintendoVibrationReply:report length:reportLength];
+        return;
+    }
     if (![self isActiveHIDControllerDevice:device]) return;
     if (!isPlayStation(device) && !isNintendo(device)) {
         return;
@@ -3368,19 +3399,7 @@ void myHIDReportCallback (
             secondary:&state->ucTouchpadCounter2 height:1070.0f pressed:(state->rgucButtonsAndHat[2] & 0x02) != 0 routing:routing];
     } else if (isNintendo(device)) {
         if (self.waitingForVibrationEnable) {
-            if (TICKS_PASSED([self.ticks getTicks], self.startedWaitingForVibrationEnable + 100)) {
-                self.vibrationEnableResponded = NO;
-                self.waitingForVibrationEnable = NO;
-                dispatch_semaphore_signal(self.hidReadSemaphore);
-            }
-            if (report[0] == k_eSwitchInputReportIDs_SubcommandReply) {
-                SwitchSubcommandInputPacket_t *reply = (SwitchSubcommandInputPacket_t *)&report[1];
-                if (reply->ucSubcommandID == k_eSwitchSubcommandIDs_EnableVibration && (reply->ucSubcommandAck & 0x80)) {
-                    self.vibrationEnableResponded = YES;
-                    self.waitingForVibrationEnable = NO;
-                    dispatch_semaphore_signal(self.hidReadSemaphore);
-                }
-            }
+            [self handleNintendoVibrationReply:report length:reportLength];
         } else {
             if (report[0] == k_eSwitchInputReportIDs_SimpleControllerState) {
                 SwitchSimpleStatePacket_t *packet = (SwitchSimpleStatePacket_t *)&report[1];
