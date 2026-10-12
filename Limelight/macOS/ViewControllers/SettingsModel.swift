@@ -834,9 +834,14 @@ class SettingsModel: ObservableObject {
   @Published var selectedEnhancedAudioEQMode: String = EnhancedAudioEQ.Mode.graphic.title {
     didSet {
       guard !isLoading, oldValue != selectedEnhancedAudioEQMode else { return }
+      // The two change places. Not a change of level: the preamp must not take the other
+      // one along here, or both end up the same.
+      let wasSyncing = isSyncingEnhancedAudioEQ
+      isSyncingEnhancedAudioEQ = true
       let otherPreamp = enhancedAudioEQInactivePreamp
       enhancedAudioEQInactivePreamp = enhancedAudioEQPreamp
       enhancedAudioEQPreamp = otherPreamp
+      isSyncingEnhancedAudioEQ = wasSyncing
       // One curve, three ways to edit it. Unless both sets of bands already describe it, the
       // one being switched to is made from the one being left: custom bands are the fixed
       // ones as they are, fixed bands are fitted to the custom curve. The preamps follow,
@@ -1987,12 +1992,17 @@ class SettingsModel: ObservableObject {
       for: selectedEnhancedAudioPreset,
       layout: selectedEnhancedAudioEQLayout)
     isApplyingEnhancedAudioPreset = true
+    // A preset is a curve of the fixed bands, so it is what plays from here on. The fixed
+    // bands are switched to first, and as they are: switching after the gains were set
+    // would fit them to the custom bands again, and the preset would be gone.
+    let wasSyncing = isSyncingEnhancedAudioEQ
+    isSyncingEnhancedAudioEQ = true
+    selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.graphic.title
+    isSyncingEnhancedAudioEQ = wasSyncing
     enhancedAudioSpatialIntensity = values.spatialIntensity
     enhancedAudioSoundstageWidth = values.soundstageWidth
     enhancedAudioReverbAmount = values.reverbAmount
     enhancedAudioEQGains = values.eqGains
-    // A preset is a curve of the fixed bands, so it is what plays from here on.
-    selectedEnhancedAudioEQMode = EnhancedAudioEQ.Mode.graphic.title
     isApplyingEnhancedAudioPreset = false
   }
 

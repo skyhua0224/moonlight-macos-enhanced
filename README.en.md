@@ -138,7 +138,7 @@ Choose the channel layout and audio codec in `Settings → Audio & Microphone`:
 - When the codec and channel layout conflict (for example PCM with 7.1), the settings page asks which one to keep. If the host does not support the chosen codec, the client falls back to Opus and says so.
 - `Output Device` plays the stream on a device of your choice without changing the system output; Dolby passthrough goes to that device too.
 - With headphones or stereo speakers, `Audio Enhancement` offers a parametric equalizer (12 bands, 24 bands, or custom bands, adjusted by dragging the curve), `Preset EQ` (general presets, corrections for more than 6,000 headphones, and your own saved presets, with import and export), `Spatial Audio` (binaural rendering of 5.1 / 7.1 / 7.1.4 on headphones), and soundstage controls.
-- When the host sends no 7.1.4 audio, the client says so and reconnects with 7.1, which that host then uses from the start; 7.1.4 can be retried in the audio settings.
+- When the host sends no 7.1.4 audio, the client says so and reconnects with 7.1, which that host then uses from the start; 7.1.4 can be retried in the audio settings. The switch to 7.1 needs Foundation Sunshine with `Keep Audio Stream Active During Silence` on; otherwise the client only says so.
 - `Keep Audio Stream Active During Silence` has the host send silence while nothing plays, so the first sound after a quiet period is not cut off.
 - During a stream, the control center can switch the audio output device and adjust volume.
 
