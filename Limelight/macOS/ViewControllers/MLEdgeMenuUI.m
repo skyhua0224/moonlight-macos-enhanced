@@ -78,6 +78,12 @@
 }
 
 - (NSView *)hitTest:(NSPoint)point {
+    // An override answers for a hidden view too, unless it says no itself: the hidden ball
+    // would take every click where it happens to lie (the lower left corner, before it was
+    // ever laid out).
+    if (self.isHiddenOrHasHiddenAncestor) {
+        return nil;
+    }
     // hitTest: receives the point in the superview's coordinate space.
     NSPoint localPoint = [self convertPoint:point fromView:self.superview];
     CGFloat radius = MIN(self.bounds.size.width, self.bounds.size.height) * 0.33;
