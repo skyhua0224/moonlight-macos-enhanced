@@ -74,14 +74,25 @@ class MicrophoneManager: ObservableObject {
             )
             var bufSize: UInt32 = 0
             guard AudioObjectGetPropertyDataSize(id, &inputScope, 0, nil, &bufSize) == noErr,
-                  bufSize > 0 else { continue }
+                  bufSize >= UInt32(MemoryLayout<AudioBufferList>.size) else { continue }
 
-            let bufferList = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
-            defer { bufferList.deallocate() }
-            guard AudioObjectGetPropertyData(id, &inputScope, 0, nil, &bufSize, bufferList) == noErr
+            // As large as the device says. The list has one buffer per stream, and
+            // AudioBufferList by itself has room for one: a device with several input
+            // streams (an aggregate device, such as the one the system makes while audio
+            // plays) was written past the end of it, into whatever lay behind.
+            let capacity = Int(bufSize)
+            let storage = UnsafeMutableRawPointer.allocate(
+                byteCount: capacity, alignment: MemoryLayout<AudioBufferList>.alignment)
+            defer { storage.deallocate() }
+            storage.initializeMemory(as: UInt8.self, repeating: 0, count: capacity)
+            guard AudioObjectGetPropertyData(id, &inputScope, 0, nil, &bufSize, storage) == noErr
             else { continue }
 
-            let inputChannels = UnsafeMutableAudioBufferListPointer(bufferList)
+            // No more buffers than there is room for, whatever the count in front says.
+            let room = (capacity - MemoryLayout<AudioBufferList>.size) / MemoryLayout<AudioBuffer>.stride + 1
+            let inputChannels = UnsafeMutableAudioBufferListPointer(
+                storage.assumingMemoryBound(to: AudioBufferList.self))
+                .prefix(room)
                 .reduce(0) { $0 + Int($1.mNumberChannels) }
             guard inputChannels > 0 else { continue }
 
