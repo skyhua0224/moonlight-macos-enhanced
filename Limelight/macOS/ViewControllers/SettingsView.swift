@@ -201,7 +201,7 @@ struct SettingsView: View {
   @ObservedObject private var languageManager = LanguageManager.shared
   @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .stream
   let hostId: String?
-  @State private var selectedInitialHost = false
+  @SwiftUI.State private var selectedInitialHost = false
 
   init(hostId: String? = nil) {
     self.hostId = hostId

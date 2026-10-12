@@ -149,11 +149,11 @@ struct AudioView: View {
     let chosen = microphoneManager.selectedDeviceUID
     return !chosen.isEmpty && !microphoneManager.devices.contains(where: { $0.uid == chosen })
   }
-  @State private var createdAt = DispatchTime.now()
+  @SwiftUI.State private var createdAt = DispatchTime.now()
   // The pane comes up in steps: what is on screen first, then the sections below it, each in
   // a turn of its own, so that opening or switching to the pane does not wait for all of it.
   // A search result may be in any section, so with one pending everything is built at once.
-  @State private var loadedSections = SettingsSearchNavigator.shared.request == nil ? 0 : 2
+  @SwiftUI.State private var loadedSections = SettingsSearchNavigator.shared.request == nil ? 0 : 2
 
   var body: some View {
     SettingsSearchScrollView {
@@ -777,13 +777,13 @@ enum EqualizerImportPanel {
 private struct AudioEqualizerSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
-  @State private var importNote: String?
-  @State private var showsPresetPicker = false
-  @State private var showsSavePreset = false
-  @State private var newPresetName = ""
-  @State private var curveDrag: CurveDrag?
+  @SwiftUI.State private var importNote: String?
+  @SwiftUI.State private var showsPresetPicker = false
+  @SwiftUI.State private var showsSavePreset = false
+  @SwiftUI.State private var newPresetName = ""
+  @SwiftUI.State private var curveDrag: CurveDrag?
   // The band whose point was last touched on the curve; its controls show under the curve.
-  @State private var selectedHandle: Int?
+  @SwiftUI.State private var selectedHandle: Int?
   // The list of single bands, each with a slider as it always had. It can be folded away.
   @AppStorage("settings.audio.eqBandList") private var showsBandDetails = true
 
@@ -1253,8 +1253,8 @@ private struct PresetEQPicker: View {
   @ObservedObject private var library = HeadphoneCorrectionLibrary.shared
   @ObservedObject private var userPresets = EnhancedAudioEQUserPresets.shared
   @ObservedObject private var languageManager = LanguageManager.shared
-  @State private var query = ""
-  @State private var newName = ""
+  @SwiftUI.State private var query = ""
+  @SwiftUI.State private var newName = ""
 
   var body: some View {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -1593,7 +1593,7 @@ private struct AudioEQCurveView: View {
   let onMove: (_ id: Int, _ frequency: Double, _ gain: Double) -> Void
   /// The drag is over: what it changed can be handed on.
   let onEnd: () -> Void
-  @State private var drag: Drag?
+  @SwiftUI.State private var drag: Drag?
 
   private static let minFrequency = 20.0
   private static let maxFrequency = 20000.0
