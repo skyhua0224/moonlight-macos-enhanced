@@ -381,12 +381,15 @@ static const NSString* HTTPS_PORT = @"47984";
     if (dispatch_semaphore_wait(requestLock, waitTime) != 0) {
         Log(LOG_E, @"Request timed out waiting for completion handler: %@", request.request.URL);
         [urlSession invalidateAndCancel];
-        requestError = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil];
+        // Cancelling makes the completion handler run, on another thread, and it writes
+        // requestError and the response there. From here on those are the handler's alone:
+        // this thread says what went wrong itself and does not look at them again.
+        _error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil];
     } else {
         [urlSession finishTasksAndInvalidate];
+        // The handler has finished: it signals after its last write.
+        _error = requestError;
     }
-
-    _error = requestError;
 
     if (!_error && request.response) {
         [request.response populateWithData:requestResp];
