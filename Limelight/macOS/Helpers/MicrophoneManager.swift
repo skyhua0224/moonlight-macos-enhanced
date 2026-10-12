@@ -87,11 +87,11 @@ class MicrophoneManager: ObservableObject {
             storage.initializeMemory(as: UInt8.self, repeating: 0, count: capacity)
             guard AudioObjectGetPropertyData(id, &inputScope, 0, nil, &bufSize, storage) == noErr
             else { continue }
+            let bufferList = storage.bindMemory(to: AudioBufferList.self, capacity: 1)
 
             // No more buffers than there is room for, whatever the count in front says.
             let room = (capacity - MemoryLayout<AudioBufferList>.size) / MemoryLayout<AudioBuffer>.stride + 1
-            let inputChannels = UnsafeMutableAudioBufferListPointer(
-                storage.assumingMemoryBound(to: AudioBufferList.self))
+            let inputChannels = UnsafeMutableAudioBufferListPointer(bufferList)
                 .prefix(room)
                 .reduce(0) { $0 + Int($1.mNumberChannels) }
             guard inputChannels > 0 else { continue }
@@ -105,7 +105,7 @@ class MicrophoneManager: ObservableObject {
             var uidRef: Unmanaged<CFString>?
             var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
             guard AudioObjectGetPropertyData(id, &uidProp, 0, nil, &uidSize, &uidRef) == noErr,
-                let uid = uidRef?.takeUnretainedValue()
+                let uid = uidRef?.takeRetainedValue()
             else { continue }
 
             // Get Name
@@ -117,7 +117,7 @@ class MicrophoneManager: ObservableObject {
             var nameRef: Unmanaged<CFString>?
             var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
             guard AudioObjectGetPropertyData(id, &nameProp, 0, nil, &nameSize, &nameRef) == noErr,
-                let name = nameRef?.takeUnretainedValue()
+                let name = nameRef?.takeRetainedValue()
             else { continue }
 
             result.append(MicrophoneDevice(

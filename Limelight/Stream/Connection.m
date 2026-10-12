@@ -5268,12 +5268,13 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     OSStatus status = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &propAddr, 0, NULL, &dataSize);
     if (status != noErr) return 0;
 
-    int count = (int)(dataSize / sizeof(AudioDeviceID));
     AudioDeviceID* devices = malloc(dataSize);
     if (!devices) return 0;
 
     status = AudioObjectGetPropertyData(kAudioObjectSystemObject, &propAddr, 0, NULL, &dataSize, devices);
     if (status != noErr) { free(devices); return 0; }
+    // As many as were written: the list may have become shorter since its size was asked.
+    int count = (int)(dataSize / sizeof(AudioDeviceID));
 
     AudioDeviceID result = 0;
     for (int i = 0; i < count; i++) {
