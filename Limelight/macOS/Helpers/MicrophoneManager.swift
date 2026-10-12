@@ -120,6 +120,11 @@ class MicrophoneManager: ObservableObject {
                 let name = nameRef?.takeRetainedValue()
             else { continue }
 
+            // Not the device the system puts together for this app alone while it plays audio:
+            // it is not a microphone anyone can choose, and it is gone when the audio stops.
+            if (uid as String).hasPrefix("CADefaultDeviceAggregate")
+                || (name as String).hasPrefix("CADefaultDeviceAggregate") { continue }
+
             result.append(MicrophoneDevice(
                 id: id,
                 uid: uid as String,
@@ -127,14 +132,10 @@ class MicrophoneManager: ObservableObject {
             ))
         }
 
+        // A chosen microphone that is not there now stays chosen: it may only be unplugged
+        // for a moment, and until it is back the stream uses the system default.
         DispatchQueue.main.async {
             self.devices = result
-            // If selection invalid, clear it (will use system default)
-            if !self.selectedDeviceUID.isEmpty,
-               !result.contains(where: { $0.uid == self.selectedDeviceUID })
-            {
-                self.selectedDeviceUID = ""
-            }
         }
     }
 

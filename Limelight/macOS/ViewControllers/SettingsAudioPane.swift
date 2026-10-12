@@ -6,7 +6,14 @@ import UniformTypeIdentifiers
 /// The Mac's output devices and which of them is the system default. Also re-renders the
 /// audio pane when the default changes, so a hint that names the device (Dolby passthrough)
 /// never shows the one from when the pane was opened.
+///
+/// One for the life of the app: a listener given to CoreAudio as a Swift closure cannot be
+/// taken back (the closure is wrapped anew each time it is handed over, so the removal names
+/// a block CoreAudio has never seen), and a list per audio pane left two listeners behind
+/// every time the pane was built.
 private final class AudioOutputDeviceList: ObservableObject {
+  static let shared = AudioOutputDeviceList()
+
   struct Device: Identifiable, Equatable {
     let id: AudioDeviceID
     let name: String
@@ -16,31 +23,20 @@ private final class AudioOutputDeviceList: ObservableObject {
   @Published private(set) var devices: [Device] = []
   @Published private(set) var current = AudioDeviceID(kAudioObjectUnknown)
 
-  private var listener: AudioObjectPropertyListenerBlock?
   private static let selectors: [AudioObjectPropertySelector] = [
     kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDevices,
   ]
 
-  init() {
+  private init() {
     let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
       self?.refresh()
     }
-    listener = block
     for selector in Self.selectors {
       var address = Self.address(selector)
       AudioObjectAddPropertyListenerBlock(
         AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
     }
     refresh()
-  }
-
-  deinit {
-    guard let block = listener else { return }
-    for selector in Self.selectors {
-      var address = Self.address(selector)
-      AudioObjectRemovePropertyListenerBlock(
-        AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
-    }
   }
 
   private static func address(
@@ -145,9 +141,14 @@ struct AudioView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var microphoneManager = MicrophoneManager.shared
-  @StateObject private var outputDevices = AudioOutputDeviceList()
+  @ObservedObject private var outputDevices = AudioOutputDeviceList.shared
   // Where the stream's sound goes; empty: the system output. See SettingsClass.audioOutputDeviceUID.
   @AppStorage("audioOutputDeviceUID") private var outputDeviceUID = ""
+  // A chosen microphone that is unplugged keeps its place in the list (see MicrophoneManager).
+  private var microphoneNotConnected: Bool {
+    let chosen = microphoneManager.selectedDeviceUID
+    return !chosen.isEmpty && !microphoneManager.devices.contains(where: { $0.uid == chosen })
+  }
   @State private var createdAt = DispatchTime.now()
   // The pane comes up in steps: what is on screen first, then the sections below it, each in
   // a turn of its own, so that opening or switching to the pane does not wait for all of it.
@@ -396,6 +397,10 @@ struct AudioView: View {
               ForEach(microphoneManager.devices) { device in
                 Text(device.name).tag(device.uid)
               }
+              if microphoneNotConnected {
+                Text(languageManager.localize("Chosen device (not connected)"))
+                  .tag(microphoneManager.selectedDeviceUID)
+              }
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -403,7 +408,10 @@ struct AudioView: View {
             .controllerPicker(
               selection: $microphoneManager.selectedDeviceUID,
               choices: [(value: "", title: languageManager.localize("System Default"))]
-                + microphoneManager.devices.map { (value: $0.uid, title: $0.name) })
+                + microphoneManager.devices.map { (value: $0.uid, title: $0.name) }
+                + (microphoneNotConnected
+                  ? [(value: microphoneManager.selectedDeviceUID,
+                      title: languageManager.localize("Chosen device (not connected)"))] : []))
             .frame(width: 210, alignment: .trailing)
             .onAppear { microphoneManager.refreshDevices() }
           }
