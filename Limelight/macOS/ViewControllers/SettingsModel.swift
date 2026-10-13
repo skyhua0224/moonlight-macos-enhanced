@@ -1160,6 +1160,8 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  /// Reverses scroll direction; main-thread edits save and refresh live mouse settings.
+  /// Profile loading suppresses persistence and change notifications.
   @Published var reverseScrollDirection: Bool {
     didSet {
       guard !isLoading else { return }
@@ -1167,6 +1169,8 @@ class SettingsModel: ObservableObject {
       postMouseSettingsChanged("reverseScrollDirection")
     }
   }
+  /// Scales pointer movement; main-thread edits save and refresh live mouse settings.
+  /// Profile loading suppresses persistence and change notifications.
   @Published var pointerSensitivity: CGFloat {
     didSet {
       guard !isLoading else { return }
@@ -1186,6 +1190,8 @@ class SettingsModel: ObservableObject {
       saveSettings()
     }
   }
+  /// Scales gesture scrolling; main-thread edits save and refresh live mouse settings.
+  /// Profile loading suppresses persistence and change notifications.
   @Published var gestureScrollSpeed: CGFloat {
     didSet {
       guard !isLoading else { return }
