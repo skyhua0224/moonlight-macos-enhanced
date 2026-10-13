@@ -2304,6 +2304,13 @@ highFreqMotor:(unsigned short)highFreqMotor {
     });
 }
 
+/**
+ * Handles termination of the current stream from the connection callback thread.
+ * Clears both borrowed input contexts and schedules controller delivery policy refresh on main
+ * before queued UI cleanup, including during reconnect. Releases session services and closes
+ * the stream window on main unless a reconnect is in progress.
+ * @param errorCode Native termination status; zero indicates normal termination.
+ */
 - (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld (0x%08x)", (long)errorCode, (unsigned int)errorCode);
     [self publishSunshineDisplayRuntimeState:@"idle"];
@@ -2325,6 +2332,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     self.hidSupport.inputContext = NULL;
     self.controllerSupport.inputContext = NULL;
+    [self refreshControllerInputSendingState];
 
     dispatch_async(dispatch_get_main_queue(), ^{
         [self releaseClipboardSyncOwnershipWithUnbind:NO];
