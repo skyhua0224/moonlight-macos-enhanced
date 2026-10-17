@@ -364,6 +364,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) uint64_t suppressFreeMouseEdgeUncaptureUntilMs;
 @property (nonatomic) BOOL pendingMouseExitedRecapture;
 @property (atomic) BOOL stopStreamInProgress;
+// Main-owned last logged controller-policy inputs; gates are always refreshed independently.
+@property (nonatomic) NSUInteger controllerInputLogState;
 
 @property (nonatomic) BOOL shouldAttemptReconnect;
 @property (nonatomic) NSInteger reconnectAttemptCount;
@@ -459,6 +461,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) id settingsDidChangeObserver;
 @property (nonatomic, strong) id streamShortcutSettingsDidChangeObserver;
 @property (nonatomic, strong) id mouseSettingsDidChangeObserver;
+@property (nonatomic, strong) id controllerSettingsDidChangeObserver;
 @property (nonatomic, strong) id hostLatencyUpdatedObserver;
 
 @property (nonatomic) PendingWindowMode pendingWindowMode;
@@ -908,4 +911,5 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 
 @interface StreamViewController (InternalTeardown)
 - (void)tearDownControllerSupportOnMainThreadIfNeeded;
+- (void)refreshControllerInputSendingState;
 @end

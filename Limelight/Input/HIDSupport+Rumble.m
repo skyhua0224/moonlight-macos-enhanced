@@ -62,23 +62,49 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     }
 }
 
+/**
+ * Returns a retained feedback endpoint without assigning direct-HID input ownership.
+ * Direct HID uses its selected physical owner. GameController fallback preserves the legacy
+ * first-device selection (excluding the unsupported 0x028E interface). Callers retain the
+ * result throughout device I/O; the manager is closed only after feedback queues are drained.
+ * @return Physical device snapshot, or nil when no fallback endpoint is connected.
+ */
+- (id)feedbackDeviceOwner {
+    @synchronized (self) {
+        if (self.controllerDriver == 0) return self.activeHIDDevice;
+        NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
+        for (id candidate in devices) {
+            if (usbIdFromDevice((__bridge IOHIDDeviceRef)candidate, @kIOHIDProductIDKey) != 0x028E)
+                return candidate;
+        }
+        return nil;
+    }
+}
+
+/**
+ * Processes motor updates on the dedicated HID queue using existing USB/Bluetooth encodings.
+ * Shutdown sends a final neutral report if needed before returning; teardown drains this worker
+ * before closing the HID manager. Retains the direct owner or legacy fallback endpoint for each iteration.
+ * Never wait synchronously for main from this queue.
+ */
 - (void)runRumbleLoop {
     while (YES) {
         // wait for signal
         dispatch_semaphore_wait(self.rumbleSemaphore, DISPATCH_TIME_FOREVER);
         
-        if (self.closeRumble) {
-            break;
-        }
+        BOOL closing = self.closeRumble;
+        if (closing && self.previousLowFreqMotor == 0 && self.previousHighFreqMotor == 0) break;
         
-        IOHIDDeviceRef device = [self getFirstDevice];
+        __attribute__((objc_precise_lifetime)) id deviceOwner = [self feedbackDeviceOwner];
+        IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)deviceOwner;
         if (device == nil) {
+            if (closing) break;
             continue;
         }
         
         // get next value
-        UInt16 lowFreqMotor = self.nextLowFreqMotor;
-        UInt16 highFreqMotor = self.nextHighFreqMotor;
+        UInt16 lowFreqMotor = closing ? 0 : self.nextLowFreqMotor;
+        UInt16 highFreqMotor = closing ? 0 : self.nextHighFreqMotor;
         
         if (isXbox(device) || isKingKong(device)) {
             UInt8 rumble_packet[] = { 0x03, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0xEB };
@@ -194,23 +220,18 @@ SwitchCommonOutputPacket_t switchRumblePacket;
                 dispatch_semaphore_signal(self.rumbleSemaphore);
             }
         }
+        if (closing) break;
     }
 }
 
+/**
+ * Returns the borrowed direct-HID owner or legacy GameController feedback endpoint.
+ * Main-run-loop callers use this for initialization/replies; workers retain feedbackDeviceOwner
+ * through their device operations instead. Does not enable direct-HID input for GameController.
+ * @return Selected device, or NULL when no endpoint is connected.
+ */
 - (IOHIDDeviceRef)getFirstDevice {
-    NSSet *devices = CFBridgingRelease(IOHIDManagerCopyDevices(self.hidManager));
-    if (devices.count == 0) {
-        return nil;
-    }
-    for (NSObject *device in devices) {
-        IOHIDDeviceRef hidDevice = (__bridge IOHIDDeviceRef)device;
-        UInt16 productId = usbIdFromDevice(hidDevice, @kIOHIDProductIDKey);
-        if (productId != 0x028E) {
-            return hidDevice;
-        }
-    }
-    
-    return nil;
+    return (__bridge IOHIDDeviceRef)[self feedbackDeviceOwner];
 }
 
 
@@ -249,6 +270,15 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     return [self writeSubcommand:k_eSwitchSubcommandIDs_EnableVibration pBuf:&enabled ucLen:sizeof(enabled) ppReply:nil];
 }
 
+/**
+ * Sends a Nintendo subcommand from the feedback queue and waits for its HID reply.
+ * Retains each physical-owner snapshot while using it; returns NO if ownership is absent.
+ * @param ucCommandID Nintendo subcommand identifier.
+ * @param pBuf Borrowed payload bytes.
+ * @param ucLen Payload byte count.
+ * @param ppReply Legacy reply output parameter; unused.
+ * @return YES when a reply acknowledges the command within the existing retry policy.
+ */
 - (BOOL)writeSubcommand:(ESwitchSubcommandIDs)ucCommandID pBuf:(UInt8 *)pBuf ucLen:(UInt8)ucLen ppReply:(SwitchSubcommandInputPacket_t **)ppReply {
     int nRetries = 5;
     BOOL success = NO;
@@ -257,7 +287,9 @@ SwitchCommonOutputPacket_t switchRumblePacket;
         SwitchSubcommandOutputPacket_t commandPacket;
         [self constructSubcommand:ucCommandID pBuf:pBuf ucLen:ucLen outPacket:&commandPacket];
 
-        IOHIDDeviceRef device = [self getFirstDevice];
+        __attribute__((objc_precise_lifetime)) id deviceOwner = [self feedbackDeviceOwner];
+        IOHIDDeviceRef device = (__bridge IOHIDDeviceRef)deviceOwner;
+        if (device == NULL) return NO;
         
         self.waitingForVibrationEnable = YES;
         self.startedWaitingForVibrationEnable = [self.ticks getTicks];
@@ -399,11 +431,20 @@ SwitchCommonOutputPacket_t switchRumblePacket;
 }
 
 
+/**
+ * Copies ordered authored feedback into a bounded mailbox while controller delivery is enabled.
+ * The receive thread schedules main-thread output; suspension clears pending amplitudes and timers.
+ * @param low Low-frequency intensity in the protocol's 16-bit range.
+ * @param high High-frequency intensity in the protocol's 16-bit range.
+ * @param sequence Wrap-aware source sequence number.
+ * @param discontinuity Whether this frame starts a new sequence.
+ */
 - (void)submitAuthoredRumbleLow:(unsigned short)low high:(unsigned short)high
                      sequence:(uint32_t)sequence discontinuity:(BOOL)discontinuity {
     // A bounded mailbox separates the receive thread from device output.
     BOOL schedule = NO;
     @synchronized (self) {
+        if (!self.shouldSendControllerEvents) return;
         if (!discontinuity && self.hasAuthoredRumbleSequence &&
             (int32_t)(sequence - self.authoredRumbleSequence) <= 0) return;
         self.hasAuthoredRumbleSequence = YES;
@@ -427,15 +468,16 @@ SwitchCommonOutputPacket_t switchRumblePacket;
             high = support.authoredRumbleHigh;
             support.authoredRumbleDeliveryScheduled = NO;
         }
-        if (!support.shouldSendInputEvents) low = high = 0;
-        [support rumbleLowFreqMotor:low highFreqMotor:high];
+        if (!support.shouldSendControllerEvents) low = high = 0;
+        if (low || high || support.nextLowFreqMotor || support.nextHighFreqMotor)
+            [support rumbleLowFreqMotor:low highFreqMotor:high];
         if (support.authoredRumbleTimer == nil && (low || high)) {
             support.authoredRumbleTimer = [NSTimer timerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
                 HIDSupport *current = weakSelf;
                 if (!current) { [timer invalidate]; return; }
                 BOOL expired;
                 @synchronized (current) {
-                    expired = !current.shouldSendInputEvents ||
+                    expired = !current.shouldSendControllerEvents ||
                         NSProcessInfo.processInfo.systemUptime - current.authoredRumbleUpdatedAt >= 0.25;
                 }
                 if (expired) {
@@ -449,12 +491,20 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     });
 }
 
+/**
+ * Queues motor amplitudes for the HID output worker, serializing with controller suspension.
+ * Zero feedback is always allowed for initialization/stop; paused nonzero feedback is discarded.
+ * @param lowFreqMotor Low-frequency intensity in the protocol's 16-bit range.
+ * @param highFreqMotor High-frequency intensity in the protocol's 16-bit range.
+ */
 - (void)rumbleLowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
-    self.nextLowFreqMotor = lowFreqMotor;
-    self.nextHighFreqMotor = highFreqMotor;
-
-    self.isRumbleTimer = NO;
-    dispatch_semaphore_signal(self.rumbleSemaphore);
+    @synchronized (self) {
+        if (!self.shouldSendControllerEvents && (lowFreqMotor || highFreqMotor)) return;
+        self.nextLowFreqMotor = lowFreqMotor;
+        self.nextHighFreqMotor = highFreqMotor;
+        self.isRumbleTimer = NO;
+        dispatch_semaphore_signal(self.rumbleSemaphore);
+    }
 }
 
 @end

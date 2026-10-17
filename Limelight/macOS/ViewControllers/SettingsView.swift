@@ -201,12 +201,16 @@ struct SettingsView: View {
   @ObservedObject private var languageManager = LanguageManager.shared
   @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .stream
   let hostId: String?
-  @State private var selectedInitialHost = false
+  @SwiftUI.State private var selectedInitialHost = false
 
+  /// Records the initial host UUID; nil selects the global profile unless the window requests a host.
+  /// Profile selection is deferred until the view first appears on the main thread.
   init(hostId: String? = nil) {
     self.hostId = hostId
   }
 
+  /// Builds the localized settings window and selects its initial profile once on appearance.
+  /// Subsequent window openings use the settings-window bridge to select the requested host.
   var body: some View {
     settingsRoot
     // Default-style buttons become controller focus targets.

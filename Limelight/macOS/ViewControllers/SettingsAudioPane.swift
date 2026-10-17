@@ -149,12 +149,14 @@ struct AudioView: View {
     let chosen = microphoneManager.selectedDeviceUID
     return !chosen.isEmpty && !microphoneManager.devices.contains(where: { $0.uid == chosen })
   }
-  @State private var createdAt = DispatchTime.now()
+  @SwiftUI.State private var createdAt = DispatchTime.now()
   // The pane comes up in steps: what is on screen first, then the sections below it, each in
   // a turn of its own, so that opening or switching to the pane does not wait for all of it.
   // A search result may be in any section, so with one pending everything is built at once.
-  @State private var loadedSections = SettingsSearchNavigator.shared.request == nil ? 0 : 2
+  @SwiftUI.State private var loadedSections = SettingsSearchNavigator.shared.request == nil ? 0 : 2
 
+  /// Builds audio and microphone controls bound to the active settings profile on main.
+  /// Appearance loads sections in stages, or all at once when navigating to a search result.
   var body: some View {
     SettingsSearchScrollView {
       VStack(alignment: .leading, spacing: 22) {
@@ -777,13 +779,13 @@ enum EqualizerImportPanel {
 private struct AudioEqualizerSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
-  @State private var importNote: String?
-  @State private var showsPresetPicker = false
-  @State private var showsSavePreset = false
-  @State private var newPresetName = ""
-  @State private var curveDrag: CurveDrag?
+  @SwiftUI.State private var importNote: String?
+  @SwiftUI.State private var showsPresetPicker = false
+  @SwiftUI.State private var showsSavePreset = false
+  @SwiftUI.State private var newPresetName = ""
+  @SwiftUI.State private var curveDrag: CurveDrag?
   // The band whose point was last touched on the curve; its controls show under the curve.
-  @State private var selectedHandle: Int?
+  @SwiftUI.State private var selectedHandle: Int?
   // The list of single bands, each with a slider as it always had. It can be folded away.
   @AppStorage("settings.audio.eqBandList") private var showsBandDetails = true
 
@@ -806,9 +808,11 @@ private struct AudioEqualizerSection: View {
     EnhancedAudioEQ.Mode(title: settingsModel.selectedEnhancedAudioEQMode) == .parametric
   }
 
+  /// Returns the in-progress parametric drag preview, or the persisted bands when no drag is active.
   private var shownBands: [EnhancedAudioEQBand] {
     curveDrag?.bands ?? settingsModel.enhancedAudioEQBands
   }
+  /// Returns the in-progress fixed-band drag preview, or the persisted gains when no drag is active.
   private var shownGains: [Double] {
     curveDrag?.gains ?? settingsModel.enhancedAudioEQGains
   }
@@ -864,6 +868,8 @@ private struct AudioEqualizerSection: View {
     }
   }
 
+  /// Updates a curve preview on main and commits changes at most once per 40 milliseconds.
+  /// Invalid indices are ignored; frequency is in hertz and gain in decibels.
   private func moveHandle(_ index: Int, frequency: Double, gain: Double) {
     var drag =
       curveDrag
@@ -887,6 +893,8 @@ private struct AudioEqualizerSection: View {
     curveDrag = drag
   }
 
+  /// Copies changed preview bands or gains into the active profile on main, triggering persistence.
+  /// The selected equalizer mode determines which values from the drag snapshot are applied.
   private func commit(_ drag: CurveDrag) {
     if isParametric {
       if settingsModel.enhancedAudioEQBands != drag.bands {
@@ -897,6 +905,7 @@ private struct AudioEqualizerSection: View {
     }
   }
 
+  /// Commits the remaining curve preview on main and clears it; does nothing without an active drag.
   private func endCurveDrag() {
     guard let drag = curveDrag else { return }
     commit(drag)
@@ -920,6 +929,8 @@ private struct AudioEqualizerSection: View {
       })
   }
 
+  /// Builds equalizer controls and curve previews for the active profile on main.
+  /// UI callbacks commit curve edits, manage presets and report import results in local view state.
   var body: some View {
     FormSection(title: "EQ") {
       SettingsRow(title: "Enable Equalizer") {
@@ -1253,9 +1264,11 @@ private struct PresetEQPicker: View {
   @ObservedObject private var library = HeadphoneCorrectionLibrary.shared
   @ObservedObject private var userPresets = EnhancedAudioEQUserPresets.shared
   @ObservedObject private var languageManager = LanguageManager.shared
-  @State private var query = ""
-  @State private var newName = ""
+  @SwiftUI.State private var query = ""
+  @SwiftUI.State private var newName = ""
 
+  /// Builds preset search results and save controls using this picker's local query and name.
+  /// Main-thread actions invoke `onPick`, save or delete user presets, and load the library on appearance.
   var body: some View {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     let saved = userPresets.presets.filter {
@@ -1593,7 +1606,7 @@ private struct AudioEQCurveView: View {
   let onMove: (_ id: Int, _ frequency: Double, _ gain: Double) -> Void
   /// The drag is over: what it changed can be handed on.
   let onEnd: () -> Void
-  @State private var drag: Drag?
+  @SwiftUI.State private var drag: Drag?
 
   private static let minFrequency = 20.0
   private static let maxFrequency = 20000.0
@@ -1621,6 +1634,8 @@ private struct AudioEQCurveView: View {
     return 24
   }
 
+  /// Draws the equalizer response over the live spectrum and installs main-thread handle gestures.
+  /// Keeps the gain-axis span fixed throughout a drag so the scale does not move under the pointer.
   var body: some View {
     ZStack {
       AudioEQSpectrumLayer()
@@ -1721,6 +1736,9 @@ private struct AudioEQCurveView: View {
     }
   }
 
+  /// Builds a main-thread gesture that selects a nearby handle and reports bounded frequency/gain edits.
+  /// `plot` is the drawing rectangle; `span` is the gain-axis half-range in decibels, frozen per drag.
+  /// Ends an abandoned drag when another begins and invokes `onEnd` when the current drag finishes.
   private func dragGesture(plot: CGRect, span: Double) -> some Gesture {
     DragGesture(minimumDistance: 0)
       .onChanged { value in

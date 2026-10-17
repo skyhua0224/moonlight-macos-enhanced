@@ -76,6 +76,8 @@
 "Auto Address Switched Title" = "Auto address switched";
 "Auto Address Switched Message" = "%@ auto-switched from %@ to %@ (%.0fms → %.0fms).";
 "Rumble Controller" = "Rumble Controller";
+"Background Controller Input" = "Background Controller Input";
+"Background Controller Input detail" = "Keep sending controller input to the host when the stream window is not focused.";
 "Buttons" = "Buttons";
 "Swap A/B and X/Y Buttons" = "Swap A/B and X/Y Buttons";
 "Emulate Guide Button" = "Emulate Guide Button (Start + Select)";
@@ -989,7 +991,7 @@
 "Minimum Brightness" = "Minimum Brightness";
 "Maximum Average Brightness" = "Maximum Average Brightness";
 "DualSense Touchpad as Trackpad" = "DualSense Touchpad as Trackpad";
-"DualSense Touchpad Mode" = "DualSense Touchpad Mode";
+"DualSense Touchpad Mode" = "PlayStation Touchpad Mode";
 "Host Touchpad" = "Host Touchpad";
 "Mac-style Trackpad" = "Mac-style Trackpad";
 "Controller Count" = "Controller Count";
@@ -1259,10 +1261,10 @@
 "Precision Touchpad Gesture Permission Message" = "Moonlight can keep three- and four-finger macOS gestures, such as Mission Control and swiping between Spaces, from also acting on this Mac while the trackpad is sent to Windows. This needs Accessibility access. Without it the precision touchpad still works, but those gestures also trigger on the Mac.";
 "Open Accessibility Settings" = "Open Accessibility Settings";
 "Not Now" = "Not Now";
-"DualSense Touchpad Output" = "DualSense Touchpad Output";
-"DualSense Touchpad Output detail" = "Controller touchpad sends the pad as game controller touch or a Mac-style trackpad, as set above. Windows precision touchpad sends its fingers and click as a precision touchpad instead, and needs a Windows 11 host that supports it; otherwise the controller touchpad is used. The DualSense touchpad tracks at most two fingers, so one- and two-finger gestures work but three- and four-finger gestures do not.";
-"DualSense Touchpad Output Controller" = "Controller touchpad (default)";
-"DualSense Touchpad Output Precision" = "Windows precision touchpad";
+"PlayStation Touchpad Output" = "PlayStation Touchpad Output";
+"PlayStation Touchpad Output detail" = "Controller touchpad sends the pad as game controller touch or a Mac-style trackpad, as set above. Windows precision touchpad sends its fingers and click as a precision touchpad instead, and needs a Windows 11 host that supports it; otherwise the controller touchpad is used. DualShock 4 and DualSense touchpads track at most two fingers, so one- and two-finger gestures work but three- and four-finger gestures do not.";
+"PlayStation Touchpad Output Controller" = "Controller touchpad (default)";
+"PlayStation Touchpad Output Precision" = "Windows precision touchpad";
 "Type Text with the macOS Input Method" = "Type Text with the macOS Input Method";
 "Type Text with the macOS Input Method Hint" = "While a Mac input method such as Pinyin is active, compose text locally and send the committed text to the host as UTF-8. Plain keys and shortcuts still go to the host as key events.";
 "Live stream change failed, reconnecting" = "Live change not applied, reconnecting";

@@ -10,6 +10,7 @@
 #import "Ticks.h"
 #import "HIDSupportRumbleTypes.h"
 #import "MLPrecisionTouchpad.h"
+#import "MLDualSenseTouchpad.h"
 
 #import "MoonlightEnhanced-Swift.h"
 #include <limits.h>
@@ -25,7 +26,32 @@
 
 @import GameController;
 
+typedef struct {
+    BOOL valid;
+    int16_t bias[6];
+    float scale[6];
+} PS4MotionCalibration;
+
+typedef struct {
+    float x[5];
+    float y[5];
+    float z[5];
+    NSUInteger count;
+    NSUInteger nextIndex;
+} PS4GyroMedianFilter;
+
 @interface HIDSupport () <CoreHIDMouseDriverDelegate>
+
+- (id)feedbackDeviceOwner;
+- (void)handleNintendoVibrationReply:(const uint8_t *)report length:(CFIndex)reportLength;
+
+- (void)sendControllerEventWithRouting:(uint64_t)routing;
+- (void)updatePlayStationTouchpadButton:(BOOL)pressed secondaryActive:(BOOL)secondaryActive;
+- (uint64_t)updatePlayStationButtons:(const UInt8 *)buttons hasTouchpad:(BOOL)hasTouchpad
+                  secondaryActive:(BOOL)secondaryActive;
+- (void)handlePlayStationTouchpad:(const UInt8 *)primary secondary:(const UInt8 *)secondary
+                         height:(float)height pressed:(BOOL)pressed routing:(uint64_t)routing;
+
 @property (nonatomic) unsigned short authoredRumbleLow;
 @property (nonatomic) unsigned short authoredRumbleHigh;
 @property (nonatomic) uint32_t authoredRumbleSequence;
@@ -41,6 +67,16 @@
 @property (nonatomic) BOOL gamepadMouseModeEnabled;
 @property (nonatomic) BOOL gamepadMouseModeLongPressMenuEnabled;
 @property (nonatomic) BOOL gamepadMenuPressed;
+@property (atomic) BOOL trackpadOwnsPointer;
+@property (nonatomic) BOOL nativeTouchpadEnabled;
+// Retains the sole physical owner of direct-HID slot zero; protected by the HID monitor.
+@property (nonatomic, strong) id activeHIDDevice;
+@property (nonatomic) float trackpadPointerSensitivity;
+@property (nonatomic) float trackpadScrollSpeed;
+@property (nonatomic) BOOL trackpadReverseScroll;
+@property (nonatomic, strong) id touchpadSettingsObserver;
+@property (nonatomic, strong) id controllerPrecisionSettingsObserver;
+@property (nonatomic, strong) MLDualSenseTouchpad *controllerPrecisionTouchpad;
 @property (nonatomic, strong) NSTimer *gamepadMenuTimer;
 @property (nonatomic) CVDisplayLinkRef displayLink;
 @property (atomic) CGFloat mouseDeltaX;
@@ -55,8 +91,37 @@
 @property (nonatomic) PS4StatePacket_t lastPS4State;
 @property (nonatomic) PS5StatePacket_t lastPS5State;
 @property (nonatomic) NSInteger controllerDriver;
+@property (nonatomic) NSInteger controllerMotionMode;
+@property (nonatomic) NSInteger controllerVirtualType;
 @property (nonatomic) BOOL isPS5Bluetooth;
 @property (nonatomic) uint8_t ds5OutputSequence;
+@property (atomic) BOOL reportedPlayStationArrival;
+@property (atomic) uint16_t requestedGyroRateHz;
+@property (atomic) uint16_t requestedAccelRateHz;
+// Protected by the HID monitor; distinguishes stream lifetimes even when pointers are reused.
+@property (nonatomic) NSUInteger inputContextGeneration;
+@property (atomic) uint64_t lastGyroReportUs;
+@property (atomic) uint64_t lastAccelReportUs;
+@property (nonatomic) PS4MotionCalibration ps4MotionCalibration;
+@property (nonatomic) PS4GyroMedianFilter ps4GyroMedianFilter;
+@property (nonatomic) BOOL hasLastPS4GyroSample;
+@property (nonatomic) float lastPS4GyroX;
+@property (nonatomic) float lastPS4GyroY;
+@property (nonatomic) float lastPS4GyroZ;
+@property (nonatomic) BOOL ps4GyroAtRest;
+@property (nonatomic) uint64_t ps4GyroStationarySinceUs;
+@property (nonatomic) uint64_t ps4GyroMovingSinceUs;
+@property (nonatomic) uint64_t ps4GyroRateWindowStartUs;
+@property (nonatomic) NSUInteger ps4GyroRateWindowSamples;
+@property (nonatomic) NSUInteger remainingPS4MotionDiagnosticSamples;
+@property (nonatomic) NSUInteger remainingPS4GyroFilterDiagnosticLogs;
+@property (nonatomic) NSUInteger remainingPS4GyroRestDiagnosticLogs;
+@property (nonatomic) BOOL ps4PrimaryTouchActive;
+@property (nonatomic) BOOL ps4SecondaryTouchActive;
+@property (nonatomic) float ps4PrimaryTouchX;
+@property (nonatomic) float ps4PrimaryTouchY;
+@property (nonatomic) float ps4SecondaryTouchX;
+@property (nonatomic) float ps4SecondaryTouchY;
 
 @property (nonatomic) SwitchSimpleStatePacket_t lastSimpleSwitchState;
 @property (nonatomic) SwitchStatePacket_t lastSwitchState;
@@ -168,6 +233,19 @@
 - (void)handleDpad:(NSInteger)intValue;
 - (void)updateButtonFlags:(int)flag state:(BOOL)set;
 - (void)setupHidManager;
+- (BOOL)isActiveHIDControllerDevice:(IOHIDDeviceRef)device;
+- (BOOL)reportPlayStationControllerArrival;
+- (BOOL)touchpadUsesMouse;
+- (void)resetTrackpadState;
+- (void)releaseTrackpadState;
+- (void)refreshControllerMouseOutputWithRouting:(uint64_t)routing;
+- (void)handlePlayStationTouchpad:(const UInt8 *)primary secondary:(const UInt8 *)secondary
+                         height:(float)height pressed:(BOOL)pressed;
+- (void)handlePS4TouchpadState:(PS4StatePacket_t *)state;
+- (void)handlePS4MotionState:(PS4StatePacket_t *)state;
+- (void)processPlayStationMotionSamples:(const int16_t *)samples;
+- (void)handlePS5MotionState:(const PS5StatePacket_t *)state;
+- (void)loadPlayStationMotionCalibrationForDevice:(IOHIDDeviceRef)device;
 - (void)tearDownHidManagerOnMainThread;
 - (BOOL)reserveDetailedInputDiagnosticsLogSequence:(NSUInteger *)sequence;
 - (void)syncScrollTraceDiagnosticsPreferenceToInputContext;

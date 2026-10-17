@@ -93,6 +93,7 @@ struct Settings: Encodable, Decodable {
   let autoFullscreen: Bool
   let displayMode: Int?
   let rumble: Bool
+  let backgroundControllerInput: Bool?
   let controllerDriver: Int
   let mouseDriver: Int
   let coreHIDAutoEnabled: Bool?
@@ -184,6 +185,11 @@ struct Settings: Encodable, Decodable {
     cachedSettingsLock.unlock()
   }
 
+  /// Creates a host-inherited copy of this profile with its connection method unset.
+  ///
+  /// Copies controller preferences, including optional background input, without persisting any
+  /// changes. Clearing the connection method lets the host choose its own connection behavior.
+  /// - Returns: Settings values suitable for a host inheriting the global profile.
   private func inheritedSettingsForHostProfile() -> Self {
     return Settings(
       resolution: resolution,
@@ -253,6 +259,7 @@ struct Settings: Encodable, Decodable {
       autoFullscreen: autoFullscreen,
       displayMode: displayMode,
       rumble: rumble,
+      backgroundControllerInput: backgroundControllerInput,
       controllerDriver: controllerDriver,
       mouseDriver: mouseDriver,
       coreHIDAutoEnabled: coreHIDAutoEnabled,
@@ -326,15 +333,26 @@ extension SettingsClass {
     return profileKey
   }
 
+  /// Encodes a profile and publishes its cache before UserDefaults emits change notifications.
+  /// - Parameters:
+  ///   - settings: Complete profile to save; encoding failure leaves storage and cache unchanged.
+  ///   - key: Host UUID or the global profile identifier. Call on main with other profile mutations.
   static func persist(_ settings: Settings, for key: String) {
     let profileKey = SettingsClass.profileKey(for: key)
     if let data = try? PropertyListEncoder().encode(settings) {
-      UserDefaults.standard.set(data, forKey: profileKey)
       Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
       Settings.storeGeneration += 1
+      UserDefaults.standard.set(data, forKey: profileKey)
     }
   }
 
+  /// Returns a settings copy with only the supplied overrides applied, without persisting it.
+  ///
+  /// Background controller input and fields without an override parameter are preserved.
+  /// A nil override keeps the original value; for doubly optional overrides, `.some(nil)` clears
+  /// an optional field and `.some(.some(value))` replaces it.
+  /// - Parameter settings: Source profile whose unmodified values are retained.
+  /// - Returns: New profile combining the source values and the named overrides.
   static func copy(
     _ settings: Settings,
     resolution: CGSize? = nil,
@@ -507,6 +525,7 @@ extension SettingsClass {
       autoFullscreen: settings.autoFullscreen,
       displayMode: settings.displayMode,
       rumble: settings.rumble,
+      backgroundControllerInput: settings.backgroundControllerInput,
       controllerDriver: settings.controllerDriver,
       mouseDriver: settings.mouseDriver,
       coreHIDAutoEnabled: settings.coreHIDAutoEnabled,

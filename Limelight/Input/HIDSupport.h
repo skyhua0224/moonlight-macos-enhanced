@@ -34,6 +34,7 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 @property(nonatomic, copy) uint64_t (^controllerShortcutHandler)(unsigned short, uint32_t);
 - (void)refreshControllerShortcutOutput;
 - (void)toggleControllerMouseMode;
+@property(atomic) BOOL shouldSendControllerEvents;
 @property(atomic) TemporaryHost *host;
 @property(nonatomic, assign) void *inputContext;
 @property(nonatomic, copy) HIDFreeMouseAbsoluteSyncHandler freeMouseAbsoluteSyncHandler;
@@ -65,6 +66,7 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (HIDInputDiagnosticsSnapshot *)consumeInputDiagnosticsSnapshot;
 - (void)refreshMouseInputConfiguration;
 - (void)refreshGamepadMouseModeConfiguration;
+- (void)refreshControllerTouchpadConfiguration;
 - (void)tearDownHidManager;
 - (BOOL)shouldUseAbsolutePointerPathForCurrentConfiguration;
 - (BOOL)shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration;
@@ -110,6 +112,9 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
                           referenceWidth:(short *)referenceWidth
                          referenceHeight:(short *)referenceHeight;
 - (void)suppressRelativeMouseMotionForMilliseconds:(uint64_t)durationMs;
+- (void)setMotionEventState:(uint16_t)controllerNumber
+                 motionType:(uint8_t)motionType
+               reportRateHz:(uint16_t)reportRateHz;
 @end
 
 @interface HIDSupport (ScrollInput)

@@ -230,6 +230,10 @@ extension SettingsModel {
     }
   }
 
+  /// Resets the observable settings to project defaults, including disabled background input.
+  ///
+  /// Run on the main thread. Uses `isLoading` to suppress property-triggered saves and notifications,
+  /// then marks settings loaded; this method alone does not persist the resulting profile.
   func loadDefaultSettings() {
     isLoading = true
     defer {
@@ -332,6 +336,7 @@ extension SettingsModel {
     autoFullscreen = Self.defaultAutoFullscreen
     selectedDisplayMode = Self.getString(from: Self.defaultDisplayMode, in: Self.displayModes)
     rumble = Self.defaultRumble
+    backgroundControllerInput = Self.defaultBackgroundControllerInput
     selectedControllerDriver = Self.defaultControllerDriver
 
     quitAppAfterStream = Self.defaultQuitAppAfterStream
@@ -383,6 +388,11 @@ extension SettingsModel {
     persistAudioCodecSettings()
   }
 
+  /// Loads the selected host or global profile into the observable settings model.
+  ///
+  /// Resolves profile inheritance and optional legacy fields, including default-off background
+  /// controller input and inherited DS4/DS5 precision output. Suppresses property-triggered saves while loading, persists supported
+  /// migrations afterward, and creates default settings when no profile exists. Run on main.
   func loadSettings() {
     var shouldPersistMigratedMouseSettings = false
     var shouldPersistMigratedShortcutSettings = false
@@ -399,8 +409,7 @@ extension SettingsModel {
     let hostId = selectedHost?.id ?? Self.globalHostId
     nativeTouchpad = UserDefaults.standard.object(
       forKey: SettingsModel.controllerNativeTouchpadKeyPrefix + hostId) as? Bool ?? true
-    dualSensePrecisionTouchpad = UserDefaults.standard.object(
-      forKey: SettingsModel.controllerDualSensePrecisionTouchpadKeyPrefix + hostId) as? Bool ?? false
+    dualSensePrecisionTouchpad = SettingsClass.dualSensePrecisionTouchpad(for: hostId)
     loadControllerSettings(for: hostId)
     loadKeyMappingMode(for: hostId)
     loadAudioCodecSettings(for: hostId)
@@ -531,6 +540,8 @@ extension SettingsModel {
       selectedDisplayMode = Self.getString(
         from: settings.displayMode ?? (settings.autoFullscreen ? 1 : 0), in: Self.displayModes)
       rumble = settings.rumble
+      backgroundControllerInput =
+        settings.backgroundControllerInput ?? Self.defaultBackgroundControllerInput
       selectedControllerDriver = Self.getString(
         from: settings.controllerDriver, in: Self.controllerDrivers)
       selectedMouseDriver = MouseInputDriverStrategy(persistedRawValue: settings.mouseDriver)
@@ -735,6 +746,12 @@ extension SettingsModel {
       (EnhancedAudioSpatialMode(rawValue: extras.spatialMode) ?? .automatic).title
   }
 
+  /// Persists the selected host or global profile and updates the decoded settings cache.
+  ///
+  /// Normalizes UI selections, stores auxiliary preferences and controller settings, and writes
+  /// an encoded profile including background controller input. Returns while `isLoading` is set;
+  /// encoding failure leaves the stored profile unchanged. Publishes the cache before UserDefaults
+  /// notifications so live stream policy reads the newly saved values. Run on the main thread.
   func saveSettings() {
     guard !isLoading else { return }
 
@@ -963,6 +980,7 @@ extension SettingsModel {
       autoFullscreen: autoFullscreen,
       displayMode: displayMode,
       rumble: rumble,
+      backgroundControllerInput: backgroundControllerInput,
       controllerDriver: controllerDriver,
       mouseDriver: mouseDriver,
       coreHIDAutoEnabled: true,
@@ -1009,11 +1027,11 @@ extension SettingsModel {
 
     let profileKey = SettingsClass.profileKey(for: hostId)
     if let data = try? PropertyListEncoder().encode(settings) {
-      UserDefaults.standard.set(data, forKey: profileKey)
       Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
       Settings.storeGeneration += 1
       // This model wrote it: what it shows is what is stored.
       seenStoreGeneration = Settings.storeGeneration
+      UserDefaults.standard.set(data, forKey: profileKey)
     }
     persistKeyboardTranslationRules(for: hostId)
   }

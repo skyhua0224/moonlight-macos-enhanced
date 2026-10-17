@@ -1810,8 +1810,27 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     [self captureMouse];
 }
 
+/**
+ * Applies a host-filtered settings notification to this active stream on main.
+ * Touchpad tuning updates both controller backends without resetting contacts; other settings
+ * refresh their existing mouse/shortcut paths. Stopping or reconnecting streams defer to setup.
+ * @param setting Persisted mouse/input setting name, or nil for a general refresh.
+ */
 - (void)applyLiveMouseSettingsRefreshForSetting:(NSString *)setting {
     if (self.stopStreamInProgress || self.reconnectInProgress) {
+        return;
+    }
+
+    if ([setting isEqualToString:@"pointerSensitivity"] ||
+        [setting isEqualToString:@"gestureScrollSpeed"] ||
+        [setting isEqualToString:@"reverseScrollDirection"]) {
+        [self.hidSupport refreshControllerTouchpadConfiguration];
+        self.controllerSupport.gamepadTrackpadPointerSensitivity =
+            [SettingsClass pointerSensitivityFor:self.app.host.uuid];
+        self.controllerSupport.gamepadTrackpadScrollSpeed =
+            [SettingsClass gestureScrollSpeedFor:self.app.host.uuid];
+        self.controllerSupport.gamepadTrackpadReverseScroll =
+            [SettingsClass reverseScrollDirectionFor:self.app.host.uuid];
         return;
     }
 
@@ -2825,6 +2844,14 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 #pragma mark - Actions
 
+/**
+ * Captures stream mouse input and updates focus-dependent input delivery.
+ *
+ * Runs on main only while the app is active and the stream window is key, installs
+ * capture/tracking state, enables keyboard/mouse delivery, and resolves
+ * controller delivery against stream readiness and the background-input preference. Maintains
+ * cursor, display-sleep and input-diagnostic state for the selected pointer mode.
+ */
 - (void)captureMouse {
     if (![NSThread isMainThread]) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -2860,6 +2887,11 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     if (!window) {
         [self noteInputDiagnosticsCaptureSkipped:@"window-nil"];
         Log(LOG_D, @"[diag] captureMouse skipped: window is nil");
+        return;
+    }
+    if (!window.isKeyWindow) {
+        [self noteInputDiagnosticsCaptureSkipped:@"window-not-key"];
+        Log(LOG_D, @"[diag] captureMouse skipped: window not key");
         return;
     }
     if (![self isWindowInCurrentSpace]) {
@@ -2921,7 +2953,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
     // Always enable input when capture is active to avoid accidental lockout
     self.hidSupport.shouldSendInputEvents = YES;
-    self.controllerSupport.shouldSendInputEvents = YES;
+    [self refreshControllerInputSendingState];
 
     self.pendingFreeMouseReentryEdge = MLFreeMouseExitEdgeNone;
     self.pendingFreeMouseReentryAtMs = 0;
@@ -2945,6 +2977,15 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     [self uncaptureMouseWithCode:@"MUC000" reason:@"legacy-direct-call"];
 }
 
+/**
+ * Releases stream mouse capture and recomputes controller delivery policy.
+ *
+ * Runs on main, cancels pointer transitions, restores local cursor/tracking state and permits
+ * display sleep. Disables physical keyboard/mouse delivery; controller delivery may remain
+ * active when the stream is ready and background input is enabled.
+ * @param code Diagnostic code identifying the release path.
+ * @param reason Human-readable diagnostic reason for releasing capture.
+ */
 - (void)uncaptureMouseWithCode:(NSString *)code reason:(NSString *)reason {
     [self logMouseUncaptureStage:@"requested" code:code reason:reason];
     if (![NSThread isMainThread]) {
@@ -2992,7 +3033,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     [self allowDisplaySleep];
     
     self.hidSupport.shouldSendInputEvents = NO;
-    self.controllerSupport.shouldSendInputEvents = NO;
+    [self refreshControllerInputSendingState];
     self.pendingFreeMouseReentryEdge = MLFreeMouseExitEdgeNone;
     self.pendingFreeMouseReentryAtMs = 0;
     self.pendingMouseExitedRecapture = NO;

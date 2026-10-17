@@ -17,6 +17,8 @@
 
 @property(nullable, nonatomic, retain) GCController *gamepad;
 @property(nonatomic) int playerIndex;
+// Physical transitions are independent of the debounce/chord output mask.
+@property(nonatomic) int physicalButtonFlags;
 @property(nonatomic) int lastButtonFlags;
 @property(nonatomic) int emulatingButtonFlags;
 @property(nonatomic) int supportedEmulationFlags;
@@ -63,6 +65,9 @@
 @property(nonatomic) NSTimeInterval trackpadClickMovementSuppressedUntil;
 @property(nonatomic) BOOL hasSentGamepadState;
 @property(nonatomic) ControllerGamepadState sentGamepadState;
+// Selected mechanical click while physically held; independent of shortcut consumption/output.
+@property(nonatomic) int trackpadPhysicalMouseButton;
+// Delivered aggregate mouse source, cleared on consumption/suspension.
 @property(nonatomic) int trackpadMouseButton;
 
 @property(nonatomic) HapticContext *_Nullable lowFreqMotor;
@@ -72,8 +77,10 @@
 @property(nonatomic) BOOL isMouseMode;
 @property(nonatomic) int lastMouseModeButtonFlags;
 
-// Motion sensor reports the host asked for (0 = off) and when each was last sent.
-// Guarded by @synchronized on the controller.
+// Motion state is guarded by ControllerSupport's stream lock.
+// Invalidates handlers detached by cleanup, reconfiguration or physical owner reuse.
+@property(nonatomic) NSUInteger motionGeneration;
+// Sensor requests (0 = off) and monotonic callback/delivery times of the last reports.
 @property(nonatomic) unsigned short accelReportRateHz;
 @property(nonatomic) unsigned short gyroReportRateHz;
 @property(nonatomic) NSTimeInterval lastAccelReportTime;
