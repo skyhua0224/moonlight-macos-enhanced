@@ -797,6 +797,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)allowDisplaySleep;
 - (void)prepareStreamWindowForSafeClose:(NSWindow *)window;
 - (void)teardownStreamMenuEntrypointsForClosingWindow:(NSWindow *)window;
+- (void)tearDownPresentationWindowObservers;
+- (void)finishClosingStreamWindow:(NSWindow *)window;
 - (void)requestSafeCloseOfStreamWindow;
 - (void)closeWindowFromMainQueueWithMessage:(NSString *)message;
 @end

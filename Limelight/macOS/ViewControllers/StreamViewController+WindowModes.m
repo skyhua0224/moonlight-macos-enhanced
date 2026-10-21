@@ -642,6 +642,18 @@
     });
 }
 
+- (void)windowDidFailToExitFullScreen:(NSWindow *)window {
+    self.fullscreenTransitionInProgress = NO;
+    if (self.pendingCloseWindowAfterFullscreenExit) {
+        // A failed native Space transition must never leave an invisible window.
+        self.pendingCloseWindowAfterFullscreenExit = NO;
+        window.ignoresMouseEvents = NO;
+        window.alphaValue = 1.0;
+        [window makeKeyAndOrderFront:nil];
+        Log(LOG_W, @"[window] Fullscreen exit failed while closing; window restored for retry");
+    }
+}
+
 - (void)windowWillEnterFullScreen:(NSNotification *)notification {
     if ([self isOurWindowTheWindowInNotiifcation:notification]) {
         self.fullscreenTransitionInProgress = YES;

@@ -42,6 +42,23 @@
 @end
 
 @implementation ClientWindow
+- (void)close {
+    // Keep the window and controller alive until AppKit has finished its close
+    // notification, then break the presentation retain cycle explicitly.
+    __attribute__((objc_precise_lifetime)) NSWindow *closingWindow = self;
+    NSWindowController *windowController = self.windowController;
+    NSViewController *contentController = self.contentViewController;
+    [super close];
+    if ([contentController isKindOfClass:StreamViewController.class]) {
+        [(StreamViewController *)contentController finishClosingStreamWindow:self];
+    }
+    self.excludedFromWindowsMenu = YES;
+    [NSApp removeWindowsItem:self];
+    self.delegate = nil;
+    self.contentViewController = nil;
+    windowController.window = nil;
+    (void)closingWindow;
+}
 - (BOOL)canBecomeKeyWindow { return YES; }
 - (BOOL)canBecomeMainWindow { return YES; }
 @end
@@ -512,6 +529,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             weakSelf.fullscreenTransitionInProgress = NO;
             [weakSelf logCurrentWindowStateWithContext:@"window-did-exit-fullscreen"];
+            if (weakSelf.pendingCloseWindowAfterFullscreenExit) {
+                weakSelf.pendingCloseWindowAfterFullscreenExit = NO;
+                [weakSelf requestSafeCloseOfStreamWindow];
+                return;
+            }
             if (weakSelf.pendingWindowMode == PendingWindowModeBorderless) {
                 weakSelf.pendingWindowMode = PendingWindowModeNone;
                 [weakSelf applyBorderlessMode];
@@ -527,10 +549,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 [weakSelf scheduleDeferredMouseCaptureRearmWithReason:@"window-exited-fullscreen" delay:0.12];
                 [weakSelf scheduleDeferredMouseCaptureRearmWithReason:@"window-exited-fullscreen" delay:0.35];
                 [weakSelf scheduleDeferredMouseCaptureRearmWithReason:@"window-exited-fullscreen" delay:0.70];
-            }
-            if (weakSelf.pendingCloseWindowAfterFullscreenExit) {
-                weakSelf.pendingCloseWindowAfterFullscreenExit = NO;
-                [weakSelf requestSafeCloseOfStreamWindow];
             }
         }
     }];
@@ -1025,6 +1043,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 }
 
 - (void)dealloc {
+    [self tearDownPresentationWindowObservers];
     [[AwdlHelperManager sharedManager] endStreamSessionWithReason:@"stream-view-controller-dealloc"];
     [self releaseClipboardSyncOwnershipWithUnbind:NO];
     [self restoreStreamWindowChromeIfNeeded];
@@ -1100,14 +1119,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.controllerSupport = nil;
 }
 
-- (void)tearDownStreamLifecycleObserversAndTimers {
-    NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
-
-    // Never leave the system gesture filter running once the stream is stopping or gone.
-    self.precisionTouchpadModeForGestureBlock = 0;
-    [self.systemGestureBlocker removeWithReason:@"stream-teardown"];
-    [self.systemShortcutCapture removeWithReason:@"stream-teardown"];
-
+- (void)tearDownPresentationWindowObservers {
+    NSNotificationCenter *defaultCenter = NSNotificationCenter.defaultCenter;
     if (self.windowDidExitFullScreenNotification != nil) {
         [defaultCenter removeObserver:self.windowDidExitFullScreenNotification];
         self.windowDidExitFullScreenNotification = nil;
@@ -1116,6 +1129,29 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [defaultCenter removeObserver:self.windowDidEnterFullScreenNotification];
         self.windowDidEnterFullScreenNotification = nil;
     }
+    if (self.windowWillCloseNotification != nil) {
+        [defaultCenter removeObserver:self.windowWillCloseNotification];
+        self.windowWillCloseNotification = nil;
+    }
+}
+
+- (void)finishClosingStreamWindow:(NSWindow *)window {
+    // Network teardown must not own the lifetime of a closed presentation.
+    [self beginStopStreamIfNeededWithReason:@"presentation-window-closed"];
+    [self tearDownPresentationWindowObservers];
+    [self allowDisplaySleep];
+    self.pendingCloseWindowAfterFullscreenExit = NO;
+    self.presentationWindowController = nil;
+}
+
+- (void)tearDownStreamLifecycleObserversAndTimers {
+    NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
+
+    // Never leave the system gesture filter running once the stream is stopping or gone.
+    self.precisionTouchpadModeForGestureBlock = 0;
+    [self.systemGestureBlocker removeWithReason:@"stream-teardown"];
+    [self.systemShortcutCapture removeWithReason:@"stream-teardown"];
+
     if (self.windowDidResignKeyNotification != nil) {
         [defaultCenter removeObserver:self.windowDidResignKeyNotification];
         self.windowDidResignKeyNotification = nil;
@@ -1132,10 +1168,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [defaultCenter removeObserver:self.controllerMenuBeginObserver];
     [defaultCenter removeObserver:self.controllerMenuEndObserver];
     self.controllerMenuBeginObserver = self.controllerMenuEndObserver = nil;
-    if (self.windowWillCloseNotification != nil) {
-        [defaultCenter removeObserver:self.windowWillCloseNotification];
-        self.windowWillCloseNotification = nil;
-    }
     if (self.appDidBecomeActiveObserver != nil) {
         [defaultCenter removeObserver:self.appDidBecomeActiveObserver];
         self.appDidBecomeActiveObserver = nil;
