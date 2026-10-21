@@ -750,6 +750,7 @@ final class AwdlHelperManager: NSObject, ObservableObject {
     private let isSandboxedBuild = AwdlHelperManager.detectSandboxedBuild()
     private var appWillTerminateObserver: NSObjectProtocol?
     private var sessionGeneration: UInt = 0
+    private var sessionOwnerID: String?
     private var sessionEnabled = false
     private var interfacePresent = false
     private var originalInterfaceUp = false
@@ -958,8 +959,8 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
     }
 
-    @objc(beginStreamSessionIfEnabled:generation:)
-    func beginStreamSessionIfEnabled(_ enabled: Bool, generation: UInt) {
+    @objc(beginStreamSessionIfEnabled:generation:ownerID:)
+    func beginStreamSessionIfEnabled(_ enabled: Bool, generation: UInt, ownerID: String) {
         sessionQueue.async {
             self.restoreIfNeededLocked(reason: "superseded-by-new-stream")
             self.resetSessionStateLocked()
@@ -971,6 +972,7 @@ final class AwdlHelperManager: NSObject, ObservableObject {
 
             self.sessionEnabled = true
             self.sessionGeneration = generation
+            self.sessionOwnerID = ownerID
 
             let state = self.queryAwdlInterfaceState()
             self.interfacePresent = state.present
@@ -1025,9 +1027,12 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
     }
 
-    @objc(endStreamSessionWithReason:)
-    func endStreamSession(withReason reason: String?) {
+    @objc(endStreamSessionForOwner:withReason:)
+    func endStreamSession(forOwner ownerID: String?, withReason reason: String?) {
         sessionQueue.async {
+            // Different controllers may reuse the same generation number. A late
+            // termination or deinit must not restore a newer controller's session.
+            guard let ownerID, self.sessionOwnerID == ownerID else { return }
             self.restoreIfNeededLocked(reason: reason ?? "(unknown)")
             self.resetSessionStateLocked()
         }
@@ -1466,6 +1471,7 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         originalInterfaceUp = false
         changedInterfaceState = false
         sessionGeneration = 0
+        sessionOwnerID = nil
     }
 
     private func restoreIfNeededLocked(reason: String) {

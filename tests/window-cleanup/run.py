@@ -1,6 +1,6 @@
 """Exercise production close methods against a deterministic Foundation window model."""
 from pathlib import Path
-import subprocess,tempfile
+import subprocess,tempfile,sys
 root=Path(__file__).resolve().parents[2]
 s=(root/'Limelight/macOS/ViewControllers/StreamViewController.m').read_text()
 w=(root/'Limelight/macOS/ViewControllers/StreamViewController+WindowModes.m').read_text()
@@ -26,7 +26,7 @@ fixture=r'''
 @implementation NSViewController
 @end
 @interface NSWindow : NSObject
-@property NSWindowController *windowController;
+@property(weak) NSWindowController *windowController;
 @property NSViewController *contentViewController;
 @property(weak) id delegate;
 @property BOOL excludedFromWindowsMenu;
@@ -131,3 +131,7 @@ with tempfile.TemporaryDirectory(prefix='moonlight-window-test-') as tmp:
  p=Path(tmp);f=p/'test.m';f.write_text(fixture+close+impl+checks)
  subprocess.run(['clang','-fobjc-arc','-fblocks','-framework','Foundation',str(f),'-o',str(p/'test')],check=True)
  subprocess.run([str(p/'test')],check=True)
+
+# Shared adapters must also survive delayed teardown of a previous presentation.
+for script in ('shared_input.py', 'awdl_ownership.py'):
+ subprocess.run([sys.executable, str(root/'tests/window-cleanup'/script)], check=True)

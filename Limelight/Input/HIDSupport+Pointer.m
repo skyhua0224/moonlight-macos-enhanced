@@ -10,6 +10,17 @@
 static CGFloat const HIDGCMouseRelativeSpeedDivisor = 2.5;
 static CGFloat const HIDCoreHIDFreeMouseBaselineScale = 0.75;
 
+// GCMouse instances are shared across streams. A previous support instance may
+// finish tearing down after another one has replaced its callbacks.
+static NSMapTable<GCMouse *, HIDSupport *> *HIDGCMouseCallbackOwners(void) {
+    static NSMapTable<GCMouse *, HIDSupport *> *owners;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        owners = [NSMapTable weakToWeakObjectsMapTable];
+    });
+    return owners;
+}
+
 static inline BOOL HIDAbsoluteMousePayloadForEvent(NSEvent *event,
                                                    BOOL clampToBounds,
                                                    short *hostX,
@@ -430,102 +441,113 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
 }
 
 -(void)registerMouseCallbacks:(GCMouse *)mouse API_AVAILABLE(macos(11.0)) {
-    if (self.useGCMouse) {
-        mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput * _Nonnull mouse, float deltaX, float deltaY) {
-            self.mouseDeltaX += deltaX;
-            self.mouseDeltaY -= deltaY;
-        };
-        
-        mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-            if ([self.precisionTouchpad consumeMouseButton:BUTTON_LEFT pressed:pressed]) {
-                return;
-            }
-            if (self.shouldSendInputEvents) {
-                PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-                if (!inputCtx) {
-                    return;
-                }
-                LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
-            }
-        };
-        mouse.mouseInput.middleButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-            if (self.shouldSendInputEvents) {
-                PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-                if (!inputCtx) {
-                    return;
-                }
-                LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
-            }
-        };
-        mouse.mouseInput.rightButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-            if ([self.precisionTouchpad consumeMouseButton:BUTTON_RIGHT pressed:pressed]) {
-                return;
-            }
-            if (self.shouldSendInputEvents) {
-                PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-                if (!inputCtx) {
-                    return;
-                }
-                LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
-            }
-        };
-        
-        mouse.mouseInput.auxiliaryButtons[0].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-            if (self.shouldSendInputEvents) {
-                PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-                if (!inputCtx) {
-                    return;
-                }
-                LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
-            }
-        };
-        mouse.mouseInput.auxiliaryButtons[1].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-            if (self.shouldSendInputEvents) {
-                PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
-                if (!inputCtx) {
-                    return;
-                }
-                LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
-            }
-        };
-    } else {
-        mouse.mouseInput.mouseMovedHandler = nil;
-        mouse.mouseInput.leftButton.pressedChangedHandler = nil;
-        mouse.mouseInput.middleButton.pressedChangedHandler = nil;
-        mouse.mouseInput.rightButton.pressedChangedHandler = nil;
-        for (GCControllerButtonInput *auxButton in mouse.mouseInput.auxiliaryButtons) {
-            auxButton.pressedChangedHandler = nil;
-        }
-    }
-
-    if (mouse.mouseInput.scroll != nil) {
+    NSMapTable<GCMouse *, HIDSupport *> *owners = HIDGCMouseCallbackOwners();
+    @synchronized (owners) {
+        [owners setObject:self forKey:mouse];
         if (self.useGCMouse) {
-            mouse.mouseInput.scroll.valueChangedHandler = nil;
-            mouse.mouseInput.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput * _Nonnull axis, float value) {
-                (void)axis;
-                [self handleGCMouseScrollValueY:value];
+            mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput * _Nonnull mouse, float deltaX, float deltaY) {
+                self.mouseDeltaX += deltaX;
+                self.mouseDeltaY -= deltaY;
+            };
+        
+            mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+                if ([self.precisionTouchpad consumeMouseButton:BUTTON_LEFT pressed:pressed]) {
+                    return;
+                }
+                if (self.shouldSendInputEvents) {
+                    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                    if (!inputCtx) {
+                        return;
+                    }
+                    LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                }
+            };
+            mouse.mouseInput.middleButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+                if (self.shouldSendInputEvents) {
+                    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                    if (!inputCtx) {
+                        return;
+                    }
+                    LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
+                }
+            };
+            mouse.mouseInput.rightButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+                if ([self.precisionTouchpad consumeMouseButton:BUTTON_RIGHT pressed:pressed]) {
+                    return;
+                }
+                if (self.shouldSendInputEvents) {
+                    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                    if (!inputCtx) {
+                        return;
+                    }
+                    LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                }
+            };
+        
+            mouse.mouseInput.auxiliaryButtons[0].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+                if (self.shouldSendInputEvents) {
+                    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                    if (!inputCtx) {
+                        return;
+                    }
+                    LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
+                }
+            };
+            mouse.mouseInput.auxiliaryButtons[1].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+                if (self.shouldSendInputEvents) {
+                    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+                    if (!inputCtx) {
+                        return;
+                    }
+                    LiSendMouseButtonEventCtx(inputCtx, pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
+                }
             };
         } else {
-            mouse.mouseInput.scroll.valueChangedHandler = nil;
-            mouse.mouseInput.scroll.yAxis.valueChangedHandler = nil;
+            mouse.mouseInput.mouseMovedHandler = nil;
+            mouse.mouseInput.leftButton.pressedChangedHandler = nil;
+            mouse.mouseInput.middleButton.pressedChangedHandler = nil;
+            mouse.mouseInput.rightButton.pressedChangedHandler = nil;
+            for (GCControllerButtonInput *auxButton in mouse.mouseInput.auxiliaryButtons) {
+                auxButton.pressedChangedHandler = nil;
+            }
+        }
+
+        if (mouse.mouseInput.scroll != nil) {
+            if (self.useGCMouse) {
+                mouse.mouseInput.scroll.valueChangedHandler = nil;
+                mouse.mouseInput.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput * _Nonnull axis, float value) {
+                    (void)axis;
+                    [self handleGCMouseScrollValueY:value];
+                };
+            } else {
+                mouse.mouseInput.scroll.valueChangedHandler = nil;
+                mouse.mouseInput.scroll.yAxis.valueChangedHandler = nil;
+            }
         }
     }
 }
 
 -(void)unregisterMouseCallbacks:(GCMouse*)mouse API_AVAILABLE(macos(11.0)) {
-    mouse.mouseInput.mouseMovedHandler = nil;
+    NSMapTable<GCMouse *, HIDSupport *> *owners = HIDGCMouseCallbackOwners();
+    @synchronized (owners) {
+        if ([owners objectForKey:mouse] != self) {
+            return;
+        }
+        [owners removeObjectForKey:mouse];
+        mouse.mouseInput.mouseMovedHandler = nil;
     
-    mouse.mouseInput.leftButton.pressedChangedHandler = nil;
-    mouse.mouseInput.middleButton.pressedChangedHandler = nil;
-    mouse.mouseInput.rightButton.pressedChangedHandler = nil;
+        mouse.mouseInput.leftButton.pressedChangedHandler = nil;
+        mouse.mouseInput.middleButton.pressedChangedHandler = nil;
+        mouse.mouseInput.rightButton.pressedChangedHandler = nil;
     
-    for (GCControllerButtonInput* auxButton in mouse.mouseInput.auxiliaryButtons) {
-        auxButton.pressedChangedHandler = nil;
-    }
+        for (GCControllerButtonInput* auxButton in mouse.mouseInput.auxiliaryButtons) {
+            auxButton.pressedChangedHandler = nil;
+        }
 
-    if (mouse.mouseInput.scroll != nil) {
-        mouse.mouseInput.scroll.valueChangedHandler = nil;
-        mouse.mouseInput.scroll.yAxis.valueChangedHandler = nil;
+        if (mouse.mouseInput.scroll != nil) {
+            mouse.mouseInput.scroll.valueChangedHandler = nil;
+            mouse.mouseInput.scroll.yAxis.valueChangedHandler = nil;
+        }
     }
 }
 

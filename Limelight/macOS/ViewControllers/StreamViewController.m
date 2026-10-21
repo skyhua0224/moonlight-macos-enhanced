@@ -521,6 +521,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.hideFullscreenControlBall = [[NSUserDefaults standardUserDefaults] boolForKey:[self fullscreenControlBallDefaultsKey]];
     [self loadPersistedFullscreenControlBallPlacement];
     
+    self.awdlSessionOwnerID = NSUUID.UUID.UUIDString;
     [self prepareForStreaming];
 
     __weak typeof(self) weakSelf = self;
@@ -801,7 +802,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [[MLRemoteUSBForwardingSession sharedSession] stop];
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"begin-stop:%@", reason ?: @"unknown"]];
     [self finalizeInputDiagnosticsWithReason:reason];
-    [[AwdlHelperManager sharedManager] endStreamSessionWithReason:reason ?: @"begin-stop"];
+    [[AwdlHelperManager sharedManager] endStreamSessionForOwner:self.awdlSessionOwnerID withReason:reason ?: @"begin-stop"];
     [self tearDownStreamLifecycleObserversAndTimers];
 
     self.hidSupport.shouldSendInputEvents = NO;
@@ -1044,7 +1045,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)dealloc {
     [self tearDownPresentationWindowObservers];
-    [[AwdlHelperManager sharedManager] endStreamSessionWithReason:@"stream-view-controller-dealloc"];
+    [[AwdlHelperManager sharedManager] endStreamSessionForOwner:self.awdlSessionOwnerID withReason:@"stream-view-controller-dealloc"];
     [self releaseClipboardSyncOwnershipWithUnbind:NO];
     [self restoreStreamWindowChromeIfNeeded];
     [self tearDownStreamLifecycleObserversAndTimers];
@@ -1755,7 +1756,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
         streamConfig.enableVsync ? 1 : 0,
         streamConfig.timingSdrCompatibilityWorkaround ? 1 : 0);
     [[AwdlHelperManager sharedManager] beginStreamSessionIfEnabled:[SettingsClass awdlStabilityHelperEnabled]
-                                                        generation:streamGeneration];
+                                                        generation:streamGeneration
+                                                           ownerID:self.awdlSessionOwnerID];
 
     if (self.useSystemControllerDriver) {
 
@@ -2193,7 +2195,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self finalizeInputDiagnosticsWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
     self.streamHealthConnectionStartedMs = 0;
     [self logStreamHealthSummaryWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
-    [[AwdlHelperManager sharedManager] endStreamSessionWithReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
+    [[AwdlHelperManager sharedManager] endStreamSessionForOwner:self.awdlSessionOwnerID withReason:[NSString stringWithFormat:@"connection-terminated:%d", errorCode]];
 
     // Notify session manager
     if (self.app.host.uuid) {
@@ -2261,7 +2263,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self stopStreamHealthDiagnostics];
     [self finalizeInputDiagnosticsWithReason:[NSString stringWithFormat:@"stage-failed:%s", stageName ?: "unknown"]];
     self.streamHealthConnectionStartedMs = 0;
-    [[AwdlHelperManager sharedManager] endStreamSessionWithReason:[NSString stringWithFormat:@"stage-failed:%s", stageName ?: "unknown"]];
+    [[AwdlHelperManager sharedManager] endStreamSessionForOwner:self.awdlSessionOwnerID withReason:[NSString stringWithFormat:@"stage-failed:%s", stageName ?: "unknown"]];
     StreamManager *failedStreamManager = self.streamMan;
     if (failedStreamManager) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -2313,7 +2315,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self stopStreamHealthDiagnostics];
     [self finalizeInputDiagnosticsWithReason:@"launch-failed"];
     self.streamHealthConnectionStartedMs = 0;
-    [[AwdlHelperManager sharedManager] endStreamSessionWithReason:@"launch-failed"];
+    [[AwdlHelperManager sharedManager] endStreamSessionForOwner:self.awdlSessionOwnerID withReason:@"launch-failed"];
     StreamManager *failedStreamManager = self.streamMan;
     if (failedStreamManager) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{

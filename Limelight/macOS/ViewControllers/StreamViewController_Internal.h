@@ -371,6 +371,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) NSInteger reconnectAttemptCount;
 @property (nonatomic) BOOL reconnectInProgress;
 @property (atomic) NSUInteger activeStreamGeneration;
+@property (nonatomic, copy) NSString *awdlSessionOwnerID;
 
 @property (nonatomic) BOOL reconnectPreserveFullscreenStateValid;
 @property (nonatomic) NSInteger reconnectPreservedWindowMode;
