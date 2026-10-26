@@ -20,7 +20,9 @@ static const uint64_t MLFreeWindowRequestTimeoutMs = 5000;
 // The cover comes on at once when a drag starts (the stretched picture is already wrong), gently
 // for a size change that happens in one step, and fades out once a frame of the new size is decoded.
 static const NSTimeInterval MLFreeWindowFrostFadeIn = 0.15;
-static const NSTimeInterval MLFreeWindowFrostFadeOut = 0.25;
+static const NSTimeInterval MLFreeWindowFrostFadeOut = 0.3;
+// A decoded frame is on screen a frame or two later; the cover waits for it.
+static const NSTimeInterval MLFreeWindowFrostPresentDelay = 0.08;
 static const NSTimeInterval MLFreeWindowFrostTimeout = 5.0;
 
 static const NSInteger MLDisplayModeFixedWindow = 0;
@@ -146,12 +148,27 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
 }
 
 - (void)freeWindowDecodedSizeChanged:(CGSize)size {
-    if (self.freeWindowFrostView.superview == nil || self.view.window.inLiveResize) {
+    self.freeWindowDecodedSize = size;
+    [self hideFreeWindowFrostIfPictureFits];
+}
+
+// The cover goes only once a frame of the window's size has been decoded: the host's notice
+// that it switched comes about 150 ms before that frame, and the old one is still stretched.
+- (void)hideFreeWindowFrostIfPictureFits {
+    if (self.freeWindowFrostView.superview == nil || self.view.window.inLiveResize ||
+        ![self freeWindowStreamMatchesSize:self.freeWindowDecodedSize]) {
         return;
     }
-    if ([self freeWindowStreamMatchesSize:size]) {
-        [self hideFreeWindowFrost];
-    }
+    NSUInteger generation = self.freeWindowFrostGeneration;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(MLFreeWindowFrostPresentDelay * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf != nil && strongSelf.freeWindowFrostGeneration == generation &&
+            !strongSelf.view.window.inLiveResize) {
+            [strongSelf hideFreeWindowFrost];
+        }
+    });
 }
 
 #pragma mark - NSWindowDelegate
@@ -224,9 +241,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     NSSize target = [self freeWindowTargetStreamSize];
     struct Resolution current = [self effectiveStreamResolution];
     if ((int)target.width == current.width && (int)target.height == current.height) {
-        if (!self.view.window.inLiveResize) {
-            [self hideFreeWindowFrost];
-        }
+        [self hideFreeWindowFrostIfPictureFits];
         return;
     }
     Connection *connection = [self liveStreamConnectionIfSupported];
@@ -271,6 +286,13 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
 
 #pragma mark - Session
 
+- (void)watchDecodedSizeOfConnection:(Connection *)connection {
+    __weak typeof(self) weakSelf = self;
+    connection.renderer.decodedSizeChangedHandler = ^(CGSize size) {
+        [weakSelf freeWindowDecodedSizeChanged:size];
+    };
+}
+
 - (void)freeWindowConnectionStarted:(Connection *)connection {
     if (!self.freeWindowActive) {
         return;
@@ -282,10 +304,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
         return;
     }
     self.freeWindowHostScaleApplied = NO;
-    __weak typeof(self) weakSelf = self;
-    connection.renderer.decodedSizeChangedHandler = ^(CGSize size) {
-        [weakSelf freeWindowDecodedSizeChanged:size];
-    };
+    [self watchDecodedSizeOfConnection:connection];
     [self freeWindowRemoteScaleOptionsChanged];
     // The window may have been resized while connecting.
     [self scheduleFreeWindowResolutionUpdateAfter:MLFreeWindowSettleDelay];
@@ -358,6 +377,11 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     self.freeWindowActive = YES;
     self.freeWindowHostScaleApplied = NO;
     self.streamMan.connection.renderer.stretchToFill = YES;
+    if (connection != nil) {
+        struct Resolution current = [self effectiveStreamResolution];
+        self.freeWindowDecodedSize = CGSizeMake(current.width, current.height);
+        [self watchDecodedSizeOfConnection:connection];
+    }
     if ([self isWindowFullscreen] || [self isWindowBorderlessMode]) {
         // The window comes back through applyWindowedMode, which restores a free window.
         [self switchToWindowedMode:sender];
