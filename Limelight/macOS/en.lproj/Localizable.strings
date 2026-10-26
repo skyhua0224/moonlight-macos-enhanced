@@ -1006,8 +1006,8 @@
 "Pointer Speed" = "Pointer Speed";
 "Scroll Mode" = "Scroll Mode";
 
-"Resolution & Frame Rate" = "Resolution & Frame Rate";
-"Bitrate & Playback" = "Bitrate & Playback";
+"Picture" = "Picture";
+"Host Overrides" = "Host Overrides";
 "Video FEC" = "Video FEC";
 "Video FEC hint" = "Forward error correction for the video stream. Host Default keeps the host's setting. Other choices only apply when the host supports client FEC control; otherwise the host default is used.";
 "Bitrate detail" = "Bitrate detail";

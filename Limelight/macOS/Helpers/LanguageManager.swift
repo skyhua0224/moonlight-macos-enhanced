@@ -551,7 +551,7 @@ public class LanguageManager: NSObject, ObservableObject {
     "Enable Remote Resolution/FPS to override the /launch mode parameter.":
       "需开启远程分辨率/帧率才会覆盖启动参数（/launch mode）。",
 
-    "Bitrate": "视频比特率",
+    "Bitrate": "码率",
 
     "Video": "视频",
     "Video Codec": "视频编解码器",

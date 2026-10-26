@@ -218,6 +218,8 @@ private struct KeyboardMouseSettingsSection: View {
         .frame(width: 180, alignment: .trailing)
       }
 
+      ToggleCell(title: "Show Local Cursor", boolBinding: $settingsModel.showLocalCursor)
+
       SettingsRow(title: "Mouse Driver") {
         Picker("", selection: $settingsModel.selectedMouseDriver) {
           ForEach(SettingsModel.mouseDrivers, id: \.self) { value in
