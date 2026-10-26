@@ -1919,3 +1919,9 @@
 "Audio codec hint passthrough unavailable" = "%1$@ does not accept a %2$@ bitstream, so it is not passed through: the sound is decoded on this Mac. If the system output is taken over by a virtual device (an equalizer app such as eqMac), choose the TV or receiver itself under Output Device above.";
 "Dolby passthrough unavailable notice" = "Dolby passthrough is off: %1$@ does not accept %2$@, so the sound is decoded on this Mac. To pass it through, choose the TV or receiver under Settings > Audio > Output Device.";
 "Video codec warning AV1 no HDR" = "AV1 is decoded in software on this Mac, which has no HDR, no 10-bit color and no 4:4:4: the three options below are off while AV1 is chosen. Choose H.265 for them.";
+"Open Source" = "Open Source";
+"Source Code" = "Source Code";
+"Third-Party Licenses" = "Third-Party Licenses";
+"Third-party licenses detail" = "Licenses of the libraries included in this app, such as dav1d, usbipdcpp and libusb.";
+"About usbipdcpp" = "About usbipdcpp";
+"USB open source detail" = "USB forwarding is built on usbipdcpp and libusb (LGPL) together with asio and spdlog. Their licenses and where to get their source are in Third-Party Licenses.";

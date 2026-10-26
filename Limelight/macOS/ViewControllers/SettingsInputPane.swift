@@ -437,6 +437,7 @@ private struct USBMappingView: View {
           enabled: mappingEnabled && hostAvailable
         )
 
+        USBOpenSourceNotice()
       }
       .frame(maxWidth: 760, alignment: .leading)
       .padding(.horizontal, 28)
@@ -575,12 +576,43 @@ private struct USBSettingsSection: View {
         }
       }
 
+      USBOpenSourceNotice()
     }
   }
 
   private func localizedUSBStatus(_ status: String) -> String {
     if status.hasPrefix("Forwarding") { return languageManager.localize("Forwarding") }
     return languageManager.localize(status)
+  }
+}
+
+private struct USBOpenSourceNotice: View {
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    FormSection(title: "Open Source") {
+      VStack(alignment: .leading, spacing: 6) {
+        // usbipdcpp asks for this sentence, unchanged, wherever it is used.
+        Text(verbatim: ThirdPartyNotices.usbipdcppAttribution)
+          .font(.callout)
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(languageManager.localize("USB open source detail"))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 10) {
+          Link(languageManager.localize("About usbipdcpp"), destination: ThirdPartyNotices.usbipdcppURL)
+          Button(languageManager.localize("Third-Party Licenses")) {
+            ThirdPartyNotices.openLicenses()
+          }
+          .controllerButtonStyle(.bordered)
+          .controlSize(.small)
+        }
+        .padding(.top, 2)
+      }
+      .padding(.vertical, 10)
+    }
   }
 }
 
