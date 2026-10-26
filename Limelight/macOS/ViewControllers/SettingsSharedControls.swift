@@ -251,22 +251,29 @@ struct SettingsContent<Content: View>: View {
   }
 }
 
-struct FormSection<Content: View>: View {
+struct FormSection<Content: View, Accessory: View>: View {
   let title: String
   let content: Content
+  let accessory: Accessory
   @ObservedObject private var languageManager = LanguageManager.shared
 
-  init(title: String, @ViewBuilder content: () -> Content) {
+  /// `accessory` sits at the trailing end of the title line, for an action on the whole section.
+  init(title: String, @ViewBuilder content: () -> Content, @ViewBuilder accessory: () -> Accessory) {
     self.title = title
     self.content = content()
+    self.accessory = accessory()
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 7) {
-      Text(LocalizedStringKey(title))
-        .font(.subheadline.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .padding(.leading, 2)
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Text(LocalizedStringKey(title))
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(.secondary)
+          .padding(.leading, 2)
+        Spacer(minLength: 0)
+        accessory
+      }
 
       VStack(alignment: .leading, spacing: 0) {
         content
@@ -276,6 +283,12 @@ struct FormSection<Content: View>: View {
       .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
     .settingsSearchSection(title)
+  }
+}
+
+extension FormSection where Accessory == EmptyView {
+  init(title: String, @ViewBuilder content: () -> Content) {
+    self.init(title: title, content: content, accessory: { EmptyView() })
   }
 }
 

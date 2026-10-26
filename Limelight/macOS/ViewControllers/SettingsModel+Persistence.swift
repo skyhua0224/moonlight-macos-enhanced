@@ -34,7 +34,7 @@ extension SettingsModel {
     keyboardTranslationRulesCacheLock.unlock()
   }
 
-  private static func invalidateKeyboardTranslationRulesCache() {
+  static func invalidateKeyboardTranslationRulesCache() {
     keyboardTranslationRulesCacheLock.lock()
     cachedKeyboardTranslationRulesByHostId.removeAll()
     keyboardTranslationRulesCacheLock.unlock()
@@ -43,6 +43,10 @@ extension SettingsModel {
   private static func decodeKeyboardTranslationRules(from data: Data?) -> [KeyboardTranslationRule]? {
     guard let data else { return nil }
     return try? PropertyListDecoder().decode([KeyboardTranslationRule].self, from: data)
+  }
+
+  static func physicalWheelHighPrecisionScaleMigrationKey(for hostId: String) -> String {
+    "settings.input.physicalWheelHighPrecisionScaleMigration.v1.\(hostId)"
   }
 
   private func controllerSettingKey(_ prefix: String, hostId: String) -> String {
@@ -558,8 +562,7 @@ extension SettingsModel {
       wheelScrollSpeed = settings.wheelScrollSpeed ?? Self.defaultWheelScrollSpeed
       rewrittenScrollSpeed = settings.rewrittenScrollSpeed ?? Self.defaultRewrittenScrollSpeed
       gestureScrollSpeed = settings.gestureScrollSpeed ?? Self.defaultGestureScrollSpeed
-      let highPrecisionMigrationKey =
-        "settings.input.physicalWheelHighPrecisionScaleMigration.v1.\(hostId)"
+      let highPrecisionMigrationKey = Self.physicalWheelHighPrecisionScaleMigrationKey(for: hostId)
       let storedHighPrecisionScale = settings.physicalWheelHighPrecisionScale
       if let storedHighPrecisionScale,
         abs(storedHighPrecisionScale - Self.legacyDefaultPhysicalWheelHighPrecisionScale) < 0.001,
@@ -1009,7 +1012,7 @@ extension SettingsModel {
 
     let profileKey = SettingsClass.profileKey(for: hostId)
     if let data = try? PropertyListEncoder().encode(settings) {
-      UserDefaults.standard.set(data, forKey: profileKey)
+      SettingsClass.store(data, profileKey: profileKey, hostId: hostId)
       Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
       Settings.storeGeneration += 1
       // This model wrote it: what it shows is what is stored.

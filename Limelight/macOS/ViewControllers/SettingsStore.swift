@@ -34,11 +34,11 @@ struct Settings: Encodable, Decodable {
   let streamResolutionScaleRatio: Int?
 
   // Remote host display mode override (affects /launch mode parameter)
-  let remoteResolution: Bool?
-  let remoteResolutionWidth: Int?
-  let remoteResolutionHeight: Int?
-  let remoteFps: Bool?
-  let remoteFpsRate: Int?
+  var remoteResolution: Bool?
+  var remoteResolutionWidth: Int?
+  var remoteResolutionHeight: Int?
+  var remoteFps: Bool?
+  var remoteFpsRate: Int?
   let hdrTransferFunction: Int?
   var hdrMetadataSource: Int? = nil
   var hdrClientDisplayProfile: Int? = nil
@@ -50,14 +50,14 @@ struct Settings: Encodable, Decodable {
   var hdrEdrStrategy: Int? = nil
   var hdrToneMappingPolicy: Int? = nil
   var dynamicHdrPreference: Int? = nil
-  let sunshineTargetDisplayName: String?
-  let sunshineUseVirtualDisplay: Bool?
-  let sunshineScreenMode: Int?
-  let sunshineTouchKeyboardAutoInvoke: Bool?
-  let sunshineHdrBrightnessOverride: Bool?
-  let sunshineMaxBrightness: CGFloat?
-  let sunshineMinBrightness: CGFloat?
-  let sunshineMaxAverageBrightness: CGFloat?
+  var sunshineTargetDisplayName: String?
+  var sunshineUseVirtualDisplay: Bool?
+  var sunshineScreenMode: Int?
+  var sunshineTouchKeyboardAutoInvoke: Bool?
+  var sunshineHdrBrightnessOverride: Bool?
+  var sunshineMaxBrightness: CGFloat?
+  var sunshineMinBrightness: CGFloat?
+  var sunshineMaxAverageBrightness: CGFloat?
 
   let bitrate: Int
   let customBitrate: Int?
@@ -128,8 +128,8 @@ struct Settings: Encodable, Decodable {
   let streamShortcuts: [String: StreamShortcut]?
   let upscalingMode: Int?
   let frameInterpolationMode: Int?
-  let connectionMethod: String?
-  let clipboardSyncMode: Int?
+  var connectionMethod: String?
+  var clipboardSyncMode: Int?
   let smoothnessLatencyMode: Int?
   let timingBufferLevel: Int?
   let timingPrioritizeResponsiveness: Bool?
@@ -308,7 +308,12 @@ struct Settings: Encodable, Decodable {
       if key == SettingsModel.globalHostId {
         return settings
       }
-      return settings.inheritedSettingsForHostProfile()
+      var inherited = settings.inheritedSettingsForHostProfile()
+      // A host that was reset to follow Default kept its host-only settings.
+      if let kept = keptHostOnlySettings(for: key) {
+        inherited.takeHostOnlyFields(from: kept)
+      }
+      return inherited
     }
 
     return nil
@@ -316,6 +321,25 @@ struct Settings: Encodable, Decodable {
 
   static func persistedSettings(for key: String) -> Self? {
     cachedPersistedSettings(forProfileKey: SettingsClass.profileKey(for: key))
+  }
+
+  // MARK: Host-only settings kept through a reset
+
+  static let keptHostOnlySettingsKeyPrefix = "settings.profileHostOnly."
+
+  /// Keeps the settings of a host whose own settings are removed, for their host-only
+  /// fields (see `Settings.hostOnlyFields`). They are read only while the host has no
+  /// settings of its own.
+  static func keepHostOnlySettings(_ settings: Settings, for hostId: String) {
+    let key = keptHostOnlySettingsKeyPrefix + hostId
+    if let data = try? PropertyListEncoder().encode(settings) {
+      UserDefaults.standard.set(data, forKey: key)
+      updateCachedPersistedSettings(settings, forProfileKey: key)
+    }
+  }
+
+  private static func keptHostOnlySettings(for hostId: String) -> Settings? {
+    cachedPersistedSettings(forProfileKey: keptHostOnlySettingsKeyPrefix + hostId)
   }
 }
 
@@ -329,10 +353,36 @@ extension SettingsClass {
   static func persist(_ settings: Settings, for key: String) {
     let profileKey = SettingsClass.profileKey(for: key)
     if let data = try? PropertyListEncoder().encode(settings) {
-      UserDefaults.standard.set(data, forKey: profileKey)
+      store(data, profileKey: profileKey, hostId: key)
       Settings.updateCachedPersistedSettings(settings, forProfileKey: profileKey)
       Settings.storeGeneration += 1
     }
+  }
+
+  static let profileModifiedAtKeyPrefix = "settings.profileModifiedAt."
+
+  /// Writes a profile's encoded settings, noting when they last changed.
+  static func store(_ data: Data, profileKey: String, hostId: String) {
+    let defaults = UserDefaults.standard
+    guard defaults.data(forKey: profileKey) != data else { return }
+    defaults.set(data, forKey: profileKey)
+    defaults.set(Date(), forKey: profileModifiedAtKeyPrefix + hostId)
+  }
+
+  /// When the profile's settings last changed. Profiles saved before this was recorded have
+  /// no date until their next change.
+  static func profileModifiedAt(for hostId: String) -> Date? {
+    UserDefaults.standard.object(forKey: profileModifiedAtKeyPrefix + hostId) as? Date
+  }
+
+  /// Removes a profile's own settings: a host then follows the Default Profile.
+  static func removeProfile(for hostId: String) {
+    let profileKey = SettingsClass.profileKey(for: hostId)
+    let defaults = UserDefaults.standard
+    defaults.removeObject(forKey: profileKey)
+    defaults.removeObject(forKey: profileModifiedAtKeyPrefix + hostId)
+    Settings.updateCachedPersistedSettings(nil, forProfileKey: profileKey)
+    Settings.storeGeneration += 1
   }
 
   static func copy(
