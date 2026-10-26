@@ -1989,3 +1989,33 @@
 "Uses the Default Profile" = "Uses the Default Profile";
 "Hosts using Default %d" = "%d hosts use these settings";
 "Reset to Default Profile…" = "Reset to Default Profile…";
+
+/* Picture */
+"Window Mode" = "Window Mode";
+"Free Window" = "Free Window";
+"Initial Size" = "Initial Size";
+"Last Window Size" = "Last Window Size";
+"Recently Used" = "Recently Used";
+"Custom…" = "Custom…";
+"Resolution per Screen" = "Resolution per Screen";
+"%d screens set" = "%d set";
+"Set Up…" = "Set Up…";
+"Notch" = "Notch";
+"Avoid Notch" = "Avoid Notch";
+"Fill Screen" = "Fill Screen";
+"Retina" = "Retina";
+"Retina free window detail" = "Every Pixel is sharpest and sets the host's display scaling to match this Mac.";
+"Every Pixel" = "Every Pixel";
+"Point Size" = "Point Size";
+"Picture Aspect" = "Picture Aspect";
+"Keep Aspect" = "Keep Aspect";
+"Stretch to Fill" = "Stretch to Fill";
+"Free Window needs Foundation Sunshine" = "Free Window needs Foundation Sunshine. This host opens a Fixed Aspect Window instead.";
+"Not Connected" = "Not Connected";
+"Forget Screen" = "Forget Screen";
+"Use Picture Setting" = "Same as Picture";
+"Match Display (%.0fx%.0f)" = "Match Display (%.0f × %.0f)";
+"Follows the Window (%d × %d)" = "Follows the Window (%d × %d)";
+"Free Window fallback notice" = "This host can't change resolution to follow the window, so the window keeps the stream's shape.";
+"Current (Custom): %dx%d" = "Current: %d × %d";
+"Display" = "Display";

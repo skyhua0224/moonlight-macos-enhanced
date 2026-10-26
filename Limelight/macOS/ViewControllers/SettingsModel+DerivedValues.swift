@@ -384,7 +384,10 @@ extension SettingsModel {
     CGSizeMake(1280, 720), CGSizeMake(1920, 1080), CGSizeMake(2560, 1440), CGSizeMake(3840, 2160),
     .zero,
   ]
-  static var fpss: [Int] = [30, 60, 90, 120, 144, .zero]
+  /// Frame rates for the stream; `StreamResolution.matchDisplayFps` follows the screen, 0 is custom.
+  static var fpss: [Int] = [StreamResolution.matchDisplayFps, 30, 60, 90, 120, 144, .zero]
+  /// Frame rates a host display can be set to; 0 is custom.
+  static let remoteFpss: [Int] = [30, 60, 90, 120, 144, .zero]
   private static var lockedBitrateSteps: [Float] = [
     0.5,
     1,
@@ -640,7 +643,10 @@ extension SettingsModel {
   static var coreHIDMaxMouseReportRates: [Int] = [1000, 2000, 4000, 8000, 500, 250, 125, 0]
   static var mouseModes: [String] = ["game", "remote"]
   static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
-  static var displayModes: [String] = ["Windowed", "Fullscreen", "Borderless Windowed"]
+  /// Indexed by `StreamDisplayMode` raw value: the order is what is stored.
+  static var displayModes: [String] = ["Windowed", "Fullscreen", "Borderless Windowed", "Free Window"]
+  /// The order the window modes are offered in.
+  static let displayModeMenuOrder: [String] = ["Free Window", "Windowed", "Borderless Windowed", "Fullscreen"]
 
   static var isMetalFXSupported: Bool {
     if #available(macOS 13.0, *) {
@@ -1699,7 +1705,12 @@ extension SettingsModel {
 
   func effectiveResolutionForBitrate() -> CGSize {
     if selectedResolution == Self.matchDisplayResolutionSentinel {
-      return Self.mainDisplayPixelSize() ?? Self.defaultResolution
+      guard let screen = StreamScreens.current() else {
+        return Self.mainDisplayPixelSize() ?? Self.defaultResolution
+      }
+      return StreamResolution.matchDisplaySize(
+        on: screen, mode: selectedStreamDisplayMode,
+        notch: StreamNotchMode(rawValue: notchMode) ?? .avoid)
     }
 
     if selectedResolution == .zero {
@@ -1712,7 +1723,14 @@ extension SettingsModel {
     return selectedResolution
   }
 
+  var selectedStreamDisplayMode: StreamDisplayMode {
+    StreamDisplayMode(rawValue: Self.getInt(from: selectedDisplayMode, in: Self.displayModes)) ?? .fixedWindow
+  }
+
   func effectiveFpsForBitrate() -> Int {
+    if selectedFps == StreamResolution.matchDisplayFps {
+      return min(240, max(30, StreamScreens.current()?.maxRefreshHz ?? Self.defaultFps))
+    }
     if selectedFps == .zero {
       if let customFps, customFps > 0 {
         return Int(customFps)

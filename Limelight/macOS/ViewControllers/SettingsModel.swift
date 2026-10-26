@@ -595,6 +595,33 @@ class SettingsModel: ObservableObject {
     }
   }
 
+  // Picture: see StreamDisplay.swift
+  @Published var notchMode = StreamNotchMode.avoid.rawValue {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var freeWindowScaleMode = FreeWindowScaleMode.pixels.rawValue {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  /// 0: the last window size, 1: the resolution choice.
+  @Published var freeWindowInitialSize = 0 {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+  @Published var screenResolutions: [String: CGSize] = [:] {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+    }
+  }
+
   @Published var enableAdaptiveBitrate: Bool {
     didSet {
       guard !isLoading else { return }
@@ -1666,6 +1693,10 @@ class SettingsModel: ObservableObject {
     enableYUV444 = Self.defaultEnableYUV444
     ignoreAspectRatio = Self.defaultIgnoreAspectRatio
     showLocalCursor = Self.defaultShowLocalCursor
+    notchMode = StreamNotchMode.avoid.rawValue
+    freeWindowScaleMode = FreeWindowScaleMode.pixels.rawValue
+    freeWindowInitialSize = 0
+    screenResolutions = [:]
     enableMicrophone = Self.defaultEnableMicrophone
     enableAdaptiveBitrate = Self.defaultEnableAdaptiveBitrate
     streamResolutionScale = Self.defaultStreamResolutionScale

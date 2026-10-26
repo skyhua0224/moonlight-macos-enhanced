@@ -1,27 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// CGSize is Hashable only from macOS 15. A picker whose selection or tag type
-/// is CGSize cannot resolve its view type on macOS 12-14 and the settings
-/// window aborts, so the resolution pickers select this value instead.
-private struct ResolutionChoice: Hashable {
-  let width: Int
-  let height: Int
-
-  init(_ size: CGSize) {
-    width = Int(size.width)
-    height = Int(size.height)
-  }
-
-  var size: CGSize { CGSize(width: width, height: height) }
-
-  static func binding(_ source: Binding<CGSize>) -> Binding<ResolutionChoice> {
-    Binding(
-      get: { ResolutionChoice(source.wrappedValue) },
-      set: { source.wrappedValue = $0.size })
-  }
-}
-
 struct StreamView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
@@ -78,92 +57,7 @@ struct StreamView: View {
         }
       }
 
-      FormSection(title: "Picture") {
-        SettingsRow(title: "Default Display Mode") {
-          Picker("", selection: $settingsModel.selectedDisplayMode) {
-            ForEach(SettingsModel.displayModes, id: \.self) { mode in
-              Text(languageManager.localize(mode)).tag(mode)
-            }
-          }
-          .labelsHidden()
-          .controllerPicker(selection: $settingsModel.selectedDisplayMode, options: SettingsModel.displayModes, title: { mode in languageManager.localize(mode) })
-          .frame(width: 220, alignment: .trailing)
-        }
-
-        SettingsRow(title: "Resolution") {
-          Picker("", selection: ResolutionChoice.binding($settingsModel.selectedResolution)) {
-            ForEach(SettingsModel.resolutions.map(ResolutionChoice.init), id: \.self) { choice in
-              if choice.size == SettingsModel.matchDisplayResolutionSentinel {
-                Text(languageManager.localize("Match Display")).tag(choice)
-              } else if choice.size == .zero {
-                Text(languageManager.localize("Custom")).tag(choice)
-              } else {
-                Text("\(choice.width) × \(choice.height)").tag(choice)
-              }
-            }
-          }
-          .labelsHidden()
-          .controllerPicker(
-            selection: $settingsModel.selectedResolution,
-            choices: SettingsModel.resolutions.map { resolution in
-              (value: resolution,
-               title: resolution == SettingsModel.matchDisplayResolutionSentinel
-                 ? languageManager.localize("Match Display")
-                 : resolution == .zero ? languageManager.localize("Custom")
-                 : "\(Int(resolution.width)) × \(Int(resolution.height))")
-            })
-          .frame(width: 220, alignment: .trailing)
-        }
-
-        if settingsModel.selectedResolution == .zero {
-          SettingsRow(title: "Custom Resolution") {
-            DimensionsInputView(
-              widthBinding: $settingsModel.customResWidth,
-              heightBinding: $settingsModel.customResHeight,
-              placeholderDimensions: CGSize(width: 1920, height: 1080)
-            )
-          }
-        }
-
-        ToggleCell(title: "Resolution Scale", hintKey: "Resolution Scale hint", boolBinding: $settingsModel.streamResolutionScale)
-
-        if settingsModel.streamResolutionScale {
-          SettingsRow(title: "Resolution Scale Ratio") {
-            Picker("", selection: $settingsModel.streamResolutionScaleRatio) {
-              Text("50%").tag(50)
-              Text("75%").tag(75)
-              Text("100%").tag(100)
-            }
-            .labelsHidden()
-            .controllerPicker(
-              selection: $settingsModel.streamResolutionScaleRatio, options: [50, 75, 100], title: { "\($0)%" })
-            .frame(width: 130, alignment: .trailing)
-          }
-        }
-
-        SettingsRow(title: "Frame Rate") {
-          Picker("", selection: $settingsModel.selectedFps) {
-            ForEach(SettingsModel.fpss, id: \.self) { fps in
-              Text(fps == 0 ? languageManager.localize("Custom") : "\(fps) Hz").tag(fps)
-            }
-          }
-          .labelsHidden()
-          .controllerPicker(selection: $settingsModel.selectedFps, options: SettingsModel.fpss, title: { fps in fps == 0 ? languageManager.localize("Custom") : "\(fps) Hz" })
-          .frame(width: 150, alignment: .trailing)
-        }
-
-        if settingsModel.selectedFps == 0 {
-          SettingsRow(title: "Custom FPS") {
-            TextField("60", value: $settingsModel.customFps, formatter: NumberOnlyFormatter())
-              .multilineTextAlignment(.trailing)
-              .controllerNumericField()
-              .textFieldStyle(.roundedBorder)
-              .frame(width: 90)
-          }
-        }
-
-        ToggleCell(title: "Ignore Aspect Ratio", boolBinding: $settingsModel.ignoreAspectRatio)
-      }
+      PictureSection()
 
       FormSection(title: "Bitrate") {
         BitrateSettingsSection()
@@ -309,13 +203,13 @@ private struct RemoteFrameRateRows: View {
       if settingsModel.remoteFpsEnabled {
         SettingsRow(title: "Remote FPS Value") {
           Picker("", selection: $settingsModel.selectedRemoteFps) {
-            ForEach(SettingsModel.fpss, id: \.self) { value in
+            ForEach(SettingsModel.remoteFpss, id: \.self) { value in
               Text(value == 0 ? NSLocalizedString("Custom", comment: "") : "\(value) Hz").tag(value)
             }
           }
           .labelsHidden()
           .controllerPicker(
-            selection: $settingsModel.selectedRemoteFps, options: SettingsModel.fpss,
+            selection: $settingsModel.selectedRemoteFps, options: SettingsModel.remoteFpss,
             title: { value in value == 0 ? NSLocalizedString("Custom", comment: "") : "\(value) Hz" })
           .frame(width: 190)
         }

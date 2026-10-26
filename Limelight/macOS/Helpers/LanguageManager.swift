@@ -302,7 +302,7 @@ public class LanguageManager: NSObject, ObservableObject {
 
     "Behaviour": "Behaviour",
     "Default Display Mode": "Default Display Mode",
-    "Windowed": "Windowed",
+    "Windowed": "Fixed Aspect Window",
     "Fullscreen": "Fullscreen",
     "Borderless Windowed": "Borderless Windowed",
     "Automatically Fullscreen Stream Window": "Automatically Fullscreen Stream Window",
@@ -683,8 +683,8 @@ public class LanguageManager: NSObject, ObservableObject {
 
     "Behaviour": "行为",
     "Default Display Mode": "默认显示模式",
-    "Windowed": "窗口模式",
-    "Fullscreen": "全屏模式",
+    "Windowed": "固定比例窗口",
+    "Fullscreen": "全屏",
     "Borderless Windowed": "无边框窗口",
     "Automatically Fullscreen Stream Window": "进入串流时默认全屏",
     "Quit App After Stream": "流传输结束后退出程序",

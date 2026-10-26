@@ -494,6 +494,13 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) int liveStreamHeight;
 @property (nonatomic) NSUInteger liveBitrateDebounceToken;
 
+// Free Window (see StreamViewController+FreeWindow.m): the host resolution follows the view.
+@property (nonatomic) BOOL freeWindowActive;
+@property (nonatomic) BOOL freeWindowRequestInFlight;
+@property (nonatomic) uint64_t freeWindowRequestStartMs;
+@property (nonatomic) NSUInteger freeWindowResizeGeneration;
+@property (nonatomic) BOOL freeWindowHostScaleApplied;
+
 // Dock gesture filter for the precision touchpad (see StreamViewController+Input.m).
 @property (nonatomic, strong) MLSystemGestureBlocker *systemGestureBlocker;
 @property (nonatomic, strong) MLSystemShortcutCapture *systemShortcutCapture;
@@ -891,6 +898,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 + (int)automaticBitrateKbpsForWidth:(int)width height:(int)height fps:(int)fps yuv444:(BOOL)yuv444;
 - (struct Resolution)effectiveStreamResolution;
 - (NSInteger)automaticBitrateKbpsForRunningStream;
+// The connection when the host takes bitrate / frame rate / resolution changes in place.
+- (Connection *)liveStreamConnectionIfSupported;
 // These return YES when the host accepted the change in place; NO means the caller should reconnect.
 - (BOOL)applyLiveBitrateKbps:(NSInteger)kbps;
 - (BOOL)applyLiveFramerate:(int)fps;
@@ -899,6 +908,24 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)audioCodecNotice:(NSString *)message;
 - (void)audioLayoutUnavailable;
 - (void)applyHostStreamResolutionWidth:(int)width height:(int)height;
+@end
+
+@interface StreamViewController (FreeWindow)
+// Whether this stream starts as a free window (the profile asks for one and the host is not
+// known to lack live resolution changes).
+- (BOOL)shouldStartAsFreeWindow;
+// viewDidAppear: the window's size and limits for a free window on `screen`.
+- (void)applyFreeWindowGeometryOnScreen:(NSScreen *)screen;
+// Back to a titled window from borderless or fullscreen.
+- (void)restoreFreeWindowFrame;
+// The size the host should stream for the view as it is now.
+- (NSSize)freeWindowTargetStreamSize;
+- (void)freeWindowConnectionStarted:(Connection *)connection;
+- (void)freeWindowHostResolutionChanged;
+- (void)freeWindowRemoteScaleOptionsChanged;
+- (void)switchToFreeWindowMode:(id)sender;
+// Fixed Aspect Window from the menu: the window keeps the stream's shape again.
+- (void)switchToFixedAspectWindowMode:(id)sender;
 @end
 
 @interface StreamViewController (InputExtensions) <NSTextInputClient>
