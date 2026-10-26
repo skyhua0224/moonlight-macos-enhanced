@@ -503,6 +503,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 // Frosted cover while a free window waits for the host to stream its new size.
 @property (nonatomic, strong) NSVisualEffectView *freeWindowFrostView;
 @property (nonatomic) NSUInteger freeWindowFrostGeneration;
+// Size of the last decoded frame: the cover stays until it is the window's size.
+@property (nonatomic) CGSize freeWindowDecodedSize;
 
 // Dock gesture filter for the precision touchpad (see StreamViewController+Input.m).
 @property (nonatomic, strong) MLSystemGestureBlocker *systemGestureBlocker;
