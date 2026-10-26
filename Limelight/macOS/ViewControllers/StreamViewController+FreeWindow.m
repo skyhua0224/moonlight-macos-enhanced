@@ -162,6 +162,40 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     });
 }
 
+#pragma mark - Free mouse
+
+// The free mouse keeps a virtual cursor in view points, measured against the view size it
+// was anchored with. Keep that reference equal to the view as the window changes size.
+- (BOOL)rescaleFreeMouseCursorToView:(NSPoint *)outPoint {
+    NSPoint point = NSZeroPoint;
+    NSSize reference = NSZeroSize;
+    if (![self.hidSupport getFreeMouseVirtualCursorPoint:&point referenceSize:&reference] ||
+        reference.width <= 0.0 || reference.height <= 0.0) {
+        return NO;
+    }
+    NSSize now = self.view.bounds.size;
+    if (now.width <= 0.0 || now.height <= 0.0) {
+        return NO;
+    }
+    if (!NSEqualSizes(reference, now)) {
+        point = NSMakePoint(point.x * now.width / reference.width, point.y * now.height / reference.height);
+        [self.hidSupport updateFreeMouseVirtualCursorAnchorWithViewPoint:point referenceSize:now];
+    }
+    if (outPoint != NULL) {
+        *outPoint = point;
+    }
+    return YES;
+}
+
+// The host's desktop changed size and Windows left its cursor where it was in pixels (or at
+// the new edge): move it back under the client's virtual cursor.
+- (void)resyncRemoteCursorAfterResize {
+    NSPoint point;
+    if ([self rescaleFreeMouseCursorToView:&point]) {
+        [self syncRemoteCursorToViewPoint:point clampToBounds:YES];
+    }
+}
+
 #pragma mark - NSWindowDelegate
 
 - (void)windowWillStartLiveResize:(NSNotification *)notification {
@@ -172,7 +206,12 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
 }
 
 - (void)windowDidResize:(NSNotification *)notification {
-    if (!self.freeWindowActive || notification.object != self.view.window) {
+    if (notification.object != self.view.window) {
+        return;
+    }
+    // Any window: the virtual cursor follows the view's size.
+    [self rescaleFreeMouseCursorToView:NULL];
+    if (!self.freeWindowActive) {
         return;
     }
     BOOL live = self.view.window.inLiveResize;
@@ -287,6 +326,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     if (!self.freeWindowActive) {
         return;
     }
+    [self resyncRemoteCursorAfterResize];
     struct Resolution streamed = [self effectiveStreamResolution];
     NSSize asked = self.freeWindowRequestedSize;
     if (self.freeWindowRequestInFlight && asked.width > 0 &&
