@@ -1406,10 +1406,11 @@ class SettingsClass: NSObject {
     if let rawValue = persistedClipboardSyncMode(for: key) {
       return rawValue
     }
+    // The Default Profile's, or what a host reset to follow it kept as its own.
     if key != SettingsModel.globalHostId,
-      let globalRawValue = persistedClipboardSyncMode(for: SettingsModel.globalHostId)
+      let inheritedRawValue = Settings.getSettings(for: key)?.clipboardSyncMode
     {
-      return globalRawValue
+      return inheritedRawValue
     }
     return inferredDefaultClipboardSyncMode(for: key)
   }

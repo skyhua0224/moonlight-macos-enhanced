@@ -5,7 +5,7 @@
 extension SettingsSearchIndex {
   static let generatedStreamEntries: [SettingsSearchEntry] = [
     SettingsSearchEntry(id: "stream/pane", pane: .stream, kind: .pane, sectionKey: "Media", titleKey: "Streaming", detailKey: "Streaming settings subtitle", keywords: []),
-    SettingsSearchEntry(id: "stream/General/Profile", pane: .stream, kind: .row, sectionKey: "General", titleKey: "Profile", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "stream/General/Profile", pane: .stream, kind: .row, sectionKey: "General", titleKey: "Profile", detailKey: nil, keywords: ["Manage Profiles"]),
     SettingsSearchEntry(id: "stream/General/Connection Method", pane: .stream, kind: .row, sectionKey: "General", titleKey: "Connection Method", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "stream/General/Connection Addresses", pane: .stream, kind: .row, sectionKey: "General", titleKey: "Connection Addresses", detailKey: "Connection Addresses detail", keywords: ["Manage Addresses"]),
     SettingsSearchEntry(id: "stream/General/Default Display Mode", pane: .stream, kind: .row, sectionKey: "General", titleKey: "Default Display Mode", detailKey: nil, keywords: ["Windowed", "Fullscreen", "Borderless Windowed"]),
@@ -180,6 +180,12 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "fileMapping/Files/Files", pane: .fileMapping, kind: .section, sectionKey: "Files", titleKey: "Files", detailKey: nil, keywords: []),
   ]
 
+  static let generatedProfilesEntries: [SettingsSearchEntry] = [
+    SettingsSearchEntry(id: "profiles/pane", pane: .profiles, kind: .pane, sectionKey: "Application", titleKey: "settingProfiles", detailKey: "settingProfiles subtitle", keywords: []),
+    SettingsSearchEntry(id: "profiles/Hosts/Hosts", pane: .profiles, kind: .section, sectionKey: "Hosts", titleKey: "Hosts", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "profiles/Presets/Import Preset…", pane: .profiles, kind: .row, sectionKey: "Presets", titleKey: "Import Preset…", detailKey: nil, keywords: []),
+  ]
+
   static let generatedAppEntries: [SettingsSearchEntry] = [
     SettingsSearchEntry(id: "app/pane", pane: .app, kind: .pane, sectionKey: "Application", titleKey: "App & Diagnostics", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Application/Appearance", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Appearance", detailKey: nil, keywords: ["System Default", "Light", "Dark"]),
@@ -219,6 +225,7 @@ extension SettingsSearchIndex {
     all.append(contentsOf: generatedKeyboardEntries)
     all.append(contentsOf: generatedUsbEntries)
     all.append(contentsOf: generatedFileMappingEntries)
+    all.append(contentsOf: generatedProfilesEntries)
     all.append(contentsOf: generatedAppEntries)
     all.append(contentsOf: generatedAboutEntries)
     return all

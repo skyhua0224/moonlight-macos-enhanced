@@ -17,9 +17,10 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
   case fileMapping = 9
   case about = 10
   case updates = 11
+  case profiles = 12
 
   static var allCases: [SettingsPaneType] {
-    [.stream, .display, .video, .audio, .input, .keyboard, .usb, .fileMapping, .app, .about]
+    [.stream, .display, .video, .audio, .input, .keyboard, .usb, .fileMapping, .profiles, .app, .about]
   }
 
   var titleKey: String {
@@ -36,6 +37,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .about: return "About & Updates"
     case .updates: return "Updates"
     case .legacy: return "Legacy"
+    case .profiles: return "settingProfiles"
     }
   }
 
@@ -43,7 +45,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     switch self {
     case .stream, .video, .display, .audio: return "Media"
     case .input, .keyboard, .usb, .fileMapping: return "Input & Devices"
-    case .app, .about, .updates, .legacy: return "Application"
+    case .profiles, .app, .about, .updates, .legacy: return "Application"
     }
   }
 
@@ -61,6 +63,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .about: return "info.circle.fill"
     case .updates: return "arrow.down.circle.fill"
     case .legacy: return "archivebox.fill"
+    case .profiles: return "person.2.fill"
     }
   }
 
@@ -77,6 +80,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .about: return "About settings subtitle"
     case .updates: return "Updates settings subtitle"
     case .app, .legacy: return "App diagnostics settings subtitle"
+    case .profiles: return "settingProfiles subtitle"
     }
   }
 
@@ -93,6 +97,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .about: return .gray
     case .updates: return .blue
     case .legacy: return .gray
+    case .profiles: return .indigo
     }
   }
 }
@@ -148,6 +153,13 @@ enum SettingsSearchIndex {
   /// not need an item here to be found.
   private static let supplementalKeywords: [String: [String]] = [
     "Profile": ["Host", "主机", "配置"],
+    // A profile's details are one level down, where search cannot go: their actions are
+    // words for the page.
+    "settingProfiles": [
+      "Profile", "Default Profile", "Preset", "Copy Settings", "Save as Preset…",
+      "Use as Default Profile…", "Export…", "Import…", "Reset to Default Profile…",
+      "Per-App Settings", "配置", "预设",
+    ],
     "Connection Method": ["addresses", "连接方式", "地址"],
     "Connection Addresses": ["host", "IP", "端口", "管理地址"],
     "Resolution": ["分辨率"],
@@ -609,6 +621,7 @@ private struct SettingsDetail: View {
         case .keyboard: InputView(scope: .keyboardMouse)
         case .usb: InputView(scope: .usb)
         case .fileMapping: FileMappingSettingsPage()
+        case .profiles: ProfilesSettingsPage()
         case .app: AppView()
         case .about: AboutUpdatesSettingsPage()
         case .updates: AboutUpdatesSettingsPage()

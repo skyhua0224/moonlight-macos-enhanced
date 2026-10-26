@@ -26,6 +26,7 @@ struct StreamView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @SwiftUI.State private var isAddressEditorPresented = false
+  @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .stream
 
   private var selectedHostName: String {
     guard let host = settingsModel.selectedHost else { return languageManager.localize("Default Profile") }
@@ -44,9 +45,14 @@ struct StreamView: View {
 
       FormSection(title: "General") {
         SettingsRow(title: "Profile") {
-          Text(selectedHostName)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
+          HStack(spacing: 10) {
+            Text(selectedHostName)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+            Button(languageManager.localize("Manage Profiles")) {
+              selectedPane = .profiles
+            }
+          }
         }
 
 
