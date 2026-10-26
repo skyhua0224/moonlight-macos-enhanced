@@ -12,6 +12,8 @@
 @interface StreamViewMac : NSView
 @property (nonatomic, strong) NSString *statusText;
 @property (nonatomic, strong) NSString *appName;
+// Shown blurred behind the loading spinner: the app's last frame or its box art.
+@property (nonatomic, strong) NSImage *startupBackdrop;
 @property (nonatomic, weak) id<KeyboardNotifiableDelegate> keyboardNotifiable;
 @property (nonatomic) BOOL prefersHiddenLocalCursor;
 // Receives trackpad touch events while indirect touches are enabled.

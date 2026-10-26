@@ -7,6 +7,7 @@
 //
 
 #import "StreamViewController_Internal.h"
+#import "AppAssetManager.h"
 #import "RemoteUSBForwardingSession.h"
 #import "ConnectionEndpointStore.h"
 #include "../../../modules/controller-feedback/ControllerFeedbackEnvelope.h"
@@ -797,6 +798,20 @@ highFreqMotor:(unsigned short)highFreqMotor {
         self.activeStreamGeneration += 1;
     }
 
+    // The last picture becomes this app's backdrop the next time it starts.
+    VideoDecoderRenderer *lastRenderer = self.streamMan.connection.renderer;
+    NSString *backdropHost = self.app.host.uuid;
+    NSString *backdropApp = self.app.id;
+    if (lastRenderer != nil && backdropHost.length > 0 && backdropApp.length > 0) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            CGImageRef image = [lastRenderer copyLastFrameImageWithMaxWidth:960];
+            if (image != NULL) {
+                [StreamBackdropStore save:image host:backdropHost app:backdropApp];
+                CGImageRelease(image);
+            }
+        });
+    }
+
     [self stopStreamHealthDiagnostics];
     [self endRemoteDisplayScaleSession];
     [[MLRemoteUSBForwardingSession sharedSession] stop];
@@ -903,6 +918,9 @@ highFreqMotor:(unsigned short)highFreqMotor {
     
     self.streamView.keyboardNotifiable = self;
     self.streamView.appName = self.app.name;
+    self.streamView.startupBackdrop = [StreamBackdropStore backdropWithHost:self.app.host.uuid ?: @""
+                                                                         app:self.app.id ?: @""
+                                                                  boxArtPath:[AppAssetManager boxArtPathForApp:self.app]];
     self.streamView.statusText = @"Starting";
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     self.view.window.delegate = self;
