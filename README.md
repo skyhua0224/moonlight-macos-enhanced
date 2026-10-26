@@ -10,7 +10,7 @@
 
 简体中文 | [English](README.en.md)
 
-[下载](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [更新说明](.github/release-notes/v1.3.9-rc.4.md) · [问题反馈](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
+[下载](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [更新说明](.github/release-notes/v1.3.9-rc.6.md) · [问题反馈](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
 <img src="readme-assets/images/app-list.png" width="760" alt="应用列表">
 
@@ -20,7 +20,7 @@
 
 ## 当前版本
 
-最新版本是 **1.3.9 RC4**（预发布），变更见 [1.3.9 RC4 更新说明](.github/release-notes/v1.3.9-rc.4.md)。1.3.9 是原生架构重建前最后一个版本。
+最新版本是 **1.3.9 RC6**，变更见 [1.3.9 RC6 更新说明](.github/release-notes/v1.3.9-rc.6.md)。1.3.9 是原生架构重建前最后一个版本。
 
 - 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载。安装包有 `universal`、`arm64`、`x86_64` 三种，不确定时选 `universal`。
 - 已安装 1.3.9 的用户可以在 `设置 → 关于与更新` 检查更新。
@@ -28,9 +28,9 @@
 
 1.3.9 相比 1.3.8 的主要变化：
 
-- 设置界面重新设计，可以搜索具体选项，也可以用手柄操作整个应用。
+- 设置界面重新设计，可以搜索具体选项，也可以用手柄操作整个应用；新增配置方案，可对照各主机与默认配置的差异，复制设置、保存预设、导入与导出。
 - 音频新增无损 PCM、AC3、E-AC3 与杜比直通，串流中可切换输出设备；音效增强新增参数均衡器、耳机校正预设和耳机上的双耳环绕声。
-- 输入新增精确式触控板、macOS 输入法输入文字和按字符的按键映射；DualSense 支持触控板、灯光、电量与触觉反馈。
+- 输入新增精确式触控板、macOS 输入法输入文字、按字符的按键映射、捕获系统快捷键、Windows 键位顺序与键入剪贴板文本；DualSense 支持触控板、灯光、电量与触觉反馈。
 - 视频新增独立的 10-bit SDR、动态 HDR 偏好，以及 Dolby Vision 与 HDR10+ 的协商和回退；没有 AV1 硬件解码的 Mac 可以用软件解码 AV1。
 - 配合 Foundation Sunshine：显示器与虚拟显示器配置，串流中不重连调整码率、帧率和分辨率，自适应码率，主机显示缩放与主机命令。
 - 新增应用内更新、性能报告导出和中英文日志查看器。
