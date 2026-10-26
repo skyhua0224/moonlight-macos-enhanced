@@ -31,6 +31,7 @@
 @import VideoToolbox;
 @import MetalKit;
 @import CoreImage;
+#import <os/lock.h>
 
 #if __has_include(<MetalFX/MetalFX.h>)
 #import <MetalFX/MetalFX.h>
@@ -1517,22 +1518,26 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     dispatch_semaphore_t _metalInflightSemaphore;
     size_t _lastDecodedWidth;
     size_t _lastDecodedHeight;
+    // Kept for the next stream's loading backdrop; both guarded by _frameStoreLock.
+    CVPixelBufferRef _lastDecodedImageBuffer;
+    BOOL _stretchToFillValue;
+    os_unfair_lock _frameStoreLock;
 }
 
-@synthesize stretchToFill = _stretchToFill;
-
 - (BOOL)stretchToFill {
-    @synchronized (self) {
-        return _stretchToFill;
-    }
+    os_unfair_lock_lock(&_frameStoreLock);
+    BOOL value = _stretchToFillValue;
+    os_unfair_lock_unlock(&_frameStoreLock);
+    return value;
 }
 
 - (void)setStretchToFill:(BOOL)stretchToFill {
-    @synchronized (self) {
-        if (_stretchToFill == stretchToFill) {
-            return;
-        }
-        _stretchToFill = stretchToFill;
+    os_unfair_lock_lock(&_frameStoreLock);
+    BOOL changed = _stretchToFillValue != stretchToFill;
+    _stretchToFillValue = stretchToFill;
+    os_unfair_lock_unlock(&_frameStoreLock);
+    if (!changed) {
+        return;
     }
     dispatch_async(dispatch_get_main_queue(), ^{
         self->displayLayer.videoGravity = stretchToFill ? AVLayerVideoGravityResize : AVLayerVideoGravityResizeAspect;
@@ -3658,6 +3663,13 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
             [self activeRendererModeName:_activeRendererMode],
             _enableHdr ? 1 : 0);
     }
+
+    os_unfair_lock_lock(&_frameStoreLock);
+    if (_lastDecodedImageBuffer != imageBuffer) {
+        CVPixelBufferRelease(_lastDecodedImageBuffer);
+        _lastDecodedImageBuffer = CVPixelBufferRetain(imageBuffer);
+    }
+    os_unfair_lock_unlock(&_frameStoreLock);
 
     size_t decodedWidth = CVPixelBufferGetWidth(imageBuffer);
     size_t decodedHeight = CVPixelBufferGetHeight(imageBuffer);
@@ -5790,6 +5802,32 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 - (void)dealloc
 {
     [self stop];
+    CVPixelBufferRelease(_lastDecodedImageBuffer);
+}
+
+- (CGImageRef)copyLastFrameImageWithMaxWidth:(CGFloat)maxWidth {
+    os_unfair_lock_lock(&_frameStoreLock);
+    CVPixelBufferRef buffer = CVPixelBufferRetain(_lastDecodedImageBuffer);
+    os_unfair_lock_unlock(&_frameStoreLock);
+    if (buffer == NULL) {
+        return NULL;
+    }
+    CIImage *image = [CIImage imageWithCVPixelBuffer:buffer];
+    CVPixelBufferRelease(buffer);
+    CGFloat width = image.extent.size.width;
+    if (width <= 0) {
+        return NULL;
+    }
+    if (maxWidth > 0 && width > maxWidth) {
+        CGFloat scale = maxWidth / width;
+        image = [image imageByApplyingTransform:CGAffineTransformMakeScale(scale, scale)];
+    }
+    static CIContext *context;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        context = [CIContext contextWithOptions:nil];
+    });
+    return [context createCGImage:image fromRect:CGRectIntegral(image.extent)];
 }
 
 #define FRAME_START_PREFIX_SIZE 4

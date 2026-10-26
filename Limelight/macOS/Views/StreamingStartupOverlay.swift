@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 
 /// Dimmed backdrop with a spinning indicator, shown over the stream view until
 /// the first frame is presented. Plain AppKit on purpose: the indicator animates
@@ -7,12 +8,19 @@ import AppKit
 /// re-parenting, window changes and full-screen transitions.
 private final class StartupOverlayView: NSView {
   private let spinner = NSProgressIndicator()
+  /// The blurred last frame of this app, or its box art, behind the spinner.
+  private let backdrop = CALayer()
 
   override init(frame frameRect: NSRect) {
     super.init(frame: frameRect)
     wantsLayer = true
     layer?.backgroundColor = NSColor.black.withAlphaComponent(0.2).cgColor
     appearance = NSAppearance(named: .darkAqua)
+
+    backdrop.contentsGravity = .resizeAspectFill
+    backdrop.masksToBounds = true
+    backdrop.isHidden = true
+    layer?.addSublayer(backdrop)
 
     spinner.style = .spinning
     spinner.controlSize = .large
@@ -44,7 +52,32 @@ private final class StartupOverlayView: NSView {
 
   override func layout() {
     super.layout()
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    backdrop.frame = bounds
+    CATransaction.commit()
     centerSpinner()
+  }
+
+  func setBackdrop(_ image: NSImage?) {
+    guard let image, let blurred = Self.frosted(image) else {
+      backdrop.contents = nil
+      backdrop.isHidden = true
+      return
+    }
+    backdrop.contents = blurred
+    backdrop.isHidden = false
+  }
+
+  /// Blurred and darkened enough to read as a backdrop, never as the live picture.
+  private static func frosted(_ image: NSImage) -> CGImage? {
+    guard let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+    let input = CIImage(cgImage: source)
+    let blurred = input.clampedToExtent()
+      .applyingGaussianBlur(sigma: max(12, input.extent.width / 48))
+      .cropped(to: input.extent)
+      .applyingFilter("CIColorControls", parameters: [kCIInputBrightnessKey: -0.18, kCIInputSaturationKey: 1.1])
+    return CIContext().createCGImage(blurred, from: input.extent)
   }
 
   private func centerSpinner() {
@@ -68,5 +101,44 @@ private final class StartupOverlayView: NSView {
 @objc final class StreamingStartupOverlayFactory: NSObject {
   @objc static func makeView() -> NSView {
     StartupOverlayView(frame: .zero)
+  }
+
+  @objc static func setBackdrop(_ image: NSImage?, on view: NSView) {
+    (view as? StartupOverlayView)?.setBackdrop(image)
+  }
+}
+
+/// The last frame of each host's app, kept on this Mac as the backdrop of its next start.
+@objc final class StreamBackdropStore: NSObject {
+  private static let queue = DispatchQueue(label: "moonlight.stream-backdrop", qos: .utility)
+
+  private static func url(host: String, app: String) -> URL? {
+    guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    else { return nil }
+    let safe = { (value: String) in value.filter { $0.isLetter || $0.isNumber || $0 == "-" } }
+    return support.appendingPathComponent("Moonlight/LastFrames", isDirectory: true)
+      .appendingPathComponent("\(safe(host))-\(safe(app)).jpg")
+  }
+
+  /// Writes the frame in the background.
+  @objc static func save(_ image: CGImage, host: String, app: String) {
+    guard let url = url(host: host, app: app) else { return }
+    queue.async {
+      let rep = NSBitmapImageRep(cgImage: image)
+      guard let data = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.72]) else { return }
+      try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try? data.write(to: url, options: .atomic)
+    }
+  }
+
+  /// This app's last frame, else its box art.
+  @objc static func backdrop(host: String, app: String, boxArtPath: String?) -> NSImage? {
+    if let url = url(host: host, app: app), let image = NSImage(contentsOf: url) {
+      return image
+    }
+    if let boxArtPath, let image = NSImage(contentsOfFile: boxArtPath) {
+      return image
+    }
+    return nil
   }
 }

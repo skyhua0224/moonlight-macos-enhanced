@@ -9,6 +9,7 @@
 //
 
 #import "StreamViewController_Internal.h"
+#import "NSView+Moonlight.h"
 
 // While the window is being dragged, wait for it to rest this long before asking.
 static const NSTimeInterval MLFreeWindowLiveResizeDelay = 0.3;
@@ -102,14 +103,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
 
     self.freeWindowFrostGeneration += 1;
     NSUInteger generation = self.freeWindowFrostGeneration;
-    if (animated && frost.alphaValue < 1.0) {
-        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-            context.duration = MLFreeWindowFrostFadeIn;
-            frost.animator.alphaValue = 1.0;
-        } completionHandler:nil];
-    } else {
-        frost.alphaValue = 1.0;
-    }
+    [frost moonlight_fadeToAlpha:1.0 duration:animated ? MLFreeWindowFrostFadeIn : 0.0 completion:nil];
 
     // A host that never streams the new size must not leave the picture covered.
     __weak typeof(self) weakSelf = self;
@@ -131,10 +125,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     self.freeWindowFrostGeneration += 1;
     NSUInteger generation = self.freeWindowFrostGeneration;
     __weak typeof(self) weakSelf = self;
-    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-        context.duration = MLFreeWindowFrostFadeOut;
-        frost.animator.alphaValue = 0.0;
-    } completionHandler:^{
+    [frost moonlight_fadeToAlpha:0.0 duration:MLFreeWindowFrostFadeOut completion:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf != nil && strongSelf.freeWindowFrostGeneration == generation) {
             [frost removeFromSuperview];

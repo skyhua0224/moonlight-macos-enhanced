@@ -8,6 +8,8 @@
 
 #import "NSView+Moonlight.h"
 
+#import <QuartzCore/QuartzCore.h>
+
 @implementation NSView (Moonlight)
 
 - (void)setBackgroundColor:(NSColor *)backgroundColor {
@@ -24,6 +26,29 @@
     self.layer.masksToBounds = YES;
     self.layer.cornerCurve = kCACornerCurveContinuous;
     self.layer.cornerRadius = cornerRadius;
+}
+
+- (void)moonlight_fadeToAlpha:(CGFloat)alpha duration:(NSTimeInterval)duration completion:(void (^)(void))completion {
+    self.wantsLayer = YES;
+    CALayer *layer = self.layer;
+    CALayer *shown = layer.presentationLayer;
+    float from = shown != nil ? shown.opacity : layer.opacity;
+
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [CATransaction setCompletionBlock:completion];
+    self.alphaValue = alpha;
+    layer.opacity = (float)alpha;
+    CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    fade.fromValue = @(from);
+    fade.toValue = @((float)alpha);
+    fade.duration = duration;
+    fade.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    if (@available(macOS 12.0, *)) {
+        fade.preferredFrameRateRange = CAFrameRateRangeMake(60, 120, 120);
+    }
+    [layer addAnimation:fade forKey:@"moonlightFade"];
+    [CATransaction commit];
 }
 
 @end

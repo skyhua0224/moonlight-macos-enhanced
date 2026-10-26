@@ -7,6 +7,7 @@
 //
 
 #import "StreamViewMac.h"
+#import "NSView+Moonlight.h"
 #import "MoonlightEnhanced-Swift.h"
 #import "Logger.h"
 
@@ -62,6 +63,14 @@
     self.startupOverlay.wantsLayer = YES;
     self.startupOverlay.layer.zPosition = 1000;
     [self addSubview:self.startupOverlay positioned:NSWindowAbove relativeTo:nil];
+    [StreamingStartupOverlayFactory setBackdrop:self.startupBackdrop on:self.startupOverlay];
+}
+
+- (void)setStartupBackdrop:(NSImage *)startupBackdrop {
+    _startupBackdrop = startupBackdrop;
+    if (self.startupOverlay != nil) {
+        [StreamingStartupOverlayFactory setBackdrop:startupBackdrop on:self.startupOverlay];
+    }
 }
 
 // Keeps the loading overlay above whatever else lives in the stream view (the
@@ -187,7 +196,21 @@
     }
     _statusText = [statusText copy];
     [self installStartupOverlay];
-    self.startupOverlay.hidden = statusText == nil;
+    NSView *overlay = self.startupOverlay;
+    if (statusText == nil) {
+        // The picture is there: let the cover go gently instead of cutting to it.
+        if (!overlay.hidden) {
+            __weak typeof(self) weakSelf = self;
+            [overlay moonlight_fadeToAlpha:0.0 duration:0.35 completion:^{
+                if (weakSelf.statusText == nil) {
+                    overlay.hidden = YES;
+                }
+            }];
+        }
+    } else {
+        overlay.hidden = NO;
+        [overlay moonlight_fadeToAlpha:1.0 duration:0.0 completion:nil];
+    }
     if (statusText == nil) {
         self.window.title = self.appName;
         [self logStartupOverlayStateWithReason:@"cleared"];
