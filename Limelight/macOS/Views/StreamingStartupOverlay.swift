@@ -10,6 +10,9 @@ private final class StartupOverlayView: NSView {
   private let spinner = NSProgressIndicator()
   /// The blurred last frame of this app, or its box art, behind the spinner.
   private let backdrop = CALayer()
+  /// Darkens the backdrop further when the Mac is in dark mode.
+  private let backdropDim = CALayer()
+  private var appearanceObservation: NSKeyValueObservation?
 
   override init(frame frameRect: NSRect) {
     super.init(frame: frameRect)
@@ -21,6 +24,13 @@ private final class StartupOverlayView: NSView {
     backdrop.masksToBounds = true
     backdrop.isHidden = true
     layer?.addSublayer(backdrop)
+    backdropDim.backgroundColor = NSColor.black.cgColor
+    backdrop.addSublayer(backdropDim)
+    updateBackdropDim()
+    // The overlay itself is always dark; the Mac's own appearance decides the dimming.
+    appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+      DispatchQueue.main.async { self?.updateBackdropDim() }
+    }
 
     spinner.style = .spinning
     spinner.controlSize = .large
@@ -55,8 +65,17 @@ private final class StartupOverlayView: NSView {
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     backdrop.frame = bounds
+    backdropDim.frame = backdrop.bounds
     CATransaction.commit()
     centerSpinner()
+  }
+
+  private func updateBackdropDim() {
+    let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    backdropDim.opacity = dark ? 0.38 : 0
+    CATransaction.commit()
   }
 
   func setBackdrop(_ image: NSImage?) {
