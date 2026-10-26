@@ -85,6 +85,9 @@ typedef struct {
 // Called once, on an arbitrary thread, when the first frame counts as rendered. Not called
 // when that already happened before it was set; check hasPresentedVideo after setting it.
 @property(copy) void (^firstFramePresentedHandler)(void);
+// Called on the main queue when a decoded frame has a different size than the one before
+// (the first frame included), with that size in pixels.
+@property(copy) void (^decodedSizeChangedHandler)(CGSize size);
 @property(nonatomic, readonly) int videoFormat;
 
 - (id)initWithView:(OSView *)view;

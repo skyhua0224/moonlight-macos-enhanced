@@ -17,6 +17,12 @@ static const NSTimeInterval MLFreeWindowSettleDelay = 0.05;
 // A host that never answers must not stop later sizes from being sent.
 static const uint64_t MLFreeWindowRequestTimeoutMs = 5000;
 
+// The cover comes on at once when a drag starts (the stretched picture is already wrong), gently
+// for a size change that happens in one step, and fades out once a frame of the new size is decoded.
+static const NSTimeInterval MLFreeWindowFrostFadeIn = 0.15;
+static const NSTimeInterval MLFreeWindowFrostFadeOut = 0.25;
+static const NSTimeInterval MLFreeWindowFrostTimeout = 5.0;
+
 static const NSInteger MLDisplayModeFixedWindow = 0;
 static const NSInteger MLDisplayModeFreeWindow = 3;
 
@@ -74,14 +80,101 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     [SettingsClass noteFreeWindowContentSize:self.view.bounds.size];
 }
 
+#pragma mark - Frost
+
+- (void)showFreeWindowFrostAnimated:(BOOL)animated {
+    NSVisualEffectView *frost = self.freeWindowFrostView;
+    if (frost == nil) {
+        frost = [[NSVisualEffectView alloc] initWithFrame:self.view.bounds];
+        frost.material = NSVisualEffectMaterialFullScreenUI;
+        frost.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+        frost.state = NSVisualEffectStateActive;
+        frost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        frost.alphaValue = 0.0;
+        self.freeWindowFrostView = frost;
+    }
+    if (frost.superview != self.view) {
+        frost.frame = self.view.bounds;
+        [self.view addSubview:frost positioned:NSWindowAbove relativeTo:nil];
+    }
+
+    self.freeWindowFrostGeneration += 1;
+    NSUInteger generation = self.freeWindowFrostGeneration;
+    if (animated && frost.alphaValue < 1.0) {
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+            context.duration = MLFreeWindowFrostFadeIn;
+            frost.animator.alphaValue = 1.0;
+        } completionHandler:nil];
+    } else {
+        frost.alphaValue = 1.0;
+    }
+
+    // A host that never streams the new size must not leave the picture covered.
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(MLFreeWindowFrostTimeout * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf != nil && strongSelf.freeWindowFrostGeneration == generation &&
+            !strongSelf.view.window.inLiveResize) {
+            [strongSelf hideFreeWindowFrost];
+        }
+    });
+}
+
+- (void)hideFreeWindowFrost {
+    NSVisualEffectView *frost = self.freeWindowFrostView;
+    if (frost == nil || frost.superview == nil) {
+        return;
+    }
+    self.freeWindowFrostGeneration += 1;
+    NSUInteger generation = self.freeWindowFrostGeneration;
+    __weak typeof(self) weakSelf = self;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = MLFreeWindowFrostFadeOut;
+        frost.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf != nil && strongSelf.freeWindowFrostGeneration == generation) {
+            [frost removeFromSuperview];
+        }
+    }];
+}
+
+- (BOOL)freeWindowStreamMatchesSize:(CGSize)size {
+    NSSize target = [self freeWindowTargetStreamSize];
+    return fabs(size.width - target.width) <= 2.0 && fabs(size.height - target.height) <= 2.0;
+}
+
+- (void)freeWindowDecodedSizeChanged:(CGSize)size {
+    if (self.freeWindowFrostView.superview == nil || self.view.window.inLiveResize) {
+        return;
+    }
+    if ([self freeWindowStreamMatchesSize:size]) {
+        [self hideFreeWindowFrost];
+    }
+}
+
 #pragma mark - NSWindowDelegate
+
+- (void)windowWillStartLiveResize:(NSNotification *)notification {
+    if (!self.freeWindowActive || notification.object != self.view.window) {
+        return;
+    }
+    [self showFreeWindowFrostAnimated:NO];
+}
 
 - (void)windowDidResize:(NSNotification *)notification {
     if (!self.freeWindowActive || notification.object != self.view.window) {
         return;
     }
-    NSTimeInterval delay = self.view.window.inLiveResize ? MLFreeWindowLiveResizeDelay : MLFreeWindowSettleDelay;
-    [self scheduleFreeWindowResolutionUpdateAfter:delay];
+    BOOL live = self.view.window.inLiveResize;
+    if (!live && self.freeWindowFrostView.superview == nil) {
+        struct Resolution current = [self effectiveStreamResolution];
+        if (![self freeWindowStreamMatchesSize:CGSizeMake(current.width, current.height)]) {
+            [self showFreeWindowFrostAnimated:YES];
+        }
+    }
+    [self scheduleFreeWindowResolutionUpdateAfter:live ? MLFreeWindowLiveResizeDelay : MLFreeWindowSettleDelay];
 }
 
 - (void)windowDidEndLiveResize:(NSNotification *)notification {
@@ -131,10 +224,14 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     NSSize target = [self freeWindowTargetStreamSize];
     struct Resolution current = [self effectiveStreamResolution];
     if ((int)target.width == current.width && (int)target.height == current.height) {
+        if (!self.view.window.inLiveResize) {
+            [self hideFreeWindowFrost];
+        }
         return;
     }
     Connection *connection = [self liveStreamConnectionIfSupported];
     if (connection == nil) {
+        [self hideFreeWindowFrost];
         return;
     }
     int result = [connection sendLiveStreamResolutionWidth:(int)target.width height:(int)target.height];
@@ -185,6 +282,10 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
         return;
     }
     self.freeWindowHostScaleApplied = NO;
+    __weak typeof(self) weakSelf = self;
+    connection.renderer.decodedSizeChangedHandler = ^(CGSize size) {
+        [weakSelf freeWindowDecodedSizeChanged:size];
+    };
     [self freeWindowRemoteScaleOptionsChanged];
     // The window may have been resized while connecting.
     [self scheduleFreeWindowResolutionUpdateAfter:MLFreeWindowSettleDelay];
@@ -220,6 +321,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
 }
 
 - (void)leaveFreeWindowKeepingStreamShape {
+    [self hideFreeWindowFrost];
     self.freeWindowActive = NO;
     self.freeWindowRequestInFlight = NO;
     NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
