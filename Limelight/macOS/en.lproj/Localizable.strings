@@ -2004,9 +2004,8 @@
 "Avoid Notch" = "Avoid Notch";
 "Fill Screen" = "Fill Screen";
 "Retina" = "Retina";
-"Retina free window detail" = "Every Pixel is sharpest and sets the host's display scaling to match this Mac.";
-"Every Pixel" = "Every Pixel";
-"Point Size" = "Point Size";
+"Every Pixel" = "Sharp";
+"Point Size" = "Less Bandwidth";
 "Picture Aspect" = "Picture Aspect";
 "Keep Aspect" = "Keep Aspect";
 "Stretch to Fill" = "Stretch to Fill";
@@ -2019,3 +2018,5 @@
 "Free Window fallback notice" = "This host can't change resolution to follow the window, so the window keeps the stream's shape.";
 "Current (Custom): %dx%d" = "Current: %d × %d";
 "Display" = "Display";
+"Common" = "Common";
+"This Mac's Screens" = "This Mac's Screens";

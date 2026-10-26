@@ -1584,10 +1584,32 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
         setSymbol(matchDisplayItem, @"macwindow.badge.plus");
         [monitorMenu addItem:matchDisplayItem];
 
-        // The same list as the settings: recent sizes, then the presets by aspect ratio.
+        // The same list as the settings: recent and common sizes, then "More".
         BOOL currentIsListed = isMatchDisplay;
-        for (NSDictionary *group in [SettingsClass resolutionMenuGroups]) {
-            [monitorMenu addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *(^sizeItem)(NSValue *) = ^NSMenuItem *(NSValue *val) {
+            NSSize size = val.sizeValue;
+            NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[SettingsClass resolutionLabel:size]
+                                                          action:@selector(selectResolutionFromMenu:)
+                                                   keyEquivalent:@""];
+            item.target = self;
+            item.representedObject = val;
+            BOOL selected = !isMatchDisplay && currentRes.width == (int)size.width && currentRes.height == (int)size.height;
+            item.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
+            return item;
+        };
+        [monitorMenu addItem:[NSMenuItem separatorItem]];
+        for (NSValue *val in [SettingsClass resolutionMenuTopSizes]) {
+            NSMenuItem *item = sizeItem(val);
+            currentIsListed = currentIsListed || item.state == NSControlStateValueOn;
+            [monitorMenu addItem:item];
+        }
+
+        NSMenu *moreMenu = [[NSMenu alloc] initWithTitle:MLString(@"More", nil)];
+        BOOL moreHasCurrent = NO;
+        for (NSDictionary *group in [SettingsClass resolutionMenuMoreGroups]) {
+            if (moreMenu.numberOfItems > 0) {
+                [moreMenu addItem:[NSMenuItem separatorItem]];
+            }
             NSMenuItem *header = nil;
             if (@available(macOS 14.0, *)) {
                 header = [NSMenuItem sectionHeaderWithTitle:group[@"title"]];
@@ -1595,20 +1617,18 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
                 header = [[NSMenuItem alloc] initWithTitle:group[@"title"] action:nil keyEquivalent:@""];
                 header.enabled = NO;
             }
-            [monitorMenu addItem:header];
+            [moreMenu addItem:header];
             for (NSValue *val in group[@"sizes"]) {
-                NSSize size = val.sizeValue;
-                NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[SettingsClass resolutionLabel:size]
-                                                              action:@selector(selectResolutionFromMenu:)
-                                                       keyEquivalent:@""];
-                item.target = self;
-                item.representedObject = val;
-                BOOL selected = !isMatchDisplay && currentRes.width == (int)size.width && currentRes.height == (int)size.height;
-                item.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
-                currentIsListed = currentIsListed || selected;
-                [monitorMenu addItem:item];
+                NSMenuItem *item = sizeItem(val);
+                moreHasCurrent = moreHasCurrent || item.state == NSControlStateValueOn;
+                [moreMenu addItem:item];
             }
         }
+        NSMenuItem *moreItem = [[NSMenuItem alloc] initWithTitle:MLString(@"More", nil) action:nil keyEquivalent:@""];
+        moreItem.submenu = moreMenu;
+        moreItem.state = (moreHasCurrent && !currentIsListed) ? NSControlStateValueMixed : NSControlStateValueOff;
+        currentIsListed = currentIsListed || moreHasCurrent;
+        [monitorMenu addItem:moreItem];
 
         [monitorMenu addItem:[NSMenuItem separatorItem]];
         if (!currentIsListed && currentRes.width > 0 && currentRes.height > 0) {

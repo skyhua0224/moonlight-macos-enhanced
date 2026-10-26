@@ -33,55 +33,65 @@ enum ResolutionMenuValue {
   static let useDefault = CGSize(width: -3, height: -3)
 }
 
-/// One resolution menu: optional leading entries, Match Display, recent sizes,
-/// the presets by aspect ratio, and Custom.
+/// One resolution menu: optional leading entries and Match Display, recent and common
+/// sizes, a "More" submenu with the presets and this Mac's screens, and Custom.
 struct ResolutionMenu: View {
   @Binding var selection: CGSize
   var leading: [(size: CGSize, title: String)] = []
   let matchDisplayTitle: String
   @ObservedObject private var languageManager = LanguageManager.shared
 
-  private var recent: [CGSize] {
-    var sizes = RecentStreamResolutions.list()
-    if selection.width > 0, !StreamResolution.isPreset(selection), !sizes.contains(selection) {
+  private var topSizes: [CGSize] {
+    var sizes = StreamResolution.topSizes()
+    let listed = sizes + StreamResolution.moreGroups().flatMap(\.sizes)
+    if selection.width > 0, !listed.contains(selection) {
       sizes.insert(selection, at: 0)
     }
     return sizes
   }
 
+  private func title(for size: CGSize) -> String {
+    if let entry = leading.first(where: { $0.size == size }) { return entry.title }
+    if size == ResolutionMenuValue.matchDisplay { return matchDisplayTitle }
+    if size == ResolutionMenuValue.custom { return languageManager.localize("Custom…") }
+    return StreamResolution.label(size)
+  }
+
   private var flatChoices: [(value: CGSize, title: String)] {
-    leading.map { (value: $0.size, title: $0.title) }
-      + [(value: ResolutionMenuValue.matchDisplay, title: matchDisplayTitle)]
-      + recent.map { (value: $0, title: StreamResolution.label($0)) }
-      + StreamResolution.presets.map { (value: $0, title: StreamResolution.label($0)) }
-      + [(value: ResolutionMenuValue.custom, title: languageManager.localize("Custom…"))]
+    let sizes = leading.map(\.size) + [ResolutionMenuValue.matchDisplay] + topSizes
+      + StreamResolution.moreGroups().flatMap(\.sizes).filter { !topSizes.contains($0) }
+      + [ResolutionMenuValue.custom]
+    return sizes.map { (value: $0, title: title(for: $0)) }
+  }
+
+  /// One block of entries with checkmarks, bound to the menu's selection.
+  private func choices(_ sizes: [CGSize]) -> some View {
+    Picker("", selection: ResolutionChoice.binding($selection)) {
+      ForEach(sizes.map(ResolutionChoice.init), id: \.self) { choice in
+        Text(title(for: choice.size)).tag(choice)
+      }
+    }
+    .pickerStyle(.inline)
+    .labelsHidden()
   }
 
   var body: some View {
-    Picker("", selection: ResolutionChoice.binding($selection)) {
-      ForEach(leading.map(\.size).map(ResolutionChoice.init), id: \.self) { choice in
-        Text(leading.first { ResolutionChoice($0.size) == choice }?.title ?? "").tag(choice)
-      }
-      Text(matchDisplayTitle).tag(ResolutionChoice(ResolutionMenuValue.matchDisplay))
-      if !recent.isEmpty {
-        Section(header: Text(languageManager.localize("Recently Used"))) {
-          ForEach(recent.map(ResolutionChoice.init), id: \.self) { choice in
-            Text(StreamResolution.label(choice.size)).tag(choice)
+    Menu {
+      choices(leading.map(\.size) + [ResolutionMenuValue.matchDisplay])
+      choices(topSizes)
+      Menu(languageManager.localize("More")) {
+        ForEach(StreamResolution.moreGroups(), id: \.title) { group in
+          Section(header: Text(group.title)) {
+            choices(group.sizes)
           }
         }
       }
-      ForEach(StreamResolution.presetGroups, id: \.ratio) { group in
-        Section(header: Text(group.ratio)) {
-          ForEach(group.sizes.map(ResolutionChoice.init), id: \.self) { choice in
-            Text(StreamResolution.label(choice.size)).tag(choice)
-          }
-        }
-      }
-      Divider()
-      Text(languageManager.localize("Custom…")).tag(ResolutionChoice(ResolutionMenuValue.custom))
+      choices([ResolutionMenuValue.custom])
+    } label: {
+      Text(title(for: selection))
     }
-    .labelsHidden()
     .controllerPicker(selection: $selection, choices: flatChoices)
+    .fixedSize()
     .frame(width: 240, alignment: .trailing)
   }
 }

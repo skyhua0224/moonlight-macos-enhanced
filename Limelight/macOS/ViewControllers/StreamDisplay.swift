@@ -173,6 +173,38 @@ enum StreamResolution {
 
   static var presets: [CGSize] { presetGroups.flatMap(\.sizes) }
 
+  /// Shown at the top of a resolution menu, after the recent sizes.
+  static let common: [CGSize] = [
+    CGSize(width: 1920, height: 1080), CGSize(width: 2560, height: 1440), CGSize(width: 3840, height: 2160),
+  ]
+
+  /// Recent sizes, then the common ones not among them.
+  static func topSizes() -> [CGSize] {
+    let recent = RecentStreamResolutions.list()
+    return recent + common.filter { !recent.contains($0) }
+  }
+
+  /// This Mac's screens as sizes: each whole panel and, with a notch, the part below it.
+  static func screenSizes() -> [CGSize] {
+    var sizes: [CGSize] = []
+    for screen in StreamScreens.known() {
+      for size in [screen.fullPixels, screen.belowNotchPixels].compactMap({ $0 }) where !sizes.contains(size) {
+        sizes.append(size)
+      }
+    }
+    return sizes.sorted { $0.width * $0.height > $1.width * $1.height }
+  }
+
+  /// The "More" submenu: the presets by aspect ratio, then this Mac's screens.
+  static func moreGroups() -> [(title: String, sizes: [CGSize])] {
+    var groups = presetGroups.map { (title: $0.ratio, sizes: $0.sizes) }
+    let screens = screenSizes()
+    if !screens.isEmpty {
+      groups.append((title: LanguageManager.shared.localize("This Mac's Screens"), sizes: screens))
+    }
+    return groups
+  }
+
   static func isPreset(_ size: CGSize) -> Bool { presets.contains(size) }
 
   static func shortName(_ size: CGSize) -> String? {
@@ -257,7 +289,7 @@ enum StreamResolution {
   }
 }
 
-/// Sizes picked by hand that are not in the preset list, newest first.
+/// Sizes streams were started at, newest first.
 enum RecentStreamResolutions {
   private static let key = "streamResolution.recent"
   private static let limit = 3
@@ -271,7 +303,7 @@ enum RecentStreamResolutions {
   }
 
   static func note(_ size: CGSize) {
-    guard size.width > 0, size.height > 0, !StreamResolution.isPreset(size) else { return }
+    guard size.width > 0, size.height > 0 else { return }
     var sizes = list().filter { $0 != size }
     sizes.insert(size, at: 0)
     let entries = sizes.prefix(limit).map { "\(Int($0.width))x\(Int($0.height))" }
@@ -419,19 +451,14 @@ extension SettingsClass {
     persist(copy(settings, fps: fps), for: key)
   }
 
-  /// The stream menu's resolution groups: recent sizes, then the presets by aspect ratio.
-  /// Each is ["title": String, "sizes": [NSValue]].
-  @objc static func resolutionMenuGroups() -> [[String: Any]] {
-    var groups: [[String: Any]] = []
-    let recent = RecentStreamResolutions.list()
-    if !recent.isEmpty {
-      groups.append(["title": LanguageManager.shared.localize("Recently Used"),
-                     "sizes": recent.map { NSValue(size: $0) }])
-    }
-    for group in StreamResolution.presetGroups {
-      groups.append(["title": group.ratio, "sizes": group.sizes.map { NSValue(size: $0) }])
-    }
-    return groups
+  /// The stream menu's first sizes: recent, then common.
+  @objc static func resolutionMenuTopSizes() -> [NSValue] {
+    StreamResolution.topSizes().map { NSValue(size: $0) }
+  }
+
+  /// The stream menu's "More" submenu, as ["title": String, "sizes": [NSValue]].
+  @objc static func resolutionMenuMoreGroups() -> [[String: Any]] {
+    StreamResolution.moreGroups().map { ["title": $0.title, "sizes": $0.sizes.map { NSValue(size: $0) }] }
   }
 
   @objc static func resolutionLabel(_ size: CGSize) -> String {
