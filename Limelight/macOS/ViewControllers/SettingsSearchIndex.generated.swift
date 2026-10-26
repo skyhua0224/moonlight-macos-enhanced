@@ -144,10 +144,10 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Mouse Driver", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Mouse Driver", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Keyboard Translation", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Keyboard Translation", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Key Mapping", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Key Mapping", detailKey: "Key Mapping detail", keywords: []),
-    SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Capture System Shortcuts", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Capture System Shortcuts", detailKey: nil, keywords: ["Capture System Shortcuts Permission Hint", "Capture System Shortcuts Hint"]),
+    SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Capture System Shortcuts", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Capture System Shortcuts", detailKey: nil, keywords: ["Grant Access", "Capture System Shortcuts Permission Hint", "Capture System Shortcuts Hint"]),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Swap Mouse Buttons", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Swap Mouse Buttons", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Reverse Scroll Direction", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Reverse Scroll Direction", detailKey: nil, keywords: []),
-    SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Precision Touchpad", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Precision Touchpad", detailKey: nil, keywords: ["Precision Touchpad Off", "Precision Touchpad Block", "Precision Touchpad Both", "Precision Touchpad Gesture Permission Hint", "Precision Touchpad Hint"]),
+    SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Precision Touchpad", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Precision Touchpad", detailKey: nil, keywords: ["Grant Access", "Precision Touchpad Off", "Precision Touchpad Block", "Precision Touchpad Both", "Precision Touchpad Gesture Permission Hint", "Precision Touchpad Hint"]),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Type Text with the macOS Input Method", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Type Text with the macOS Input Method", detailKey: "Type Text with the macOS Input Method Hint", keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Pointer Speed", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Pointer Speed", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Keyboard & Mouse/Scroll Mode", pane: .keyboard, kind: .row, sectionKey: "Keyboard & Mouse", titleKey: "Scroll Mode", detailKey: nil, keywords: []),
@@ -169,6 +169,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "usb/pane", pane: .usb, kind: .pane, sectionKey: "Input & Devices", titleKey: "USB Mapping", detailKey: "USB settings subtitle", keywords: []),
     SettingsSearchEntry(id: "usb/My Devices/My Devices", pane: .usb, kind: .section, sectionKey: "My Devices", titleKey: "My Devices", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "usb/Nearby Devices/Nearby Devices", pane: .usb, kind: .section, sectionKey: "Nearby Devices", titleKey: "Nearby Devices", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "usb/Open Source/Open Source", pane: .usb, kind: .section, sectionKey: "Open Source", titleKey: "Open Source", detailKey: nil, keywords: []),
   ]
 
   static let generatedFileMappingEntries: [SettingsSearchEntry] = [
@@ -203,6 +204,9 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "about/About & Updates/Moonlight macOS Enhanced", pane: .about, kind: .row, sectionKey: "About & Updates", titleKey: "Moonlight macOS Enhanced", detailKey: "About hero subtitle", keywords: ["version"]),
     SettingsSearchEntry(id: "about/About & Updates/Check Automatically", pane: .about, kind: .row, sectionKey: "About & Updates", titleKey: "Check Automatically", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "about/About & Updates/Check for Updates", pane: .about, kind: .row, sectionKey: "About & Updates", titleKey: "Check for Updates", detailKey: "Update Sources detail", keywords: []),
+    SettingsSearchEntry(id: "about/Open Source/License", pane: .about, kind: .row, sectionKey: "Open Source", titleKey: "License", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "about/Open Source/Source Code", pane: .about, kind: .row, sectionKey: "Open Source", titleKey: "Source Code", detailKey: nil, keywords: ["GitHub"]),
+    SettingsSearchEntry(id: "about/Open Source/Third-Party Licenses", pane: .about, kind: .row, sectionKey: "Open Source", titleKey: "Third-Party Licenses", detailKey: "Third-party licenses detail", keywords: ["Open"]),
   ]
 
   static let generatedEntries: [SettingsSearchEntry] = {

@@ -1974,3 +1974,9 @@
 "Audio codec hint passthrough unavailable" = "%1$@ 不接受 %2$@ 位流，所以不会直通，音频改在这台 Mac 上解码。如果系统输出被虚拟设备接管（比如 eqMac 这类均衡器应用），请在上面的“输出设备”里直接选择电视或功放。";
 "Dolby passthrough unavailable notice" = "杜比直通未启用：%1$@ 不接受 %2$@，音频改在这台 Mac 上解码。要直通，请在 设置 > 音频 > 输出设备 里选择电视或功放。";
 "Video codec warning AV1 no HDR" = "这台 Mac 上 AV1 走软件解码，不支持 HDR、10 位色和 4:4:4：选择 AV1 期间下面这三项不生效。需要它们请选 H.265。";
+"Open Source" = "开源";
+"Source Code" = "源代码";
+"Third-Party Licenses" = "第三方许可证";
+"Third-party licenses detail" = "本应用包含的第三方库的许可证，例如 dav1d、usbipdcpp 和 libusb。";
+"About usbipdcpp" = "关于 usbipdcpp";
+"USB open source detail" = "USB 转发基于 usbipdcpp 和 libusb（LGPL），并使用了 asio 和 spdlog。它们的许可证和源代码获取方式见“第三方许可证”。";
