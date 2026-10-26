@@ -21,7 +21,9 @@ Markers in the Swift sources (line comments):
       A control that is not built from a row component. Placed inside the view
       that draws it; the pane and section come from where that view is used.
   // settings-search: ignore
-      Placed inside a struct whose rows are intentionally not part of any pane.
+      Placed inside a struct whose rows are intentionally not part of any pane,
+      also when a pane shows it somewhere search cannot open (a page one level
+      down). Views it instantiates are not followed from it.
   // settings-search: pane=keyboard
       Placed inside a struct to attribute it to a pane in addition to the
       panes that reach it by instantiation.
@@ -849,6 +851,9 @@ class Generator(object):
             return
         self.seen.add(key)
         self.visited.add(d.uid)
+        if self._ignored(d):
+            # Shown by a pane, but somewhere search cannot open (a page one level down).
+            return
         f = d.f
         items = self._items(d)
         scope_ifs = collect_scope_ifs(d)
@@ -1071,14 +1076,16 @@ class Generator(object):
         self._check_attribution()
         return self._finalize()
 
+    def _ignored(self, d):
+        return any(re.match(r"ignore\b", m.group(1).strip()) and d.owns(m.start())
+                   for m in MARKER_RE.finditer(d.f.src, d.open, d.close))
+
     def _check_attribution(self):
         problems = []
         for d in self.decls:
             if d.kind != "struct" or d.is_component:
                 continue
-            ignored = any(re.match(r"ignore\b", m.group(1).strip()) and d.owns(m.start())
-                          for m in MARKER_RE.finditer(d.f.src, d.open, d.close))
-            if ignored:
+            if self._ignored(d):
                 continue
             for pos, kind, call, extra in self._items(d):
                 if kind not in ("row", "marker") or (d.uid, pos) in self.emitted:
