@@ -10,7 +10,7 @@
 
 [简体中文](README.md) | English
 
-[Download](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [Release notes](.github/release-notes/v1.3.9-rc.4.md) · [Report an issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
+[Download](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [Release notes](.github/release-notes/v1.3.9-rc.6.md) · [Report an issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
 <img src="readme-assets/images/en/app-list.png" width="760" alt="App list">
 
@@ -20,7 +20,7 @@
 
 ## Current Release
 
-The latest release is **1.3.9 RC4** (prerelease); see the [1.3.9 RC4 release notes](.github/release-notes/v1.3.9-rc.4.md) for what changed. 1.3.9 is the final release before the native architecture rebuild.
+The latest release is **1.3.9 RC6**; see the [1.3.9 RC6 release notes](.github/release-notes/v1.3.9-rc.6.md) for what changed. 1.3.9 is the final release before the native architecture rebuild.
 
 - Download it from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). Packages come as `universal`, `arm64`, and `x86_64`; choose `universal` if unsure.
 - If 1.3.9 is already installed, check for updates in `Settings → About & Updates`.
@@ -28,9 +28,9 @@ The latest release is **1.3.9 RC4** (prerelease); see the [1.3.9 RC4 release not
 
 What changed in 1.3.9 compared with 1.3.8:
 
-- Settings were redesigned and can be searched down to individual options; the whole app can be driven with a controller.
+- Settings were redesigned and can be searched down to individual options; the whole app can be driven with a controller. Setting Profiles compare each host with the Default Profile and copy settings, keep presets, and import and export them.
 - Audio gained lossless PCM, AC3, E-AC3, and Dolby passthrough, and the output device can be switched during a stream; Audio Enhancement gained a parametric equalizer, headphone correction presets, and binaural surround on headphones.
-- Input gained Precision Touchpad, text entry through macOS input methods, and key mapping by typed character; DualSense supports its touchpad, lighting, battery, and haptics.
+- Input gained Precision Touchpad, text entry through macOS input methods, key mapping by typed character, system shortcut capture, Windows key order, and Type Clipboard Text; DualSense supports its touchpad, lighting, battery, and haptics.
 - Video gained a separate 10-bit SDR option, a Dynamic HDR Preference, and Dolby Vision and HDR10+ negotiation with fallback; Macs without an AV1 hardware decoder can decode AV1 in software.
 - With Foundation Sunshine: display and virtual display configuration, bitrate, frame rate, and resolution changes without reconnecting, adaptive bitrate, host display scale, and Host Commands.
 - Added in-app updates, performance report export, and a bilingual log viewer.
