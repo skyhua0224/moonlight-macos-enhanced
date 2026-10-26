@@ -235,6 +235,11 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
         [self hideFreeWindowFrostIfPictureFits];
         return;
     }
+    if (NSEqualSizes(target, self.freeWindowRefusedSize)) {
+        // The host would not stream this size; keep the picture it sends, stretched to fit.
+        [self hideFreeWindowFrost];
+        return;
+    }
     Connection *connection = [self liveStreamConnectionIfSupported];
     if (connection == nil) {
         [self hideFreeWindowFrost];
@@ -247,6 +252,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     }
     self.freeWindowRequestInFlight = YES;
     self.freeWindowRequestStartMs = now;
+    self.freeWindowRequestedSize = target;
     Log(LOG_I, @"[free-window] asked for %.0fx%.0f (view %.0fx%.0f pt, stream %dx%d)",
         target.width, target.height, NSWidth(self.view.bounds), NSHeight(self.view.bounds),
         current.width, current.height);
@@ -261,7 +267,18 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
             LiGetMillis() - strongSelf.freeWindowRequestStartMs < MLFreeWindowRequestTimeoutMs) {
             return;
         }
-        Log(LOG_W, @"[free-window] no answer from the host; sending the current size again");
+        NSSize unanswered = strongSelf.freeWindowRequestedSize;
+        strongSelf.freeWindowRequestInFlight = NO;
+        if (NSEqualSizes(unanswered, strongSelf.freeWindowRetriedSize)) {
+            // Asked twice without an answer: leave this size alone until the window changes.
+            Log(LOG_W, @"[free-window] host did not take %.0fx%.0f; not asking again for it",
+                unanswered.width, unanswered.height);
+            strongSelf.freeWindowRefusedSize = unanswered;
+            [strongSelf hideFreeWindowFrost];
+            return;
+        }
+        Log(LOG_W, @"[free-window] no answer from the host; asking once more");
+        strongSelf.freeWindowRetriedSize = unanswered;
         [strongSelf sendFreeWindowResolutionIfNeeded];
     });
 }
@@ -269,6 +286,15 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
 - (void)freeWindowHostResolutionChanged {
     if (!self.freeWindowActive) {
         return;
+    }
+    struct Resolution streamed = [self effectiveStreamResolution];
+    NSSize asked = self.freeWindowRequestedSize;
+    if (self.freeWindowRequestInFlight && asked.width > 0 &&
+        ((int)asked.width != streamed.width || (int)asked.height != streamed.height)) {
+        // The host answered with another size: it would not switch to the one asked for.
+        Log(LOG_W, @"[free-window] host kept %dx%d instead of %.0fx%.0f; not asking again for it",
+            streamed.width, streamed.height, asked.width, asked.height);
+        self.freeWindowRefusedSize = asked;
     }
     self.freeWindowRequestInFlight = NO;
     NSTimeInterval delay = self.view.window.inLiveResize ? MLFreeWindowLiveResizeDelay : 0;

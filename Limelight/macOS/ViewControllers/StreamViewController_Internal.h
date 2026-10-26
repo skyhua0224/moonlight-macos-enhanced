@@ -505,6 +505,11 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) NSUInteger freeWindowFrostGeneration;
 // Size of the last decoded frame: the cover stays until it is the window's size.
 @property (nonatomic) CGSize freeWindowDecodedSize;
+// The size last asked for, one that was already retried, and one the host would not take
+// (it is not asked for again until the window has another size).
+@property (nonatomic) NSSize freeWindowRequestedSize;
+@property (nonatomic) NSSize freeWindowRetriedSize;
+@property (nonatomic) NSSize freeWindowRefusedSize;
 
 // Dock gesture filter for the precision touchpad (see StreamViewController+Input.m).
 @property (nonatomic, strong) MLSystemGestureBlocker *systemGestureBlocker;
