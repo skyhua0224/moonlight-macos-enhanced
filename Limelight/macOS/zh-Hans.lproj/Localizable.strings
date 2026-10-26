@@ -15,7 +15,7 @@
 "Custom Resolution" = "自定义分辨率";
 "FPS" = "帧率";
 "Custom FPS" = "自定义帧率";
-"Bitrate" = "比特率";
+"Bitrate" = "码率";
 
 /* Video Settings */
 "Video" = "视频";
@@ -1061,8 +1061,8 @@
 "Pointer Speed" = "指针速度";
 "Scroll Mode" = "滚动模式";
 
-"Resolution & Frame Rate" = "分辨率与帧率";
-"Bitrate & Playback" = "码率与播放";
+"Picture" = "画面";
+"Host Overrides" = "主机端覆盖";
 "Video FEC" = "视频 FEC";
 "Video FEC hint" = "视频流前向纠错设置。主机默认沿用主机端配置；其他选项仅在主机支持客户端 FEC 控制时生效，否则仍使用主机默认值。";
 "Bitrate detail" = "调整串流码率。更高码率需要更稳定的网络带宽。";

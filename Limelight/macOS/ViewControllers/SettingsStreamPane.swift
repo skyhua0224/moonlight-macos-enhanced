@@ -76,8 +76,9 @@ struct StreamView: View {
           }
           .disabled(selectedTemporaryHost == nil)
         }
+      }
 
-
+      FormSection(title: "Picture") {
         SettingsRow(title: "Default Display Mode") {
           Picker("", selection: $settingsModel.selectedDisplayMode) {
             ForEach(SettingsModel.displayModes, id: \.self) { mode in
@@ -89,41 +90,6 @@ struct StreamView: View {
           .frame(width: 220, alignment: .trailing)
         }
 
-
-        SettingsRow(title: "Language") {
-          Picker("", selection: $languageManager.currentLanguage) {
-            ForEach(AppLanguage.allCases) { language in
-              Text(languageManager.localize(language.rawValue)).tag(language)
-            }
-          }
-          .labelsHidden()
-          .controllerPicker(
-            selection: $languageManager.currentLanguage, options: AppLanguage.allCases,
-            title: { languageManager.localize($0.rawValue) })
-          .frame(width: 160, alignment: .trailing)
-          .onChange(of: languageManager.currentLanguage) { _ in
-            languageManager.applyAppLanguage()
-          }
-        }
-      }
-
-      FormSection(title: "Clipboard") {
-        SettingsRow(title: "Clipboard Sync", detail: "Clipboard Sync detail") {
-          Picker("", selection: $settingsModel.selectedClipboardSyncMode) {
-            ForEach(SettingsModel.clipboardSyncModes, id: \.self) { mode in
-              Text(languageManager.localize(mode)).tag(mode)
-            }
-          }
-          .labelsHidden()
-          .controllerPicker(selection: $settingsModel.selectedClipboardSyncMode, options: SettingsModel.clipboardSyncModes, title: { mode in languageManager.localize(mode) })
-          .pickerStyle(.menu)
-          .frame(width: 170, alignment: .trailing)
-        }
-
-        SettingDescriptionRow(textKey: "Clipboard Sync Foundation detail")
-      }
-
-      FormSection(title: "Resolution & Frame Rate") {
         SettingsRow(title: "Resolution") {
           Picker("", selection: ResolutionChoice.binding($settingsModel.selectedResolution)) {
             ForEach(SettingsModel.resolutions.map(ResolutionChoice.init), id: \.self) { choice in
@@ -159,6 +125,21 @@ struct StreamView: View {
           }
         }
 
+        ToggleCell(title: "Resolution Scale", hintKey: "Resolution Scale hint", boolBinding: $settingsModel.streamResolutionScale)
+
+        if settingsModel.streamResolutionScale {
+          SettingsRow(title: "Resolution Scale Ratio") {
+            Picker("", selection: $settingsModel.streamResolutionScaleRatio) {
+              Text("50%").tag(50)
+              Text("75%").tag(75)
+              Text("100%").tag(100)
+            }
+            .labelsHidden()
+            .controllerPicker(
+              selection: $settingsModel.streamResolutionScaleRatio, options: [50, 75, 100], title: { "\($0)%" })
+            .frame(width: 130, alignment: .trailing)
+          }
+        }
 
         SettingsRow(title: "Frame Rate") {
           Picker("", selection: $settingsModel.selectedFps) {
@@ -181,23 +162,34 @@ struct StreamView: View {
           }
         }
 
+        ToggleCell(title: "Ignore Aspect Ratio", boolBinding: $settingsModel.ignoreAspectRatio)
+      }
 
-        ToggleCell(title: "Resolution Scale", hintKey: "Resolution Scale hint", boolBinding: $settingsModel.streamResolutionScale)
+      FormSection(title: "Bitrate") {
+        BitrateSettingsSection()
 
-        if settingsModel.streamResolutionScale {
-          SettingsRow(title: "Resolution Scale Ratio") {
-            Picker("", selection: $settingsModel.streamResolutionScaleRatio) {
-              Text("50%").tag(50)
-              Text("75%").tag(75)
-              Text("100%").tag(100)
+        SettingsChoiceRow(title: "Video FEC", selection: $settingsModel.selectedVideoFecPercentage,
+          options: SettingsModel.videoFecPercentages)
+        Text("Video FEC hint").font(.footnote).foregroundStyle(.secondary)
+      }
+
+      FormSection(title: "Clipboard") {
+        SettingsRow(title: "Clipboard Sync", detail: "Clipboard Sync detail") {
+          Picker("", selection: $settingsModel.selectedClipboardSyncMode) {
+            ForEach(SettingsModel.clipboardSyncModes, id: \.self) { mode in
+              Text(languageManager.localize(mode)).tag(mode)
             }
-            .labelsHidden()
-            .controllerPicker(
-              selection: $settingsModel.streamResolutionScaleRatio, options: [50, 75, 100], title: { "\($0)%" })
-            .frame(width: 130, alignment: .trailing)
           }
+          .labelsHidden()
+          .controllerPicker(selection: $settingsModel.selectedClipboardSyncMode, options: SettingsModel.clipboardSyncModes, title: { mode in languageManager.localize(mode) })
+          .pickerStyle(.menu)
+          .frame(width: 170, alignment: .trailing)
         }
 
+        SettingDescriptionRow(textKey: "Clipboard Sync Foundation detail")
+      }
+
+      FormSection(title: "Host Overrides") {
         ToggleCell(title: "Remote Resolution", hintKey: "Remote overrides hint", boolBinding: $settingsModel.remoteResolutionEnabled)
         if settingsModel.remoteResolutionEnabled {
           SettingsRow(title: "Remote Resolution") {
@@ -228,19 +220,8 @@ struct StreamView: View {
             }
           }
         }
-      }
 
-      RemoteFrameRateSection()
-
-      FormSection(title: "Bitrate & Playback") {
-        BitrateSettingsSection()
-
-        ToggleCell(title: "Play Sound on Host", boolBinding: $settingsModel.audioOnPC)
-        ToggleCell(title: "Ignore Aspect Ratio", boolBinding: $settingsModel.ignoreAspectRatio)
-        ToggleCell(title: "Show Local Cursor", boolBinding: $settingsModel.showLocalCursor)
-        SettingsChoiceRow(title: "Video FEC", selection: $settingsModel.selectedVideoFecPercentage,
-          options: SettingsModel.videoFecPercentages)
-        Text("Video FEC hint").font(.footnote).foregroundStyle(.secondary)
+        RemoteFrameRateRows()
       }
     }
     .onAppear {
@@ -320,10 +301,10 @@ private struct BitrateSettingsSection: View {
   }
 }
 
-private struct RemoteFrameRateSection: View {
+private struct RemoteFrameRateRows: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   var body: some View {
-    FormSection(title: "Remote FPS") {
+    Group {
       ToggleCell(title: "Remote FPS", hintKey: "Remote overrides hint", boolBinding: $settingsModel.remoteFpsEnabled)
       if settingsModel.remoteFpsEnabled {
         SettingsRow(title: "Remote FPS Value") {
