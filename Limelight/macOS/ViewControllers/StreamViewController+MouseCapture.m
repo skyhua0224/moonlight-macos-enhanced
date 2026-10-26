@@ -2609,7 +2609,8 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         [action isEqualToString:KeyboardTranslationProfile.localActionToggleFullscreenControlBall] ||
         [action isEqualToString:KeyboardTranslationProfile.localActionOpenControlCenter] ||
         [action isEqualToString:KeyboardTranslationProfile.localActionReleaseMouseCapture] ||
-        [action isEqualToString:KeyboardTranslationProfile.localActionToggleBorderlessWindowed];
+        [action isEqualToString:KeyboardTranslationProfile.localActionToggleBorderlessWindowed] ||
+        [action isEqualToString:KeyboardTranslationProfile.localActionTypeClipboardText];
     if (!recognizedAction) {
         return NO;
     }
@@ -2641,6 +2642,11 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
         if ([action isEqualToString:KeyboardTranslationProfile.localActionReconnectStream]) {
             [strongSelf reconnectFromMenu:nil];
+            return;
+        }
+
+        if ([action isEqualToString:KeyboardTranslationProfile.localActionTypeClipboardText]) {
+            [strongSelf typeClipboardTextFromMenu:nil];
             return;
         }
 
@@ -2700,7 +2706,8 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         || [action isEqualToString:KeyboardTranslationProfile.localActionReconnectStream]
         || [action isEqualToString:KeyboardTranslationProfile.localActionOpenControlCenter]
         || [action isEqualToString:KeyboardTranslationProfile.localActionReleaseMouseCapture]
-        || [action isEqualToString:KeyboardTranslationProfile.localActionToggleBorderlessWindowed];
+        || [action isEqualToString:KeyboardTranslationProfile.localActionToggleBorderlessWindowed]
+        || [action isEqualToString:KeyboardTranslationProfile.localActionTypeClipboardText];
 }
 
 - (BOOL)handleKeyboardTranslationRuleForEvent:(NSEvent *)event {
@@ -2825,6 +2832,11 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
     if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionOpenControlCenter]]) {
         [self presentControlCenterFromShortcut];
+        return YES;
+    }
+
+    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionTypeClipboardText]]) {
+        [self typeClipboardTextFromMenu:nil];
         return YES;
     }
     

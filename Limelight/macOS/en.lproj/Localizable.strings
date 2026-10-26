@@ -1925,3 +1925,7 @@
 "Third-party licenses detail" = "Licenses of the libraries included in this app, such as dav1d, usbipdcpp and libusb.";
 "About usbipdcpp" = "About usbipdcpp";
 "USB open source detail" = "USB forwarding is built on usbipdcpp and libusb (LGPL) together with asio and spdlog. Their licenses and where to get their source are in Third-Party Licenses.";
+"Type Clipboard Text" = "Type Clipboard Text";
+"No text in clipboard" = "There is no text in the clipboard";
+"Clipboard text could not be typed" = "The clipboard text could not be typed: stream input is not ready";
+"Clipboard sync unsupported notice" = "Clipboard sync is on, but this host does not support it. To send text, use Type Clipboard Text in the stream menu.";

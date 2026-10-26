@@ -1486,6 +1486,12 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     setSymbol(reconnectItem, @"arrow.triangle.2.circlepath");
     [self.streamMenu addItem:reconnectItem];
 
+    NSMenuItem *typeClipboardItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Type Clipboard Text", nil) action:@selector(typeClipboardTextFromMenu:) keyEquivalent:@""];
+    [self applyShortcut:[self streamShortcutForAction:MLShortcutActionTypeClipboardText] toMenuItem:typeClipboardItem];
+    typeClipboardItem.target = self;
+    setSymbol(typeClipboardItem, @"doc.on.clipboard");
+    [self.streamMenu addItem:typeClipboardItem];
+
     [self.streamMenu addItem:[NSMenuItem separatorItem]];
 
     // NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid]; // Already defined above
