@@ -428,8 +428,11 @@ class SettingsClass: NSObject {
   @objc static func noteResolutionUsed(for key: String, screen: NSScreen?) {
     guard let settings = Settings.getSettings(for: key) else { return }
     let screenID = StreamScreens.screen(for: screen)?.id
-    guard StreamResolution.displayMode(of: settings) != .freeWindow else { return }
-    // Match Display has no size of its own to remember.
+    // A free window opening at its last size has no chosen size; Match Display has no
+    // size of its own either (note() ignores it).
+    if StreamResolution.displayMode(of: settings) == .freeWindow, (settings.freeWindowInitialSize ?? 0) == 0 {
+      return
+    }
     RecentStreamResolutions.note(StreamResolution.choice(in: settings, screenID: screenID))
   }
 
