@@ -49,10 +49,11 @@ What changed in 1.3.9 compared with 1.3.8:
 | Video | AV1 (in software where there is no hardware decoder) / HEVC / H.264, custom resolution and frame rate, YUV 4:4:4, 10-bit SDR; Native, Metal, and Compatibility renderers; VT super resolution, MetalFX, and frame interpolation |
 | HDR | HDR10 (PQ / HLG); Dolby Vision 8.1 / 8.4 and HDR10+ negotiation with fallback; the picture follows the host when HDR is toggled mid-stream |
 | Audio | Opus stereo, 5.1, 7.1, and 7.1.4; lossless PCM, AC3, and E-AC3; Dolby passthrough to HDMI devices; an output device of its own; Audio Enhancement with a parametric equalizer, headphone correction presets, and binaural surround; microphone |
-| Keyboard, mouse, trackpad | Locked and Free Mouse; high-polling CoreHID mouse input; Precision Touchpad; text entry through macOS input methods; key mapping by position or by character; shortcut translation; Windows key order; system shortcut capture |
+| Keyboard, mouse, trackpad | Locked and Free Mouse; high-polling CoreHID mouse input; Precision Touchpad; text entry through macOS input methods; key mapping by position or by character; shortcut translation; Windows key order; system shortcut capture; type clipboard text |
 | Controllers | Multiple controllers, rumble, motion, controller mouse; DualSense touchpad, lighting, battery, and haptics; controller navigation of the app itself |
 | Stream control | In-stream control center; bitrate, frame rate, and resolution changes without reconnecting; adaptive bitrate; video FEC preference |
 | Host integration | Bidirectional clipboard, display and virtual display configuration, host display scale, Host Commands, Sleep Host, USB Mapping, Host Files |
+| Settings | Settings search; Setting Profiles: comparison with the Default Profile, copying settings, presets, import and export |
 | Diagnostics and updates | Performance overlay, performance report export, bilingual log viewer, in-app updates |
 
 Some of these require Foundation Sunshine; see the next section.
