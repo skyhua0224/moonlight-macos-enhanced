@@ -835,8 +835,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
     // Stopping the stream can block while common-c tears down sockets/ENet.
     // Do cleanup/stop off the main thread so window close doesn't feel like a hang.
-    __strong typeof(self) strongSelf = self;
+    // The closed window may have dropped every other reference by the time the
+    // stop finishes. Hold the controller through a __block slot, not a captured
+    // self, so the last reference can be handed back to the main queue: dealloc
+    // does AppKit cleanup and must not run on this global queue.
+    __block StreamViewController *stopOwner = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        StreamViewController *strongSelf = stopOwner;
+        stopOwner = nil;
         double start = CACurrentMediaTime();
         if (strongSelf.controllerSupport != nil) {
             double cleanupStart = CACurrentMediaTime();
@@ -851,13 +857,19 @@ highFreqMotor:(unsigned short)highFreqMotor {
         Log(LOG_I, @"Stream stop took %.3fs (total %.3fs)", CACurrentMediaTime() - stopStart, CACurrentMediaTime() - start);
 
         // Ensure streaming state is cleared for this host even if we don't receive a termination callback
-        if (self.app.host.uuid) {
-            [[StreamingSessionManager shared] didDisconnectForHost:self.app.host.uuid];
+        if (strongSelf.app.host.uuid) {
+            [[StreamingSessionManager shared] didDisconnectForHost:strongSelf.app.host.uuid];
         }
 
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), completion);
         }
+
+        void *lastReference = (__bridge_retained void *)strongSelf;
+        strongSelf = nil;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            (void)CFBridgingRelease(lastReference);
+        });
     });
 }
 
