@@ -73,6 +73,8 @@ typedef struct {
 @property(nonatomic, assign) void *depacketizerContext;
 @property(nonatomic) BOOL directSubmission;
 @property(nonatomic) BOOL presentationSuspended;
+/// Fill the view without keeping the picture's aspect ratio (Picture Aspect: Stretch to Fill).
+@property(atomic) BOOL stretchToFill;
 
 @property(nonatomic, readonly) VideoStats videoStats;
 @property(nonatomic, readonly) BOOL hasPresentedVideo;

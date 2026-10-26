@@ -97,7 +97,7 @@ class SettingsClass: NSObject {
         "customFps": settings.customFps,
         "autoAdjustBitrate": settings.autoAdjustBitrate ?? true,
         "yuv444": settings.enableYUV444 ?? false,
-        "ignoreAspectRatio": settings.ignoreAspectRatio ?? true,
+        "ignoreAspectRatio": settings.ignoreAspectRatio ?? SettingsModel.defaultIgnoreAspectRatio,
         "showLocalCursor": settings.showLocalCursor ?? false,
         "microphone": settings.enableMicrophone ?? false,
         "enableAdaptiveBitrate": settings.enableAdaptiveBitrate ?? SettingsModel.defaultEnableAdaptiveBitrate,
@@ -319,8 +319,10 @@ class SettingsClass: NSObject {
       // We can't easily get display size here without risk, so 1920x1080 is a safe bet for bitrate calc.
       let w = (matchDisplay || width == 0) ? 1920 : width
       let h = (matchDisplay || height == 0) ? 1080 : height
+      // Match Display (-1) and custom (0) frame rates are resolved when the stream starts.
       let newBitrate = SettingsModel.getDefaultBitrateKbps(
-        width: w, height: h, fps: fps, yuv444: updated.enableYUV444 ?? false)
+        width: w, height: h, fps: fps > 0 ? fps : SettingsModel.defaultFps,
+        yuv444: updated.enableYUV444 ?? false)
       // Clear custom since auto is on.
       updated = copy(updated, bitrate: newBitrate, customBitrate: .some(nil))
     }
@@ -340,6 +342,7 @@ class SettingsClass: NSObject {
       customFps: .some(CGFloat(fps)))
 
     persist(updated, for: key)
+    RecentStreamResolutions.note(CGSize(width: width, height: height))
   }
 
   @objc static func applyStreamRecommendation(_ recommendation: StreamRiskRecommendation, for key: String) {
@@ -394,106 +397,42 @@ class SettingsClass: NSObject {
   }
 
   @objc static func loadMoonlightSettings(for key: String) {
-    if let settings = Settings.getSettings(for: key) {
-      let dataMan = DataManager()
+    loadMoonlightSettings(for: key, screen: StreamScreens.streamTargetScreen())
+  }
 
-      func even(_ v: CGFloat) -> CGFloat {
-        let i = Int(v.rounded(.down))
-        return CGFloat(i - (i % 2))
-      }
+  /// Writes the size, frame rate and bitrate of a stream shown on `screen` to the
+  /// temporary settings every stream and menu reads.
+  @objc(loadMoonlightSettingsFor:screen:)
+  static func loadMoonlightSettings(for key: String, screen: NSScreen?) {
+    guard let settings = Settings.getSettings(for: key) else { return }
+    let size = streamSize(for: key, screen: screen)
+    let fps = streamFrameRate(for: key, screen: screen)
 
-      func pixelSize(for rect: NSRect, screen: NSScreen) -> CGSize {
-        let scale = max(1.0, screen.backingScaleFactor)
-        return CGSize(width: even(rect.width * scale), height: even(rect.height * scale))
-      }
+    DataManager().saveSettings(
+      withBitrate: settings.bitrate,
+      framerate: fps,
+      height: Int(size.height),
+      width: Int(size.width),
+      onscreenControls: 0,
+      remote: false,
+      optimizeGames: settings.optimize,
+      multiController: settings.multiController,
+      audioOnPC: settings.audioOnPC,
+      useHevc: settings.codec != 0,
+      enableHdr: settings.hdr,
+      btMouseSupport: false
+    )
+  }
 
-      func displayPixelSize(fullscreenSafe: Bool) -> CGSize? {
-        guard let screen = NSScreen.main else { return nil }
-        // Use the display's native pixel size. This matches the panel's physical resolution
-        // (e.g. 3840x2160) even when macOS is running in HiDPI scaled mode.
-
-        if fullscreenSafe {
-          if #available(macOS 12.0, *) {
-            let insets = screen.safeAreaInsets
-            let safeFrame = NSRect(
-              x: screen.frame.origin.x + insets.left,
-              y: screen.frame.origin.y + insets.bottom,
-              width: max(0.0, screen.frame.size.width - insets.left - insets.right),
-              height: max(0.0, screen.frame.size.height - insets.top - insets.bottom)
-            )
-            if safeFrame.size.width > 0.0 && safeFrame.size.height > 0.0 {
-              return pixelSize(for: safeFrame, screen: screen)
-            }
-          }
-        }
-
-        let displayID: CGDirectDisplayID?
-        if let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-          as? NSNumber
-        {
-          displayID = CGDirectDisplayID(screenNumber.uint32Value)
-        } else {
-          displayID = nil
-        }
-
-        guard let displayID, let mode = CGDisplayCopyDisplayMode(displayID) else { return nil }
-
-        let size = CGSize(width: mode.pixelWidth, height: mode.pixelHeight)
-        return CGSize(width: even(size.width), height: even(size.height))
-      }
-
-      let usingMatchDisplayResolution = settings.matchDisplayResolution ?? false
-      let displayMode = settings.displayMode ?? (settings.autoFullscreen ? 1 : 0)
-      let fullscreenSafeSize = displayMode == 1 ? displayPixelSize(fullscreenSafe: true) : nil
-      let nativeDisplaySize = displayPixelSize(fullscreenSafe: false)
-
-      let dataResolutionWidth: CGFloat
-      let dataResolutionHeight: CGFloat
-      if usingMatchDisplayResolution, let size = fullscreenSafeSize ?? nativeDisplaySize {
-        dataResolutionWidth = size.width
-        dataResolutionHeight = size.height
-      } else {
-        var explicitWidth =
-          settings.resolution == .zero
-          ? (settings.customResolution?.width ?? 1280) : settings.resolution.width
-        var explicitHeight =
-          settings.resolution == .zero
-          ? (settings.customResolution?.height ?? 720) : settings.resolution.height
-
-        if displayMode == 1,
-          let nativeDisplaySize,
-          let fullscreenSafeSize,
-          Int(explicitWidth) == Int(nativeDisplaySize.width),
-          Int(explicitHeight) == Int(nativeDisplaySize.height)
-        {
-          explicitWidth = fullscreenSafeSize.width
-          explicitHeight = fullscreenSafeSize.height
-        }
-
-        dataResolutionWidth = explicitWidth
-        dataResolutionHeight = explicitHeight
-      }
-      let dataFps = settings.fps == .zero ? Int(settings.customFps ?? 60.0) : settings.fps
-      let dataBitrate = settings.bitrate
-      let dataCodec = settings.codec != 0
-
-      // TODO: Add this back when VideoDecoderRenderer gets merged, with frame pacing setting check
-      //            let dataFramePacing = SettingsModel.getBool(from: settings.framePacing, in: SettingsModel.pacingOptions)
-
-      dataMan.saveSettings(
-        withBitrate: dataBitrate,
-        framerate: dataFps,
-        height: Int(dataResolutionHeight),
-        width: Int(dataResolutionWidth),
-        onscreenControls: 0,
-        remote: false,
-        optimizeGames: settings.optimize,
-        multiController: settings.multiController,
-        audioOnPC: settings.audioOnPC,
-        useHevc: dataCodec,
-        enableHdr: settings.hdr,
-        btMouseSupport: false
-      )
+  /// A stream starts on `screen`: a size typed by hand becomes a recent choice.
+  @objc static func noteResolutionUsed(for key: String, screen: NSScreen?) {
+    guard let settings = Settings.getSettings(for: key) else { return }
+    let screenID = StreamScreens.screen(for: screen)?.id
+    let ownChoice = screenID.flatMap { settings.screenResolutions?[$0] }
+    if let ownChoice, ownChoice.width > 0 {
+      RecentStreamResolutions.note(ownChoice)
+    } else if ownChoice == nil, settings.resolution == .zero, let custom = settings.customResolution {
+      RecentStreamResolutions.note(custom)
     }
   }
 

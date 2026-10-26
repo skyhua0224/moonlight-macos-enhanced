@@ -23,8 +23,8 @@
 @end
 
 // Foundation Sunshine remote display scale: reads the Windows display scale of the streamed
-// display and lets the user change it from the control center. The host is never changed on
-// its own: not when a stream starts and not when it ends. Host calls run on a private serial
+// display and lets the user change it from the control center. The host is changed only when
+// asked: by hand there, or by a Free Window set to Every Pixel; never when a stream ends. Host calls run on a private serial
 // queue; nothing here blocks the caller.
 typedef NS_ENUM(NSInteger, MLRemoteDisplayScaleSupport) {
     // Not asked yet, or the last request failed in a way that may be temporary.

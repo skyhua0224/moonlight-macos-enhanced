@@ -214,10 +214,15 @@
     self.liveStreamHeight = height;
     Log(LOG_I, @"[live] Stream resolution is now %dx%d", width, height);
 
+    if (self.freeWindowActive) {
+        // The window chose this size; it keeps its shape.
+        [self freeWindowHostResolutionChanged];
+        return;
+    }
+
     // The absolute mouse reference is the view size, so only the window shape follows the stream.
     NSWindow *window = self.view.window;
-    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
-    if (window == nil || [prefs[@"ignoreAspectRatio"] boolValue]) {
+    if (window == nil) {
         return;
     }
 

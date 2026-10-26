@@ -170,20 +170,49 @@ enum SettingsProfileDifferences {
   ]
 
   private static let streamFields: [Field] = [
+    Field(titleKey: "Window Mode") { v in
+      let mode = v.settings.map { $0.displayMode ?? ($0.autoFullscreen ? 1 : 0) }
+        ?? SettingsModel.defaultDisplayMode
+      return option(SettingsModel.getString(from: mode, in: SettingsModel.displayModes))
+    },
     Field(titleKey: "Resolution") { v in
       guard let s = v.settings else {
         return Reading(size(SettingsModel.defaultResolution.width, SettingsModel.defaultResolution.height))
       }
-      if s.matchDisplayResolution ?? false { return option("Match Display") }
-      if let custom = s.customResolution, custom.width > 0, custom.height > 0 {
+      if StreamResolution.displayMode(of: s) == .freeWindow, (s.freeWindowInitialSize ?? 0) == 0 {
+        return option("Last Window Size")
+      }
+      if s.matchDisplayResolution ?? false || s.resolution == SettingsModel.matchDisplayResolutionSentinel {
+        return option("Match Display")
+      }
+      if let custom = s.customResolution, custom.width > 0, custom.height > 0, s.resolution == .zero {
         return Reading(size(custom.width, custom.height))
       }
       let resolution = s.resolution == .zero ? SettingsModel.defaultResolution : s.resolution
       return Reading(size(resolution.width, resolution.height))
     },
+    Field(titleKey: "Resolution per Screen") { v in
+      let screens = v.settings?.screenResolutions ?? [:]
+      guard !screens.isEmpty else { return option("Off") }
+      let names = Dictionary(uniqueKeysWithValues: StreamScreens.known().map { ($0.id, $0.name) })
+      let parts = screens.sorted { $0.key < $1.key }.map { id, choice -> String in
+        let value = choice == SettingsModel.matchDisplayResolutionSentinel
+          ? LanguageManager.shared.localize("Match Display") : size(choice.width, choice.height)
+        return "\(names[id] ?? id): \(value)"
+      }
+      return Reading(parts.joined(separator: ", "))
+    },
+    Field(titleKey: "Notch") { v in
+      option((v.settings?.notchMode ?? 0) == StreamNotchMode.fill.rawValue ? "Fill Screen" : "Avoid Notch")
+    },
+    Field(titleKey: "Retina") { v in
+      option((v.settings?.freeWindowScaleMode ?? 0) == FreeWindowScaleMode.points.rawValue
+        ? "Point Size" : "Every Pixel")
+    },
     Field(titleKey: "Frame Rate") { v in
+      if v.settings?.fps == StreamResolution.matchDisplayFps { return option("Match Display") }
       let fps: Int
-      if let custom = v.settings?.customFps, custom > 0 {
+      if let custom = v.settings?.customFps, custom > 0, v.settings?.fps == 0 {
         fps = Int(custom)
       } else if let stored = v.settings?.fps, stored > 0 {
         fps = stored
@@ -197,6 +226,9 @@ enum SettingsProfileDifferences {
     },
     Field(titleKey: "Resolution Scale Ratio") { v in
       Reading("\(v.settings?.streamResolutionScaleRatio ?? SettingsModel.defaultStreamResolutionScaleRatio)%")
+    },
+    Field(titleKey: "Picture Aspect") { v in
+      option((v.settings?.ignoreAspectRatio ?? SettingsModel.defaultIgnoreAspectRatio) ? "Stretch to Fill" : "Keep Aspect")
     },
     Field(titleKey: "Auto Adjust Bitrate") { v in
       onOff(v.settings?.autoAdjustBitrate ?? SettingsModel.defaultAutoAdjustBitrate)
@@ -213,19 +245,8 @@ enum SettingsProfileDifferences {
     Field(titleKey: "Adaptive Bitrate") { v in
       onOff(v.settings?.enableAdaptiveBitrate ?? SettingsModel.defaultEnableAdaptiveBitrate)
     },
-    Field(titleKey: "Ignore Aspect Ratio") { v in
-      onOff(v.settings?.ignoreAspectRatio ?? SettingsModel.defaultIgnoreAspectRatio)
-    },
-    Field(titleKey: "Show Local Cursor") { v in
-      onOff(v.settings?.showLocalCursor ?? SettingsModel.defaultShowLocalCursor)
-    },
     Field(titleKey: "Video FEC") { v in
       option(SettingsModel.videoFecPercentageSelection(for: v.settings?.videoFecPercentage))
-    },
-    Field(titleKey: "Default Display Mode") { v in
-      let mode = v.settings.map { $0.displayMode ?? ($0.autoFullscreen ? 1 : 0) }
-        ?? SettingsModel.defaultDisplayMode
-      return option(SettingsModel.getString(from: mode, in: SettingsModel.displayModes))
     },
   ]
 
@@ -475,6 +496,9 @@ enum SettingsProfileDifferences {
   ]
 
   private static let inputFields: [Field] = [
+    Field(titleKey: "Show Local Cursor") { v in
+      onOff(v.settings?.showLocalCursor ?? SettingsModel.defaultShowLocalCursor)
+    },
     Field(titleKey: "Mouse Mode") { v in
       let mode = v.settings?.mouseMode.map {
         SettingsModel.getString(from: $0, in: SettingsModel.mouseModes)

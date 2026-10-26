@@ -909,7 +909,7 @@
 "Keep Waiting" = "继续等待";
 "Local Network" = "局域网";
 "Logs" = "日志";
-"Match Display (%.0fx%.0f)" = "跟随显示器 (%.0fx%.0f)";
+"Match Display (%.0fx%.0f)" = "跟随屏幕 (%.0f × %.0f)";
 "More" = "更多";
 "No Addresses Available" = "无可用地址";
 "No Default (Automatic)" = "不设默认（自动）";
@@ -979,7 +979,7 @@
 "Listening Device" = "聆听设备";
 "Locked Mouse" = "锁定鼠标";
 "Long-press Menu to Toggle Mouse Mode" = "长按菜单键切换鼠标模式";
-"Match Display" = "匹配显示器";
+"Match Display" = "跟随屏幕";
 "Match Display Resolution hint" = "自动匹配当前显示器尺寸。";
 "Native Touchpad Input" = "原生触控板输入";
 "No Filter" = "无筛选";
@@ -2043,3 +2043,29 @@
 "Uses the Default Profile" = "使用默认配置";
 "Hosts using Default %d" = "%d 台主机正在使用";
 "Reset to Default Profile…" = "恢复为默认配置…";
+
+/* Picture */
+"Window Mode" = "窗口模式";
+"Free Window" = "自由窗口";
+"Initial Size" = "初始大小";
+"Last Window Size" = "上次的窗口大小";
+"Recently Used" = "最近使用";
+"Resolution per Screen" = "各屏幕分辨率";
+"%d screens set" = "已单独设置 %d 块";
+"Set Up…" = "设置…";
+"Notch" = "刘海";
+"Avoid Notch" = "避开刘海";
+"Fill Screen" = "铺满屏幕";
+"Retina" = "Retina";
+"Retina free window detail" = "按像素最清晰，同时把主机的显示缩放调成和这台 Mac 一致。";
+"Every Pixel" = "按像素";
+"Point Size" = "按点";
+"Picture Aspect" = "画面比例";
+"Keep Aspect" = "保持比例";
+"Stretch to Fill" = "拉伸填满";
+"Free Window needs Foundation Sunshine" = "自由窗口需要 Foundation Sunshine，这台主机会改用固定比例窗口。";
+"Not Connected" = "未连接";
+"Forget Screen" = "忽略这块屏幕";
+"Use Picture Setting" = "与画面设置相同";
+"Follows the Window (%d × %d)" = "跟随窗口 (%d × %d)";
+"Free Window fallback notice" = "这台主机不能跟着窗口改分辨率，窗口会保持串流的比例。";

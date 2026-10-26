@@ -915,9 +915,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self installMouseTrackingArea];
     
     NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
-    BOOL ignoreAspectRatio = prefs ? [prefs[@"ignoreAspectRatio"] boolValue] : NO;
 
-    if (!ignoreAspectRatio) {
+    // A fixed aspect window keeps the stream's shape; Picture Aspect only matters where the
+    // window cannot (fullscreen and borderless on a screen of another shape).
+    if (!self.freeWindowActive) {
         int width = [self.class getResolution].width;
         int height = [self.class getResolution].height;
 
@@ -948,7 +949,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSScreen *preferredScreen = MLScreenContainingMouseLocation();
     NSString *autosaveKey = [NSString stringWithFormat:@"NSWindow Frame %@", self.view.window.frameAutosaveName];
     BOOL hasSavedFrame = [[NSUserDefaults standardUserDefaults] stringForKey:autosaveKey].length > 0;
-    if (hasSavedFrame) {
+    if (self.freeWindowActive) {
+        // The stream was asked for at this size in prepareForStreaming.
+        [self applyFreeWindowGeometryOnScreen:preferredScreen];
+    } else if (hasSavedFrame) {
         [self.view.window moonlight_centerWindowOnScreen:preferredScreen];
     } else {
         [self.view.window setFrame:NSMakeRect(0, 0, initialW, initialH) display:NO];
@@ -1388,7 +1392,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.appName = self.app.name;
     streamConfig.serverCert = self.app.host.serverCert;
     streamConfig.serverCodecModeSupport = self.app.host.serverCodecModeSupport;
-    
+
+    // Size and frame rate for the screen the stream is shown on: the window's, or for a new
+    // window the one under the pointer, where viewDidAppear places it.
+    NSScreen *targetScreen = self.view.window.screen ?: MLScreenContainingMouseLocation();
+    self.freeWindowActive = [self shouldStartAsFreeWindow];
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid screen:targetScreen];
+    [SettingsClass noteResolutionUsedFor:self.app.host.uuid screen:targetScreen];
+
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
@@ -1396,13 +1407,22 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.liveStreamHeight = 0;
     streamConfig.width = [self.class getResolution].width;
     streamConfig.height = [self.class getResolution].height;
+    if (self.freeWindowActive && self.view.window != nil) {
+        // Reconnecting: the window is already there, and its size is what to ask for.
+        NSSize target = [self freeWindowTargetStreamSize];
+        streamConfig.width = (int)target.width;
+        streamConfig.height = (int)target.height;
+        self.liveStreamWidth = streamConfig.width;
+        self.liveStreamHeight = streamConfig.height;
+    }
 
     streamConfig.frameRate = [streamSettings.framerate intValue];
 
     // Apply resolution scaling (mirrors moonlight-qt behavior)
     BOOL scaleEnabled = prefs ? [prefs[@"streamResolutionScale"] boolValue] : NO;
     int scaleRatio = prefs ? [prefs[@"streamResolutionScaleRatio"] intValue] : 100;
-    if (scaleEnabled && scaleRatio > 0 && scaleRatio != 100) {
+    // A free window asks for its own size; Point Size is how it sends fewer pixels.
+    if (!self.freeWindowActive && scaleEnabled && scaleRatio > 0 && scaleRatio != 100) {
         int scaledWidth = streamConfig.width * scaleRatio / 100;
         int scaledHeight = streamConfig.height * scaleRatio / 100;
         streamConfig.width = (scaledWidth / 8) * 8;
@@ -1759,6 +1779,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.controllerRightGain = controllerCalibration[@"rightGain"].doubleValue;
     streamConfig.upscalingMode = (int)[SettingsClass upscalingModeFor:self.app.host.uuid];
     streamConfig.frameInterpolationMode = prefs[@"frameInterpolationMode"] != nil ? [prefs[@"frameInterpolationMode"] intValue] : 0;
+    // A free window is briefly a different shape than the stream while its size is being sent.
+    streamConfig.stretchToFill = [prefs[@"ignoreAspectRatio"] boolValue] || self.freeWindowActive;
     Log(LOG_I, @"[diag] Stream timing config: preset=%d framePacing=%d buffer=%d responsiveness=%d compatibility=%d vsync=%d sdrCompat=%d",
         (int)streamConfig.smoothnessLatencyMode,
         (int)streamConfig.framePacingMode,
@@ -2003,6 +2025,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
             callbackConn,
             callbackInputContext,
             self.streamMan.connection);
+        [self freeWindowConnectionStarted:callbackConn ?: self.streamMan.connection];
         if (self.pendingAudioPlanNotice.length > 0) {
             NSString *audioPlanNotice = self.pendingAudioPlanNotice;
             self.pendingAudioPlanNotice = nil;

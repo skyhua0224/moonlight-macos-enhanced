@@ -284,6 +284,10 @@ extension SettingsModel {
     enableYUV444 = Self.defaultEnableYUV444
     ignoreAspectRatio = Self.defaultIgnoreAspectRatio
     showLocalCursor = Self.defaultShowLocalCursor
+    notchMode = StreamNotchMode.avoid.rawValue
+    freeWindowScaleMode = FreeWindowScaleMode.pixels.rawValue
+    freeWindowInitialSize = 0
+    screenResolutions = [:]
     enableMicrophone = Self.defaultEnableMicrophone
     enableAdaptiveBitrate = Self.defaultEnableAdaptiveBitrate
     streamResolutionScale = Self.defaultStreamResolutionScale
@@ -439,6 +443,10 @@ extension SettingsModel {
       enableYUV444 = settings.enableYUV444 ?? Self.defaultEnableYUV444
       ignoreAspectRatio = settings.ignoreAspectRatio ?? Self.defaultIgnoreAspectRatio
       showLocalCursor = settings.showLocalCursor ?? Self.defaultShowLocalCursor
+      notchMode = settings.notchMode ?? StreamNotchMode.avoid.rawValue
+      freeWindowScaleMode = settings.freeWindowScaleMode ?? FreeWindowScaleMode.pixels.rawValue
+      freeWindowInitialSize = settings.freeWindowInitialSize ?? 0
+      screenResolutions = settings.screenResolutions ?? [:]
       enableMicrophone = settings.enableMicrophone ?? Self.defaultEnableMicrophone
       enableAdaptiveBitrate = settings.enableAdaptiveBitrate ?? Self.defaultEnableAdaptiveBitrate
       streamResolutionScale = settings.streamResolutionScale ?? Self.defaultStreamResolutionScale
@@ -626,7 +634,7 @@ extension SettingsModel {
       remoteFpsEnabled = settings.remoteFps ?? Self.defaultRemoteFpsEnabled
       if remoteFpsEnabled {
         let rate = settings.remoteFpsRate ?? 0
-        if Self.fpss.contains(rate), rate != 0 {
+        if Self.remoteFpss.contains(rate), rate != 0 {
           selectedRemoteFps = rate
           remoteCustomFps = nil
         } else {
@@ -881,7 +889,7 @@ extension SettingsModel {
       }
     }
 
-    let settings = Settings(
+    var settings = Settings(
       resolution: matchDisplayResolution ? Self.defaultResolution : selectedResolution,
       matchDisplayResolution: matchDisplayResolution,
       customResolution: customResolution,
@@ -1009,6 +1017,10 @@ extension SettingsModel {
       timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround,
       enableAdaptiveBitrate: enableAdaptiveBitrate
     )
+    settings.notchMode = notchMode
+    settings.freeWindowScaleMode = freeWindowScaleMode
+    settings.freeWindowInitialSize = freeWindowInitialSize
+    settings.screenResolutions = screenResolutions.isEmpty ? nil : screenResolutions
 
     let profileKey = SettingsClass.profileKey(for: hostId)
     if let data = try? PropertyListEncoder().encode(settings) {

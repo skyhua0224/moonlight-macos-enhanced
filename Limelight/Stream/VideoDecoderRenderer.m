@@ -1517,6 +1517,26 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     dispatch_semaphore_t _metalInflightSemaphore;
 }
 
+@synthesize stretchToFill = _stretchToFill;
+
+- (BOOL)stretchToFill {
+    @synchronized (self) {
+        return _stretchToFill;
+    }
+}
+
+- (void)setStretchToFill:(BOOL)stretchToFill {
+    @synchronized (self) {
+        if (_stretchToFill == stretchToFill) {
+            return;
+        }
+        _stretchToFill = stretchToFill;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self->displayLayer.videoGravity = stretchToFill ? AVLayerVideoGravityResize : AVLayerVideoGravityResizeAspect;
+    });
+}
+
 @synthesize videoFormat;
 
 - (BOOL)hasPresentedVideo
@@ -1614,7 +1634,7 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
 
     displayLayer = (AVSampleBufferDisplayLayer *)layerContainer.layer;
     displayLayer.backgroundColor = [OSColor blackColor].CGColor;
-    displayLayer.videoGravity = AVLayerVideoGravityResizeAspect;
+    displayLayer.videoGravity = self.stretchToFill ? AVLayerVideoGravityResize : AVLayerVideoGravityResizeAspect;
     displayLayer.opaque = YES;
     [self prepareNativePresentationResources];
 
@@ -1783,6 +1803,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     if (streamConfig == nil) {
         return;
     }
+    self.stretchToFill = streamConfig.stretchToFill;
 
     void (^warmBlock)(void) = ^{
         uint64_t warmStartMs = LiGetMillis();
@@ -4898,9 +4919,11 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     [renderEncoder setFragmentTexture:sourceTexture atIndex:0];
     NSUInteger fitWidth = drawable.texture.width;
     NSUInteger fitHeight = drawable.texture.height;
-    MLAspectFitPixelSize(sourceTexture.width, sourceTexture.height,
-                         drawable.texture.width, drawable.texture.height,
-                         &fitWidth, &fitHeight);
+    if (!self.stretchToFill) {
+        MLAspectFitPixelSize(sourceTexture.width, sourceTexture.height,
+                             drawable.texture.width, drawable.texture.height,
+                             &fitWidth, &fitHeight);
+    }
     MTLViewport viewport = {
         .originX = ((double)drawable.texture.width - (double)fitWidth) * 0.5,
         .originY = ((double)drawable.texture.height - (double)fitHeight) * 0.5,
@@ -4936,9 +4959,11 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
 
         NSUInteger fitWidth = drawable.texture.width;
         NSUInteger fitHeight = drawable.texture.height;
-        MLAspectFitPixelSize(sourceTexture.width, sourceTexture.height,
-                             drawable.texture.width, drawable.texture.height,
-                             &fitWidth, &fitHeight);
+        if (!self.stretchToFill) {
+            MLAspectFitPixelSize(sourceTexture.width, sourceTexture.height,
+                                 drawable.texture.width, drawable.texture.height,
+                                 &fitWidth, &fitHeight);
+        }
         // MetalFX is an upscaler. When the drawable is smaller than the
         // source, fall back to the direct aspect-fit renderer instead of
         // asking the scaler to downscale or changing the requested stream.

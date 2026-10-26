@@ -142,6 +142,23 @@ struct Settings: Encodable, Decodable {
   let timingSdrCompatibilityWorkaround: Bool?
   var enableAdaptiveBitrate: Bool? = nil
 
+  // Picture: see StreamDisplay.swift
+  var notchMode: Int? = nil
+  var freeWindowScaleMode: Int? = nil
+  var freeWindowInitialSize: Int? = nil
+  /// Resolution of a screen with its own choice, by display UUID; match display is (-1, -1).
+  var screenResolutions: [String: CGSize]? = nil
+
+  /// Carries the fields that the memberwise initializer leaves at their defaults.
+  fileprivate func withPictureFields(of source: Settings) -> Settings {
+    var settings = self
+    settings.notchMode = source.notchMode
+    settings.freeWindowScaleMode = source.freeWindowScaleMode
+    settings.freeWindowInitialSize = source.freeWindowInitialSize
+    settings.screenResolutions = source.screenResolutions
+    return settings
+  }
+
   private static func globalProfileKey() -> String {
     SettingsClass.profileKey(for: SettingsModel.globalHostId)
   }
@@ -295,7 +312,7 @@ struct Settings: Encodable, Decodable {
       timingCompatibilityMode: timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: timingSdrCompatibilityWorkaround,
       enableAdaptiveBitrate: enableAdaptiveBitrate
-    )
+    ).withPictureFields(of: self)
   }
 
   static func getSettings(for key: String) -> Self? {
@@ -423,7 +440,8 @@ extension SettingsClass {
     mouseMode: Int? = nil,
     volumeLevel: CGFloat? = nil,
     keyboardCompatibilityMode: Int? = nil,
-    streamShortcuts: [String: StreamShortcut]? = nil
+    streamShortcuts: [String: StreamShortcut]? = nil,
+    displayMode: Int? = nil
   ) -> Settings {
     let resolvedResolution = resolution ?? settings.resolution
     let resolvedMatchDisplayResolution = matchDisplayResolution ?? settings.matchDisplayResolution
@@ -555,7 +573,7 @@ extension SettingsClass {
       optimize: settings.optimize,
 
       autoFullscreen: settings.autoFullscreen,
-      displayMode: settings.displayMode,
+      displayMode: displayMode ?? settings.displayMode,
       rumble: settings.rumble,
       controllerDriver: settings.controllerDriver,
       mouseDriver: settings.mouseDriver,
@@ -602,7 +620,7 @@ extension SettingsClass {
       timingCompatibilityMode: settings.timingCompatibilityMode,
       timingSdrCompatibilityWorkaround: settings.timingSdrCompatibilityWorkaround,
       enableAdaptiveBitrate: settings.enableAdaptiveBitrate
-    )
+    ).withPictureFields(of: settings)
   }
 
 }

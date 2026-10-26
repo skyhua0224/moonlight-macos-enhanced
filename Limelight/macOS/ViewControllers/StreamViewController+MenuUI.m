@@ -1505,20 +1505,26 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     BOOL isBorderless = ((self.view.window.styleMask & NSWindowStyleMaskTitled) == 0) && !isFullscreen;
     BOOL isWindowed = !isFullscreen && !isBorderless;
 
-    NSMenuItem *windowedItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Windowed", nil) action:@selector(switchToWindowedMode:) keyEquivalent:@""];
+    NSMenuItem *freeWindowItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Free Window", nil) action:@selector(switchToFreeWindowMode:) keyEquivalent:@""];
+    freeWindowItem.target = self;
+    freeWindowItem.state = (isWindowed && self.freeWindowActive) ? NSControlStateValueOn : NSControlStateValueOff;
+    setSymbol(freeWindowItem, @"macwindow.on.rectangle");
+    [windowMenu addItem:freeWindowItem];
+
+    NSMenuItem *windowedItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Windowed", nil) action:@selector(switchToFixedAspectWindowMode:) keyEquivalent:@""];
     windowedItem.target = self;
-    windowedItem.state = isWindowed ? NSControlStateValueOn : NSControlStateValueOff;
+    windowedItem.state = (isWindowed && !self.freeWindowActive) ? NSControlStateValueOn : NSControlStateValueOff;
     setSymbol(windowedItem, @"macwindow");
     [windowMenu addItem:windowedItem];
 
-    NSMenuItem *fullscreenItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Fullscreen", nil) action:@selector(switchToFullscreenMode:) keyEquivalent:@"f"];
+    NSMenuItem *fullscreenItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Fullscreen", nil) action:@selector(selectFullscreenModeFromMenu:) keyEquivalent:@"f"];
     fullscreenItem.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagCommand;
     fullscreenItem.target = self;
     fullscreenItem.state = isFullscreen ? NSControlStateValueOn : NSControlStateValueOff;
     setSymbol(fullscreenItem, @"arrow.up.left.and.arrow.down.right");
     [windowMenu addItem:fullscreenItem];
 
-    NSMenuItem *borderlessItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Borderless Windowed", nil) action:@selector(switchToBorderlessMode:) keyEquivalent:@""];
+    NSMenuItem *borderlessItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Borderless Windowed", nil) action:@selector(selectBorderlessModeFromMenu:) keyEquivalent:@""];
     borderlessItem.target = self;
     borderlessItem.state = isBorderless ? NSControlStateValueOn : NSControlStateValueOff;
     setSymbol(borderlessItem, @"rectangle.dashed");
@@ -1550,92 +1556,71 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     setSymbol(monitorItem, @"display");
     NSMenu *monitorMenu = [[NSMenu alloc] initWithTitle:MLString(@"Display", nil)];
 
-    // 1. Follow Monitor
-    CGSize refreshLocalSize = CGSizeZero;
-    if ([self.view.window screen]) {
-        NSRect screenFrame = [self.view.window screen].frame;
-        CGFloat scale = [self.view.window screen].backingScaleFactor;
-        refreshLocalSize = CGSizeMake(screenFrame.size.width * scale, screenFrame.size.height * scale);
-    }
-    
-    NSString *matchDisplayTitle = MLString(@"Match Display", nil);
-    if (refreshLocalSize.width > 0 && refreshLocalSize.height > 0) {
-        matchDisplayTitle = [NSString stringWithFormat:MLString(@"Match Display (%.0fx%.0f)", nil), refreshLocalSize.width, refreshLocalSize.height];
-    }
+    NSString *hostUUID = self.app.host.uuid;
+    NSScreen *windowScreen = self.view.window.screen;
+    NSDictionary *currentPrefs = [SettingsClass getSettingsFor:hostUUID];
+    struct Resolution currentRes = [self effectiveStreamResolution];
 
-    NSMenuItem *matchDisplayItem = [[NSMenuItem alloc] initWithTitle:matchDisplayTitle action:@selector(selectMatchDisplayFromMenu:) keyEquivalent:@""];
-    matchDisplayItem.target = self;
-    
-    NSDictionary *currentPrefs = [SettingsClass getSettingsFor:self.app.host.uuid];
-    BOOL isMatchDisplay = currentPrefs ? [currentPrefs[@"matchDisplayResolution"] boolValue] : NO;
-    matchDisplayItem.state = isMatchDisplay ? NSControlStateValueOn : NSControlStateValueOff;
+    // The frame rate the stream runs at (Match Display and custom are resolved here).
+    int storedFps = currentPrefs ? [currentPrefs[@"fps"] intValue] : 0;
+    int currentFps = [[[DataManager alloc] getSettings].framerate intValue];
 
-    setSymbol(matchDisplayItem, @"macwindow.badge.plus");
-    [monitorMenu addItem:matchDisplayItem];
+    if (self.freeWindowActive) {
+        NSString *title = [NSString stringWithFormat:MLString(@"Follows the Window (%d × %d)", nil),
+                           currentRes.width, currentRes.height];
+        NSMenuItem *followItem = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+        followItem.state = NSControlStateValueOn;
+        setSymbol(followItem, @"macwindow.on.rectangle");
+        [monitorMenu addItem:followItem];
+    } else {
+        BOOL isMatchDisplay = currentPrefs ? [currentPrefs[@"matchDisplayResolution"] boolValue] : NO;
+        CGSize matchSize = [SettingsClass matchDisplayMenuSizeFor:hostUUID screen:windowScreen];
+        NSString *matchDisplayTitle = matchSize.width > 0
+            ? [NSString stringWithFormat:MLString(@"Match Display (%.0fx%.0f)", nil), matchSize.width, matchSize.height]
+            : MLString(@"Match Display", nil);
+        NSMenuItem *matchDisplayItem = [[NSMenuItem alloc] initWithTitle:matchDisplayTitle action:@selector(selectMatchDisplayFromMenu:) keyEquivalent:@""];
+        matchDisplayItem.target = self;
+        matchDisplayItem.state = isMatchDisplay ? NSControlStateValueOn : NSControlStateValueOff;
+        setSymbol(matchDisplayItem, @"macwindow.badge.plus");
+        [monitorMenu addItem:matchDisplayItem];
 
-    struct Resolution currentRes = [self.class getResolution];
-    
-    int currentFps = 0;
-    if (prefs) {
-        int rawFps = [prefs[@"fps"] intValue];
-        if (rawFps == 0) {
-            currentFps = [prefs[@"customFps"] intValue];
-        } else {
-            currentFps = rawFps;
+        // The same list as the settings: recent sizes, then the presets by aspect ratio.
+        BOOL currentIsListed = isMatchDisplay;
+        for (NSDictionary *group in [SettingsClass resolutionMenuGroups]) {
+            [monitorMenu addItem:[NSMenuItem separatorItem]];
+            NSMenuItem *header = nil;
+            if (@available(macOS 14.0, *)) {
+                header = [NSMenuItem sectionHeaderWithTitle:group[@"title"]];
+            } else {
+                header = [[NSMenuItem alloc] initWithTitle:group[@"title"] action:nil keyEquivalent:@""];
+                header.enabled = NO;
+            }
+            [monitorMenu addItem:header];
+            for (NSValue *val in group[@"sizes"]) {
+                NSSize size = val.sizeValue;
+                NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[SettingsClass resolutionLabel:size]
+                                                              action:@selector(selectResolutionFromMenu:)
+                                                       keyEquivalent:@""];
+                item.target = self;
+                item.representedObject = val;
+                BOOL selected = !isMatchDisplay && currentRes.width == (int)size.width && currentRes.height == (int)size.height;
+                item.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
+                currentIsListed = currentIsListed || selected;
+                [monitorMenu addItem:item];
+            }
         }
-    }
-    if (currentFps == 0) {
-        TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
-        currentFps = [tempSettings.framerate intValue];
-    }
 
-    // Check if effective config is 0x0 (which we interpret as Host Native)
-    BOOL isMatchHost = (!isMatchDisplay && currentRes.width == 0 && currentRes.height == 0);
-
-    [monitorMenu addItem:[NSMenuItem separatorItem]];
-    
-    // 3. Custom
-    NSMenuItem *customItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Custom…", nil) action:@selector(selectCustomResolutionFromMenu:) keyEquivalent:@""];
-    customItem.target = self;
-    setSymbol(customItem, @"slider.horizontal.below.rectangle");
-    [monitorMenu addItem:customItem];
-
-    [monitorMenu addItem:[NSMenuItem separatorItem]];
-
-    // 4. Resolutions Submenu
-    // Determine if we should show "Current Resolution" or if it is covered by standard list / custom.
-    BOOL currentIsStandard = NO;
-
-    NSArray<NSValue *> *resolutions = @[
-        [NSValue valueWithSize:NSMakeSize(3840, 2160)],
-        [NSValue valueWithSize:NSMakeSize(2560, 1440)],
-        [NSValue valueWithSize:NSMakeSize(1920, 1080)],
-        [NSValue valueWithSize:NSMakeSize(1280, 720)]
-    ];
-
-    for (NSValue *val in resolutions) {
-        NSSize size = val.sizeValue;
-        if ((int)size.width == currentRes.width && (int)size.height == currentRes.height) {
-            currentIsStandard = YES;
+        [monitorMenu addItem:[NSMenuItem separatorItem]];
+        if (!currentIsListed && currentRes.width > 0 && currentRes.height > 0) {
+            NSString *customTitle = [NSString stringWithFormat:MLString(@"Current (Custom): %dx%d", nil), currentRes.width, currentRes.height];
+            NSMenuItem *currentItem = [[NSMenuItem alloc] initWithTitle:customTitle action:nil keyEquivalent:@""];
+            currentItem.state = NSControlStateValueOn;
+            [monitorMenu addItem:currentItem];
         }
-        
-        NSString *title = [NSString stringWithFormat:@"%.0f x %.0f", size.width, size.height];
-        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(selectResolutionFromMenu:) keyEquivalent:@""];
-        item.target = self;
-        item.representedObject = val;
-        
-        BOOL selected = (!isMatchDisplay && !isMatchHost && currentRes.width == (int)size.width && currentRes.height == (int)size.height);
-        item.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
-        
-        [monitorMenu addItem:item];
-    }
-    
-    // If current is NOT Follow Monitor, NOT Follow Host, and NOT Standard, we display it as "Effective Custom"
-    if (!isMatchDisplay && !isMatchHost && !currentIsStandard) {
-        NSString *customTitle = [NSString stringWithFormat:MLString(@"Current (Custom): %dx%d", nil), currentRes.width, currentRes.height];
-        NSMenuItem *currentItem = [[NSMenuItem alloc] initWithTitle:customTitle action:nil keyEquivalent:@""];
-        currentItem.state = NSControlStateValueOn;
-        [monitorMenu addItem:currentItem];
+        NSMenuItem *customItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Custom…", nil) action:@selector(selectCustomResolutionFromMenu:) keyEquivalent:@""];
+        customItem.target = self;
+        setSymbol(customItem, @"slider.horizontal.below.rectangle");
+        [monitorMenu addItem:customItem];
     }
 
     [monitorMenu addItem:[NSMenuItem separatorItem]];
@@ -1644,22 +1629,30 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     NSMenuItem *fpsSubItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Frame Rate", nil) action:nil keyEquivalent:@""];
     NSMenu *fpsSubMenu = [[NSMenu alloc] initWithTitle:MLString(@"Frame Rate", nil)];
     
+    BOOL fpsFollowsScreen = storedFps == -1;
+    NSMenuItem *matchFpsItem = [[NSMenuItem alloc] initWithTitle:[SettingsClass matchDisplayFrameRateTitleWithScreen:windowScreen]
+                                                          action:@selector(selectFrameRateFromMenu:)
+                                                   keyEquivalent:@""];
+    matchFpsItem.target = self;
+    matchFpsItem.representedObject = @(-1);
+    matchFpsItem.state = fpsFollowsScreen ? NSControlStateValueOn : NSControlStateValueOff;
+    [fpsSubMenu addItem:matchFpsItem];
+    [fpsSubMenu addItem:[NSMenuItem separatorItem]];
+
     NSArray<NSNumber *> *fpsOptions = @[ @30, @60, @90, @120, @144 ];
-    BOOL currentFpsIsStandard = NO;
+    BOOL currentFpsIsStandard = fpsFollowsScreen;
     for (NSNumber *fps in fpsOptions) {
-        if (currentFps == fps.intValue) currentFpsIsStandard = YES;
-        
-        NSString *title = [NSString stringWithFormat:@"%@ FPS", fps];
+        BOOL selected = !fpsFollowsScreen && currentFps == fps.intValue;
+        if (selected) currentFpsIsStandard = YES;
+
+        NSString *title = [NSString stringWithFormat:@"%@ Hz", fps];
         NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(selectFrameRateFromMenu:) keyEquivalent:@""];
         item.target = self;
         item.representedObject = fps;
-        
-        BOOL selected = (currentFps == fps.intValue);
         item.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
-        
         [fpsSubMenu addItem:item];
     }
-    
+
     // If FPS is weird (custom), show it
     if (!currentFpsIsStandard) {
          NSString *title = [NSString stringWithFormat:MLString(@"Current: %d FPS", nil), currentFps];
@@ -2123,6 +2116,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     if (menu != nil && !self.stopStreamInProgress) {
         [self populateRemoteDisplayScaleMenu:menu];
     }
+    [self freeWindowRemoteScaleOptionsChanged];
 }
 
 #pragma mark - NSMenuDelegate
@@ -2151,6 +2145,22 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     [scale applyManualPercent:percent.integerValue completion:^(NSDictionary<NSString *, id> *outcome) {
         [weakSelf presentRemoteDisplayScaleOutcome:outcome];
     }];
+}
+
+// A window mode clicked in the menu becomes the host's; ⌃⌘F only toggles fullscreen for now.
+// A free window keeps following its size in fullscreen and borderless.
+- (void)selectFullscreenModeFromMenu:(id)sender {
+    if (NSApp.currentEvent.type != NSEventTypeKeyDown && !self.freeWindowActive) {
+        [SettingsClass setDisplayMode:1 for:self.app.host.uuid];
+    }
+    [self switchToFullscreenMode:sender];
+}
+
+- (void)selectBorderlessModeFromMenu:(id)sender {
+    if (!self.freeWindowActive) {
+        [SettingsClass setDisplayMode:2 for:self.app.host.uuid];
+    }
+    [self switchToBorderlessMode:sender];
 }
 
 - (void)handleToggleFullscreenFromMenu:(id)sender {
@@ -2280,8 +2290,18 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
             if (h < 0) h = 0;
             if (f < 0) f = 0;
             
-            [SettingsClass setCustomResolution:w :h :f for:self.app.host.uuid];
-            [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+            NSString *uuid = self.app.host.uuid;
+            NSScreen *screen = self.view.window.screen;
+            if (w > 0 && h > 0 && [SettingsClass screenHasOwnResolutionFor:uuid screen:screen]) {
+                [SettingsClass setStreamResolution:NSMakeSize(w, h) matchDisplay:NO for:uuid screen:screen];
+                if (f > 0) {
+                    [SettingsClass setStreamFrameRate:f for:uuid];
+                }
+                [SettingsClass noteRecentResolution:NSMakeSize(w, h)];
+            } else {
+                [SettingsClass setCustomResolution:w :h :f for:uuid];
+            }
+            [SettingsClass loadMoonlightSettingsFor:uuid screen:screen];
             // Zero means "let the host decide", which only a new session can do.
             BOOL appliedLive = w > 0 && h > 0 && f > 0;
             if (appliedLive && (w != res.width || h != res.height)) {
@@ -2299,63 +2319,42 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     }];
 }
 
-- (void)selectMatchDisplayFromMenu:(id)sender {
-    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
-    BOOL currentMatch = prefs ? [prefs[@"matchDisplayResolution"] boolValue] : NO;
-    if (currentMatch) {
-         return;
+// Resolution and frame rate picked here are saved like in the settings (for this screen when it
+// has its own choice), then the stream follows: in place when the host can, otherwise it reconnects.
+- (void)applyResolutionFromMenuWithReason:(NSString *)reason {
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid screen:self.view.window.screen];
+    struct Resolution res = [self.class getResolution];
+    if ([self applyLiveResolutionWidth:res.width height:res.height]) {
+        [self rebuildStreamMenu];
+        return;
     }
-    
-    // Switch to match display
-    // We need current FPS because setResolutionAndFps requires it.
-    TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
-    int currentFps = [tempSettings.framerate intValue];
+    [self attemptReconnectWithReason:reason];
+}
 
-    [SettingsClass setResolutionAndFps:0 :0 :currentFps matchDisplay:YES for:self.app.host.uuid];
-    
-    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
-    [self attemptReconnectWithReason:@"resolution-changed"];
+- (void)selectMatchDisplayFromMenu:(id)sender {
+    [SettingsClass setStreamResolution:CGSizeZero matchDisplay:YES for:self.app.host.uuid screen:self.view.window.screen];
+    [self applyResolutionFromMenuWithReason:@"resolution-changed"];
 }
 
 - (void)selectResolutionFromMenu:(NSMenuItem *)sender {
     NSValue *val = sender.representedObject;
     if (!val) return;
-    NSSize size = val.sizeValue;
-    
-    TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
-    int currentFps = [tempSettings.framerate intValue];
-
-    // Disable match display, set explicit resolution
-    [SettingsClass setResolutionAndFps:(int)size.width :(int)size.height :currentFps matchDisplay:NO for:self.app.host.uuid];
-
-    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
-    if ([self applyLiveResolutionWidth:(int)size.width height:(int)size.height]) {
-        [self rebuildStreamMenu];
-        return;
-    }
-    [self attemptReconnectWithReason:@"resolution-changed"];
+    [SettingsClass setStreamResolution:val.sizeValue matchDisplay:NO for:self.app.host.uuid screen:self.view.window.screen];
+    [self applyResolutionFromMenuWithReason:@"resolution-changed"];
 }
 
 - (void)selectFrameRateFromMenu:(NSMenuItem *)sender {
-    NSNumber *fpsStats = sender.representedObject;
-    if (!fpsStats) return;
-    int newFps = fpsStats.intValue;
+    NSNumber *fpsValue = sender.representedObject;
+    if (!fpsValue) return;
+    [SettingsClass setStreamFrameRate:fpsValue.intValue for:self.app.host.uuid];
 
-    TemporarySettings *tempSettings = [[DataManager alloc] getSettings];
-    int currentFps = [tempSettings.framerate intValue];
-    if (newFps == currentFps) return;
-    
-    // Get current resolution settings to preserve them
-    NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
-    BOOL matchDisplay = prefs ? [prefs[@"matchDisplayResolution"] boolValue] : NO;
-    
-    // If not matching display, we need to know the explicit resolution.
-    // getResolution returns the currently streaming config resolution, which is what we want to keep.
-    struct Resolution currentRes = [self.class getResolution];
-    
-    [SettingsClass setResolutionAndFps:currentRes.width :currentRes.height :newFps matchDisplay:matchDisplay for:self.app.host.uuid];
-    
-    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid];
+    int previousFps = [[[DataManager alloc] getSettings].framerate intValue];
+    [SettingsClass loadMoonlightSettingsFor:self.app.host.uuid screen:self.view.window.screen];
+    int newFps = [[[DataManager alloc] getSettings].framerate intValue];
+    if (newFps == previousFps) {
+        [self rebuildStreamMenu];
+        return;
+    }
     if ([self applyLiveFramerate:newFps]) {
         [self rebuildStreamMenu];
         return;

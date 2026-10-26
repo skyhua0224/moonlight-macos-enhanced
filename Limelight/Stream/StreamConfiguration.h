@@ -140,6 +140,8 @@
 @property(nonatomic) CGFloat controllerRightGain;
 @property(nonatomic) int upscalingMode;
 @property(nonatomic) int frameInterpolationMode;
+/// Fill the view instead of keeping the aspect ratio (Picture Aspect, or a free window).
+@property(nonatomic) BOOL stretchToFill;
 
 // Startup timeline for the "[startup] first frame" summary, as LiGetMillis() values; 0 = not
 // reached. Each mark is written once, by the stage that owns it, on that stage's thread.

@@ -72,7 +72,14 @@
     }
 
     NSApplicationPresentationOptions opts = [NSApp presentationOptions];
-    opts |= (NSApplicationPresentationHideDock | NSApplicationPresentationHideMenuBar);
+    NSScreen *screen = self.view.window.screen ?: [NSScreen mainScreen];
+    if ([SettingsClass borderlessAvoidsNotchFor:self.app.host.uuid screen:screen]) {
+        // The window stops below the notch; the menu bar fills the strip beside it.
+        opts |= NSApplicationPresentationHideDock;
+        opts &= ~NSApplicationPresentationHideMenuBar;
+    } else {
+        opts |= (NSApplicationPresentationHideDock | NSApplicationPresentationHideMenuBar);
+    }
     [NSApp setPresentationOptions:opts];
 }
 
@@ -314,10 +321,12 @@
     [self restorePresentationOptionsIfNeeded];
 
     if (self.savedContentAspectRatioValid) {
-        @try {
-            window.contentAspectRatio = self.savedContentAspectRatio;
-        } @catch (NSException *exception) {
-            // ignore
+        if (!self.freeWindowActive) {
+            @try {
+                window.contentAspectRatio = self.savedContentAspectRatio;
+            } @catch (NSException *exception) {
+                // ignore
+            }
         }
         self.savedContentAspectRatioValid = NO;
     }
@@ -339,7 +348,9 @@
     struct Resolution res = [self.class getResolution];
     CGFloat aspectRatio = (res.height > 0) ? ((CGFloat)res.width / (CGFloat)res.height) : (16.0 / 9.0);
 
-    if (wasBorderless) {
+    if (self.freeWindowActive) {
+        [self restoreFreeWindowFrame];
+    } else if (wasBorderless) {
         NSScreen *screen = window.screen ?: [NSScreen mainScreen];
         NSRect visible = screen ? screen.visibleFrame : window.frame;
         
@@ -397,10 +408,12 @@
         [self restorePresentationOptionsIfNeeded];
 
         if (self.savedContentAspectRatioValid) {
-            @try {
-                window.contentAspectRatio = self.savedContentAspectRatio;
-            } @catch (NSException *exception) {
-                // ignore
+            if (!self.freeWindowActive) {
+                @try {
+                    window.contentAspectRatio = self.savedContentAspectRatio;
+                } @catch (NSException *exception) {
+                    // ignore
+                }
             }
             self.savedContentAspectRatioValid = NO;
         }
@@ -415,6 +428,16 @@
     } else {
         Log(LOG_I, @"[diag] switchToFullscreenMode no-op: already fullscreen");
     }
+}
+
+/// The frame a borderless stream window covers: the whole screen, or the part below
+/// the notch when the profile keeps the picture out of it.
+- (NSRect)borderlessFrameForScreen:(NSScreen *)screen {
+    NSRect frame = screen.frame;
+    if ([SettingsClass borderlessAvoidsNotchFor:self.app.host.uuid screen:screen]) {
+        frame.size.height -= screen.safeAreaInsets.top;
+    }
+    return frame;
 }
 
 - (void)applyBorderlessMode {
@@ -440,7 +463,7 @@
         // contentAspectRatio (e.g., 16:9), AppKit will refuse a 16:10 screen-sized frame and
         // we end up with a visible blank strip. Temporarily set the aspect ratio to the screen.
         NSScreen *screen = window.screen ?: [NSScreen mainScreen];
-        NSRect screenFrame = screen ? screen.frame : window.frame;
+        NSRect screenFrame = screen ? [self borderlessFrameForScreen:screen] : window.frame;
         if (!self.savedContentAspectRatioValid) {
             self.savedContentAspectRatio = window.contentAspectRatio;
             self.savedContentAspectRatioValid = YES;
@@ -475,11 +498,7 @@
                 return;
             }
             NSScreen *s = w.screen ?: [NSScreen mainScreen];
-            NSRect tf = s ? s.frame : w.frame;
-            // Fix for positioning issue where window is shifted up
-            if (s) {
-                 tf = s.frame;
-            }
+            NSRect tf = s ? [self borderlessFrameForScreen:s] : w.frame;
             [w setFrame:tf display:YES];
             [w.contentView setNeedsLayout:YES];
             [self.view setNeedsLayout:YES];
