@@ -206,17 +206,20 @@
         Log(LOG_W, @"[live] Ignoring invalid host resolution %dx%d", width, height);
         return;
     }
-    if (width == self.liveStreamWidth && height == self.liveStreamHeight) {
-        return;
-    }
-
+    BOOL changed = width != self.liveStreamWidth || height != self.liveStreamHeight;
     self.liveStreamWidth = width;
     self.liveStreamHeight = height;
-    Log(LOG_I, @"[live] Stream resolution is now %dx%d", width, height);
+    if (changed) {
+        Log(LOG_I, @"[live] Stream resolution is now %dx%d", width, height);
+    }
 
     if (self.freeWindowActive) {
-        // The window chose this size; it keeps its shape.
+        // The window chose this size and keeps its shape. A notice repeating the current size
+        // is still the host's answer to a request (it would not switch).
         [self freeWindowHostResolutionChanged];
+        return;
+    }
+    if (!changed) {
         return;
     }
 
