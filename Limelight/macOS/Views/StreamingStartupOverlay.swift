@@ -69,15 +69,32 @@ private final class StartupOverlayView: NSView {
     backdrop.isHidden = false
   }
 
-  /// Blurred and darkened enough to read as a backdrop, never as the live picture.
+  /// Frosted like Screen Sharing: soft enough that the last screen is still recognisable, with
+  /// brightness nudged toward the middle so the spinner reads on dark and bright pictures alike.
   private static func frosted(_ image: NSImage) -> CGImage? {
     guard let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
     let input = CIImage(cgImage: source)
-    let blurred = input.clampedToExtent()
-      .applyingGaussianBlur(sigma: max(12, input.extent.width / 48))
+    let context = CIContext()
+    let luminance = averageLuminance(of: input, context: context) ?? 0.4
+    // Dark pictures are lifted a little, bright ones toned down a little.
+    let brightness = luminance < 0.3 ? (0.3 - luminance) * 0.35 : luminance > 0.7 ? -(luminance - 0.7) * 0.4 : 0
+    let frosted = input.clampedToExtent()
+      .applyingGaussianBlur(sigma: max(4, input.extent.width / 150))
       .cropped(to: input.extent)
-      .applyingFilter("CIColorControls", parameters: [kCIInputBrightnessKey: -0.18, kCIInputSaturationKey: 1.1])
-    return CIContext().createCGImage(blurred, from: input.extent)
+      .applyingFilter("CIColorControls", parameters: [
+        kCIInputBrightnessKey: brightness, kCIInputSaturationKey: 1.25, kCIInputContrastKey: 0.92,
+      ])
+    return context.createCGImage(frosted, from: input.extent)
+  }
+
+  private static func averageLuminance(of image: CIImage, context: CIContext) -> CGFloat? {
+    guard let average = CIFilter(name: "CIAreaAverage", parameters: [
+      kCIInputImageKey: image, kCIInputExtentKey: CIVector(cgRect: image.extent),
+    ])?.outputImage else { return nil }
+    var pixel = [UInt8](repeating: 0, count: 4)
+    context.render(average, toBitmap: &pixel, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                   format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+    return (0.2126 * CGFloat(pixel[0]) + 0.7152 * CGFloat(pixel[1]) + 0.0722 * CGFloat(pixel[2])) / 255
   }
 
   private func centerSpinner() {
