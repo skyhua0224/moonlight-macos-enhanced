@@ -14,7 +14,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "stream/Picture/Custom Resolution", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Custom Resolution", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "stream/Picture/Resolution per Screen", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Resolution per Screen", detailKey: nil, keywords: ["%d screens set", "Set Up…"]),
     SettingsSearchEntry(id: "stream/Picture/Notch", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Notch", detailKey: nil, keywords: ["Avoid Notch", "Fill Screen"]),
-    SettingsSearchEntry(id: "stream/Picture/Retina", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Retina", detailKey: "Retina free window detail", keywords: ["Every Pixel", "Point Size"]),
+    SettingsSearchEntry(id: "stream/Picture/Retina", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Retina", detailKey: nil, keywords: ["Every Pixel", "Point Size"]),
     SettingsSearchEntry(id: "stream/Picture/Resolution Scale", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Resolution Scale", detailKey: "Resolution Scale hint", keywords: []),
     SettingsSearchEntry(id: "stream/Picture/Resolution Scale Ratio", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Resolution Scale Ratio", detailKey: nil, keywords: ["50%", "75%", "100%"]),
     SettingsSearchEntry(id: "stream/Picture/Frame Rate", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Frame Rate", detailKey: nil, keywords: ["Custom…"]),

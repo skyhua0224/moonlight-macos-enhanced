@@ -648,6 +648,16 @@ extension SettingsModel {
   /// The order the window modes are offered in.
   static let displayModeMenuOrder: [String] = ["Free Window", "Windowed", "Borderless Windowed", "Fullscreen"]
 
+  /// The same symbols as the stream menu's Window submenu.
+  static func displayModeSymbol(_ mode: String) -> String {
+    switch mode {
+    case "Free Window": return "arrow.up.and.down.and.arrow.left.and.right"
+    case "Borderless Windowed": return "rectangle.dashed"
+    case "Fullscreen": return "arrow.up.left.and.arrow.down.right"
+    default: return "macwindow"
+    }
+  }
+
   static var isMetalFXSupported: Bool {
     if #available(macOS 13.0, *) {
       return true

@@ -1508,7 +1508,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     NSMenuItem *freeWindowItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Free Window", nil) action:@selector(switchToFreeWindowMode:) keyEquivalent:@""];
     freeWindowItem.target = self;
     freeWindowItem.state = (isWindowed && self.freeWindowActive) ? NSControlStateValueOn : NSControlStateValueOff;
-    setSymbol(freeWindowItem, @"macwindow.on.rectangle");
+    setSymbol(freeWindowItem, @"arrow.up.and.down.and.arrow.left.and.right");
     [windowMenu addItem:freeWindowItem];
 
     NSMenuItem *windowedItem = [[NSMenuItem alloc] initWithTitle:MLString(@"Windowed", nil) action:@selector(switchToFixedAspectWindowMode:) keyEquivalent:@""];
@@ -1570,7 +1570,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
                            currentRes.width, currentRes.height];
         NSMenuItem *followItem = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
         followItem.state = NSControlStateValueOn;
-        setSymbol(followItem, @"macwindow.on.rectangle");
+        setSymbol(followItem, @"arrow.up.and.down.and.arrow.left.and.right");
         [monitorMenu addItem:followItem];
     } else {
         BOOL isMatchDisplay = currentPrefs ? [currentPrefs[@"matchDisplayResolution"] boolValue] : NO;

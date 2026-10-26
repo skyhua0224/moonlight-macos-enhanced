@@ -169,7 +169,7 @@ struct PictureSection: View {
       SettingsRow(title: "Window Mode") {
         Picker("", selection: $settingsModel.selectedDisplayMode) {
           ForEach(offered(SettingsModel.displayModeMenuOrder), id: \.self) { value in
-            Text(languageManager.localize(value)).tag(value)
+            Label(languageManager.localize(value), systemImage: SettingsModel.displayModeSymbol(value)).tag(value)
           }
         }
         .labelsHidden()
@@ -235,7 +235,7 @@ struct PictureSection: View {
       }
 
       if mode == .freeWindow {
-        SettingsRow(title: "Retina", detail: "Retina free window detail") {
+        SettingsRow(title: "Retina") {
           Picker("", selection: $settingsModel.freeWindowScaleMode) {
             Text(languageManager.localize("Every Pixel")).tag(FreeWindowScaleMode.pixels.rawValue)
             Text(languageManager.localize("Point Size")).tag(FreeWindowScaleMode.points.rawValue)
