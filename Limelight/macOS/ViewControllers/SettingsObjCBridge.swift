@@ -424,16 +424,13 @@ class SettingsClass: NSObject {
     )
   }
 
-  /// A stream starts on `screen`: a size typed by hand becomes a recent choice.
+  /// A stream starts on `screen`: the size chosen for it becomes a recent one.
   @objc static func noteResolutionUsed(for key: String, screen: NSScreen?) {
     guard let settings = Settings.getSettings(for: key) else { return }
     let screenID = StreamScreens.screen(for: screen)?.id
-    let ownChoice = screenID.flatMap { settings.screenResolutions?[$0] }
-    if let ownChoice, ownChoice.width > 0 {
-      RecentStreamResolutions.note(ownChoice)
-    } else if ownChoice == nil, settings.resolution == .zero, let custom = settings.customResolution {
-      RecentStreamResolutions.note(custom)
-    }
+    guard StreamResolution.displayMode(of: settings) != .freeWindow else { return }
+    // Match Display has no size of its own to remember.
+    RecentStreamResolutions.note(StreamResolution.choice(in: settings, screenID: screenID))
   }
 
   @objc static func getHostUUID(from address: String) -> String? {

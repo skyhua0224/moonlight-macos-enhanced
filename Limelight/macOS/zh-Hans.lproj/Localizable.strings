@@ -2057,9 +2057,8 @@
 "Avoid Notch" = "避开刘海";
 "Fill Screen" = "铺满屏幕";
 "Retina" = "Retina";
-"Retina free window detail" = "按像素最清晰，同时把主机的显示缩放调成和这台 Mac 一致。";
-"Every Pixel" = "按像素";
-"Point Size" = "按点";
+"Every Pixel" = "清晰";
+"Point Size" = "省带宽";
 "Picture Aspect" = "画面比例";
 "Keep Aspect" = "保持比例";
 "Stretch to Fill" = "拉伸填满";
@@ -2069,3 +2068,5 @@
 "Use Picture Setting" = "与画面设置相同";
 "Follows the Window (%d × %d)" = "跟随窗口 (%d × %d)";
 "Free Window fallback notice" = "这台主机不能跟着窗口改分辨率，窗口会保持串流的比例。";
+"Common" = "常见";
+"This Mac's Screens" = "本机屏幕";
