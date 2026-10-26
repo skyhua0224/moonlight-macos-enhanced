@@ -2581,6 +2581,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     self.clipboardAwaitingInitialSnapshot = NO;
     self.clipboardInitialSnapshotDeadlineMs = 0;
     self.clipboardSessionBound = NO;
+    self.clipboardUnsupportedNoticeShown = NO;
     self.clipboardHasPendingEchoSuppressionHash = NO;
     self.clipboardPendingEchoSuppressionHash = 0;
     [self resetClipboardActivationDiagnosticState];
@@ -2668,6 +2669,12 @@ highFreqMotor:(unsigned short)highFreqMotor {
     int bindErr = [connection bindClipboardSession];
     if (bindErr == LI_ERR_UNSUPPORTED) {
         Log(LOG_I, @"[clipboard] Host does not advertise clipboard sync");
+        // Sync is switched on for this host, so say once per stream that it
+        // cannot work, instead of leaving copy and paste silently broken.
+        if (!self.clipboardUnsupportedNoticeShown) {
+            self.clipboardUnsupportedNoticeShown = YES;
+            [self showNotification:MLString(@"Clipboard sync unsupported notice", nil) forSeconds:6.0];
+        }
         return;
     }
     if (bindErr != 0) {

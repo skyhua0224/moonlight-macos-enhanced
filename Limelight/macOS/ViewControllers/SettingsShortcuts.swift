@@ -75,6 +75,7 @@ final class StreamShortcutProfile: NSObject {
   static let reconnectStreamAction = "reconnectStream"
   static let openControlCenterAction = "openControlCenter"
   static let toggleBorderlessWindowedAction = "toggleBorderlessWindowed"
+  static let typeClipboardTextAction = "typeClipboardText"
 
   private static let orderedActions = [
     releaseMouseCaptureAction,
@@ -87,6 +88,7 @@ final class StreamShortcutProfile: NSObject {
     reconnectStreamAction,
     openControlCenterAction,
     toggleBorderlessWindowedAction,
+    typeClipboardTextAction,
   ]
 
   private static let supportedKeySymbols: [Int: String] = [
@@ -198,6 +200,7 @@ final class StreamShortcutProfile: NSObject {
     case reconnectStreamAction: "Reconnect Stream"
     case openControlCenterAction: "Open control center"
     case toggleBorderlessWindowedAction: "Toggle borderless / windowed (advanced)"
+    case typeClipboardTextAction: "Type Clipboard Text"
     default: action
     }
   }
@@ -218,6 +221,10 @@ final class StreamShortcutProfile: NSObject {
       reconnectStreamAction: StreamShortcut(keyCode: kVK_ANSI_R, modifierFlags: [.control, .option]),
       openControlCenterAction: StreamShortcut(keyCode: kVK_ANSI_C, modifierFlags: [.control, .option]),
       toggleBorderlessWindowedAction: StreamShortcut(keyCode: kVK_ANSI_B, modifierFlags: [.control, .option, .command]),
+      // Same combination as Moonlight on other platforms. It also keeps the key
+      // from reaching hosts that bind it themselves (Foundation toggles its
+      // virtual display with it).
+      typeClipboardTextAction: StreamShortcut(keyCode: kVK_ANSI_V, modifierFlags: [.control, .option, .shift]),
     ]
   }
 
@@ -513,6 +520,7 @@ final class KeyboardTranslationProfile: NSObject {
   static let localActionOpenControlCenter = StreamShortcutProfile.openControlCenterAction
   static let localActionToggleBorderlessWindowed =
     StreamShortcutProfile.toggleBorderlessWindowedAction
+  static let localActionTypeClipboardText = StreamShortcutProfile.typeClipboardTextAction
 
   private static let orderedLocalActions = [
     localActionShowDisconnectOptions,
@@ -525,6 +533,7 @@ final class KeyboardTranslationProfile: NSObject {
     localActionTogglePerformanceOverlay,
     localActionToggleFullscreenControlBall,
     localActionToggleBorderlessWindowed,
+    localActionTypeClipboardText,
   ]
 
   @objc static func defaultRules() -> [KeyboardTranslationRule] {

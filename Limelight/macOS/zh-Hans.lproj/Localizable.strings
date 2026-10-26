@@ -1980,3 +1980,7 @@
 "Third-party licenses detail" = "本应用包含的第三方库的许可证，例如 dav1d、usbipdcpp 和 libusb。";
 "About usbipdcpp" = "关于 usbipdcpp";
 "USB open source detail" = "USB 转发基于 usbipdcpp 和 libusb（LGPL），并使用了 asio 和 spdlog。它们的许可证和源代码获取方式见“第三方许可证”。";
+"Type Clipboard Text" = "键入剪贴板文本";
+"No text in clipboard" = "剪贴板中没有文本";
+"Clipboard text could not be typed" = "无法键入剪贴板文本：串流输入尚未就绪";
+"Clipboard sync unsupported notice" = "已开启剪贴板同步，但这台主机不支持。要发送文字，请使用串流菜单中的“键入剪贴板文本”。";

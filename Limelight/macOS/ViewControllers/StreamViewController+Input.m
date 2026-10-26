@@ -264,6 +264,32 @@ static const NSUInteger MLMaxImeCommitLength = 4096;
     });
 }
 
+#pragma mark - Type clipboard text
+
+- (void)typeClipboardTextFromMenu:(id)sender {
+    // Typing works on any host, including ones without clipboard sync.
+    static const NSUInteger maxTypedLength = 65536;
+    NSString *text = [[NSPasteboard generalPasteboard] stringForType:NSPasteboardTypeString];
+    if (text.length == 0) {
+        [self showNotification:MLString(@"No text in clipboard", nil)];
+        return;
+    }
+    // CRLF would type two line breaks on the host.
+    text = [text stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"];
+    if (text.length > maxTypedLength) {
+        text = [text substringToIndex:[text rangeOfComposedCharacterSequenceAtIndex:maxTypedLength].location];
+        Log(LOG_W, @"[text] clipboard text truncated to %lu characters for typing", (unsigned long)text.length);
+    }
+    // The shortcut's modifiers are already down on the host; they must not
+    // apply to the typed characters.
+    [self.hidSupport releaseAllModifierKeys];
+    BOOL sent = [self.hidSupport sendUtf8Text:text];
+    Log(LOG_I, @"[text] typed clipboard text: %lu characters sent=%d", (unsigned long)text.length, sent ? 1 : 0);
+    if (!sent) {
+        [self showNotification:MLString(@"Clipboard text could not be typed", nil)];
+    }
+}
+
 #pragma mark - Composition label
 
 - (void)updateImeCompositionLabel {
