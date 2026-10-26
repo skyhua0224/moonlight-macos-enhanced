@@ -1515,6 +1515,8 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     uint64_t _lastInflightBackpressureLogMs;
     NSUInteger _inflightBackpressureCount;
     dispatch_semaphore_t _metalInflightSemaphore;
+    size_t _lastDecodedWidth;
+    size_t _lastDecodedHeight;
 }
 
 @synthesize stretchToFill = _stretchToFill;
@@ -3655,6 +3657,20 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
             planeCount,
             [self activeRendererModeName:_activeRendererMode],
             _enableHdr ? 1 : 0);
+    }
+
+    size_t decodedWidth = CVPixelBufferGetWidth(imageBuffer);
+    size_t decodedHeight = CVPixelBufferGetHeight(imageBuffer);
+    if (decodedWidth != _lastDecodedWidth || decodedHeight != _lastDecodedHeight) {
+        _lastDecodedWidth = decodedWidth;
+        _lastDecodedHeight = decodedHeight;
+        void (^sizeHandler)(CGSize) = self.decodedSizeChangedHandler;
+        if (sizeHandler != nil) {
+            CGSize size = CGSizeMake(decodedWidth, decodedHeight);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                sizeHandler(size);
+            });
+        }
     }
 
     if (_dolbyVisionGeneratedMetadata && _dolbyVisionMetadataSession != NULL) {
