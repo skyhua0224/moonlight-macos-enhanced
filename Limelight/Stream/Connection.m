@@ -428,6 +428,8 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 
 #if defined(LI_MIC_CONTROL_START)
     dispatch_queue_t _micQueue;
+    // Creates, starts and stops the capture engine; see -startMicrophoneIfNeeded.
+    dispatch_queue_t _micEngineQueue;
     OpusMSEncoder* _micEncoder;
     NSMutableData* _micPcmQueue;
     int _micSendFailures;
@@ -4515,6 +4517,9 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _audioBufferReadFrameOffset = 0;
     _clipboardControlQueue = dispatch_queue_create("moonlight.connection.clipboard", DISPATCH_QUEUE_SERIAL);
     dispatch_queue_set_specific(_clipboardControlQueue, gClipboardQueueKey, gClipboardQueueKey, NULL);
+#if defined(LI_MIC_CONTROL_START)
+    _micEngineQueue = dispatch_queue_create("moonlight.mic.engine", DISPATCH_QUEUE_SERIAL);
+#endif
     [self updateVolume];
     
     NSString* cleanHost;
@@ -5290,12 +5295,19 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         return;
     }
 
-    dispatch_async(dispatch_get_main_queue(), ^{
+    // Not on the main thread: setting the engine up opens the input and, with a microphone
+    // chosen, reads the UID of every audio device, and CoreAudio makes such calls wait while a
+    // device is being opened. The stream's own output start does that right now, and on an
+    // HDMI TV whose clock does not start it takes ~10 s, which froze the app as the stream
+    // came up.
+    dispatch_async(_micEngineQueue, ^{
         if (self->_micStopping || !self->_streamConfig.enableMic) {
             Log(LOG_I, @"Microphone start skipped because capture is stopping");
             return;
         }
+        LiSetThreadConnectionContext(&self->_connectionContext);
         [self startMicrophoneEngineLocked];
+        LiSetThreadConnectionContext(NULL);
     });
 }
 
@@ -5618,13 +5630,6 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _micStopping = YES;
     _micEncryptionStatusLogged = NO;
 
-    if (self.micAudioEngine != nil) {
-        [self.micAudioEngine.inputNode removeTapOnBus:0];
-        [self.micAudioEngine stop];
-        self.micAudioEngine = nil;
-    }
-    self.micConverter = nil;
-
     dispatch_block_t teardownBlock = ^{
         self->_micSendFailures = 0;
         if (self->_micEncoder != NULL) {
@@ -5643,7 +5648,19 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         teardownBlock();
     }
 
-    destroyMicrophoneStreamCtx(&_connectionContext.micContext);
+    // The engine is stopped, and the mic socket closed, on the queue that starts them, so after
+    // a start that is still in progress, and without waiting for it: stopping can wait on
+    // CoreAudio as long as starting, and this is also called on the main thread. Nothing is
+    // sent meanwhile: the tap's sends end with _micStopping.
+    dispatch_async(_micEngineQueue, ^{
+        if (self.micAudioEngine != nil) {
+            [self.micAudioEngine.inputNode removeTapOnBus:0];
+            [self.micAudioEngine stop];
+            self.micAudioEngine = nil;
+        }
+        self.micConverter = nil;
+        destroyMicrophoneStreamCtx(&self->_connectionContext.micContext);
+    });
 }
 #endif
 
