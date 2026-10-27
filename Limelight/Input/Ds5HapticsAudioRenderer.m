@@ -4,6 +4,7 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <CoreAudio/CoreAudio.h>
 #import <math.h>
+#import <stdatomic.h>
 
 #import "../Utility/Logger.h"
 
@@ -117,6 +118,22 @@ static BOOL Ds5EndpointIsAvailable(AudioDeviceID *outDevice, NSString **outName)
     return found;
 }
 
+// The endpoint the last lookup found, kAudioObjectUnknown for none. The lookup reads the name of
+// every audio device, and CoreAudio makes such a read wait while a device is being opened: ~10 s
+// for an HDMI TV whose clock does not start, which is what a stream's audio output start runs
+// into. The answer is wanted on the main thread (stream setup, controller arrival) and on the
+// control stream thread, so the lookup runs on a queue of its own, at launch and whenever the
+// device list changes, and those callers read its last answer.
+static _Atomic AudioDeviceID sDs5Endpoint = kAudioObjectUnknown;
+
+static void Ds5RefreshEndpoint(void) {
+    AudioDeviceID device = kAudioObjectUnknown;
+    if (!Ds5EndpointIsAvailable(&device, NULL)) {
+        device = kAudioObjectUnknown;
+    }
+    atomic_store(&sDs5Endpoint, device);
+}
+
 @interface Ds5HapticsAudioRenderer () {
     AudioQueueRef _queue;
     AudioDeviceID _device;
@@ -162,19 +179,44 @@ static void Ds5AudioQueueBufferDone(void *userData,
     [_lock unlock];
 }
 
++ (void)startWatchingPhysicalEndpoint {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        dispatch_queue_t queue = dispatch_queue_create("moonlight.ds5.endpoint",
+            dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
+        dispatch_async(queue, ^{
+            AudioObjectPropertyAddress address = {
+                kAudioHardwarePropertyDevices,
+                kAudioObjectPropertyScopeGlobal,
+                kAudioObjectPropertyElementMain
+            };
+            AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &address, queue,
+                                                ^(UInt32 count, const AudioObjectPropertyAddress *addresses) {
+                Ds5RefreshEndpoint();
+            });
+            Ds5RefreshEndpoint();
+        });
+    });
+}
+
 // Read-only capability check; never open an unrelated system audio output.
-+ (BOOL)hasPhysicalEndpoint { return Ds5EndpointIsAvailable(NULL, NULL); }
++ (BOOL)hasPhysicalEndpoint {
+    [self startWatchingPhysicalEndpoint];
+    return atomic_load(&sDs5Endpoint) != kAudioObjectUnknown;
+}
 
 - (BOOL)openIfNeeded {
     if (_queue != NULL) {
         return YES;
     }
 
-    AudioDeviceID device = kAudioObjectUnknown;
-    NSString *name = nil;
-    if (!Ds5EndpointIsAvailable(&device, &name)) {
+    // The endpoint from the last lookup: looking it up here would wait for any device that is
+    // being opened, on the control stream thread (see sDs5Endpoint).
+    AudioDeviceID device = atomic_load(&sDs5Endpoint);
+    if (device == kAudioObjectUnknown) {
         return NO;
     }
+    NSString *name = Ds5DeviceName(device);
 
     AudioStreamBasicDescription format = {0};
     format.mSampleRate = 48000.0;
@@ -337,6 +379,7 @@ static void Ds5AudioQueueBufferDone(void *userData,
 #else
 
 @implementation Ds5HapticsAudioRenderer
++ (void)startWatchingPhysicalEndpoint {}
 + (BOOL)hasPhysicalEndpoint { return NO; }
 - (BOOL)submitPCMFrame:(const LI_DS5_HAPTICS_PCM_FRAME *)frame { (void)frame; return NO; }
 - (void)reset {}

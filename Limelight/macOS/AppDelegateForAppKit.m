@@ -21,6 +21,7 @@
 #import "TemporaryHost.h"
 #import "Logger.h"
 #import "MLAudioBitstreamOutput.h"
+#import "Ds5HapticsAudioRenderer.h"
 #import "StreamingSessionManager.h"
 #import "MoonlightEnhanced-Swift.h"
 #import <objc/runtime.h>
@@ -97,6 +98,9 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         [MLAudioBitstreamOutput restoreLeftoverDeviceFormatIfNeeded];
     });
+    // A stream asks on the main thread whether a DualSense's own audio endpoint is there; the
+    // answer is looked up in the background, from now on.
+    [Ds5HapticsAudioRenderer startWatchingPhysicalEndpoint];
 
     __weak typeof(self) prewarmSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{

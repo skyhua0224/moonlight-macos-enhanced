@@ -14,6 +14,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// was accepted by its AudioQueue.
 @interface Ds5HapticsAudioRenderer : NSObject
 
+/// Looks for the endpoint in the background, now and whenever the audio device list changes.
+/// Call early (at launch): +hasPhysicalEndpoint answers from the last lookup.
++ (void)startWatchingPhysicalEndpoint;
+/// Never touches CoreAudio; NO until the first lookup has finished.
 + (BOOL)hasPhysicalEndpoint;
 - (BOOL)submitPCMFrame:(const LI_DS5_HAPTICS_PCM_FRAME *)frame;
 - (void)reset;
