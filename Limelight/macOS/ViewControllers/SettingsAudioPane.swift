@@ -27,6 +27,11 @@ private final class AudioOutputDeviceList: ObservableObject {
     kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDevices,
   ]
 
+  // Device reads run here, never on the main thread: while a device is being opened (a stream's
+  // output start on an HDMI TV whose clock does not run takes ~10 s) CoreAudio makes every read
+  // of that device wait. Only the results are published, on the main thread.
+  private let queue = DispatchQueue(label: "moonlight.audio.output-devices", qos: .utility)
+
   private init() {
     let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
       self?.refresh()
@@ -34,7 +39,7 @@ private final class AudioOutputDeviceList: ObservableObject {
     for selector in Self.selectors {
       var address = Self.address(selector)
       AudioObjectAddPropertyListenerBlock(
-        AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
+        AudioObjectID(kAudioObjectSystemObject), &address, queue, block)
     }
     refresh()
   }
@@ -85,27 +90,54 @@ private final class AudioOutputDeviceList: ObservableObject {
   }
 
   // What the default device accepts as a bitstream, asked once per device change: the hint
-  // under Audio Codec is worked out every time the pane is drawn.
-  private var bitstreamSupportByCodec: [String: MLAudioBitstreamSupport] = [:]
+  // under Audio Codec is worked out every time the pane is drawn. Main thread; the reads behind
+  // it run on the queue, and a result read before the last device change is dropped.
+  @Published private var bitstreamSupportByCodec: [String: MLAudioBitstreamSupport] = [:]
+  private var bitstreamSupportPending: Set<String> = []
+  private var deviceGeneration = 0
 
   /// What the device Dolby passthrough goes to accepts: the one with this UID, or the system
-  /// output when the UID is empty or its device is gone (the rule the stream follows).
-  func bitstreamSupport(forCodec codec: Int32, deviceUID: String) -> MLAudioBitstreamSupport {
+  /// output when the UID is empty or its device is gone (the rule the stream follows). nil
+  /// until it has been read; the pane is drawn again then.
+  func bitstreamSupport(forCodec codec: Int32, deviceUID: String) -> MLAudioBitstreamSupport? {
     let key = "\(codec)|\(deviceUID)"
     if let known = bitstreamSupportByCodec[key] {
       return known
     }
-    let device = MLAudioBitstreamOutput.device(forUID: deviceUID)
-    let support =
-      device != AudioDeviceID(kAudioObjectUnknown)
-      ? MLAudioBitstreamOutput.support(forCodec: codec, onDevice: device)
-      : MLAudioBitstreamOutput.supportOnDefaultDevice(forCodec: codec)
-    bitstreamSupportByCodec[key] = support
-    return support
+    guard bitstreamSupportPending.insert(key).inserted else { return nil }
+    let generation = deviceGeneration
+    queue.async { [weak self] in
+      let device = MLAudioBitstreamOutput.device(forUID: deviceUID)
+      let support =
+        device != AudioDeviceID(kAudioObjectUnknown)
+        ? MLAudioBitstreamOutput.support(forCodec: codec, onDevice: device)
+        : MLAudioBitstreamOutput.supportOnDefaultDevice(forCodec: codec)
+      DispatchQueue.main.async {
+        guard let self = self, self.deviceGeneration == generation else { return }
+        self.bitstreamSupportPending.remove(key)
+        self.bitstreamSupportByCodec[key] = support
+      }
+    }
+    return nil
   }
 
   private func refresh() {
-    bitstreamSupportByCodec = [:]
+    queue.async { [weak self] in
+      let (found, defaultDevice) = AudioOutputDeviceList.readDevices()
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        self.deviceGeneration += 1
+        self.bitstreamSupportPending = []
+        self.bitstreamSupportByCodec = [:]
+        if found != self.devices { self.devices = found }
+        // Published even when unchanged: the hints that depend on the device are worked out again.
+        self.current = defaultDevice
+      }
+    }
+  }
+
+  /// The output devices and the system default. Device queue only.
+  private static func readDevices() -> (devices: [Device], current: AudioDeviceID) {
     let system = AudioObjectID(kAudioObjectSystemObject)
 
     var defaultAddress = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
@@ -131,9 +163,7 @@ private final class AudioOutputDeviceList: ObservableObject {
       else { return nil }
       return Device(id: id, name: Self.name(id) ?? "?", uid: Self.uid(id) ?? "")
     }
-    if found != devices { devices = found }
-    // Published even when unchanged: the hints that depend on the device are worked out again.
-    current = defaultDevice
+    return (found, defaultDevice)
   }
 }
 
@@ -496,9 +526,10 @@ struct AudioView: View {
     // AC3 / E-AC3 run at a fixed bitrate whatever the channel count.
     let mbps = MLAudioStreamPlan.mbpsText(current.wireKbps)
     if settingsModel.selectedDolbyOutput != "Decode on This Mac" {
-      let support = outputDevices.bitstreamSupport(
-        forCodec: Int32(choice.codecId), deviceUID: outputDeviceUID)
-      if support.available {
+      if let support = outputDevices.bitstreamSupport(
+        forCodec: Int32(choice.codecId), deviceUID: outputDeviceUID),
+        support.available
+      {
         let dolbyName = languageManager.localize(
           choice == .eac3 ? "Dolby Digital Plus" : "Dolby Digital")
         var text = String(
@@ -577,9 +608,11 @@ struct AudioView: View {
     guard choice == .ac3 || choice == .eac3,
       settingsModel.selectedDolbyOutput != "Decode on This Mac"
     else { return nil }
-    let support = outputDevices.bitstreamSupport(
-      forCodec: Int32(choice.codecId), deviceUID: outputDeviceUID)
-    guard !support.available else { return nil }
+    guard
+      let support = outputDevices.bitstreamSupport(
+        forCodec: Int32(choice.codecId), deviceUID: outputDeviceUID),
+      !support.available
+    else { return nil }
     return String(
       format: languageManager.localize("Audio codec hint passthrough unavailable"),
       support.deviceName, MLAudioStreamPlan.codecDisplayName(choice.codecId))
