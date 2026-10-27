@@ -10,7 +10,7 @@
 
 [简体中文](README.md) | English
 
-[Download](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [Release notes](.github/release-notes/v1.3.9-rc.6.md) · [Report an issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
+[Download](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [Release notes](.github/release-notes/v1.3.9-rc.7.md) · [Report an issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
 <img src="readme-assets/images/en/app-list.png" width="760" alt="App list">
 
@@ -20,7 +20,7 @@
 
 ## Current Release
 
-The latest release is **1.3.9 RC6**; see the [1.3.9 RC6 release notes](.github/release-notes/v1.3.9-rc.6.md) for what changed. 1.3.9 is the final release before the native architecture rebuild.
+The latest release is **1.3.9 RC7**; see the [1.3.9 RC7 release notes](.github/release-notes/v1.3.9-rc.7.md) for what changed. 1.3.9 is the final release before the native architecture rebuild.
 
 - Download it from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). Packages come as `universal`, `arm64`, and `x86_64`; choose `universal` if unsure.
 - If 1.3.9 is already installed, check for updates in `Settings → About & Updates`.
@@ -32,7 +32,7 @@ What changed in 1.3.9 compared with 1.3.8:
 - Audio gained lossless PCM, AC3, E-AC3, and Dolby passthrough, and the output device can be switched during a stream; Audio Enhancement gained a parametric equalizer, headphone correction presets, and binaural surround on headphones.
 - Input gained Precision Touchpad, text entry through macOS input methods, key mapping by typed character, system shortcut capture, Windows key order, and Type Clipboard Text; DualSense supports its touchpad, lighting, battery, and haptics.
 - Video gained a separate 10-bit SDR option, a Dynamic HDR Preference, and Dolby Vision and HDR10+ negotiation with fallback; Macs without an AV1 hardware decoder can decode AV1 in software.
-- With Foundation Sunshine: display and virtual display configuration, bitrate, frame rate, and resolution changes without reconnecting, adaptive bitrate, host display scale, and Host Commands.
+- With Foundation Sunshine: display and virtual display configuration, bitrate, frame rate, and resolution changes without reconnecting, Free Window (the host resolution follows the stream window), adaptive bitrate, host display scale, and Host Commands.
 - Added in-app updates, performance report export, and a bilingual log viewer.
 
 ## Quick Start
@@ -51,7 +51,7 @@ What changed in 1.3.9 compared with 1.3.8:
 | Audio | Opus stereo, 5.1, 7.1, and 7.1.4; lossless PCM, AC3, and E-AC3; Dolby passthrough to HDMI devices; an output device of its own; Audio Enhancement with a parametric equalizer, headphone correction presets, and binaural surround; microphone |
 | Keyboard, mouse, trackpad | Locked and Free Mouse; high-polling CoreHID mouse input; Precision Touchpad; text entry through macOS input methods; key mapping by position or by character; shortcut translation; Windows key order; system shortcut capture; type clipboard text |
 | Controllers | Multiple controllers, rumble, motion, controller mouse; DualSense touchpad, lighting, battery, and haptics; controller navigation of the app itself |
-| Stream control | In-stream control center; bitrate, frame rate, and resolution changes without reconnecting; adaptive bitrate; video FEC preference |
+| Stream control | In-stream control center; bitrate, frame rate, and resolution changes without reconnecting; Free Window; adaptive bitrate; video FEC preference |
 | Host integration | Bidirectional clipboard, display and virtual display configuration, host display scale, Host Commands, Sleep Host, USB Mapping, Host Files |
 | Settings | Settings search; Setting Profiles: comparison with the Default Profile, copying settings, presets, import and export |
 | Diagnostics and updates | Performance overlay, performance report export, bilingual log viewer, in-app updates |
@@ -86,7 +86,7 @@ The following require Foundation Sunshine with the corresponding capability enab
 
 - Microphone, 7.1.4 audio, lossless PCM, AC3, and E-AC3
 - Bidirectional clipboard, display and virtual display (VDD) configuration, host display scale
-- Bitrate, frame rate, and resolution changes without reconnecting, adaptive bitrate, video FEC preference
+- Bitrate, frame rate, and resolution changes without reconnecting, Free Window, adaptive bitrate, video FEC preference
 - DualSense touchpad, lighting, and haptics; Precision Touchpad
 - Host Commands, Sleep Host, USB Mapping, Host Files
 
