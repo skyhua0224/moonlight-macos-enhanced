@@ -1161,7 +1161,8 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
                 (unsigned int)channelLayout.mChannelLayoutTag);
         }
     }
-    conn->_audioDeviceChannelCount = MLDefaultOutputChannelCount();
+    // The device's own channel count is read by the direct renderer when it starts, on the
+    // output queue. Not here: a device read waits while the device is being opened (see below).
     conn->_audioRenderChannelCount = conn->_channelCount;
     conn->_audioRendererBackend = MLAudioRendererBackendLegacyQueue;
     conn->_audioUnderrunCount = 0;
@@ -1174,22 +1175,35 @@ int ArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION originalOpusC
     conn->_audioPrimaryReprobeAttempted = preferCompatibility714Topology;
 
     {
-        NSString *passthroughRejection = [conn audioPassthroughRejectionReason];
         MLAudioStreamPlan *plan = conn->_audioPlan;
-        int packetMs = MAX(1, opusConfig.samplesPerFrame / MAX(1, opusConfig.sampleRate / 1000));
-        Log(LOG_I, @"[audio] Stream start: codec requested=%@ effective=%@ negotiated=%@ channels=%d packetMs=%d samplesPerFrame=%d expectedPacketBytes=%d wireKbps=%d payloadKbps=%d continuousAudio=%d fallback=%@ passthrough=%@",
-            plan != nil ? plan.requestedCodecName : @"opus",
-            plan != nil ? plan.effectiveCodecName : @"opus",
-            [MLAudioStreamPlan codecName:conn->_audioCodec],
-            opusConfig.channelCount,
-            packetMs,
-            opusConfig.samplesPerFrame,
-            conn->_pcmExpectedBytes,
-            plan != nil ? (int)plan.wireKbps : 0,
-            plan != nil ? (int)plan.payloadKbps : 0,
-            conn->_continuousAudio ? 1 : 0,
-            plan != nil ? plan.fallbackLogText : @"none",
-            passthroughRejection == nil ? @"planned" : [NSString stringWithFormat:@"no(%@)", passthroughRejection]);
+        const int packetMs = MAX(1, opusConfig.samplesPerFrame / MAX(1, opusConfig.sampleRate / 1000));
+        const int negotiated = conn->_audioCodec;
+        const int channels = opusConfig.channelCount;
+        const int samplesPerFrame = opusConfig.samplesPerFrame;
+        const int expectedPacketBytes = conn->_pcmExpectedBytes;
+        const int continuousAudio = conn->_continuousAudio ? 1 : 0;
+        // Logged from the output queue, ahead of the first start: whether passthrough is possible
+        // reads the output device, and while a device is being opened (an HDMI TV whose clock does
+        // not start holds it for ~10 s) such a read waits, here holding up the connection start.
+        dispatch_async(conn->_audioOutputQueue, ^{
+            // Marked like a start, so that ArCleanup does not wait out a read that waits as long.
+            __atomic_store_n(&conn->_audioOutputStartInFlight, 1, __ATOMIC_SEQ_CST);
+            NSString *passthroughRejection = [conn audioPassthroughRejectionReason];
+            __atomic_store_n(&conn->_audioOutputStartInFlight, 0, __ATOMIC_SEQ_CST);
+            Log(LOG_I, @"[audio] Stream start: codec requested=%@ effective=%@ negotiated=%@ channels=%d packetMs=%d samplesPerFrame=%d expectedPacketBytes=%d wireKbps=%d payloadKbps=%d continuousAudio=%d fallback=%@ passthrough=%@",
+                plan != nil ? plan.requestedCodecName : @"opus",
+                plan != nil ? plan.effectiveCodecName : @"opus",
+                [MLAudioStreamPlan codecName:negotiated],
+                channels,
+                packetMs,
+                samplesPerFrame,
+                expectedPacketBytes,
+                plan != nil ? (int)plan.wireKbps : 0,
+                plan != nil ? (int)plan.payloadKbps : 0,
+                continuousAudio,
+                plan != nil ? plan.fallbackLogText : @"none",
+                passthroughRejection == nil ? @"planned" : [NSString stringWithFormat:@"no(%@)", passthroughRejection]);
+        });
     }
 
     Log(LOG_I, @"Audio renderer init request: backendMode=%d audioConfiguration=0x%08X channels=%d streams=%d coupled=%d samplesPerFrame=%d disableHighQuality714=%d",
