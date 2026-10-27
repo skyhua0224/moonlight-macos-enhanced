@@ -386,6 +386,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     dispatch_queue_t _audioOutputQueue;
     int32_t _audioOutputGeneration;       // atomic; any thread
     int32_t _audioAttemptGeneration;      // generation of the attempt in progress
+    int32_t _audioOutputStartInFlight;    // atomic; any thread. An attempt is running on the queue
     int32_t _audioOutputRetryToken;       // invalidates an earlier scheduled retry
     BOOL _audioOutputRunning;
     BOOL _audioOutputFailureNoticed;
@@ -3279,6 +3280,7 @@ static const NSTimeInterval kAudioOutputDeviceChangeRetryDelaySec = 0.5;
 // within CoreAudio's own ~10 s timeout; this bound only protects stream
 // shutdown from a wedged CoreAudio.
 static const int64_t kAudioOutputTeardownWaitSec = 15;
+static const int64_t kAudioOutputTeardownInFlightWaitMs = 200;
 
 - (BOOL)audioOutputAttemptCancelled
 {
@@ -3549,7 +3551,15 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
 // One start attempt: the configured backend, then (unless the device clock is
 // known not to run) the remaining fallbacks. Output queue only; the serial
 // queue is what keeps two attempts from ever overlapping.
+// Marks the attempt as in flight so ArCleanup knows the queue may be stuck inside CoreAudio.
 - (void)runAudioOutputStartAttemptForGeneration:(int32_t)generation
+{
+    __atomic_store_n(&_audioOutputStartInFlight, 1, __ATOMIC_SEQ_CST);
+    [self performAudioOutputStartAttemptForGeneration:generation];
+    __atomic_store_n(&_audioOutputStartInFlight, 0, __ATOMIC_SEQ_CST);
+}
+
+- (void)performAudioOutputStartAttemptForGeneration:(int32_t)generation
 {
     if (__atomic_load_n(&_audioOutputGeneration, __ATOMIC_SEQ_CST) != generation || _audioOutputRunning) {
         return;
@@ -3895,6 +3905,10 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
 // buffers the render callbacks read. Waits for the output queue so an in-flight
 // start finishes (and is torn down) before the memory goes away, but never longer
 // than kAudioOutputTeardownWaitSec; see the ivar comment for the timeout case.
+// When a start is still inside CoreAudio (a device whose clock is not running
+// holds it for ~10 s) it does not wait at all beyond a moment: the queued block
+// frees everything once the start returns, and the next stream's ArInit waits
+// for it, so stopping and starting again are not held up by the device.
 - (void)shutdownAudioOutput
 {
     __atomic_add_fetch(&_audioOutputGeneration, 1, __ATOMIC_SEQ_CST);
@@ -3938,14 +3952,16 @@ static const int64_t kAudioOutputTeardownWaitSec = 15;
         return;
     }
 
+    const BOOL startInFlight = __atomic_load_n(&_audioOutputStartInFlight, __ATOMIC_SEQ_CST) != 0;
+    const int64_t waitMs = startInFlight ? kAudioOutputTeardownInFlightWaitMs : kAudioOutputTeardownWaitSec * 1000;
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     dispatch_async(_audioOutputQueue, ^{
         teardown();
         dispatch_semaphore_signal(done);
     });
-    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, kAudioOutputTeardownWaitSec * NSEC_PER_SEC)) != 0) {
-        Log(LOG_W, @"[audio] Audio output teardown is still waiting on CoreAudio after %llds; it will finish in the background",
-            (long long)kAudioOutputTeardownWaitSec);
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, waitMs * NSEC_PER_MSEC)) != 0) {
+        Log(LOG_W, @"[audio] Audio output teardown is still waiting on CoreAudio after %lldms%@; it will finish in the background",
+            (long long)waitMs, startInFlight ? @" (an output start is in flight)" : @"");
     }
 }
 
