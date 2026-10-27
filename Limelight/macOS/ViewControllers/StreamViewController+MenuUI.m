@@ -2546,7 +2546,9 @@ static UInt32 MLAudioDeviceOutputChannels(AudioDeviceID device) {
     return channels;
 }
 
-// Live output devices (output channels, alive, not hidden) as @{ @"id": AudioDeviceID, @"name": NSString }.
+// Live output devices (output channels, alive, not hidden) as @{ @"name": NSString, @"uid": NSString }.
+// Never on the main thread: while a device is starting (or failing to, like a TV whose clock is not
+// running) CoreAudio holds that device's I/O lock for seconds, and these queries wait for it.
 static NSArray<NSDictionary<NSString *, id> *> *MLAudioOutputDevices(void) {
     AudioObjectPropertyAddress address = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
     UInt32 size = 0;
@@ -2567,19 +2569,56 @@ static NSArray<NSDictionary<NSString *, id> *> *MLAudioOutputDevices(void) {
             MLAudioDeviceFlag(device, kAudioDevicePropertyIsHidden, NO)) {
             continue;
         }
+        NSString *uid = MLAudioDeviceString(device, kAudioDevicePropertyDeviceUID);
+        if (uid.length == 0) {
+            continue;
+        }
         NSString *name = MLAudioDeviceString(device, kAudioObjectPropertyName) ?: MLString(@"Unknown Output", nil);
-        [result addObject:@{ @"id": @(device), @"name": name }];
+        [result addObject:@{ @"name": name, @"uid": uid }];
     }
     return result;
 }
 
-// Fills the Audio Output submenu from the devices that exist right now. Main thread.
+// The last device list read in the background, and whether a read is running. Main thread only.
+static NSArray<NSDictionary<NSString *, id> *> *sAudioOutputDevices;
+static BOOL sAudioOutputDevicesReading;
+
+// Fills the Audio Output submenu from the last device list, then reads the list again in the
+// background and refills the submenu if it changed. Main thread.
 // The choice is the app's own (the same setting as Output Device in the audio settings): the
 // stream plays on that device and the system output stays as it is.
 - (void)populateAudioOutputMenu:(NSMenu *)menu {
+    [self fillAudioOutputMenu:menu devices:sAudioOutputDevices ?: @[]];
+    if (sAudioOutputDevicesReading) {
+        return;
+    }
+    sAudioOutputDevicesReading = YES;
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSArray<NSDictionary<NSString *, id> *> *devices = MLAudioOutputDevices();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            sAudioOutputDevicesReading = NO;
+            if ([devices isEqualToArray:sAudioOutputDevices ?: @[]]) {
+                return;
+            }
+            sAudioOutputDevices = devices;
+            StreamViewController *strongSelf = weakSelf;
+            if (strongSelf != nil && strongSelf.audioOutputMenu == menu) {
+                [strongSelf fillAudioOutputMenu:menu devices:devices];
+            }
+        });
+    });
+}
+
+- (void)fillAudioOutputMenu:(NSMenu *)menu devices:(NSArray<NSDictionary<NSString *, id> *> *)devices {
     NSString *chosenUID = [SettingsClass audioOutputDeviceUID];
-    const BOOL chosenAlive = chosenUID.length > 0 &&
-        [MLAudioBitstreamOutput deviceForUID:chosenUID] != kAudioObjectUnknown;
+    BOOL chosenAlive = NO;
+    for (NSDictionary<NSString *, id> *entry in devices) {
+        if (chosenUID.length > 0 && [entry[@"uid"] isEqualToString:chosenUID]) {
+            chosenAlive = YES;
+            break;
+        }
+    }
     NSMutableArray<NSDictionary<NSString *, id> *> *specs = [NSMutableArray array];
     [specs addObject:@{
         @"title": MLString(@"Output Device Follow System", nil),
@@ -2587,11 +2626,8 @@ static NSArray<NSDictionary<NSString *, id> *> *MLAudioOutputDevices(void) {
         @"rep": @"",
         @"state": @(chosenAlive ? NSControlStateValueOff : NSControlStateValueOn),
     }];
-    for (NSDictionary<NSString *, id> *entry in MLAudioOutputDevices()) {
-        NSString *uid = MLAudioDeviceString((AudioDeviceID)[entry[@"id"] unsignedIntValue], kAudioDevicePropertyDeviceUID);
-        if (uid.length == 0) {
-            continue;
-        }
+    for (NSDictionary<NSString *, id> *entry in devices) {
+        NSString *uid = entry[@"uid"];
         [specs addObject:@{
             @"title": entry[@"name"],
             @"action": NSStringFromSelector(@selector(selectAudioOutputFromMenu:)),
