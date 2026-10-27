@@ -10,7 +10,7 @@
 
 简体中文 | [English](README.en.md)
 
-[下载](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [更新说明](.github/release-notes/v1.3.9-rc.6.md) · [问题反馈](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
+[下载](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [更新说明](.github/release-notes/v1.3.9-rc.7.md) · [问题反馈](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
 <img src="readme-assets/images/app-list.png" width="760" alt="应用列表">
 
@@ -20,7 +20,7 @@
 
 ## 当前版本
 
-最新版本是 **1.3.9 RC6**，变更见 [1.3.9 RC6 更新说明](.github/release-notes/v1.3.9-rc.6.md)。1.3.9 是原生架构重建前最后一个版本。
+最新版本是 **1.3.9 RC7**，变更见 [1.3.9 RC7 更新说明](.github/release-notes/v1.3.9-rc.7.md)。1.3.9 是原生架构重建前最后一个版本。
 
 - 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载。安装包有 `universal`、`arm64`、`x86_64` 三种，不确定时选 `universal`。
 - 已安装 1.3.9 的用户可以在 `设置 → 关于与更新` 检查更新。
@@ -32,7 +32,7 @@
 - 音频新增无损 PCM、AC3、E-AC3 与杜比直通，串流中可切换输出设备；音效增强新增参数均衡器、耳机校正预设和耳机上的双耳环绕声。
 - 输入新增精确式触控板、macOS 输入法输入文字、按字符的按键映射、捕获系统快捷键、Windows 键位顺序与键入剪贴板文本；DualSense 支持触控板、灯光、电量与触觉反馈。
 - 视频新增独立的 10-bit SDR、动态 HDR 偏好，以及 Dolby Vision 与 HDR10+ 的协商和回退；没有 AV1 硬件解码的 Mac 可以用软件解码 AV1。
-- 配合 Foundation Sunshine：显示器与虚拟显示器配置，串流中不重连调整码率、帧率和分辨率，自适应码率，主机显示缩放与主机命令。
+- 配合 Foundation Sunshine：显示器与虚拟显示器配置，串流中不重连调整码率、帧率和分辨率，自由窗口（主机分辨率跟随串流窗口），自适应码率，主机显示缩放与主机命令。
 - 新增应用内更新、性能报告导出和中英文日志查看器。
 
 ## 快速开始
@@ -51,7 +51,7 @@
 | 音频 | Opus 立体声、5.1、7.1、7.1.4；无损 PCM、AC3、E-AC3；杜比直通到 HDMI 设备；独立的输出设备；音效增强、参数均衡器与耳机校正预设、双耳环绕声；麦克风 |
 | 键盘、鼠标、触控板 | 锁定鼠标与自由鼠标；CoreHID 高回报率鼠标；精确式触控板；macOS 输入法输入文字；按位置或按字符的按键映射；快捷键翻译；Windows 键位顺序；捕获系统快捷键；键入剪贴板文本 |
 | 手柄 | 多手柄、震动、动作输入、手柄鼠标；DualSense 触控板、灯光、电量与触觉反馈；用手柄操作应用界面 |
-| 串流控制 | 串流中的控制中心；不重连调整码率、帧率和分辨率；自适应码率；视频 FEC 偏好 |
+| 串流控制 | 串流中的控制中心；不重连调整码率、帧率和分辨率；自由窗口；自适应码率；视频 FEC 偏好 |
 | 主机协作 | 双向剪贴板、显示器与虚拟显示器配置、主机显示缩放、主机命令、休眠主机、USB 映射、主机文件 |
 | 设置 | 设置搜索；配置方案：与默认配置对照、复制设置、预设、导入与导出 |
 | 诊断与更新 | 性能浮窗、性能报告导出、中英文日志查看器、应用内更新 |
@@ -86,7 +86,7 @@
 
 - 麦克风、7.1.4 声道、无损 PCM、AC3 与 E-AC3 音频
 - 双向剪贴板、显示器与虚拟显示器（VDD）配置、主机显示缩放
-- 串流中不重连调整码率、帧率和分辨率，自适应码率，视频 FEC 偏好
+- 串流中不重连调整码率、帧率和分辨率，自由窗口，自适应码率，视频 FEC 偏好
 - DualSense 的触控板、灯光与触觉反馈，精确式触控板
 - 主机命令、休眠主机、USB 映射、主机文件
 
