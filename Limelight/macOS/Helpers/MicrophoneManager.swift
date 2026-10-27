@@ -32,6 +32,10 @@ class MicrophoneManager: ObservableObject {
 
     private var testEngine: AVAudioEngine?
     private var levelTimer: Timer?
+    // Device queries run here, never on the main thread: while an output device is starting
+    // (or failing to, like an HDMI TV whose clock is not running) CoreAudio holds its I/O lock
+    // for seconds, and these queries wait for it.
+    private let deviceQueue = DispatchQueue(label: "moonlight.microphone.devices", qos: .utility)
 
     init() {
         refreshDevices()
@@ -47,6 +51,17 @@ class MicrophoneManager: ObservableObject {
     // MARK: - Device Enumeration
 
     func refreshDevices() {
+        deviceQueue.async { [weak self] in
+            let result = Self.inputDevices()
+            // A chosen microphone that is not there now stays chosen: it may only be unplugged
+            // for a moment, and until it is back the stream uses the system default.
+            DispatchQueue.main.async {
+                self?.devices = result
+            }
+        }
+    }
+
+    private static func inputDevices() -> [MicrophoneDevice] {
         var propAddr = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -55,14 +70,14 @@ class MicrophoneManager: ObservableObject {
         var dataSize: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(
             AudioObjectID(kAudioObjectSystemObject), &propAddr, 0, nil, &dataSize) == noErr
-        else { return }
+        else { return [] }
 
         let count = Int(dataSize) / MemoryLayout<AudioDeviceID>.size
         var deviceIDs = [AudioDeviceID](repeating: 0, count: count)
         guard AudioObjectGetPropertyData(
             AudioObjectID(kAudioObjectSystemObject), &propAddr, 0, nil, &dataSize, &deviceIDs)
             == noErr
-        else { return }
+        else { return [] }
 
         var result: [MicrophoneDevice] = []
         for id in deviceIDs {
@@ -131,12 +146,7 @@ class MicrophoneManager: ObservableObject {
                 name: name as String
             ))
         }
-
-        // A chosen microphone that is not there now stays chosen: it may only be unplugged
-        // for a moment, and until it is back the stream uses the system default.
-        DispatchQueue.main.async {
-            self.devices = result
-        }
+        return result
     }
 
     // MARK: - Device Change Listener
@@ -150,13 +160,11 @@ class MicrophoneManager: ObservableObject {
             mElement: kAudioObjectPropertyElementMain
         )
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            DispatchQueue.main.async {
-                self?.refreshDevices()
-            }
+            self?.refreshDevices()
         }
         listenerBlock = block
         AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &propAddr, DispatchQueue.main, block)
+            AudioObjectID(kAudioObjectSystemObject), &propAddr, deviceQueue, block)
     }
 
     private func removeDeviceChangeListener() {
@@ -167,7 +175,7 @@ class MicrophoneManager: ObservableObject {
             mElement: kAudioObjectPropertyElementMain
         )
         AudioObjectRemovePropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &propAddr, DispatchQueue.main, block)
+            AudioObjectID(kAudioObjectSystemObject), &propAddr, deviceQueue, block)
         listenerBlock = nil
     }
 
