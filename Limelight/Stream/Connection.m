@@ -422,6 +422,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     int32_t _audioPassthroughFallbackRequested; // atomic; decode thread asks at most once
     BOOL _audioPassthroughGivenUp;            // output queue; for the rest of the session
     BOOL _audioLeftoverChecked;               // output queue
+    BOOL _enhancedAudioOutputTargetResolved;  // output queue
     uint64_t _audioPassthroughConsecutiveRejects; // decode thread
     MLAudioBitstreamStats _bitstreamReported;     // decode thread (and ArCleanup after it ended)
 
@@ -3427,6 +3428,7 @@ static const int64_t kAudioOutputTeardownInFlightWaitMs = 200;
     _bitstreamOutput = nil;
     _audioPassthroughGivenUp = NO;
     _audioLeftoverChecked = NO;
+    _enhancedAudioOutputTargetResolved = NO;
     _audioPassthroughConsecutiveRejects = 0;
     memset(&_bitstreamReported, 0, sizeof(_bitstreamReported));
 
@@ -3598,6 +3600,12 @@ static const int64_t kAudioOutputTeardownInFlightWaitMs = 200;
     BOOL started = NO;
     MLAudioRendererBackend backend = MLAudioRendererBackendLegacyQueue;
     const MLAudioOutputMode mode = (MLAudioOutputMode)_audioOutputMode;
+    if (!_enhancedAudioOutputTargetResolved && mode == MLAudioOutputModeEnhanced) {
+        // Here and not in -initWithConfig:, which runs on the main thread: Automatic is worked
+        // out from the output device (see there).
+        _enhancedAudioOutputTargetResolved = YES;
+        _enhancedAudioOutputTarget = (int)MLResolveEnhancedOutputTarget((MLAudioEnhancedOutputTarget)_enhancedAudioOutputTargetConfigured);
+    }
     _audioOutputDeviceUID = MLChosenOutputDevice() != kAudioObjectUnknown ? [SettingsClass audioOutputDeviceUID] : @"";
 
     // Passthrough first. If it cannot start it is given up for the session and
@@ -4489,7 +4497,11 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _stateLock = OS_UNFAIR_LOCK_INIT;
     _audioOutputMode = config.audioOutputMode;
     _enhancedAudioOutputTargetConfigured = config.enhancedAudioOutputTarget;
-    _enhancedAudioOutputTarget = (int)MLResolveEnhancedOutputTarget((MLAudioEnhancedOutputTarget)config.enhancedAudioOutputTarget);
+    // Automatic is worked out from the output device before the first start, on the output
+    // queue: a device read here, on the main thread, waits while a device is being opened, ~10 s
+    // for an HDMI TV whose clock does not start. Until then nothing renders.
+    _enhancedAudioOutputTarget = config.enhancedAudioOutputTarget != MLAudioEnhancedOutputTargetAutomatic
+        ? config.enhancedAudioOutputTarget : (int)MLAudioEnhancedOutputTargetSpeakers;
     _enhancedAudioPreset = config.enhancedAudioPreset;
     _enhancedAudioSpatialIntensity = config.enhancedAudioSpatialIntensity;
     _enhancedAudioSoundstageWidth = config.enhancedAudioSoundstageWidth;
