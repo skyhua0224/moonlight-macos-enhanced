@@ -5063,7 +5063,8 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
 - (int)sendLiveStreamResolutionWidth:(int)width height:(int)height {
     [self ensureControlContextBacklink];
-    int err = LiSendStreamResolutionCtx(&_connectionContext.controlContext, width, height);
+    // qiin/mic API (#48): -1 invalid size (odd or over 16384), -2 unsupported host, -3 not connected, -4 send failed.
+    int err = LiRequestResolutionChangeCtx(&_connectionContext.controlContext, width, height);
     Log(LOG_I, @"[live] resolution %dx%d -> result=%d", width, height, err);
     return err;
 }
