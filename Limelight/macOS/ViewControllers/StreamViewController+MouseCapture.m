@@ -1671,6 +1671,11 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         // The log viewer needs the local pointer for as long as it is open.
         return NO;
     }
+    if (window.attachedSheet != nil) {
+        // The disconnect options (Command-W) are a sheet on this window: while it is up the pointer is the
+        // user's, or its buttons cannot be clicked (Command-W opened it and the window took the pointer back).
+        return NO;
+    }
     if (![self isWindowInCurrentSpace]) {
         return NO;
     }
@@ -1712,6 +1717,10 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 - (void)ensureStreamWindowKeyIfPossible {
     NSWindow *window = self.view.window;
     if (!window || window.isKeyWindow) {
+        return;
+    }
+    if (window.attachedSheet != nil) {
+        // the sheet is the key window; taking the key back would leave it unclickable
         return;
     }
     if (![NSApp isActive] || self.stopStreamInProgress || self.reconnectInProgress || self.spaceTransitionInProgress) {
