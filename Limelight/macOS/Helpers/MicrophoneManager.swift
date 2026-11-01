@@ -967,9 +967,31 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
     }
 
+    /// A Sidecar display is connected: its agent process runs for the life of the session, and the display shows up
+    /// among the screens under a name that carries "Sidecar" in every localisation Apple ships (the Chinese name is
+    /// "Sidecar Display（隔空播放）").
+    static func sidecarSessionActive() -> Bool {
+        let agentRunning = NSWorkspace.shared.runningApplications.contains {
+            $0.executableURL?.lastPathComponent == "SidecarDisplayAgent"
+                || ($0.bundleIdentifier ?? "").hasPrefix("com.apple.sidecar")
+        }
+        if agentRunning { return true }
+        return NSScreen.screens.contains { $0.localizedName.localizedCaseInsensitiveContains("sidecar") }
+    }
+
     @objc(beginStreamSessionIfEnabled:generation:ownerID:)
     func beginStreamSessionIfEnabled(_ enabled: Bool, generation: UInt, ownerID: String) {
+        // Sidecar carries its picture and touches over the same awdl0 interface this helper brings down: with a Sidecar
+        // iPad connected its video link times out within seconds (SidecarDisplayAgent "RTCP Timeout", error -401) and the
+        // iPad freezes while the session is torn down and rebuilt. So the helper leaves awdl0 alone then.
+        let sidecar = enabled && Self.sidecarSessionActive()
         sessionQueue.async {
+            if sidecar {
+                self.restoreIfNeededLocked(reason: "superseded-by-new-stream")
+                self.resetSessionStateLocked()
+                self.logInfo("[diag] AWDL helper skipped for stream generation=\(generation): a Sidecar display is connected and needs awdl0")
+                return
+            }
             self.restoreIfNeededLocked(reason: "superseded-by-new-stream")
             self.resetSessionStateLocked()
 
