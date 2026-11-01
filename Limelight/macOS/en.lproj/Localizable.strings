@@ -62,11 +62,11 @@
 "OK" = "OK";
 
 /* Remote Overrides */
-"Remote overrides hint" = "These options only affect the host-side rendering/encoding mode. Leave them off for most cases.";
+"Remote overrides hint" = "Host-side rendering and encoding only. Leave off unless needed.";
 
 /* Bitrate */
 "Target Bitrate" = "Target Bitrate";
-"Auto bitrate hint" = "Auto bitrate is calculated based on resolution and FPS; enabling YUV 4:4:4 may increase the target bitrate.";
+"Auto bitrate hint" = "Follows resolution and FPS; YUV 4:4:4 raises the target.";
 
 /* Input Settings */
 "Controller" = "Controller";
@@ -160,7 +160,7 @@
 "Mouse Runtime Detail AppKit Fallback UnsupportedOS" = "CoreHID requires macOS 15 or later, so Moonlight fell back to the AppKit compatibility path.";
 "Mouse Runtime Detail AppKit Fallback Runtime" = "CoreHID failed at runtime, so Moonlight fell back to the AppKit compatibility path.";
 "Scroll Runtime Path Idle" = "No recent scroll path";
-"Scroll Runtime Detail Idle" = "Scroll during a stream to see whether Moonlight is handling wheel, gesture, or rewritten scroll input.";
+"Scroll Runtime Detail Idle" = "Scroll during a stream to see which path handles it.";
 "Scroll Runtime Path Wheel" = "Discrete wheel active";
 "Scroll Runtime Detail Wheel" = "Moonlight is currently handling the input as a native physical wheel path.";
 "Scroll Runtime Path Gesture" = "Continuous gesture active";
@@ -313,6 +313,12 @@
 "Touchscreen Mode" = "Touchscreen Mode";
 "Trackpad" = "Trackpad";
 "Touchscreen" = "Touchscreen";
+"Search" = "Search";
+"No matches" = "No matches";
+"Static library" = "Static library";
+"Framework" = "Framework";
+"Data" = "Data";
+"Source in the app" = "Source in the app";
 
 /* Host Status */
 "Online, but not paired" = "Online, but not paired";
@@ -669,9 +675,9 @@
 "Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
 "HDR Capabilities" = "HDR Capabilities";
 "Dolby Vision negotiation detail" = "Negotiated automatically with the host and display; the stream falls back to compatible HDR when needed.";
-"HDR10+ capability detail" = "Needs macOS 13 or later, HEVC hardware decoding, an HDR display and the Native renderer; the Metal renderer shows the HDR10 picture without the per-frame metadata. Dolby Vision is preferred when both are offered; set Dynamic HDR Preference to HDR10+ to use it.";
-"Dolby Vision capability detail native" = "The Native renderer passes Dolby Vision metadata straight to the display. It is used when the host sends Dolby Vision.";
-"Dolby Vision capability detail metal" = "The Metal renderer shows only the HDR10 base layer of a Dolby Vision stream. Use the Native renderer for full Dolby Vision.";
+"HDR10+ capability detail" = "Needs macOS 13+, HEVC hardware decode, an HDR display and the Native renderer.";
+"Dolby Vision capability detail native" = "Passes Dolby Vision metadata to the display when the host sends it.";
+"Dolby Vision capability detail metal" = "Metal shows only the HDR10 base layer; use the Native renderer for full Dolby Vision.";
 "Dolby Vision capability detail unavailable" = "Needs HEVC hardware decoding, HDR playback, an HDR-capable display and the Native renderer.";
 "Dynamic HDR chroma note dolby vision" = "Dolby Vision uses 4:2:0, so this stream will not use 4:4:4. Your YUV 4:4:4 setting is not changed.";
 "Dynamic HDR chroma note automatic" = "With YUV 4:4:4 on, Automatic uses HDR10+ or HDR10. Select Dolby Vision to use it instead; the stream will then use 4:2:0.";
@@ -687,7 +693,7 @@
 "Sunshine Display Runtime Reconnected" = "Reconnected with topology restored";
 "Use Virtual Display" = "Use Virtual Display";
 "Use Physical Display" = "Use Physical Display";
-"Use Virtual Display detail" = "Requests a Sunshine virtual display session when the host supports VDD.";
+"Use Virtual Display detail" = "Requests a Sunshine virtual display when the host supports VDD.";
 "Screen Mode" = "Screen Mode";
 "Screen Mode detail" = "Controls how Sunshine prepares the host display topology for this session.";
 "Override HDR Display Profile" = "Override HDR Display Profile";
@@ -724,7 +730,7 @@
 "Video Runtime Detail Native Forced" = "Using VideoToolbox decode with native sample-buffer presentation.";
 "Video Runtime Detail Native Compatibility Fallback" = "Native Renderer was requested, but Moonlight fell back to Compatibility because both Native and Metal were unavailable.";
 "Video Runtime Detail Compatibility Forced" = "Using the most conservative compatibility presentation path.";
-"Video Runtime Detail Idle" = "This area will show the active video renderer and the last automatic fallback reason.";
+"Video Runtime Detail Idle" = "Shows the active renderer and the last fallback reason.";
 "Active Enhancement" = "Active Enhancement";
 "Active Frame Interpolation" = "Active Frame Interpolation";
 "Video Enhancement Runtime Detail Idle" = "This area will show the actual enhancement engine once a stream is running.";
@@ -740,7 +746,7 @@
 "Enhanced Renderer" = "Metal Renderer";
 "Enhanced Renderer detail" = "Metal rendering path with deeper HDR, tone-mapping, and presentation controls.";
 "Native Renderer" = "Native Renderer";
-"Native Renderer detail" = "Recommended path for the lowest latency and the highest default color accuracy, using VideoToolbox decode plus native sample-buffer presentation.";
+"Native Renderer detail" = "Lowest latency and the best default color: VideoToolbox decode with native presentation.";
 "Native Renderer (Recommended) detail" = "Recommended path for the lowest latency and the highest default color accuracy, using VideoToolbox decode plus native sample-buffer presentation.";
 "Compatibility Renderer" = "Compatibility Renderer";
 "Compatibility Renderer detail" = "Legacy presentation path kept for older systems and recovery scenarios.";
@@ -805,17 +811,17 @@
 "MetalFX" = "MetalFX";
 "MetalFX capability detail" = "Current MetalFX availability for the active macOS version.";
 "VT Low-Latency Super Resolution" = "VT Low-Latency Super Resolution";
-"VT Low-Latency Super Resolution detail" = "Low-latency VideoToolbox super-resolution processor availability on this Mac.";
+"VT Low-Latency Super Resolution detail" = "Low-latency VideoToolbox super resolution on this Mac.";
 "VT Low-Latency Frame Interpolation" = "VT Low-Latency Frame Interpolation";
-"VT Low-Latency Frame Interpolation detail" = "Low-latency VideoToolbox frame interpolation processor availability on this Mac.";
+"VT Low-Latency Frame Interpolation detail" = "Low-latency VideoToolbox frame interpolation on this Mac.";
 "VT Quality Super Resolution" = "VT Quality Super Resolution";
-"VT Quality Super Resolution detail" = "Quality-prioritized VideoToolbox super-resolution support, including model readiness.";
+"VT Quality Super Resolution detail" = "Quality VideoToolbox super resolution and model readiness.";
 "Sunshine Extensions" = "Sunshine Extensions";
-"Sunshine Extensions detail" = "Moonlight now sends Foundation Sunshine launch extensions such as display selection, VDD, screen mode, and HDR display-profile overrides when the host supports them.";
+"Sunshine Extensions detail" = "Sends Foundation Sunshine launch extensions (display, VDD, screen mode, HDR profile) to hosts that support them.";
 "Admin Prompt Only" = "Admin Prompt Only";
 "Welcome to Moonlight" = "Welcome to Moonlight";
 "Welcome to Moonlight macOS Enhanced" = "Welcome to Moonlight macOS Enhanced";
-"Welcome Permissions Subtitle" = "Set up the permissions and helpers you want now. You can adjust them later in Settings.";
+"Welcome Permissions Subtitle" = "Set up what you want now; you can change it in Settings later.";
 "Microphone Permission detail" = "Needed only if you want to stream your microphone to the host.";
 "Install Persistent Helper" = "Install Persistent Helper";
 "AWDL Helper Installed" = "Installed";
@@ -823,20 +829,20 @@
 "AWDL Helper Admin Prompt Only" = "Admin Prompt Only";
 "Permissions" = "Permissions";
 "Continue" = "Continue";
-"Welcome AWDL detail" = "Optional. Helps stabilize Wi-Fi streaming by managing the AWDL interface during a session.";
+"Welcome AWDL detail" = "Optional. Keeps Wi‑Fi streams steadier by managing AWDL during a session.";
 "Keyboard Compatibility" = "Shortcut Translation";
 "Keyboard Compatibility detail" = "The option above controls global translation. The custom rules below always stay active.";
 "Shortcut Translation Rules" = "Shortcut Translation Rules";
 "Shortcut Translation Rules note" = "These rules always stay active. Add one only if you want a specific Mac shortcut to trigger a host shortcut or a Moonlight action.";
 "No Shortcut Translation Rules" = "No translation rules yet";
-"No Shortcut Translation Rules detail" = "Add a rule if you want certain Mac shortcuts to trigger a Windows shortcut or a Moonlight action.";
+"No Shortcut Translation Rules detail" = "Add a rule to turn a Mac shortcut into a host shortcut or a Moonlight action.";
 "Add Rule" = "Add Rule";
 "Edit Rule" = "Edit";
 "Delete Rule" = "Delete";
 "Save Rule" = "Save";
 "Add Shortcut Translation Rule" = "Add Shortcut Translation Rule";
 "Edit Shortcut Translation Rule" = "Edit Shortcut Translation Rule";
-"Shortcut Translation Editor note" = "Pick the shortcut you press on the Mac, then choose whether it should trigger a host shortcut or a Moonlight action.";
+"Shortcut Translation Editor note" = "Record the Mac shortcut, then choose a host shortcut or a Moonlight action.";
 "Action Type" = "Action Type";
 "Trigger" = "Trigger";
 "Remote Shortcut" = "Remote Shortcut";
@@ -868,7 +874,7 @@
 "Stream Shortcuts" = "Stream Shortcuts";
 "Clipboard" = "Clipboard";
 "Clipboard Sync" = "Clipboard Sync";
-"Clipboard Sync detail" = "Automatically syncs text and one image while this stream owns clipboard sync.";
+"Clipboard Sync detail" = "Syncs text and one image while this stream owns the clipboard.";
 "Clipboard Sync Foundation detail" = "Available for Foundation Sunshine hosts. Supported hosts default to Auto Sync, and unsupported hosts simply ignore it.";
 "Selected Connection Unavailable" = "Selected connection is unavailable";
 "Selected Connection Unavailable Detail" = "The selected route %@ is unavailable, but %@ is reachable. Switch routes before starting the stream?";
@@ -962,8 +968,8 @@
 
 "Controller Deadzone" = "Controller Deadzone";
 "Media" = "Media";
-"Native Touchpad detail" = "Host Touchpad sends game touch input. Mac-style Trackpad moves and scrolls the remote cursor. Hold Options to switch during a stream.";
-"HDR detail" = "Use the display's HDR and extended dynamic range path when the host negotiates HDR.";
+"Native Touchpad detail" = "Host Touchpad sends game touch input; Mac-style Trackpad moves the cursor and scrolls. Hold Options to switch.";
+"HDR detail" = "Uses the display's HDR path when the host negotiates HDR.";
 "YUV444 detail" = "Request 4:4:4 chroma when the selected decoder and display path support it.";
 "Unlock Maximum Bitrate" = "Unlock Maximum Bitrate";
 "HDR Display Profile" = "HDR Display Profile";
@@ -999,7 +1005,7 @@
 "Connected Controllers" = "Connected Controllers";
 "Keyboard Translation" = "Keyboard Translation";
 "Key Mapping" = "Key Mapping";
-"Key Mapping detail" = "Use Typed characters when your Mac and the host use different keyboard layouts. Games that bind keys by position (WASD) work best with Physical key position.";
+"Key Mapping detail" = "Typed characters suits different layouts; Physical key position suits WASD games.";
 "Physical key position" = "Physical key position";
 "Typed characters" = "Typed characters";
 "Capture System Shortcuts" = "Capture System Shortcuts";
@@ -1009,7 +1015,7 @@
 "Picture" = "Picture";
 "Host Overrides" = "Host Overrides";
 "Video FEC" = "Video FEC";
-"Video FEC hint" = "Forward error correction for the video stream. Host Default keeps the host's setting. Other choices only apply when the host supports client FEC control; otherwise the host default is used.";
+"Video FEC hint" = "Forward error correction for video. Host Default keeps the host's setting; other choices need host support.";
 "Bitrate detail" = "Bitrate detail";
 "Audio Enhancement" = "Audio Enhancement";
 "Diagnostics" = "Diagnostics";
@@ -1140,7 +1146,7 @@
 
 /* Controller touchpad shortcut editor */
 "Touchpad Button Shortcut" = "Tap touchpad";
-"Touchpad Button Shortcut hint" = "Assign buttons on controllers without a touchpad (such as Xbox) to send a single touchpad tap in games. Unmapped by default.";
+"Touchpad Button Shortcut hint" = "For controllers without a touchpad: a button that sends one touchpad tap. Off by default.";
 "Edit Shortcut…" = "Edit…";
 "Shortcut Not Mapped" = "Not mapped";
 "Shortcut Activation" = "Activation";
@@ -1169,7 +1175,7 @@
 "Controller Shortcuts" = "Controller shortcuts";
 "Restore Default Controller Shortcuts" = "Restore default controller shortcuts";
 "Press controller buttons to record" = "Press a button or combination on the controller";
-"Controller shortcut capture note" = "Hold every button in the combination, then release them to record. The controller does not operate the interface while recording.";
+"Controller shortcut capture note" = "Hold the whole combination, then release to record. The controller does not drive the UI meanwhile.";
 "Controller shortcut conflict format" = "Overlaps with: %@";
 "Controller Hint Move" = "Move";
 "Controller Hint Open" = "Open";
@@ -1234,43 +1240,43 @@
 "Host Command Sent: %@" = "Sent: %@";
 "Host Command Failed: %@" = "Host command failed: %@";
 "Adaptive Bitrate" = "Adaptive Bitrate";
-"Adaptive Bitrate hint" = "Measures bandwidth before the stream starts to cap the bitrate, then lets the host adjust it during the stream based on packet loss and latency. Requires Foundation Sunshine.";
+"Adaptive Bitrate hint" = "Caps the bitrate from a bandwidth test at start, then follows packet loss and latency. Needs Foundation Sunshine.";
 "Precision Touchpad" = "Precision Touchpad";
-"Precision Touchpad Hint" = "Send the trackpad's multi-finger touches to a Windows 11 host as a precision touchpad, so Windows handles scrolling, pinch and three- or four-finger gestures itself. Block mode sends every finger to Windows and stops the Mac from also moving, clicking or scrolling with the same fingers. Use-both mode keeps a single finger on the normal Mac pointer and clicks; as soon as a second finger lands, the whole gesture goes to Windows until all fingers lift. In Block mode Windows moves its own pointer and this Mac cannot tell where it is, so opening the floating control ball with the pointer and sliding onto another display will not line up with the cursor you see; choose Use-both if you rely on those. Needs a Windows 11 host that supports it; otherwise normal mouse input is used.";
+"Precision Touchpad Hint" = "Sends trackpad touches to a Windows 11 host as a precision touchpad.\nBlock: every finger goes to Windows and the Mac pointer stays still.\nUse both: one finger moves the Mac pointer; two or more go to Windows.\nBlock mode hides the cursor from this Mac, so the control ball and crossing displays may not line up.";
 "Precision Touchpad Off" = "Off";
 "Precision Touchpad Block" = "On – block macOS trackpad pointer events";
 "Precision Touchpad Both" = "On – use both";
-"Precision Touchpad Gesture Permission Hint" = "Accessibility access is not granted, so macOS gestures such as Mission Control and swiping between Spaces still act on this Mac while streaming. Grant Moonlight access under Privacy & Security > Accessibility, or turn those gestures off in System Settings > Trackpad.";
+"Precision Touchpad Gesture Permission Hint" = "Without Accessibility access, Mission Control and Space swipes still act on this Mac. Allow Moonlight in Privacy & Security > Accessibility, or turn those gestures off in Trackpad settings.";
 "Optional" = "Optional";
 "Accessibility" = "Accessibility";
-"Welcome Accessibility detail" = "Optional. Lets Moonlight send macOS shortcuts such as ⌘Tab and ⌘Space to the host, and keep trackpad gestures from acting on this Mac while the precision touchpad is on.";
-"Capture System Shortcuts Hint" = "While the stream has the mouse and keyboard, shortcuts macOS normally keeps for itself (⌘Tab, ⌘`, ⌘Space, ⌃Space, ⌃ arrow keys, screenshots, function keys) are sent to the host instead. ⌘ is the Win key unless the keyboard translation says otherwise, so ⌘Tab opens Task View. Force Quit (⌥⌘Esc) and Lock Screen (⌃⌘Q) always stay with macOS. Release the mouse to use your Mac's shortcuts again. Warning: Mac shortcuts such as ⌘Q are then sent to the host too, so ⌘Q will not quit Moonlight; use the stream's disconnect or quit shortcut.";
-"Capture System Shortcuts Permission Hint" = "Accessibility access is not granted, so macOS still handles its own shortcuts such as ⌘Tab while streaming. Grant Moonlight access under Privacy & Security > Accessibility.";
+"Welcome Accessibility detail" = "Optional. Sends ⌘Tab, ⌘Space and other macOS shortcuts to the host and stops trackpad gestures acting on this Mac.";
+"Capture System Shortcuts Hint" = "Sends macOS shortcuts (⌘Tab, ⌘Space, ⌃Space, ⌃ arrows, screenshots, function keys) to the host while streaming.\n⌘ is the Win key, so ⌘Tab opens Task View.\nForce Quit (⌥⌘Esc) and Lock Screen (⌃⌘Q) stay with macOS.\n⌘Q goes to the host too; use the stream's quit shortcut.";
+"Capture System Shortcuts Permission Hint" = "No Accessibility access: macOS still handles ⌘Tab and its other shortcuts. Allow Moonlight in Privacy & Security > Accessibility.";
 "Capture System Shortcuts Permission Title" = "Allow Moonlight to capture system shortcuts?";
 "Capture System Shortcuts Permission Message" = "To send shortcuts such as ⌘Tab and ⌘Space to the host, macOS requires Accessibility access for Moonlight. You can grant it now or later in System Settings > Privacy & Security > Accessibility. Without it, macOS keeps handling those shortcuts.";
 "Grant Access" = "Grant Access";
 "Grant Accessibility Access" = "Grant Access";
-"Translation Rules Capture Warning" = "To record a macOS system shortcut such as ⌘Tab or ⌘Space as a trigger, turn on Capture System Shortcuts first. Warning: while capture is on and the stream has the keyboard, Mac shortcuts such as ⌘Q are sent to the host and will not act on this Mac (for example, ⌘Q will not quit Moonlight). Use the stream's disconnect or quit shortcut instead; if needed, Force Quit (⌥⌘Esc) still works because it is never captured.";
-"Translation Rule System Shortcut Warning" = "This is a macOS system shortcut. The rule only works while Capture System Shortcuts is on and has Accessibility access; otherwise macOS may act on it as well, or the rule may not fire at all.";
-"Shortcut needs system shortcut capture" = "This is a macOS system shortcut. Turn on Capture System Shortcuts to record and use it as a trigger.";
+"Translation Rules Capture Warning" = "Recording ⌘Tab or ⌘Space needs Capture System Shortcuts; then ⌘Q goes to the host too. ⌥⌘Esc still works.";
+"Translation Rule System Shortcut Warning" = "A macOS system shortcut: the rule needs Capture System Shortcuts and Accessibility access, or macOS acts on it too.";
+"Shortcut needs system shortcut capture" = "A system shortcut: turn on Capture System Shortcuts to use it as a trigger.";
 "Shortcut never captured" = "Force Quit (⌥⌘Esc) and Lock Screen (⌃⌘Q) always stay with macOS and can't be used as triggers.";
-"Translation Rule Needs Capture" = "This trigger is a macOS system shortcut and only works while Capture System Shortcuts is on.";
+"Translation Rule Needs Capture" = "A system shortcut: works only while Capture System Shortcuts is on.";
 "Precision Touchpad Gesture Permission Title" = "Block macOS gestures while streaming?";
 "Precision Touchpad Gesture Permission Message" = "Moonlight can keep three- and four-finger macOS gestures, such as Mission Control and swiping between Spaces, from also acting on this Mac while the trackpad is sent to Windows. This needs Accessibility access. Without it the precision touchpad still works, but those gestures also trigger on the Mac.";
 "Open Accessibility Settings" = "Open Accessibility Settings";
 "Not Now" = "Not Now";
 "DualSense Touchpad Output" = "DualSense Touchpad Output";
-"DualSense Touchpad Output detail" = "Controller touchpad sends the pad as game controller touch or a Mac-style trackpad, as set above. Windows precision touchpad sends its fingers and click as a precision touchpad instead, and needs a Windows 11 host that supports it; otherwise the controller touchpad is used. The DualSense touchpad tracks at most two fingers, so one- and two-finger gestures work but three- and four-finger gestures do not.";
+"DualSense Touchpad Output detail" = "Windows precision touchpad needs a supporting Windows 11 host; otherwise the controller touchpad is used. Two fingers at most.";
 "DualSense Touchpad Output Controller" = "Controller touchpad (default)";
 "DualSense Touchpad Output Precision" = "Windows precision touchpad";
 "Type Text with the macOS Input Method" = "Type Text with the macOS Input Method";
-"Type Text with the macOS Input Method Hint" = "While a Mac input method such as Pinyin is active, compose text locally and send the committed text to the host as UTF-8. Plain keys and shortcuts still go to the host as key events.";
+"Type Text with the macOS Input Method Hint" = "Compose with a Mac input method and send the committed text as UTF-8; other keys still go as key events.";
 "Live stream change failed, reconnecting" = "Live change not applied, reconnecting";
 "Bitrate set to %@ Mbps" = "Bitrate set to %@ Mbps";
 "Frame rate set to %d FPS" = "Frame rate set to %d FPS";
 "Resolution set to %dx%d" = "Resolution set to %dx%d";
 "Recording Detail" = "Recording Detail";
-"Recording Detail detail" = "Normal records Info and above. Detailed also records Debug lines, which makes the log larger. What the log window shows is set in the window itself.";
+"Recording Detail detail" = "Detailed also records Debug lines and makes the log larger.";
 "Normal" = "Normal";
 "Detailed" = "Detailed";
 "Display Scale" = "Display Scale";
@@ -1287,7 +1293,7 @@
 "Audio Codec" = "Audio Codec";
 "Opus" = "Opus";
 "Lossless (PCM)" = "Lossless (PCM)";
-"Audio codec hint PCM" = "Lossless audio needs about %@ Mbps of bandwidth for stereo and %@ Mbps for 5.1 surround, on top of the video bitrate. If the link cannot carry it, audio drops out and video stutters.";
+"Audio codec hint PCM" = "Lossless audio needs about %@ Mbps (stereo) or %@ Mbps (5.1) on top of the video; a weak link stutters.";
 "Audio codec fallback: channels" = "This codec supports up to 5.1 channels, so Opus is used with this audio configuration.";
 "Audio codec conflict message" = "%1$@ carries at most 5.1 channels, but Audio Configuration is set to %2$@. Choose which one to keep. Until you choose, streams use Opus.";
 "Audio codec conflict keep codec" = "Use %@ with 5.1";
@@ -1314,15 +1320,15 @@
 "Dolby passthrough stopped; audio continues decoded on this Mac." = "Dolby passthrough stopped; audio continues decoded on this Mac.";
 "AC3" = "AC3";
 "E-AC3" = "E-AC3";
-"Audio codec hint compressed" = "%@ audio uses about %@ Mbps. It is decoded on this Mac, which adds about 32 ms of audio latency compared with Opus and brings no quality gain; it is offered for compatibility. If the link cannot carry it, audio drops out and video stutters.";
+"Audio codec hint compressed" = "%@ audio uses about %@ Mbps and adds about 32 ms of latency over Opus; for compatibility only.";
 "Dolby Output" = "Dolby Output";
 "Decode on This Mac" = "Decode on This Mac";
 "Dolby Digital" = "Dolby Digital";
 "Dolby Digital Plus" = "Dolby Digital Plus";
-"Audio codec hint passthrough" = "%1$@ accepts %2$@ directly: the audio is sent to it untouched. While streaming, other apps cannot play sound on this device, and the volume is controlled on the device. It uses about %3$@ Mbps; if the link cannot carry it, audio drops out and video stutters.";
+"Audio codec hint passthrough" = "%1$@ takes %2$@ untouched (about %3$@ Mbps); other apps cannot play on it, and volume is set on the device.";
 "Audio codec hint passthrough stereo" = "Choose 5.1 in Audio Configuration to get surround sound from it.";
 "Keep Audio Stream Active During Silence" = "Keep Audio Stream Active During Silence";
-"Keep Audio Stream Active During Silence hint" = "The host sends silence while nothing is playing. This costs a little bandwidth and can help when the first sound after a quiet period is cut off.";
+"Keep Audio Stream Active During Silence hint" = "Sends silence while nothing plays; costs a little bandwidth, helps when the first sound is cut off.";
 
 /* Log viewer: curated titles and details, category and noise names. */
 "%@: aggregating for %@ s window" = "%@: aggregating for %@ s window";
@@ -1859,7 +1865,7 @@
 "EQ Import File" = "Import…";
 "EQ Paste" = "Paste from Clipboard";
 "EQ Reset Bands" = "Reset";
-"EQ Import Hint" = "Drag the points on the curve; click one for exact values. Presets and imported files work with 12, 24 and custom bands alike: custom bands hold them exactly, fixed bands follow the same curve as closely as they can.";
+"EQ Import Hint" = "Drag the points to adjust; click one for exact values. Presets and imports work with 12, 24 and custom bands.";
 "EQ Import Failed" = "No usable filters were found in this text.";
 "EQ Import Done %d" = "Imported %d filters.";
 "EQ Import Skipped %d %d" = "Imported %1$d filters. %2$d lines use a filter type that is not supported and were skipped.";
@@ -1867,7 +1873,7 @@
 "Spatial Audio Automatic" = "Automatic";
 "Spatial Audio Wide Stereo" = "Wide Stereo";
 "Spatial Audio Off" = "Off";
-"Spatial Audio Automatic hint" = "With headphones, a 5.1, 7.1 or 7.1.4 stream is placed around you (binaural rendering, works with any headphones); intensity and width do not apply then. Speakers and stereo streams get the widened stereo.";
+"Spatial Audio Automatic hint" = "Headphones: surround streams are rendered binaurally (intensity and width do not apply). Speakers: widened stereo.";
 "Spatial Audio Wide Stereo hint" = "Surround channels are mixed into a widened stereo image on any device. Intensity and width shape it.";
 "Spatial Audio Off hint" = "A plain stereo downmix without widening.";
 "Output Device" = "Output Device";
@@ -1909,22 +1915,20 @@
 "EQ General Night Listening detail" = "Bass and treble back at low volume";
 "EQ General Softer Treble" = "Softer Treble";
 "EQ General Softer Treble detail" = "Takes the edge off bright speakers";
-"AV1 Decode software detail" = "This Mac has no AV1 hardware decoder. When AV1 is chosen it is decoded in software (dav1d), which uses more power and may not keep up at high resolutions and frame rates. HDR and 10-bit color still need the hardware decoder.";
+"AV1 Decode software detail" = "No AV1 hardware decoder: software decoding (dav1d) uses more power; HDR and 10-bit color need hardware.";
 "Preset EQ By Device" = "By Device";
 "Preset EQ By Sound" = "By Sound";
-"Video codec warning AV1 software" = "This Mac has no AV1 hardware decoder, so AV1 is decoded in software: it uses much more power and keeps up to about 1080p at 120 or 1440p at 60 frames per second; 4K will not keep up. HDR, 10-bit color and 4:4:4 are not available. H.265 is the better choice unless you need AV1.";
-"Video codec warning HEVC unavailable" = "This Mac has no H.265 hardware decoder. The stream will use H.264, and HDR and 10-bit color are not available.";
+"Video codec warning AV1 software" = "No AV1 hardware decoder: software decoding tops out near 1080p120 or 1440p60, uses more power, has no HDR or 10-bit.";
+"Video codec warning HEVC unavailable" = "No H.265 hardware decoder: H.264 is used, without HDR or 10-bit color.";
 "Output Device Follow System" = "Same as System Output";
-"Output Device hint" = "Where the stream's sound plays. It is only for Moonlight and leaves the system output alone, so an equalizer app that takes the system output over does not get in the way.";
-"Audio codec hint passthrough unavailable" = "%1$@ does not accept a %2$@ bitstream, so it is not passed through: the sound is decoded on this Mac. If the system output is taken over by a virtual device (an equalizer app such as eqMac), choose the TV or receiver itself under Output Device above.";
+"Output Device hint" = "Where the stream's sound plays; only for Moonlight, so an equalizer app on the system output does not interfere.";
+"Audio codec hint passthrough unavailable" = "%1$@ does not accept %2$@: sound is decoded on this Mac. With eqMac, pick the TV or receiver in Output Device.";
 "Dolby passthrough unavailable notice" = "Dolby passthrough is off: %1$@ does not accept %2$@, so the sound is decoded on this Mac. To pass it through, choose the TV or receiver under Settings > Audio > Output Device.";
-"Video codec warning AV1 no HDR" = "AV1 is decoded in software on this Mac, which has no HDR, no 10-bit color and no 4:4:4: the three options below are off while AV1 is chosen. Choose H.265 for them.";
+"Video codec warning AV1 no HDR" = "Software AV1 has no HDR, 10-bit or 4:4:4, so those three options are off. Choose H.265 for them.";
 "Open Source" = "Open Source";
 "Source Code" = "Source Code";
 "Third-Party Licenses" = "Third-Party Licenses";
-"Third-party licenses detail" = "Licenses of the libraries included in this app, such as dav1d, usbipdcpp and libusb.";
-"About usbipdcpp" = "About usbipdcpp";
-"USB open source detail" = "USB forwarding is built on usbipdcpp and libusb (LGPL) together with asio and spdlog. Their licenses and where to get their source are in Third-Party Licenses.";
+"Third-party licenses detail" = "What is inside this app, and under which license.";
 "Type Clipboard Text" = "Type Clipboard Text";
 "No text in clipboard" = "There is no text in the clipboard";
 "Clipboard text could not be typed" = "The clipboard text could not be typed: stream input is not ready";

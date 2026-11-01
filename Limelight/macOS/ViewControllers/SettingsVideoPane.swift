@@ -341,7 +341,7 @@ private struct VideoAdvancedSettingsSection: View {
         SettingsChoiceRow(title: "Allow Drawable Timeout", selection: $settingsModel.selectedAllowDrawableTimeoutMode,
           options: SettingsModel.allowDrawableTimeoutModes)
       } else {
-        Text("Metal tuning is available with the Metal renderer.").font(.footnote).foregroundStyle(.secondary)
+        Text("Metal tuning is available with the Metal renderer.").font(.footnote).settingsLineCheck("SettingsVideoPane:344").foregroundStyle(.secondary)
       }
     }
   }
