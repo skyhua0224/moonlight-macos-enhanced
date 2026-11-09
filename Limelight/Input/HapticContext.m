@@ -17,7 +17,13 @@
     BOOL _playing;
     BOOL _needsRestart;
     BOOL _closed;
+    // The continuous event is not stopped between two ticks: stopping and starting it for each tick puts the
+    // player's start latency in front of every short tick. Intensity zero is sent as the dynamic parameter and
+    // the player stops only after kIdleStopSeconds without a nonzero value.
+    NSUInteger _idleGeneration;
 }
+
+static const NSTimeInterval kIdleStopSeconds = 3.0;
 
 - (BOOL)available {
     @synchronized(self) { return !_closed && _hapticEngine != nil; }
@@ -45,13 +51,36 @@
         if (_closed || _hapticEngine == nil || !isfinite(intensity) || !isfinite(sharpness)) return NO;
         NSError *error = nil;
         if (intensity <= 0) {
-            if (_playing && ![_hapticPlayer stopAtTime:CHHapticTimeImmediate error:&error]) {
-                Log(LOG_W, @"[controller-haptics] Stop failed player=%ld: %@", (long)_playerIndex, error);
-                _hapticPlayer = nil;
+            if (!_playing || _hapticPlayer == nil) {
+                _playing = NO;
+                return YES;
             }
-            _playing = NO;
-            return error == nil;
+            // Park the running player at zero, and stop it once nothing came for a while.
+            [_hapticPlayer sendParameters:@[[[CHHapticDynamicParameter alloc]
+                initWithParameterID:CHHapticDynamicParameterIDHapticIntensityControl value:0 relativeTime:0]]
+                atTime:CHHapticTimeImmediate error:&error];
+            if (error != nil) {
+                Log(LOG_W, @"[controller-haptics] Park failed player=%ld: %@", (long)_playerIndex, error);
+                [_hapticPlayer cancelAndReturnError:nil];
+                _hapticPlayer = nil;
+                _playing = NO;
+                return NO;
+            }
+            const NSUInteger generation = ++_idleGeneration;
+            __weak typeof(self) weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kIdleStopSeconds * NSEC_PER_SEC)),
+                           dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                HapticContext *me = weakSelf;
+                if (me == nil) return;
+                @synchronized(me) {
+                    if (me->_idleGeneration != generation || me->_closed || !me->_playing) return;
+                    [me->_hapticPlayer stopAtTime:CHHapticTimeImmediate error:nil];
+                    me->_playing = NO;
+                }
+            });
+            return YES;
         }
+        _idleGeneration++;
         if (_needsRestart) {
             if (![_hapticEngine startAndReturnError:&error]) {
                 Log(LOG_W, @"[controller-haptics] Restart failed player=%ld: %@", (long)_playerIndex, error);
