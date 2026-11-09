@@ -1281,6 +1281,9 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         if (input != NULL && LiInputContextIsInitialized(input)) {
             [_controllerStreamLock lock];
             for (Controller *controller in _controllers.allValues) {
+                // A pad that is gone, or that the host never heard of, gets nothing: a neutral event would
+                // create it on the host.
+                if (!ds5_pad_may_send(controller.gamepad != nil, controller.controllerAnnounced)) continue;
                 // The host holds the last rotation rate it was given. GameController stops reporting
                 // while the app is not active, so without this a game keeps turning on its own.
                 BOOL gyroRequested = NO;
@@ -1379,16 +1382,152 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 #define UPDATE_BUTTON_FLAG(controller, x, y) \
 ((y) ? [self setButtonFlag:controller flags:x] : [self clearButtonFlag:controller flags:x])
 
+- (DS5BluetoothMode)bluetoothHapticsMode {
+    return ds5_resolve_bluetooth_mode((int)_ds5BtHapticsFallback, (int)_ds5BtOutput, NULL);
+}
+
+// Whether rumble may be played on this pad: key 10/100 "off" silences a DualSense that is not on USB.
+- (BOOL)bluetoothPolicyAllowsRumbleForPlayer:(unsigned short)controllerNumber {
+    if (ds5_bluetooth_allows_rumble([self bluetoothHapticsMode])) return YES;
+    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    if (![controller.gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) return YES;
+    return [_rawHID isUSBDeviceForIdentity:[self rawHIDIdentityForPlayer:controllerNumber]];
+}
+
+static double RumbleNowMs(void) { return CFAbsoluteTimeGetCurrent() * 1000.0; }
+
+// Host rumble arrives on the control thread and is played on the main queue, which also delivers the GameController
+// input. Input never waits for it: the control thread only appends to a bounded ring and schedules one drain.
+// The drain feeds every value, in order, to the pulse scheduler (DS5RumbleScheduler.h), which applies a start at
+// once and holds it for a minimum length, defers an early stop to the end of the hold and keeps the louder value
+// of each motor inside the hold. So a menu tick that starts and stops between two drains is still played.
+- (void)drainPendingRumble {
+    unsigned short low[16][32], high[16][32];
+    BOOL direct[16][32];
+    unsigned count[16];
+    @synchronized(_hapticsMailboxLock) {
+        for (NSUInteger index = 0; index < 16; index++) {
+            count[index] = _rumbleEventCount[index];
+            for (unsigned item = 0; item < count[index]; item++) {
+                low[index][item] = _rumbleEvents[index][item].low;
+                high[index][item] = _rumbleEvents[index][item].high;
+                direct[index][item] = _rumbleEvents[index][item].direct;
+            }
+            _rumbleEventCount[index] = 0;
+        }
+        _rumbleDrainScheduled = NO;
+    }
+    if (!self.shouldSendInputEvents) return;
+    for (NSUInteger index = 0; index < 16; index++) {
+        for (unsigned item = 0; item < count[index]; item++) {
+            if (direct[index][item]) {
+                // A value computed on the client (the PCM fallback): played as it is, and the pulse state starts over.
+                ds5_rs_reset(&_rumbleSched[index]);
+                [self applyRumbleNow:(unsigned short)index lowFreqMotor:low[index][item] highFreqMotor:high[index][item]];
+                continue;
+            }
+            const DS5RumbleAction action = ds5_rs_event(&_rumbleSched[index], RumbleNowMs(), low[index][item], high[index][item]);
+            if (action.apply) [self applyRumbleNow:(unsigned short)index lowFreqMotor:action.low highFreqMotor:action.high];
+        }
+        [self scheduleRumbleTickForPlayer:index];
+    }
+    [self logRumbleWindow];
+}
+
+// One timer per player at most: it fires when a held pulse may end.
+- (void)scheduleRumbleTickForPlayer:(NSUInteger)player {
+    const double due = ds5_rs_next_due(&_rumbleSched[player]);
+    if (due < 0.0) return;
+    const unsigned generation = ++_rumbleTimerGeneration[player];
+    const double wait = due - RumbleNowMs();
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(fmax(0.0, wait) * (double)NSEC_PER_MSEC) + 500000), dispatch_get_main_queue(), ^{
+        ControllerSupport *strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf->_rumbleTimerGeneration[player] != generation) return;
+        const DS5RumbleAction action = ds5_rs_tick(&strongSelf->_rumbleSched[player], RumbleNowMs());
+        if (action.apply) [strongSelf applyRumbleNow:(unsigned short)player lowFreqMotor:action.low highFreqMotor:action.high];
+        [strongSelf scheduleRumbleTickForPlayer:player];
+    });
+}
+
+// Every five seconds while rumble flows: how many host values arrived, how many were played, what the pulses looked like.
+- (void)logRumbleWindow {
+    const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (_rumbleLastLog == 0) _rumbleLastLog = now;
+    if (now - _rumbleLastLog < 5.0) return;
+    _rumbleLastLog = now;
+    DS5RumbleStats total = {0};
+    for (NSUInteger index = 0; index < 16; index++) {
+        const DS5RumbleStats stats = ds5_rs_take_stats(&_rumbleSched[index]);
+        total.received += stats.received;
+        total.applied += stats.applied;
+        total.pulses += stats.pulses;
+        total.deferred += stats.deferred;
+        total.merged += stats.merged;
+        if (stats.shortestPulseMs != 0.0 && (total.shortestPulseMs == 0.0 || stats.shortestPulseMs < total.shortestPulseMs)) total.shortestPulseMs = stats.shortestPulseMs;
+        if (stats.longestPulseMs > total.longestPulseMs) total.longestPulseMs = stats.longestPulseMs;
+    }
+    unsigned dropped = 0;
+    @synchronized(_hapticsMailboxLock) { dropped = _rumbleDropped; _rumbleDropped = 0; }
+    if (total.received == 0 && dropped == 0) return;
+    Log(LOG_I, @"[controller-rumble] 5 s window: host values received=%u, pulses started=%u, applied=%u, stops deferred to the end of a pulse=%u, merged into a running pulse=%u, dropped (ring full)=%u, host pulse length shortest=%.1f ms longest=%.1f ms",
+        total.received, total.pulses, total.applied, total.deferred, total.merged, dropped, total.shortestPulseMs, total.longestPulseMs);
+}
+
+// Host rumble from the control thread (or anywhere): queued, never played on the caller's thread.
 -(void) rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor
 {
-    if (![NSThread isMainThread]) {
-        __weak typeof(self) weakSelf = self;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (weakSelf.shouldSendInputEvents) [weakSelf rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
-        });
-        return;
+    [self queueRumble:controllerNumber low:lowFreqMotor high:highFreqMotor direct:NO];
+}
+
+- (void)queueRumble:(unsigned short)controllerNumber low:(unsigned short)low high:(unsigned short)high direct:(BOOL)direct {
+    if (controllerNumber >= 16) return;
+    BOOL schedule = NO;
+    @synchronized(_hapticsMailboxLock) {
+        unsigned *count = &_rumbleEventCount[controllerNumber];
+        if (*count >= 32) {
+            // The main queue is far behind: keep the newest value in the last slot so the final state is right.
+            _rumbleEvents[controllerNumber][31].low = low;
+            _rumbleEvents[controllerNumber][31].high = high;
+            _rumbleEvents[controllerNumber][31].direct = direct;
+            _rumbleDropped++;
+        } else {
+            _rumbleEvents[controllerNumber][*count].low = low;
+            _rumbleEvents[controllerNumber][*count].high = high;
+            _rumbleEvents[controllerNumber][*count].direct = direct;
+            (*count)++;
+        }
+        if (!_rumbleDrainScheduled) { _rumbleDrainScheduled = YES; schedule = YES; }
     }
+    if (schedule) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf drainPendingRumble]; });
+    }
+}
+
+// Plays one value on the pad now (main queue): CoreHaptics first, a raw output report when CoreHaptics refuses.
+-(void) applyRumbleNow:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor
+{
     if (!ControllerIsFeedbackTarget(self, controllerNumber)) return;
+    if (![self bluetoothPolicyAllowsRumbleForPlayer:controllerNumber]) return;
+    // The strength option scales the amplitude the host asked for (host tuning key ds5.rumble.strength).
+    if (self.rumbleStrength != 1.0) {
+        lowFreqMotor = (unsigned short)lrint(fmin(65535.0, (double)lowFreqMotor * self.rumbleStrength));
+        highFreqMotor = (unsigned short)lrint(fmin(65535.0, (double)highFreqMotor * self.rumbleStrength));
+    }
+    AlkDs5Feedback coreFeedback = _hasDS5Feedback[controllerNumber] ? _lastDS5Feedback[controllerNumber] :
+        (AlkDs5Feedback){.struct_size = sizeof(coreFeedback), .abi = ALK_DS5_CORE_ABI_VERSION, .device_index = 0};
+    // Rumble emulation needs both enable bits; valid_flag2 bit 2 selects the current firmware's curve.
+    coreFeedback.valid_flag0 = 0x03u;
+    coreFeedback.valid_flag1 = 0u;
+    coreFeedback.valid_flag2 = 0x04u;
+    coreFeedback.motor_left = (uint8_t)(lowFreqMotor >> 8);
+    coreFeedback.motor_right = (uint8_t)(highFreqMotor >> 8);
+    uint8_t coreReport[ALK_DS5_USB_OUTPUT_REPORT_BYTES] = {0};
+    size_t coreReportLength = 0;
+    (void)alk_ds5_build_output_report(&coreFeedback, coreReport, sizeof(coreReport), &coreReportLength);
+    (void)[self withDS5CoreForPlayer:controllerNumber call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_feedback(core, &coreFeedback); }];
+    _lastDS5Feedback[controllerNumber] = coreFeedback; _hasDS5Feedback[controllerNumber] = YES;
     Controller* controller = [_controllers objectForKey:[NSNumber numberWithInteger:controllerNumber]];
     if (controller == nil && controllerNumber == 0 && _oscEnabled) {
         // No physical controller, but we have on-screen controls
@@ -1398,23 +1537,75 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         // No connected controller for this player
         return;
     }
-
     if (controller.lastAuthoredHapticsTime != 0 &&
         CFAbsoluteTimeGetCurrent() - controller.lastAuthoredHapticsTime < 0.25) return;
     BOOL left = [controller.lowFreqMotor setIntensity:lowFreqMotor / 65535.0f sharpness:0.5f];
     BOOL right = [controller.highFreqMotor setIntensity:highFreqMotor / 65535.0f sharpness:0.5f];
+    if (!(left && right) && [controller.gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+        // A raw write is only for when CoreHaptics refused: gamecontrollerd writes this device too.
+        [_rawHID sendOutputReport:coreReport length:coreReportLength playerIdentity:[self rawHIDIdentityForPlayer:controllerNumber]];
+        return;
+    }
     if (!(left && right) && [_presenceDelegate respondsToSelector:@selector(controllerRumbleFallback:low:high:)]) {
         [_presenceDelegate controllerRumbleFallback:controllerNumber low:lowFreqMotor high:highFreqMotor];
+    }
+}
+
+// How many authored-haptics frames the stream delivered, and how many reached a pad: one line every five
+// seconds while the numbers change, so a game that never produces haptics is visible in the log.
+typedef enum { Ds5FrameIR = 0, Ds5FramePCM = 1 } Ds5FrameKind;
+static void NoteHapticsFrame(Ds5FrameKind kind, BOOL accepted) {
+    static _Atomic unsigned long sReceived[2], sAccepted[2], sLoggedTotal;
+    static _Atomic CFAbsoluteTime sLastLog;
+    atomic_fetch_add(&sReceived[kind], 1);
+    if (accepted) atomic_fetch_add(&sAccepted[kind], 1);
+    const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    const unsigned long total = atomic_load(&sReceived[0]) + atomic_load(&sReceived[1]);
+    if (now - atomic_load(&sLastLog) >= 5.0 && total != atomic_load(&sLoggedTotal)) {
+        atomic_store(&sLastLog, now);
+        atomic_store(&sLoggedTotal, total);
+        Log(LOG_I, @"[controller-haptics] frames from the host: IR received=%lu used=%lu, PCM received=%lu used=%lu",
+            atomic_load(&sReceived[0]), atomic_load(&sAccepted[0]), atomic_load(&sReceived[1]), atomic_load(&sAccepted[1]));
     }
 }
 
 // The control receive thread only copies into a bounded, per-player mailbox.
 // Controller ownership, engines and light state remain on the main queue.
 - (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame {
-    if (!frame || !self.shouldSendInputEvents || frame->controllerNumber >= 16) return;
+    if (!frame || !self.shouldSendInputEvents || frame->controllerNumber >= 16) {
+        NoteHapticsFrame(Ds5FrameIR, NO);
+        return;
+    }
+    NoteHapticsFrame(Ds5FrameIR, YES);
+    AlkDs5IrHaptics coreFrame = {
+        .struct_size = sizeof(coreFrame), .abi = ALK_DS5_CORE_ABI_VERSION,
+        .device_index = 0,
+        .left_intensity = (uint16_t)lrintf(fminf(1.0f, fmaxf(0.0f, frame->lanes[0].rmsAmplitude)) * 65535.0f),
+        .right_intensity = (uint16_t)lrintf(fminf(1.0f, fmaxf(0.0f, frame->lanes[1].rmsAmplitude)) * 65535.0f),
+        .left_sharpness = (uint16_t)lrintf(fminf(1.0f, fmaxf(0.0f, frame->lanes[0].lowBandRatio)) * 65535.0f),
+        .right_sharpness = (uint16_t)lrintf(fminf(1.0f, fmaxf(0.0f, frame->lanes[1].lowBandRatio)) * 65535.0f),
+        .pts_ns = frame->timestampUs * 1000ull};
+    if ([self withDS5CoreForPlayer:frame->controllerNumber call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_ir_haptics(core, &coreFrame); }] != ALK_DS5_OK) return;
+    DS5IrFrame irFrame;
+    memset(&irFrame, 0, sizeof(irFrame));
+    for (int lane = 0; lane < 2; ++lane) {
+        irFrame.rms[lane] = frame->lanes[lane].rmsAmplitude;
+        irFrame.peak[lane] = frame->lanes[lane].peakAmplitude;
+        irFrame.transient[lane] = frame->lanes[lane].transientStrength;
+        irFrame.lowBand[lane] = frame->lanes[lane].lowBandRatio;
+    }
+    irFrame.silent = (frame->flags & (LI_DS5_HAPTICS_IR_FLAG_SILENT | LI_DS5_HAPTICS_IR_FLAG_STREAM_END)) != 0;
+    irFrame.flags = frame->flags;
+    irFrame.seq = frame->sourceSequenceNumber;
     BOOL schedule = NO;
     @synchronized(_hapticsMailboxLock) {
-        _pendingHaptics[@(frame->controllerNumber)] = [NSData dataWithBytes:frame length:sizeof(*frame)];
+        DS5IrPlayback *playback = &_irPlayback[frame->controllerNumber];
+        if (frame->flags & LI_DS5_HAPTICS_IR_FLAG_DISCONTINUITY) {
+            // A new stream: what is queued or deferred belongs to the old one.
+            playback->count = 0;
+            playback->hasPending = false;
+        }
+        ds5_irp_push(playback, &irFrame);
         if (!_hapticsDrainScheduled) { _hapticsDrainScheduled = YES; schedule = YES; }
     }
     if (schedule) {
@@ -1424,18 +1615,47 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 }
 
 - (void)drainAuthoredHaptics {
-    NSDictionary<NSNumber *, NSData *> *frames;
+    // Every player's queue is stepped: the frames that arrived since the last drain, in order, and the value
+    // deferred by the minimum hold of a pulse.
+    const double now = CFAbsoluteTimeGetCurrent();
+    DS5IrFrame chosen[16];
+    BOOL apply[16], rising[16];
+    double wake[16];
     @synchronized(_hapticsMailboxLock) {
-        frames = [_pendingHaptics copy];
-        [_pendingHaptics removeAllObjects];
         _hapticsDrainScheduled = NO;
+        for (unsigned player = 0; player < 16; player++) {
+            wake[player] = 0.0;
+            apply[player] = ds5_irp_step(&_irPlayback[player], now, &chosen[player], &wake[player]);
+            rising[player] = _irPlayback[player].lastRising;
+            _irWakeAt[player] = wake[player];
+        }
+    }
+    double earliestWake = 0.0;
+    for (unsigned player = 0; player < 16; player++) {
+        if (wake[player] != 0.0 && (earliestWake == 0.0 || wake[player] < earliestWake)) earliestWake = wake[player];
+    }
+    if (earliestWake != 0.0) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(fmax(0.0, earliestWake - now) * NSEC_PER_SEC) + 500 * NSEC_PER_USEC),
+                       dispatch_get_main_queue(), ^{ [weakSelf drainAuthoredHaptics]; });
     }
     if (!self.shouldSendInputEvents) return;
-    for (NSNumber *number in frames) {
+    for (unsigned number = 0; number < 16; number++) {
+        if (!apply[number]) continue;
         LI_DS5_HAPTICS_IR_FRAME_V2 frame;
-        [frames[number] getBytes:&frame length:sizeof(frame)];
+        memset(&frame, 0, sizeof(frame));
+        frame.controllerNumber = (uint16_t)number;
+        frame.flags = chosen[number].flags;
+        frame.sourceSequenceNumber = chosen[number].seq;
+        for (int lane = 0; lane < 2; ++lane) {
+            frame.lanes[lane].rmsAmplitude = chosen[number].rms[lane];
+            frame.lanes[lane].peakAmplitude = chosen[number].peak[lane];
+            frame.lanes[lane].transientStrength = chosen[number].transient[lane];
+            frame.lanes[lane].lowBandRatio = chosen[number].lowBand[lane];
+        }
+        if (chosen[number].silent) frame.flags |= LI_DS5_HAPTICS_IR_FLAG_SILENT;
         if (!ControllerIsFeedbackTarget(self, frame.controllerNumber)) continue;
-        Controller *controller = _controllers[number];
+        Controller *controller = _controllers[@(number)];
         if (!controller) continue;
         if (!(frame.flags & LI_DS5_HAPTICS_IR_FLAG_DISCONTINUITY) &&
             controller.hasHapticsSequence &&
@@ -1461,8 +1681,19 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             BOOL leftAccepted = [controller.lowFreqMotor setIntensity:left.intensity sharpness:left.sharpness];
             BOOL rightAccepted = [controller.highFreqMotor setIntensity:right.intensity sharpness:right.sharpness];
             native = leftAccepted && rightAccepted;
+            if (native && rising[number]) {
+                @synchronized(_hapticsMailboxLock) { ds5_irp_note_issued(&_irPlayback[number], true); }
+            }
         }
-        if (!native) {
+        if (!native && !ds5_bluetooth_allows_motor_fallback([self bluetoothHapticsMode])) {
+            // An explicit "ir" choice does not fall back to plain rumble: the haptics are unavailable.
+            [controller.lowFreqMotor setMotorAmplitude:0];
+            [controller.highFreqMotor setMotorAmplitude:0];
+            if (!_loggedIrUnavailable) {
+                _loggedIrUnavailable = YES;
+                Log(LOG_W, @"[controller-haptics] UNAVAILABLE: analysed haptics are selected for Bluetooth but this pad cannot render them; no rumble fallback by choice");
+            }
+        } else if (!native) {
             [controller.lowFreqMotor setMotorAmplitude:0];
             [controller.highFreqMotor setMotorAmplitude:0];
             float low, high;
@@ -1481,6 +1712,30 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
         }
         controller.authoredHapticsFallback = !native;
     }
+    [self logIrPlaybackWindow];
+}
+
+// One line every five seconds while analysed haptics flow: how many ticks (energy after silence) the stream
+// delivered and how many were issued to the actuators. A difference is a tick lost between the two.
+- (void)logIrPlaybackWindow {
+    const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (_irStatsLast == 0) _irStatsLast = now;
+    if (now - _irStatsLast < 5.0) return;
+    _irStatsLast = now;
+    DS5IrStats total = {0};
+    @synchronized(_hapticsMailboxLock) {
+        for (unsigned player = 0; player < 16; player++) {
+            const DS5IrStats stats = ds5_irp_take_stats(&_irPlayback[player]);
+            total.framesIn += stats.framesIn; total.batches += stats.batches; total.overflows += stats.overflows;
+            total.ticksSeen += stats.ticksSeen; total.risingApplied += stats.risingApplied; total.issued += stats.issued;
+            total.applies += stats.applies;
+            if (stats.maxBatch > total.maxBatch) total.maxBatch = stats.maxBatch;
+        }
+    }
+    if (total.framesIn == 0) return;
+    Log(LOG_I, @"[controller-haptics] IR 5 s window: frames=%u in %u drains (largest %u), ticks seen=%u, ticks played=%u, issued to the actuators=%u, lost=%d, queue overflows=%u",
+        total.framesIn, total.batches, total.maxBatch, total.ticksSeen, total.risingApplied, total.issued,
+        (int)total.ticksSeen - (int)total.issued, total.overflows);
 }
 
 - (void)controllerMaintenance:(NSTimer *)timer {
@@ -1511,6 +1766,13 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
             }
             uint8_t percent = battery.batteryLevel >= 0 && battery.batteryLevel <= 1
                 ? (uint8_t)lrintf(battery.batteryLevel * 100) : LI_BATTERY_PERCENTAGE_UNKNOWN;
+            _diagGCBatteryPercent = percent;
+            AlkDs5BatteryObservation batteryObservation = {
+                .struct_size = sizeof(batteryObservation), .abi = ALK_DS5_CORE_ABI_VERSION,
+                .device_index = 0, .sequence = (uint64_t)_maintenanceTicks,
+                .level_steps = (uint8_t)fminf(10.0f, floorf(percent / 10.0f)),
+                .charging_state = state, .full = state == LI_BATTERY_STATE_FULL ? 1u : 0u};
+            (void)[self withDS5CoreForPlayer:(NSUInteger)controller.playerIndex call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_battery(core, &batteryObservation); }];
             PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
             if (input) LiSendControllerBatteryEventCtx(input, (uint8_t)controller.playerIndex, state, percent);
         }
@@ -1519,10 +1781,11 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame
 {
+    NoteHapticsFrame(Ds5FramePCM, frame != NULL && ControllerIsFeedbackTarget(self, frame->controllerNumber));
     if (frame == NULL || !ControllerIsFeedbackTarget(self, frame->controllerNumber) ||
-        frame->sampleRate != 48000 || frame->channelCount != 2 ||
+        frame->sampleRate != 48000 || (frame->channelCount != 2 && frame->channelCount != 4) ||
         frame->bitsPerSample != 16 || frame->frameCount > 480 ||
-        frame->pcmDataLength != (uint32_t)frame->frameCount * 4 ||
+        frame->pcmDataLength != (uint32_t)frame->frameCount * frame->channelCount * 2u ||
         (frame->pcmDataLength != 0 && frame->pcmData == NULL)) {
         return;
     }
