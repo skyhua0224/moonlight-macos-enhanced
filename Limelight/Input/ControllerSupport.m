@@ -751,6 +751,522 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 @synthesize shouldSendInputEvents = _shouldSendInputEvents;
 @synthesize dualSenseTouchpad = _dualSenseTouchpad;
 
+- (AlkDs5Core *)ds5CoreForPlayer:(NSUInteger)player {
+    if (player >= 16) return NULL;
+    if (_ds5Core[player] == NULL) {
+        AlkDs5BackendEvidence evidence = {
+            .struct_size = sizeof(evidence), .abi = ALK_DS5_CORE_ABI_VERSION,
+            .proven_capabilities = ALK_DS5_CAP_AUDIO_PCM | ALK_DS5_CAP_AUDIO_RENDER,
+            .audio = {sizeof(AlkDs5AudioFacts), ALK_DS5_CORE_ABI_VERSION, 48000u, 16u, 4u,
+                      {1u, 2u, 3u, 4u}, 2400u, 1u, 1u, 0u}};
+        AlkDs5Profile profile = {
+            .struct_size = sizeof(profile), .abi = ALK_DS5_CORE_ABI_VERSION,
+            .vendor_id = 0x054c, .product_id = 0x0ce6,
+            .transport = ALK_DS5_TRANSPORT_USB, .max_devices = 1,
+            .product_string = "DualSense", .manufacturer = "Sony",
+            .backend_evidence = &evidence};
+        if (alk_ds5_core_create(&profile, &_ds5Core[player]) != ALK_DS5_OK) return NULL;
+        AlkDs5Event event = {.struct_size = sizeof(event), .abi = ALK_DS5_CORE_ABI_VERSION};
+        if (alk_ds5_core_arrive(_ds5Core[player], 0, &event) != ALK_DS5_OK) {
+            alk_ds5_core_destroy(_ds5Core[player]);
+            _ds5Core[player] = NULL;
+            return NULL;
+        }
+        _ds5Sequence[player] = event.sequence;
+        (void)alk_ds5_core_begin_session(_ds5Core[player], 1u);
+    }
+    return _ds5Core[player];
+}
+
+// The core is not thread safe: raw HID input arrives on the HID queue, feedback on the
+// main queue, IR and PCM on the control thread. Nothing on this client reads core events,
+// so they are discarded here to keep the bounded queue from rejecting later submissions.
+- (AlkDs5Error)withDS5CoreForPlayer:(NSUInteger)player call:(AlkDs5Error (NS_NOESCAPE ^)(AlkDs5Core *core))call {
+    AlkDs5Error result = ALK_DS5_ERROR_NOT_FOUND;
+    os_unfair_lock_lock(&_ds5CoreLock);
+    AlkDs5Core *core = [self ds5CoreForPlayer:player];
+    if (core != NULL) {
+        result = call(core);
+        AlkDs5Event discarded = {.struct_size = sizeof(discarded), .abi = ALK_DS5_CORE_ABI_VERSION};
+        while (alk_ds5_core_poll_event(core, &discarded) == ALK_DS5_OK) {}
+    }
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    return result;
+}
+
+// TEMPORARY, for test builds: remove the [ds5-diag] lines (this function, noteDS5InputSent,
+// noteDS5GCGyroPeak and the _diag* state) once the DualSense options are settled.
+// Test-build measurement: how long a raw report's change takes to reach the send path, and
+// the gyro scale GameController delivers against the report's nominal 1024 counts per deg/s.
+- (void)flushDS5DiagLockedAt:(CFAbsoluteTime)now {
+    if (now - _diagLastLog < 1.0) {
+        os_unfair_lock_unlock(&_ds5CoreLock);
+        return;
+    }
+    const BOOL inputActive = _diagLagCount != 0 || _diagRawGyroPeak >= 5.0 || _diagGCGyroPeak >= 5.0 ||
+                             _rawImuRate != 0 || _gcMotionRate != 0;
+    double avg = _diagLagCount != 0 ? _diagLagSum / _diagLagCount : 0.0, max = _diagLagMax;
+    uint32_t count = _diagLagCount;
+    double rawPeak = _diagRawGyroPeak, gcPeak = _diagGCGyroPeak;
+    uint8_t steps = _diagRawBatterySteps, charging = _diagRawCharging, percent = _diagGCBatteryPercent;
+    unsigned rawRate = _rawImuRate, gcRate = _gcMotionRate, sentRate = _gyroSentRate;
+    unsigned hostGyro = _motionGyroRate[0], hostAccel = _motionAccelRate[0];
+    int source = (int)_motionSourceEffective;
+    DS5RawHIDBridge *bridge = _rawHID;
+    NSString *transportIdentity = _rawHIDIdentity[0];
+    _diagLagSum = _diagLagMax = _diagRawGyroPeak = _diagGCGyroPeak = 0.0;
+    _diagLagCount = 0;
+    _diagLastLog = now;
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    // The output counters of the same second, so one log shows the input and the output rates side by side.
+    const DS5OutputStats out = bridge != nil ? [bridge takeOutputStats] : (DS5OutputStats){0};
+    const BOOL outputActive = out.requested != 0 || out.written != 0 || out.failed != 0;
+    if (!inputActive && !outputActive) return;
+    Log(LOG_I, @"[ds5-diag] rawToSend avgMs=%.1f maxMs=%.1f n=%u gyroPeakDegS raw=%.0f gc=%.0f battery raw=%u/10 charging=%u gc=%u%% out req=%u wr=%u merged=%u same=%u fail=%u pulsesWritten=%u kept=%u dropped=%u maxWriteMs=%.1f",
+        avg * 1000.0, max * 1000.0, count, rawPeak, gcPeak, steps, charging, percent,
+        out.requested, out.written, out.merged, out.identical, out.failed, out.pulses, out.kept, out.dropped, out.maxWriteMs);
+    if (rawRate != 0 || gcRate != 0 || sentRate != 0) {
+        Log(LOG_I, @"[ds5-diag] motion rawImu/s=%u gcMotion/s=%u gyroSent/s=%u source=%@ transport=%@ hostAsks gyro=%uHz accel=%uHz",
+            rawRate, gcRate, sentRate, source == DS5_MOTION_SOURCE_RAW ? @"raw" : @"gamecontroller",
+            [bridge transportNameForIdentity:transportIdentity], hostGyro, hostAccel);
+    }
+}
+
+- (void)noteDS5InputSent {
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    os_unfair_lock_lock(&_ds5CoreLock);
+    if (_diagRawChangedAt != 0) {
+        double lag = now - _diagRawChangedAt;
+        _diagRawChangedAt = 0;
+        if (lag >= 0 && lag < 2.0) {
+            _diagLagSum += lag;
+            _diagLagMax = MAX(_diagLagMax, lag);
+            _diagLagCount++;
+        }
+    }
+    [self flushDS5DiagLockedAt:now];
+}
+
+- (void)noteDS5GCGyroPeak:(double)degreesPerSecond {
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    os_unfair_lock_lock(&_ds5CoreLock);
+    _diagGCGyroPeak = MAX(_diagGCGyroPeak, degreesPerSecond);
+    [self flushDS5DiagLockedAt:now];
+}
+
+// The pad address of a raw device: from its feature 0x09 when that was read, else from a serial that is an address.
+- (NSString *)padKeyForIdentity:(NSString *)identity {
+    if (identity.length == 0) return nil;
+    os_unfair_lock_lock(&_ds5CoreLock);
+    NSString *known = _rawAddressKey[identity];
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    if (known != nil) return known;
+    char key[13];
+    return ds5_serial_key(identity.UTF8String, key) ? [NSString stringWithUTF8String:key] : nil;
+}
+
+// Feature 0x09 of a raw device arrived with the pad's address: when another device of the same address is already a raw pad,
+// only one of them stays, the USB one (in the lower player number of the two).
+- (void)noteRawPadAddress:(NSString *)key forIdentity:(NSString *)identity {
+    NSString *snapshot[16] = {nil};
+    os_unfair_lock_lock(&_ds5CoreLock);
+    if (_rawAddressKey == nil) _rawAddressKey = [NSMutableDictionary dictionary];
+    _rawAddressKey[identity] = key;
+    for (NSUInteger index = 0; index < 16; index++) snapshot[index] = _rawHIDIdentity[index];
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    NSUInteger mine = NSNotFound, other = NSNotFound;
+    for (NSUInteger index = 0; index < 16; index++) {
+        if (snapshot[index] == nil) continue;
+        if ([snapshot[index] isEqualToString:identity]) { mine = index; continue; }
+        NSString *otherKey = [self padKeyForIdentity:snapshot[index]];
+        if ([otherKey isEqualToString:key] && other == NSNotFound) other = index;
+    }
+    if (mine == NSNotFound || other == NSNotFound) return;
+    const BOOL mineUSB = [_rawHID isUSBDeviceForIdentity:identity];
+    const BOOL otherUSB = [_rawHID isUSBDeviceForIdentity:snapshot[other]];
+    const BOOL keepMine = mineUSB && !otherUSB;                 // the USB device wins; ties keep the older one
+    NSString *keeper = keepMine ? identity : snapshot[other];
+    NSString *loser = keepMine ? snapshot[other] : identity;
+    const NSUInteger keeperSlot = keepMine ? mine : other, loserSlot = keepMine ? other : mine;
+    const NSUInteger lowSlot = MIN(keeperSlot, loserSlot), highSlot = MAX(keeperSlot, loserSlot);
+    const double now = [NSProcessInfo processInfo].systemUptime;
+    os_unfair_lock_lock(&_ds5CoreLock);
+    if ([_rawHIDIdentity[mine] isEqualToString:identity] && [_rawHIDIdentity[other] isEqualToString:snapshot[other]]) {
+        if (_rawTwinIgnored == nil) _rawTwinIgnored = [NSMutableDictionary dictionary];
+        _rawTwinIgnored[loser] = @(now);
+        _rawHIDIdentity[lowSlot] = [keeper copy];
+        _rawHIDIdentity[highSlot] = nil;
+    }
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    Log(LOG_I, @"[ds5-hid] the raw devices %@ (%@) and %@ (%@) are one pad (address %@): %@ is kept as player %lu, the other is ignored",
+        identity, mineUSB ? @"USB" : @"not USB", snapshot[other], otherUSB ? @"USB" : @"not USB", key, keeper, (unsigned long)lowSlot);
+}
+
+- (NSUInteger)rawHIDPlayerForIdentity:(NSString *)identity {
+    NSUInteger player = NSNotFound;
+    NSString *assigned[16] = {nil};
+    BOOL ignoredRecently = NO;
+    const double now = [NSProcessInfo processInfo].systemUptime;
+    os_unfair_lock_lock(&_ds5CoreLock);
+    for (NSUInteger index = 0; index < 16; index++) {
+        assigned[index] = _rawHIDIdentity[index];
+        if ([_rawHIDIdentity[index] isEqualToString:identity]) player = index;
+    }
+    if (player == NSNotFound) {
+        NSNumber *checked = _rawTwinIgnored[identity];
+        ignoredRecently = checked != nil && now - checked.doubleValue < 1.0;
+    }
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    if (player != NSNotFound) return player;
+    if (ignoredRecently) return NSNotFound;
+
+    // Is this the other transport of a pad that already has a raw device?
+    NSString *key = [self padKeyForIdentity:identity];
+    NSUInteger twin = NSNotFound;
+    if (key != nil) {
+        for (NSUInteger index = 0; index < 16; index++) {
+            if (assigned[index] != nil && ![assigned[index] isEqualToString:identity] && [[self padKeyForIdentity:assigned[index]] isEqualToString:key]) { twin = index; break; }
+        }
+    }
+    DS5TwinDecision decision = DS5_TWIN_NONE;
+    if (twin != NSNotFound) {
+        decision = ds5_twin_decide(true, [_rawHID hasDeviceForIdentity:assigned[twin]],
+                                   [_rawHID isUSBDeviceForIdentity:identity], [_rawHID isUSBDeviceForIdentity:assigned[twin]]);
+    }
+    os_unfair_lock_lock(&_ds5CoreLock);
+    if (_rawTwinIgnored == nil) _rawTwinIgnored = [NSMutableDictionary dictionary];
+    if (decision == DS5_TWIN_IGNORE_NEW) {
+        const BOOL first = _rawTwinIgnored[identity] == nil;
+        _rawTwinIgnored[identity] = @(now);
+        os_unfair_lock_unlock(&_ds5CoreLock);
+        if (first) Log(LOG_I, @"[ds5-hid] %@ is the other transport of the pad already served as player %lu (same address %@): its reports are ignored",
+                       identity, (unsigned long)twin, key);
+        return NSNotFound;
+    }
+    if (decision == DS5_TWIN_REPLACE_OLD && [_rawHIDIdentity[twin] isEqualToString:assigned[twin]]) {
+        _rawTwinIgnored[assigned[twin]] = @(now);
+        _rawHIDIdentity[twin] = [identity copy];
+        [_rawTwinIgnored removeObjectForKey:identity];
+        player = twin;
+        os_unfair_lock_unlock(&_ds5CoreLock);
+        Log(LOG_I, @"[ds5-hid] %@ (USB) takes the place of its Bluetooth twin %@ as player %lu (same address %@)",
+            identity, assigned[twin], (unsigned long)twin, key);
+        return player;
+    }
+    [_rawTwinIgnored removeObjectForKey:identity];
+    for (NSUInteger index = 0; index < 16; index++) {
+        if ([_rawHIDIdentity[index] isEqualToString:identity]) { player = index; break; }
+    }
+    if (player == NSNotFound) {
+        for (NSUInteger index = 0; index < 16; index++) {
+            if (_rawHIDIdentity[index] == nil) { _rawHIDIdentity[index] = [identity copy]; player = index; break; }
+        }
+    }
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    return player;
+}
+
+- (NSString *)rawHIDIdentityForPlayer:(NSUInteger)player {
+    if (player >= 16) return nil;
+    os_unfair_lock_lock(&_ds5CoreLock);
+    NSString *identity = _rawHIDIdentity[player];
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    return identity;
+}
+
+// Closes the one-second sample window and chooses the motion source for the next one. Called with
+// _ds5CoreLock held, from whichever source delivers a sample first.
+- (void)rollMotionWindowLockedAt:(double)now {
+    if (_motionWindowStart == 0.0) {
+        _motionWindowStart = now;
+        return;
+    }
+    if (now - _motionWindowStart < 1.0) return;
+    _rawImuRate = _rawImuWindow;
+    _gcMotionRate = _gcMotionWindow;
+    _gyroSentRate = _gyroSentWindow;
+    _rawImuWindow = _gcMotionWindow = _gyroSentWindow = 0;
+    _motionWindowStart = now;
+    NSUInteger rawDevices = 0;
+    for (NSUInteger index = 0; index < 16; index++) {
+        if (_rawHIDIdentity[index] != nil) rawDevices++;
+    }
+    // The raw report is tied to a player only by arrival order, so it is used for one controller only.
+    const unsigned minimum = 60;
+    if (rawDevices != 1) {
+        _motionSourceEffective = DS5_MOTION_SOURCE_GAMECONTROLLER;
+    } else if (self.controllerMotionSource == 1) {
+        _motionSourceEffective = DS5_MOTION_SOURCE_GAMECONTROLLER;
+    } else if (self.controllerMotionSource == 2) {
+        _motionSourceEffective = _rawImuRate >= minimum ? DS5_MOTION_SOURCE_RAW : DS5_MOTION_SOURCE_GAMECONTROLLER;
+    } else {
+        _motionSourceEffective = ds5_motion_select_source(_motionSourceEffective, _rawImuRate, _gcMotionRate, minimum);
+    }
+}
+
+// A GameController motion sample arrived. Returns whether it is the source that should be sent.
+- (BOOL)noteGCMotionSampleShouldSend {
+    const double now = [NSProcessInfo processInfo].systemUptime;
+    os_unfair_lock_lock(&_ds5CoreLock);
+    _gcMotionWindow++;
+    [self rollMotionWindowLockedAt:now];
+    BOOL send = _motionSourceEffective == DS5_MOTION_SOURCE_GAMECONTROLLER;
+    os_unfair_lock_unlock(&_ds5CoreLock);
+    return send;
+}
+
+- (void)noteGyroSent {
+    os_unfair_lock_lock(&_ds5CoreLock);
+    _gyroSentWindow++;
+    os_unfair_lock_unlock(&_ds5CoreLock);
+}
+
+- (PML_CONTROL_STREAM_CONTEXT)ds5ControlContext {
+    PML_INPUT_STREAM_CONTEXT input = ControllerInputContext(self);
+    if (input == NULL || !LiInputContextIsInitialized(input) || input->connectionContext == NULL) return NULL;
+    return &input->connectionContext->controlContext;
+}
+
+- (void)handleRawHIDInput:(NSString *)identity input:(const AlkDs5ExtendedInput *)input {
+    if (input == NULL) return;
+    NSUInteger player = [self rawHIDPlayerForIdentity:identity];
+    if (player == NSNotFound) return;
+    const double uptime = [NSProcessInfo processInfo].systemUptime;
+    __block BOOL sendGyro = NO, sendAccel = NO, sendJack = NO, muteChanged = NO, muteNow = NO;
+    __block DS5Vec3 gyroDps = {{0, 0, 0}}, accelMs2 = {{0, 0, 0}};
+    __block NSString *motionLog = nil;
+    __block uint8_t jackHeadset = 0, jackMicrophone = 0, jackMuted = 0;
+    __block BOOL padAudioReconfigure = NO;
+    (void)[self withDS5CoreForPlayer:player call:^AlkDs5Error(AlkDs5Core *core) {
+        AlkDs5State state = input->state;
+        const uint8_t sticks[4] = {state.left_x, state.left_y, state.right_x, state.right_y};
+        BOOL changed = state.buttons != self->_diagRawButtons;
+        for (int axis = 0; axis < 4; axis++) changed = changed || abs((int)sticks[axis] - (int)self->_diagRawSticks[axis]) >= 4;
+        if (changed) {
+            memcpy(self->_diagRawSticks, sticks, sizeof(sticks));
+            self->_diagRawButtons = state.buttons;
+            if (self->_diagRawChangedAt == 0) self->_diagRawChangedAt = CFAbsoluteTimeGetCurrent();
+        }
+        for (int axis = 0; axis < 3; axis++) {
+            self->_diagRawGyroPeak = MAX(self->_diagRawGyroPeak,
+                                         fabs((double)ds5_raw_gyro_dps(&self->_imuCalibration[player], axis, input->motion.gyro[axis])));
+        }
+        self->_diagRawBatterySteps = input->battery.level_steps;
+        self->_diagRawCharging = input->battery.charging_state;
+        state.struct_size = sizeof(state);
+        state.abi = ALK_DS5_CORE_ABI_VERSION;
+        state.device_index = 0;
+        state.sequence = ++self->_ds5Sequence[player];
+        AlkDs5Event event = {.struct_size = sizeof(event), .abi = ALK_DS5_CORE_ABI_VERSION};
+        (void)alk_ds5_core_submit_state(core, &state, &event);
+        for (NSUInteger index = 0; index < 2; index++) {
+            AlkDs5TouchObservation touch = {
+                .struct_size = sizeof(touch), .abi = ALK_DS5_CORE_ABI_VERSION,
+                .device_index = 0, .sequence = state.sequence,
+                .contact_id = input->touch[index].contact_id,
+                .active = input->touch[index].active,
+                .x = input->touch[index].x, .y = input->touch[index].y,
+                .pressure = input->touch[index].pressure};
+            (void)alk_ds5_core_submit_touch(core, &touch);
+        }
+        AlkDs5MotionObservation motion = {
+            .struct_size = sizeof(motion), .abi = ALK_DS5_CORE_ABI_VERSION,
+            .device_index = 0, .sequence = state.sequence,
+            .gyro = {input->motion.gyro[0], input->motion.gyro[1], input->motion.gyro[2]},
+            .accelerometer = {input->motion.accelerometer[0], input->motion.accelerometer[1], input->motion.accelerometer[2]},
+            .sensor_timestamp = input->motion.sensor_timestamp};
+        (void)alk_ds5_core_submit_motion(core, &motion);
+        AlkDs5BatteryObservation battery = {
+            .struct_size = sizeof(battery), .abi = ALK_DS5_CORE_ABI_VERSION,
+            .device_index = 0, .sequence = state.sequence,
+            .level_steps = input->battery.level_steps, .charging_state = input->battery.charging_state,
+            .full = input->battery.full};
+        (void)alk_ds5_core_submit_battery(core, &battery);
+        AlkDs5JackObservation jack = {
+            .struct_size = sizeof(jack), .abi = ALK_DS5_CORE_ABI_VERSION,
+            .device_index = 0, .sequence = state.sequence,
+            .headset_present = input->jack.headset_present,
+            .microphone_present = input->jack.microphone_present,
+            .microphone_muted = input->jack.microphone_muted};
+        (void)alk_ds5_core_submit_jack(core, &jack);
+
+        // The Mute button exists only in the raw report. A change is handed to the main queue below.
+        muteNow = ds5_raw_mute_pressed(input->state.buttons);
+        if (ds5_mute_changed(self->_rawMute[player], muteNow)) {
+            self->_rawMute[player] = muteNow;
+            muteChanged = YES;
+        }
+
+        // The headset the real pad reports decides the output path of pad audio; a change rewrites the pad's audio bytes.
+        {
+            const int headsetNow = input->jack.headset_present ? 1 : 0;
+            const BOOL wanted = self->_padAudioSeen[player] || self->_padSpeakerStream || [self padAudioSelfTestWanted];
+            if (self->_padHeadset[player] != headsetNow) {
+                self->_padHeadset[player] = headsetNow;
+                if (wanted) padAudioReconfigure = YES;
+            } else if (wanted && !self->_padAudioConfigured[player]) {
+                padAudioReconfigure = YES;
+            }
+            if (padAudioReconfigure) self->_padAudioConfigured[player] = YES;  // queued once, not once per report
+        }
+
+        // Raw sensor path: the sample is converted on the spot and sent after the lock is released.
+        self->_rawImuWindow++;
+        [self rollMotionWindowLockedAt:uptime];
+        if (self->_motionSourceEffective == DS5_MOTION_SOURCE_RAW) {
+            const DS5ImuCalibration *calibration = &self->_imuCalibration[player];
+            if (ds5_motion_due(uptime, self->_rawLastGyroSent[player], self->_motionGyroRate[player])) {
+                self->_rawLastGyroSent[player] = uptime;
+                for (int axis = 0; axis < 3; axis++) gyroDps.v[axis] = ds5_raw_gyro_wire_dps(input->motion.gyro[axis]);
+                sendGyro = YES;
+                self->_gyroSentWindow++;
+            }
+            if (ds5_motion_due(uptime, self->_rawLastAccelSent[player], self->_motionAccelRate[player])) {
+                self->_rawLastAccelSent[player] = uptime;
+                for (int axis = 0; axis < 3; axis++) accelMs2.v[axis] = ds5_raw_accel_wire_ms2(input->motion.accelerometer[axis]);
+                sendAccel = YES;
+            }
+        }
+
+        // Low-rate log of the raw report next to what goes on the wire (once a second while the pad moves,
+        // every five seconds at rest).
+        {
+            const double magnitude = sqrt((double)input->motion.gyro[0] * input->motion.gyro[0] +
+                                          (double)input->motion.gyro[1] * input->motion.gyro[1] +
+                                          (double)input->motion.gyro[2] * input->motion.gyro[2]);
+            if (magnitude >= self->_mlRawPeak) {
+                self->_mlRawPeak = magnitude;
+                for (int axis = 0; axis < 3; axis++) {
+                    self->_mlRawGyro[axis] = input->motion.gyro[axis];
+                    self->_mlRawAccel[axis] = input->motion.accelerometer[axis];
+                    self->_mlWireGyro[axis] = ds5_raw_gyro_wire_dps(input->motion.gyro[axis]);
+                    self->_mlWireAccel[axis] = ds5_raw_accel_wire_ms2(input->motion.accelerometer[axis]);
+                    self->_mlCalGyro[axis] = ds5_raw_gyro_dps(&self->_imuCalibration[player], axis, input->motion.gyro[axis]);
+                }
+            }
+            const BOOL moving = self->_mlRawPeak >= 3.0 * DS5_WIRE_GYRO_COUNTS_PER_DPS;
+            if (uptime - self->_motionLogLast >= 1.0 && (moving || uptime - self->_motionLogIdleLast >= 5.0)) {
+                const float gain = (float)self.gyroSensitivity;
+                motionLog = [NSString stringWithFormat:
+                    @"[ds5-motion] source=%@ rates raw=%u gc=%u sent=%u | real report gyro counts %d %d %d accel counts %d %d %d"
+                    @" | wire gyro deg/s %.2f %.2f %.2f x client gain %.2f -> host counts %ld %ld %ld (calibrated deg/s would be %.2f %.2f %.2f)"
+                    @" | wire accel m/s2 %.2f %.2f %.2f"
+                    @" | latest GameController rotation rad/s %.3f %.3f %.3f accel g %.3f %.3f %.3f -> wire deg/s %.2f %.2f %.2f",
+                    self->_motionSourceEffective == DS5_MOTION_SOURCE_RAW ? @"raw" : @"gamecontroller",
+                    self->_rawImuRate, self->_gcMotionRate, self->_gyroSentRate,
+                    self->_mlRawGyro[0], self->_mlRawGyro[1], self->_mlRawGyro[2],
+                    self->_mlRawAccel[0], self->_mlRawAccel[1], self->_mlRawAccel[2],
+                    self->_mlWireGyro[0], self->_mlWireGyro[1], self->_mlWireGyro[2], gain,
+                    lrintf(self->_mlWireGyro[0] * gain * 16.4f), lrintf(self->_mlWireGyro[1] * gain * 16.4f), lrintf(self->_mlWireGyro[2] * gain * 16.4f),
+                    self->_mlCalGyro[0], self->_mlCalGyro[1], self->_mlCalGyro[2],
+                    self->_mlWireAccel[0], self->_mlWireAccel[1], self->_mlWireAccel[2],
+                    self->_mlGCRot[0], self->_mlGCRot[1], self->_mlGCRot[2], self->_mlGCAcc[0], self->_mlGCAcc[1], self->_mlGCAcc[2],
+                    self->_mlGCProto[0], self->_mlGCProto[1], self->_mlGCProto[2]];
+                self->_motionLogLast = uptime;
+                if (!moving) self->_motionLogIdleLast = uptime;
+                self->_mlRawPeak = 0.0;
+            }
+        }
+
+        // Headset and microphone facts go to the host when they change, and again every few seconds so a
+        // host that created the virtual controller later still learns them.
+        if (self.ds5ReportHeadset) {
+            const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+            const BOOL stale = !self->_sentJack[player].valid || now - self->_sentJack[player].sentAt > 5.0;
+            if (stale || self->_sentJack[player].headset != input->jack.headset_present ||
+                self->_sentJack[player].microphone != input->jack.microphone_present ||
+                self->_sentJack[player].muted != input->jack.microphone_muted) {
+                sendJack = YES;
+                jackHeadset = input->jack.headset_present;
+                jackMicrophone = input->jack.microphone_present;
+                jackMuted = input->jack.microphone_muted;
+            }
+        }
+        return ALK_DS5_OK;
+    }];
+
+    if (motionLog != nil) Log(LOG_I, @"%@", motionLog);
+    if (padAudioReconfigure) {
+        __weak typeof(self) weakSelf = self;
+        const NSUInteger audioPlayer = player;
+        dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf configurePadAudioForPlayer:audioPlayer]; });
+    }
+    if (muteChanged) {
+        const BOOL pressed = muteNow;
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            ControllerSupport *strongSelf = weakSelf;
+            Controller *controller = strongSelf != nil ? [strongSelf->_controllers objectForKey:@(player)] : nil;
+            if (controller == nil) return;
+            controller.rawMuteButton = pressed;
+            [strongSelf updateFinished:controller];
+            // The pad's firmware flips its own mute LED on the button. The LED follows the virtual device:
+            // what the game last asked for, off when it never asked.
+            if (pressed && strongSelf.ds5ApplyHostLights) [strongSelf assertMuteLEDForPlayer:(unsigned short)player];
+        });
+    }
+    if (sendGyro || sendAccel) {
+        PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+        if (inputCtx != NULL && self->_shouldSendInputEvents && LiInputContextIsInitialized(inputCtx)) {
+            if (sendAccel) LiSendControllerMotionEventCtx(inputCtx, (uint8_t)player, LI_MOTION_TYPE_ACCEL,
+                                                          accelMs2.v[0], accelMs2.v[1], accelMs2.v[2]);
+            if (sendGyro) {
+                const float gyroGain = (float)self.gyroSensitivity;
+                LiSendControllerMotionEventCtx(inputCtx, (uint8_t)player, LI_MOTION_TYPE_GYRO,
+                                               gyroDps.v[0] * gyroGain, gyroDps.v[1] * gyroGain, gyroDps.v[2] * gyroGain);
+            }
+        }
+    }
+    if (sendJack) {
+        PML_CONTROL_STREAM_CONTEXT control = [self ds5ControlContext];
+        // The library refuses (LI_ERR_UNSUPPORTED) until the host has declared input-status=1, so a host
+        // that never did sees nothing and the next report asks again.
+        if (control != NULL && LiSendDs5InputStatusCtx(control, (uint16_t)player,
+                LI_DS5_IN_HEADSET | LI_DS5_IN_MICROPHONE | LI_DS5_IN_MIC_MUTED,
+                jackHeadset, jackMicrophone, jackMuted) == 0) {
+            os_unfair_lock_lock(&_ds5CoreLock);
+            _sentJack[player].valid = YES;
+            _sentJack[player].headset = jackHeadset;
+            _sentJack[player].microphone = jackMicrophone;
+            _sentJack[player].muted = jackMuted;
+            _sentJack[player].sentAt = CFAbsoluteTimeGetCurrent();
+            os_unfair_lock_unlock(&_ds5CoreLock);
+            Log(LOG_I, @"[ds5-ext] input status sent player=%lu headset=%u microphone=%u muted=%u",
+                (unsigned long)player, jackHeadset, jackMicrophone, jackMuted);
+        }
+    }
+}
+
+- (void)handleRawHIDFeature:(NSString *)identity reportID:(uint8_t)reportID
+                     report:(const uint8_t *)report length:(size_t)length {
+    // The bytes the real pad answers to a read-only GET_REPORT, once per attach. The virtual pad on the host
+    // takes its default answers from these.
+    {
+        NSMutableString *dump = [NSMutableString stringWithCapacity:length * 2];
+        for (size_t index = 0; index < length && index < 96; index++) [dump appendFormat:@"%02x", report[index]];
+        Log(LOG_I, @"[ds5-feature] real pad report 0x%02x length %zu: %@", reportID, length, dump);
+    }
+    if (reportID == 0x09 && length >= 7) {
+        char text[13];
+        snprintf(text, sizeof text, "%02x%02x%02x%02x%02x%02x", report[1], report[2], report[3], report[4], report[5], report[6]);
+        [self noteRawPadAddress:[NSString stringWithUTF8String:text] forIdentity:identity];
+    }
+    NSUInteger player = [self rawHIDPlayerForIdentity:identity];
+    if (player == NSNotFound) return;
+    if (reportID == ALK_DS5_FEATURE_CALIBRATION_ID) {
+        DS5ImuCalibration calibration;
+        const bool factory = ds5_imu_calibration_from_report(report, length, &calibration);
+        os_unfair_lock_lock(&_ds5CoreLock);
+        _imuCalibration[player] = calibration;
+        os_unfair_lock_unlock(&_ds5CoreLock);
+        Log(LOG_I, @"[ds5-ext] imu calibration player=%lu factory=%d gyroSensitivity=%.1f,%.1f,%.1f", (unsigned long)player,
+            factory, calibration.sensitivity[0], calibration.sensitivity[1], calibration.sensitivity[2]);
+    }
+    (void)[self withDS5CoreForPlayer:player call:^AlkDs5Error(AlkDs5Core *core) {
+        return alk_ds5_core_set_feature_report_for_device(core, 0, reportID, report, length);
+    }];
+}
+
 - (void)setShouldSendInputEvents:(BOOL)enabled {
     BOOL wasEnabled = _shouldSendInputEvents;
     _shouldSendInputEvents = enabled;
