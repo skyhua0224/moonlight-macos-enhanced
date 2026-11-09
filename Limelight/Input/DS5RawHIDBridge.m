@@ -327,3 +327,349 @@ static void DS5RawHIDOutputReport(void *context, IOReturn result, void *sender,
     [_stateLock unlock];
 }
 
+- (void)startWithInputHandler:(DS5RawHIDInputHandler)handler
+               featureHandler:(DS5RawHIDFeatureHandler)featureHandler {
+    [self stop];
+    _handler = [handler copy];
+    _featureHandler = [featureHandler copy];
+    _stateLock = [[NSLock alloc] init];
+    _outputLock = [[NSLock alloc] init];
+    dispatch_queue_attr_t outputAttr = dispatch_queue_attr_make_with_qos_class(
+        DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0);
+    [_outputLock lock];
+    ds5_outc_init(&_coalescer);
+    _pendingIdentity = nil;
+    _drainScheduled = NO;
+    _outputGeneration++;
+    _outputQueue = dispatch_queue_create("com.skyhua.moonlight.ds5-hid-output", outputAttr);
+    [_outputLock unlock];
+    _devices = [NSMutableDictionary dictionary];
+    _deviceTransports = [NSMutableDictionary dictionary];
+    _featureIdentities = [NSMutableSet set];
+    _stopping = NO;
+    atomic_store_explicit(&_outputThreadStop, 0, memory_order_release);
+    const char *timing = getenv("DS5_HID_TIMING");
+    _timingLogs = timing != NULL && timing[0] != '\0' && timing[0] != '0';
+    _outputThreadReady = dispatch_semaphore_create(0);
+    _outputThread = [[NSThread alloc] initWithTarget:self selector:@selector(outputRunLoopMain) object:nil];
+    _outputThread.name = @"ds5-hid-output";
+    _outputThread.qualityOfService = NSQualityOfServiceUserInteractive;
+    [_outputThread start];
+    dispatch_semaphore_wait(_outputThreadReady, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)));
+    _ioQueue = dispatch_queue_create("com.skyhua.moonlight.ds5-hid-io", DISPATCH_QUEUE_SERIAL);
+    __weak DS5RawHIDBridge *weakSelf = self;
+    dispatch_async(_ioQueue, ^{
+        DS5RawHIDBridge *strongSelf = weakSelf;
+        if (strongSelf == nil) return;
+        dispatch_queue_t ioQueue = strongSelf->_ioQueue;
+        IOHIDManagerRef manager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+        if (manager == NULL) return;
+        [strongSelf->_stateLock lock];
+        BOOL stopping = strongSelf->_stopping;
+        if (!stopping) strongSelf->_manager = manager;
+        [strongSelf->_stateLock unlock];
+        if (stopping) {
+            CFRelease(manager);
+            return;
+        }
+        NSArray *matches = @[
+            @{(__bridge NSString *)CFSTR(kIOHIDVendorIDKey): @0x054c,
+              (__bridge NSString *)CFSTR(kIOHIDProductIDKey): @0x0ce6,
+              (__bridge NSString *)CFSTR(kIOHIDPrimaryUsagePageKey): @0x01,
+              (__bridge NSString *)CFSTR(kIOHIDPrimaryUsageKey): @0x05},
+            @{(__bridge NSString *)CFSTR(kIOHIDVendorIDKey): @0x054c,
+              (__bridge NSString *)CFSTR(kIOHIDProductIDKey): @0x0df2,
+              (__bridge NSString *)CFSTR(kIOHIDPrimaryUsagePageKey): @0x01,
+              (__bridge NSString *)CFSTR(kIOHIDPrimaryUsageKey): @0x05}
+        ];
+        IOHIDManagerSetDeviceMatchingMultiple(manager, (__bridge CFArrayRef)matches);
+        IOHIDManagerRegisterDeviceMatchingCallback(manager, DS5RawHIDMatched, (__bridge void *)strongSelf);
+        IOHIDManagerRegisterDeviceRemovalCallback(manager, DS5RawHIDRemoved, (__bridge void *)strongSelf);
+        IOHIDManagerRegisterInputReportCallback(manager, DS5RawHIDInput, (__bridge void *)strongSelf);
+        IOHIDManagerSetDispatchQueue(manager, ioQueue);
+        IOHIDManagerSetCancelHandler(manager, ^{
+            (void)strongSelf;
+            CFRelease(manager);
+        });
+        CFAbsoluteTime startedAt = CFAbsoluteTimeGetCurrent();
+        IOReturn openResult = IOHIDManagerOpen(manager, kIOHIDOptionsTypeNone);
+        DS5LogSlowHIDCall(@"ManagerOpen", CFAbsoluteTimeGetCurrent() - startedAt);
+        if (openResult != kIOReturnSuccess) {
+            Log(LOG_W, @"[ds5-hid] IOHIDManagerOpen failed: 0x%x", openResult);
+        }
+        startedAt = CFAbsoluteTimeGetCurrent();
+        IOHIDManagerActivate(manager);
+        DS5LogSlowHIDCall(@"ManagerActivate", CFAbsoluteTimeGetCurrent() - startedAt);
+    });
+}
+
+- (void)stop {
+    IOHIDManagerRef manager = NULL;
+    dispatch_queue_t queue = _ioQueue;
+    if (_stateLock != nil) {
+        [_stateLock lock];
+        _stopping = YES;
+        manager = _manager;
+        _manager = NULL;
+        _handler = nil;
+        _featureHandler = nil;
+        [_stateLock unlock];
+    }
+    if (_outputLock != nil) {
+        [_outputLock lock];
+        ds5_outc_clear(&_coalescer);
+        _pendingIdentity = nil;
+        _outputGeneration++;
+        _outputQueue = nil;
+        [_outputLock unlock];
+    }
+    if (manager != NULL && queue != NULL) {
+        dispatch_async(queue, ^{
+            CFAbsoluteTime startedAt = CFAbsoluteTimeGetCurrent();
+            IOHIDManagerCancel(manager);
+            DS5LogSlowHIDCall(@"ManagerCancel", CFAbsoluteTimeGetCurrent() - startedAt);
+        });
+    }
+    self.hasDevice = NO;
+    if (_stateLock != nil) {
+        [_stateLock lock];
+        for (NSValue *value in _devices.allValues) {
+            IOHIDDeviceRef device = (IOHIDDeviceRef)[value pointerValue];
+            if (device != NULL) CFRelease(device);
+        }
+        [_devices removeAllObjects];
+        [_deviceTransports removeAllObjects];
+        [_featureIdentities removeAllObjects];
+        [_stateLock unlock];
+    }
+    _manager = NULL;
+    _ioQueue = NULL;
+    atomic_store_explicit(&_outputThreadStop, 1, memory_order_release);
+    CFRunLoopRef outputLoop = _outputRunLoop;
+    if (outputLoop != NULL) CFRunLoopWakeUp(outputLoop);
+    NSThread *outputThread = _outputThread;
+    _outputThread = nil;
+    if (outputThread != nil) {
+        const CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent() + 1.0;
+        while (!outputThread.isFinished && CFAbsoluteTimeGetCurrent() < deadline) usleep(2000);
+    }
+}
+
+- (BOOL)isUSBDeviceForIdentity:(NSString *)identity {
+    if (identity.length == 0 || _stateLock == nil) return NO;
+    [_stateLock lock];
+    NSString *transport = [_deviceTransports[identity] copy];
+    BOOL present = _devices[identity] != nil;
+    [_stateLock unlock];
+    return present && [transport caseInsensitiveCompare:@"USB"] == NSOrderedSame;
+}
+
+- (BOOL)hasDeviceForIdentity:(NSString *)identity {
+    if (identity.length == 0 || _stateLock == nil) return NO;
+    [_stateLock lock];
+    BOOL present = _devices[identity] != nil;
+    [_stateLock unlock];
+    return present;
+}
+
+- (NSString *)transportNameForIdentity:(NSString *)identity {
+    if (identity.length == 0 || _stateLock == nil) return @"unknown";
+    [_stateLock lock];
+    NSString *transport = [_deviceTransports[identity] copy];
+    BOOL present = _devices[identity] != nil;
+    [_stateLock unlock];
+    if (!present || transport.length == 0) return @"unknown";
+    if ([transport caseInsensitiveCompare:@"USB"] == NSOrderedSame) return @"usb";
+    if ([transport caseInsensitiveCompare:@"Bluetooth"] == NSOrderedSame) return @"bluetooth";
+    return [transport lowercaseString];
+}
+
++ (int)connectedPadLinkUsb:(int *)usbOut bluetooth:(int *)bluetoothOut other:(int *)otherOut {
+    int usb = 0, bluetooth = 0, other = 0;
+    BOOL failed = NO;
+    const int products[2] = {0x0ce6, 0x0df2};
+    for (int index = 0; index < 2 && !failed; index++) {
+        CFMutableDictionaryRef match = IOServiceMatching(kIOHIDDeviceKey);
+        if (match == NULL) { failed = YES; break; }
+        int vendor = 0x054c;
+        int product = products[index];
+        int page = 0x01;
+        int usage = 0x05;
+        CFNumberRef vendorNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &vendor);
+        CFNumberRef productNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &product);
+        CFNumberRef pageNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &page);
+        CFNumberRef usageNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &usage);
+        if (vendorNum == NULL || productNum == NULL || pageNum == NULL || usageNum == NULL) {
+            if (vendorNum) CFRelease(vendorNum);
+            if (productNum) CFRelease(productNum);
+            if (pageNum) CFRelease(pageNum);
+            if (usageNum) CFRelease(usageNum);
+            CFRelease(match);
+            failed = YES;
+            break;
+        }
+        CFDictionarySetValue(match, CFSTR(kIOHIDVendorIDKey), vendorNum);
+        CFDictionarySetValue(match, CFSTR(kIOHIDProductIDKey), productNum);
+        CFDictionarySetValue(match, CFSTR(kIOHIDPrimaryUsagePageKey), pageNum);
+        CFDictionarySetValue(match, CFSTR(kIOHIDPrimaryUsageKey), usageNum);
+        CFRelease(vendorNum);
+        CFRelease(productNum);
+        CFRelease(pageNum);
+        CFRelease(usageNum);
+        io_iterator_t iterator = IO_OBJECT_NULL;
+        // IOServiceGetMatchingServices consumes match.
+        kern_return_t result = IOServiceGetMatchingServices(kIOMainPortDefault, match, &iterator);
+        if (result != KERN_SUCCESS) { failed = YES; break; }
+        io_object_t device;
+        while ((device = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
+            CFTypeRef transport = IORegistryEntryCreateCFProperty(device, CFSTR(kIOHIDTransportKey), kCFAllocatorDefault, 0);
+            if (transport != NULL && CFGetTypeID(transport) == CFStringGetTypeID()) {
+                if (CFStringCompare((CFStringRef)transport, CFSTR("USB"), kCFCompareCaseInsensitive) == kCFCompareEqualTo) usb++;
+                else if (CFStringCompare((CFStringRef)transport, CFSTR("Bluetooth"), kCFCompareCaseInsensitive) == kCFCompareEqualTo) bluetooth++;
+                else other++;
+            } else {
+                other++;
+            }
+            if (transport != NULL) CFRelease(transport);
+            IOObjectRelease(device);
+        }
+        IOObjectRelease(iterator);
+    }
+    if (usbOut != NULL) *usbOut = usb;
+    if (bluetoothOut != NULL) *bluetoothOut = bluetooth;
+    if (otherOut != NULL) *otherOut = other;
+    if (failed) return DS5_LINK_UNKNOWN;
+    if (usb > 0 && bluetooth > 0) return DS5_LINK_MIXED;
+    if (bluetooth > 0) return DS5_LINK_BLUETOOTH;
+    if (usb > 0) return DS5_LINK_USB;
+    if (other > 0) return DS5_LINK_UNKNOWN;
+    return DS5_LINK_NONE;
+}
+
+- (BOOL)submitReport:(const uint8_t *)report length:(size_t)length playerIdentity:(NSString *)identity bluetoothAudio:(BOOL)bluetoothAudio {
+    if (report == NULL || identity.length == 0 || _stateLock == nil) return NO;
+    [_stateLock lock];
+    BOOL available = _devices[identity] != nil && !_stopping;
+    NSString *transport = [_deviceTransports[identity] copy];
+    [_stateLock unlock];
+    const BOOL framedStream = length >= 334u || (length == 142u && report[0] == 0x32u);
+    if (!available || (bluetoothAudio &&
+                       ([transport caseInsensitiveCompare:@"Bluetooth"] != NSOrderedSame || !framedStream)) ||
+        (!bluetoothAudio && length != ALK_DS5_USB_OUTPUT_REPORT_BYTES)) return NO;
+
+    // Everything that is not known to be USB is paced like Bluetooth.
+    const BOOL paced = [transport caseInsensitiveCompare:@"USB"] != NSOrderedSame;
+    // The audio bytes of a USB output report, logged whenever they change: the valid flags that select the
+    // volumes and the audio control (flag0 0x10 headphone volume, 0x20 speaker volume, 0x40 microphone volume,
+    // 0x80 audio control; flag1 0x80 audio control 2), the three volumes, audio control (byte 8) and control 2 (byte 38).
+    if (!bluetoothAudio && !paced && ((report[1] & 0xf0) != 0 || (report[2] & 0x80) != 0)) {
+        static uint8_t last[8];
+        const uint8_t now[8] = {(uint8_t)(report[1] & 0xf0), (uint8_t)(report[2] & 0x80), report[5], report[6], report[7], report[8], report[38], 1};
+        if (memcmp(last, now, sizeof(now)) != 0) {
+            memcpy(last, now, sizeof(now));
+            Log(LOG_I, @"[ds5-output] USB audio bytes: flag0&0xf0=0x%02x flag1&0x80=0x%02x headphoneVolume=0x%02x speakerVolume=0x%02x micVolume=0x%02x audioControl(8)=0x%02x audioControl2(38)=0x%02x",
+                now[0], now[1], now[2], now[3], now[4], now[5], now[6]);
+        }
+    }
+    [_outputLock lock];
+    const BOOL accepted = _outputQueue != nil &&
+        ds5_outc_submit(&_coalescer, (uint64_t)identity.hash, paced, report, length);
+    if (accepted) _pendingIdentity = [identity copy];
+    const BOOL schedule = accepted && !_drainScheduled;
+    if (schedule) _drainScheduled = YES;
+    dispatch_queue_t queue = _outputQueue;
+    [_outputLock unlock];
+    if (schedule) dispatch_async(queue, ^{ [self drainOutput]; });
+    return accepted;
+}
+
+- (BOOL)sendOutputReport:(const uint8_t *)report length:(size_t)length playerIdentity:(NSString *)identity {
+    return [self submitReport:report length:length playerIdentity:identity bluetoothAudio:NO];
+}
+
+- (BOOL)sendBluetoothAudioReport:(const uint8_t *)report length:(size_t)length playerIdentity:(NSString *)identity {
+    return [self submitReport:report length:length playerIdentity:identity bluetoothAudio:YES];
+}
+
+- (void)flushOutputWithTimeout:(NSTimeInterval)timeout {
+    if (_outputLock == nil) return;
+    const CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent() + timeout;
+    for (;;) {
+        [_outputLock lock];
+        const BOOL busy = ds5_outc_busy(&_coalescer);
+        [_outputLock unlock];
+        if (!busy || CFAbsoluteTimeGetCurrent() >= deadline) break;
+        usleep(2000);
+    }
+}
+
+- (DS5OutputStats)takeOutputStats {
+    DS5OutputStats stats;
+    memset(&stats, 0, sizeof(stats));
+    if (_outputLock == nil) return stats;
+    [_outputLock lock];
+    stats = ds5_outc_take_stats(&_coalescer);
+    [_outputLock unlock];
+    return stats;
+}
+
+// Runs on _outputQueue. Starts at most one write; the completion starts the next.
+- (void)drainOutput {
+    uint8_t report[DS5_OUTC_CAPACITY];
+    size_t length = 0;
+    uint64_t key = 0;
+    double waitMs = 0.0;
+    [_outputLock lock];
+    _drainScheduled = NO;
+    const DS5OutputStep step = ds5_outc_next(&_coalescer, DS5NowMilliseconds(), report, &length, &key, &waitMs);
+    NSString *identity = step == DS5_OUTC_WRITE ? _pendingIdentity : nil;
+    const uint32_t generation = _outputGeneration;
+    const BOOL timer = step == DS5_OUTC_WAIT && waitMs > 0.0 && _outputQueue != nil;
+    if (timer) _drainScheduled = YES;
+    dispatch_queue_t queue = _outputQueue;
+    [_outputLock unlock];
+    if (timer) {
+        // The wait ends with the pacing interval; a report that arrives meanwhile is merged into the pending one.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(waitMs * (double)NSEC_PER_MSEC) + 1000), queue,
+                       ^{ [self drainOutput]; });
+        return;
+    }
+    if (step != DS5_OUTC_WRITE) return;
+    [self writeOutputReport:report length:length identity:identity generation:generation];
+    [self scheduleAudioFollowUp];
+}
+
+- (void)outputRunLoopMain {
+    @autoreleasepool {
+        CFRunLoopSourceContext context = {0};
+        context.perform = DS5OutputSourcePerform;
+        CFRunLoopSourceRef source = CFRunLoopSourceCreate(kCFAllocatorDefault, 0, &context);
+        CFRunLoopRef loop = CFRunLoopGetCurrent();
+        if (source != NULL) CFRunLoopAddSource(loop, source, kCFRunLoopDefaultMode);
+        _outputRunLoop = loop;
+        if (_outputThreadReady != NULL) dispatch_semaphore_signal(_outputThreadReady);
+        while (atomic_load_explicit(&_outputThreadStop, memory_order_acquire) == 0) {
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.2, false);
+        }
+        if (source != NULL) {
+            CFRunLoopRemoveSource(loop, source, kCFRunLoopDefaultMode);
+            CFRelease(source);
+        }
+        if (_outputRunLoop == loop) _outputRunLoop = NULL;
+    }
+}
+
+- (void)scheduleAudioFollowUp {
+    [_outputLock lock];
+    const double waitMs = ds5_outc_audio_wait_ms(&_coalescer, DS5NowMilliseconds());
+    const BOOL audioWaiting = _coalescer.hasAudioLane && _coalescer.audioCount > 0 && _coalescer.audioInflight < ds5_outc_pcm_pipeline(&_coalescer);
+    const BOOL timer = audioWaiting && waitMs > 0.0 && _outputQueue != nil && !_drainScheduled;
+    if (timer) _drainScheduled = YES;
+    dispatch_queue_t queue = _outputQueue;
+    [_outputLock unlock];
+    if (!timer || queue == nil) return;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(waitMs * (double)NSEC_PER_MSEC)), queue, ^{
+        [self drainOutput];
+    });
+}
+
