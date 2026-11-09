@@ -14,17 +14,43 @@
 #import "DataManager.h"
 #import "HIDSupport.h"
 #import "Ds5HapticsAudioRenderer.h"
+#import "Ds5BluetoothAudioRenderer.h"
 #import "MLDualSenseTouchpad.h"
 #include "../../modules/controller-feedback/ControllerFeedbackEnvelope.h"
 #include "Limelight.h"
 #include "Limelight-internal.h"
 #include "ControllerShortcutAdapter.h"
+#include "../../core/interaction/ds5-core/include/alkaidlab/ds5_core/ds5_core.h"
+#import "DS5RawHIDBridge.h"
+#import "DS5MotionMapping.h"
+#import "DS5OutputMapping.h"
+#include "DS5PadPresence.h"
+#import "DS5ButtonMerge.h"
+#import "DS5BluetoothPolicy.h"
+#import "DS5RumbleScheduler.h"
+#import "DS5IrPlayback.h"
+#import "DS5PadTwin.h"
 
 @import GameController;
 @import AudioToolbox;
 @import CoreHaptics;
 
 #import <math.h>
+#import <os/lock.h>
+
+@interface ControllerSupport (DS5CoreRouting)
+- (AlkDs5Core *)ds5CoreForPlayer:(NSUInteger)player;
+- (AlkDs5Error)withDS5CoreForPlayer:(NSUInteger)player call:(AlkDs5Error (NS_NOESCAPE ^)(AlkDs5Core *core))call;
+- (NSString *)rawHIDIdentityForPlayer:(NSUInteger)player;
+- (void)writeDualSenseFeedback:(unsigned short)controllerNumber
+                         flag0:(uint8_t)flag0 flag1:(uint8_t)flag1 flag2:(uint8_t)flag2
+                        update:(void (^)(AlkDs5Feedback *feedback))update;
+@end
+
+// Foundation controller-arrival extension: unlike LI_CCAP_DS5_HAPTICS_PCM,
+// this bit identifies a DualSense even when no physical audio endpoint exists.
+// The host keeps older clients on the legacy PS fallback when this bit is absent.
+static const uint16_t LI_CCAP_DUALSENSE_IDENTITY = 0x0400;
 
 static inline PML_INPUT_STREAM_CONTEXT ControllerInputContext(ControllerSupport *support) {
     PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)support.inputContext;
@@ -75,6 +101,8 @@ static short ApplyStickCalibrationY(short rawX, short rawY, CGFloat deadzone,
     float calibratedGain = fminf(2.0f, fmaxf(0.25f, (float)gain));
     return (short)lrintf(fminf(1.0f, fmaxf(-1.0f, y * calibratedGain)) * 32767.0f);
 }
+
+typedef struct { float v[3]; } DS5Vec3;
 
 static BOOL ControllerIsFeedbackTarget(ControllerSupport *support, unsigned short number) {
     return support.controllerFeedbackTarget < 0 || support.controllerFeedbackTarget == number;
@@ -279,6 +307,15 @@ static void FlushControllerTrackpad(ControllerSupport *support, Controller *cont
 static BOOL SendControllerTouchWithContact(ControllerSupport *support, Controller *controller,
                                            uint32_t pointerId, BOOL active,
                                            float x, float y, BOOL hasContact) {
+    if (controller != nil) {
+        AlkDs5TouchObservation touch = {
+            .struct_size = sizeof(touch), .abi = ALK_DS5_CORE_ABI_VERSION,
+            .device_index = 0, .sequence = (uint64_t)controller.playerIndex + 1u,
+            .contact_id = (uint8_t)(pointerId & 1u), .active = hasContact ? 1u : 0u,
+            .x = (uint16_t)fminf(1919.0f, fmaxf(0.0f, x * 1920.0f)),
+            .y = (uint16_t)fminf(1079.0f, fmaxf(0.0f, y * 1080.0f)), .pressure = 0};
+        (void)[support withDS5CoreForPlayer:(NSUInteger)controller.playerIndex call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_touch(core, &touch); }];
+    }
     if (controller != nil && [support.dualSenseTouchpad claimsTouchpad]) {
         // Windows precision touchpad: no controller touch events, no pointer or scroll output.
         if (support.shouldSendInputEvents) {
@@ -431,40 +468,6 @@ static void RegisterPhysicalTouchpad(ControllerSupport *support, Controller *con
         BOOL current = SendControllerTouchWithContact(support, controller, controller.playerIndex * 2 + (secondary ? 1 : 0), active, x, y, NO);
         if (secondary) controller.secondaryTouchActive = current; else controller.primaryTouchActive = current;
     };
-}
-
-static void ApplyDualSenseTriggerEffect(GCDualSenseAdaptiveTrigger *trigger,
-                                        uint8_t type, const uint8_t *effect) {
-    if (trigger == nil) {
-        return;
-    }
-    if (type == 0 || effect == NULL) {
-        [trigger setModeOff];
-        return;
-    }
-
-    float p0 = effect[0] / 255.0f;
-    float p1 = effect[1] / 255.0f;
-    float p2 = effect[2] / 255.0f;
-    if (@available(macOS 11.3, *)) {
-        switch (type) {
-            case 0x01: // Feedback: start position + resistive strength.
-                [trigger setModeFeedbackWithStartPosition:p0 resistiveStrength:p1];
-                break;
-            case 0x02: // Weapon: start position + end position + strength.
-                [trigger setModeWeaponWithStartPosition:p0 endPosition:MAX(p0 + 0.001f, p1)
-                                    resistiveStrength:p2];
-                break;
-            case 0x06: // Vibration: start position + amplitude + frequency.
-                [trigger setModeVibrationWithStartPosition:p0 amplitude:p1 frequency:p2];
-                break;
-            default:
-                // The macOS public API has no equivalent for the remaining
-                // vendor effect encodings; fail closed instead of guessing.
-                [trigger setModeOff];
-                break;
-        }
-    }
 }
 
 enum ButtonDebouncerState {
@@ -648,14 +651,100 @@ static const double MOUSE_SPEED_DIVISOR = 2.5;
 
     NSMutableDictionary<NSNumber * /* key flag */, NSMutableDictionary<NSNumber * /* player index */, ButtonDebouncer *> *> *_debouncers;
     Ds5HapticsAudioRenderer *_ds5HapticsAudioRenderer;
+    Ds5BluetoothAudioRenderer *_ds5BluetoothAudioRenderer;
+    DS5RawHIDBridge *_rawHID;
+    NSString *_rawHIDIdentity[16];
+    // Raw devices that are the Bluetooth twin of a USB device of the same pad: no player, no input (DS5PadTwin.h).
+    NSMutableDictionary<NSString *, NSNumber *> *_rawTwinIgnored;
+    // The pad address each raw device reported in feature 0x09 (twelve hex digits); two devices with one address are one pad.
+    NSMutableDictionary<NSString *, NSString *> *_rawAddressKey;
+    os_unfair_lock _ds5CoreLock;
+    CFAbsoluteTime _diagRawChangedAt;
+    CFAbsoluteTime _diagLastLog;
+    uint64_t _diagRawButtons;
+    uint8_t _diagRawSticks[4];
+    double _diagLagSum;
+    double _diagLagMax;
+    uint32_t _diagLagCount;
+    double _diagRawGyroPeak;
+    double _diagGCGyroPeak;
+    uint8_t _diagRawBatterySteps;
+    uint8_t _diagRawCharging;
+    uint8_t _diagGCBatteryPercent;
+    AlkDs5Feedback _lastDS5Feedback[16];
+    BOOL _hasDS5Feedback[16];
     NSObject *_hapticsMailboxLock;
-    NSMutableDictionary<NSNumber *, NSData *> *_pendingHaptics;
     BOOL _hapticsDrainScheduled;
+    // Analysed haptics (IR v2): every frame of the stream in order, played with no tick lost (DS5IrPlayback.h).
+    // Guarded by _hapticsMailboxLock.
+    DS5IrPlayback _irPlayback[16];
+    double _irWakeAt[16];
+    CFAbsoluteTime _irStatsLast;
+    // Every host rumble value waits here in order (a ring per player), so a pulse is never merged into its stop.
+    struct { unsigned short low, high; BOOL direct; } _rumbleEvents[16][32];
+    unsigned _rumbleEventCount[16];
+    BOOL _rumbleDrainScheduled;
+    DS5RumbleScheduler _rumbleSched[16];
+    unsigned _rumbleTimerGeneration[16];
+    unsigned _rumbleDropped, _rumbleWindowReceived;
+    CFAbsoluteTime _rumbleLastLog;
     id _touchpadSettingsObserver;
     id _dualSensePrecisionObserver;
     MLDualSenseTouchpad *_dualSenseTouchpad;
     NSTimer *_controllerMaintenanceTimer;
+    NSTimer *_controllerScanTimer;
+    BOOL _dualSenseOnly;
+    NSUInteger _lastScanSignature;
+    CFAbsoluteTime _lastScanLog;
     NSUInteger _maintenanceTicks;
+    AlkDs5Core *_ds5Core[16];
+    uint64_t _ds5Sequence[16];
+    // Motion: rates the host asked for, the raw source's pacing, and the per-second sample counts the
+    // automatic source choice and the [ds5-diag] line use. Guarded by _ds5CoreLock.
+    DS5ImuCalibration _imuCalibration[16];
+    unsigned short _motionGyroRate[16];
+    unsigned short _motionAccelRate[16];
+    double _rawLastGyroSent[16];
+    double _rawLastAccelSent[16];
+    double _motionWindowStart;
+    unsigned _rawImuWindow, _gcMotionWindow, _gyroSentWindow;
+    unsigned _rawImuRate, _gcMotionRate, _gyroSentRate;
+    DS5MotionSource _motionSourceEffective;
+    // The [ds5-motion] line: the strongest raw sample of the last second beside what was sent, and the latest
+    // GameController sample with its mapping. Raw fields are guarded by _ds5CoreLock; the GC ones are written
+    // from the motion handler and only read for this log.
+    double _motionLogLast;
+    double _motionLogIdleLast;
+    double _mlRawPeak;
+    int16_t _mlRawGyro[3], _mlRawAccel[3];
+    float _mlWireGyro[3], _mlWireAccel[3], _mlCalGyro[3];
+    double _mlGCRot[3], _mlGCAcc[3];
+    float _mlGCProto[3];
+    BOOL _mlGCValid;
+    // Headset and microphone facts last sent to the host (0x5516).
+    struct { BOOL valid; uint8_t headset, microphone, muted; CFAbsoluteTime sentAt; } _sentJack[16];
+    // Who writes the player LEDs: 0 nobody yet, 1 GameController (playerIndex), 2 raw output report.
+    int _playerLEDWriter[16];
+    // The pattern a game asked for, so a later empty message does not clear it and a reconnect restores it.
+    BOOL _gameLEDSet[16];
+    uint8_t _gameLEDMask[16];
+    NSInteger _originalGCPlayerIndex[16];
+    BOOL _hasOriginalGCPlayerIndex[16];
+    NSMutableDictionary<NSString *, NSNumber *> *_lastPlayerForKey;
+    BOOL _loggedMissingRawIdentity;
+    BOOL _rawMute[16];
+    uint8_t _gameMuteLED[16];  // the mute LED value the game last asked for; 0 until it asks
+    id _originalLightColor[16];  // GCColor, kept as id so the ivar needs no availability guard
+    BOOL _loggedBluetoothAudioSkipped;
+    // Pad audio (the "pad-audio" extension, offered with ds5PadAudioOffer): a four-channel frame was seen for
+    // this pad, the pad's audio bytes were written, and whether the real pad reports a headset (-1 unknown).
+    BOOL _padAudioSeen[16];
+    BOOL _padAudioConfigured[16];
+    int _padHeadset[16];
+    BOOL _padAudioSelfTestRan;
+    BOOL _padAudioSelfTestFlag, _padAudioSelfTestFlagRead;
+    BOOL _padSpeakerStream;  // this stream plays the host's speaker pair on a pad (decided at stream start)
+    BOOL _loggedIrUnavailable;
 
 }
 
