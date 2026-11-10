@@ -78,7 +78,16 @@
     [parentHost setValue:self.customName forKey:@"customName"];
     parentHost.uuid = self.uuid;
     parentHost.serverCodecModeSupport = self.serverCodecModeSupport;
-    parentHost.pairState = [NSNumber numberWithInt:self.pairState];
+    // A record without a pinned certificate (made from a plain-HTTP answer) cannot say the host is unpaired when the
+    // stored record has a certificate: its Unpaired would be written over the real Paired state.
+    BOOL storedHasCert = parentHost.serverCert.length > 0;
+    if (self.serverCert != nil || !storedHasCert) {
+        parentHost.pairState = [NSNumber numberWithInt:self.pairState];
+    }
+}
+
+- (BOOL)canUseHttps {
+    return self.pairState == PairStatePaired && self.serverCert.length > 0;
 }
 
 - (NSString *)displayName {

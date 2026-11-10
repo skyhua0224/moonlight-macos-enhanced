@@ -40,6 +40,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(atomic, retain) NSString *uuid;
 @property(atomic, retain) NSSet *appList;
 @property(nonatomic, readonly) NSString *displayName;
+// YES when HTTPS requests to this host make sense: paired, with the server certificate on record. Unpaired,
+// duplicate and old-record hosts only ever get the plain-HTTP serverinfo (what discovery does).
+@property(nonatomic, readonly) BOOL canUseHttps;
 
 - (instancetype)initFromHost:(Host *)host;
 
