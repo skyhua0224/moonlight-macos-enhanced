@@ -122,6 +122,7 @@
 				macOS/ViewControllers/SettingsLineCheck.swift,
 				macOS/ViewControllers/BluetoothFullHapticsSwitch.swift,
 				macOS/ViewControllers/BluetoothFullHapticsWarning.swift,
+				macOS/ViewControllers/HostSessionPolicy.swift,
 				Crypto/CryptoManager.m,
 				Crypto/IdManager.m,
 				Crypto/mkcert.c,
