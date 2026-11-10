@@ -34,6 +34,8 @@
 @property(nonatomic) CFAbsoluteTime lastAuthoredHapticsTime;
 @property(nonatomic) BOOL authoredHapticsLogged;
 @property(nonatomic) BOOL authoredHapticsFallback;
+// DualSense Mute button from the raw input report; GameController has no such button.
+@property(nonatomic) BOOL rawMuteButton;
 
 @property(nonatomic) BOOL hasTouchpadModeOverride;
 @property(nonatomic) BOOL touchpadMouseMode;

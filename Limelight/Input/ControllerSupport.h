@@ -41,6 +41,21 @@
 @property(nonatomic) NSInteger controllerMotionMode;
 @property(nonatomic) NSInteger controllerFeedbackTarget;
 @property(nonatomic) NSInteger controllerVirtualType;
+// Motion source: 0 automatic (the faster of the two measured), 1 GameController, 2 raw sensor report.
+@property(nonatomic) NSInteger controllerMotionSource;
+// Multipliers on the gyro rate sent to the host and on the rumble amplitude (1 = unchanged).
+@property(nonatomic) CGFloat gyroSensitivity;
+@property(nonatomic) CGFloat rumbleStrength;
+// DualSense host controls (control message 0x5515) and input status (0x5516).
+@property(nonatomic) BOOL ds5ApplyHostLights;
+@property(nonatomic) BOOL ds5ApplyHostAudio;
+@property(nonatomic) BOOL ds5ReportHeadset;
+// Highest headset and speaker volume the host may set, in percent of the device range.
+@property(nonatomic) NSInteger ds5VolumeLimitPercent;
+// Tuning keys 10 and 100 (Bluetooth haptics path, key 100 wins) and 101 (motion report rate cap).
+@property(nonatomic) NSInteger ds5BtHapticsFallback;
+@property(nonatomic) NSInteger ds5BtOutput;
+@property(nonatomic) NSInteger reportRateCapHz;
 // Controller family declared to the host on launch/resume (x360, ds4, ds5), or nil.
 @property(nonatomic, copy) NSString *clientGamepad;
 // A shortcut maps buttons to the touchpad, so controllers without one still
@@ -62,6 +77,10 @@
 - (Controller *)getOscController;
 #endif
 - (void)cleanup;
+// YES while ControllerSupport only takes DualSense pads (the HID driver owns every other pad).
+@property(nonatomic, readonly) BOOL dualSenseOnly;
+// Whether a pad is assigned to this player number.
+- (BOOL)hasPlayer:(unsigned short)player;
 - (void)setGamepadMouseModeLongPressMenuEnabled:(BOOL)enabled;
 
 - (void)updateLeftStick:(Controller *)controller x:(short)x y:(short)y;
@@ -89,6 +108,18 @@
                        red:(unsigned char)red
                      green:(unsigned char)green
                       blue:(unsigned char)blue;
+- (void)setDualSensePlayerLEDs:(unsigned short)controllerNumber
+                           mask:(unsigned char)mask
+                        muteLED:(unsigned char)muteLED;
+- (void)setDualSenseAudioControls:(unsigned short)controllerNumber
+                    speakerVolume:(unsigned char)speakerVolume
+                  headphoneVolume:(unsigned char)headphoneVolume
+                       micVolume:(unsigned char)micVolume
+                     audioControl:(unsigned char)audioControl
+                    audioControl2:(unsigned char)audioControl2
+                          micMute:(BOOL)micMute;
+// Applies the fields of a host output extension that are set in validMask.
+- (void)applyDualSenseOutputExtension:(const LI_DS5_OUTPUT_EXTENSION *)output;
 - (void)setAdaptiveTriggers:(unsigned short)controllerNumber
                  eventFlags:(unsigned char)eventFlags
                    typeLeft:(unsigned char)typeLeft
