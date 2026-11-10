@@ -431,6 +431,8 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 - (void)setShouldSendInputEvents:(BOOL)enabled {
     BOOL wasEnabled = __atomic_load_n(&_shouldSendInputEvents, __ATOMIC_ACQUIRE);
     if (wasEnabled && !enabled) {
+        void (^suspendHandler)(void) = self.touchSuspendHandler;
+        if (suspendHandler != nil) dispatch_async(dispatch_get_main_queue(), suspendHandler);
         [self.precisionTouchpad reset];
         [self releaseAllPressedMouseButtons];
         [self releaseAllModifierKeys];

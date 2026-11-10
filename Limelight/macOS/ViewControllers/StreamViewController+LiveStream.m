@@ -211,6 +211,7 @@
     self.liveStreamHeight = height;
     if (changed) {
         Log(LOG_I, @"[live] Stream resolution is now %dx%d", width, height);
+        [self updateDirectTouchVideoWidth:width height:height];
     }
 
     if (self.freeWindowActive) {

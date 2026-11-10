@@ -1843,6 +1843,10 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         [self configurePrecisionTouchpadInput];
         return;
     }
+    if ([setting isEqualToString:@"touchInputMode"]) {
+        [self refreshDirectTouchInput];
+        return;
+    }
     if ([setting isEqualToString:@"imeTextInput"]) {
         [self refreshTextInputConfiguration];
         return;

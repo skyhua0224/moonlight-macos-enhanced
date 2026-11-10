@@ -9,7 +9,12 @@
 #import <Cocoa/Cocoa.h>
 #import "StreamViewController.h"
 
+@class MLTouchRuntime;
+
 @interface StreamViewMac : NSView
+/// Direct touch (touchscreen Mac, Sidecar iPad) for this stream window. While set, mouse events that are the
+/// system's emulation of a touch are dropped here, before the stream view controller turns them into host clicks.
+@property (nonatomic, strong) MLTouchRuntime *touchRuntime;
 @property (nonatomic, strong) NSString *statusText;
 @property (nonatomic, strong) NSString *appName;
 // Shown blurred behind the loading spinner: the app's last frame or its box art.

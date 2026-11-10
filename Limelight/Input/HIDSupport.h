@@ -31,6 +31,14 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 
 @interface HIDSupport : NSObject
 @property(atomic) BOOL shouldSendInputEvents;
+/// Runs on the main queue when input is switched off (focus lost, menu opened): live touches must be let go.
+@property(nonatomic, copy) void (^touchSuspendHandler)(void);
+/// LiSendTouchEvent calls that did not go out (input queue full, not initialised, host without the feature), and the
+/// last error code. Read for the debug overlay and the touch log.
+@property(atomic) NSUInteger touchSendFailures;
+@property(atomic) int touchLastSendError;
+/// Pointer ids whose DOWN went out and whose UP has not (bit n = pointer n). Touched on the input queue only.
+@property(nonatomic) uint32_t touchDownSentMask;
 /// Gamepad devices the HID manager currently matches, and whether one of them delivered a report this
 /// class parsed. The HID driver sends controller packets only after such a report: without a real pad
 /// it must say nothing, because any controller packet creates a virtual pad on the host.
@@ -82,6 +90,20 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (void)setUpPrecisionTouchpad;
 - (void)refreshPrecisionTouchpadConfiguration;
 - (void)handleTrackpadTouchesEvent:(NSEvent *)event inView:(NSView *)view;
+@end
+
+// Direct touch (touchscreen Mac, Sidecar iPad): what reaches the host from the touch layer. All of these
+// queue on the input queue like every other input; none of them read AppKit events.
+@interface HIDSupport (DirectTouch)
+/// LiGetHostFeatureFlags() of this stream's connection (0 until the connection knows).
+- (uint32_t)touchHostFeatureFlags;
+/// LiSendTouchEvent, in order on the input queue. A pointer's later events go out only after its DOWN did.
+- (void)sendTouchWireEvent:(uint8_t)eventType pointerId:(uint32_t)pointerId x:(float)x y:(float)y;
+- (void)sendTouchRelativeDeltaX:(short)deltaX deltaY:(short)deltaY;
+/// x and y in 0..1 over the picture, top-left origin. referenceSize is the picture size in pixels.
+- (void)sendTouchAbsoluteX:(float)x y:(float)y referenceSize:(CGSize)referenceSize;
+- (void)sendTouchMouseButton:(int)button pressed:(BOOL)pressed;
+- (void)sendTouchHighResScroll:(short)amount;
 @end
 
 @interface HIDSupport (PointerInput)
