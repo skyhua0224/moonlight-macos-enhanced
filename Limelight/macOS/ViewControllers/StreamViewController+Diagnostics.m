@@ -940,8 +940,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 
     if (self.adaptiveBitrateController != nil) {
         uint32_t abrRtt = 0;
-        PML_CONTROL_STREAM_CONTEXT abrControlCtx = (PML_CONTROL_STREAM_CONTEXT)[self.streamMan.connection controlStreamContext];
-        MLGetUsableRttInfo(abrControlCtx, &abrRtt, NULL);
+        MLGetUsableRttInfo(self.streamMan.connection, &abrRtt, NULL);
         double abrLoss = stats.totalFrames > 0 ? (double)stats.networkDroppedFrames * 100.0 / stats.totalFrames : 0.0;
         [self.adaptiveBitrateController updatePacketLossPercent:abrLoss
                                                           rttMs:abrRtt
@@ -1219,9 +1218,12 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 
     if (self.streamHealthNoPayloadStreak >= kPayloadStallIdrThreshold &&
         (self.connectionLastIdrRequestMs == 0 || nowMs - self.connectionLastIdrRequestMs > kPayloadStallIdrIntervalMs)) {
-        LiRequestIdrFrame();
-        self.connectionLastIdrRequestMs = nowMs;
-        Log(LOG_I, @"[diag] Requested IDR on payload-stall streak=%lu", (unsigned long)self.streamHealthNoPayloadStreak);
+        // Through the session handle: the process-wide LiRequestIdrFrame() resolves
+        // the main thread's bound context, which can be a previous session's.
+        if ([self.streamMan.connection requestIdrFrame]) {
+            self.connectionLastIdrRequestMs = nowMs;
+            Log(LOG_I, @"[diag] Requested IDR on payload-stall streak=%lu", (unsigned long)self.streamHealthNoPayloadStreak);
+        }
     }
 
     if (self.streamHealthNoPayloadStreak >= kPayloadStallReconnectThreshold &&
@@ -1886,8 +1888,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     BOOL rttAvailable = NO;
     BOOL usingPathProbeLatency = NO;
     NSInteger pathProbeMs = -1;
-    PML_CONTROL_STREAM_CONTEXT controlCtx = self.streamMan.connection ? (PML_CONTROL_STREAM_CONTEXT)[self.streamMan.connection controlStreamContext] : NULL;
-    rttAvailable = MLGetUsableRttInfo(controlCtx, &rtt, NULL);
+    rttAvailable = MLGetUsableRttInfo(self.streamMan.connection, &rtt, NULL);
     if (!rttAvailable) {
         NSString *preferredAddr = [self currentPreferredAddressForStatus];
         NSNumber *latency = preferredAddr ? self.app.host.addressLatencies[preferredAddr] : nil;

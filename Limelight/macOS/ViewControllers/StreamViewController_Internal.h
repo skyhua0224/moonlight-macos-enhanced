@@ -201,10 +201,10 @@ static inline CGFloat MLOverlayButtonWidth(NSButton *button, CGFloat minWidth, C
     return MIN(maxWidth, MAX(minWidth, width));
 }
 
-static inline BOOL MLGetUsableRttInfo(PML_CONTROL_STREAM_CONTEXT controlCtx, uint32_t *rtt, uint32_t *rttVar) {
+static inline BOOL MLGetUsableRttInfo(Connection *connection, uint32_t *rtt, uint32_t *rttVar) {
     uint32_t currentRtt = 0;
     uint32_t currentRttVar = 0;
-    if (controlCtx == NULL || !LiGetEstimatedRttInfoCtx(controlCtx, &currentRtt, &currentRttVar)) {
+    if (connection == nil || ![connection getEstimatedRtt:&currentRtt variance:&currentRttVar]) {
         return NO;
     }
 
@@ -221,10 +221,10 @@ static inline BOOL MLGetUsableRttInfo(PML_CONTROL_STREAM_CONTEXT controlCtx, uin
     return YES;
 }
 
-static inline NSString *MLRttLogSummary(PML_CONTROL_STREAM_CONTEXT controlCtx) {
+static inline NSString *MLRttLogSummary(Connection *connection) {
     uint32_t rtt = 0;
     uint32_t rttVar = 0;
-    if (!MLGetUsableRttInfo(controlCtx, &rtt, &rttVar)) {
+    if (!MLGetUsableRttInfo(connection, &rtt, &rttVar)) {
         return @"n/a";
     }
 

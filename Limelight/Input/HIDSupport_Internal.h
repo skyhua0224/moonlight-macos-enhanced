@@ -378,10 +378,14 @@ static inline void HIDDispatchInput(HIDSupport *support, PML_INPUT_STREAM_CONTEX
     }
     PML_CONNECTION_CONTEXT connCtx = inputCtx->connectionContext;
     dispatch_async(support.inputQueue, ^{
+        // The queue runs on shared worker threads: put back the previous binding so
+        // this session's context is not left on a thread that outlives it.
+        PML_CONNECTION_CONTEXT previousCtx = LiGetThreadConnectionContext();
         if (connCtx != NULL) {
             LiSetThreadConnectionContext(connCtx);
         }
         block();
+        LiSetThreadConnectionContext(previousCtx);
     });
 }
 

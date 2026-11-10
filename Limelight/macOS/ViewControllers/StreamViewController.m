@@ -2185,15 +2185,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
         BOOL wasReconnect = self.reconnectInProgress;
         [self publishSunshineDisplayRuntimeState:wasReconnect ? @"reconnected" : @"active"];
         // format: 0 none, 1 HDR10+, 2/3 Vivid, 4 DV 8.1, 5 DV 8.4 (host's choice).
+        Connection *startedConnection = self.streamMan.connection;
         Log(LOG_I, @"[hdr] Foundation dynamic HDR result: format=%d fallback=%d",
-            LiGetNegotiatedDynamicHdrFormat(),
-            LiGetNegotiatedDynamicHdrFallback());
-        PML_CONTROL_STREAM_CONTEXT fecControlCtx = self.streamMan.connection
-            ? (PML_CONTROL_STREAM_CONTEXT)[self.streamMan.connection controlStreamContext] : NULL;
-        if (fecControlCtx != NULL) {
+            [startedConnection negotiatedDynamicHdrFormat],
+            [startedConnection negotiatedDynamicHdrFallback]);
+        if (startedConnection != nil) {
             NSDictionary *fecPrefs = [SettingsClass getSettingsFor:self.app.host.uuid];
             Log(LOG_I, @"[fec] Host RS FEC control active=%d (client preference %d, -2 host default)",
-                fecControlCtx->videoFecControlSupported ? 1 : 0,
+                [startedConnection hostFecControlSupported] ? 1 : 0,
                 fecPrefs[@"videoFecPercentage"] != nil ? [fecPrefs[@"videoFecPercentage"] intValue] : -2);
         }
         if (self.reconnectInProgress) {
@@ -2577,8 +2576,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
         } else if (status == CONN_STATUS_OKAY) {
             [self hideConnectionWarning];
             if (self.lastConnectionStatus == CONN_STATUS_POOR &&
-                (self.connectionLastIdrRequestMs == 0 || now - self.connectionLastIdrRequestMs > 3000)) {
-                LiRequestIdrFrame();
+                (self.connectionLastIdrRequestMs == 0 || now - self.connectionLastIdrRequestMs > 3000) &&
+                [self.streamMan.connection requestIdrFrame]) {
                 self.connectionLastIdrRequestMs = now;
                 Log(LOG_I, @"[diag] Requested IDR on POOR->OKAY transition");
             }
