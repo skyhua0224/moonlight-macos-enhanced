@@ -17,6 +17,26 @@ static const NSString* HTTPS_PORT = @"47984";
     return [NSString stringWithFormat:@"manualEndpoints.%@", hostId ?: @""];
 }
 
++ (NSString *)networkInterfaceKeyForHost:(NSString *)hostId {
+    return [NSString stringWithFormat:@"networkInterface.%@", hostId ?: @""];
+}
+
++ (NSString *)networkInterfaceForHost:(NSString *)hostId {
+    if (hostId.length == 0) return nil;
+    NSString *name = [[NSUserDefaults standardUserDefaults] stringForKey:[self networkInterfaceKeyForHost:hostId]];
+    return name.length > 0 ? name : nil;
+}
+
++ (void)setNetworkInterface:(NSString *)name forHost:(NSString *)hostId {
+    if (hostId.length == 0) return;
+    NSString *key = [self networkInterfaceKeyForHost:hostId];
+    if (name.length == 0 || [name isEqualToString:@"Auto"]) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
+    } else {
+        [[NSUserDefaults standardUserDefaults] setObject:name forKey:key];
+    }
+}
+
 + (NSString *)defaultConnectionMethodKeyForHost:(NSString *)hostId {
     return [NSString stringWithFormat:@"defaultConnectionMethod.%@", hostId ?: @""];
 }

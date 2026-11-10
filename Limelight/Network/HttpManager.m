@@ -332,6 +332,14 @@ static const NSString* HTTPS_PORT = @"47984";
 }
 
 - (void) executeRequestSynchronously:(HttpRequest*)request {
+    [self executeRequestSynchronously:request waitSlack:2.0 deadline:nil];
+}
+
+- (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack {
+    [self executeRequestSynchronously:request waitSlack:slack deadline:nil];
+}
+
+- (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack deadline:(NSDate *)deadline {
     NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
     NSURLSession* urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
 
@@ -370,9 +378,11 @@ static const NSString* HTTPS_PORT = @"47984";
     }];
     [task resume];
 
-    // Bound the synchronous wait. We've seen cases where the completion handler
-    // never runs (e.g., during teardown or certain TLS failure modes), which
-    // would otherwise deadlock the calling thread indefinitely.
+    // Bound the synchronous wait. NSURLRequest.timeoutInterval is an idle
+    // timeout (Apple, NSURLRequest.timeoutInterval), not a deadline for the
+    // whole fallback chain, and the completion handler has failed to run.
+    // slack is the historical extra 2 seconds. A presence probe passes 0 and
+    // a deadline so the fallback cannot outlive that budget.
     NSTimeInterval timeout = request.request.timeoutInterval;
     if (timeout <= 0) {
         timeout = NORMAL_TIMEOUT_SEC;
@@ -380,6 +390,26 @@ static const NSString* HTTPS_PORT = @"47984";
     dispatch_time_t waitTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 2.0) * NSEC_PER_SEC));
     if (dispatch_semaphore_wait(requestLock, waitTime) != 0) {
         Log(LOG_E, @"Request timed out waiting for completion handler: %@", request.request.URL);
+    if (deadline != nil) {
+        NSTimeInterval left = [deadline timeIntervalSinceNow];
+        if (left < timeout) {
+            timeout = left;
+        }
+    }
+    if (timeout < 0.05) {
+        _error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil];
+        if (request.response) {
+            request.response.statusCode = [_error code];
+            request.response.statusMessage = [_error localizedDescription];
+        }
+        return;
+    }
+    if (deadline != nil) {
+        NSMutableURLRequest *bounded = [request.request mutableCopy];
+        bounded.timeoutInterval = timeout;
+        request.request = bounded;
+    }
+    dispatch_time_t waitTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + slack) * NSEC_PER_SEC));
         [urlSession invalidateAndCancel];
         // Cancelling makes the completion handler run, on another thread, and it writes
         // requestError and the response there. From here on those are the handler's alone:
@@ -397,10 +427,18 @@ static const NSString* HTTPS_PORT = @"47984";
         // If the fallback error code was detected, issue the fallback request
         if (request.response.statusCode == request.fallbackError && request.fallbackRequest != NULL) {
             Log(LOG_D, @"Request failed with fallback error code: %d", request.fallbackError);
+            if (deadline != nil && [deadline timeIntervalSinceNow] < 0.05) {
+                return;
+            }
+            if (deadline != nil) {
+                NSMutableURLRequest *next = [request.fallbackRequest mutableCopy];
+                next.timeoutInterval = [deadline timeIntervalSinceNow];
+                request.fallbackRequest = next;
+            }
             request.request = request.fallbackRequest;
             request.fallbackError = 0;
             request.fallbackRequest = NULL;
-            [self executeRequestSynchronously:request];
+            [self executeRequestSynchronously:request waitSlack:slack deadline:deadline];
         }
     }
     else if (_error && request.fallbackRequest) {
@@ -411,10 +449,22 @@ static const NSString* HTTPS_PORT = @"47984";
         } else {
             Log(LOG_W, @"Request failed with error %ld, attempting fallback", (long)[_error code]);
         }
+        if (deadline != nil && [deadline timeIntervalSinceNow] < 0.05) {
+            if (request.response) {
+                request.response.statusCode = [_error code];
+                request.response.statusMessage = [_error localizedDescription];
+            }
+            return;
+        }
+        if (deadline != nil) {
+            NSMutableURLRequest *next = [request.fallbackRequest mutableCopy];
+            next.timeoutInterval = [deadline timeIntervalSinceNow];
+            request.fallbackRequest = next;
+        }
         request.request = request.fallbackRequest;
         request.fallbackError = 0;
         request.fallbackRequest = NULL;
-        [self executeRequestSynchronously:request];
+        [self executeRequestSynchronously:request waitSlack:slack deadline:deadline];
     }
     else if (_error && request.response) {
         request.response.statusCode = [_error code];
@@ -512,6 +562,16 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (NSURLRequest *)newHttpServerInfoRequest {
     return [self newHttpServerInfoRequest:false];
+}
+
+- (NSURLRequest *)newServerInfoWaitRequestAfterSeq:(NSInteger)seq timeoutSec:(NSInteger)timeoutSec {
+    // Foundation Sunshine v2 long-poll. Hosts without the events feature are not asked.
+    // The URL-request timeout is longer than the server's wait so a normal timeout is not a transport error.
+    NSString *base = _serverCert != nil ? _baseHTTPSURL : _baseHTTPURL;
+    NSInteger wait = timeoutSec > 0 ? timeoutSec : 25;
+    NSString *urlString = [NSString stringWithFormat:@"%@/serverinfo?uniqueid=%@&fsWait=%ld&timeout=%ld",
+                           base, _clientUniqueId, (long)seq, (long)wait];
+    return [self createRequestFromString:urlString timeout:(int)wait + 5];
 }
 
 - (NSURLRequest *)newDisplaysRequest {

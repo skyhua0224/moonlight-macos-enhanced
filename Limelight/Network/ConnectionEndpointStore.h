@@ -20,6 +20,11 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)disableEndpoint:(NSString *)address forHost:(NSString *)hostId;
 + (BOOL)enableEndpoint:(NSString *)address forHost:(NSString *)hostId;
 
+/// The network interface this computer's stream is pinned to (its name, e.g. "en0" or "utun10"); nil = 自动. Per computer, by name:
+/// an interface index is not kept because it changes when an interface is rebuilt.
++ (nullable NSString *)networkInterfaceForHost:(NSString *)hostId;
++ (void)setNetworkInterface:(nullable NSString *)name forHost:(NSString *)hostId;
+
 + (nullable NSString *)defaultConnectionMethodForHost:(NSString *)hostId;
 + (void)setDefaultConnectionMethod:(nullable NSString *)method forHost:(NSString *)hostId;
 
