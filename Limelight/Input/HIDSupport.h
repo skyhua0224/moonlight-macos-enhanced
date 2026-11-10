@@ -31,6 +31,11 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 
 @interface HIDSupport : NSObject
 @property(atomic) BOOL shouldSendInputEvents;
+/// Gamepad devices the HID manager currently matches, and whether one of them delivered a report this
+/// class parsed. The HID driver sends controller packets only after such a report: without a real pad
+/// it must say nothing, because any controller packet creates a virtual pad on the host.
+@property(atomic) NSInteger hidGamepadDeviceCount;
+@property(atomic) BOOL hidGamepadReportSeen;
 @property(nonatomic, copy) uint64_t (^controllerShortcutHandler)(unsigned short, uint32_t);
 - (void)refreshControllerShortcutOutput;
 - (void)toggleControllerMouseMode;

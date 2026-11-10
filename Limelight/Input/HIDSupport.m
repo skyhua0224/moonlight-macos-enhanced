@@ -6,6 +6,7 @@
 //  Copyright © 2017 Moonlight Stream. All rights reserved.
 //
 #import "HIDSupport_Internal.h"
+#import "DS5PadPresence.h"
 #import "KeyboardRouting.h"
 
 #import <IOKit/hid/IOHIDElement.h>
@@ -433,10 +434,11 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         [self.precisionTouchpad reset];
         [self releaseAllPressedMouseButtons];
         [self releaseAllModifierKeys];
-        if (self.controllerDriver == 0) {
+        if (self.controllerDriver == 0 && ds5_hid_may_send(self.hidGamepadReportSeen)) {
             PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
             if (HIDValidateInputContext(input, "pause-controller-input")) {
                 int player = self.controller.playerIndex;
+                [self traceHIDControllerSend:"pause-neutral" player:player mask:1];
                 HIDDispatchInput(self, input, ^{
                     LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
                 });
@@ -884,7 +886,24 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         ControllerShortcutNeutralMask(physical));
 }
 
+// Every controller packet the HID driver sends is traced: the first few of a stream in full, then one
+// line a second, so a packet that creates a pad on the host can be found in the log.
+- (void)traceHIDControllerSend:(const char *)kind player:(int)player mask:(int)mask {
+    static _Atomic unsigned long sCount;
+    static _Atomic CFAbsoluteTime sLast;
+    const unsigned long count = atomic_fetch_add(&sCount, 1) + 1;
+    const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (count <= 4 || now - atomic_load(&sLast) >= 1.0) {
+        atomic_store(&sLast, now);
+        NSLog(@"[controller-send] hid %s player=%d mask=0x%x pads=%ld seen=%d (packet %lu)", kind, player, mask,
+              (long)self.hidGamepadDeviceCount, self.hidGamepadReportSeen ? 1 : 0, count);
+    }
+}
+
 - (void)sendControllerEvent {
+    // No parsed report from a real HID pad yet (or the pad is gone): nothing to say. A packet here would
+    // create a virtual pad on the host for a Mac that has none.
+    if (!ds5_hid_may_send(self.hidGamepadReportSeen)) return;
     uint64_t routing = [self evaluateControllerShortcuts];
     if (self.shouldSendInputEvents) {
         // Capture state
@@ -922,6 +941,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         if (!inputCtx) {
             return;
         }
+        [self traceHIDControllerSend:"state" player:playerIndex mask:1];
         HIDDispatchInput(self, inputCtx, ^{
             LiSendMultiControllerEventCtx(inputCtx, playerIndex, 1, lastButtonFlags, lastLeftTrigger, lastRightTrigger, lastLeftStickX, lastLeftStickY, lastRightStickX, lastRightStickY);
         });
@@ -1503,8 +1523,7 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
 
 - (NSInteger)controllerDriver {
     NSInteger configured = [SettingsClass controllerDriverFor:self.host.uuid];
-    // Keep HIDSupport alive for the DS5 output report path, but suppress its
-    // duplicate input events when Apple's Game Controller path is available.
+    // The HID driver has no DualSense parser: DualSense input comes from GameController and the raw HID bridge.
     if (configured == 0) {
         for (GCController *controller in GCController.controllers) {
             if ([controller.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
@@ -2065,6 +2084,7 @@ void myHIDReportCallback (
         self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
         self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
         
+        self.hidGamepadReportSeen = YES;
         if (self.controllerDriver == 0) {
 
             if (self.lastPS4State.rgucButtonsHatAndCounter[0] != state->rgucButtonsHatAndCounter[0] ||
@@ -2080,65 +2100,6 @@ void myHIDReportCallback (
             {
                 [self sendControllerEvent];
                 self.lastPS4State = *state;
-            }
-        }
-    } else if (isPS5(device)) {
-        PS5StatePacket_t *state = (PS5StatePacket_t *)report;
-        switch (report[0]) {
-            case k_EPS5ReportIdState:
-                state = (PS5StatePacket_t *)(report + 1);
-                self.isPS5Bluetooth = reportLength == 10;
-                break;
-            case k_EPS5ReportIdBluetoothState:
-                state = (PS5StatePacket_t *)(report + 2);
-                self.isPS5Bluetooth = YES;
-                break;
-            default:
-                NSLog(@"Unknown PS5 packet: 0x%hhu", report[0]);
-                break;
-        }
-        
-        UInt8 abxy = state->rgucButtonsAndHat[0] >> 4;
-        [self updateButtonFlags:X_FLAG state:(abxy & 0x01) != 0];
-        [self updateButtonFlags:A_FLAG state:(abxy & 0x02) != 0];
-        [self updateButtonFlags:B_FLAG state:(abxy & 0x04) != 0];
-        [self updateButtonFlags:Y_FLAG state:(abxy & 0x08) != 0];
-        
-        [self handleDpad:state->rgucButtonsAndHat[0] & 0x0F];
-
-        UInt8 otherButtons = state->rgucButtonsAndHat[1];
-        [self updateButtonFlags:LB_FLAG state:(otherButtons & 0x01) != 0];
-        [self updateButtonFlags:RB_FLAG state:(otherButtons & 0x02) != 0];
-        [self updateButtonFlags:BACK_FLAG state:(otherButtons & 0x10) != 0];
-        [self updateButtonFlags:PLAY_FLAG state:(otherButtons & 0x20) != 0];
-        [self updateButtonFlags:LS_CLK_FLAG state:(otherButtons & 0x40) != 0];
-        [self updateButtonFlags:RS_CLK_FLAG state:(otherButtons & 0x80) != 0];
-
-        [self updateButtonFlags:SPECIAL_FLAG state:(state->rgucButtonsAndHat[2] & 0x01) != 0];
-        
-        self.controller.lastLeftTrigger = state->ucTriggerLeft;
-        self.controller.lastRightTrigger = state->ucTriggerRight;
-
-        self.controller.lastLeftStickX = (state->ucLeftJoystickX - 128) * 255 + 1;
-        self.controller.lastLeftStickY = (state->ucLeftJoystickY - 128) * -255;
-        self.controller.lastRightStickX = (state->ucRightJoystickX - 128) * 255 + 1;
-        self.controller.lastRightStickY = (state->ucRightJoystickY - 128) * -255;
-        
-        if (self.controllerDriver == 0) {
-
-            if (self.lastPS5State.rgucButtonsAndHat[0] != state->rgucButtonsAndHat[0] ||
-                self.lastPS5State.rgucButtonsAndHat[1] != state->rgucButtonsAndHat[1] ||
-                self.lastPS5State.rgucButtonsAndHat[2] != state->rgucButtonsAndHat[2] ||
-                self.lastPS5State.ucTriggerLeft != state->ucTriggerLeft ||
-                self.lastPS5State.ucTriggerRight != state->ucTriggerRight ||
-                self.lastPS5State.ucLeftJoystickX != state->ucLeftJoystickX ||
-                self.lastPS5State.ucLeftJoystickY != state->ucLeftJoystickY ||
-                self.lastPS5State.ucRightJoystickX != state->ucRightJoystickX ||
-                self.lastPS5State.ucRightJoystickY != state->ucRightJoystickY ||
-                0)
-            {
-                [self sendControllerEvent];
-                self.lastPS5State = *state;
             }
         }
     } else if (isNintendo(device)) {
@@ -2193,6 +2154,7 @@ void myHIDReportCallback (
                 axis = (short)(packet->sJoystickRight[1] - INT_MAX);
                 self.controller.lastRightStickY = axis;
                 
+                self.hidGamepadReportSeen = YES;
                 if (self.controllerDriver == 0) {
                     
                     if (self.lastSimpleSwitchState.rgucButtons[0] != packet->rgucButtons[0] ||
@@ -2248,6 +2210,7 @@ void myHIDReportCallback (
                 axis = ((packet->controllerState.rgucJoystickRight[1] & 0xF0) >> 4) | (packet->controllerState.rgucJoystickRight[2] << 4);
                 self.controller.lastRightStickY = MAX(MIN((axis - 2048) * 24, INT16_MAX), INT16_MIN);
                 
+                self.hidGamepadReportSeen = YES;
                 if (self.controllerDriver == 0) {
                     
                     if (self.lastSwitchState.controllerState.rgucButtons[0] != packet->controllerState.rgucButtons[0] ||
@@ -2274,6 +2237,7 @@ void myHIDDeviceMatchingCallback(void * _Nullable        context,
                                 IOHIDDeviceRef          device) {
     HIDSupport *self = (__bridge HIDSupport *)context;
 
+    @synchronized(self) { self.hidGamepadDeviceCount += 1; }
     [self rumbleSync];
 }
 
@@ -2283,6 +2247,11 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
                                 IOHIDDeviceRef          device) {
     HIDSupport *self = (__bridge HIDSupport *)context;
 
+    BOOL lastPadGone = NO;
+    @synchronized(self) {
+        if (self.hidGamepadDeviceCount > 0) self.hidGamepadDeviceCount -= 1;
+        lastPadGone = self.hidGamepadDeviceCount == 0;
+    }
     [self.gamepadMenuTimer invalidate];
     self.gamepadMenuTimer = nil;
     self.gamepadMenuPressed = NO;
@@ -2296,7 +2265,20 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
         self.controller.lastRightStickX = 0;
         self.controller.lastRightStickY = 0;
         
-        [self sendControllerEvent];
+        if (lastPadGone && self.hidGamepadReportSeen) {
+            // The last HID pad is gone: free its virtual pad on the host (the packet with its bit cleared).
+            PML_INPUT_STREAM_CONTEXT input = HIDInputContext(self);
+            if (HIDValidateInputContext(input, "hid-pad-removed")) {
+                int player = self.controller.playerIndex;
+                [self traceHIDControllerSend:"removal" player:player mask:0];
+                HIDDispatchInput(self, input, ^{
+                    LiSendMultiControllerEventCtx(input, player, 0, 0, 0, 0, 0, 0, 0, 0);
+                });
+            }
+            self.hidGamepadReportSeen = NO;
+        } else {
+            [self sendControllerEvent];
+        }
     }
 }
 
@@ -2338,7 +2320,7 @@ void myHIDDeviceRemovalCallback(void * _Nullable        context,
                 LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_LEFT);
             if (heldMouseButtons & B_FLAG)
                 LiSendMouseButtonEventCtx(input, BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
-            if (active)
+            if (active && ds5_hid_may_send(self.hidGamepadReportSeen))
                 LiSendMultiControllerEventCtx(input, player, 1, 0, 0, 0, 0, 0, 0, 0);
         });
     }
