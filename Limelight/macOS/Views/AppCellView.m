@@ -7,6 +7,7 @@
 //
 
 #import "AppCellView.h"
+#import "MLTouchMenuSupport.h"
 
 @interface AppCellView () <NSMenuDelegate>
 @property (nonatomic, strong) NSTrackingArea *trackingArea;
@@ -28,6 +29,11 @@
     [self removeTrackingArea:self.trackingArea];
     [self createTrackingArea];
     [super updateTrackingAreas];
+}
+
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    if (self.window != nil) [MLTouchMenuSupport installLongPressMenuOnView:self];
 }
 
 - (void)menuWillOpen:(NSMenu *)menu {
