@@ -2216,15 +2216,144 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
     });
 }
 
-    if (@available(macOS 11.3, *)) {
-        GCDualSenseGamepad *dualSense = (GCDualSenseGamepad *)gamepad.extendedGamepad;
-        if ((eventFlags & DS_EFFECT_LEFT_TRIGGER) != 0) {
-            ApplyDualSenseTriggerEffect(dualSense.leftTrigger, typeLeft, left);
+- (void)applyDualSenseOutputExtension:(const LI_DS5_OUTPUT_EXTENSION *)output {
+    if (output == NULL) return;
+    const LI_DS5_OUTPUT_EXTENSION copy = *output;
+    if (![NSThread isMainThread]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (weakSelf.shouldSendInputEvents) [weakSelf applyDualSenseOutputExtension:&copy];
+        });
+        return;
+    }
+    const unsigned short controllerNumber = copy.controllerNumber;
+    if (controllerNumber >= 16 || !ControllerIsFeedbackTarget(self, controllerNumber)) return;
+    const uint32_t valid = copy.validMask;
+
+    if (self.ds5ApplyHostLights) {
+        if (valid & LI_DS5_OUT_PLAYER_LEDS) {
+            // An empty mask is "no value" until the game has set a pattern: the host's initial snapshot and
+            // a default message carry one, and must not clear the number the pad shows from connect.
+            if (ds5_player_led_request_applies(valid, copy.playerLedMask, _gameLEDSet[controllerNumber])) {
+                _gameLEDSet[controllerNumber] = copy.playerLedMask != 0;
+                _gameLEDMask[controllerNumber] = copy.playerLedMask;
+                [self applyPlayerLEDMask:copy.playerLedMask forPlayer:controllerNumber];
+            } else {
+                Log(LOG_I, @"[ds5-ext] player LEDs mask=0x%02x ignored: no pattern from the game yet, keeping the connect-time number",
+                    copy.playerLedMask);
+            }
         }
-        if ((eventFlags & DS_EFFECT_RIGHT_TRIGGER) != 0) {
-            ApplyDualSenseTriggerEffect(dualSense.rightTrigger, typeRight, right);
+        if (valid & LI_DS5_OUT_MUTE_LED) _gameMuteLED[controllerNumber] = copy.muteLed;
+        uint8_t flag1 = 0, flag2 = 0;
+        ds5_ext_light_flags(&copy, &flag1, &flag2);
+        // The brightness byte takes the values 0 (full), 1 (medium) and 2 (dim); it is not a 0 to 255
+        // level. Anything else is not a value the pad accepts and is left alone.
+        if ((valid & LI_DS5_OUT_LIGHTBAR_BRIGHTNESS) != 0 && !(flag2 & DS5_FLAG2_LIGHT_BRIGHTNESS)) {
+            Log(LOG_W, @"[ds5-ext] lightbar brightness %u is outside 0 to 2 and was not applied", copy.lightbarBrightness);
+        }
+        if (flag1 != 0 || flag2 != 0) {
+            [self writeDualSenseFeedback:controllerNumber flag0:0 flag1:flag1 flag2:flag2
+                                  update:^(AlkDs5Feedback *feedback) { ds5_ext_apply_lights(feedback, &copy, flag1, flag2); }];
         }
     }
+
+    if (self.ds5ApplyHostAudio) {
+        uint8_t flag0 = 0, flag1 = 0;
+        const int limit = (int)MIN(100, MAX(1, self.ds5VolumeLimitPercent > 0 ? self.ds5VolumeLimitPercent : 100));
+        ds5_ext_audio_flags(&copy, &flag0, &flag1);
+        if ((_padAudioSeen[controllerNumber] || _padSpeakerStream) && (flag0 & 0xf0) != 0) {
+            // While the pad plays the host's audio, the speaker and headset volumes and the output path are the client's
+            // (configurePadAudioForPlayer:): a value the game or the Windows driver writes, 0 or a small one, would silence
+            // the pad. The microphone fields still follow the host.
+            Log(LOG_I, @"[ds5-audio] host audio bytes ignored while pad audio runs: flag0&0xf0=0x%02x headphone=0x%02x speaker=0x%02x mic=0x%02x routing=0x%02x",
+                flag0 & 0xf0, copy.headphoneVolume, copy.speakerVolume, copy.micVolume, copy.audioRouting);
+            flag0 &= (uint8_t)~0xb0u;  // headphone volume, speaker volume and audio control; the microphone volume stays
+        }
+        if ((flag0 != 0 || flag1 != 0) &&
+            ![_rawHID isUSBDeviceForIdentity:[self rawHIDIdentityForPlayer:controllerNumber]]) {
+            // No Bluetooth audio path of the pad is known to work, and raw audio writes preceded a pad
+            // hang on a test pad: the speaker, headset and microphone fields are written to a USB
+            // pad only.
+            if (!_loggedBluetoothAudioSkipped) {
+                _loggedBluetoothAudioSkipped = YES;
+                Log(LOG_W, @"[ds5-ext] audio controls from the host are not written over Bluetooth (valid=0x%02x); connect the pad by USB", valid);
+            }
+            flag0 = flag1 = 0;
+        }
+        if (flag0 != 0 || flag1 != 0) {
+            [self writeDualSenseFeedback:controllerNumber flag0:flag0 flag1:flag1 flag2:0
+                                  update:^(AlkDs5Feedback *feedback) { ds5_ext_apply_audio(feedback, &copy, flag0, flag1, limit); }];
+        }
+        Log(LOG_I, @"[ds5-ext] output extension player=%hu valid=0x%02x applied audio flags=0x%02x/0x%02x", controllerNumber, valid, flag0, flag1);
+    }
+}
+
+- (void)setDualSensePlayerLEDs:(unsigned short)controllerNumber
+                           mask:(unsigned char)mask
+                        muteLED:(unsigned char)muteLED {
+    if (controllerNumber >= 16 || !ControllerIsFeedbackTarget(self, controllerNumber)) return;
+    LI_DS5_OUTPUT_EXTENSION output = {.controllerNumber = controllerNumber,
+        .validMask = LI_DS5_OUT_PLAYER_LEDS | LI_DS5_OUT_MUTE_LED, .playerLedMask = mask, .muteLed = muteLED};
+    [self applyDualSenseOutputExtension:&output];
+}
+
+- (void)setDualSenseAudioControls:(unsigned short)controllerNumber
+                    speakerVolume:(unsigned char)speakerVolume
+                  headphoneVolume:(unsigned char)headphoneVolume
+                       micVolume:(unsigned char)micVolume
+                     audioControl:(unsigned char)audioControl
+                    audioControl2:(unsigned char)audioControl2
+                          micMute:(BOOL)micMute {
+    if (controllerNumber >= 16 || !ControllerIsFeedbackTarget(self, controllerNumber)) return;
+    // The second audio control byte has no wire field; it is written directly.
+    if (audioControl2 != 0 && !_padAudioSeen[controllerNumber] && !_padSpeakerStream) {
+        [self writeDualSenseFeedback:controllerNumber flag0:0 flag1:DS5_FLAG1_AUDIO_CONTROL2 flag2:0
+                              update:^(AlkDs5Feedback *feedback) { feedback->audio_control2 = audioControl2; }];
+    }
+    LI_DS5_OUTPUT_EXTENSION output = {.controllerNumber = controllerNumber,
+        .validMask = LI_DS5_OUT_SPEAKER_VOLUME | LI_DS5_OUT_HEADPHONE_VOLUME | LI_DS5_OUT_MIC_VOLUME |
+                     LI_DS5_OUT_AUDIO_ROUTING | LI_DS5_OUT_MIC_MUTE,
+        .speakerVolume = speakerVolume, .headphoneVolume = headphoneVolume, .micVolume = micVolume,
+        .audioRouting = audioControl, .micMute = micMute ? 1u : 0u};
+    [self applyDualSenseOutputExtension:&output];
+}
+
+-(void) setAdaptiveTriggers:(unsigned short)controllerNumber
+                 eventFlags:(unsigned char)eventFlags
+                   typeLeft:(unsigned char)typeLeft
+                  typeRight:(unsigned char)typeRight
+                       left:(const unsigned char *)left
+                      right:(const unsigned char *)right
+{
+    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+        return;
+    }
+    AlkDs5Feedback coreFeedback = _hasDS5Feedback[controllerNumber] ? _lastDS5Feedback[controllerNumber] :
+        (AlkDs5Feedback){.struct_size = sizeof(coreFeedback), .abi = ALK_DS5_CORE_ABI_VERSION, .device_index = 0};
+    // On the wire an effect is the type byte and ten parameters; 0x04 and 0x08 enable the right and left trigger.
+    coreFeedback.valid_flag0 = 0u;
+    coreFeedback.valid_flag1 = 0u;
+    coreFeedback.valid_flag2 = 0u;
+    if ((eventFlags & DS_EFFECT_LEFT_TRIGGER) != 0 && left != NULL) {
+        coreFeedback.valid_flag0 |= 0x08u;
+        coreFeedback.left_trigger.mode = ALK_DS5_TRIGGER_RAW;
+        coreFeedback.left_trigger.raw[0] = typeLeft;
+        memcpy(coreFeedback.left_trigger.raw + 1, left, DS_EFFECT_PAYLOAD_SIZE);
+    }
+    if ((eventFlags & DS_EFFECT_RIGHT_TRIGGER) != 0 && right != NULL) {
+        coreFeedback.valid_flag0 |= 0x04u;
+        coreFeedback.right_trigger.mode = ALK_DS5_TRIGGER_RAW;
+        coreFeedback.right_trigger.raw[0] = typeRight;
+        memcpy(coreFeedback.right_trigger.raw + 1, right, DS_EFFECT_PAYLOAD_SIZE);
+    }
+    uint8_t coreReport[ALK_DS5_USB_OUTPUT_REPORT_BYTES] = {0};
+    size_t coreReportLength = 0;
+    if (alk_ds5_build_output_report(&coreFeedback, coreReport, sizeof(coreReport), &coreReportLength) == ALK_DS5_OK) {
+        (void)[self withDS5CoreForPlayer:controllerNumber call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_feedback(core, &coreFeedback); }];
+        _lastDS5Feedback[controllerNumber] = coreFeedback; _hasDS5Feedback[controllerNumber] = YES;
+        if ([_rawHID sendOutputReport:coreReport length:coreReportLength playerIdentity:[self rawHIDIdentityForPlayer:controllerNumber]]) return;
+    }
+    // A missing raw identity is an explicit capability loss for DS5 effects.
 }
 
 -(void) setMotionEventState:(unsigned short)controllerNumber
@@ -2246,6 +2375,9 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
 
     // The host asks for the accelerometer and the gyro separately, so both requests are kept
     // and one handler serves them; a handler per request would replace the other one.
+    // Tuning key 101: the client never reports faster than the cap (the host's request is the other limit).
+    const unsigned short hostRequestedHz = reportRateHz;
+    reportRateHz = (unsigned short)ds5_capped_report_rate(hostRequestedHz, (int)self.reportRateCapHz);
     BOOL anyRequested = NO;
     @synchronized (controller) {
         if (motionType == LI_MOTION_TYPE_ACCEL) {
@@ -2258,6 +2390,20 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
             return;
         }
         anyRequested = controller.accelReportRateHz > 0 || controller.gyroReportRateHz > 0;
+    }
+
+    if (controllerNumber < 16) {
+        os_unfair_lock_lock(&_ds5CoreLock);
+        _motionGyroRate[controllerNumber] = controller.gyroReportRateHz;
+        _motionAccelRate[controllerNumber] = controller.accelReportRateHz;
+        _rawLastGyroSent[controllerNumber] = 0.0;
+        _rawLastAccelSent[controllerNumber] = 0.0;
+        os_unfair_lock_unlock(&_ds5CoreLock);
+    }
+    Log(LOG_I, @"[ds5-ext] host motion request player=%hu type=%u rate=%huHz source=%ld", controllerNumber,
+        (unsigned)motionType, reportRateHz, (long)self.controllerMotionSource);
+    if (reportRateHz != hostRequestedHz) {
+        Log(LOG_I, @"[ds5-ext] motion report rate capped from %huHz to %huHz by the report rate cap", hostRequestedHz, reportRateHz);
     }
 
     if (!anyRequested) {
@@ -2275,6 +2421,11 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
             return;
         }
         PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(strongSelf);
+        // Every sample is counted so the automatic choice can compare the two sources; only the
+        // chosen one is sent.
+        if (![strongSelf noteGCMotionSampleShouldSend]) {
+            return;
+        }
         // Nothing is sent while controller delivery is paused; the pause itself sends a zero
         // rotation so the host does not keep turning at the last rate.
         if (inputCtx == NULL || !strongSelf->_shouldSendInputEvents) {
@@ -2289,12 +2440,12 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
         BOOL sendGyro = NO;
         @synchronized (strongController) {
             unsigned short accelRate = strongController.accelReportRateHz;
-            if (accelRate > 0 && now - strongController.lastAccelReportTime >= 0.5 / accelRate) {
+            if (ds5_motion_due(now, strongController.lastAccelReportTime, accelRate)) {
                 strongController.lastAccelReportTime = now;
                 sendAccel = YES;
             }
             unsigned short gyroRate = strongController.gyroReportRateHz;
-            if (gyroRate > 0 && now - strongController.lastGyroReportTime >= 0.5 / gyroRate) {
+            if (ds5_motion_due(now, strongController.lastGyroReportTime, gyroRate)) {
                 strongController.lastGyroReportTime = now;
                 sendGyro = YES;
             }
@@ -2311,18 +2462,42 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
         // and the acceleration is negated on top of it.
         if (sendAccel) {
             GCAcceleration acceleration = sample.acceleration;
-            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, LI_MOTION_TYPE_ACCEL,
-                                           (float)(-acceleration.x * 9.80665),
-                                           (float)(-acceleration.z * 9.80665),
-                                           (float)(acceleration.y * 9.80665));
+            AlkDs5MotionObservation motionObservation = {
+                .struct_size = sizeof(motionObservation), .abi = ALK_DS5_CORE_ABI_VERSION,
+                .device_index = 0, .sequence = (uint64_t)now * 1000u,
+                .gyro = {0, 0, 0},
+                .accelerometer = {(int16_t)lrintf(-acceleration.x * 1000.0f),
+                                  (int16_t)lrintf(-acceleration.z * 1000.0f),
+                                  (int16_t)lrintf(acceleration.y * 1000.0f)},
+                .sensor_timestamp = (uint32_t)lrint(now * 1000000.0)};
+            (void)[strongSelf withDS5CoreForPlayer:(NSUInteger)strongController.playerIndex call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_motion(core, &motionObservation); }];
+            float protocolAccel[3];
+            ds5_gc_accel_to_protocol(acceleration.x, acceleration.y, acceleration.z, protocolAccel);
+            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)strongController.playerIndex, LI_MOTION_TYPE_ACCEL,
+                                           protocolAccel[0], protocolAccel[1], protocolAccel[2]);
         }
         if (sendGyro && sample.hasRotationRate) {
             static const double kRadiansToDegrees = 57.29577951308232;
             GCRotationRate rotation = sample.rotationRate;
-            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)controllerNumber, LI_MOTION_TYPE_GYRO,
-                                           (float)(rotation.x * kRadiansToDegrees),
-                                           (float)(rotation.z * kRadiansToDegrees),
-                                           (float)(-rotation.y * kRadiansToDegrees));
+            AlkDs5MotionObservation motionObservation = {
+                .struct_size = sizeof(motionObservation), .abi = ALK_DS5_CORE_ABI_VERSION,
+                .device_index = 0, .sequence = (uint64_t)now * 1000u,
+                .gyro = {(int16_t)lrintf(rotation.x * 1000.0f),
+                         (int16_t)lrintf(rotation.z * 1000.0f),
+                         (int16_t)lrintf(-rotation.y * 1000.0f)},
+                .accelerometer = {0, 0, 0}, .sensor_timestamp = (uint32_t)lrint(now * 1000000.0)};
+            (void)[strongSelf withDS5CoreForPlayer:(NSUInteger)strongController.playerIndex call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_motion(core, &motionObservation); }];
+            [strongSelf noteDS5GCGyroPeak:MAX(fabs(rotation.x), MAX(fabs(rotation.y), fabs(rotation.z))) * kRadiansToDegrees];
+            float protocolGyro[3];
+            ds5_gc_gyro_to_protocol(rotation.x, rotation.y, rotation.z, protocolGyro);
+            strongSelf->_mlGCRot[0] = rotation.x; strongSelf->_mlGCRot[1] = rotation.y; strongSelf->_mlGCRot[2] = rotation.z;
+            strongSelf->_mlGCAcc[0] = sample.acceleration.x; strongSelf->_mlGCAcc[1] = sample.acceleration.y; strongSelf->_mlGCAcc[2] = sample.acceleration.z;
+            for (int axis = 0; axis < 3; axis++) strongSelf->_mlGCProto[axis] = protocolGyro[axis];
+            strongSelf->_mlGCValid = YES;
+            [strongSelf noteGyroSent];
+            const float gyroGain = (float)strongSelf.gyroSensitivity;
+            LiSendControllerMotionEventCtx(inputCtx, (uint8_t)strongController.playerIndex, LI_MOTION_TYPE_GYRO,
+                                           protocolGyro[0] * gyroGain, protocolGyro[1] * gyroGain, protocolGyro[2] * gyroGain);
         }
     };
     motion.sensorsActive = YES;
@@ -2422,11 +2597,32 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
     }
 }
 
+// How often a controller callback found no controller, logged at most once a second.
+- (void)noteOrphanUpdate {
+    static _Atomic unsigned long sOrphans;
+    static _Atomic CFAbsoluteTime sLast;
+    const unsigned long count = atomic_fetch_add(&sOrphans, 1) + 1;
+    const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (now - atomic_load(&sLast) >= 1.0) {
+        atomic_store(&sLast, now);
+        Log(LOG_W, @"[controller] update dropped: no controller object for the callback (total %lu)", count);
+    }
+}
+
 -(void) updateFinished:(Controller*)controller
 {
     if (!_shouldSendInputEvents) {
         return;
     }
+    // A callback that found no controller must not announce or update one: the arrival would create
+    // a pad on the host (nil reads as player 0) and every later event would repeat it.
+    if (controller == nil) {
+        [self noteOrphanUpdate];
+        return;
+    }
+#if !TARGET_OS_IPHONE
+    if (controller.gamepad == nil) return;
+#endif
 
     @synchronized(controller) {
         // Quit Combo: Start+Select+L1+R1
@@ -2483,11 +2679,20 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
             if (!hasTouchpad) supportedButtonFlags |= TOUCHPAD_FLAG;
             if (hasTouchpad && allowsPlayStationExtensions) {
                 capabilities |= LI_CCAP_TOUCHPAD;
-                if ([extended isKindOfClass:GCDualSenseGamepad.class] &&
-                    self.controllerHapticsMode == 0 && [Ds5HapticsAudioRenderer hasPhysicalEndpoint]) {
+                BOOL isDualSense = [extended isKindOfClass:GCDualSenseGamepad.class];
+                if (isDualSense) {
+                    capabilities |= LI_CCAP_DUALSENSE_IDENTITY;
+                }
+                NSString *rawIdentity = [self rawHIDIdentityForPlayer:controller.playerIndex];
+                const BOOL bluetoothTransport = [[self->_rawHID transportNameForIdentity:rawIdentity] isEqualToString:@"bluetooth"];
+                const BOOL bluetoothPadAudio = bluetoothTransport && [Ds5HapticsAudioRenderer padSpeakerEnabled];
+                const BOOL bluetoothFullPcm = bluetoothTransport &&
+                    ds5_bluetooth_requests_full_pcm((int)_ds5BtOutput, [self bluetoothHapticsMode]);
+                if (isDualSense && self.controllerHapticsMode == 0 &&
+                    (([Ds5HapticsAudioRenderer usbPcmRequested] && [Ds5HapticsAudioRenderer hasPhysicalEndpoint]) || bluetoothPadAudio || bluetoothFullPcm)) {
                     capabilities |= LI_CCAP_DS5_HAPTICS_PCM;
                 }
-                supportedButtonFlags |= TOUCHPAD_FLAG;
+                supportedButtonFlags |= TOUCHPAD_FLAG | MISC_FLAG;  // MISC_FLAG: the Mute button, read from the raw report
             } else if (!hasTouchpad && allowsPlayStationExtensions && self.advertiseTouchpadForShortcut) {
                 capabilities |= LI_CCAP_TOUCHPAD;
             }
@@ -2501,10 +2706,17 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
                 capabilities |= LI_CCAP_RGB_LED;
             }
             LiSendControllerArrivalEventCtx(inputCtx, (uint8_t)controller.playerIndex,
-                                            (uint16_t)[ControllerSupport getConnectedGamepadMask:nil],
+                                            ds5_pad_active_mask((unsigned)_controllerNumbers),
                                             controllerType, supportedButtonFlags, capabilities);
             LogControllerMappingDiagnostics(controller, controllerType, supportedButtonFlags, capabilities, self);
             controller.controllerAnnounced = YES;
+            // The pad's mute LED may have been left on by an earlier run; the virtual device starts with it off.
+            if (hasTouchpad && self.ds5ApplyHostLights && controller.playerIndex >= 0 && controller.playerIndex < 16) {
+                [self assertMuteLEDForPlayer:(unsigned short)controller.playerIndex];
+            }
+            Log(LOG_I, @"[controller-send] arrival player=%ld mask=0x%x type=%u capabilities=%u gamepad=%p",
+                (long)controller.playerIndex, (unsigned)ds5_pad_active_mask((unsigned)_controllerNumbers),
+                (unsigned)controllerType, (unsigned)capabilities, (__bridge void *)controller.gamepad);
 
             if (controller.gamepad.battery != nil) {
                 GCDeviceBattery *battery = controller.gamepad.battery;
@@ -2524,11 +2736,28 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
         }
 
         ControllerGamepadState state = {
-            .buttons = (uint32_t)controller.lastButtonFlags,
+            .buttons = ds5_merge_mute_flag((uint32_t)controller.lastButtonFlags, controller.rawMuteButton),
             .leftTrigger = controller.lastLeftTrigger, .rightTrigger = controller.lastRightTrigger,
             .leftX = controller.lastLeftStickX, .leftY = controller.lastLeftStickY,
             .rightX = controller.lastRightStickX, .rightY = controller.lastRightStickY
         };
+        AlkDs5State coreState = {
+            .struct_size = sizeof(coreState), .abi = ALK_DS5_CORE_ABI_VERSION,
+            .device_index = 0,
+            .buttons = state.buttons, .hat = 0,
+            .left_trigger = state.leftTrigger, .right_trigger = state.rightTrigger,
+            .left_x = (uint8_t)(((int)state.leftX + 32768) >> 8),
+            .left_y = (uint8_t)(((int)state.leftY + 32768) >> 8),
+            .right_x = (uint8_t)(((int)state.rightX + 32768) >> 8),
+            .right_y = (uint8_t)(((int)state.rightY + 32768) >> 8)};
+        // Core bookkeeping never decides whether input reaches the host.
+        const NSUInteger corePlayer = (NSUInteger)controller.playerIndex;
+        (void)[self withDS5CoreForPlayer:corePlayer call:^AlkDs5Error(AlkDs5Core *core) {
+            AlkDs5State sequenced = coreState;
+            sequenced.sequence = ++self->_ds5Sequence[corePlayer];
+            AlkDs5Event coreEvent = {.struct_size = sizeof(coreEvent), .abi = ALK_DS5_CORE_ABI_VERSION};
+            return alk_ds5_core_submit_state(core, &sequenced, &coreEvent);
+        }];
         uint64_t routing = [self evaluateControllerShortcuts:controller];
         uint32_t consumed = ControllerShortcutProtocolMask(ControllerShortcutRouteConsumed(routing));
         uint32_t replayed = ControllerShortcutProtocolMask(ControllerShortcutRouteReplay(routing));
@@ -2546,10 +2775,11 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
         if (!_shouldSendInputEvents) { [_controllerStreamLock unlock]; return; }
         controller.sentGamepadState = state;
         controller.hasSentGamepadState = YES;
+        [self noteDS5InputSent];
         if (_multiController) {
             LiSendMultiControllerEventCtx(inputCtx,
                                           controller.playerIndex,
-                                          [ControllerSupport getConnectedGamepadMask:nil],
+                                          ds5_pad_active_mask((unsigned)_controllerNumbers),
                                           state.buttons,
                                           state.leftTrigger,
                                           state.rightTrigger,
@@ -2654,7 +2884,7 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
 
         if (useLegacyPausedHandler) {
             controller.controllerPausedHandler = ^(GCController *controller) {
-                Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+                Controller* limeController = [self limeControllerForGC:controller];
 
                 // Get off the main thread
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
@@ -2673,7 +2903,7 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
         __weak typeof(controller) weakController = controller;
         if (controller.extendedGamepad != NULL) {
             controller.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *gamepad, GCControllerElement *element) {
-                Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:weakController.playerIndex]];
+                Controller* limeController = [self limeControllerForGC:weakController];
                 [self evaluateControllerShortcuts:limeController];
                 short leftStickX, leftStickY;
                 short rightStickX, rightStickY;
@@ -2784,9 +3014,9 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
                     self.nativeTouchpadEnabled);
                 if (physicalTouchpad != nil) {
                     primary.valueChangedHandler = nil;
-                    RegisterPhysicalTouchpad(self, _controllers[@(controller.playerIndex)], physicalTouchpad, NO);
+                    RegisterPhysicalTouchpad(self, [self limeControllerForGC:controller], physicalTouchpad, NO);
                 } else if (primary != nil) {
-                    Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
+                    Controller *touchController = [self limeControllerForGC:controller];
                     primary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
                         (void)pad; (void)xValue; (void)yValue;
                         QueueControllerTouchSnapshot(self, touchController, primary, secondary);
@@ -2794,9 +3024,9 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
                 }
                 if (secondaryTouchpad != nil) {
                     secondary.valueChangedHandler = nil;
-                    RegisterPhysicalTouchpad(self, _controllers[@(controller.playerIndex)], secondaryTouchpad, YES);
+                    RegisterPhysicalTouchpad(self, [self limeControllerForGC:controller], secondaryTouchpad, YES);
                 } else if (secondary != nil) {
-                    Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
+                    Controller *touchController = [self limeControllerForGC:controller];
                     secondary.valueChangedHandler = ^(GCControllerDirectionPad *pad, float xValue, float yValue) {
                         (void)pad; (void)xValue; (void)yValue;
                         QueueControllerTouchSnapshot(self, touchController, primary, secondary);
@@ -2810,7 +3040,7 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
                     touchButton = [(GCDualShockGamepad *)controller.extendedGamepad touchpadButton];
                 }
                 if (touchButton != nil) {
-                    Controller *touchController = [_controllers objectForKey:@(controller.playerIndex)];
+                    Controller *touchController = [self limeControllerForGC:controller];
                     touchButton.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
                         (void)button;
                         (void)value;
@@ -2879,7 +3109,7 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
         }
         else if (controller.gamepad != NULL) {
             controller.gamepad.valueChangedHandler = ^(GCGamepad *gamepad, GCControllerElement *element) {
-                Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:weakController.playerIndex]];
+                Controller* limeController = [self limeControllerForGC:weakController];
                 UPDATE_BUTTON_FLAG(limeController, A_FLAG, gamepad.buttonA.pressed);
                 UPDATE_BUTTON_FLAG(limeController, B_FLAG, gamepad.buttonB.pressed);
                 UPDATE_BUTTON_FLAG(limeController, X_FLAG, gamepad.buttonX.pressed);
@@ -3053,9 +3283,90 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
     [self updateAutoOnScreenControlMode];
 }
 
+// A pad that comes back keeps the number it had, when that number is still free.
+- (NSString *)playerMemoryKeyForController:(GCController *)controller {
+    return [NSString stringWithFormat:@"%@|%@", controller.vendorName ?: @"", controller.productCategory ?: @""];
+}
+
+- (BOOL)acceptsGCController:(GCController *)controller {
+    if (controller == nil || ![ControllerSupport isSupportedGamepad:controller]) return NO;
+    if (!_dualSenseOnly) return YES;
+    if (@available(macOS 11.0, *)) {
+        return [controller.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]];
+    }
+    return NO;
+}
+
+- (BOOL)hasPlayer:(unsigned short)player {
+    return [_controllers objectForKey:@(player)] != nil;
+}
+
+- (BOOL)dualSenseOnly { return _dualSenseOnly; }
+
+// The one path every new pad takes, whichever way it was noticed (notification or scan).
+- (void)attachGCController:(GCController *)controller via:(NSString *)via {
+    if (![self acceptsGCController:controller]) {
+        // Ignore micro gamepads and motion controllers, and every pad that is not a DualSense while the HID driver owns them
+        return;
+    }
+    if ([self limeControllerForGC:controller] != nil) return;
+    Log(LOG_I, @"[controller-attach] via=%@ vendor=%@ category=%@", via, controller.vendorName ?: @"?", controller.productCategory ?: @"?");
+    [self assignController:controller];
+    [self restoreGamePlayerLEDsForController:controller];
+    [self registerControllerCallbacks:controller];
+    [self setupDebouncersForController:[self limeControllerForGC:controller]];
+    [self updateAutoOnScreenControlMode];
+    [self->_presenceDelegate gamepadPresenceChanged];
+    if (_shouldSendInputEvents) {
+        Controller *attached = [self limeControllerForGC:controller];
+        if (attached != nil) [self updateFinished:attached];
+    }
+}
+
+// Once a second during a stream: pads GameController lists that were never attached, and the HID devices
+// the raw bridge sees. Logged only when something changes.
+- (void)scanForControllers:(NSTimer *)timer {
+    (void)timer;
+    NSUInteger signature = 0;
+    NSUInteger listed = 0;
+    for (GCController *controller in [GCController controllers]) {
+        listed++;
+        signature = signature * 31u + (NSUInteger)controller.hash;
+        if (![self acceptsGCController:controller]) continue;
+        if ([self limeControllerForGC:controller] == nil) {
+            [self attachGCController:controller via:@"scan"];
+        }
+    }
+    signature = signature * 31u + _controllers.count * 7u + (_rawHID.hasDevice ? 1u : 0u);
+    const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (signature != _lastScanSignature || now - _lastScanLog >= 30.0) {
+        _lastScanSignature = signature;
+        _lastScanLog = now;
+        Log(LOG_I, @"[controller-scan] GameController lists %lu pad(s), %lu assigned, raw HID device present=%d, DualSense-only=%d",
+            (unsigned long)listed, (unsigned long)_controllers.count, _rawHID.hasDevice ? 1 : 0, _dualSenseOnly ? 1 : 0);
+    }
+}
+
+// GameController's own player number is not a key: the host asks for LED patterns by writing it
+// (ds5 player LEDs, including GCControllerPlayerIndexUnset), and a Bluetooth reconnect resets it. The
+// controller is found by identity.
+- (Controller *)limeControllerForGC:(GCController *)gamepad {
+    if (gamepad == nil) return nil;
+    for (Controller *candidate in _controllers.allValues) {
+        if (candidate.gamepad == gamepad) return candidate;
+    }
+    return nil;
+}
+
 -(void) assignController:(GCController*)controller {
-    for (int i = 0; i < 4; i++) {
-        if (!(_controllerNumbers & (1 << i))) {
+    NSString *memoryKey = [self playerMemoryKeyForController:controller];
+    NSNumber *remembered = _lastPlayerForKey[memoryKey];
+    const int preferred = remembered != nil ? remembered.intValue : -1;
+    const int i = ds5_pad_choose_number((unsigned)_controllerNumbers, preferred);
+    if (i >= 0) {
+        {
+            if (_lastPlayerForKey == nil) _lastPlayerForKey = [NSMutableDictionary dictionary];
+            _lastPlayerForKey[memoryKey] = @(i);
             _controllerNumbers |= (1 << i);
             controller.playerIndex = i;
 
@@ -3070,6 +3381,9 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
             }
 
             controller.handlerQueue = dispatch_get_main_queue();
+            if (@available(macOS 11.0, *)) {
+                if (controller.light != nil) _originalLightColor[i] = controller.light.color;
+            }
             limeController.gamepad = controller;
             limeController.controllerAnnounced = NO;
             limeController.primaryTouchActive = NO;
@@ -3081,7 +3395,6 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
             [_controllers setObject:limeController forKey:[NSNumber numberWithInteger:controller.playerIndex]];
 
             Log(LOG_I, @"Assigning controller index: %d", i);
-            break;
         }
     }
 }
