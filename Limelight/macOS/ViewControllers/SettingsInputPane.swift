@@ -32,6 +32,7 @@ struct InputView: View {
               tint: .purple
             )
             ControllerSettingsSection()
+            DualSenseSettingsSections()
             FormSection(title: "Controller Shortcuts") {
               ControllerShortcutReferenceView(settingsModel: settingsModel)
             }
@@ -79,6 +80,7 @@ private struct ControllerSettingsSection: View {
 
   var body: some View {
     FormSection(title: "Controller") {
+      ConnectedControllersRow()
       SettingsRow(title: "Controller Driver") {
         Picker("", selection: $settingsModel.selectedControllerDriver) {
           ForEach(SettingsModel.controllerDrivers, id: \.self) { value in
@@ -101,80 +103,48 @@ private struct ControllerSettingsSection: View {
         .frame(width: 160, alignment: .trailing)
       }
 
-      ToggleCell(title: "Rumble", boolBinding: $settingsModel.rumble)
-      ToggleCell(title: "Swap Buttons", boolBinding: $settingsModel.swapButtons)
-      SettingsRow(title: "DualSense Touchpad Mode") {
-        HStack(spacing: 6) {
-          InfoHintButton(hintKey: "Native Touchpad detail")
-          Picker("", selection: Binding<String>(
-            get: { settingsModel.nativeTouchpad ? "Host Touchpad" : "Mac-style Trackpad" },
-            set: { settingsModel.nativeTouchpad = ($0 == "Host Touchpad") }
-          )) {
-            Text(languageManager.localize("Host Touchpad")).tag("Host Touchpad")
-            Text(languageManager.localize("Mac-style Trackpad")).tag("Mac-style Trackpad")
-          }
-          .labelsHidden()
-          .controllerPicker(
-            selection: Binding<String>(
-              get: { settingsModel.nativeTouchpad ? "Host Touchpad" : "Mac-style Trackpad" },
-              set: { settingsModel.nativeTouchpad = ($0 == "Host Touchpad") }),
-            options: ["Host Touchpad", "Mac-style Trackpad"], title: { languageManager.localize($0) })
-          .frame(width: 190, alignment: .trailing)
-        }
-      }
-      SettingsRow(title: "DualSense Touchpad Output") {
-        HStack(spacing: 6) {
-          InfoHintButton(hintKey: "DualSense Touchpad Output detail")
-          Picker("", selection: $settingsModel.dualSensePrecisionTouchpad) {
-            Text(languageManager.localize("DualSense Touchpad Output Controller")).tag(false)
-            Text(languageManager.localize("DualSense Touchpad Output Precision")).tag(true)
-          }
-          .labelsHidden()
-          .controllerPicker(selection: $settingsModel.dualSensePrecisionTouchpad, options: [false, true], title: { value in
-            languageManager.localize(value ? "DualSense Touchpad Output Precision" : "DualSense Touchpad Output Controller")
-          })
-          .frame(width: 250, alignment: .trailing)
-        }
-      }
-      SettingsRow(title: "Haptic Feedback") {
-        Picker("", selection: $settingsModel.selectedControllerHapticsMode) {
-          ForEach(SettingsModel.controllerHapticsModes, id: \.self) { value in
-            Text(languageManager.localize(value)).tag(value)
-          }
-        }
-        .labelsHidden()
-        .controllerPicker(selection: $settingsModel.selectedControllerHapticsMode, options: SettingsModel.controllerHapticsModes, title: { value in languageManager.localize(value) })
-        .frame(width: 220, alignment: .trailing)
-      }
-      SettingsRow(title: "Motion Sensor") {
-        Picker("", selection: $settingsModel.selectedControllerMotionMode) {
-          ForEach(SettingsModel.controllerMotionModes, id: \.self) { value in
-            Text(languageManager.localize(value)).tag(value)
-          }
-        }
-        .labelsHidden()
-        .controllerPicker(selection: $settingsModel.selectedControllerMotionMode, options: SettingsModel.controllerMotionModes, title: { value in languageManager.localize(value) })
-        .frame(width: 220, alignment: .trailing)
-      }
-      SettingsRow(title: "Feedback Target") {
-        Picker("", selection: $settingsModel.selectedControllerFeedbackTarget) {
-          ForEach(SettingsModel.controllerFeedbackTargets, id: \.self) { value in
-            Text(languageManager.localize(value)).tag(value)
-          }
-        }
-        .labelsHidden()
-        .controllerPicker(selection: $settingsModel.selectedControllerFeedbackTarget, options: SettingsModel.controllerFeedbackTargets, title: { value in languageManager.localize(value) })
-        .frame(width: 220, alignment: .trailing)
-      }
-      ControllerDeadzoneRow(value: $settingsModel.controllerDeadzone)
-      ToggleCell(title: "Emulate Guide Button", boolBinding: $settingsModel.emulateGuide)
-      ToggleCell(title: "Gamepad Mouse Emulation", hintKey: "Gamepad Mouse Hint", boolBinding: $settingsModel.gamepadMouseMode)
       SettingsChoiceRow(title: "Host Controller Type", detail: "Host Controller Type detail", selection: $settingsModel.selectedControllerVirtualType,
                         options: SettingsModel.controllerVirtualTypes)
-      SettingsRow(title: "Connected Controllers") {
-        Text("\(GCController.controllers().count)")
-          .foregroundStyle(.secondary)
+      ControllerDeadzoneRow(value: $settingsModel.controllerDeadzone)
+      ToggleCell(title: "Swap Buttons", boolBinding: $settingsModel.swapButtons)
+      ToggleCell(title: "Emulate Guide Button", boolBinding: $settingsModel.emulateGuide)
+      ToggleCell(title: "Gamepad Mouse Emulation", hintKey: "Gamepad Mouse Hint", boolBinding: $settingsModel.gamepadMouseMode)
+    }
+  }
+}
+
+/// The controllers macOS reports now, with the battery of those that report one. Connect and
+/// disconnect refresh it.
+private struct ConnectedControllersRow: View {
+  @ObservedObject private var languageManager = LanguageManager.shared
+  @SwiftUI.State private var controllers = GCController.controllers()
+
+  private func line(_ controller: GCController) -> String {
+    var text = controller.vendorName ?? controller.productCategory
+    if let battery = controller.battery, battery.batteryState != .unknown {
+      text += String(format: " · %.0f%%", Double(battery.batteryLevel) * 100)
+        + (battery.batteryState == .charging ? " ⚡︎" : "")
+    }
+    return text
+  }
+
+  var body: some View {
+    SettingsRow(title: "Connected Controllers") {
+      VStack(alignment: .trailing, spacing: 2) {
+        if controllers.isEmpty {
+          Text(languageManager.localize("None")).foregroundStyle(.secondary)
+        }
+        ForEach(Array(controllers.enumerated()), id: \.offset) { _, controller in
+          Text(line(controller)).foregroundStyle(.secondary)
+        }
       }
+      .padding(.vertical, 4)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+      controllers = GCController.controllers()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in
+      controllers = GCController.controllers()
     }
   }
 }
@@ -586,36 +556,6 @@ private struct USBSettingsSection: View {
   }
 }
 
-private struct USBOpenSourceNotice: View {
-  @ObservedObject private var languageManager = LanguageManager.shared
-
-  var body: some View {
-    FormSection(title: "Open Source") {
-      VStack(alignment: .leading, spacing: 6) {
-        // usbipdcpp asks for this sentence, unchanged, wherever it is used.
-        Text(verbatim: ThirdPartyNotices.usbipdcppAttribution)
-          .font(.callout)
-          .textSelection(.enabled)
-          .fixedSize(horizontal: false, vertical: true)
-        Text(languageManager.localize("USB open source detail"))
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-        HStack(spacing: 10) {
-          Link(languageManager.localize("About usbipdcpp"), destination: ThirdPartyNotices.usbipdcppURL)
-          Button(languageManager.localize("Third-Party Licenses")) {
-            ThirdPartyNotices.openLicenses()
-          }
-          .controllerButtonStyle(.bordered)
-          .controlSize(.small)
-        }
-        .padding(.top, 2)
-      }
-      .padding(.vertical, 10)
-    }
-  }
-}
-
 private struct USBMappingHeader: View {
   @Binding var mappingEnabled: Bool
   let status: String
@@ -734,6 +674,216 @@ private struct MouseTuningSettingsSection: View {
         .disabled(!coreHID)
       }
       SettingsChoiceRow(title: "Touchscreen Mode", selection: $settingsModel.selectedTouchscreenMode, options: SettingsModel.touchscreenModes)
+    }
+  }
+}
+
+/// DualSense options that act on this Mac, ordered by how often they are touched: vibration,
+/// motion and touchpad, lights, speaker and headset, microphone, host extensions, advanced.
+/// Host-owned tuning (adaptive trigger scales, lightbar mode and colour, audio levels) lives in
+/// the host's settings and is not repeated here; gyro sensitivity and rumble strength mirror the
+/// client-owned keys of the host's tuning catalog.
+private struct DualSenseSettingsSections: View {
+  /// Bumped when the user cancels the Full Bluetooth Haptics warning, so the switch is rebuilt off.
+  @State private var fullVibrationRedraw = 0
+  @EnvironmentObject private var settingsModel: SettingsModel
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  private var motionSource: Binding<String> {
+    Binding(
+      get: {
+        let index = min(max(settingsModel.dualSense.motionSource, 0),
+                        SettingsModel.DualSenseClientSettings.motionSourceKeys.count - 1)
+        return SettingsModel.DualSenseClientSettings.motionSourceKeys[index]
+      },
+      set: { value in
+        settingsModel.dualSense.motionSource =
+          SettingsModel.DualSenseClientSettings.motionSourceKeys.firstIndex(of: value) ?? 0
+      })
+  }
+
+  /// One Bluetooth vibration choice over two stored values: the haptics fallback (key 10) and
+  /// the coarse output path (key 100), which wins over it when it is not Automatic. The choice
+  /// writes both so they never disagree. Output 4 is not a row here: the Advanced switch sets
+  /// it, and that value is the haptics-only Bluetooth path (report 0x32, one report in flight,
+  /// speaker stays on USB). Turning the switch off restores the output that matches this choice.
+  private var bluetoothVibration: Binding<String> {
+    let keys = SettingsModel.DualSenseClientSettings.btHapticsFallbackKeys
+    // Fallback index -> output path: Automatic, IR, Rumble (legacy), Off.
+    let outputForFallback = [0, 2, 1, 3]
+    return Binding(
+      get: {
+        let output = settingsModel.dualSense.btOutput
+        if let index = outputForFallback.firstIndex(of: output), output != 0 { return keys[index] }
+        return keys[min(max(settingsModel.dualSense.btHapticsFallback, 0), keys.count - 1)]
+      },
+      set: { value in
+        let index = keys.firstIndex(of: value) ?? 0
+        settingsModel.dualSense.btHapticsFallback = index
+        if settingsModel.dualSense.btOutput != 4 {
+          settingsModel.dualSense.btOutput = outputForFallback[index]
+        }
+      })
+  }
+
+  /// Turning it on asks first (BluetoothFullHapticsWarning) and writes nothing until the user confirms;
+  /// cancelling redraws the switch off. Turning it off restores the output the haptics choice implies.
+  private var bluetoothFullVibration: Binding<Bool> {
+    let model = settingsModel
+    let switcher = BluetoothFullHapticsSwitch(
+      readOutput: { model.dualSense.btOutput },
+      writeOutput: { model.dualSense.btOutput = $0 },
+      readFallback: { model.dualSense.btHapticsFallback },
+      confirm: { answer in
+        BluetoothFullHapticsWarning.present(on: nil, completion: answer)
+      },
+      declined: { fullVibrationRedraw += 1 })
+    return Binding(get: { switcher.isOn }, set: { switcher.set($0) })
+  }
+
+  var body: some View {
+    FormSection(title: "Rumble and Haptics") {
+      ToggleCell(title: "Rumble", boolBinding: $settingsModel.rumble)
+      SettingsRow(title: "Haptic Feedback") {
+        Picker("", selection: $settingsModel.selectedControllerHapticsMode) {
+          ForEach(SettingsModel.controllerHapticsModes, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedControllerHapticsMode, options: SettingsModel.controllerHapticsModes, title: { value in languageManager.localize(value) })
+        .frame(width: 220, alignment: .trailing)
+      }
+      SettingsValueSliderRow(
+        title: "Rumble Strength", value: $settingsModel.dualSense.rumbleStrength,
+        range: SettingsModel.DualSenseClientSettings.rumbleStrengthRange, step: 0.05,
+        multiplier: 100, suffix: "%")
+      HintedChoiceRow(
+        title: "Bluetooth Vibration", hintKey: "Bluetooth Vibration detail",
+        selection: bluetoothVibration,
+        options: SettingsModel.DualSenseClientSettings.btHapticsFallbackKeys)
+      SettingsRow(title: "Feedback Target") {
+        Picker("", selection: $settingsModel.selectedControllerFeedbackTarget) {
+          ForEach(SettingsModel.controllerFeedbackTargets, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedControllerFeedbackTarget, options: SettingsModel.controllerFeedbackTargets, title: { value in languageManager.localize(value) })
+        .frame(width: 220, alignment: .trailing)
+      }
+    }
+    FormSection(title: "Motion and Touchpad") {
+      SettingsRow(title: "Motion Sensor") {
+        Picker("", selection: $settingsModel.selectedControllerMotionMode) {
+          ForEach(SettingsModel.controllerMotionModes, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .controllerPicker(selection: $settingsModel.selectedControllerMotionMode, options: SettingsModel.controllerMotionModes, title: { value in languageManager.localize(value) })
+        .frame(width: 220, alignment: .trailing)
+      }
+      SettingsValueSliderRow(
+        title: "Gyro Sensitivity", value: $settingsModel.dualSense.gyroSensitivity,
+        range: SettingsModel.DualSenseClientSettings.gyroSensitivityRange, step: 0.05,
+        multiplier: 100, suffix: "%")
+      SettingsRow(title: "DualSense Touchpad Mode") {
+        HStack(spacing: 6) {
+          InfoHintButton(hintKey: "Native Touchpad detail")
+          Picker("", selection: Binding<String>(
+            get: { settingsModel.nativeTouchpad ? "Host Touchpad" : "Mac-style Trackpad" },
+            set: { settingsModel.nativeTouchpad = ($0 == "Host Touchpad") }
+          )) {
+            Text(languageManager.localize("Host Touchpad")).tag("Host Touchpad")
+            Text(languageManager.localize("Mac-style Trackpad")).tag("Mac-style Trackpad")
+          }
+          .labelsHidden()
+          .controllerPicker(
+            selection: Binding<String>(
+              get: { settingsModel.nativeTouchpad ? "Host Touchpad" : "Mac-style Trackpad" },
+              set: { settingsModel.nativeTouchpad = ($0 == "Host Touchpad") }),
+            options: ["Host Touchpad", "Mac-style Trackpad"], title: { languageManager.localize($0) })
+          .frame(width: 190, alignment: .trailing)
+        }
+      }
+      SettingsRow(title: "DualSense Touchpad Output") {
+        HStack(spacing: 6) {
+          InfoHintButton(hintKey: "DualSense Touchpad Output detail")
+          Picker("", selection: $settingsModel.dualSensePrecisionTouchpad) {
+            Text(languageManager.localize("DualSense Touchpad Output Controller")).tag(false)
+            Text(languageManager.localize("DualSense Touchpad Output Precision")).tag(true)
+          }
+          .labelsHidden()
+          .controllerPicker(selection: $settingsModel.dualSensePrecisionTouchpad, options: [false, true], title: { value in
+            languageManager.localize(value ? "DualSense Touchpad Output Precision" : "DualSense Touchpad Output Controller")
+          })
+          .frame(width: 250, alignment: .trailing)
+        }
+      }
+    }
+    FormSection(title: "Lights") {
+      ToggleCell(title: "Use Host Lights", hintKey: "Use Host Lights detail",
+                 boolBinding: $settingsModel.dualSense.applyHostLights)
+    }
+    FormSection(title: "Speaker and Headset", content: {
+      ToggleCell(title: "Use Host Audio", hintKey: "Use Host Audio detail",
+                 boolBinding: $settingsModel.dualSense.applyHostAudio)
+      SettingsValueSliderRow(
+        title: "Volume Limit", value: $settingsModel.dualSense.volumeLimitPercent,
+        range: SettingsModel.DualSenseClientSettings.volumeLimitRange, step: 1, suffix: "%")
+    }, accessory: {
+      Text(languageManager.localize("USB only"))
+        .font(.caption)
+        .foregroundStyle(.tertiary)
+        .padding(.trailing, 10)
+    })
+    FormSection(title: "Microphone") {
+      ToggleCell(title: "Report Headset and Microphone",
+                 boolBinding: $settingsModel.dualSense.reportHeadset)
+    }
+    FormSection(title: "Host Extensions") {
+      ToggleCell(title: "Enable DualSense Extensions", hintKey: "Enable DualSense Extensions detail",
+                 boolBinding: $settingsModel.dualSense.extensionsEnabled)
+    }
+    FormSection(title: "Advanced") {
+      HintedChoiceRow(title: "Motion Source", hintKey: "Motion Source detail",
+                      selection: motionSource,
+                      options: SettingsModel.DualSenseClientSettings.motionSourceKeys)
+      SettingsValueSliderRow(
+        title: "Motion Report Rate Limit", value: $settingsModel.dualSense.reportRateCapHz,
+        range: SettingsModel.DualSenseClientSettings.reportRateCapRange, step: 10, suffix: " Hz")
+      ToggleCell(title: "Full Bluetooth Haptics (Experimental)",
+                 hintKey: "Full Bluetooth Haptics detail",
+                 boolBinding: bluetoothFullVibration)
+        .id(fullVibrationRedraw)
+    }
+  }
+}
+
+/// A menu row whose consequence sits in an info popover, not under the title.
+private struct HintedChoiceRow: View {
+  let title: String
+  let hintKey: String
+  @Binding var selection: String
+  let options: [String]
+  @ObservedObject private var languageManager = LanguageManager.shared
+
+  var body: some View {
+    SettingsRow(title: title) {
+      HStack(spacing: 6) {
+        InfoHintButton(hintKey: hintKey)
+        Picker("", selection: $selection) {
+          ForEach(options, id: \.self) { value in
+            Text(languageManager.localize(value)).tag(value)
+          }
+        }
+        .labelsHidden()
+        .controllerPicker(selection: $selection, options: options, title: { value in languageManager.localize(value) })
+        .pickerStyle(.menu)
+        .focusable()
+        .frame(width: 190, alignment: .trailing)
+      }
     }
   }
 }

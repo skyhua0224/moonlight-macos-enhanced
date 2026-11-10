@@ -1169,6 +1169,40 @@ class SettingsClass: NSObject {
     return ControllerShortcutProfile.defaults(menuEnabled: gamepadMouseModeLongPressMenu(for: key))
   }
 
+  /// The DualSense client options of a host, falling back to the global profile like the other
+  /// controller settings. Values are clamped to their ranges.
+  static func dualSenseClientSettings(for key: String) -> SettingsModel.DualSenseClientSettings {
+    let defaults = UserDefaults.standard
+    let data = defaults.data(forKey: SettingsModel.controllerDualSenseKeyPrefix + key)
+      ?? (key == SettingsModel.globalHostId ? nil
+        : defaults.data(forKey: SettingsModel.controllerDualSenseKeyPrefix + SettingsModel.globalHostId))
+    return (data.flatMap { try? PropertyListDecoder().decode(SettingsModel.DualSenseClientSettings.self, from: $0) })?
+      .normalized ?? .default
+  }
+
+  @objc static func ds5ExtensionsEnabled(for key: String) -> Bool {
+    dualSenseClientSettings(for: key).extensionsEnabled
+  }
+
+  /// Plain values for the Objective-C stream setup: motionSource, gyroSensitivity, rumbleStrength,
+  /// applyHostLights, applyHostAudio, volumeLimitPercent, extensionsEnabled, reportHeadset.
+  @objc static func dualSenseClientValues(for key: String) -> [String: NSNumber] {
+    let value = dualSenseClientSettings(for: key)
+    return [
+      "motionSource": NSNumber(value: value.motionSource),
+      "gyroSensitivity": NSNumber(value: Double(value.gyroSensitivity)),
+      "rumbleStrength": NSNumber(value: Double(value.rumbleStrength)),
+      "applyHostLights": NSNumber(value: value.applyHostLights),
+      "applyHostAudio": NSNumber(value: value.applyHostAudio),
+      "volumeLimitPercent": NSNumber(value: Double(value.volumeLimitPercent)),
+      "extensionsEnabled": NSNumber(value: value.extensionsEnabled),
+      "reportHeadset": NSNumber(value: value.reportHeadset),
+      "btHapticsFallback": NSNumber(value: value.btHapticsFallback),
+      "btOutput": NSNumber(value: value.btOutput),
+      "reportRateCapHz": NSNumber(value: Double(value.reportRateCapHz)),
+    ]
+  }
+
   @objc static func controllerHapticsMode(for key: String) -> Int {
     let value = UserDefaults.standard.string(
       forKey: SettingsModel.controllerHapticsModeKeyPrefix + key)

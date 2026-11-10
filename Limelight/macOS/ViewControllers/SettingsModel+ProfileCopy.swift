@@ -146,6 +146,8 @@ extension SettingsModel {
       key: { controllerMotionModeKeyPrefix + $0 }, fallsBackToDefault: true),
     ProfileKey(id: "controller.feedbackTarget",
       key: { controllerFeedbackTargetKeyPrefix + $0 }, fallsBackToDefault: true),
+    ProfileKey(id: "controller.dualSenseClient",
+      key: { controllerDualSenseKeyPrefix + $0 }, fallsBackToDefault: true),
     ProfileKey(id: "controller.virtualType",
       key: { controllerVirtualTypeKeyPrefix + $0 }, fallsBackToDefault: true),
     // The stick calibration describes the controller on this Mac, not the host.

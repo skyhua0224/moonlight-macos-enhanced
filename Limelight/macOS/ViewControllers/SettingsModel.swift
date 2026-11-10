@@ -183,6 +183,7 @@ class SettingsModel: ObservableObject {
   static let controllerFeedbackTargetKeyPrefix = "settings.controller.feedbackTarget."
   static let controllerVirtualTypeKeyPrefix = "settings.controller.virtualType."
   static let controllerCalibrationKeyPrefix = "settings.controller.calibration."
+  static let controllerDualSenseKeyPrefix = "settings.controller.dualSenseClient."
   static let keyMappingModeKeyPrefix = "settings.keyboard.keyMappingMode."
   static let controllerShortcutProfileKeyPrefix = "settings.controller.shortcuts."
   static let audioCodecKeyPrefix = "settings.audio.codec."
@@ -1295,6 +1296,12 @@ class SettingsModel: ObservableObject {
       persistControllerSettings()
     }
   }
+  @Published var dualSense: DualSenseClientSettings = .default {
+    didSet {
+      guard !isLoading else { return }
+      persistControllerSettings()
+    }
+  }
   @Published var controllerCalibration: ControllerCalibration {
     didSet {
       guard !isLoading else { return }
@@ -1776,6 +1783,7 @@ class SettingsModel: ObservableObject {
     nativeTouchpad = true
     dualSensePrecisionTouchpad = false
     controllerDeadzone = Self.defaultControllerDeadzone
+    dualSense = .default
     selectedControllerHapticsMode = Self.defaultControllerHapticsMode
     selectedControllerMotionMode = Self.defaultControllerMotionMode
     selectedControllerFeedbackTarget = Self.defaultControllerFeedbackTarget

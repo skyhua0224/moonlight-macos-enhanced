@@ -24,8 +24,14 @@
 		D20000040000000000000004 /* FileProvider Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = D20000080000000000000008 /* FileProvider Info.plist */; };
 		D20000050000000000000005 /* RemoteFileProvider.appex in PlugIns */ = {isa = PBXBuildFile; fileRef = D20000100000000000000010 /* RemoteFileProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
 		D20000220000000000000022 /* Ds5HapticsAudioRenderer.m in Sources */ = {isa = PBXBuildFile; fileRef = D20000230000000000000023 /* Ds5HapticsAudioRenderer.m */; };
+		D20000300000000000000030 /* Ds5BluetoothAudioRenderer.m in Sources */ = {isa = PBXBuildFile; fileRef = D20000310000000000000031 /* Ds5BluetoothAudioRenderer.m */; };
 		D20000240000000000000024 /* FileProviderCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000250000000000000025 /* FileProviderCoordinator.swift */; };
 		D30000020000000000000002 /* SettingsSearchIndex.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30000010000000000000001 /* SettingsSearchIndex.generated.swift */; };
+		E50000010000000000000001 /* DS5Core.c in Sources */ = {isa = PBXBuildFile; fileRef = E50000110000000000000011 /* DS5Core.c */; };
+		E50000020000000000000002 /* USBIPCore.c in Sources */ = {isa = PBXBuildFile; fileRef = E50000120000000000000012 /* USBIPCore.c */; };
+		E50000030000000000000003 /* libDS5Core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E50000210000000000000021 /* libDS5Core.a */; };
+		E50000040000000000000004 /* libUSBIPCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E50000220000000000000022 /* libUSBIPCore.a */; };
+		E50000050000000000000005 /* DS5RawHIDBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E50000130000000000000013 /* DS5RawHIDBridge.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -50,6 +56,8 @@
 			remoteGlobalIDString = D20000140000000000000014;
 			remoteInfo = RemoteFileProvider;
 		};
+		E50000810000000000000081 /* DS5Core proxy */ = {isa = PBXContainerItemProxy; containerPortal = FB290CE619B2C406004C83CF /* Project object */; proxyType = 1; remoteGlobalIDString = E50000510000000000000051; remoteInfo = DS5Core; };
+		E50000820000000000000082 /* USBIPCore proxy */ = {isa = PBXContainerItemProxy; containerPortal = FB290CE619B2C406004C83CF /* Project object */; proxyType = 1; remoteGlobalIDString = E50000520000000000000052; remoteInfo = USBIPCore; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -95,8 +103,14 @@
 		D20000090000000000000009 /* FileProvider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "FileProviderExtension/FileProvider.entitlements"; sourceTree = SOURCE_ROOT; };
 		D20000100000000000000010 /* RemoteFileProvider.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = RemoteFileProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D20000230000000000000023 /* Ds5HapticsAudioRenderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Limelight/Input/Ds5HapticsAudioRenderer.m"; sourceTree = SOURCE_ROOT; };
+		D20000310000000000000031 /* Ds5BluetoothAudioRenderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Limelight/Input/Ds5BluetoothAudioRenderer.m"; sourceTree = SOURCE_ROOT; };
 		D20000250000000000000025 /* FileProviderCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Limelight/macOS/ViewControllers/FileProviderCoordinator.swift"; sourceTree = SOURCE_ROOT; };
 		D30000010000000000000001 /* SettingsSearchIndex.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Limelight/macOS/ViewControllers/SettingsSearchIndex.generated.swift"; sourceTree = SOURCE_ROOT; };
+		E50000110000000000000011 /* DS5Core.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "core/interaction/ds5-core/src/ds5_core.c"; sourceTree = SOURCE_ROOT; };
+		E50000120000000000000012 /* USBIPCore.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "core/network/usbip-core/src/usbip_core.c"; sourceTree = SOURCE_ROOT; };
+		E50000130000000000000013 /* DS5RawHIDBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Limelight/Input/DS5RawHIDBridge.m"; sourceTree = SOURCE_ROOT; };
+		E50000210000000000000021 /* libDS5Core.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDS5Core.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		E50000220000000000000022 /* libUSBIPCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libUSBIPCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -106,6 +120,8 @@
 				/Localized/macOS/Main.storyboard,
 				"build-number.sh",
 				macOS/ViewControllers/SettingsLineCheck.swift,
+				macOS/ViewControllers/BluetoothFullHapticsSwitch.swift,
+				macOS/ViewControllers/BluetoothFullHapticsWarning.swift,
 				Crypto/CryptoManager.m,
 				Crypto/IdManager.m,
 				Crypto/mkcert.c,
@@ -274,6 +290,8 @@
 				A42858422D5065B800E39078 /* OpenSSL in Frameworks */,
 				B10000012F00000000E39078 /* Sparkle in Frameworks */,
 				4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */,
+				E50000030000000000000003 /* libDS5Core.a in Frameworks */,
+				E50000040000000000000004 /* libUSBIPCore.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -284,6 +302,8 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E50000730000000000000073 /* DS5Core Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		E50000740000000000000074 /* USBIPCore Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -295,12 +315,22 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		E50000310000000000000031 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				E50000110000000000000011 /* DS5Core.c */,
+				E50000120000000000000012 /* USBIPCore.c */,
+			);
+			name = Core;
+			sourceTree = SOURCE_ROOT;
+		};
 		FB290CE519B2C406004C83CF = {
 			isa = PBXGroup;
 			children = (
 				4CD17E9B2733C0FC004D438C /* README.md */,
 				4C2556A121F56F280009838E /* Moonlight.entitlements */,
 				98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */,
+				E50000310000000000000031 /* Core */,
 				A40F5A3F2D432ABE006DA227 /* Limelight */,
 				A4B1C1002D9F0A1B00C0FF01 /* Localizable.strings */,
 				A4B1C1002D9F0A1B00C0FF06 /* InfoPlist.strings */,
@@ -349,6 +379,8 @@
 			dependencies = (
 				4C38E8301FF0C726000425CD /* PBXTargetDependency */,
 				D20000190000000000000019 /* File Provider dependency */,
+				E50000410000000000000041 /* DS5Core dependency */,
+				E50000420000000000000042 /* USBIPCore dependency */,
 			);
 			name = "Moonlight for macOS";
 			productName = "Moonlight for macOS";
@@ -371,6 +403,28 @@
 			productName = RemoteFileProvider;
 			productReference = D20000100000000000000010 /* RemoteFileProvider.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		E50000510000000000000051 /* DS5Core */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E50000610000000000000061 /* Build configuration list for DS5Core */;
+			buildPhases = (E50000710000000000000071 /* DS5Core Sources */, E50000730000000000000073 /* DS5Core Frameworks */);
+			buildRules = ();
+			dependencies = ();
+			name = DS5Core;
+			productName = DS5Core;
+			productReference = E50000210000000000000021 /* libDS5Core.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		E50000520000000000000052 /* USBIPCore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E50000620000000000000062 /* Build configuration list for USBIPCore */;
+			buildPhases = (E50000720000000000000072 /* USBIPCore Sources */, E50000740000000000000074 /* USBIPCore Frameworks */);
+			buildRules = ();
+			dependencies = ();
+			name = USBIPCore;
+			productName = USBIPCore;
+			productReference = E50000220000000000000022 /* libUSBIPCore.a */;
+			productType = "com.apple.product-type.library.static";
 		};
 /* End PBXNativeTarget section */
 
@@ -425,6 +479,8 @@
 			targets = (
 				4C7E0A791FECBFFD00684411 /* Moonlight for macOS */,
 				D20000140000000000000014 /* RemoteFileProvider */,
+				E50000510000000000000051 /* DS5Core */,
+				E50000520000000000000052 /* USBIPCore */,
 			);
 		};
 /* End PBXProject section */
@@ -489,7 +545,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/RemoteUSB/CMakeLists.txt",
-				"$(SRCROOT)/RemoteUSB/main.cpp",
+				"$(SRCROOT)/RemoteUSB/main.mm",
 				"$(SRCROOT)/scripts/build_remote_usb_helper.sh",
 			);
 			name = "Build Remote USB Helper";
@@ -534,8 +590,10 @@
 				D10000020000000000000002 /* FoundationDisplayView.swift in Sources */,
 				D20000010000000000000001 /* FileProviderSharedState.swift in Sources */,
 				D20000220000000000000022 /* Ds5HapticsAudioRenderer.m in Sources */,
+				D20000300000000000000030 /* Ds5BluetoothAudioRenderer.m in Sources */,
 				D20000240000000000000024 /* FileProviderCoordinator.swift in Sources */,
 				D30000020000000000000002 /* SettingsSearchIndex.generated.swift in Sources */,
+				E50000050000000000000005 /* DS5RawHIDBridge.m in Sources */,
 				4C38E8011FEE08AA000425CD /* (null) in Sources */,
 				4C38E7FC1FEE0875000425CD /* (null) in Sources */,
 				4C38E7F91FEE085B000425CD /* (null) in Sources */,
@@ -551,6 +609,8 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E50000710000000000000071 /* DS5Core Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (E50000010000000000000001 /* DS5Core.c in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		E50000720000000000000072 /* USBIPCore Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (E50000020000000000000002 /* USBIPCore.c in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -564,6 +624,8 @@
 			name = RemoteFileProvider;
 			targetProxy = D20000180000000000000018 /* File Provider target proxy */;
 		};
+		E50000410000000000000041 /* DS5Core dependency */ = {isa = PBXTargetDependency; name = DS5Core; targetProxy = E50000810000000000000081 /* DS5Core proxy */; };
+		E50000420000000000000042 /* USBIPCore dependency */ = {isa = PBXTargetDependency; name = USBIPCore; targetProxy = E50000820000000000000082 /* USBIPCore proxy */; };
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
@@ -863,6 +925,10 @@
 			};
 			name = Release;
 		};
+		E50000910000000000000091 /* DS5Core Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_C_LANGUAGE_STANDARD = c11; GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)",); HEADER_SEARCH_PATHS = ("$(SRCROOT)/core/interaction/ds5-core/include",); MACOSX_DEPLOYMENT_TARGET = 12.0; PRODUCT_NAME = DS5Core; SDKROOT = macosx; SKIP_INSTALL = YES;}; name = Debug; };
+		E50000920000000000000092 /* DS5Core Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_C_LANGUAGE_STANDARD = c11; HEADER_SEARCH_PATHS = ("$(SRCROOT)/core/interaction/ds5-core/include",); MACOSX_DEPLOYMENT_TARGET = 12.0; PRODUCT_NAME = DS5Core; SDKROOT = macosx; SKIP_INSTALL = YES;}; name = Release; };
+		E50000930000000000000093 /* USBIPCore Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_C_LANGUAGE_STANDARD = c11; HEADER_SEARCH_PATHS = ("$(SRCROOT)/core/network/usbip-core/include",); MACOSX_DEPLOYMENT_TARGET = 12.0; PRODUCT_NAME = USBIPCore; SDKROOT = macosx; SKIP_INSTALL = YES;}; name = Debug; };
+		E50000940000000000000094 /* USBIPCore Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_C_LANGUAGE_STANDARD = c11; HEADER_SEARCH_PATHS = ("$(SRCROOT)/core/network/usbip-core/include",); MACOSX_DEPLOYMENT_TARGET = 12.0; PRODUCT_NAME = USBIPCore; SDKROOT = macosx; SKIP_INSTALL = YES;}; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -893,6 +959,8 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		E50000610000000000000061 /* Build configuration list for DS5Core */ = {isa = XCConfigurationList; buildConfigurations = (E50000910000000000000091 /* DS5Core Debug */, E50000920000000000000092 /* DS5Core Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		E50000620000000000000062 /* Build configuration list for USBIPCore */ = {isa = XCConfigurationList; buildConfigurations = (E50000930000000000000093 /* USBIPCore Debug */, E50000940000000000000094 /* USBIPCore Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */

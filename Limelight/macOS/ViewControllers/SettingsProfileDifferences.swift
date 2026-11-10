@@ -476,6 +476,16 @@ enum SettingsProfileDifferences {
         ?? SettingsModel.defaultControllerDeadzone))
       return Reading(String(format: "%.0f%%", deadzone * 100))
     },
+    Field(titleKey: "DualSense Motion") { v in
+      let value = v.key("controller.dualSenseClient", as: Data.self).flatMap {
+        try? PropertyListDecoder().decode(SettingsModel.DualSenseClientSettings.self, from: $0)
+      }?.normalized ?? .default
+      let source = SettingsModel.DualSenseClientSettings.motionSourceKeys[value.motionSource]
+      // The text names the source and the gyro gain; the other options decide the identity.
+      return Reading(
+        localize(source) + String(format: " · %.0f%%", Double(value.gyroSensitivity) * 100),
+        identity: String(describing: value))
+    },
     Field(titleKey: "Emulate Guide Button") { v in
       onOff(v.settings?.emulateGuide ?? SettingsModel.defaultEmulateGuide)
     },
