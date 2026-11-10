@@ -312,6 +312,14 @@
 "Touchscreen Mode" = "触摸屏模式";
 "Trackpad" = "触控板";
 "Touchscreen" = "触摸屏";
+"Touch Input Method" = "触控方式";
+"Native Multi-Touch" = "原生多点触控";
+"Touchpad Mode" = "触控板模式";
+"Direct Tap" = "直接点按";
+"Hold five fingers" = "五指长按";
+"Hold five fingers to open Control Center" = "五指长按打开控制中心";
+"Also: controller chord, hold five fingers" = "另可用:手柄组合键、五指长按";
+"Open Control Center" = "打开控制中心";
 "Search" = "搜索";
 "No matches" = "没有匹配项";
 "Static library" = "静态库";

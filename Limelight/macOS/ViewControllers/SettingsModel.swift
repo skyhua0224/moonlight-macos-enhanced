@@ -1229,6 +1229,13 @@ class SettingsModel: ObservableObject {
       postMouseSettingsChanged("touchscreenMode")
     }
   }
+  @Published var selectedTouchInputMode: String {
+    didSet {
+      guard !isLoading else { return }
+      saveSettings()
+      postMouseSettingsChanged("touchInputMode")
+    }
+  }
   @Published var gamepadMouseMode: Bool {
     didSet {
       guard !isLoading else { return }
@@ -1774,6 +1781,8 @@ class SettingsModel: ObservableObject {
     streamShortcuts = StreamShortcutProfile.defaultShortcuts()
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
+    selectedTouchInputMode = Self.getString(
+      from: Self.defaultTouchInputMode, in: Self.touchInputModes)
 
     emulateGuide = Self.defaultEmulateGuide
     appArtworkWidth = Self.defaultAppArtworkWidth

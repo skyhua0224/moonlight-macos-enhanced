@@ -313,6 +313,14 @@
 "Touchscreen Mode" = "Touchscreen Mode";
 "Trackpad" = "Trackpad";
 "Touchscreen" = "Touchscreen";
+"Touch Input Method" = "Touch Input Method";
+"Native Multi-Touch" = "Native Multi-Touch";
+"Touchpad Mode" = "Touchpad Mode";
+"Direct Tap" = "Direct Tap";
+"Hold five fingers" = "Hold five fingers";
+"Hold five fingers to open Control Center" = "Hold five fingers to open Control Center";
+"Also: controller chord, hold five fingers" = "Also: controller chord, hold five fingers";
+"Open Control Center" = "Open Control Center";
 "Search" = "Search";
 "No matches" = "No matches";
 "Static library" = "Static library";

@@ -582,6 +582,11 @@ enum SettingsProfileDifferences {
         from: v.settings?.touchscreenMode ?? SettingsModel.defaultTouchscreenMode,
         in: SettingsModel.touchscreenModes))
     },
+    Field(titleKey: "Touch Input Method") { v in
+      option(SettingsModel.getString(
+        from: v.settings?.touchInputMode ?? SettingsModel.defaultTouchInputMode,
+        in: SettingsModel.touchInputModes))
+    },
   ]
 
   private static let shortcutFields: [Field] = [

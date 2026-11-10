@@ -110,6 +110,7 @@ struct Settings: Encodable, Decodable {
   let swapMouseButtons: Bool?
   let reverseScrollDirection: Bool?
   let touchscreenMode: Int?
+  let touchInputMode: Int?
   let gamepadMouseMode: Bool?
   let gamepadMouseModeLongPressMenu: Bool?
   let hostPrecisionTouchpad: Bool?
@@ -282,6 +283,7 @@ struct Settings: Encodable, Decodable {
       swapMouseButtons: swapMouseButtons,
       reverseScrollDirection: reverseScrollDirection,
       touchscreenMode: touchscreenMode,
+      touchInputMode: touchInputMode,
       gamepadMouseMode: gamepadMouseMode,
       gamepadMouseModeLongPressMenu: gamepadMouseModeLongPressMenu,
       hostPrecisionTouchpad: hostPrecisionTouchpad,
@@ -590,6 +592,7 @@ extension SettingsClass {
       swapMouseButtons: settings.swapMouseButtons,
       reverseScrollDirection: settings.reverseScrollDirection,
       touchscreenMode: settings.touchscreenMode,
+      touchInputMode: settings.touchInputMode,
       gamepadMouseMode: settings.gamepadMouseMode,
       gamepadMouseModeLongPressMenu: settings.gamepadMouseModeLongPressMenu,
       hostPrecisionTouchpad: settings.hostPrecisionTouchpad,
