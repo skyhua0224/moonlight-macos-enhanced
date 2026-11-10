@@ -308,3 +308,437 @@ static NSUInteger countKind(NSArray<NSValue *> *log, MLTouchEmuKind k) {
     return n;
 }
 
+static void testTrackpadEmulator(void) {
+    NSMutableArray *log = [NSMutableArray array];
+    MLTouchPointerEmulator *em = makeEmu(log, MLTouchInputModeTrackpad);
+
+    // A short still tap is a left click: press then release.
+    [em processSamples:@[S(@"a", MLTouchPhaseBegan, 500, 500, 0.0)]];
+    [em processSamples:@[S(@"a", MLTouchPhaseEnded, 501, 500, 0.1)]];
+    CHECK(log.count == 2);
+    CHECK(emuAt(log, 0).kind == MLTouchEmuKindButton && emuAt(log, 0).button == MLTouchEmuButtonLeft && emuAt(log, 0).pressed);
+    CHECK(emuAt(log, 1).kind == MLTouchEmuKindButton && emuAt(log, 1).button == MLTouchEmuButtonLeft && !emuAt(log, 1).pressed);
+
+    // A slow touch is not a click.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"b", MLTouchPhaseBegan, 500, 500, 1.0)]];
+    [em processSamples:@[S(@"b", MLTouchPhaseEnded, 500, 500, 1.3)]];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 0);
+
+    // Dragging moves the pointer by deltas and does not click.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"c", MLTouchPhaseBegan, 500, 500, 2.0)]];
+    [em processSamples:@[S(@"c", MLTouchPhaseMoved, 520, 490, 2.02)]];
+    [em processSamples:@[S(@"c", MLTouchPhaseMoved, 540, 480, 2.04)]];
+    [em processSamples:@[S(@"c", MLTouchPhaseEnded, 540, 480, 2.1)]];
+    CHECK(countKind(log, MLTouchEmuKindMoveRelative) == 2);
+    CHECK_NEAR(emuAt(log, 0).a, 20, 1e-6); CHECK_NEAR(emuAt(log, 0).b, -10, 1e-6);
+    CHECK(countKind(log, MLTouchEmuKindButton) == 0);
+
+    // Two-finger tap is a right click.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"d1", MLTouchPhaseBegan, 400, 500, 3.0), S(@"d2", MLTouchPhaseBegan, 480, 500, 3.01)]];
+    [em processSamples:@[S(@"d1", MLTouchPhaseEnded, 400, 500, 3.1), S(@"d2", MLTouchPhaseEnded, 480, 500, 3.11)]];
+    CHECK(log.count == 2);
+    CHECK(emuAt(log, 0).button == MLTouchEmuButtonRight && emuAt(log, 0).pressed);
+    CHECK(emuAt(log, 1).button == MLTouchEmuButtonRight && !emuAt(log, 1).pressed);
+
+    // Two-finger drag scrolls (fingers up = positive) and clicks nothing, also when one lifts first.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"e1", MLTouchPhaseBegan, 400, 500, 4.0), S(@"e2", MLTouchPhaseBegan, 480, 500, 4.0)]];
+    for (int i = 1; i <= 5; i++) {
+        [em processSamples:@[S(@"e1", MLTouchPhaseMoved, 400, 500 + i * 10, 4.0 + i * 0.02),
+                             S(@"e2", MLTouchPhaseMoved, 480, 500 + i * 10, 4.0 + i * 0.02)]];
+    }
+    [em processSamples:@[S(@"e1", MLTouchPhaseEnded, 400, 550, 4.2)]];
+    [em processSamples:@[S(@"e2", MLTouchPhaseMoved, 480, 570, 4.25)]]; // the lone finger left must not move the pointer
+    [em processSamples:@[S(@"e2", MLTouchPhaseEnded, 480, 570, 4.3)]];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 0);
+    CHECK(countKind(log, MLTouchEmuKindMoveRelative) == 0);
+    CHECK(countKind(log, MLTouchEmuKindScroll) >= 3);
+    for (NSUInteger i = 0; i < log.count; i++) {
+        if (emuAt(log, i).kind == MLTouchEmuKindScroll) CHECK(emuAt(log, i).a > 0);
+    }
+
+    // A single finger after a two-finger gesture starts a fresh session.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"f", MLTouchPhaseBegan, 300, 300, 5.0)]];
+    [em processSamples:@[S(@"f", MLTouchPhaseEnded, 300, 300, 5.1)]];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 2);
+
+    // Long press: the poll presses the left button, moving then drags, lifting releases. No click on release.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"g", MLTouchPhaseBegan, 300, 300, 6.0)]];
+    [em pollAtTime:6.2];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 0 && !em.leftButtonDown);
+    [em pollAtTime:6.5];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 1 && em.leftButtonDown);
+    [em pollAtTime:6.6];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 1);                  // once only
+    [em processSamples:@[S(@"g", MLTouchPhaseMoved, 330, 300, 6.7)]];
+    CHECK(countKind(log, MLTouchEmuKindMoveRelative) == 1);
+    [em processSamples:@[S(@"g", MLTouchPhaseEnded, 330, 300, 6.8)]];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 2 && !em.leftButtonDown);
+    CHECK(!emuAt(log, log.count - 1).pressed);
+
+    // A finger that moved is never a long press.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"h", MLTouchPhaseBegan, 300, 300, 7.0)]];
+    [em processSamples:@[S(@"h", MLTouchPhaseMoved, 340, 300, 7.1)]];
+    [em pollAtTime:8.0];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 0);
+    [em processSamples:@[S(@"h", MLTouchPhaseEnded, 340, 300, 8.1)]];
+
+    // Cancelling the touch while the button is held lets go of it.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"i", MLTouchPhaseBegan, 300, 300, 9.0)]];
+    [em pollAtTime:9.6];
+    CHECK(em.leftButtonDown);
+    [em cancelAll];
+    CHECK(!em.leftButtonDown && !emuAt(log, log.count - 1).pressed);
+}
+
+static void testDirectEmulator(void) {
+    NSMutableArray *log = [NSMutableArray array];
+    MLTouchPointerEmulator *em = makeEmu(log, MLTouchInputModeDirect);
+
+    // Down: the pointer jumps under the finger (centre of the picture = 0.5, 0.5) and presses.
+    [em processSamples:@[S(@"a", MLTouchPhaseBegan, 800, 500, 0.0)]];
+    CHECK(log.count == 2);
+    CHECK(emuAt(log, 0).kind == MLTouchEmuKindMoveAbsolute);
+    CHECK_NEAR(emuAt(log, 0).a, 0.5, 1e-6); CHECK_NEAR(emuAt(log, 0).b, 0.5, 1e-6);
+    CHECK(emuAt(log, 1).kind == MLTouchEmuKindButton && emuAt(log, 1).pressed && em.leftButtonDown);
+    // Move follows the finger in absolute terms; up releases at the last position.
+    [em processSamples:@[S(@"a", MLTouchPhaseMoved, 1200, 725, 0.1)]];
+    CHECK(emuAt(log, log.count - 1).kind == MLTouchEmuKindMoveAbsolute);
+    CHECK_NEAR(emuAt(log, log.count - 1).a, 0.75, 1e-6);
+    [em processSamples:@[S(@"a", MLTouchPhaseEnded, 1200, 725, 0.2)]];
+    CHECK(emuAt(log, log.count - 1).kind == MLTouchEmuKindButton && !emuAt(log, log.count - 1).pressed);
+    CHECK(!em.leftButtonDown);
+
+    // A second finger on a still first finger lets go of the left button and makes a scroll / right click session.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"b1", MLTouchPhaseBegan, 800, 500, 1.0)]];
+    [em processSamples:@[S(@"b2", MLTouchPhaseBegan, 900, 500, 1.02)]];
+    CHECK(!em.leftButtonDown);
+    CHECK(countKind(log, MLTouchEmuKindButton) == 2);     // press, release
+    [log removeAllObjects];
+    [em processSamples:@[S(@"b1", MLTouchPhaseEnded, 800, 500, 1.1), S(@"b2", MLTouchPhaseEnded, 900, 500, 1.11)]];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 2);     // the right click
+    CHECK(emuAt(log, log.count - 2).button == MLTouchEmuButtonRight && emuAt(log, log.count - 2).pressed);
+
+    // A second finger on a dragging first finger does not interrupt the drag.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"c1", MLTouchPhaseBegan, 800, 500, 2.0)]];
+    [em processSamples:@[S(@"c1", MLTouchPhaseMoved, 900, 500, 2.1)]];
+    [em processSamples:@[S(@"c2", MLTouchPhaseBegan, 400, 500, 2.2)]];
+    CHECK(em.leftButtonDown);
+    [em processSamples:@[S(@"c2", MLTouchPhaseEnded, 400, 500, 2.3)]];
+    [em processSamples:@[S(@"c1", MLTouchPhaseEnded, 900, 500, 2.4)]];
+    CHECK(!em.leftButtonDown);
+
+    // Two-finger drag scrolls.
+    [log removeAllObjects];
+    [em processSamples:@[S(@"d1", MLTouchPhaseBegan, 400, 500, 3.0)]];
+    [em processSamples:@[S(@"d2", MLTouchPhaseBegan, 480, 500, 3.01)]];
+    [log removeAllObjects];
+    for (int i = 1; i <= 4; i++) {
+        [em processSamples:@[S(@"d1", MLTouchPhaseMoved, 400, 500 - i * 12, 3.0 + i * 0.02),
+                             S(@"d2", MLTouchPhaseMoved, 480, 500 - i * 12, 3.0 + i * 0.02)]];
+    }
+    CHECK(countKind(log, MLTouchEmuKindScroll) >= 2);
+    for (NSUInteger i = 0; i < log.count; i++) {
+        if (emuAt(log, i).kind == MLTouchEmuKindScroll) CHECK(emuAt(log, i).a < 0);
+    }
+    [em processSamples:@[S(@"d1", MLTouchPhaseEnded, 400, 452, 3.2), S(@"d2", MLTouchPhaseEnded, 480, 452, 3.2)]];
+    CHECK(countKind(log, MLTouchEmuKindButton) == 0);
+}
+
+#pragma mark - Five-finger hold
+
+static MLTouchFiveFingerHold *makeHold(NSMutableArray<NSNumber *> *states, int *triggers) {
+    MLTouchFiveFingerHold *h = [[MLTouchFiveFingerHold alloc] init];
+    h.onStateChange = ^(MLTouchHoldState st) { [states addObject:@(st)]; };
+    h.onTrigger = ^{ (*triggers)++; };
+    return h;
+}
+
+static NSArray *landFingers(int n, NSTimeInterval t0, NSTimeInterval step) {
+    NSMutableArray *a = [NSMutableArray array];
+    for (int i = 0; i < n; i++) [a addObject:S([NSString stringWithFormat:@"h%d", i], MLTouchPhaseBegan, 100 + i * 120, 300 + i * 10, t0 + i * step)];
+    return a;
+}
+
+static void testFiveFingerHold(void) {
+    NSMutableArray *states = [NSMutableArray array];
+    int triggers = 0;
+    MLTouchFiveFingerHold *h = makeHold(states, &triggers);
+    CHECK(h.requiredTouches == 5 && h.holdDuration == 0.8 && h.maxMovement == 20.0);
+
+    // Five fingers land together and stay: nothing before 0.8 s, one trigger at 0.8 s, none after.
+    [h processSamples:landFingers(5, 10.0, 0.0)];
+    CHECK(h.state == MLTouchHoldStateArming && h.downCount == 5);
+    CHECK_NEAR([h progressAtTime:10.0], 0.0, 1e-9);
+    CHECK_NEAR([h progressAtTime:10.4], 0.5, 1e-9);
+    [h pollAtTime:10.79];
+    CHECK(triggers == 0 && h.state == MLTouchHoldStateArming);
+    [h pollAtTime:10.8];
+    CHECK(triggers == 1 && h.state == MLTouchHoldStateFired);
+    CHECK_NEAR([h progressAtTime:10.9], 0.0, 1e-9);
+    [h pollAtTime:12.0];
+    CHECK(triggers == 1);
+    // Lifting after the trigger does nothing more; with every finger up it is armed again.
+    NSMutableArray *ups = [NSMutableArray array];
+    for (int i = 0; i < 5; i++) [ups addObject:S([NSString stringWithFormat:@"h%d", i], MLTouchPhaseEnded, 100 + i * 120, 300 + i * 10, 13.0)];
+    [h processSamples:ups];
+    CHECK(h.state == MLTouchHoldStateIdle && h.downCount == 0 && triggers == 1);
+    NSArray *expected = @[@(MLTouchHoldStateArming), @(MLTouchHoldStateFired), @(MLTouchHoldStateIdle)];
+    CHECK([states isEqualToArray:expected]);
+
+    // It can be done again.
+    [h processSamples:landFingers(5, 20.0, 0.0)];
+    [h pollAtTime:20.85];
+    CHECK(triggers == 2);
+    [h reset];
+
+    // Lifted early: no trigger, and the same fingers coming back do not re-arm until all were up.
+    [states removeAllObjects]; triggers = 0;
+    h = makeHold(states, &triggers);
+    [h processSamples:landFingers(5, 30.0, 0.0)];
+    [h processSamples:@[S(@"h2", MLTouchPhaseEnded, 340, 320, 30.5)]];
+    CHECK(h.state == MLTouchHoldStateFailed);
+    [h pollAtTime:31.5];
+    CHECK(triggers == 0);
+    [h processSamples:@[S(@"h2b", MLTouchPhaseBegan, 340, 320, 31.6)]];   // five down again, but not from empty
+    [h pollAtTime:33.0];
+    CHECK(triggers == 0 && h.state == MLTouchHoldStateFailed);
+    NSMutableArray *rest = [NSMutableArray array];
+    for (NSString *n in @[@"h0", @"h1", @"h2b", @"h3", @"h4"]) [rest addObject:S(n, MLTouchPhaseEnded, 100, 300, 34.0)];
+    [h processSamples:rest];
+    CHECK(h.state == MLTouchHoldStateIdle);
+
+    // Movement: 19 points is a hold, 21 points is not (measured from where each touch began).
+    h = makeHold(states, &triggers); triggers = 0;
+    [h processSamples:landFingers(5, 40.0, 0.0)];
+    [h processSamples:@[S(@"h0", MLTouchPhaseMoved, 100 + 19, 300, 40.2)]];
+    [h pollAtTime:40.8];
+    CHECK(triggers == 1);
+    h = makeHold(states, &triggers); triggers = 0;
+    [h processSamples:landFingers(5, 50.0, 0.0)];
+    [h processSamples:@[S(@"h4", MLTouchPhaseMoved, 100 + 4 * 120 + 12, 350 + 17, 50.2)]];   // sqrt(12^2+17^2) = 20.8
+    CHECK(h.state == MLTouchHoldStateFailed);
+    [h pollAtTime:51.0];
+    CHECK(triggers == 0);
+    // small jitter in many events still counts from the start, not step by step
+    h = makeHold(states, &triggers); triggers = 0;
+    [h processSamples:landFingers(5, 60.0, 0.0)];
+    for (int i = 1; i <= 6; i++) [h processSamples:@[S(@"h1", MLTouchPhaseMoved, 220 + i * 4, 310, 60.0 + i * 0.05)]];   // 24 points in total
+    CHECK(h.state == MLTouchHoldStateFailed);
+
+    // Four fingers never arm; a sixth makes it fail; five staggered landings count the hold from the fifth.
+    h = makeHold(states, &triggers); triggers = 0;
+    [h processSamples:landFingers(4, 70.0, 0.0)];
+    [h pollAtTime:75.0];
+    CHECK(triggers == 0 && h.state == MLTouchHoldStateIdle);
+    [h reset];
+    h = makeHold(states, &triggers); triggers = 0;
+    [h processSamples:landFingers(5, 80.0, 0.0)];
+    [h processSamples:@[S(@"h5", MLTouchPhaseBegan, 800, 300, 80.3)]];
+    CHECK(h.state == MLTouchHoldStateFailed);
+    [h pollAtTime:82.0];
+    CHECK(triggers == 0);
+    h = makeHold(states, &triggers); triggers = 0;
+    [h processSamples:landFingers(5, 90.0, 0.5)];           // landings at 90.0, 90.5, ... 92.0
+    [h pollAtTime:92.7];
+    CHECK(triggers == 0);
+    [h pollAtTime:92.8];
+    CHECK(triggers == 1);
+
+    // Six touches landing one after another never trigger on the way up (the sixth arrives before the fifth's hold ends).
+    h = makeHold(states, &triggers); triggers = 0;
+    [h processSamples:landFingers(6, 100.0, 0.1)];
+    [h pollAtTime:105.0];
+    CHECK(triggers == 0);
+
+    // The centroid is the middle of the touches that are down.
+    h = makeHold(states, &triggers);
+    [h processSamples:landFingers(5, 110.0, 0.0)];
+    CGPoint c = h.centroid;
+    CHECK_NEAR(c.x, 100 + 2 * 120, 1e-6); CHECK_NEAR(c.y, 300 + 2 * 10, 1e-6);
+}
+
+static void testHoldCancelsHostTouches(void) {
+    // The runtime's wiring: the five touches are being sent from the first contact; when the hold fires the host gets
+    // CANCEL_ALL, and nothing of those five is sent afterwards, while a touch that begins later is.
+    NSMutableArray *log = [NSMutableArray array];
+    MLTouchForwarder *f = makeForwarder(log, CGSizeMake(1600, 1000), CGSizeMake(1920, 1080));
+    MLTouchFiveFingerHold *h = [[MLTouchFiveFingerHold alloc] init];
+    h.onTrigger = ^{ [f cancelAllAndIgnoreCurrentTouches]; };
+
+    NSArray *down = landFingers(5, 10.0, 0.0);
+    [h processSamples:down]; [f processSamples:down];
+    CHECK(log.count == 5);                                      // for 0.8 s the host does see five touches
+    for (NSUInteger i = 0; i < 5; i++) CHECK(wireAt(log, i).event == LI_TOUCH_EVENT_DOWN);
+    [h pollAtTime:10.8];
+    CHECK(log.count == 6 && wireAt(log, 5).event == LI_TOUCH_EVENT_CANCEL_ALL);
+    CHECK(f.activeCount == 0);
+
+    // The fingers are still down and moving: nothing reaches the host, and they do not "begin" again.
+    NSArray *move = @[S(@"h0", MLTouchPhaseMoved, 105, 300, 11.0), S(@"h3", MLTouchPhaseMoved, 470, 335, 11.0)];
+    [h processSamples:move]; [f processSamples:move];
+    CHECK(log.count == 6);
+    // A finger that lands after the gesture works as usual.
+    NSArray *late = @[S(@"late", MLTouchPhaseBegan, 800, 500, 11.5)];
+    [h processSamples:late]; [f processSamples:late];
+    CHECK(log.count == 7 && wireAt(log, 6).event == LI_TOUCH_EVENT_DOWN);
+    // Lifting the five sends nothing; the late finger's end does.
+    NSMutableArray *ups = [NSMutableArray array];
+    for (int i = 0; i < 5; i++) [ups addObject:S([NSString stringWithFormat:@"h%d", i], MLTouchPhaseEnded, 100, 300, 12.0)];
+    [h processSamples:ups]; [f processSamples:ups];
+    CHECK(log.count == 7);
+    [f processSamples:@[S(@"late", MLTouchPhaseEnded, 800, 500, 12.5)]];
+    CHECK(log.count == 8 && wireAt(log, 7).event == LI_TOUCH_EVENT_UP);
+    // A new set of five afterwards is a fresh touch sequence for the host and a new hold.
+    NSArray *again = landFingers(5, 20.0, 0.0);
+    [h processSamples:again]; [f processSamples:again];
+    CHECK(log.count == 13 && wireAt(log, 8).event == LI_TOUCH_EVENT_DOWN);
+
+    // No hold: fingers that lift early are forwarded as always.
+    log = [NSMutableArray array];
+    f = makeForwarder(log, CGSizeMake(1600, 1000), CGSizeMake(1920, 1080));
+    h = [[MLTouchFiveFingerHold alloc] init];
+    h.onTrigger = ^{ [f cancelAllAndIgnoreCurrentTouches]; };
+    down = landFingers(5, 30.0, 0.0);
+    [h processSamples:down]; [f processSamples:down];
+    NSArray *up1 = @[S(@"h0", MLTouchPhaseEnded, 100, 300, 30.3)];
+    [h processSamples:up1]; [f processSamples:up1];
+    [h pollAtTime:31.5];
+    CHECK(log.count == 6 && wireAt(log, 5).event == LI_TOUCH_EVENT_UP);
+}
+
+#pragma mark - Gate
+
+static void testMouseGate(void) {
+    MLTouchMouseGate *g = [[MLTouchMouseGate alloc] init];
+    NSTimeInterval age = 0;
+    // Disabled: everything passes.
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:1 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictPass);
+
+    g.enabled = YES;
+    // A real mouse with no touch around passes.
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:1 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(10, 10) time:1.1 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    // The runtime believes the subtype always: a touch-made click from a touch the recognizer never saw.
+    g.subtypeAlwaysDrops = YES;
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:0.5 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictDropSubtype);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(10, 10) time:0.6 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictDropSequence);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:0.7 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(10, 10) time:0.8 touchSubtype:NO ageSinceTouch:&age];
+    g.subtypeAlwaysDrops = NO;
+    // A subtype that says touch, on a Mac where no touch has happened (trackpad, mouse): passes.
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:1.5 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(10, 10) time:1.6 touchSubtype:YES ageSinceTouch:&age];
+    // With a touch in play, an event that says it came from touch is dropped, with its up.
+    [g noteTouchPoint:CGPointMake(900, 900) active:NO time:1.9];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:2 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictDropSubtype);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseMove button:0 point:CGPointMake(400, 10) time:2.05 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictDropSequence);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(400, 10) time:2.1 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictDropSequence);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:5 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(10, 10) time:5.1 touchSubtype:NO ageSinceTouch:&age];
+
+    // While a finger is down every mouse event is the emulation's.
+    [g noteTouchPoint:CGPointMake(500, 500) active:YES time:10.0];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(500, 500) time:10.01 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictDropCorrelated);
+    CHECK(age >= 0 && age < 0.05);
+    [g noteAllTouchesUpAtTime:10.2];
+    // The up of that click arrives after the finger lifted: still dropped, so the host never sees half a click.
+    CHECK([g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(500, 500) time:10.21 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictDropSequence);
+
+    // Soon after the lift, near the finger: dropped. Far away, or late: passes (a real mouse).
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(510, 505) time:10.3 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictDropCorrelated);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(510, 505) time:10.31 touchSubtype:NO ageSinceTouch:&age];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(900, 505) time:10.3 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(900, 505) time:10.31 touchSubtype:NO ageSinceTouch:&age];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(500, 500) time:11.0 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    CHECK(age > 0.5 && age < 1.0);
+    CHECK(g.passedNearTouchCount >= 1);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(500, 500) time:11.1 touchSubtype:NO ageSinceTouch:&age];
+
+    // A touch note nothing closed does not hold the mouse forever.
+    [g reset];
+    [g noteTouchPoint:CGPointMake(500, 500) active:YES time:30.0];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(900, 900) time:30.5 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictDropCorrelated);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(900, 900) time:30.6 touchSubtype:NO ageSinceTouch:&age];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(900, 900) time:33.0 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(900, 900) time:33.1 touchSubtype:NO ageSinceTouch:&age];
+
+    // Right button tracked on its own.
+    [g reset];
+    [g noteTouchPoint:CGPointMake(1, 1) active:NO time:19.9];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:1 point:CGPointMake(1, 1) time:20 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictDropSubtype);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(900, 900) time:20.1 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseUp button:1 point:CGPointMake(1, 1) time:20.2 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictDropSequence);
+    CHECK(g.droppedCount > 0);
+}
+
+#pragma mark - Click routing
+
+// A recorded session on a MacBook trackpad, replayed: every press had subtype-touch=1, no touch screen, no touch ever in
+// play (age-since-touch=-1, down=0). All of them were dropped because the runtime believed the subtype always.
+static void testTrackpadClicksReachHost(void) {
+    CHECK(!MLTouchSubtypeBelievedWithoutTouch(NO, YES));   // a MacBook without a touch screen, window key
+    CHECK(!MLTouchSubtypeBelievedWithoutTouch(NO, NO));    // ... even when the window is not key
+    CHECK(!MLTouchSubtypeBelievedWithoutTouch(YES, YES));  // touch screen, window key: the recognizer sees every touch
+    CHECK(MLTouchSubtypeBelievedWithoutTouch(YES, NO));    // touch screen, window not key: the activating touch is unseen
+
+    MLTouchMouseGate *g = [[MLTouchMouseGate alloc] init];
+    g.enabled = YES;
+    g.subtypeAlwaysDrops = MLTouchSubtypeBelievedWithoutTouch(NO, YES);
+    NSTimeInterval age = 0, t = 100.0;
+    for (int i = 0; i < 50; i++) {
+        NSInteger button = i % 5 == 4 ? 1 : 0;   // mostly left clicks, a two-finger right click now and then
+        CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:button point:CGPointMake(500, 400) time:t touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictPass);
+        CHECK([g verdictForMouseKind:MLTouchGateMouseMove button:button point:CGPointMake(510, 400) time:t + 0.02 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictPass);
+        CHECK([g verdictForMouseKind:MLTouchGateMouseUp button:button point:CGPointMake(510, 400) time:t + 0.05 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictPass);
+        t += 0.4;
+    }
+    CHECK(g.passedClickCount == 50 && g.droppedCount == 0);
+
+    // A real screen touch, then a trackpad press 3 s later: the press is the user's.
+    [g noteTouchPoint:CGPointMake(300, 300) active:YES time:200.0];
+    [g noteAllTouchesUpAtTime:200.2];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(700, 500) time:203.2 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictPass);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(700, 500) time:203.25 touchSubtype:YES ageSinceTouch:&age];
+    // The click the system made from that touch (0.1 s after it ended) is still dropped, and counted by kind.
+    [g reset];
+    [g noteTouchPoint:CGPointMake(300, 300) active:YES time:300.0];
+    [g noteAllTouchesUpAtTime:300.2];
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(300, 300) time:300.3 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictDropSubtype);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(300, 300) time:300.35 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictDropSequence);
+    CHECK(g.droppedSubtypeCount == 1 && g.droppedSequenceCount == 1);
+
+    // Touch Mac, stream window not key: the activating touch's click is the system's, the recognizer never saw it.
+    [g reset];
+    g.subtypeAlwaysDrops = MLTouchSubtypeBelievedWithoutTouch(YES, NO);
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:400 touchSubtype:YES ageSinceTouch:&age] == MLTouchGateVerdictDropSubtype);
+    [g verdictForMouseKind:MLTouchGateMouseUp button:0 point:CGPointMake(10, 10) time:400.1 touchSubtype:YES ageSinceTouch:&age];
+    // A mouse event without the subtype is a real mouse whatever the flag says.
+    CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(10, 10) time:401 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
+}
+
+int main(void) {
+    @autoreleasepool {
+        testModeSelection();
+        testVideoRectAndNormalize();
+        testPointerTable();
+        testForwarder();
+        testTrackpadEmulator();
+        testDirectEmulator();
+        testMouseGate();
+        testTrackpadClicksReachHost();
+        testFiveFingerHold();
+        testHoldCancelsHostTouches();
+    }
+    printf("%d checks, %d failed\n", g_checks, g_failures);
+    return g_failures == 0 ? 0 : 1;
+}
