@@ -268,6 +268,29 @@ NSString *const deviceName = @"roth";
     return NO;
 }
 
++ (unsigned int)usableInterfaceIndexForName:(NSString *)name {
+    if (name.length == 0 || name.length >= IFNAMSIZ) {
+        return 0;
+    }
+    unsigned int index = if_nametoindex(name.UTF8String);
+    if (index == 0) {
+        return 0;
+    }
+    BOOL usable = NO;
+    struct ifaddrs *list = NULL;
+    if (getifaddrs(&list) == 0) {
+        for (struct ifaddrs *entry = list; entry != NULL; entry = entry->ifa_next) {
+            if (strcmp(entry->ifa_name, name.UTF8String) == 0 &&
+                (entry->ifa_flags & IFF_UP) != 0 && (entry->ifa_flags & IFF_RUNNING) != 0) {
+                usable = YES;
+                break;
+            }
+        }
+        freeifaddrs(list);
+    }
+    return usable ? index : 0;
+}
+
 + (BOOL)isTunnelInterfaceName:(NSString *)ifname {
     return interfaceNameLooksLikeTunnel(ifname);
 }
