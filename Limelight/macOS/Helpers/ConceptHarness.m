@@ -604,3 +604,383 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
 
 #pragma mark - Scripted scene
 
++ (void)startScripted {
+    if (![self enabled]) return;
+    [NSApp activateIgnoringOtherApps:YES];
+    if (getenv("MLC_TLS_PROBE")) {
+        // The request that used to crash: an HTTPS request to a TLS endpoint through an HttpManager with no pinned certificate.
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            HttpManager *m = [[HttpManager alloc] initWithHost:@"127.0.0.1" uniqueId:@"0123456789ABCDEF" serverCert:nil];
+            HttpResponse *r = [[HttpResponse alloc] init];
+            [m executeRequestSynchronously:[HttpRequest requestForResponse:r withUrlRequest:[m newAppListRequest]]];
+            fprintf(stderr, "ConceptHarness: tls probe with nil cert finished, status=%d message=%s\n", (int)r.statusCode, r.statusMessage.UTF8String ?: "");
+        });
+    }
+    if (getenv("MLC_ENDPOINTS")) {
+        // MLC_ENDPOINTS="uuid|address|kind;..." : addresses added the way 添加连接方式 does (kind: host, forward, relay, overlay or empty)
+        for (NSString *entry in [[NSString stringWithUTF8String:getenv("MLC_ENDPOINTS")] componentsSeparatedByString:@";"]) {
+            NSArray *p = [entry componentsSeparatedByString:@"|"];
+            if (p.count < 2) continue;
+            [ConnectionEndpointStore addManualEndpoint:p[1] forHost:p[0]];
+            if (p.count > 2 && [p[2] length] > 0) [ConnectionEndpointStore setDeclaredPath:p[2] forEndpoint:p[1] forHost:p[0]];
+        }
+    }
+    if (getenv("MLC_PAIRWATCH")) {
+        // MLC_PAIRWATCH=<host uuid>: logs every change of the persisted pairState of that host (what the next launch would load)
+        NSString *watched = [NSString stringWithUTF8String:getenv("MLC_PAIRWATCH")];
+        __block int last = -99;
+        NSDate *t0 = [NSDate date];
+        [NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *timer) {
+            for (TemporaryHost *h in [[[DataManager alloc] init] getHosts]) {
+                if (![h.uuid isEqualToString:watched]) continue;
+                if ((int)h.pairState != last) {
+                    fprintf(stderr, "PAIRWATCH %s pairState %d -> %d at +%.1fs\n", watched.UTF8String, last, (int)h.pairState, -[t0 timeIntervalSinceNow]);
+                    last = (int)h.pairState;
+                }
+            }
+        }];
+    }
+    if (getenv("MLC_APPLIST_EVERY")) {
+        // MLC_APPLIST_EVERY=<seconds>: asks the apps page to read the host's app list again, the way a refresh does
+        NSTimeInterval every = atof(getenv("MLC_APPLIST_EVERY"));
+        [NSTimer scheduledTimerWithTimeInterval:every repeats:YES block:^(NSTimer *timer) {
+            __block NSViewController *found = nil;
+            __block void (^walk)(NSViewController *) = ^(NSViewController *vc) {
+                if ([NSStringFromClass([vc class]) isEqualToString:@"AppsViewController"]) found = vc;
+                for (NSViewController *child in vc.childViewControllers) walk(child);
+            };
+            walk([self mainWindow].contentViewController);
+            if (found == nil) return;
+            TemporaryHost *h = [found valueForKey:@"host"];
+            if (h == nil) return;
+            fprintf(stderr, "APPLIST refresh %s\n", h.name.UTF8String);
+            [found performSelector:NSSelectorFromString(@"discoverAppsForHost:") withObject:h];
+        }];
+    }
+    if (getenv("MLC_SOAK")) {
+        // no scene and no capture: the real app keeps running while the hosts are switched
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self runSoak]; });
+        return;
+    }
+    if (getenv("MLC_FACTSSTRESS")) {
+        // regression test of the DeckFactsStore lock deadlock: discovery-style ingests against main-thread writes, watchdog on the main queue
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (@available(macOS 14.0, *)) {
+                [MLDeckSelfTest stressWithSpec:[NSString stringWithUTF8String:getenv("MLC_FACTSSTRESS")]];
+            }
+        });
+    }
+    if (getenv("MLC_SELFTEST")) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (@available(macOS 14.0, *)) {
+                [MLDeckSelfTest runWithXmlPath:[NSString stringWithUTF8String:getenv("MLC_SELFTEST")]];
+            }
+        });
+    }
+    if (getenv("MLC_SELFTEST_CAP")) {
+        // host capability 2 / capability 1 fixtures through the real parsers: "cap2.xml,cap1.xml,cap2-applist.xml"
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (@available(macOS 14.0, *)) {
+                [MLDeckSelfTest runCapabilityWithSpec:[NSString stringWithUTF8String:getenv("MLC_SELFTEST_CAP")]];
+            }
+        });
+    }
+    if (getenv("MLC_ADDADDR")) {
+        // The add-by-address flow after OK in the sheet, then (MLC_PAIRUUID) the 配对 button of that host.
+        NSString *address = [NSString stringWithUTF8String:getenv("MLC_ADDADDR")];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"addAddress", @"address": address}];
+        });
+    }
+    if (getenv("MLC_ADDR_DEFAULT")) {
+        // "uuid|address": pin that address as the host's default
+        NSArray *parts = [[NSString stringWithUTF8String:getenv("MLC_ADDR_DEFAULT")] componentsSeparatedByString:@"|"];
+        if (parts.count == 2) [SettingsClass setConnectionMethod:parts[1] for:parts[0]];
+    }
+    if (getenv("MLC_POPOVER_STRESS")) {
+        // open and close the 自定义主页 popover N times; the page's content frame must be identical after every cycle
+        int cycles = atoi(getenv("MLC_POPOVER_STRESS"));
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __block int index = 0, bad = 0;
+            NSString *baseline = [MLDeckLayoutProbe frameString];
+            fprintf(stderr, "POPSTRESS baseline=%s\n", baseline.UTF8String);
+            __block void (^cycle)(void) = nil;
+            cycle = ^{
+                if (index >= cycles) {
+                    fprintf(stderr, "POPSTRESS done cycles=%d mismatches=%d\n", cycles, bad);
+                    return;
+                }
+                [[MLDeckHomeCustomizer shared] show];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    NSString *open = [MLDeckLayoutProbe frameString];
+                    [[MLDeckHomeCustomizer shared] toggle:nil];
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        NSString *closed = [MLDeckLayoutProbe frameString];
+                        BOOL same = [open isEqualToString:baseline] && [closed isEqualToString:baseline];
+                        if (!same) { bad++; fprintf(stderr, "POPSTRESS cycle %d MISMATCH open=%s closed=%s\n", index, open.UTF8String, closed.UTF8String); }
+                        index++;
+                        cycle();
+                    });
+                });
+            };
+            cycle();
+        });
+    }
+    if (getenv("MLC_STREAMRETURN")) {
+        // a stream ending: the main window leaves and comes back; frames of it for 1.5 s from the return
+        NSString *dir = getenv("MLC_FRAMEDIR") ? [NSString stringWithUTF8String:getenv("MLC_FRAMEDIR")] : @"/tmp/apps-concept/out/ret";
+        [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+        MLCWindowListCreateImage create = (MLCWindowListCreateImage)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NSWindow *w = [self mainWindow];
+            fprintf(stderr, "STREAMRETURN before titleVisibility=%ld toolbarVisible=%d\n", (long)w.titleVisibility, w.toolbar.isVisible);
+            [w orderOut:nil];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [w makeKeyAndOrderFront:nil];
+                for (int i = 0; i < 30; i++) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        if (create == NULL) return;
+                        CGImageRef img = create(CGRectNull, kCGWindowListOptionIncludingWindow, (uint32_t)w.windowNumber, kCGWindowImageBoundsIgnoreFraming);
+                        if (img != NULL) {
+                            NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:img];
+                            [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:[dir stringByAppendingPathComponent:[NSString stringWithFormat:@"r-%02d.png", i]] atomically:NO];
+                            CGImageRelease(img);
+                        }
+                    });
+                }
+                fprintf(stderr, "STREAMRETURN after titleVisibility=%ld toolbarVisible=%d\n", (long)w.titleVisibility, w.toolbar.isVisible);
+            });
+        });
+    }
+    if (getenv("MLC_SWEEP")) {
+        // MLC_SWEEP="from,to,step[,pingpong]": the window's width is driven from..to in `step` pt on a 60 Hz timer
+        // (MLC_SWEEPSHOT=dir: instead one step per 120 ms with a capture of the window after each, MLC_SWEEPHOLD ms).
+        int from = 1000, to = 2560, step = 10, pingpong = 0;
+        sscanf(getenv("MLC_SWEEP"), "%d,%d,%d,%d", &from, &to, &step, &pingpong);
+        const char *shotDir = getenv("MLC_SWEEPSHOT");
+        double hold = getenv("MLC_SWEEPHOLD") ? atof(getenv("MLC_SWEEPHOLD")) / 1000.0 : 0.12;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NSWindow *w = [self mainWindow];
+            NSMutableArray<NSNumber *> *widths = [NSMutableArray array];
+            for (int x = from; x <= to; x += step) [widths addObject:@(x)];
+            if (pingpong) for (int x = to - step; x >= from; x -= step) [widths addObject:@(x)];
+            MLCWindowListCreateImage create = (MLCWindowListCreateImage)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+            if (shotDir) [[NSFileManager defaultManager] createDirectoryAtPath:[NSString stringWithUTF8String:shotDir] withIntermediateDirectories:YES attributes:nil error:nil];
+            __block NSUInteger index = 0;
+            __block CFTimeInterval last = CACurrentMediaTime();
+            __block double worst = 0, sum = 0;
+            NSMutableArray<NSNumber *> *dts = [NSMutableArray array];
+            NSTimeInterval interval = shotDir ? hold : 1.0 / 60.0;
+            [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer) {
+                if (index >= widths.count) {
+                    [timer invalidate];
+                    if (!shotDir) {
+                        NSArray *sorted = [dts sortedArrayUsingSelector:@selector(compare:)];
+                        double p95 = sorted.count ? [sorted[(NSUInteger)(sorted.count * 0.95)] doubleValue] : 0;
+                        fprintf(stderr, "SWEEPDONE frames=%lu mean_ms=%.2f p95_ms=%.2f max_ms=%.2f over_20ms=%d\n", (unsigned long)dts.count,
+                                dts.count ? sum / dts.count * 1000 : 0, p95 * 1000, worst * 1000, (int)[[dts filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self > 0.020"]] count]);
+                    } else fprintf(stderr, "SWEEPDONE shots=%lu\n", (unsigned long)widths.count);
+                    return;
+                }
+                CFTimeInterval now = CACurrentMediaTime();
+                if (index > 0 && !shotDir) { double dt = now - last; [dts addObject:@(dt)]; sum += dt; if (dt > worst) worst = dt; }
+                last = now;
+                CGFloat width = widths[index].doubleValue;
+                NSRect frame = w.frame;
+                NSRect content = [w contentRectForFrameRect:frame];
+                content.size.width = width;
+                CFTimeInterval callStart = CACurrentMediaTime();
+                [w setFrame:[w frameRectForContentRect:content] display:YES];
+                CFTimeInterval callCost = CACurrentMediaTime() - callStart;
+                static double callSum = 0, callMax = 0; static int callN = 0;
+                callSum += callCost; callN++; if (callCost > callMax) callMax = callCost;
+                if (callN % 100 == 0) fprintf(stderr, "SWEEPCALL n=%d mean_ms=%.2f max_ms=%.2f\n", callN, callSum / callN * 1000, callMax * 1000);
+                if (shotDir && create) {
+                    CGImageRef img = create(CGRectNull, kCGWindowListOptionIncludingWindow, (uint32_t)w.windowNumber, kCGWindowImageBoundsIgnoreFraming);
+                    if (img) {
+                        NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:img];
+                        [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:[NSString stringWithFormat:@"%s/s-%04d.png", shotDir, (int)width] atomically:NO];
+                        CGImageRelease(img);
+                    }
+                }
+                index++;
+            }];
+        });
+    }
+    if (getenv("MLC_EDITSHEET")) {
+        // MLC_EDITSHEET=info|menu|right : opens 编辑连接 the way the three entries do (the button in 主机信息, ⋯ > 编辑连接, the host's
+        // right-click menu) and says in the log whether a sheet came up. With MLC_SHEETONLY the shot is the sheet itself.
+        NSString *how = [NSString stringWithUTF8String:getenv("MLC_EDITSHEET")];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __block NSViewController *apps = nil, *hosts = nil;
+            __block void (^walk)(NSViewController *) = ^(NSViewController *vc) {
+                NSString *cls = NSStringFromClass([vc class]);
+                if ([cls isEqualToString:@"AppsViewController"]) apps = vc;
+                if ([cls isEqualToString:@"HostsViewController"]) hosts = vc;
+                for (NSViewController *child in vc.childViewControllers) walk(child);
+            };
+            walk([self mainWindow].contentViewController);
+            TemporaryHost *host = apps ? [apps valueForKey:@"host"] : nil;
+            fprintf(stderr, "EDITSHEET how=%s apps=%d hosts=%d host=%s\n", how.UTF8String, apps != nil, hosts != nil, host.name.UTF8String ?: "(nil)");
+            if ([how isEqualToString:@"info"] && apps) {
+                [apps performSelector:NSSelectorFromString(@"deckAddConnection")];
+            } else if ([how isEqualToString:@"menu"] && apps) {
+                NSMenu *menu = [apps performSelector:NSSelectorFromString(@"deckHostMenuForApp:") withObject:nil];
+                for (NSMenuItem *item in menu.itemArray) {
+                    if ([item.representedObject isEqual:@"editor"]) {
+                        [apps performSelector:NSSelectorFromString(@"deckHostMenuAction:") withObject:item];
+                    }
+                }
+            } else if ([how isEqualToString:@"right"] && hosts && host) {
+                NSMenuItem *item = [[NSMenuItem alloc] init];
+                item.representedObject = host;
+                [hosts performSelector:NSSelectorFromString(@"showConnectionEditor:") withObject:item];
+            }
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                fprintf(stderr, "EDITSHEET sheet=%d\n", [self mainWindow].attachedSheet != nil);
+            });
+        });
+    }
+    if (getenv("MLC_DETAILS")) {
+        // The button that shows the Foundation Sunshine version (DeckFsLabel) posts exactly this: the 连接详情 sheet of the host.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __block NSViewController *apps = nil;
+            __block void (^walk)(NSViewController *) = ^(NSViewController *vc) {
+                if ([NSStringFromClass([vc class]) isEqualToString:@"AppsViewController"]) apps = vc;
+                for (NSViewController *child in vc.childViewControllers) walk(child);
+            };
+            walk([self mainWindow].contentViewController);
+            TemporaryHost *host = apps ? [apps valueForKey:@"host"] : nil;
+            fprintf(stderr, "DETAILS apps=%d host=%s\n", apps != nil, host.name.UTF8String ?: "(nil)");
+            [[self mainWindow] makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];   // a harness app launched in the background has no key window
+            if (host) [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
+                userInfo:@{@"command": @"menu", @"host": host, @"action": @"details"}];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                fprintf(stderr, "DETAILS sheet=%d\n", [self mainWindow].attachedSheet != nil);
+            });
+        });
+    }
+    if (getenv("MLC_QUIET_AT")) {
+        // holds the "a stream is open" state (MLNetworkQuiet) from MLC_QUIET_AT seconds for MLC_QUIET_FOR seconds (default 8)
+        double at = atof(getenv("MLC_QUIET_AT")), length = getenv("MLC_QUIET_FOR") ? atof(getenv("MLC_QUIET_FOR")) : 8.0;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(at * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            Log(LOG_I, @"[harness] simulated stream begins");
+            [MLNetworkQuiet beginStream:@"harness-stream"];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(length * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                Log(LOG_I, @"[harness] simulated stream ends");
+                [MLNetworkQuiet end:@"harness-stream"];
+            });
+        });
+    }
+    if (getenv("MLC_TRYOPEN")) {
+        // asks the apps page to start the host's first app, the way a click, a key or a menu item would (openApp:)
+        // MLC_TRYOPEN=<n> asks n times, MLC_TRYOPEN_EVERY seconds apart (default 1.4), the first at MLC_TRYOPEN_AT (default 4)
+        int tries = MAX(1, atoi(getenv("MLC_TRYOPEN")));
+        double every = getenv("MLC_TRYOPEN_EVERY") ? atof(getenv("MLC_TRYOPEN_EVERY")) : 1.4;
+        double first = getenv("MLC_TRYOPEN_AT") ? atof(getenv("MLC_TRYOPEN_AT")) : 4.0;
+        for (int attempt = 0; attempt < tries; attempt++)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((first + attempt * every) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __block NSViewController *found = nil;
+            __block void (^walk)(NSViewController *) = ^(NSViewController *vc) {
+                if ([NSStringFromClass([vc class]) isEqualToString:@"AppsViewController"]) found = vc;
+                for (NSViewController *child in vc.childViewControllers) walk(child);
+            };
+            walk([self mainWindow].contentViewController);
+            if (found == nil) { fprintf(stderr, "TRYOPEN no apps page\n"); return; }
+            TemporaryHost *h = [found valueForKey:@"host"];
+            TemporaryApp *app = [[h.appList allObjects] firstObject];
+            fprintf(stderr, "TRYOPEN host=%s state=%d pair=%d app=%s\n", h.displayName.UTF8String, (int)h.state, (int)h.pairState, app.name.UTF8String);
+            [found performSelector:NSSelectorFromString(@"openApp:") withObject:app];
+            fprintf(stderr, "TRYOPEN %d returned\n", attempt);
+        });
+    }
+    if (getenv("MLC_ADDSHEET")) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            // exactly what the toolbar ＋ does: the action goes to the first responder chain
+            NSToolbarItem *plus = nil;
+            for (NSToolbarItem *item in [self mainWindow].toolbar.items) {
+                if (item.action == NSSelectorFromString(@"addHostButtonClicked:")) plus = item;
+            }
+            NSButton *button = [plus.view isKindOfClass:[NSButton class]] ? (NSButton *)plus.view : nil;
+            fprintf(stderr, "ConceptHarness: toolbar add item found=%d enabled=%d target=%s\n", plus != nil, plus.enabled,
+                    NSStringFromClass([button.target class]).UTF8String ?: "(nil)");
+            [button performClick:nil];
+        });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NSWindow *w = [self mainWindow];
+            fprintf(stderr, "ConceptHarness: add-host sheet shown=%d\n", w.attachedSheet != nil);
+            if (w.attachedSheet != nil && !getenv("MLC_SHEETONLY")) [w endSheet:w.attachedSheet];
+        });
+    }
+    if (getenv("MLC_PAIRUUID")) {
+        NSString *pairUUID = [NSString stringWithUTF8String:getenv("MLC_PAIRUUID")];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(7.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            for (TemporaryHost *h in [[[DataManager alloc] init] getHosts]) {
+                if ([h.uuid isEqualToString:pairUUID]) {
+                    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"pair", @"host": h}];
+                }
+            }
+        });
+    }
+    double settle = getenv("MLC_SETTLE") ? atof(getenv("MLC_SETTLE")) : 2.5;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self prepareWindow];
+        [self openScene];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(settle * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (getenv("MLC_PAD") != NULL) {
+                [self runPadScript];
+            } else {
+                [self captureAndQuit];
+            }
+        });
+    });
+}
+
+// MARK: - Scripted pad (Deck gamepad walk)
+
+/// MLC_PAD="tok,tok,...": every token is a pad button pressed through ControllerNavigation's own polling
+/// (u d l r a b x y menu view lb rb), the same button through the raw DualSense mapping (R + button, e.g. Ra),
+/// or wait=<ms>, shot=<name>, log=<text>, expect=<focus key>, expectwin=<main|sheet|other>. After every press the
+/// focus state is logged as "PAD <n> <token> <state>"; MLC_PAD_OUT is the directory of the shots, MLC_PAD_STEP the
+/// pause after a press in ms (default 450).
++ (uint32_t)padMaskForToken:(NSString *)token {
+    static NSDictionary<NSString *, NSNumber *> *map;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        map = @{@"u": @(DS5UI_UP), @"d": @(DS5UI_DOWN), @"l": @(DS5UI_LEFT), @"r": @(DS5UI_RIGHT), @"a": @(DS5UI_A), @"b": @(DS5UI_B),
+                @"x": @(DS5UI_X), @"y": @(DS5UI_Y), @"menu": @(DS5UI_MENU), @"view": @(DS5UI_VIEW), @"lb": @(DS5UI_LB), @"rb": @(DS5UI_RB),
+                @"lt": @(DS5UI_LT), @"rt": @(DS5UI_RT)};
+    });
+    return map[token].unsignedIntValue;
+}
+
+/// The DualSense report a button press is in the raw path: core buttons, hat, left stick.
++ (NSDictionary *)padRawForToken:(NSString *)token {
+    NSDictionary *buttons = @{@"a": @(1 << DS5UI_CORE_CROSS), @"b": @(1 << DS5UI_CORE_CIRCLE), @"x": @(1 << DS5UI_CORE_SQUARE),
+                              @"y": @(1 << DS5UI_CORE_TRIANGLE), @"menu": @(1 << DS5UI_CORE_OPTIONS), @"view": @(1 << DS5UI_CORE_CREATE),
+                              @"lb": @(1 << DS5UI_CORE_L1), @"rb": @(1 << DS5UI_CORE_R1)};
+    NSDictionary *hats = @{@"u": @0, @"r": @2, @"d": @4, @"l": @6};
+    // the triggers are analog in this path: a full pull
+    return @{@"buttons": buttons[token] ?: @0, @"hat": hats[token] ?: @8, @"lx": @128, @"ly": @128,
+             @"lt": @([token isEqualToString:@"lt"] ? 255 : 0), @"rt": @([token isEqualToString:@"rt"] ? 255 : 0)};
+}
+
++ (void)padShot:(NSString *)path {
+    NSWindow *w = [self mainWindow];
+    MLCWindowListCreateImage create = (MLCWindowListCreateImage)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+    if (create == NULL || w == nil) return;
+    // the window with everything above it (sheet, popover, focus ring, hint legend), as the window server composes it
+    CGFloat screenHeight = NSScreen.screens.firstObject.frame.size.height;
+    CGRect cgRect = CGRectMake(w.frame.origin.x, screenHeight - NSMaxY(w.frame), w.frame.size.width, w.frame.size.height);
+    CGImageRef img = create(cgRect, kCGWindowListOptionOnScreenAboveWindow | kCGWindowListOptionIncludingWindow,
+                            (uint32_t)w.windowNumber, kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution);
+    if (img == NULL) return;
+    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:img];
+    [[NSFileManager defaultManager] createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+    [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
+    CGImageRelease(img);
+    fprintf(stderr, "PAD shot %s\n", path.UTF8String);
+}
+
+static NSString *sPadMark = @"";
+
