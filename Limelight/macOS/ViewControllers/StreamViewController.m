@@ -10,6 +10,8 @@
 #import "AppAssetManager.h"
 #import "RemoteUSBForwardingSession.h"
 #import "ConnectionEndpointStore.h"
+#include <net/if.h>
+#include "Limelight.h"
 #include "../../../modules/controller-feedback/ControllerFeedbackEnvelope.h"
 #include "../../Input/ControllerShortcutAdapter.h"
 
@@ -1374,6 +1376,16 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [self launchFailed:MLString(@"Failed to connect to PC", nil)];
         return;
     }
+    // 网卡: a pinned interface has to be there now; no stream starts on another one in its place
+    NSString *pinnedInterface = [ConnectionEndpointStore networkInterfaceForHost:self.app.host.uuid];
+    if (pinnedInterface.length > 0) {
+        if ([Utils usableInterfaceIndexForName:pinnedInterface] == 0) {
+            Log(LOG_E, @"[nic] Pinned interface %@ is not available; the stream does not start", pinnedInterface);
+            [self launchFailed:[NSString stringWithFormat:[[LanguageManager shared] localize:@"deck.nic.streamUnavailable"], pinnedInterface]];
+            return;
+        }
+        streamConfig.networkInterface = pinnedInterface;
+    }
     if (selectedConnectionMethod.length == 0 || [selectedConnectionMethod isEqualToString:@"Auto"]) {
         self.app.host.activeAddress = streamConfig.host;
     }
@@ -2381,6 +2393,19 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSString *audioMessage = [self audioCodecRejectionMessageForError:errorCode];
     if (audioMessage != nil) {
         message = audioMessage;
+    }
+    // a socket that could not be bound to the pinned interface failed this stage: say that, not an errno
+    LI_BOUND_INTERFACE_STATUS pinStatus;
+    LiGetBoundInterfaceStatus(&pinStatus);
+    if (pinStatus.ifIndex != 0) {
+        int bindFailures = 0;
+        for (int kind = 0; kind < LI_BOUND_IF_KIND_COUNT; kind++) {
+            bindFailures += pinStatus.failed[kind];
+        }
+        char pinName[IF_NAMESIZE] = {0};
+        if (bindFailures > 0 && if_indextoname(pinStatus.ifIndex, pinName) != NULL) {
+            message = [NSString stringWithFormat:[[LanguageManager shared] localize:@"deck.nic.streamUnavailable"], @(pinName)];
+        }
     }
     [self closeWindowFromMainQueueWithMessage:message];
 }

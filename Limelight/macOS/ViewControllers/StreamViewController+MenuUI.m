@@ -1147,10 +1147,10 @@ static MLEdgeMenuDock MLEdgeMenuDockFromExitEdge(MLFreeMouseExitEdge edge) {
 
     NSString *addr = [self currentPreferredAddressForStatus];
     NSNumber *latency = addr ? self.app.host.addressLatencies[addr] : nil;
-    if (!latency) {
+    if (!latency || latency.integerValue < 1) {
         return -1;
     }
-    return MAX(1, latency.integerValue);
+    return latency.integerValue;
 }
 
 - (NSString *)currentStreamHealthBadgeText {

@@ -2070,3 +2070,16 @@
 "Turn On Anyway" = "Turn On Anyway";
 "Turn On Anyway (%d)" = "Turn On Anyway (%d)";
 "None" = "None";
+
+"deck.nic" = "Network";
+"deck.nic.wifi" = "Wi-Fi";
+"deck.nic.ethernet" = "Ethernet";
+"deck.nic.tunnel" = "Tunnel";
+"deck.nic.unavailable" = "unavailable";
+"deck.nic.pin" = "Stream with this interface";
+"deck.nic.pinned" = "Pinned. Choose Auto to undo";
+"deck.nic.auto" = "Pick the interface by the system route";
+"deck.nic.streamUnavailable" = "The selected network interface %@ is not available";
+"deck.path.proxy" = "Via proxy";
+"deck.evidence.proxy" = "A public address through a tunnel whose own address is in 198.18.0.0/15 (a proxy's virtual-IP interface)";
+"deck.addr.reachableNoMs" = "Reachable";
