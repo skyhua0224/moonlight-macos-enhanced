@@ -1028,3 +1028,394 @@ func deckCapabilityText(_ host: DeckHost) -> String {
   return text
 }
 
+/// Resolves a DNS name to its addresses off the main thread, remembers the answer, and tells the page (so a
+/// name that points at the public address is called 直连 once known). `addresses` answers at once from the cache.
+enum DeckResolver {
+  private static let lock = NSLock()
+  private static var cache: [String: [String]] = [:]
+  private static var started: [String: Date] = [:]
+
+  static func addresses(_ name: String) -> [String]? {
+    let key = name.lowercased()
+    // MLC_RESOLVE="name=ip,name=ip": what a name resolves to in the shots (harness only)
+    if let table = conceptEnv("MLC_RESOLVE") {
+      for pair in table.split(separator: ",") {
+        let parts = pair.split(separator: "=").map(String.init)
+        if parts.count == 2, parts[0].lowercased() == key { return [parts[1]] }
+      }
+    }
+    lock.lock()
+    if let hit = cache[key] { lock.unlock(); return hit }
+    let recent = started[key].map { Date().timeIntervalSince($0) < 60 } ?? false
+    if !recent { started[key] = Date() }
+    lock.unlock()
+    if !recent {
+      DispatchQueue.global(qos: .utility).async {
+        var hints = addrinfo(ai_flags: 0, ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM, ai_protocol: 0, ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
+        var result: UnsafeMutablePointer<addrinfo>?
+        var found: [String] = []
+        if getaddrinfo(name, nil, &hints, &result) == 0 {
+          var cursor = result
+          while let info = cursor {
+            var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            if getnameinfo(info.pointee.ai_addr, info.pointee.ai_addrlen, &buffer, socklen_t(buffer.count), nil, 0, NI_NUMERICHOST) == 0 {
+              let text = String(cString: buffer)
+              if !found.contains(text) { found.append(text) }
+            }
+            cursor = info.pointee.ai_next
+          }
+          freeaddrinfo(result)
+        }
+        // IPv4 first: the stream prefers it and the kinds read more naturally
+        found.sort { ($0.contains(":") ? 1 : 0) < ($1.contains(":") ? 1 : 0) }
+        lock.lock(); cache[key] = found; lock.unlock()
+        if !found.isEmpty { DispatchQueue.main.async { NotificationCenter.default.post(name: DeckConnectMenuRegistry.didChange, object: nil) } }
+      }
+    }
+    return nil
+  }
+}
+
+/// Independent reachability results for addresses discovery has not reported on yet (the 线路 chips ask for
+/// one when a path has no result): a serverinfo probe with a 1.5 s timeout that never touches discovery's state.
+enum DeckProbe {
+  /// reachable: the host answered; ms: the application round trip when one was measured, never negative
+  struct Result { let reachable: Bool; let ms: Int?; let when: Date }
+  private static let lock = NSLock()
+  private static var results: [String: Result] = [:]
+  private static var running: Set<String> = []
+  private static var lastTry: [String: Date] = [:]
+
+  /// host:port (the same host on two ports is two addresses)
+  static func endpointKey(_ address: String) -> String { DeckEndpoint.parse(address)?.key ?? address.lowercased() }
+
+  static func result(_ host: String, _ address: String) -> Result? {
+    lock.lock(); defer { lock.unlock() }
+    return results[host + "|" + DeckProbe.endpointKey(address)]
+  }
+
+  static func isRunning(_ host: String, _ address: String) -> Bool {
+    lock.lock(); defer { lock.unlock() }
+    return running.contains(host + "|" + DeckProbe.endpointKey(address))
+  }
+
+  /// Starts a probe if none ran for this address in the last 8 s.
+  static func request(host: String, address: String, using probe: ((String, Double, @escaping (NSNumber?) -> Void) -> Void)?) {
+    guard let probe else { return }
+    let key = host + "|" + DeckProbe.endpointKey(address)
+    lock.lock()
+    if running.contains(key) || (lastTry[key].map { Date().timeIntervalSince($0) < 8 } ?? false) { lock.unlock(); return }
+    running.insert(key); lastTry[key] = Date()
+    lock.unlock()
+    probe(address, 1.5) { ms in
+      lock.lock()
+      results[key] = Result(reachable: ms != nil, ms: DeckLatencyRules.valid(ms?.intValue), when: Date())
+      running.remove(key)
+      lock.unlock()
+      DispatchQueue.main.async { NotificationCenter.default.post(name: DeckConnectMenuRegistry.didChange, object: nil) }
+    }
+  }
+}
+
+
+// MARK: - Real-size scaling
+
+/// The factor the adaptive size makes a card bigger by. It is a LAYOUT number: the tile views multiply their own metrics
+/// (fonts, spacing, radii, shadows) by it, so the system lays out and draws them at the target size. A scale transform
+/// (scaleEffect) draws a card at its base size and enlarges the picture of it: soft text and edges. A transform is only
+/// used for transient hover feedback, never for a resting size.
+private struct DeckScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
+extension EnvironmentValues {
+  var deckScale: CGFloat {
+    get { self[DeckScaleKey.self] }
+    set { self[DeckScaleKey.self] = newValue }
+  }
+}
+
+
+// MARK: - Popovers drawn over a forced-dark header
+
+/// The real appearance of the window. A header drawn over a wallpaper forces `.dark` for its own text; a popover or sheet opened
+/// from inside it inherits that, and its text and symbols (.primary = white) land on the system's LIGHT popover material:
+/// white on white, the icon picker in light mode. Anything presented from there sets the real scheme again.
+enum DeckAppearance {
+  static var scheme: ColorScheme {
+    NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+  }
+}
+
+extension View {
+  func deckPopoverContent() -> some View { self.environment(\.colorScheme, DeckAppearance.scheme) }
+}
+
+
+// MARK: - Foundation Sunshine: the mark, the label, the one-time recommendation
+
+/// Where Foundation Sunshine is described (its own About page and tray menu use this address).
+let deckFoundationSunshineURL = URL(string: "https://github.com/AlkaidLab/foundation-sunshine")!
+/// Its releases, where the Foundation Sunshine panel itself looks for updates.
+let deckFoundationSunshineReleasesURL = URL(string: "https://github.com/AlkaidLab/foundation-sunshine/releases/latest")!
+
+@available(macOS 14.0, *)
+enum DeckFs {
+  static func names() -> DeckHostSoftware.Names {
+    DeckHostSoftware.Names(foundation: DL("deck.fs.name"), sunshine: DL("deck.software.sunshine"),
+                           gfe: DL("deck.software.gfe"), compatible: DL("deck.software.compatible"))
+  }
+  /// The 主机软件 row text.
+  static func softwareText(_ host: DeckHost) -> String { DeckHostSoftware.title(host.software, names: names()) }
+  /// The hover text: the same with the version string exactly as the host sent it (".杂鱼", ".<commit>", a manual build's tag).
+  static func softwareDetail(_ host: DeckHost) -> String { DeckHostSoftware.detail(host.software, names: names()) }
+
+  static func learn() { NSWorkspace.shared.open(deckFoundationSunshineURL) }
+  static func learnUpdate() { NSWorkspace.shared.open(deckFoundationSunshineReleasesURL) }
+
+  /// The functions that exist only with Foundation Sunshine (each one reads a Fs* field or a Foundation endpoint).
+  static let features: [(symbol: String, key: String)] = [
+    ("tv", "deck.fs.feat.bigscreen"),             // FsKind=bigscreen
+    ("display.2", "deck.fs.feat.vdd"),            // VddCapabilityVersion + /displays
+    ("photo.on.rectangle", "deck.fs.feat.art"),   // FsArt: hero, logo, icon
+    ("cpu", "deck.fs.feat.hardware"),             // FsGpu, FsOsVersion, FsDisplayModes
+    ("macwindow.badge.plus", "deck.fs.feat.icon"),// FsHostIcon
+    ("clock.arrow.circlepath", "deck.fs.feat.played"), // FsLastPlayed, FsPlaySeconds, FsSession
+  ]
+
+  /// Why a function is greyed: on a computer known not to be Windows the text says it is Windows-only.
+  static func requirement(_ host: DeckHost) -> String {
+    host.software.windows == .no ? DL("deck.fs.requiresWindows") : DL("deck.fs.requires")
+  }
+
+  static func promoKey(_ host: DeckHost, _ what: String) -> String { "deck.fsPromo.\(what).\(host.id)" }
+  nonisolated(unsafe) static var shownThisLaunch = Set<String>()
+}
+
+/// The small sun in the sidebar: a Foundation Sunshine computer, monochrome, with its version as the tooltip.
+@available(macOS 14.0, *)
+struct DeckFsMark: View {
+  let host: DeckHost
+  /// `.secondary` inside a list row: the list turns it white on the accent fill of the selected row (measured 5.4:1 light, 6.3:1
+  /// dark against the fill) and keeps it grey on the grey selection of an unfocused or inactive window.
+  var body: some View {
+    Image(systemName: "sun.max.fill")
+      .font(.system(size: 10, weight: .semibold))
+      .foregroundStyle(.secondary)
+      .deckHelp(DeckFs.softwareDetail(host))
+      .accessibilityLabel(DeckFs.softwareText(host))
+  }
+}
+
+/// A low-key label ("Foundation Sunshine 2026.1110.165906") on the card and in the hero; opens 主机信息.
+@available(macOS 14.0, *)
+struct DeckFsLabel: View {
+  let host: DeckHost
+  var onDark = false
+  var body: some View {
+    Button {
+      NotificationCenter.default.post(name: .init("MLDeckHostCommand"), object: nil,
+                                      userInfo: ["command": "menu", "host": host.raw, "action": "details"])
+    } label: {
+      HStack(spacing: 4) {
+        Image(systemName: "sun.max.fill").font(.system(size: 9, weight: .semibold))
+        Text(DeckFs.softwareText(host)).font(.system(size: 11, weight: .medium)).lineLimit(1)
+      }
+      .foregroundStyle(onDark ? Color.white.opacity(0.9) : Color.secondary)
+      .padding(.horizontal, 8).padding(.vertical, 3)
+      .background { if onDark { Color.clear.deckGlass(Capsule()) } else { Capsule().fill(Color.primary.opacity(0.06)) } }
+      .contentShape(Capsule())
+    }
+    .controllerButtonStyle(.plain)
+    .deckHelp(DeckFs.softwareDetail(host) == DeckFs.softwareText(host) ? DL("deck.fs.openInfo") : "\(DeckFs.softwareDetail(host))\n\(DL("deck.fs.openInfo"))")
+  }
+}
+
+/// The recommendation under the hero of a computer that does not run Foundation Sunshine: once per computer, no modal.
+@available(macOS 14.0, *)
+struct DeckFsBanner: View {
+  let snapshot: DeckHost
+  @ObservedObject var model: DeckAppsModel
+  @SwiftUI.State private var tick = 0
+
+  /// The computer as it is now: its software is only known once a serverinfo answer has been read, which may be after the page was built.
+  private var host: DeckHost { let _ = tick; return DeckHost(snapshot.raw, live: DeckLive.host(snapshot.id)) }
+
+  private var updateShown: Bool {
+    let defaults = UserDefaults.standard
+    return host.paired && DeckFsUpdateRules.shouldShow(
+      reason: host.fsUpdateReason(kindSeen: model.fsKindSeen), token: host.fsUpdateToken(),
+      dismissedFor: defaults.string(forKey: DeckFs.promoKey(host, "updateDismissed")),
+      shownFor: defaults.string(forKey: DeckFs.promoKey(host, "updateShown")),
+      shownThisLaunch: DeckFs.shownThisLaunch.contains(host.id + "#update"))
+  }
+
+  private var banner: DeckFsPromoRules.Banner {
+    let defaults = UserDefaults.standard
+    guard host.paired, host.softwareKnown else { return .none }
+    return DeckFsPromoRules.banner(host.software,
+                                   dismissed: defaults.bool(forKey: DeckFs.promoKey(host, "dismissed")),
+                                   shownBefore: defaults.bool(forKey: DeckFs.promoKey(host, "shown")),
+                                   shownThisLaunch: DeckFs.shownThisLaunch.contains(host.id))
+  }
+
+  private var text: String {
+    switch banner {
+    case .windows:
+      let name: String
+      switch host.software.kind {
+      case .gfe: name = DL("deck.software.gfe")
+      case .compatible: name = DL("deck.software.compatibleShort")
+      default: name = DL("deck.software.sunshineShort")
+      }
+      return DLf("deck.fs.banner.windows", name)
+    case .ifWindows: return DL("deck.fs.banner.ifWindows")
+    case .none: return ""
+    }
+  }
+
+  var body: some View {
+    let _ = tick
+    #if MLC_CONCEPT_HARNESS
+    if conceptEnv("MLC_BANNERLOG") != nil {
+      let _ = fputs("BANNER paired=\(host.paired) known=\(host.softwareKnown) state=\(host.facts.serverState) fs=\(host.isFoundation) windows=\(host.software.windows) banner=\(banner) update=\(updateShown) dismissed=\(UserDefaults.standard.bool(forKey: DeckFs.promoKey(host, "dismissed"))) shown=\(UserDefaults.standard.bool(forKey: DeckFs.promoKey(host, "shown"))) thisLaunch=\(DeckFs.shownThisLaunch.contains(host.id)) id=\(host.id)\n", stderr)
+    }
+    #endif
+    Group {
+    if updateShown {
+      bar(text: DL("deck.fs.update.banner"), primary: DL("deck.fs.update.learn"), action: { DeckFs.learnUpdate() }, dismiss: {
+        UserDefaults.standard.set(host.fsUpdateToken(), forKey: DeckFs.promoKey(host, "updateDismissed"))
+      }, appeared: {
+        DeckFs.shownThisLaunch.insert(host.id + "#update")
+        UserDefaults.standard.set(host.fsUpdateToken(), forKey: DeckFs.promoKey(host, "updateShown"))
+      })
+    } else if banner != .none {
+      bar(text: text, primary: DL("deck.fs.learnFull"), action: { DeckFs.learn() }, dismiss: {
+        UserDefaults.standard.set(true, forKey: DeckFs.promoKey(host, "dismissed"))
+      }, appeared: {
+        // shown: remembered, so it does not come back on a later launch (it stays on this page until dismissed)
+        DeckFs.shownThisLaunch.insert(host.id)
+        if !UserDefaults.standard.bool(forKey: DeckFs.promoKey(host, "shown")) { UserDefaults.standard.set(true, forKey: DeckFs.promoKey(host, "shown")) }
+      })
+    }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .init("HostLatencyUpdated"))) { _ in tick += 1 }
+    .onReceive(NotificationCenter.default.publisher(for: .init("MLDeckHostsChanged"))) { _ in tick += 1 }
+  }
+
+  private func bar(text: String, primary: String, action: @escaping () -> Void, dismiss: @escaping () -> Void, appeared: @escaping () -> Void) -> some View {
+    VStack {
+      HStack(alignment: .center, spacing: 14) {
+        Image(systemName: "sun.max.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(.secondary)
+        Text(text).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+        Button(primary, action: action).controlSize(.regular)
+        Button(DL("deck.fs.dismiss")) { dismiss(); tick += 1 }.controllerButtonStyle(.borderless).foregroundStyle(.secondary).controlSize(.regular)
+      }
+      .padding(.horizontal, 14).padding(.vertical, 11)
+      .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+      .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(nsColor: .separatorColor).opacity(0.7), lineWidth: 0.5))
+      .frame(maxWidth: 760, alignment: .leading)
+      .onAppear(perform: appeared)
+    }
+  }
+}
+
+/// 主机信息 on a computer without Foundation Sunshine: what Foundation Sunshine adds, greyed, with the reason.
+@available(macOS 14.0, *)
+struct DeckFsFeatureGroup: View {
+  let host: DeckHost
+  var body: some View {
+    if host.softwareKnown && !host.isFoundation {
+      VStack(alignment: .leading, spacing: 8) {
+        Text(DL("deck.fs.group")).font(.system(size: 13, weight: .semibold)).padding(.leading, 10)
+        VStack(spacing: 0) {
+          ForEach(Array(DeckFs.features.enumerated()), id: \.offset) { index, feature in
+            HStack {
+              Label(DL(feature.key), systemImage: feature.symbol)
+              Spacer(minLength: 16)
+              Text(DeckFs.requirement(host))
+            }
+            .font(.system(size: 13)).foregroundStyle(.tertiary)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .overlay(alignment: .bottom) { if index < DeckFs.features.count - 1 { Divider().padding(.leading, 12) } }
+            .accessibilityElement(children: .combine)
+          }
+        }
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color(nsColor: .separatorColor).opacity(0.7), lineWidth: 0.5))
+      }
+    }
+  }
+}
+
+/// The 主机软件 value with its 了解 link (the link is only there when Foundation Sunshine is an option for this computer).
+@available(macOS 14.0, *)
+struct DeckSoftwareValue: View {
+  let host: DeckHost
+  var kindSeen: Bool?
+  var body: some View {
+    HStack(spacing: 8) {
+      Text(DeckFs.softwareText(host)).deckHelp(DeckFs.softwareDetail(host))
+      if host.fsUpdateReason(kindSeen: kindSeen) != nil {
+        // always there while the host is behind, whether or not the banner was dismissed
+        Button(DL("deck.fs.update.mark")) { DeckFs.learnUpdate() }
+          .controllerButtonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.accentColor)
+          .padding(.horizontal, 7).padding(.vertical, 2)
+          .background(Capsule().fill(Color.accentColor.opacity(0.14)))
+          .deckHelp(DL("deck.fs.update.tip"))
+      }
+      if DeckFsPromoRules.recommends(host.software) {
+        Button(DL("deck.fs.learn")) { DeckFs.learn() }.controllerButtonStyle(.borderless).foregroundStyle(Color.accentColor)
+      }
+    }
+  }
+}
+
+
+@available(macOS 14.0, *)
+extension DeckAppsModel {
+  /// Whether any app of this computer carries FsKind. nil until the app list has been read.
+  var fsKindSeen: Bool? {
+    apps.isEmpty ? nil : apps.contains { !($0.fsExtras["FsKind"] ?? "").isEmpty }
+  }
+}
+
+
+/// A status mark at the trailing end of a sidebar row (running, nearby and unpaired ...). On the selected row's accent fill it
+/// sits on a white disc so orange and green stay legible on blue.
+@available(macOS 14.0, *)
+struct DeckRowBadge: View {
+  let symbol: String
+  let tint: Color
+  /// The row is the selected one. No backplate and no ring in either appearance (a white disc reads as a white ring in dark
+  /// mode, a palette symbol as one in light). The mark keeps itself legible on the accent fill and on the grey selection by
+  /// its own colour: a deep, saturated disc with a white glyph, or plain white for a glyph that has no disc of its own.
+  var onAccent = false
+  /// Deep variants of the two status colours used on the selected row (the pale dark-mode green is not legible on blue).
+  static func deep(_ color: Color) -> Color {
+    color == .green ? Color(red: 28 / 255, green: 128 / 255, blue: 58 / 255)
+      : (color == .orange ? Color(red: 176 / 255, green: 88 / 255, blue: 0) : color)
+  }
+  var body: some View {
+    if symbol.hasSuffix(".circle.fill") {
+      // A disc drawn as a shape with the glyph cut out in white. An SF Symbol in palette mode inside a selected list row is
+      // re-coloured by the list (a light-mode row showed a white ring around the mark); a shape is not.
+      Circle().fill(onAccent ? Self.deep(tint) : tint)
+        .frame(width: 15, height: 15)
+        .overlay {
+          Image(systemName: String(symbol.dropLast(".circle.fill".count)) + ".fill")
+            .font(.system(size: 7, weight: .bold)).foregroundColor(.white).offset(x: 0.5)
+        }
+    } else if onAccent {
+      Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.white)
+    } else {
+      Image(systemName: symbol).foregroundStyle(tint)
+    }
+  }
+}
+
+
+/// The decision of the page's app-list timer, for Objective-C (DeckAppListRules is the rule and is tested on its own).
+@objc(MLDeckAppListTick)
+public final class DeckAppListTick: NSObject {
+  @objc public static func reason(online: Bool, wasOnline: Bool, seenEtag: String, fetchedEtag: String, lastFetch: Date?) -> String {
+    DeckAppListRules.due(online: online, wasOnline: wasOnline, seenEtag: seenEtag, fetchedEtag: fetchedEtag, lastFetch: lastFetch, now: Date())?.rawValue ?? ""
+  }
+}
