@@ -172,6 +172,13 @@ private struct ConnectionEditorSheet: NSViewControllerRepresentable {
 private struct BitrateSettingsSection: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @Environment(\.locale) private var locale
+  @AppStorage(BandwidthProbeRules.settingKey) private var storedProbeCeilingMbps = BandwidthProbeRules.defaultCeilingMbps
+  /// The most the pre-stream probe may allow (advanced; a host that states its own ceiling overrides it). Out-of-range input is
+  /// kept inside the range the stream rules accept.
+  private var probeCeilingMbps: Binding<Int> {
+    Binding(get: { BandwidthProbeRules.settingCeilingKbps(storedMbps: storedProbeCeilingMbps) / 1000 },
+            set: { storedProbeCeilingMbps = min(BandwidthProbeRules.settingRangeMbps.upperBound, max(BandwidthProbeRules.settingRangeMbps.lowerBound, $0)) })
+  }
   private var mbps: Binding<Double> {
     Binding(get: { Double(settingsModel.effectiveBitrateKbps) / 1000 }, set: { value in
       guard value.isFinite else { return }
@@ -182,6 +189,19 @@ private struct BitrateSettingsSection: View {
   var body: some View {
     ToggleCell(title: "Auto Adjust Bitrate", hintKey: "Auto bitrate hint", boolBinding: $settingsModel.autoAdjustBitrate)
     ToggleCell(title: "Adaptive Bitrate", hintKey: "Adaptive Bitrate hint", boolBinding: $settingsModel.enableAdaptiveBitrate)
+    if settingsModel.enableAdaptiveBitrate {
+      SettingsRow(title: "Probe bitrate ceiling", detail: "Probe bitrate ceiling hint") {
+        HStack(spacing: 5) {
+          TextField("150", value: probeCeilingMbps, format: .number.locale(locale))
+            .labelsHidden()
+            .controllerNumericField()
+            .multilineTextAlignment(.trailing)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 90)
+          Text("Mbps").foregroundStyle(.secondary)
+        }
+      }
+    }
     ToggleCell(title: "Unlock max bitrate (1000 Mbps)", boolBinding: $settingsModel.unlockMaxBitrate)
     SettingsRow(title: settingsModel.autoAdjustBitrate ? "Target Bitrate" : "Bitrate") {
       HStack(spacing: 5) {

@@ -11,6 +11,7 @@
 #import "RemoteUSBForwardingSession.h"
 #import "HttpRequest.h"
 #import "ServerInfoResponse.h"
+#import "AppListResponse.h"
 #import "IdManager.h"
 #import "LatencyProbe.h"
 #import "StreamingSessionManager.h"

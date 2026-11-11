@@ -2083,3 +2083,5 @@
 "deck.path.proxy" = "Via proxy";
 "deck.evidence.proxy" = "A public address through a tunnel whose own address is in 198.18.0.0/15 (a proxy's virtual-IP interface)";
 "deck.addr.reachableNoMs" = "Reachable";
+"Probe bitrate ceiling" = "Probe bitrate ceiling";
+"Probe bitrate ceiling hint" = "The highest bitrate the start-up bandwidth test may allow. Raise it on a 10 GbE link. A host that states its own ceiling overrides this.";

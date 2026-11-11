@@ -131,6 +131,8 @@
 				Network/HostPathRank.c,
 				Network/HostPathRoute.c,
 				macOS/ViewControllers/HostSessionPolicy.swift,
+				macOS/ViewControllers/HostEventsRules.swift,
+				macOS/ViewControllers/BandwidthProbeRules.swift,
 				Crypto/CryptoManager.m,
 				Crypto/IdManager.m,
 				Crypto/mkcert.c,
