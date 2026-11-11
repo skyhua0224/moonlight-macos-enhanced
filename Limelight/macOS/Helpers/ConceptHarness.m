@@ -354,3 +354,253 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
     app.fsExtras = MockAppExtras(app.host.uuid, slug, running);
 }
 
+/// The shape of real user data that crashed a launch: hosts without a certificate at a REAL reachable address
+/// (Gaming PC 10.100.0.133 answers on 47984), a stale certificate, duplicates by name, offline hosts.
++ (void)seedRepro {
+    DataManager *dm = [[DataManager alloc] init];
+    NSData *junk = [NSData dataWithBytes:"not-a-real-certificate-just-bytes-0123456789" length:44];
+    // MLC_REPRO_ADDR: where the "real reachable" hosts point (a TLS endpoint that answers the handshake).
+    NSString *reach = getenv("MLC_REPRO_ADDR") ? [NSString stringWithUTF8String:getenv("MLC_REPRO_ADDR")] : @"10.100.0.133";
+    NSArray *rows = @[
+        // name, uuid, address, hasJunkCert, apps
+        @[@"Aaa Gaming PC", @"REPRO-NOCERT-1", reach, @NO, @[]],
+        @[@"Gaming PC", @"REPRO-DUP-2", reach, @NO, @[@"desktop", @"steam"]],
+        @[@"Gaming PC", @"REPRO-OLD-3", reach, @YES, @[@"desktop", @"steam", @"genshin"]],
+        @[@"Linux PC", @"REPRO-UNP-4", @"10.100.0.210", @NO, @[]],
+        @[@"Offline PC", @"REPRO-OFF-5", @"10.100.0.250", @YES, @[@"desktop", @"steam"]],
+        @[@"Mac mini", @"REPRO-SRV-6", @"10.100.0.220", @NO, @[]],
+    ];
+    int macIndex = 0;
+    NSString *posters = [NSString stringWithUTF8String:getenv("MLC_POSTERS") ?: ""];
+    for (NSArray *row in rows) {
+        TemporaryHost *h = [[TemporaryHost alloc] init];
+        h.name = row[0]; h.uuid = row[1];
+        h.localAddress = row[2]; h.address = row[2];
+        h.pairState = [row[3] boolValue] ? PairStatePaired : PairStateUnpaired;
+        if ([row[3] boolValue]) h.serverCert = junk;
+        h.mac = [NSString stringWithFormat:@"02:00:00:aa:bb:%02x", ++macIndex];
+        NSMutableSet *apps = [NSMutableSet set];
+        for (NSString *slug in row[4]) {
+            NSDictionary *e = CatalogEntry(slug);
+            TemporaryApp *a = [[TemporaryApp alloc] init];
+            a.id = e[@"id"]; a.name = e[@"name"]; a.hdrSupported = NO; a.superCommands = @[]; a.host = h;
+            [apps addObject:a];
+            NSString *dst = [AppAssetManager boxArtPathForApp:a];
+            [[NSFileManager defaultManager] createDirectoryAtPath:dst.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+            [[NSFileManager defaultManager] copyItemAtPath:[posters stringByAppendingPathComponent:[slug stringByAppendingString:@".png"]] toPath:dst error:nil];
+        }
+        h.appList = apps;
+        [dm updateHost:h];
+        [dm updateAppsForExistingHost:h];
+    }
+}
+
+/// MLC_SEED=tls: MLC_TLS_N paired computers whose pinned certificate is the one MLC_TLS_CERT (DER) holds, each
+/// at 127.0.0.1:<port> (the HTTPS port is the http port minus 5), uuid TLS-<i>. A local HTTPS server that asks for
+/// a client certificate answers them: discovery then runs the client-certificate handshake of every host in parallel.
++ (void)seedTLS {
+    DataManager *dm = [[DataManager alloc] init];
+    NSData *der = [NSData dataWithContentsOfFile:[NSString stringWithUTF8String:getenv("MLC_TLS_CERT") ?: ""]];
+    int count = getenv("MLC_TLS_N") ? atoi(getenv("MLC_TLS_N")) : 8;
+    int base = getenv("MLC_TLS_BASE") ? atoi(getenv("MLC_TLS_BASE")) : 50005;
+    for (int i = 0; i < count; i++) {
+        TemporaryHost *h = [[TemporaryHost alloc] init];
+        h.name = [NSString stringWithFormat:@"Stress %d", i];
+        h.uuid = [NSString stringWithFormat:@"TLS-%d", i];
+        NSString *addr = [NSString stringWithFormat:@"127.0.0.1:%d", base + i * 10];
+        h.localAddress = addr; h.address = addr;
+        // MLC_TLS_EXT=<http port>: the second address is 127.0.0.1:<that port> (a mock that may only answer plain HTTP)
+        h.externalAddress = getenv("MLC_TLS_EXT") ? [NSString stringWithFormat:@"127.0.0.1:%d", atoi(getenv("MLC_TLS_EXT")) + i * 10]
+                                                  : [NSString stringWithFormat:@"localhost:%d", base + i * 10];
+        h.pairState = PairStatePaired;
+        h.serverCert = der;
+        h.mac = [NSString stringWithFormat:@"02:00:00:cc:dd:%02x", i + 1];
+        h.appList = [NSSet set];
+        [dm updateHost:h];
+    }
+}
+
+/// Switches through every host in the sidebar, round and round, until the process is stopped.
++ (void)runSoak {
+    NSArray *hosts = [[[DataManager alloc] init] getHosts];
+    NSArray *sorted = [hosts sortedArrayUsingSelector:@selector(compareName:)];
+    __block NSUInteger index = 0;
+    [NSTimer scheduledTimerWithTimeInterval:4.0 repeats:YES block:^(NSTimer *timer) {
+        TemporaryHost *h = sorted[index % sorted.count];
+        index++;
+        fprintf(stderr, "ConceptHarness: soak select %s\n", h.name.UTF8String);
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckSelectHost" object:nil userInfo:@{@"uuid": h.uuid}];
+    }];
+}
+
++ (void)seedIfNeeded {
+    if (![self enabled]) return;
+    if (getenv("MLC_SEED") && strcmp(getenv("MLC_SEED"), "none") == 0) {
+        // an empty database: the first-run state
+        [[NSUserDefaults standardUserDefaults] setObject:@"简体中文" forKey:@"appLanguage"];
+        return;
+    }
+    if (getenv("MLC_SEED") && strcmp(getenv("MLC_SEED"), "tls") == 0) {
+        // English unless MLC_LANG=zh (the distribution shots are read in Chinese)
+        BOOL chinese = getenv("MLC_LANG") && strcmp(getenv("MLC_LANG"), "zh") == 0;
+        [[NSUserDefaults standardUserDefaults] setObject:chinese ? @"简体中文" : @"English" forKey:@"appLanguage"];
+        if ([[[DataManager alloc] init] getHosts].count == 0) [self seedTLS];
+        return;
+    }
+    if (getenv("MLC_SEED") && strcmp(getenv("MLC_SEED"), "repro") == 0) {
+        [[NSUserDefaults standardUserDefaults] setObject:@"English" forKey:@"appLanguage"];
+        if ([[[DataManager alloc] init] getHosts].count == 0) [self seedRepro];
+        return;
+    }
+    // The shots are in Chinese unless MLC_LANG=en.
+    BOOL english = getenv("MLC_LANG") && strcmp(getenv("MLC_LANG"), "en") == 0;
+    [[NSUserDefaults standardUserDefaults] setObject:english ? @"English" : @"简体中文" forKey:@"appLanguage"];
+    DataManager *dm = [[DataManager alloc] init];
+    NSMutableDictionary *facts = [NSMutableDictionary dictionary];
+    NSString *posters = [NSString stringWithUTF8String:getenv("MLC_POSTERS") ?: ""];
+    BOOL seeded = [dm getHosts].count > 0;
+    NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+
+    for (NSDictionary *m in MockHosts()) {
+        NSMutableDictionary *f = [NSMutableDictionary dictionary];
+        NSDictionary *profile = MockProfile(m[@"uuid"]);
+        f[@"platform"] = profile != nil ? m[@"platform"] : @"";
+        f[@"vendor"] = @"foundation";
+        if (profile != nil) {
+            f[@"fsVersion"] = profile[@"fs"];
+            f[@"osVersion"] = profile[@"os"];
+            f[@"gpu"] = profile[@"gpu"];
+            f[@"displayModes"] = profile[@"modes"];
+            if (profile[@"hostIcon"]) f[@"hostIcon"] = profile[@"hostIcon"];
+        } else {
+            f[@"vendor"] = @"";
+        }
+        if ([m[@"uuid"] isEqualToString:@"0D44-ALIENWARE"]) {
+            f[@"icon"] = @{@"symbol": @"gamecontroller.fill", @"color": @"green"};   // chosen by the user
+        }
+        if ([m[@"lastConnected"] doubleValue] != 0) f[@"lastConnected"] = @(now + [m[@"lastConnected"] doubleValue]);
+        if ([m[@"lastSeen"] doubleValue] != 0) f[@"lastSeen"] = @(now + [m[@"lastSeen"] doubleValue]);
+        if (m[@"lastApp"]) f[@"lastApp"] = CatalogEntry(m[@"lastApp"])[@"id"];
+        if ([m[@"uuid"] isEqualToString:@"0F66-OFFICEPC"]) {
+            f[@"sessions"] = @[
+                @{@"app": @"1", @"start": @(now - 3600*26), @"seconds": @(3600*3 + 300)},
+                @{@"app": @"1", @"start": @(now - 86400*3), @"seconds": @(3600*1 + 1200)},
+                @{@"app": @"1", @"start": @(now - 86400*4), @"seconds": @(3600*2 + 2700)},
+                @{@"app": @"1", @"start": @(now - 86400*6), @"seconds": @(3300)},
+                @{@"app": @"1", @"start": @(now - 86400*8), @"seconds": @(3600*4 + 600)},
+            ];
+        }
+        if ([m[@"uuid"] isEqualToString:@"0A11-GAMINGPC-LIVE"]) {
+            f[@"sessions"] = @[
+                @{@"app": @"3", @"start": @(now - 4320), @"seconds": @0},
+                @{@"app": @"1", @"start": @(now - 7200 - 3600), @"seconds": @(3600*2 + 600)},
+                @{@"app": @"4", @"start": @(now - 86400 - 7000), @"seconds": @(3600*1 + 1800)},
+                @{@"app": @"5", @"start": @(now - 172800), @"seconds": @(3600*3)},
+                @{@"app": @"2", @"start": @(now - 259200), @"seconds": @(1800)},
+            ];
+        }
+        NSMutableArray *rec = [NSMutableArray array];
+        for (NSString *s in m[@"recents"]) [rec addObject:CatalogEntry(s)[@"id"]];
+        f[@"recents"] = rec;
+        facts[m[@"uuid"]] = f;
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:facts forKey:@"MLHostFacts"];
+    if (seeded) return;
+
+    for (NSDictionary *m in MockHosts()) {
+        TemporaryHost *h = [[TemporaryHost alloc] init];
+        h.uuid = m[@"uuid"];
+        h.name = m[@"name"];
+        h.localAddress = m[@"local"];
+        h.address = m[@"local"] ?: m[@"external"];
+        h.externalAddress = m[@"external"];
+        if ([m[@"uuid"] isEqualToString:@"0E56-GARAGE"] || [m[@"uuid"] isEqualToString:@"0A11-GAMINGPC-LIVE"]) {
+            // several ways to reach the same computer, for the address rows
+            if (h.externalAddress.length == 0) h.externalAddress = @"203.0.113.77";
+            h.ipv6Address = @"2001:db8:1234::133";
+            if ([m[@"uuid"] isEqualToString:@"0E56-GARAGE"]) h.address = @"garage-pc.local";
+        }
+        h.mac = m[@"mac"];
+        h.serverCodecModeSupport = [m[@"codec"] intValue];
+        h.pairState = [m[@"paired"] boolValue] ? PairStatePaired : PairStateUnpaired;
+        if ([m[@"paired"] boolValue]) {
+            h.serverCert = [@"concept-mock-server-certificate-not-real" dataUsingEncoding:NSUTF8StringEncoding];
+        }
+        NSMutableSet *apps = [NSMutableSet set];
+        int order = 0;
+        // MLC_APPCOUNT=N: exactly N apps on the LIVE host (the catalog repeated with new ids), for the tile-size checks
+        NSArray *slugList = m[@"apps"];
+        if (getenv("MLC_APPCOUNT") && [m[@"uuid"] isEqualToString:@"0A11-GAMINGPC-LIVE"]) {
+            NSMutableArray *list = [NSMutableArray array];
+            NSArray *pool = @[@"genshin", @"hsr", @"zzz", @"cyberpunk", @"eldenring", @"forza", @"hades", @"bg3", @"steam", @"resolve", @"blender"];
+            for (int i = 0; i < atoi(getenv("MLC_APPCOUNT")); i++) [list addObject:pool[i % pool.count]];
+            slugList = list;
+        }
+        // MLC_APPSET=slug,slug: the apps of the plain Sunshine host Alienware, in this order (the 连接 fallback shots)
+        if (getenv("MLC_APPSET") && [m[@"uuid"] isEqualToString:@"0D44-ALIENWARE"]) {
+            slugList = [[NSString stringWithUTF8String:getenv("MLC_APPSET")] componentsSeparatedByString:@","];
+        }
+        int serial = 0;
+        for (NSString *slug in slugList) {
+            NSDictionary *e = CatalogEntry(slug);
+            if (e == nil) continue;   // MLC_APPSET=none: no apps at all
+            TemporaryApp *a = [[TemporaryApp alloc] init];
+            a.id = getenv("MLC_APPCOUNT") ? [NSString stringWithFormat:@"%@-%d", e[@"id"], serial++] : e[@"id"];
+            a.name = e[@"name"];
+            a.hdrSupported = [e[@"hdr"] boolValue];
+            a.pinned = (order < 2 && [m[@"apps"] count] > 6);
+            a.superCommands = @[];
+            a.host = h;
+            [apps addObject:a];
+            order++;
+            // Box art goes where the real asset manager looks for it.
+            NSString *dst = [AppAssetManager boxArtPathForApp:a];
+            [[NSFileManager defaultManager] createDirectoryAtPath:dst.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+            NSString *src = [posters stringByAppendingPathComponent:[slug stringByAppendingString:@".png"]];
+            [[NSFileManager defaultManager] removeItemAtPath:dst error:nil];
+            [[NSFileManager defaultManager] copyItemAtPath:src toPath:dst error:nil];
+            // Foundation Sunshine hosts also send landscape art, a logo and a square icon.
+            NSString *base = [dst stringByDeletingPathExtension];
+            NSDictionary *extras = MockAppExtras(m[@"uuid"], slug, NO);
+            NSString *art = extras[@"FsArt"] ?: @"";
+            NSDictionary *kinds = @{@"hero": @"_hero.jpg", @"logo": @"_logo.png", @"icon": @"_icon.png"};
+            for (NSString *kind in kinds) {
+                NSString *file = [posters stringByAppendingPathComponent:[slug stringByAppendingString:kinds[kind]]];
+                if ([art containsString:kind] && [[NSFileManager defaultManager] fileExistsAtPath:file]) {
+                    [[NSFileManager defaultManager] copyItemAtPath:file toPath:[base stringByAppendingString:kinds[kind]] error:nil];
+                }
+            }
+        }
+        h.appList = apps;
+        NSString *thumb = MockProfile(m[@"uuid"])[@"thumb"];
+        TemporaryApp *anyApp = apps.anyObject;
+        NSString *lastFrameHosts = @"0A11-GAMINGPC-LIVE 0F66-OFFICEPC 0E56-GARAGE";
+        if (thumb != nil && [lastFrameHosts containsString:m[@"uuid"]]) {
+            // the client's own last frame of the desktop (app id 1), where StreamBackdropStore keeps it
+            NSString *dir = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject
+                             stringByAppendingPathComponent:@"Moonlight/LastFrames"];
+            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+            NSMutableString *safeHost = [NSMutableString string];
+            for (NSUInteger i = 0; i < [m[@"uuid"] length]; i++) {
+                unichar ch = [m[@"uuid"] characterAtIndex:i];
+                if ([[NSCharacterSet alphanumericCharacterSet] characterIsMember:ch] || ch == '-') [safeHost appendFormat:@"%C", ch];
+            }
+            NSString *dst = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-1.jpg", safeHost]];
+            [[NSFileManager defaultManager] removeItemAtPath:dst error:nil];
+            [[NSFileManager defaultManager] copyItemAtPath:[posters stringByAppendingPathComponent:[thumb stringByAppendingString:@".jpg"]] toPath:dst error:nil];
+            thumb = nil;   // no host-provided thumbnail for these: the last frame is what they have
+        }
+        if (thumb != nil && anyApp != nil) {
+            NSString *dir = [AppAssetManager boxArtPathForApp:anyApp].stringByDeletingLastPathComponent;
+            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+            NSString *src = [posters stringByAppendingPathComponent:[thumb stringByAppendingString:@".jpg"]];
+            [[NSFileManager defaultManager] removeItemAtPath:[dir stringByAppendingPathComponent:@"_desktop.jpg"] error:nil];
+            [[NSFileManager defaultManager] copyItemAtPath:src toPath:[dir stringByAppendingPathComponent:@"_desktop.jpg"] error:nil];
+        }
+        [dm updateHost:h];
+        [dm updateAppsForExistingHost:h];
+    }
+}
+
+#pragma mark - Scripted scene
+
