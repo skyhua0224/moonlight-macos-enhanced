@@ -1202,6 +1202,11 @@
 "Controller Hint Space" = "Space";
 "Controller Hint Keyboard Layout" = "Symbols / Shift";
 "Controller Hint Done" = "Done";
+"Controller Hint Computers" = "Computers";
+"Controller Hint Sections" = "Sections";
+"Controller Hint Page" = "Page";
+"Controller Hint More" = "More";
+"Controller Hint Customize" = "Customize Home";
 "Keyboard Space" = "space";
 "Controller Shortcut Conflict" = "This trigger overlaps other shortcuts";
 "Replace Conflicting Shortcuts" = "Replace overlapping shortcuts";

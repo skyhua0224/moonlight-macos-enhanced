@@ -275,6 +275,7 @@ final class ControllerKeyboardModel: ObservableObject {
     case .nextColumn: model.cycleShift()
     case .done: apply(.done)
     case .back: dismiss()
+    case .contextMenu, .previousSection, .nextSection: break
     }
   }
 
