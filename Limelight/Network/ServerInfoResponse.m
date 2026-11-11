@@ -8,6 +8,7 @@
 
 #import "ServerInfoResponse.h"
 #import <libxml2/libxml/xmlreader.h>
+#import "MoonlightEnhanced-Swift.h"
 
 @implementation ServerInfoResponse
 @synthesize data, statusCode, statusMessage;
@@ -18,6 +19,10 @@
 }
 
 - (void) populateHost:(TemporaryHost*)host {
+    [self populateHost:host updatePairState:YES];
+}
+
+- (void) populateHost:(TemporaryHost*)host updatePairState:(BOOL)updatePairState {
     host.name = [[self getStringTag:TAG_HOSTNAME] trim];
     host.uuid = [[self getStringTag:TAG_UNIQUE_ID] trim];
     host.mac = [[self getStringTag:TAG_MAC_ADDRESS] trim];
@@ -45,7 +50,9 @@
     }
     
     NSInteger pairStatus;
-    if ([self getIntTag:TAG_PAIR_STATUS value:&pairStatus]) {
+    if (!updatePairState) {
+        // left as it is
+    } else if ([self getIntTag:TAG_PAIR_STATUS value:&pairStatus]) {
         host.pairState = pairStatus ? PairStatePaired : PairStateUnpaired;
     } else {
         host.pairState = PairStateUnknown;
@@ -58,6 +65,20 @@
 
     host.appVersion = [[self getStringTag:@"appversion"] trim];
     host.gfeVersion = [[self getStringTag:@"GfeVersion"] trim];
+
+    // Foundation Sunshine announces itself with FsCapabilityVersion (absent on Sunshine and GFE).
+    NSMutableDictionary<NSString *, NSString *> *fs = [NSMutableDictionary dictionary];
+    for (NSString *tag in @[@"FsCapabilityVersion", @"FsFeatures", @"FsPlatform", @"FsOsVersion", @"FsGpu",
+                            @"FsDisplayModes", @"FsHostIcon", @"FsHostAvatarVersion", @"FsEventSeq", @"FsSessionStarted",
+                            @"VddCapabilityVersion", @"SunshineVersion", @"state", @"GfeVersion", @"appListEtag"]) {
+        NSString *value = [[self getStringTag:tag] trim];
+        if (value.length > 0) {
+            fs[tag] = value;
+        }
+    }
+    if (host.uuid.length > 0) {
+        [MLDeckActivity ingestServerInfoWithHostUUID:host.uuid fields:fs];
+    }
 }
 
 @end

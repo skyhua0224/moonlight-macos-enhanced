@@ -7,6 +7,7 @@
 //
 
 #import "TemporaryApp.h"
+#import "ConceptHarness.h"
 
 @implementation MLAppSuperCommand
 
@@ -24,6 +25,8 @@
     self.pinned = app.pinned;
     self.host = tempHost;
     self.superCommands = @[];
+    self.fsExtras = @{};
+    [ConceptHarness applyMockExtrasToApp:self];
     
     return self;
 }

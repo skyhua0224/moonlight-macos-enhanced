@@ -11,6 +11,11 @@
 @interface DiscoveryWorker : NSOperation
 
 @property(nonatomic, copy) void (^onlineHandler)(TemporaryHost *host);
+/// A one-off round on a host record that is not (yet) the one the app keeps, e.g. the record mDNS builds from a plain-HTTP
+/// answer: it fills in that record but writes nothing to the database and calls no handler. Otherwise its Unpaired
+/// (no pinned certificate, so HTTP only) overwrote the stored Paired state of the real record: a Windows host
+/// showed 未配对 from 08:57:29 until the real worker's next round at 08:57:54.
+@property(nonatomic) BOOL probeOnly;
 
 - (id) initWithHost:(TemporaryHost*)host uniqueId:(NSString*)uniqueId;
 - (void) discoverHost;

@@ -26,3 +26,5 @@
 #import "MLAudioBitstreamOutput.h"
 
 #include "../modules/controller-feedback/ControllerShortcut.h"
+#import "TemporaryApp.h"
+#import "AppAssetManager.h"

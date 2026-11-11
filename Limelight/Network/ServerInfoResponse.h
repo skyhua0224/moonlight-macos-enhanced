@@ -22,6 +22,8 @@
 
 - (void) populateWithData:(NSData *)data;
 - (void) populateHost:(TemporaryHost*)host;
+/// With updatePairState NO the host's pairState is left exactly as it is (the caller decides it from TLS answers only).
+- (void) populateHost:(TemporaryHost*)host updatePairState:(BOOL)updatePairState;
 
 @end
 

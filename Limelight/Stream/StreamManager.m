@@ -125,9 +125,10 @@
     // goes out and let the Connection be built while the host is busy.
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
-    // VddCapabilityVersion only exists in Foundation Sunshine serverinfo. Runtime
-    // stream changes (0x5506) are a Foundation protocol extension.
-    _config.foundationHost = [serverInfoResp getStringTag:@"VddCapabilityVersion"] != nil;
+    // Foundation Sunshine announces itself with FsCapabilityVersion or VddCapabilityVersion (> 0), the same rule as
+    // DeckHost.isFoundation. Runtime stream changes (0x5506) are a Foundation protocol extension.
+    _config.foundationHost = [MLDeckActivity isFoundationServerInfoWithFsCapability:[serverInfoResp getStringTag:@"FsCapabilityVersion"]
+                                                                      vddCapability:[serverInfoResp getStringTag:@"VddCapabilityVersion"]];
 
     // Everything the Connection reads from the config is final now (serverinfo fields, and
     // the bitrate after the optional probe) except the session URL from the reply.
@@ -180,8 +181,11 @@
 
     // resumeApp and launchApp handle calling launchFailed
     const uint64_t hostLaunchStartMs = LiGetMillis();
-    if ([serverState hasSuffix:@"_SERVER_BUSY"]) {
-        // App already running, resume it
+    Log(LOG_I, @"[session] host request: %@ (server state %@, app %@, startupBeginMs=%llu)",
+        decision == 2 ? @"resume" : @"launch", serverState ?: @"?", _config.appName ?: @"?",
+        (unsigned long long)_config.startupBeginMs);
+    if (decision == 2) {
+        // This app is already running, resume it
         if (![self resumeApp:hMan]) {
             [self discardPreparedConnection];
             return;

@@ -7,6 +7,7 @@
 //
 
 #import "DiscoveryManager.h"
+#import "ConceptHarness.h"
 #import "CryptoManager.h"
 #import "HttpManager.h"
 #import "Utils.h"
@@ -232,6 +233,9 @@ static BOOL MoonlightShouldAutoDiscoverNewHosts(void) {
 }
 
 - (void) startDiscovery {
+    if ([ConceptHarness networkMocked]) {
+        return;
+    }
     if (shouldDiscover) {
         return;
     }
@@ -398,6 +402,7 @@ static BOOL MoonlightShouldAutoDiscoverNewHosts(void) {
     Log(LOG_D, @"Found host through MDNS: %@:", host.name);
     // Since this is on a background thread, we do not need to use the opQueue
     DiscoveryWorker* worker = (DiscoveryWorker*)[self createWorkerForHost:host];
+    worker.probeOnly = YES;   // this record is built from a plain-HTTP answer: it must not overwrite the stored one
     [worker discoverHost];
     TemporaryHost *knownHost = [self getHostInDiscovery:host.uuid];
     if (knownHost == nil && !MoonlightShouldAutoDiscoverNewHosts()) {

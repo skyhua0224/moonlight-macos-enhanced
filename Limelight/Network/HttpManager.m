@@ -261,19 +261,27 @@ static BOOL IsServerInfoRequest(NSURL *url) {
 }
 
 static void LogServerInfoFallbackError(NSInteger code, NSURL *url) {
-    uint64_t nowMs = (uint64_t)(CFAbsoluteTimeGetCurrent() * 1000.0);
-    if (nowMs - gLastServerInfoErrorLogMs < 1000) {
-        gSuppressedServerInfoErrorLogs++;
-        return;
+    // called from every discovery thread at once: the counters are shared
+    static NSObject *lock = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ lock = [[NSObject alloc] init]; });
+    int suppressed = 0;
+    @synchronized (lock) {
+        uint64_t nowMs = (uint64_t)(CFAbsoluteTimeGetCurrent() * 1000.0);
+        if (nowMs - gLastServerInfoErrorLogMs < 1000) {
+            gSuppressedServerInfoErrorLogs++;
+            return;
+        }
+        suppressed = gSuppressedServerInfoErrorLogs;
+        gSuppressedServerInfoErrorLogs = 0;
+        gLastServerInfoErrorLogMs = nowMs;
     }
 
-    if (gSuppressedServerInfoErrorLogs > 0) {
-        Log(LOG_W, @"Request failed with error %ld, attempting fallback (suppressed %d repeats in last 1.0s)", (long)code, gSuppressedServerInfoErrorLogs);
-        gSuppressedServerInfoErrorLogs = 0;
+    if (suppressed > 0) {
+        Log(LOG_W, @"Request failed with error %ld, attempting fallback (suppressed %d repeats in last 1.0s)", (long)code, suppressed);
     } else {
         Log(LOG_W, @"Request failed with error %ld, attempting fallback", (long)code);
     }
-    gLastServerInfoErrorLogMs = nowMs;
 }
 
 static const NSString* HTTP_PORT = @"47989";
@@ -352,6 +360,7 @@ static const NSString* HTTPS_PORT = @"47984";
     __block NSMutableData* respData = [[NSMutableData alloc] init];
     __block NSError* requestError = nil;
     __block NSData* requestResp = nil;
+    __block NSHTTPURLResponse* httpAnswer = nil;
     dispatch_semaphore_t requestLock = dispatch_semaphore_create(0);
     
     Log(LOG_D, @"Making Request: %@", request);
@@ -367,6 +376,9 @@ static const NSString* HTTPS_PORT = @"47984";
         }
         else {
             Log(LOG_D, @"Received response: %@", response);
+            if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+                httpAnswer = (NSHTTPURLResponse *)response;
+            }
 
             if (data != NULL) {
                 Log(LOG_D, @"\n\nReceived data: %@\n\n", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
@@ -446,6 +458,13 @@ static const NSString* HTTPS_PORT = @"47984";
 
     if (!_error && request.response) {
         [request.response populateWithData:requestResp];
+        if (httpAnswer != nil && [request.response conformsToProtocol:@protocol(HttpHeaderReceiver)]) {
+            [(id<HttpHeaderReceiver>)request.response receivedHTTPStatus:httpAnswer.statusCode headers:httpAnswer.allHeaderFields];
+        }
+        if ([request.response isKindOfClass:[HttpResponse class]]) {
+            ((HttpResponse *)request.response).receivedOverClientTLS =
+                _serverCert != nil && [request.request.URL.scheme isEqualToString:@"https"];
+        }
         
         // If the fallback error code was detected, issue the fallback request
         if (request.response.statusCode == request.fallbackError && request.fallbackRequest != NULL) {
@@ -1264,6 +1283,28 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
     };
 }
 
+/// kind: poster (the default art of every host), or hero / logo / icon (Foundation Sunshine: FsArt lists which exist).
+/// With etag / modified of the copy on disk the request is conditional: a host that supports it answers 304 and sends nothing.
+- (NSURLRequest*) newAppAssetRequestWithAppId:(NSString *)appId kind:(NSString *)kind etag:(NSString *)etag modified:(NSString *)modified {
+    return [self newAppAssetRequestWithAppId:appId kind:kind variant:nil etag:etag modified:modified];
+}
+
+- (NSURLRequest*) newAppAssetRequestWithAppId:(NSString *)appId kind:(NSString *)kind variant:(NSString *)variant etag:(NSString *)etag modified:(NSString *)modified {
+    NSString* urlString = [NSString stringWithFormat:@"%@/appasset?uniqueid=%@&appid=%@&AssetType=2&AssetIdx=0", _baseHTTPSURL, _clientUniqueId, appId];
+    if (kind.length > 0 && ![kind isEqualToString:@"poster"]) {
+        urlString = [urlString stringByAppendingFormat:@"&type=%@", kind];
+    }
+    if (variant.length > 0) {
+        urlString = [urlString stringByAppendingFormat:@"&fsVariant=%@", variant];
+    }
+    NSMutableURLRequest* request = [[self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC] mutableCopy];
+    // the session's own cache must not answer for the host
+    request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    if (etag.length > 0) [request setValue:etag forHTTPHeaderField:@"If-None-Match"];
+    if (modified.length > 0) [request setValue:modified forHTTPHeaderField:@"If-Modified-Since"];
+    return request;
+}
+
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString *)appId {
     NSString* urlString = [NSString stringWithFormat:@"%@/appasset?uniqueid=%@&appid=%@&AssetType=2&AssetIdx=0", _baseHTTPSURL, _clientUniqueId, appId];
     return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
@@ -1303,7 +1344,18 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
     }
 }
 
+/// The one lock for the client identity and the temporary keychain behind it. The challenge handler of every
+/// parallel connection reads gTempClientKeychain, and importing a new identity deletes and releases it:
+/// all of it happens under this lock (it is recursive, so getClientCertificate can call down into it).
+static NSObject *HMCertLock(void) {
+    static NSObject *lock = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ lock = [[NSObject alloc] init]; });
+    return lock;
+}
+
 - (void)ensureIdentityKeychainUnlocked:(SecIdentityRef)identity context:(NSString *)context {
+  @synchronized (HMCertLock()) {
     // Prefer unlocking our known temporary keychain first to avoid
     // triggering an implicit keychain lookup prompt via identity APIs.
     [self ensureKeychainUnlocked:gTempClientKeychain context:context];
@@ -1341,6 +1393,7 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
         CFRelease(keychain);
     }
     CFRelease(privateKey);
+  }
 }
 
 - (BOOL)isMoonlightManagedKeychainPath:(NSString *)path {
@@ -1573,11 +1626,7 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
 // Returns the identity, with caching to avoid recreating the keychain on every TLS challenge
 - (SecIdentityRef)getClientCertificate {
     // Serialize certificate import + regeneration across all concurrent TLS challenges
-    static NSObject *certLock = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        certLock = [[NSObject alloc] init];
-    });
+    NSObject *certLock = HMCertLock();
 
     // Cache: reuse identity if the P12 file hasn't changed
     static SecIdentityRef cachedIdentity = NULL;

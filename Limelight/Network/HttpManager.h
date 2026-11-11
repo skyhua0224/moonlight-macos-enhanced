@@ -39,6 +39,11 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
 - (BOOL) executeSuperCommandWithId:(NSString*)commandId;
 - (BOOL) requestHostSleep;
 - (NSURLRequest*) newAppAssetRequestWithAppId:(NSString*)appId;
+- (NSURLRequest*) newAppAssetRequestWithAppId:(NSString*)appId kind:(NSString*)kind etag:(NSString*)etag modified:(NSString*)modified;
+/// variant: nil is the host's default (the lossless picture), "preview" a small one (hosts that advertise poster_variants).
+- (NSURLRequest*) newAppAssetRequestWithAppId:(NSString*)appId kind:(NSString*)kind variant:(NSString*)variant etag:(NSString*)etag modified:(NSString*)modified;
+/// Delegate-side TLS answers for a download that streams to disk (MLPosterDownload).
+- (void) URLSession:(NSURLSession *)session didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler;
 - (NSArray<NSDictionary<NSString*, id>*>*) fetchSunshineDisplays;
 - (NSDictionary<NSString*, id>*) fetchSunshineDisplaySnapshot;
 - (NSDictionary<NSString*, id>*) fetchSunshineUSBForwardingCapability;
