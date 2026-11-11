@@ -670,19 +670,210 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             }
             break;
         }
-    });
+        [lock lock];
+        BOOL online = publishedOnline;
+        [lock unlock];
+        if (online) {
+            break;
+        }
+        if (dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC)) == 0) {
+            groupDone = YES;
+            break;
+        }
+    }
+    if (self.cancelled) {
+        _raceEpoch += 1;
+        return;
+    }
+    if (groupDone) {
+        commit();
+    }
 }
 
-- (ServerInfoResponse*) requestInfoAtAddress:(NSString*)address cert:(NSData*)cert {
+- (void)orderProbesForHappyEyeballs:(NSMutableArray<NSString *> *)addresses {
+    [self orderProbesForHappyEyeballs:addresses lastGood:-1];
+}
+
+- (void)orderProbesForHappyEyeballs:(NSMutableArray<NSString *> *)addresses lastGood:(int)lastGood {
+    NSUInteger count = addresses.count;
+    if (count < 2) {
+        return;
+    }
+    HostPathSample *samples = calloc(count, sizeof(HostPathSample));
+    HostPathScore *scores = calloc(count, sizeof(HostPathScore));
+    int *order = calloc(count, sizeof(int));
+    if (samples == NULL || scores == NULL || order == NULL) {
+        free(samples);
+        free(scores);
+        free(order);
+        return;
+    }
+    NSArray<NSString *> *snapshot = [addresses copy];
+    for (NSUInteger i = 0; i < count; i++) {
+        char ifname[64];
+        samples[i].address = snapshot[i].UTF8String;
+        samples[i].iface = host_path_route_kind(samples[i].address, ifname, sizeof(ifname));
+        samples[i].relay_hint = (int)[[MLHostPathSignals shared] relayHintForAddress:snapshot[i]];
+        samples[i].rtt_ms = -1;
+        samples[i].jitter_ms = -1;
+        samples[i].reachable = 1;
+        host_path_score(&samples[i], &scores[i]);
+    }
+    host_path_presence_order(samples, scores, (int)count, lastGood, order);
+    [addresses removeAllObjects];
+    for (NSUInteger i = 0; i < count; i++) {
+        [addresses addObject:snapshot[order[i]]];
+    }
+    free(samples);
+    free(scores);
+    free(order);
+}
+
+- (void)chooseRankedAddress:(NSArray<NSString *> *)addresses
+                     states:(NSDictionary *)states
+                  latencies:(NSDictionary *)latencies
+                      apply:(BOOL)apply {
+    NSUInteger count = addresses.count;
+    if (count == 0 || _host.uuid.length == 0) {
+        return;
+    }
+    HostPathSample *samples = calloc(count, sizeof(HostPathSample));
+    HostPathScore *scores = calloc(count, sizeof(HostPathScore));
+    if (samples == NULL || scores == NULL) {
+        free(samples);
+        free(scores);
+        return;
+    }
+    int current = -1;
+    for (NSUInteger i = 0; i < count; i++) {
+        NSString *address = addresses[i];
+        BOOL online = [states[address] intValue] == 1;
+        int raw = latencies[address] != nil ? [latencies[address] intValue] : -1;
+        int smoothed = [self smoothedRttMsForAddress:address sample:raw success:online];
+        char ifname[64];
+        int hint = (int)[[MLHostPathSignals shared] relayHintForAddress:address];
+        int delta = (online && raw >= 0 && smoothed >= 0) ? (raw > smoothed ? raw - smoothed : smoothed - raw) : -1;
+        samples[i].address = address.UTF8String;
+        samples[i].reachable = online ? 1 : 0;
+        samples[i].rtt_ms = smoothed;
+        samples[i].jitter_ms = delta;
+        samples[i].relay_hint = hint;
+        samples[i].iface = host_path_route_kind(samples[i].address, ifname, sizeof(ifname));
+        // the egress interface's own address, only for a tunnel: 198.18.0.0/15 on it is the mark of a fake-IP proxy (经代理)
+        NSString *egressSource = nil;
+        if (samples[i].iface == HOST_PATH_IFACE_TUNNEL) {
+            [Utils outboundInterfaceNameForAddress:address sourceAddress:&egressSource];
+        }
+        host_path_score(&samples[i], &scores[i]);
+        if (_host.activeAddress != nil && [address isEqualToString:_host.activeAddress]) {
+            current = (int)i;
+        }
+        [[MLHostPathSignals shared] recordProbeForHost:_host.uuid
+                                               address:address
+                                             reachable:online
+                                                 rttMs:smoothed
+                                              jitterMs:delta
+                                                 iface:samples[i].iface
+                                               relayed:scores[i].relayed ? YES : NO
+                                                 klass:scores[i].klass
+                                          egressSource:egressSource ?: @""];
+    }
+    int chosen = host_path_select(samples, scores, (int)count, current);
+    if (apply && chosen >= 0 && chosen < (int)count) {
+        NSString *next = addresses[chosen];
+        if (_host.activeAddress == nil || ![_host.activeAddress isEqualToString:next]) {
+            NSString *kind = @"overlay";
+            if (scores[chosen].klass == HOST_PATH_CLASS_LAN) {
+                kind = @"lan";
+            } else if (scores[chosen].klass == HOST_PATH_CLASS_PUBLIC) {
+                kind = @"public";
+            } else if (scores[chosen].klass == HOST_PATH_CLASS_RELAY) {
+                kind = @"relay";
+            }
+            Log(LOG_I, @"Route for %@: %@ -> %@ (%@, %d ms)", _host.name, _host.activeAddress ?: @"", next, kind, samples[chosen].rtt_ms);
+            _host.activeAddress = next;
+        }
+    }
+    free(samples);
+    free(scores);
+}
+
+- (ServerInfoResponse*) requestInfoAtAddress:(NSString*)address cert:(NSData*)cert budget:(NSTimeInterval)budget {
     @autoreleasepool {
+        if (budget < 0.05) {
+            budget = 0.05;
+        }
         HttpManager* hMan = [[HttpManager alloc] initWithHost:address
                                                      uniqueId:_uniqueId
                                                          serverCert:cert];
         ServerInfoResponse* response = [[ServerInfoResponse alloc] init];
+        NSMutableURLRequest *primary = [[hMan newServerInfoRequest:YES] mutableCopy];
+        primary.timeoutInterval = budget;
+        NSMutableURLRequest *fallback = nil;
+        if (cert != nil) {
+            fallback = [[hMan newHttpServerInfoRequest:YES] mutableCopy];
+            fallback.timeoutInterval = budget;
+        }
+        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:budget];
         [hMan executeRequestSynchronously:[HttpRequest requestForResponse:response
-                                                           withUrlRequest:[hMan newServerInfoRequest:true]
-                                           fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest:true]]];
+                                                            withUrlRequest:primary
+                                                            fallbackError:401
+                                                            fallbackRequest:fallback]
+                                 waitSlack:0
+                                  deadline:deadline];
         return response;
+    }
+}
+
+- (int)lastGoodIndexInAddresses:(NSArray<NSString *> *)addresses {
+    NSDictionary *states = _host.addressStates;
+    NSDictionary *latencies = _host.addressLatencies;
+    int best = -1;
+    int bestLatency = 1000000;
+    for (NSUInteger i = 0; i < addresses.count; i++) {
+        NSString *address = addresses[i];
+        if ([states[address] intValue] != 1) {
+            continue;
+        }
+        int latency = latencies[address] != nil ? [latencies[address] intValue] : 1000000;
+        if (latency < 0) {
+            latency = 1000000;
+        }
+        if (best < 0 || latency < bestLatency) {
+            best = (int)i;
+            bestLatency = latency;
+        }
+    }
+    return best;
+}
+
+- (int)presenceTimeoutMsForAddress:(NSString *)address {
+    HostPathSample sample;
+    HostPathScore score;
+    char ifname[64];
+    memset(&sample, 0, sizeof(sample));
+    sample.address = address.UTF8String;
+    sample.reachable = 1;
+    sample.rtt_ms = -1;
+    sample.jitter_ms = -1;
+    sample.relay_hint = (int)[[MLHostPathSignals shared] relayHintForAddress:address];
+    sample.iface = host_path_route_kind(sample.address, ifname, sizeof(ifname));
+    host_path_score(&sample, &score);
+    return host_path_presence_timeout_ms(score.klass);
+}
+
+- (void)noteEventsFromResponse:(ServerInfoResponse *)response {
+    if (response == nil) {
+        return;
+    }
+    BOOL events = [MLHostEventsRules eventsEnabledWithCapability:[response getStringTag:@"FsCapabilityVersion"]
+                                                        features:[response getStringTag:@"FsFeatures"]];
+    NSInteger seq = [MLHostEventsRules integer:[response getStringTag:@"FsEventSeq"]];
+    @synchronized (self) {   // recursive: the commit of a round already holds it
+        _fsEvents = events;
+        if (seq > 0) {
+            _fsSeq = seq;
+        }
     }
 }
 
