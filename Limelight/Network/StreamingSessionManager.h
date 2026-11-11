@@ -43,6 +43,12 @@ typedef NS_ENUM(NSInteger, StreamingState) {
                        appName:(NSString *)appName
             windowController:(NSWindowController *)windowController;
 
+// The stream view controller a launch of this host has made, weakly: one stream window per computer (seven
+// clicks on 连接桌面 opened seven windows). `liveStreamWindowForHost:` is the window of that controller while it is
+// on screen, nil otherwise.
+- (void)noteStreamViewController:(id)viewController forHost:(NSString *)hostUUID;
+- (nullable NSWindow *)liveStreamWindowForHost:(NSString *)hostUUID;
+
 // Update stream statistics
 - (void)updateStreamStats:(double)latency 
                resolution:(NSString *)resolution 

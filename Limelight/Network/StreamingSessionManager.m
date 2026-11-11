@@ -6,6 +6,7 @@
 //
 
 #import "StreamingSessionManager.h"
+#import "MoonlightEnhanced-Swift.h"
 
 @interface StreamingSessionManager ()
 
@@ -14,6 +15,7 @@
 @property (nonatomic, readwrite, nullable) NSString *activeAppId;
 @property (nonatomic, readwrite, nullable) NSString *activeAppName;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *sessions;
+@property (nonatomic, strong) NSMapTable<NSString *, NSViewController *> *launchedControllers;
 
 // Stream statistics
 @property (nonatomic, readwrite) double currentLatency;
@@ -58,8 +60,21 @@
         _currentFramerate = 0;
         _connectionQuality = 1.0;
         _sessions = [NSMutableDictionary dictionary];
+        _launchedControllers = [NSMapTable strongToWeakObjectsMapTable];
     }
     return self;
+}
+
+- (void)noteStreamViewController:(id)viewController forHost:(NSString *)hostUUID {
+    if (hostUUID.length == 0 || ![viewController isKindOfClass:[NSViewController class]]) return;
+    [self.launchedControllers setObject:viewController forKey:hostUUID];
+}
+
+- (NSWindow *)liveStreamWindowForHost:(NSString *)hostUUID {
+    if (hostUUID.length == 0) return nil;
+    NSViewController *controller = [self.launchedControllers objectForKey:hostUUID];
+    NSWindow *window = controller.isViewLoaded ? controller.view.window : nil;
+    return (window != nil && (window.isVisible || window.isMiniaturized)) ? window : nil;
 }
 
 - (BOOL)canStartStreamForHost:(NSString *)hostUUID {
@@ -83,6 +98,9 @@
     session.appName = appName;
     session.windowController = windowController;
     session.state = StreamingStateStreaming;
+    // the launch is over, the stream owns the link now: nothing in the background until it ends
+    [MLNetworkQuiet end:[@"launch:" stringByAppendingString:hostUUID]];
+    [MLNetworkQuiet beginStream:[@"stream:" stringByAppendingString:hostUUID]];
     session.latency = 0;
     session.resolution = nil;
     session.framerate = 0;
@@ -145,6 +163,11 @@
 }
 
 - (void)didDisconnectForHost:(NSString *)hostUUID {
+    // the stream (or the launch that never got to one) is over: the next click may launch, background work resumes
+    [MLNetworkQuiet end:[@"stream:" stringByAppendingString:hostUUID ?: @""]];
+    [MLNetworkQuiet end:[@"launch:" stringByAppendingString:hostUUID ?: @""]];
+    [MLLaunchGate release:hostUUID ?: @""];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLLaunchStateChanged" object:nil userInfo:@{@"hostUUID": hostUUID ?: @""}];
     StreamingSession *session = self.sessions[hostUUID];
     if (session) {
         session.state = StreamingStateIdle;
