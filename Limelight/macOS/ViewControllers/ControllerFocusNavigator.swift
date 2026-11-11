@@ -746,9 +746,52 @@ extension View {
     }
     guard let window, window === self.window else {
       ring.hide()
-      if window == nil || window !== self.window {
-        pendingDirection = nil
+      pendingDirection = nil
+      return
+    }
+
+    if restoreTicks > 0, let memory {
+      restoreTicks -= 1
+      column = isDeckMain(window) ? .detail : memory.column
+      let targets = collectTargets(in: window)
+      let found = relocate(Target(kind: memory.kind, view: window.contentView ?? NSView()), key: memory.key,
+                           center: memory.center, in: targets, kind: memory.kind)
+      switch PadFocusReturn.step(found: found != nil, ticksLeft: restoreTicks) {
+      case .restore:
+        current = found
+        self.memory = nil
+        restoreTicks = 0
+      case .pageDefault:
+        // The control that opened the window is gone from the page: the page's own first control, not the sidebar.
+        self.memory = nil
+        restoreTicks = 0
+        focusInitial(targets, window: window)
+      case .wait:
+        break
       }
+    }
+
+    if pendingInitialTicks > 0 {
+      pendingInitialTicks -= 1
+      if pendingInitialTicks == 0 {
+        let targets = collectTargets(in: window)
+        // After LB / RB the page is rebuilt for the new computer: a control that was only a stand-in (the first one found
+        // before the primary button exists) is replaced by the primary button as soon as the page has it.
+        let settled = current?.key == "primary"
+        if let old = current, settled || (initialRetries == 0 && targets.contains(where: { $0.same(as: old) })) {
+          // still there
+        } else {
+          focusInitial(targets, window: window)
+          if current?.key != "primary", initialRetries > 0 {
+            initialRetries -= 1
+            pendingInitialTicks = 12
+          }
+        }
+      }
+    }
+
+    guard showRing, let current else {
+      ring.hide()
       return
     }
 
@@ -756,7 +799,16 @@ extension View {
       pendingTicks -= 1
       if pendingTicks <= 0 {
         let targets = collectTargets(in: window)
-        if let next = neighbor(of: current, toward: direction, in: targets) {
+        if direction == .previousSection || direction == .nextSection {
+          if jumpSection(from: current, forward: direction == .nextSection, targets: targets, window: window) {
+            pendingDirection = nil
+          } else if pendingRetries > 0 {
+            pendingRetries -= 1
+            pendingTicks = 3
+          } else {
+            pendingDirection = nil
+          }
+        } else if let next = neighbor(of: current, toward: direction, in: targets) {
           pendingDirection = nil
           focus(next, window: window)
         } else if pendingRetries > 0 {
@@ -770,13 +822,21 @@ extension View {
 
     guard let focused = self.current, let frame = frame(of: focused) else {
       ring.hide()
+      // The page was rebuilt under the focus: find the control again by its key or place.
+      staleTicks += 1
+      if isDeck, staleTicks % 6 == 1, let old = self.current {
+        let targets = collectTargets(in: window)
+        self.current = relocate(old, key: old.key, center: currentCenter, in: targets)
+      }
       return
     }
+    staleTicks = 0
+    currentCenter = NSPoint(x: frame.midX, y: frame.midY)
     let visible = frame.intersection(visibleFrame(of: focused, in: window))
     if visible.height < 6 || visible.width < 6 {
       ring.hide()
     } else {
-      ring.show(visible, in: window)
+      ring.show(visible, in: window, radius: ringRadius(of: focused, frame: frame))
     }
   }
 
@@ -784,14 +844,109 @@ extension View {
     ring.hide()
     window = nil
     current = nil
+    currentCenter = nil
+    memory = nil
+    restoreTicks = 0
     pendingDirection = nil
     pendingKeyboardTicks = 0
+    pendingInitialTicks = 0
+    initialRetries = 0
+    sectionMemory = [:]
     ControllerKeyboardPanel.shared.dismiss()
+  }
+
+  /// A line for the harness: where the focus is, in window coordinates (top left origin).
+  @objc func debugState() -> String {
+    guard let window else { return "window=none focus=none" }
+    let name = window.identifier?.rawValue ?? NSStringFromClass(type(of: window))
+    let kind = window.sheetParent != nil ? "sheet" : (name == Self.mainIdentifier ? "main" : "other")
+    let columnName = column == .sidebar ? "sidebar" : "detail"
+    guard let current, let frame = frame(of: current) else {
+      return "window=\(kind) column=\(columnName) focus=none ring=\(ring.isVisible ? 1 : 0) back=\(ControllerBackRegistry.shared.count)"
+    }
+    let local = window.convertFromScreen(frame)
+    let top = window.contentView.map { $0.bounds.height - local.maxY } ?? 0
+    let box = "\(Int(local.minX)),\(Int(top)),\(Int(local.width))x\(Int(local.height))"
+    return "window=\(kind) column=\(columnName) kind=\(current.kind) key=\(current.key ?? "-") frame=\(box) ring=\(ring.isVisible ? 1 : 0) back=\(ControllerBackRegistry.shared.count)"
+  }
+
+  /// Every control the pad can reach in the window now, for the harness (a line per control).
+  @objc func debugTargets() -> String {
+    guard let window else { return "window=none" }
+    return collectTargets(in: window).map { target -> String in
+      let f = frame(of: target).map { window.convertFromScreen($0) } ?? .zero
+      let section = (target.view as? ControllerFocusAnchorView)?.section.map { " §" + $0 } ?? ""
+      return "\(target.kind) \(target.key ?? "-") \(Int(f.minX)),\(Int((window.contentView?.bounds.height ?? 0) - f.maxY)),\(Int(f.width))x\(Int(f.height))\(section)"
+    }.joined(separator: " ; ")
+  }
+
+  /// The key of the focused control (the harness walks by it).
+  @objc var focusedKey: String { current?.key ?? "" }
+
+  // MARK: Window changes and rebuilds
+
+  /// Where the focus was in the main window when something else took the pad: a sheet, a popover, the settings window.
+  /// Nothing is taken when the pad had no focus there (the page default is placed on the way back).
+  private func rememberFocus(leaving old: NSWindow) {
+    guard old.identifier?.rawValue == Self.mainIdentifier, old.sheetParent == nil, let current else { return }
+    memory = Memory(key: current.key, kind: current.kind, center: currentCenter ?? .zero, column: .detail)
+  }
+
+  private func enter(_ window: NSWindow, showFocus: Bool) {
+    if let old = self.window {
+      rememberFocus(leaving: old)
+    }
+    self.window = window
+    current = nil
+    currentCenter = nil
+    pendingDirection = nil
+    column = !isDeckMain(window) && sidebarFrame(in: window) != nil ? .sidebar : .detail
+    if isDeck, window.identifier?.rawValue == Self.mainIdentifier, window.sheetParent == nil, memory != nil {
+      restoreTicks = 120
+    } else if isDeck, showFocus {
+      // A sheet, alert or popover the pad opened: its first control is focused once it has laid out.
+      pendingInitialTicks = 8
+    }
+  }
+
+  /// The same control in a rebuilt page: by key, else the nearest of the same kind.
+  private func relocate(_ old: Target, key: String?, center: NSPoint?, in targets: [Target], kind: Kind? = nil) -> Target? {
+    if kind == nil, let same = targets.first(where: { $0.same(as: old) }) { return same }
+    if let key {
+      // the same app can sit in two shelves: of the controls with the key, the one nearest where the focus was
+      let matches = targets.filter { $0.key == key && (kind == nil || $0.kind == kind) }
+      if matches.count == 1 { return matches[0] }
+      if let center, matches.count > 1 {
+        return matches.compactMap { target -> (Target, CGFloat)? in
+          guard let f = frame(of: target) else { return nil }
+          return (target, hypot(f.midX - center.x, f.midY - center.y))
+        }.min { $0.1 < $1.1 }?.0
+      }
+      if let first = matches.first { return first }
+    }
+    guard let center else { return nil }
+    let wanted = kind ?? old.kind
+    return targets.filter { $0.kind == wanted }
+      .compactMap { target -> (Target, CGFloat)? in
+        guard let f = frame(of: target) else { return nil }
+        return (target, hypot(f.midX - center.x, f.midY - center.y))
+      }
+      .filter { $0.1 < 160 }
+      .min { $0.1 < $1.1 }?.0
+  }
+
+  private func ringRadius(of target: Target, frame: NSRect) -> CGFloat {
+    if let anchor = target.view as? ControllerFocusAnchorView, anchor.ringRadius >= 0 { return anchor.ringRadius }
+    if target.kind == .row { return 8 }
+    if target.kind == .anchor || target.kind == .press {
+      return frame.height <= 64 ? frame.height / 2 : 12
+    }
+    return 8
   }
 
   // MARK: Collection
 
-  private func collectTargets(in window: NSWindow) -> [Target] {
+  private func collectTargets(in window: NSWindow, ignoreScope: Bool = false) -> [Target] {
     guard let content = window.contentView else { return [] }
     var targets: [Target] = []
     collect(in: content, into: &targets)
@@ -812,19 +967,35 @@ extension View {
       return carrierFrames.contains { $0.contains(frame) }
     }
 
+    // A button the page also marks with an anchor of its own size is one target, the anchor.
+    let triggerFrames = targets.compactMap { target -> NSRect? in
+      guard let anchor = target.view as? ControllerFocusAnchorView, anchor.trigger != nil else { return nil }
+      return frame(of: target)
+    }
+    targets.removeAll { target in
+      guard target.kind == .press, let frame = frame(of: target), frame.width * frame.height > 0 else { return false }
+      return triggerFrames.contains { anchor in
+        let overlap = anchor.intersection(frame)
+        return overlap.width * overlap.height > 0.6 * frame.width * frame.height
+          && overlap.width * overlap.height > 0.6 * anchor.width * anchor.height
+      }
+    }
+
     return targets.filter { target in
       guard let frame = frame(of: target), frame.width > 1, frame.height > 1 else { return false }
-      guard frame.midX >= layout.minX, frame.midX <= layout.maxX, frame.midY <= layout.maxY else { return false }
-      guard let sidebar else { return true }
-      let inSidebar = frame.midX < sidebar.maxX
-      return (column == .sidebar) == inSidebar
+      // Controls in a row that scrolls sideways may be off the window's edge until the row scrolls.
+      let sideways = Self.scrollsHorizontally(target.view)
+      guard sideways || (frame.midX >= layout.minX && frame.midX <= layout.maxX), frame.midY <= layout.maxY else { return false }
+      if ignoreScope { return true }
+      return PadFocusScope.includes(midX: frame.midX, sidebarMaxX: sidebar?.maxX, sidebarColumn: column == .sidebar,
+                                    deckMain: isDeckMain(window))
     }
   }
 
   private func collect(in view: NSView, into targets: inout [Target]) {
     guard !view.isHidden, view.alphaValue > 0 else { return }
     if let anchor = view as? ControllerFocusAnchorView {
-      if anchor.isTargetEnabled {
+      if anchor.isTargetEnabled && anchor.isFocusable {
         targets.append(Target(kind: .anchor, view: anchor))
       }
       return
@@ -833,6 +1004,20 @@ extension View {
       for row in 0..<table.numberOfRows {
         if table.delegate?.tableView?(table, isGroupRow: row) == true { continue }
         if table.delegate?.tableView?(table, shouldSelectRow: row) == false { continue }
+        if let rowView = table.rowView(atRow: row, makeIfNecessary: false) {
+          // SwiftUI lists mark their section titles as group-style rows
+          if rowView.isGroupRowStyle { continue }
+          // a row that holds a button of its own (清理旧记录) is that button, not a selectable row
+          var inner: [ControllerFocusAnchorView] = []
+          Self.anchors(in: rowView, into: &inner)
+          let actions = inner.filter { $0.isTargetEnabled && $0.isFocusable && $0.trigger != nil }
+          if !actions.isEmpty {
+            targets.append(contentsOf: actions.map { Target(kind: .anchor, view: $0) })
+            continue
+          }
+        } else if table.rect(ofRow: row).height < 24 {
+          continue
+        }
         targets.append(Target(kind: .row, view: table, row: row))
       }
       return
@@ -860,6 +1045,28 @@ extension View {
     case let field as NSTextField: return field.isEditable ? .text : nil
     default: return nil
     }
+  }
+
+  private static func scrollsHorizontally(_ view: NSView) -> Bool {
+    var scrollView = view.enclosingScrollView
+    while let current = scrollView {
+      if let document = current.documentView, document.frame.width > current.contentView.bounds.width + 1 { return true }
+      scrollView = current.superview?.enclosingScrollView
+    }
+    return false
+  }
+
+  /// The nearest enclosing scroll view that can scroll along the axis.
+  private static func scrollView(for view: NSView, vertical: Bool) -> NSScrollView? {
+    var scrollView = view.enclosingScrollView
+    while let current = scrollView {
+      if let document = current.documentView {
+        let content = current.contentView.bounds
+        if vertical ? document.frame.height > content.height + 1 : document.frame.width > content.width + 1 { return current }
+      }
+      scrollView = current.superview?.enclosingScrollView
+    }
+    return nil
   }
 
   // MARK: Geometry
@@ -908,8 +1115,14 @@ extension View {
     }
     switch direction {
     case .down, .up:
-      let ahead = candidates.filter { _, frame in
+      var ahead = candidates.filter { _, frame in
         direction == .down ? frame.maxY <= origin.midY : frame.minY >= origin.midY
+      }
+      // A list that scrolls is finished before the focus leaves it: what is ahead inside the same scroll view
+      // (a row below the visible part) comes before a control outside it that happens to be nearer.
+      if let scroller = current.view.enclosingScrollView {
+        let inside = ahead.filter { $0.0.view.enclosingScrollView === scroller }
+        if !inside.isEmpty { ahead = inside }
       }
       // Distance to the edge facing us picks the nearest row band.
       func edgeDistance(_ frame: NSRect) -> CGFloat {
@@ -946,6 +1159,10 @@ extension View {
       guard let frame = frame(of: target) else { return false }
       return frame.intersects(visibleFrame(of: target, in: window))
     }
+    if isDeck, column == .detail, let primary = visible.first(where: { $0.key == "primary" }) {
+      focus(primary, window: window)
+      return
+    }
     let pool = visible.isEmpty ? targets : visible
     let top = pool.max { lhs, rhs in
       let l = frame(of: lhs) ?? .zero
@@ -959,13 +1176,16 @@ extension View {
 
   private func switchColumn(to target: Column, targets: [Target], window: NSWindow) {
     endTextEditing(in: window)
-    column = target
+    column = isDeckMain(window) ? .detail : target
     current = nil
     focusInitial(collectTargets(in: window), window: window)
   }
 
   private func focus(_ target: Target, window: NSWindow) {
     current = target
+    if let section = (target.view as? ControllerFocusAnchorView)?.section {
+      sectionMemory[section] = (target.view, target.row)
+    }
     if target.kind == .row, let table = target.view as? NSTableView {
       if table.selectedRow != target.row {
         table.selectRowIndexes(IndexSet(integer: target.row), byExtendingSelection: false)
@@ -989,10 +1209,20 @@ extension View {
         let rect = document.convert(window.convertFromScreen(frame), from: nil).insetBy(dx: 0, dy: -36)
         let clip = scrollView.contentView
         var bounds = clip.bounds
-        if rect.height >= bounds.height || rect.minY < bounds.minY {
-          bounds.origin.y = rect.minY
-        } else if rect.maxY > bounds.maxY {
-          bounds.origin.y = rect.maxY - bounds.height
+        if document.frame.height > bounds.height + 1 {
+          if rect.height >= bounds.height || rect.minY < bounds.minY {
+            bounds.origin.y = rect.minY
+          } else if rect.maxY > bounds.maxY {
+            bounds.origin.y = rect.maxY - bounds.height
+          }
+        }
+        if document.frame.width > bounds.width + 1 {
+          let wide = rect.insetBy(dx: -36, dy: 0)
+          if wide.width >= bounds.width || wide.minX < bounds.minX {
+            bounds.origin.x = wide.minX
+          } else if wide.maxX > bounds.maxX {
+            bounds.origin.x = wide.maxX - bounds.width
+          }
         }
         scroll(scrollView, to: bounds)
       }
@@ -1008,17 +1238,74 @@ extension View {
     scrollView.reflectScrolledClipView(clip)
   }
 
-  /// Scrolls the column a page; returns false at the end of the content.
+  /// Scrolls the column a page (a row sideways); returns false at the end of the content.
   private func pageScroll(toward direction: ControllerFocusInput, from current: Target) -> Bool {
-    guard let scrollView = current.view.enclosingScrollView, let document = scrollView.documentView else {
+    let vertical = direction == .up || direction == .down
+    guard let scrollView = Self.scrollView(for: current.view, vertical: vertical),
+          let document = scrollView.documentView else {
       return false
     }
     let clip = scrollView.contentView
-    let step = clip.bounds.height * 0.6
-    let delta = (document.isFlipped == (direction == .down)) ? step : -step
     let before = clip.bounds.origin
-    scroll(scrollView, to: clip.bounds.offsetBy(dx: 0, dy: delta))
+    if vertical {
+      let step = clip.bounds.height * 0.6
+      let delta = (document.isFlipped == (direction == .down)) ? step : -step
+      scroll(scrollView, to: clip.bounds.offsetBy(dx: 0, dy: delta))
+    } else {
+      let step = clip.bounds.width * 0.6
+      scroll(scrollView, to: clip.bounds.offsetBy(dx: direction == .right ? step : -step, dy: 0))
+    }
     return clip.bounds.origin != before
+  }
+
+  // MARK: Context menu
+
+  /// The Menu button: the menu of the focused control, else of the smallest marked region around it.
+  private func presentContextMenu(in window: NSWindow) {
+    let pagePanel = {
+      if self.isDeckMain(window), let page = Self.pageMenu?() {
+        ControllerMenuPanel.shared.present(menu: page.menu, title: page.title, in: window,
+                                           selectedIndex: -1, firstIndex: 0, onClose: nil)
+      }
+    }
+    guard let current, let frame = frame(of: current), let content = window.contentView else {
+      pagePanel()
+      return
+    }
+    if let anchor = current.view as? ControllerFocusAnchorView {
+      if let provider = anchor.contextMenu ?? anchor.menuProvider {
+        let built = provider()
+        ControllerMenuPanel.shared.present(menu: built.menu, title: built.title, in: window,
+                                           selectedIndex: -1, firstIndex: 0, onClose: nil)
+        return
+      }
+    }
+    var anchors: [ControllerFocusAnchorView] = []
+    Self.anchors(in: content, into: &anchors)
+    let point = NSPoint(x: frame.midX, y: frame.midY)
+    let best = anchors
+      .filter { $0.contextMenu != nil }
+      .compactMap { anchor -> (ControllerFocusAnchorView, CGFloat)? in
+        guard let f = self.frame(of: Target(kind: .anchor, view: anchor)), f.contains(point) else { return nil }
+        return (anchor, f.width * f.height)
+      }
+      .min { $0.1 < $1.1 }?.0
+    if let provider = best?.contextMenu {
+      let built = provider()
+      ControllerMenuPanel.shared.present(menu: built.menu, title: built.title, in: window,
+                                         selectedIndex: -1, firstIndex: 0, onClose: nil)
+    } else {
+      pagePanel()
+    }
+  }
+
+  private static func anchors(in view: NSView, into out: inout [ControllerFocusAnchorView]) {
+    guard !view.isHidden else { return }
+    if let anchor = view as? ControllerFocusAnchorView {
+      out.append(anchor)
+      return
+    }
+    for subview in view.subviews { anchors(in: subview, into: &out) }
   }
 
   @discardableResult
@@ -1231,7 +1518,7 @@ final class ControllerChoiceTarget: NSObject {
       }
     case .previousColumn: model.moveFocus(by: -6)
     case .nextColumn: model.moveFocus(by: 6)
-    case .delete, .space, .done: break
+    case .delete, .space, .done, .contextMenu, .previousSection, .nextSection: break
     }
   }
 
