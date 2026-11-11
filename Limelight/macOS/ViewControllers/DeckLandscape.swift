@@ -1007,3 +1007,347 @@ struct DeckAddressRow: View {
   }
 }
 
+/// The 线路 section: 自动 and one item per PATH class (局域网, 公网直连, 端口转发, 组网, 中转, 未确认), built from the same
+/// list as the 地址 group (DeckAddressModel). Several addresses of one class are one chip with every host:port in its
+/// tooltip, the evidence for the class under them, and a port hint on the chip when they use a non-standard port.
+/// Results come from discovery's per-address probes (matched by host AND port); an address discovery has not reported
+/// on gets an independent 1.5 s probe. A path is never called direct, forwarded or relayed without evidence.
+@available(macOS 14.0, *)
+final class DeckAddressRouteProvider: DeckConnectMenuSectionProvider {
+  static let shared = DeckAddressRouteProvider()
+  weak var actions: DeckAppsActions?
+  var order: Int { 50 }
+
+  func sections(for host: DeckHost) -> [DeckConnectMenuSection] {
+    guard let actions else { return [] }
+    let chosenRaw = actions.defaultAddress?(host.id) ?? ""
+    let automatic = chosenRaw.isEmpty || chosenRaw == "Auto"
+    let chosen = automatic ? nil : DeckEndpoint.parse(chosenRaw)
+    let live = DeckLive.host(host.id) ?? host.raw
+    let active = live.activeAddress.flatMap { DeckEndpoint.parse($0) }
+    func set(_ value: String) -> () -> Void {
+      return {
+        actions.setDefaultAddress?(host.id, value)
+        NotificationCenter.default.post(name: .deckAddressChanged, object: nil)
+        NotificationCenter.default.post(name: DeckConnectMenuRegistry.didChange, object: nil)
+      }
+    }
+
+    let rows = DeckAddressModel.rows(host)
+    let groups = DeckChipBuilder.groups(rows.map { ($0.entry.endpoint, $0.verdict) })
+    var items = [DeckConnectMenuItem(id: "route.auto", title: DL("deck.auto"), symbol: "arrow.triangle.branch", selected: automatic, action: set(""))]
+    var snaps = [DeckChipSnap(id: "route.auto", title: DL("deck.auto"), symbol: "arrow.triangle.branch", target: "")]
+    for group in groups {
+      let members = rows.filter { row in group.endpoints.contains(row.entry.endpoint) }
+      var best: Int?
+      var answered = false, failed = false
+      for row in members {
+        if row.answered { answered = true; if let ms = row.latency { best = min(best ?? ms, ms) } }
+        if row.failed { failed = true }
+      }
+      // nothing from discovery for this class: an independent probe of its first address, then its result
+      var probing = false
+      if !answered && !failed && host.online {
+        let target = members.first { !$0.entry.endpoint.isLocalName }.map { $0.entry.endpoint.display } ?? members[0].entry.endpoint.display
+        if let result = DeckProbe.result(host.id, target) {
+          if result.reachable { answered = true; best = result.ms } else { failed = true }
+          if Date().timeIntervalSince(result.when) > 8 { DeckProbe.request(host: host.id, address: target, using: actions.probeAddress) }
+        } else {
+          DeckProbe.request(host: host.id, address: target, using: actions.probeAddress)
+          probing = true
+        }
+      }
+      let target = (members.first { !$0.entry.endpoint.isLocalName } ?? members[0]).entry.endpoint
+      // what the chip shows: the address in use, else the fastest, else the first; "+N" for the others of the group
+      let pick = DeckChipBuilder.shown(group, inUse: active) { endpoint in members.first { $0.entry.endpoint == endpoint }?.latency }
+      let latencyOfPick = members.first { $0.entry.endpoint == pick.endpoint }?.latency ?? best
+      let word = DeckAddressModel.title(group.word)
+      let shown = latencyOfPick.flatMap { DeckLatency.display(key: host.id + "|path|" + pick.endpoint.key, raw: $0) }
+      var item = DeckConnectMenuItem(id: "route.\(group.group)", title: word + " " + pick.endpoint.shortDisplay() + (pick.more > 0 ? " +\(pick.more)" : ""),
+                                     trailing: shown.map { "\($0) ms" },
+                                     symbol: DeckAddressModel.symbol(group.word),
+                                     selected: !automatic && chosen.map { c in group.endpoints.contains(c) } == true,
+                                     action: set(target.display))
+      item.unreachable = !answered && failed
+      item.testing = probing || (!answered && !failed && host.online && DeckProbe.isRunning(host.id, target.display))
+      item.inUse = automatic && active.map { a in group.endpoints.contains(a) } == true && !item.unreachable
+      // every host:port of the group, then the evidence for the first member that has one
+      let evidence = members.first { $0.verdict.isConfirmed }.map { DeckAddressModel.evidence($0.verdict) } ?? members.first.map { DeckAddressModel.evidence($0.verdict) } ?? ""
+      // a stream on this address failed in the last 30 minutes: the chip says so, the tooltip says why
+      var failureNote = ""
+      if let failure = StreamPathHealth.recentFailure(forHost: host.id, address: pick.endpoint.display) {
+        let reason = (failure["reason"] as? String) == "loss" ? DLf("deck.path.failedLoss", (failure["detail"] as? String) ?? "") : DL("deck.path.failedControl")
+        failureNote = DLf("deck.path.failedWhy", reason)
+        item.badge = DL("deck.path.failedMark")
+      }
+      var streamNote = ""
+      if let measured = members.first(where: { $0.entry.endpoint == pick.endpoint }), let ms = measured.streamMs, let when = measured.streamWhen {
+        streamNote = DLf("deck.latency.stream", ms, DateFormatter.localizedString(from: when, dateStyle: .medium, timeStyle: .short))
+      }
+      item.tooltip = (group.endpoints.map { $0.display } + [failureNote, streamNote, evidence]).filter { !$0.isEmpty }.joined(separator: "\n")
+      items.append(item)
+      snaps.append(DeckChipSnap(id: item.id, title: item.title, symbol: item.symbol, trailing: item.trailing, badge: item.badge, unreachable: item.unreachable,
+                                inUse: item.inUse, target: target.display, members: group.endpoints.map { $0.key }, tooltip: item.tooltip ?? ""))
+    }
+    // The first frames of a launch: the answers are still out and the paths would be drawn from less than they will be. Until
+    // they are in, the chips are the remembered ones (same addresses, same order); then the live ones, which replace them
+    // only where something really differs (DeckChipStability).
+    let keys = rows.map { $0.entry.endpoint.key }
+    let waited = DeckChipMemory.waited(host.id)
+    let complete = DeckChipStability.evidenceComplete(offline: host.settledOffline, rows: rows.map {
+      // the path class also reads the interface evidence of the path probe (HostPathSignals), which comes a moment after the
+      // round trip: counted as in after a short grace if it never comes
+      (answered: $0.answered, failed: $0.failed,
+       measured: waited >= 5 || ($0.latency != nil && HostPathSignals.shared.probeFact(uuid: host.id, address: $0.entry.endpoint.display) != nil),
+       isDomain: $0.isDomain,
+       resolved: !$0.isDomain || DeckResolver.addresses($0.entry.endpoint.host) != nil)
+    })
+    let remembered = DeckChipMemory.entry(host.id)
+    let choice = DeckChipStability.choose(live: snaps, liveKeys: keys, remembered: remembered, complete: complete, waited: waited)
+    if DeckChipStability.shouldSave(live: snaps, liveKeys: keys, remembered: remembered, complete: complete, sinceLastSave: DeckChipMemory.sinceLastSave(host.id)) {
+      DeckChipMemory.save(host.id, DeckChipMemoryEntry(keys: keys, chips: snaps))
+    }
+    if choice.fromMemory {
+      items = choice.chips.map { snap in
+        var item = DeckConnectMenuItem(id: snap.id, title: snap.title, trailing: snap.trailing, badge: snap.badge, symbol: snap.symbol,
+                                       selected: snap.id == "route.auto" ? automatic : (!automatic && chosen.map { snap.members.contains($0.key) } == true),
+                                       action: set(snap.target))
+        item.unreachable = snap.unreachable
+        // the address in use is known as soon as discovery has one; until then the last one carries the mark
+        item.inUse = automatic && (active.map { a in snap.members.contains(a.key) } ?? snap.inUse) && !snap.unreachable
+        item.tooltip = snap.tooltip
+        item.pending = true
+        return item
+      }
+    } else if choice.pending {
+      for index in items.indices { items[index].pending = true }
+    }
+    return [DeckConnectMenuSection(id: "route", title: DL("deck.route"), items: items)]
+  }
+}
+
+// MARK: - Menus: the old right-click menus as real NSMenus
+
+enum DeckMenuPresenter {
+  static func pop(_ menu: NSMenu) {
+    menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+  }
+}
+
+/// A menu item that runs a closure.
+final class DeckBlockMenuItem: NSMenuItem {
+  private var block: (() -> Void)?
+
+  init(_ title: String, symbol: String? = nil, checked: Bool = false, enabled: Bool = true, _ block: @escaping () -> Void) {
+    super.init(title: title, action: #selector(fire), keyEquivalent: "")
+    self.block = block
+    target = self
+    state = checked ? .on : .off
+    isEnabled = enabled
+    if let symbol { image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+  }
+
+  required init(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+  @objc private func fire() { block?() }
+}
+
+/// A transparent layer that takes only right clicks (and control-clicks) and shows the old NSMenu; everything
+/// else passes through to the tile beneath it. SwiftUI's own contextMenu cannot show the old menu with its
+/// submenus built by the old code.
+struct DeckContextMenuLayer: NSViewRepresentable {
+  let provider: () -> NSMenu?
+
+  func makeNSView(context: Context) -> DeckMenuView { DeckMenuView() }
+  func updateNSView(_ view: DeckMenuView, context: Context) { view.provider = provider }
+
+  final class DeckMenuView: NSView {
+    var provider: (() -> NSMenu?)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+      guard let event = NSApp.currentEvent else { return nil }
+      let secondary = event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
+      return secondary ? super.hitTest(point) : nil
+    }
+
+    // A long press with a finger opens the same menu (macOS 27 touch): see DeckTouchLongPress.
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      guard #available(macOS 14.0, *) else { return }
+      if window != nil {
+        DeckTouchLongPress.shared.register(self) { [weak self] in self?.provider?() }
+      } else {
+        DeckTouchLongPress.shared.unregister(self)
+      }
+    }
+
+    override func rightMouseDown(with event: NSEvent) { show(event) }
+    override func mouseDown(with event: NSEvent) { if event.modifierFlags.contains(.control) { show(event) } }
+
+    private func show(_ event: NSEvent) {
+      if let menu = provider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) }
+    }
+  }
+}
+
+@available(macOS 14.0, *)
+extension View {
+  /// The full old app menu on right-click.
+  func deckAppContextMenu(_ app: TemporaryApp, _ model: DeckAppsModel) -> some View {
+    Group { if conceptEnv("MLC_NOMENULAYER") != nil { self } else { overlay(DeckContextMenuLayer { model.actions.appMenu?(app) }) } }
+  }
+}
+
+/// The ⋯ menu of a computer: 线路 and the connection modes first, then the old host menu with all its items.
+@available(macOS 14.0, *)
+enum DeckMoreMenu {
+  static func menu(_ snapshot: DeckHost, _ model: DeckAppsModel) -> NSMenu {
+    // the computer as it is now: its software (and so what is greyed here) is known only after a serverinfo answer was read
+    let host = DeckHost(snapshot.raw, live: DeckLive.host(snapshot.id))
+    let menu = model.actions.hostMenu?(model.defaultApp) ?? NSMenu()
+    var head: [NSMenuItem] = []
+
+    for section in DeckConnectMenuRegistry.sections(for: host) {
+      head.append(NSMenuItem.sectionHeader(title: section.title))
+      for item in section.items {
+        let text = item.title + (item.trailing.map { "   " + $0 } ?? "") + (item.unreachable ? "   " + DL("deck.path.timeout") : (item.testing ? "   " + DL("deck.path.testing") : ""))
+        head.append(DeckBlockMenuItem(text, checked: item.selected, enabled: item.enabled && !(item.unreachable && !item.selected)) { item.action() })
+      }
+    }
+    var modes: [NSMenuItem] = []
+    if model.canStream && DeckConnect.vddAvailable(host) {
+      modes.append(DeckBlockMenuItem(DL("deck.more.vdd"), symbol: "display.2") {
+        DeckConnect.connect(DeckConnectChoice(mode: .vdd, displayId: nil), host: host, model: model)
+      })
+    }
+    let displays = model.canStream ? DeckConnect.displays(host, model) : []
+    if !displays.isEmpty {
+      let sub = NSMenu()
+      for display in displays {
+        sub.addItem(DeckBlockMenuItem(display.name) {
+          DeckConnect.connect(DeckConnectChoice(mode: .display, displayId: display.id), host: host, model: model)
+        })
+      }
+      let parent = NSMenuItem(title: DL("deck.mode.chooseDisplay"), action: nil, keyEquivalent: "")
+      parent.image = NSImage(systemSymbolName: "rectangle.on.rectangle", accessibilityDescription: nil)
+      parent.submenu = sub
+      modes.append(parent)
+    }
+    // a computer without Foundation Sunshine: the modes it cannot offer stay in the menu, greyed, with the reason
+    if host.paired && host.softwareKnown && !host.isFoundation {
+      let why = DeckFs.requirement(host)
+      modes.append(DeckBlockMenuItem(DL("deck.mode.bigscreen") + "   " + why, symbol: "tv", enabled: false) {})
+      modes.append(DeckBlockMenuItem(DL("deck.more.vdd.short") + "   " + why, symbol: "display.2", enabled: false) {})
+      if DeckFsPromoRules.recommends(host.software) {
+        modes.append(DeckBlockMenuItem(DL("deck.fs.learnFull"), symbol: "sun.max") { DeckFs.learn() })
+      }
+    }
+    if !modes.isEmpty {
+      head.append(NSMenuItem.sectionHeader(title: DL("deck.connectMode")))
+      head.append(contentsOf: modes)
+    }
+    if !head.isEmpty { head.append(.separator()) }
+    for (index, item) in head.enumerated() { menu.insertItem(item, at: index) }
+    return menu
+  }
+}
+
+// MARK: - The connect area: separate buttons
+
+enum DeckConnectLook { case card, hero }
+
+/// 连接桌面 (filled), 大屏模式 (Foundation Sunshine hosts), the round 串流设置 and 更多 buttons; while a game
+/// runs the filled one is 继续 <app> with 退出应用 beside it. No split button, no dropdown.
+@available(macOS 14.0, *)
+struct DeckConnectBar: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckAppsModel
+  let look: DeckConnectLook
+  var game: TemporaryApp?
+
+  private var hero: Bool { look == .hero }
+  private var height: CGFloat { hero ? 46 : 44 }
+
+  var body: some View {
+    let choice = DeckConnect.effective(host, model)
+    let shown = choice.mode == .bigscreen ? DeckConnectChoice(mode: .desktop, displayId: nil) : choice
+    let title = game.map { DLf("deck.resumeApp", $0.name ?? "") } ?? DeckConnect.primaryLabel(shown, host: host, model: model)
+    let nothingToStart = game == nil && model.connectPlan.target == .none
+    VStack(alignment: .leading, spacing: 8) {
+    // the buttons wrap onto a second row when the column is narrow (a large page scale), never truncate
+    DeckFlowLayout(spacing: 10) {
+      primary(title: model.launching ? DL("deck.connecting") : title, choice: shown)
+      if model.launching {
+        secondary(DL("deck.cancelConnect"), symbol: "xmark") { model.actions.cancelLaunch?() }
+      }
+      if let game {
+        secondary(DL("deck.quit"), symbol: "xmark") { model.quitApp(game) }
+        // 连接桌面 while an app runs: the host keeps one app, so this asks to quit the running one first (the help
+        // line says so); DeckConnectPlan.desktopWhileRunning decides whether it is offered
+        if DeckConnectPlan.desktopWhileRunning(plan: model.connectPlan, runningId: game.id) != nil {
+          secondary(DL("deck.connectDesktop"), symbol: "display", help: DLf("deck.desktopWhileRunning", game.name ?? "")) {
+            DeckConnect.connect(DeckConnectChoice(mode: .desktop, displayId: nil), host: host, model: model)
+          }
+        }
+      }
+      if let big = model.bigScreenApp {
+        secondary(DL("deck.mode.bigscreen"), symbol: "tv") {
+          guard model.canStream else { NSSound.beep(); return }
+          DeckConnectStore.set(host.id, DeckConnectChoice(mode: .bigscreen, displayId: nil))
+          if host.isFoundation { model.actions.connect?("bigscreen", "") } else { model.openApp(big) }
+        }
+      }
+      DeckHeroRound(symbol: "slider.horizontal.3", help: DL("deck.settings"), onDark: hero, size: height) { model.actions.settings?() }
+      DeckHeroRound(symbol: "ellipsis", help: DL("deck.more"), onDark: hero, size: height, padMenu: { DeckMoreMenu.menu(host, model) }) { DeckMenuPresenter.pop(DeckMoreMenu.menu(host, model)) }
+    }
+    if nothingToStart {
+      Text(DL("deck.noApps")).font(.system(size: 12)).foregroundStyle(hero ? Color.white.opacity(0.8) : Color.secondary)
+    }
+    }
+    // B while a connection is being made cancels it, as 取消 does
+    .controllerBackAction(active: model.launching) { model.actions.cancelLaunch?() }
+  }
+
+  @ViewBuilder
+  private func primary(title: String, choice: DeckConnectChoice) -> some View {
+    let action: () -> Void = {
+      if model.launching { return }
+      if let game { model.openApp(game) } else { DeckConnect.connect(choice, host: host, model: model) }
+    }
+    let icon = Group {
+      if model.launching { ProgressView().controlSize(.small) } else { Image(systemName: "play.fill") }
+    }
+    if hero {
+      Button(action: action) { Label { Text(title) } icon: { icon }.lineLimit(1) }
+        .controllerButtonStyle(DeckHeroPrimaryStyle())
+        .controllerKey("primary")
+        .disabled(game == nil && model.connectPlan.target == .none)
+    } else {
+      Button(action: action) { Label { Text(title) } icon: { icon } }
+        .controllerButtonStyle(DeckCardButtonStyle(prominent: true, height: height))
+        .controllerKey("primary")
+        .disabled(game == nil && model.connectPlan.target == .none)
+    }
+  }
+
+  @ViewBuilder
+  private func secondary(_ title: String, symbol: String, help: String? = nil, action: @escaping () -> Void) -> some View {
+    Group {
+      if hero {
+        Button(action: action) {
+          Label(title, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+            .padding(.horizontal, 20).frame(height: height).deckGlass(Capsule()).contentShape(Capsule())
+        }
+        .controllerButtonStyle(.plain)
+      } else {
+        Button(action: action) { Label(title, systemImage: symbol) }
+          .controllerButtonStyle(DeckCardButtonStyle(height: height))
+      }
+    }
+    .controllerKey("secondary:\(symbol)")
+    .help(help ?? "")
+  }
+}
+
+// MARK: - 线路 chips
+
