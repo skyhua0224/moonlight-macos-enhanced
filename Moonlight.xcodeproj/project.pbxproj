@@ -133,6 +133,7 @@
 				macOS/ViewControllers/HostSessionPolicy.swift,
 				macOS/ViewControllers/HostEventsRules.swift,
 				macOS/ViewControllers/BandwidthProbeRules.swift,
+				macOS/Helpers/ConceptHarness.m,
 				Crypto/CryptoManager.m,
 				Crypto/IdManager.m,
 				Crypto/mkcert.c,
