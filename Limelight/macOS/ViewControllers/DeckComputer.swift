@@ -630,3 +630,283 @@ func deckCardStatus(_ host: DeckHost, pairing: DeckPairingState) -> String {
   return deckStatusLine(host)
 }
 
+@available(macOS 14.0, *)
+struct DeckComputerCard: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckAppsModel
+  /// 简洁: a smaller card.
+  var compact = false
+  /// The width the card has to fill (page width less the margins), to size the preview.
+  var contentWidth: CGFloat = 900
+  /// Variant C of the offline page: content under the text column (地址) and under the preview (状态 + 设备).
+  var leftExtra: AnyView?
+  var rightExtra: AnyView?
+
+  @ObservedObject private var pairing = DeckPairingState.shared
+  private var game: TemporaryApp? { host.online && host.paired ? model.runningGame : nil }
+  private var style: DeckRunningStyle { DeckRunningStyle.current }
+
+  var body: some View {
+    // the preview is the larger half of the card: 42 % of the width, 360...680 pt, 16:9
+    let previewWidth = min(680, max(360, floor(contentWidth * 0.42)))
+    HStack(alignment: .top, spacing: DeckInset.page) {
+      VStack(alignment: .leading, spacing: compact ? 8 : 14) {
+        DeckEditableHostIcon(host: host, model: model, size: compact ? 56 : 76).shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+        Text(host.name).font(.system(size: compact ? 30 : 38, weight: .bold)).lineLimit(2)
+        Text(statusText).font(.system(size: 14)).foregroundStyle(.secondary)
+        if host.paired { DeckPathChips(host: host, model: model) }
+        if host.paired { DeckNicChips(host: host, model: model) }
+        stateButtons.padding(.top, compact ? 2 : 8)
+        if let leftExtra { leftExtra.padding(.top, 12) }
+      }
+      // the text column never takes the width the picture (or the PIN boxes) needs
+      .frame(minWidth: 240, maxWidth: .infinity, alignment: .leading)
+      VStack(alignment: .leading, spacing: 16) {
+        preview(previewWidth)
+        if let rightExtra { rightExtra }
+      }
+      .frame(width: rightExtra == nil ? nil : previewWidth)
+    }
+  }
+
+  @ViewBuilder
+  private func preview(_ previewWidth: CGFloat) -> some View {
+    if let game, style == .art {
+      DeckRunningArt(app: game, version: model.artVersion).frame(width: previewWidth)
+        .onTapGesture { model.openApp(game) }
+        .controllerFocusTarget(key: "preview", radius: 16) { model.openApp(game) }
+    } else if !host.paired && (pairing.started.contains(host.id) || pairing.pins[host.id] != nil) {
+      DeckPairingPanel(host: host, pin: pairing.pins[host.id]).frame(width: max(previewWidth, 380))
+    } else {
+      if model.canStream {
+        DeckDesktopThumb(host: host, version: model.artVersion)
+          // both sides fixed: an aspect-fit box otherwise fits itself to whatever height it is offered
+          .frame(width: previewWidth, height: (previewWidth * 9 / 16).rounded())
+          .onTapGesture { connect() }
+          .controllerFocusTarget(key: "preview", radius: 12) { connect() }
+          .accessibilityAddTraits(.isButton)
+          .accessibilityLabel(DL("deck.connect"))
+      } else {
+        // off or not paired: a picture, not a control (no click, no focus, no button role)
+        DeckDesktopThumb(host: host, version: model.artVersion)
+          .frame(width: previewWidth, height: (previewWidth * 9 / 16).rounded())
+          .allowsHitTesting(false)
+          .accessibilityHidden(true)
+      }
+    }
+  }
+
+  private var statusText: String { deckCardStatus(host, pairing: pairing) }
+
+  @ViewBuilder
+  private var stateButtons: some View {
+    if !host.online { offlineButtons }
+    else if !host.paired { pairingButtons }
+    else { buttons }
+  }
+
+  /// Offline: 唤醒 with a real MAC. Without one (none stored, or all zeros) the button says 无法唤醒, is
+  /// disabled, and one line says why; 唤醒 is never offered without a MAC.
+  private var offlineButtons: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(spacing: 10) {
+        Button { model.actions.wake?() } label: {
+          Label(host.canWake ? DL("deck.wake") : DL("deck.noMac"), systemImage: host.canWake ? "power" : "power.dotted").frame(minWidth: 106)
+        }
+        .controllerButtonStyle(DeckCardButtonStyle(prominent: true))
+        .controllerKey("primary")
+        .disabled(!host.canWake)
+        DeckHeroRound(symbol: "slider.horizontal.3", help: DL("deck.settings"), onDark: false, size: 44) { model.actions.settings?() }
+        DeckHeroRound(symbol: "ellipsis", help: DL("deck.more"), onDark: false, size: 44, padMenu: { DeckMoreMenu.menu(host, model) }) { DeckMenuPresenter.pop(DeckMoreMenu.menu(host, model)) }
+      }
+      if !host.canWake {
+        Text(DL("deck.noMacReason")).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+
+  /// Unpaired: 配对; once pressed the PIN shows here, no alert.
+  @ViewBuilder
+  private var pairingButtons: some View {
+    let started = pairing.started.contains(host.id) || pairing.pins[host.id] != nil
+    VStack(alignment: .leading, spacing: 10) {
+      if started {
+        // the PIN itself is large in the panel on the right; here: that it is waiting, and a way out
+        HStack(spacing: 10) {
+          ProgressView().controlSize(.small)
+          Button(DL("deck.cancel")) { cancelPairing() }.controllerButtonStyle(DeckCardButtonStyle()).controllerKey("primary")
+            .controllerBackAction(active: true) { cancelPairing() }
+        }
+        .frame(height: 44)
+      } else {
+        HStack(spacing: 10) {
+          Button { pairing.begin(host.id); model.actions.pair?() } label: {
+            Label(pairing.failures[host.id] == nil ? DL("deck.pair") : DL("deck.retry"), systemImage: "link").frame(minWidth: 106)
+          }
+          .controllerButtonStyle(DeckCardButtonStyle(prominent: true))
+          .controllerKey("primary")
+          DeckHeroRound(symbol: "slider.horizontal.3", help: DL("deck.settings"), onDark: false, size: 44) { model.actions.settings?() }
+          DeckHeroRound(symbol: "ellipsis", help: DL("deck.more"), onDark: false, size: 44, padMenu: { DeckMoreMenu.menu(host, model) }) { DeckMenuPresenter.pop(DeckMoreMenu.menu(host, model)) }
+        }
+        if let failure = pairing.failures[host.id] {
+          Label(failure.isEmpty ? DL("deck.pairFailed") : failure, systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 12.5)).foregroundStyle(.red).lineLimit(2).frame(maxWidth: 300, alignment: .leading)
+        }
+      }
+    }
+  }
+
+  private func cancelPairing() {
+    pairing.cancel(host.id)
+    model.actions.cancelPair?()
+  }
+
+  /// 连接桌面 (filled), 大屏模式 on Foundation Sunshine hosts, the round 串流设置 and 更多: separate buttons,
+  /// no dropdown. 退出应用 beside 继续 <app> while a game runs.
+  private var buttons: some View {
+    DeckConnectBar(host: host, model: model, look: .card, game: game)
+  }
+
+  private func primary() {
+    if let game { model.openApp(game) } else { connect() }
+  }
+
+  private func connect() {
+    DeckConnect.connect(DeckConnect.effective(host, model), host: host, model: model)
+  }
+}
+
+// MARK: - Host info and recent sessions
+
+@available(macOS 14.0, *)
+struct DeckHostInfoCard: View {
+  let host: DeckHost
+  var kindSeen: Bool?
+
+  private var rows: [(String, String)] {
+    var rows: [(String, String)] = []
+    let route = deckRouteText(host)
+    if !route.isEmpty { rows.append((DL("deck.fact.route"), route)) }
+    if !host.facts.osVersion.isEmpty { rows.append((DL("deck.fact.platform"), host.facts.osVersion)) }
+    if !host.facts.gpu.isEmpty { rows.append((DL("deck.fact.gpu"), host.facts.gpu)) }
+    rows.append((DL("deck.fact.codecs"), deckCapabilityText(host)))
+    let modes = Self.modes(host.facts.displayModes)
+    if !modes.isEmpty { rows.append((DL("deck.fact.modes"), modes)) }
+    rows.append((DL("deck.wake"), host.canWake ? DL("deck.wake.ok") : DL("deck.wake.no")))
+    return rows
+  }
+
+  /// "3840x2160@120,2560x1440@165" -> "3840×2160 120 Hz · 2560×1440 165 Hz"
+  static func modes(_ raw: String) -> String {
+    raw.split(separator: ",").map { mode -> String in
+      let parts = mode.split(separator: "@")
+      let size = (parts.first.map(String.init) ?? "").replacingOccurrences(of: "x", with: "×")
+      return parts.count > 1 ? "\(size) \(parts[1]) Hz" : size
+    }.joined(separator: " · ")
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      VStack(spacing: 0) {
+        if host.softwareKnown {
+          HStack(alignment: .top) {
+            Text(DL("deck.fact.software"))
+            Spacer(minLength: 24)
+            DeckSoftwareValue(host: host, kindSeen: kindSeen).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+          }
+          .font(.system(size: 13))
+          .padding(.vertical, 10)
+          Divider()
+        }
+        ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+          if index > 0 { Divider() }
+          HStack(alignment: .top) {
+            Text(row.0)
+            Spacer(minLength: 24)
+            Text(row.1).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+          }
+          .font(.system(size: 13))
+          .padding(.vertical, 10)
+        }
+      }
+      .padding(.horizontal, 14)
+      .deckCard(radius: 12)
+      DeckFsFeatureGroup(host: host)
+    }
+  }
+}
+
+@available(macOS 14.0, *)
+struct DeckRecentSessions: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckAppsModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      ForEach(Array(host.facts.sessions.prefix(5).enumerated()), id: \.offset) { index, session in
+        if index > 0 { Divider() }
+        if let app = model.apps.first(where: { $0.id == session.appId }) {
+          HStack(spacing: 12) {
+            DeckAppIcon(app: app, size: 30, version: model.artVersion)
+            Text(app.name ?? "").font(.system(size: 13, weight: .medium))
+            Spacer()
+            Text(detail(session)).font(.system(size: 12)).foregroundStyle(.secondary)
+          }
+          .padding(.vertical, 8)
+        } else if let name = session.name, !name.isEmpty {
+          // the host is off and its app list is not cached: the name kept with the session
+          HStack(spacing: 12) {
+            Text(name).font(.system(size: 13, weight: .medium))
+            Spacer()
+            Text(detail(session)).font(.system(size: 12)).foregroundStyle(.secondary)
+          }
+          .padding(.vertical, 8)
+        }
+      }
+    }
+    .padding(.horizontal, 14)
+    .deckCard(radius: 12)
+  }
+
+  private func detail(_ session: DeckSession) -> String {
+    var text = DeckTime.relative(session.start) ?? ""
+    if session.seconds > 0 { text += " · " + DeckTime.duration(TimeInterval(session.seconds)) }
+    return text
+  }
+}
+
+// MARK: - The page
+
+@available(macOS 14.0, *)
+final class DeckHomeEditState: ObservableObject {
+  static let shared = DeckHomeEditState()
+  /// While a row is being dragged: which one, and the row it would be dropped before.
+  @Published var dragging: DeckSectionID?
+  @Published var dropBefore: DeckSectionID?
+  private var observer: NSObjectProtocol?
+
+  init() {
+    observer = NotificationCenter.default.addObserver(forName: .init("MLDeckCustomize"), object: nil, queue: .main) { [weak self] note in
+      self?.dragging = (note.userInfo?["drag"] as? String).flatMap(DeckSectionID.init)
+      self?.dropBefore = (note.userInfo?["drop"] as? String).flatMap(DeckSectionID.init)
+      DeckHomeCustomizer.shared.show()
+    }
+  }
+}
+
+/// The page. The width comes straight from the live layout, not from a copy kept in state: a copy
+/// that missed a window resize left the content wider than the window and pushed it under the sidebar.
+@available(macOS 14.0, *)
+struct DeckComputerView: View {
+  @ObservedObject var model: DeckAppsModel
+
+  var body: some View {
+    GeometryReader { proxy in DeckComputerBody(model: model, windowWidth: proxy.size.width) }
+  }
+}
+
+private struct DeckContentHeightKey: PreferenceKey {
+  static var defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
