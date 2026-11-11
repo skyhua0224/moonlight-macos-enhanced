@@ -523,163 +523,152 @@ static dispatch_once_t gUnpairedObservationOnceToken;
                 return;
             }
         }
-    }
-    int totalCount = (int)probeAddresses.count;
-    int offlineCount = totalCount - onlineCount;
+        // immutable copies: the mutable ones stay private to this round
+        NSDictionary *latenciesFinal = nil, *statesFinal = nil;
+        [lock lock];
+        latenciesFinal = [latencies copy];
+        statesFinal = [states copy];
+        [lock unlock];
+        BOOL stateChanged = NO;
+        NSInteger previousState = _host.state;
+        // Everything below runs under @synchronized(self) and only reads and writes the host; the callback and the
+        // database write come after the block (nothing external is called while the lock is held).
+        @synchronized (self) {
+            _host.addressLatencies = latenciesFinal;
+            _host.addressStates = statesFinal;
 
-    NSInteger previousState = _host.state;
-    if (receivedResponse) {
-        _host.state = StateOnline;
-    } else if (isStreamingThisHost) {
-        // If we are currently streaming from this host, assume it is online even if discovery fails.
-        // Discovery often fails during streaming because the host is busy or ports are in use.
-        _host.state = StateOnline;
-        Log(LOG_I, @"Discovery failed for %@ but keeping Online because streaming is active", _host.name);
-    } else {
-        _host.state = StateOffline;
-    }
+            // Check if this host is currently streaming
+            BOOL isStreamingThisHost = [[StreamingSessionManager shared] isStreamingHost:_host.uuid];
 
-    if (receivedResponse && bestResp) {
-        PairState previousPairState = _host.pairState;
-        BOOL hadPinnedCert = (_host.serverCert != nil);
-
-        [bestResp populateHost:_host];
-
-        // Guard against transient discovery responses falsely downgrading a paired host.
-        // Evaluate pair status across all successful responses in this poll cycle,
-        // not only the lowest-latency one, to avoid single-endpoint false downgrades.
-        if (hadPinnedCert && previousPairState == PairStatePaired) {
-            if (sawExplicitPairedStatus) {
-                _host.pairState = PairStatePaired;
-                dispatch_once(&gUnpairedObservationOnceToken, ^{
-                    gUnpairedObservationLock = [[NSObject alloc] init];
-                    gUnpairedObservationCountByHost = [NSMutableDictionary dictionary];
-                });
-                NSString *hostUUID = _host.uuid ?: @"";
-                @synchronized (gUnpairedObservationLock) {
-                    [gUnpairedObservationCountByHost removeObjectForKey:hostUUID];
+            int onlineCount = 0;
+            for (NSString *addr in probeAddresses) {
+                NSNumber *state = states[addr];
+                if (state && state.intValue == 1) {
+                    onlineCount++;
                 }
-            } else if (!sawExplicitUnpairedStatus) {
-                if (_host.pairState != PairStatePaired) {
-                    Log(LOG_W, @"Ignoring pairState downgrade for %@ (missing PairStatus; keeping Paired)", _host.name);
-                }
-                _host.pairState = PairStatePaired;
+            }
+            int totalCount = (int)probeAddresses.count;
+            int offlineCount = totalCount - onlineCount;
+
+            if (receivedResponse) {
+                _host.state = StateOnline;
+            } else if (isStreamingThisHost) {
+                // If we are currently streaming from this host, assume it is online even if discovery fails.
+                // Discovery often fails during streaming because the host is busy or ports are in use.
+                _host.state = StateOnline;
+                Log(LOG_I, @"Discovery failed for %@ but keeping Online because streaming is active", _host.name);
             } else {
-                dispatch_once(&gUnpairedObservationOnceToken, ^{
-                    gUnpairedObservationLock = [[NSObject alloc] init];
-                    gUnpairedObservationCountByHost = [NSMutableDictionary dictionary];
-                });
-
-                NSString *hostUUID = _host.uuid ?: @"";
-                NSInteger observationCount = 0;
-                @synchronized (gUnpairedObservationLock) {
-                    NSNumber *existing = gUnpairedObservationCountByHost[hostUUID];
-                    observationCount = existing.integerValue + 1;
-                    gUnpairedObservationCountByHost[hostUUID] = @(observationCount);
-                }
-
-                if (observationCount < PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED) {
-                    Log(LOG_W, @"Ignoring transient unpaired state for %@ (%ld/%ld confirmations)",
-                        _host.name,
-                        (long)observationCount,
-                        (long)PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED);
-                    _host.pairState = PairStatePaired;
-                } else {
-                    Log(LOG_I, @"Accepting Paired->Unpaired for %@ after %ld confirmations",
-                        _host.name,
-                        (long)observationCount);
-                }
+                _host.state = StateOffline;
             }
-        }
 
-        if (autoConnectionMode && !isStreamingThisHost) {
-            if (firstOnlineAddress != nil) {
-                _host.activeAddress = firstOnlineAddress;
-            } else if (bestAddress != nil) {
-                _host.activeAddress = bestAddress;
-            }
-        } else if (!autoConnectionMode && !isStreamingThisHost && selectedConnectionMethod.length > 0) {
-            // Keep the user's selected route even when it is currently down.
-            // The host stays online if another endpoint answered; the stream
-            // launch path can then offer to switch routes explicitly.
-            _host.activeAddress = selectedConnectionMethod;
-        }
+            if (receivedResponse && bestResp) {
+                PairState previousPairState = _host.pairState;
+                BOOL hadPinnedCert = (_host.serverCert != nil);
 
-        Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t ipv6Address:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n\t latency:%f ms\n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.ipv6Address, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress, minLatency);
-    }
+                // With a pinned certificate the pair state is decided below from TLS answers only; the response
+                // (often the fastest one, which is the plain-HTTP fallback) never writes it.
+                [bestResp populateHost:_host updatePairState:!hadPinnedCert];
 
-    if (totalCount > 0) {
-        if (onlineCount > 0) {
-            Log(LOG_I, @"Discovery summary for %@: %d/%d online", _host.name, onlineCount, totalCount);
-        } else {
-            Log(LOG_W, @"Discovery summary for %@: %d online, %d offline", _host.name, onlineCount, offlineCount);
-        }
-    }
-
-    // Auto-switch to a significantly lower-latency address (>= 20ms improvement)
-    if (autoConnectionMode && receivedResponse && !isStreamingThisHost && bestAddress != nil && _host.activeAddress != nil) {
-        if (![bestAddress isEqualToString:_host.activeAddress]) {
-            NSNumber *currentLatency = latencies[_host.activeAddress];
-            NSNumber *bestLatency = latencies[bestAddress];
-            if (currentLatency && bestLatency && (currentLatency.doubleValue - bestLatency.doubleValue) >= AUTO_SWITCH_PING_IMPROVEMENT_MS) {
-                // Thread-safe initialization using dispatch_once
-                dispatch_once(&gAutoSwitchCooldownOnceToken, ^{
-                    gAutoSwitchCooldownLock = [[NSObject alloc] init];
-                    gAutoSwitchCooldownByHost = [NSMutableDictionary dictionary];
-                });
-
-                NSString *hostUUID = _host.uuid ?: @"";
-                NSTimeInterval now = CFAbsoluteTimeGetCurrent();
-                BOOL canSwitch = YES;
-                @synchronized (gAutoSwitchCooldownLock) {
-                    NSNumber *nextAllowed = gAutoSwitchCooldownByHost[hostUUID];
-                    if (nextAllowed && now < nextAllowed.doubleValue) {
-                        canSwitch = NO;
-                    } else if (hostUUID.length > 0) {
-                        gAutoSwitchCooldownByHost[hostUUID] = @(now + AUTO_SWITCH_COOLDOWN_SEC);
-                    }
-                }
-
-                if (canSwitch) {
-                    NSString *oldAddress = _host.activeAddress;
-                    _host.activeAddress = bestAddress;
-                    Log(LOG_I, @"Auto-switched %@ from %@ (%.0fms) to %@ (%.0fms)", _host.name, oldAddress, currentLatency.doubleValue, bestAddress, bestLatency.doubleValue);
-
-                    NSString *uuidForNotification = _host.uuid ?: @"";
-                    NSString *hostNameForNotification = _host.name ?: @"";
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [[NSNotificationCenter defaultCenter] postNotificationName:@"HostAutoAddressSwitched" object:nil userInfo:@{
-                            @"uuid": uuidForNotification,
-                            @"hostName": hostNameForNotification,
-                            @"oldAddress": oldAddress ?: @"",
-                            @"newAddress": bestAddress ?: @"",
-                            @"oldLatency": currentLatency ?: @(-1),
-                            @"newLatency": bestLatency ?: @(-1)
-                        }];
+                if (hadPinnedCert) {
+                    dispatch_once(&gUnpairedObservationOnceToken, ^{
+                        gUnpairedObservationLock = [[NSObject alloc] init];
+                        gUnpairedObservationCountByHost = [NSMutableDictionary dictionary];
                     });
+                    NSString *hostUUID = _host.uuid ?: @"";
+                    NSInteger observationCount = 0;
+                    NSString *reason = nil;
+                    @synchronized (gUnpairedObservationLock) {
+                        if (sawExplicitPairedStatus) {
+                            [gUnpairedObservationCountByHost removeObjectForKey:hostUUID];
+                        } else if (sawExplicitUnpairedStatus) {
+                            observationCount = [gUnpairedObservationCountByHost[hostUUID] integerValue] + 1;
+                            gUnpairedObservationCountByHost[hostUUID] = @(observationCount);
+                        } else {
+                            // no TLS answer this round: nothing to confirm, and the streak of confirmations is broken
+                            [gUnpairedObservationCountByHost removeObjectForKey:hostUUID];
+                        }
+                    }
+                    if (sawExplicitPairedStatus) {
+                        _host.pairState = PairStatePaired;
+                        reason = @"an HTTPS+certificate answer says PairStatus=1";
+                    } else if (sawExplicitUnpairedStatus) {
+                        if (previousPairState != PairStatePaired || observationCount >= PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED) {
+                            _host.pairState = PairStateUnpaired;
+                            reason = [NSString stringWithFormat:@"HTTPS+certificate answers said PairStatus=0 in %ld consecutive rounds", (long)observationCount];
+                        } else {
+                            reason = [NSString stringWithFormat:@"HTTPS+certificate answer said PairStatus=0 (%ld/%ld), kept until confirmed",
+                                      (long)observationCount, (long)PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED];
+                        }
+                    } else {
+                        reason = @"no HTTPS+certificate answer with a PairStatus this round (HTTP-only answers are ignored for pairing): unchanged";
+                    }
+                    if (_host.pairState != previousPairState) {
+                        Log(LOG_I, @"[pair] CHANGE %@: %d -> %d: %@", _host.name, (int)previousPairState, (int)_host.pairState, reason);
+                    } else if (sawExplicitUnpairedStatus || !sawExplicitPairedStatus) {
+                        Log(LOG_I, @"[pair] %@ stays %d: %@", _host.name, (int)_host.pairState, reason);
+                    }
+                } else if (_host.pairState != previousPairState) {
+                    Log(LOG_I, @"[pair] CHANGE %@: %d -> %d: no pinned certificate, taken from the answer", _host.name, (int)previousPairState, (int)_host.pairState);
+                }
+
+                [self noteEventsFromResponse:bestResp];
+                if (!autoConnectionMode && !isStreamingThisHost && selectedConnectionMethod.length > 0) {
+                    // Keep the user's selected route even when it is currently down.
+                    // The host stays online if another endpoint answered; the stream
+                    // launch path can then offer to switch routes explicitly.
+                    _host.activeAddress = selectedConnectionMethod;
+                }
+
+                Log(LOG_D, @"Received response from: %@\n{\n\t address:%@ \n\t localAddress:%@ \n\t externalAddress:%@ \n\t ipv6Address:%@ \n\t uuid:%@ \n\t mac:%@ \n\t pairState:%d \n\t online:%d \n\t activeAddress:%@ \n\t latency:%f ms\n}", _host.name, _host.address, _host.localAddress, _host.externalAddress, _host.ipv6Address, _host.uuid, _host.mac, _host.pairState, _host.state, _host.activeAddress, minLatency);
+            }
+
+            if (totalCount > 0) {
+                if (onlineCount > 0) {
+                    Log(LOG_I, @"Discovery summary for %@: %d/%d online", _host.name, onlineCount, totalCount);
+                } else {
+                    Log(LOG_W, @"Discovery summary for %@: %d online, %d offline", _host.name, onlineCount, offlineCount);
                 }
             }
+
+            (void)bestAddress;
+            [self chooseRankedAddress:probeAddresses states:states latencies:latencies apply:(autoConnectionMode && !isStreamingThisHost)];
+
+            stateChanged = _host.state != previousState;
         }
-    }
-
-    // Persist state changes (including offline) so UI stays in sync
-    DataManager *dataManager = [[DataManager alloc] init];
-    [dataManager updateHost:_host];
-    if (_host.state != previousState && self.onlineHandler) self.onlineHandler(_host);
-
-    // Broadcast latency update for UI (SettingsModel)
-    __weak typeof(self) weakSelf2 = self;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        __strong typeof(weakSelf2) strongSelf = weakSelf2;
-        if (strongSelf) {
-            NSString *uuid = [strongSelf getHost].uuid;
-            if (uuid) {
+        // Persist state changes (including offline) so UI stays in sync
+        if (!self.probeOnly) {
+            DataManager *dataManager = [[DataManager alloc] init];
+            [dataManager updateHost:_host];
+        }
+        if (stateChanged && self.onlineHandler && !self.probeOnly) {
+            self.onlineHandler(_host);
+        }
+        NSDictionary *latencyCopy = [latencies copy];
+        NSDictionary *stateCopy = [states copy];
+        NSString *uuid = _host.uuid;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (uuid.length > 0) {
                 [[NSNotificationCenter defaultCenter] postNotificationName:@"HostLatencyUpdated" object:nil userInfo:@{
                     @"uuid": uuid,
-                    @"latencies": latencies,
-                    @"states": states
+                    @"latencies": latencyCopy,
+                    @"states": stateCopy
                 }];
             }
+        });
+    };
+    dispatch_group_notify(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), commit);
+
+    BOOL groupDone = NO;
+    while (!self.cancelled) {
+        if ([[MLHostPathSignals shared] generation] != wakeGen) {
+            [lock lock];
+            BOOL online = publishedOnline;
+            [lock unlock];
+            if (!online) {
+                _raceEpoch += 1;
+                return;
+            }
+            break;
         }
     });
 }
