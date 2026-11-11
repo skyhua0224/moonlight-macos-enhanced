@@ -367,3 +367,376 @@ struct DeckHeroIdentity {
   let onDesktop: () -> Void
 }
 
+@available(macOS 14.0, *)
+struct DeckFeaturedHero: View {
+  let app: TemporaryApp
+  @ObservedObject var model: DeckAppsModel
+  let height: CGFloat
+  /// The computer-first page puts the computer's identity over the art.
+  var identity: DeckHeroIdentity?
+  @SwiftUI.State private var hero: NSImage?
+  @SwiftUI.State private var poster: NSImage?
+  @SwiftUI.State private var logo: NSImage?
+
+  private var running: Bool { model.runningId == app.id }
+  /// How far the backdrop runs past the hero's frame, under the floating sidebar and the toolbar.
+  private let extendLeading: CGFloat = 340
+  private let extendTop: CGFloat = 80
+
+  var body: some View {
+    ZStack(alignment: .bottomLeading) {
+      backdrop
+      if let identity {
+        VStack(alignment: .leading, spacing: 0) {
+          HStack(spacing: 12) {
+            DeckHostIcon(host: identity.host, size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+              Text(identity.host.name).font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+              Text(deckStatusLine(identity.host)).font(.system(size: 12.5, weight: .medium)).foregroundStyle(.white.opacity(0.78))
+            }
+          }
+          .shadow(color: .black.opacity(0.35), radius: 6)
+          .padding(.leading, 36).padding(.top, 78)
+          Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      }
+      VStack(alignment: .leading, spacing: 14) {
+        HStack(alignment: .bottom, spacing: 16) {
+          DeckAppIcon(app: app, size: 64, version: model.artVersion).shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+          VStack(alignment: .leading, spacing: 8) {
+            if let logo {
+              Image(nsImage: logo).resizable().scaledToFit().frame(height: 64, alignment: .leading)
+                .shadow(color: .black.opacity(0.4), radius: 8)
+            } else {
+              Text(app.name ?? "").font(.system(size: 34, weight: .heavy)).foregroundStyle(.white)
+                .lineLimit(2).shadow(color: .black.opacity(0.45), radius: 8)
+            }
+            DeckFactsRow(items: deckFacts(for: app, model: model, running: running), onArt: true, size: 13)
+          }
+        }
+        HStack(spacing: 10) {
+          Button { model.openApp(app) } label: {
+            Label(running ? DL("deck.resume") : DL("deck.play"), systemImage: "play.fill").frame(minWidth: 76)
+          }
+          .deckProminent()
+          if running {
+            Button { model.quitApp(app) } label: { Text(DL("deck.quit")).frame(minWidth: 56) }
+              .deckSecondary()
+          }
+          if let identity {
+            Button { identity.onDesktop() } label: { Label(DL("deck.desktop"), systemImage: "display") }
+              .deckSecondary()
+          }
+        }
+        .controlSize(.large)
+      }
+      .padding(.horizontal, 36)
+      .padding(.bottom, 56)
+      .environment(\.colorScheme, .dark)
+    }
+    .frame(height: height)
+    .task(id: "\(app.deckKey)/\(model.artVersion)") {
+      hero = nil; poster = nil; logo = nil
+      if DeckArt.exists(app, .hero) { hero = await DeckArt.load(app, kind: .hero, maxPixel: 2200) }
+      if hero == nil { poster = await DeckArt.load(app, kind: .poster, maxPixel: 900) }
+      // a picture that is already landscape (Steam header.jpg) fills the card: no small copy on a blurred background
+      if hero == nil, let p = poster, DeckArtRules.treatment(width: p.size.width, height: p.size.height) == .fill { hero = p; poster = nil }
+      if DeckArt.exists(app, .logo) { logo = await DeckArt.load(app, kind: .logo, maxPixel: 900) }
+    }
+  }
+
+  private var fade: LinearGradient {
+    LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.62), .init(color: .clear, location: 1)],
+                   startPoint: .top, endPoint: .bottom)
+  }
+
+  /// The art fills a rectangle that is larger than the hero: it runs under the floating sidebar and
+  /// the toolbar, so the hero reads as edge to edge behind the glass.
+  @ViewBuilder
+  private var backdrop: some View {
+    GeometryReader { geo in
+      let size = CGSize(width: geo.size.width + extendLeading, height: geo.size.height + extendTop)
+      ZStack(alignment: .trailing) {
+        if let hero {
+          Image(nsImage: hero).resizable().scaledToFill()
+            .frame(width: size.width, height: size.height, alignment: .top).clipped()
+        } else if let poster {
+          Image(nsImage: poster).resizable().scaledToFill()
+            .frame(width: size.width * 1.7, height: size.height * 1.7)
+            .blur(radius: 52).saturation(1.4)
+            .frame(width: size.width, height: size.height).clipped()
+            .overlay(Color.black.opacity(0.2))
+          Image(nsImage: poster).resizable().aspectRatio(contentMode: .fit)
+            .frame(maxWidth: geo.size.width * 0.5, maxHeight: geo.size.height * 0.66)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.45), radius: 22, y: 10)
+            .padding(.trailing, 64).padding(.top, 40)
+        }
+        LinearGradient(colors: [.black.opacity(0.62), .black.opacity(0.2), .clear], startPoint: .leading, endPoint: .trailing)
+        LinearGradient(colors: [.black.opacity(0.35), .clear], startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.35))
+      }
+      .frame(width: size.width, height: size.height)
+      .mask(fade)
+      .offset(x: -extendLeading, y: -extendTop)
+    }
+  }
+}
+
+// MARK: - A1 Games
+
+@available(macOS 14.0, *)
+struct DeckGamesView: View {
+  @ObservedObject var model: DeckAppsModel
+  @SwiftUI.State private var width: CGFloat = 1000
+
+  private var heroHeight: CGFloat { min(520, max(380, width * 0.34)) }
+  private var cardWidth: CGFloat { width > 1400 ? 340 : 280 }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 30) {
+        if let app = model.featured { DeckFeaturedHero(app: app, model: model, height: heroHeight) }
+
+        if !model.recentApps.isEmpty {
+          VStack(alignment: .leading, spacing: 14) {
+            DeckSectionTitle(title: DL("deck.continuePlaying"), chevron: true).padding(.horizontal, 36)
+            ScrollView(.horizontal, showsIndicators: false) {
+              LazyHStack(alignment: .top, spacing: 20) {
+                ForEach(model.recentApps, id: \.deckKey) { app in DeckContinueCard(app: app, model: model, width: cardWidth) }
+              }
+              .padding(.horizontal, 36)
+            }
+          }
+        }
+
+        VStack(alignment: .leading, spacing: 14) {
+          DeckSectionTitle(title: DL("deck.library"), chevron: true)
+          LazyVGrid(columns: [GridItem(.adaptive(minimum: 168, maximum: 240), spacing: 24, alignment: .top)], spacing: 28) {
+            ForEach(model.libraryApps, id: \.deckKey) { app in
+              DeckPosterTile(app: app, model: model, subtitle: deckFacts(for: app, model: model, running: false, includeSource: false))
+            }
+          }
+        }
+        .padding(.horizontal, 36)
+        .padding(.bottom, 40)
+      }
+    }
+    .background(GeometryReader { proxy in Color.clear.onAppear { width = proxy.size.width }.onChange(of: proxy.size.width) { _, new in width = new } })
+    .scrollClipDisabled()
+    .background(Color(nsColor: .windowBackgroundColor))
+    .ignoresSafeArea(.container, edges: .top)
+  }
+}
+
+@available(macOS 14.0, *)
+struct DeckContinueCard: View {
+  let app: TemporaryApp
+  @ObservedObject var model: DeckAppsModel
+  let width: CGFloat
+  @SwiftUI.State private var hovering = false
+
+  private var running: Bool { model.runningId == app.id }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      ZStack(alignment: .topLeading) {
+        DeckLandscapeArt(app: app, version: model.artVersion)
+          .frame(width: width, height: width * 9 / 16)
+          .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+      }
+      .shadow(color: .black.opacity(hovering ? 0.3 : 0.16), radius: hovering ? 16 : 8, y: hovering ? 8 : 4)
+      HStack(spacing: 10) {
+        DeckAppIcon(app: app, size: 36, version: model.artVersion)
+        VStack(alignment: .leading, spacing: 2) {
+          HStack(spacing: 0) {
+            DeckRunningGlyph(running: running, size: 11)
+            Text(app.name ?? "").font(.system(size: 13, weight: .semibold)).lineLimit(1)
+          }
+          DeckFactsRow(items: Array(deckFacts(for: app, model: model, running: running, includeSource: false).prefix(1)), size: 11)
+        }
+      }
+    }
+    .frame(width: width)
+    .offset(y: hovering ? -2 : 0)
+    .animation(.smooth(duration: 0.18), value: hovering)
+    .onHover { hovering = $0 }
+    .contentShape(Rectangle())
+    .onTapGesture(count: 2) { model.openApp(app) }
+    .onTapGesture { model.selectedId = app.id }
+    .deckPadTarget(app, model, radius: 18)
+    .deckAppContextMenu(app, model)
+  }
+}
+
+// MARK: - A3 Quiet
+
+@available(macOS 14.0, *)
+struct DeckQuietView: View {
+  @ObservedObject var model: DeckAppsModel
+  @SwiftUI.State private var width: CGFloat = 1000
+
+  private var host: DeckHost? { model.host }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 34) {
+        header
+        if !model.pinnedApps.isEmpty { section(DL("deck.pinned"), model.pinnedApps) }
+        section(DL("deck.allApps"), model.libraryApps.filter { !$0.pinned })
+      }
+      .padding(.horizontal, 36)
+      .padding(.top, 8)
+      .padding(.bottom, 44)
+    }
+    .background(GeometryReader { proxy in Color.clear.onAppear { width = proxy.size.width }.onChange(of: proxy.size.width) { _, new in width = new } })
+    .background(Color(nsColor: .windowBackgroundColor))
+  }
+
+  @ViewBuilder
+  private var header: some View {
+    if let host {
+      HStack(alignment: .center, spacing: 16) {
+        DeckHostIcon(host: host, size: 56, muted: !host.online)
+        VStack(alignment: .leading, spacing: 4) {
+          Text(host.name).font(.system(size: 34, weight: .bold)).lineLimit(1)
+          Text(deckHostFactsLine(host)).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+        }
+        Spacer()
+      }
+    }
+  }
+
+  private func section(_ title: String, _ apps: [TemporaryApp]) -> some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text(title).font(.system(size: 22, weight: .bold))
+      LazyVGrid(columns: [GridItem(.adaptive(minimum: 176, maximum: 250), spacing: 28, alignment: .top)], spacing: 32) {
+        ForEach(apps, id: \.deckKey) { app in
+          DeckPosterTile(app: app, model: model, radius: 16,
+                         subtitle: deckFacts(for: app, model: model, running: model.runningId == app.id, includeSource: true).prefix(1).map { $0 })
+        }
+      }
+    }
+  }
+}
+
+/// One quiet line of host facts: platform and version, GPU, route, codecs.
+func deckHostFactsLine(_ host: DeckHost) -> String {
+  var parts: [String] = []
+  if !host.facts.osVersion.isEmpty { parts.append(host.facts.osVersion) } else if !DeckLook.platformName(host.platform).isEmpty { parts.append(DeckLook.platformName(host.platform)) }
+  if !host.facts.gpu.isEmpty { parts.append(host.facts.gpu) }
+  parts.append(deckRouteText(host))
+  parts.append(deckCapabilityText(host))
+  return parts.joined(separator: " · ")
+}
+
+/// The measured path when one is known, otherwise only the latency.
+func deckRouteText(_ host: DeckHost) -> String {
+  let live = HostPathSignals.shared.phrase(forHost: host.id, active: host.address ?? "")
+  if !live.isEmpty {
+    if let rtt = host.rtt { return live + " " + "\(rtt) ms" }
+    return live
+  }
+  return host.rtt.map { "\($0) ms" } ?? ""
+}
+
+/// The window subtitle of the apps page for a host: where it is and how fast.
+@objc(MLDeckWindowText)
+public final class DeckWindowText: NSObject {
+  @objc public static func subtitle(forHost host: TemporaryHost) -> String {
+    let deck = DeckHost(host)
+    let live = HostPathSignals.shared.phrase(forHost: deck.id, active: deck.address ?? "")
+    var parts: [String] = []
+    if live.isEmpty, let address = deck.address, !address.isEmpty { parts.append(address) }
+    let route = deckRouteText(deck)
+    if !route.isEmpty { parts.append(route) }
+    return parts.joined(separator: " · ")
+  }
+}
+
+/// 大屏模式 (Foundation Sunshine hosts, windows): a tile of its own, not a poster.
+@available(macOS 14.0, *)
+struct DeckBigScreenTile: View {
+  let app: TemporaryApp
+  @ObservedObject var model: DeckAppsModel
+  @SwiftUI.State private var hovering = false
+  @Environment(\.deckScale) private var s
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8 * s) {
+      ZStack {
+        LinearGradient(colors: [Color(red: 0.36, green: 0.30, blue: 0.86), Color(red: 0.62, green: 0.27, blue: 0.78)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+        VStack(spacing: 10 * s) {
+          Image(systemName: "tv").font(.system(size: 44 * s, weight: .light)).foregroundStyle(.white)
+          Text(DL("deck.bigscreen")).font(.system(size: 15 * s, weight: .bold)).foregroundStyle(.white)
+        }
+        Image(systemName: "sparkles").font(.system(size: 13 * s)).foregroundStyle(.white.opacity(0.8))
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding(10 * s)
+      }
+      .aspectRatio(0.75, contentMode: .fit)
+      .clipShape(RoundedRectangle(cornerRadius: 14 * s, style: .continuous))
+      .shadow(color: .black.opacity(hovering ? 0.3 : 0.16), radius: (hovering ? 14 : 7) * s, y: (hovering ? 8 : 3) * s)
+      Text(DL("deck.bigscreen")).font(.system(size: 13 * s, weight: .medium)).lineLimit(1)
+    }
+    .offset(y: hovering ? -2 : 0)
+    .animation(.smooth(duration: 0.18), value: hovering)
+    .onHover { hovering = $0 }
+    .contentShape(Rectangle())
+    .onTapGesture(count: 2) { model.openApp(app) }
+    .deckPadTarget(app, model, radius: 14 * s)
+  }
+}
+
+/// A poster tile, or the 大屏模式 tile for the host's big screen entry.
+@available(macOS 14.0, *)
+struct DeckAppCell: View {
+  let app: TemporaryApp
+  @ObservedObject var model: DeckAppsModel
+  var subtitle: [DeckFactItem] = []
+  var highlightRunning = false
+  /// The running app is already marked in 继续, so 应用 does not repeat it.
+  var suppressRunning = false
+  /// With no computer card: 继续 / 退出 on the running app's own tile.
+  var runningControls = false
+  /// 应用卡片 横版: 16:9 cards instead of posters.
+  var landscape = false
+
+  var body: some View {
+    if deckIsBigScreen(app) {
+      if landscape { DeckBigScreenCard(app: app, model: model) } else { DeckBigScreenTile(app: app, model: model) }
+    } else if landscape {
+      VStack(alignment: .leading, spacing: 8) {
+        DeckLandscapeTile(app: app, model: model, markRunning: !suppressRunning)
+        if runningControls && model.runningId == app.id {
+          HStack(spacing: 6) {
+            Button { model.openApp(app) } label: { Label(DL("deck.resume"), systemImage: "play.fill").font(.system(size: 11, weight: .semibold)).lineLimit(1) }
+              .deckProminent().controlSize(.small)
+            Button { model.quitApp(app) } label: { Text(DL("deck.quit")).font(.system(size: 11)).lineLimit(1) }
+              .deckSecondary().controlSize(.small)
+          }
+        }
+      }
+    } else {
+      VStack(alignment: .leading, spacing: 8) {
+        DeckPosterTile(app: app, model: model, subtitle: subtitle, badge: suppressRunning ? .none : (highlightRunning ? .styled : .legacy))
+        if runningControls && model.runningId == app.id {
+          HStack(spacing: 6) {
+            Button { model.openApp(app) } label: { Label(DL("deck.resume"), systemImage: "play.fill").font(.system(size: 11, weight: .semibold)).lineLimit(1) }
+              .deckProminent().controlSize(.small)
+            Button { model.quitApp(app) } label: { Text(DL("deck.quit")).font(.system(size: 11)).lineLimit(1) }
+              .deckSecondary().controlSize(.small)
+          }
+        }
+      }
+    }
+  }
+}
+
+/// The default Foundation Sunshine entries by name (only used for a Foundation Sunshine host that sends no FsKind).
+func deckKindFromName(_ name: String) -> String? {
+  let n = name.trimmingCharacters(in: .whitespaces).lowercased()
+  if ["大屏", "大屏模式", "big screen", "bigscreen", "big-screen"].contains(n) { return "bigscreen" }
+  if ["desktop", "桌面"].contains(n) { return "desktop" }
+  return nil
+}
