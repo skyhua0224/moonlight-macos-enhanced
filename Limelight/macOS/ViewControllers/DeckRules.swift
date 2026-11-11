@@ -359,3 +359,383 @@ struct DeckChipGroup: Equatable {
   var endpoints: [DeckEndpoint]
 }
 
+enum DeckChipBuilder {
+  static func groups(_ items: [(endpoint: DeckEndpoint, verdict: DeckPathVerdict)]) -> [DeckChipGroup] {
+    var order: [Int] = []
+    var members: [Int: [(DeckEndpoint, DeckPathVerdict)]] = [:]
+    for item in items {
+      let g = DeckPathWords.chipGroup(item.verdict, item.endpoint)
+      if members[g] == nil { order.append(g) }
+      members[g, default: []].append((item.endpoint, item.verdict))
+    }
+    order.sort()
+    return order.map { g in
+      let list = members[g] ?? []
+      return DeckChipGroup(word: DeckPathWords.word(list[0].1, list[0].0), group: g, endpoints: list.map { $0.0 })
+    }
+  }
+
+  /// What a chip shows of its group: the address in use, else the one with the lowest latency, else the first; "+N" for the rest.
+  static func shown(_ group: DeckChipGroup, inUse: DeckEndpoint?, latency: (DeckEndpoint) -> Int?) -> (endpoint: DeckEndpoint, more: Int) {
+    let pick: DeckEndpoint
+    if let inUse, group.endpoints.contains(inUse) { pick = inUse }
+    else if let best = group.endpoints.compactMap({ e in latency(e).map { (e, $0) } }).min(by: { $0.1 < $1.1 }) { pick = best.0 }
+    else { pick = group.endpoints[0] }
+    return (pick, group.endpoints.count - 1)
+  }
+}
+
+
+// MARK: - Latency figures
+
+/// A latency that may be shown. -1 and -2 are internal answers ("reachable, no number", "could not measure"), never numbers.
+enum DeckLatencyRules {
+  static func valid(_ ms: Int?) -> Int? {
+    guard let ms, ms >= 1 else { return nil }
+    return ms
+  }
+}
+
+// MARK: - 网卡 (the network interface a computer's stream is pinned to)
+
+/// The rules of the per-computer 网卡 choice (Enhanced keeps the minimum: a choice, the list it is made from, the words, 经代理).
+/// Pure: the enumeration of the machine's interfaces is HostNics (HostPathPresence.swift).
+enum DeckNic {
+  enum Kind: Equatable { case wifi, ethernet, tunnel }
+
+  /// One interface as the system reports it.
+  struct Raw {
+    var name: String
+    var index: UInt32
+    var up: Bool
+    var running: Bool
+    var ipv4: String?
+    var isWifi: Bool
+  }
+
+  struct Interface: Equatable {
+    var name: String
+    var index: UInt32
+    var kind: Kind
+    var ipv4: String?
+  }
+
+  /// What the saved word means against today's list.
+  enum Choice: Equatable {
+    case automatic
+    case interface(Interface)
+    /// the saved interface is not there now (unplugged, Wi-Fi off): shown as chosen and unavailable, never swapped for another
+    case missing(String)
+  }
+
+  /// Physical interfaces (en*) that are up and have an IPv4 address that is not link-local, and tunnels (utun, tun, ipsec, ppp)
+  /// that are up and carry an IPv4 address (the system's own utun0-3 have only a link-local IPv6 one, so they are not listed).
+  /// Physical first, then tunnels, each by name with numbers in numeric order (en1 before en10).
+  static func interfaces(_ raw: [Raw]) -> [Interface] {
+    var list: [Interface] = []
+    for item in raw where item.up && item.running && item.index != 0 {
+      guard let v4 = item.ipv4, !v4.isEmpty, !v4.hasPrefix("169.254.") else { continue }
+      if item.name.hasPrefix("en") {
+        list.append(Interface(name: item.name, index: item.index, kind: item.isWifi ? .wifi : .ethernet, ipv4: v4))
+      } else if ["utun", "tun", "ipsec", "ppp"].contains(where: { item.name.hasPrefix($0) }) {
+        list.append(Interface(name: item.name, index: item.index, kind: .tunnel, ipv4: v4))
+      }
+    }
+    return list.sorted { a, b in
+      if (a.kind == .tunnel) != (b.kind == .tunnel) { return b.kind == .tunnel }
+      return a.name.compare(b.name, options: .numeric) == .orderedAscending
+    }
+  }
+
+  /// 「Wi-Fi en0 · 192.0.2.12」, 「以太网 en5 · 192.0.2.8」, 「隧道 utun10」: type word, name, and the IPv4 of a physical interface.
+  static func label(_ interface: Interface, kindWord: String) -> String {
+    var text = kindWord + " " + interface.name
+    if interface.kind != .tunnel, let v4 = interface.ipv4, !v4.isEmpty { text += " · " + v4 }
+    return text
+  }
+
+  static func choice(saved: String?, in list: [Interface]) -> Choice {
+    guard let saved, !saved.isEmpty, saved != "Auto" else { return .automatic }
+    if let hit = list.first(where: { $0.name == saved }) { return .interface(hit) }
+    return .missing(saved)
+  }
+
+  /// 198.18.0.0/15 (RFC 2544 benchmarking range, RFC 6890): the range a fake-IP proxy hands its TUN, so an address of it on a
+  /// tunnel is evidence of a capture-all proxy. Evidence only; it does not prove a VPN.
+  static func isFakeIP(_ ipv4: String?) -> Bool {
+    guard let ipv4, let v4 = DeckPathClassifier.ipv4(ipv4) else { return false }
+    return (v4 & 0xFFFE_0000) == 0xC612_0000
+  }
+}
+
+// MARK: - Host software (what is running on the other computer) and the Foundation Sunshine recommendation
+
+/// What /serverinfo lets the client say about the software on the other side, and nothing more.
+///
+/// Facts (host source read 2026-11-11; Sunshine docs: `GFE_VERSION` "identifies the GameStream version Sunshine imitates", 3.23.0.74):
+///  - Foundation Sunshine sends FsCapabilityVersion / VddCapabilityVersion and `SunshineVersion` ("<name> <version>").
+///  - Sunshine (and forks) send `GfeVersion` = the constant 3.23.0.74 and `state` = SUNSHINE_SERVER_FREE|BUSY. So a GfeVersion
+///    on its own is NOT evidence of GeForce Experience.
+///  - GeForce Experience sends `state` = MJOLNIR_STATE_SERVER_AVAILABLE|BUSY and its real GfeVersion; it exists on Windows only.
+///  - No field of /serverinfo names the operating system of a non-Foundation host (FsPlatform is Foundation-only).
+/// Nothing here invents a version.
+enum DeckHostSoftware {
+  enum Kind: Equatable {
+    case foundation(version: String)
+    case sunshine(version: String)
+    case gfe(version: String)
+    case compatible
+  }
+  enum Windows: Equatable { case yes, no, unknown }
+
+  struct Info: Equatable {
+    var kind: Kind
+    var windows: Windows
+    /// The version string as the host sent it ("2026.1112.025657.杂鱼", "manual-20261112-025657-dev"), for the hover text.
+    /// `kind` carries only the short form.
+    var fullVersion = ""
+    var isFoundation: Bool { if case .foundation = kind { return true } else { return false } }
+  }
+
+  /// Where the version starts in what the host sent: the first word that begins with a digit (after a leading v), else the
+  /// last word if it has a digit in it. "Sunshine 2026.1112.025657.杂鱼" -> "2026.1112.025657.杂鱼"; "v0.23.1" -> "0.23.1";
+  /// "manual-20261112-025657" stays whole; "Sunshine", "杂鱼" and "" -> "". The product word is never part of it.
+  static func fullVersion(_ raw: String) -> String {
+    let words = raw.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+    func stripped(_ w: String) -> String {
+      let rest = w.dropFirst()
+      return (w.hasPrefix("v") || w.hasPrefix("V")) && rest.first?.isASCII == true && rest.first?.isNumber == true ? String(rest) : w
+    }
+    guard let last = words.last else { return "" }
+    if let i = words.firstIndex(where: { stripped($0).first?.isASCII == true && stripped($0).first?.isNumber == true }) {
+      return ([stripped(words[i])] + words[(i + 1)...]).joined(separator: " ")
+    }
+    // no word begins with a digit: a build tag such as "manual-20261112-025657" is kept for the hover text, a bare word
+    // ("Sunshine", "杂鱼") is not a version
+    return last.contains(where: { $0.isASCII && $0.isNumber }) ? stripped(last) : ""
+  }
+
+  /// The version as shown: its first `maxParts` numeric parts, nothing after them. The date builds of Foundation Sunshine are
+  /// `YYYY.MDD.HMMSS` plus optional suffixes (".杂鱼", ".<commit>", a dirty mark): "2026.1112.025657.杂鱼" -> "2026.1112.025657",
+  /// "Sunshine 2026.823.50647.970e0298b" -> "2026.823.50647", "v0.23.1" -> "0.23.1". A version that does not begin with a digit
+  /// ("manual-20261112-025657", "杂鱼", "") shows nothing: a version is never invented. GeForce Experience's own four-part
+  /// version is kept whole by its caller (maxParts 4). Suffixes only appear in the hover text (`fullVersion`).
+  static func versionNumber(_ raw: String, maxParts: Int = 3) -> String {
+    let token = fullVersion(raw).split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init) ?? ""
+    guard token.first?.isASCII == true, token.first?.isNumber == true else { return "" }
+    var parts: [Substring] = []
+    for part in token.split(separator: ".", omittingEmptySubsequences: false) {
+      guard !part.isEmpty, part.allSatisfy({ $0.isASCII && $0.isNumber }) else { break }
+      parts.append(part)
+      if parts.count == maxParts { break }
+    }
+    return parts.joined(separator: ".")
+  }
+
+  /// The one rule for "this host is Foundation Sunshine": FsCapabilityVersion or VddCapabilityVersion above 0, read as the
+  /// plain integers they are (a missing, empty, non-numeric or 0 tag does not count). DeckHost, the facts store and the
+  /// stream manager all use it, so the page and the stream never disagree.
+  static func isFoundation(fsCapability: Int, vddCapability: Int) -> Bool { fsCapability > 0 || vddCapability > 0 }
+  static func isFoundation(fsCapability: String?, vddCapability: String?) -> Bool {
+    func number(_ text: String?) -> Int { Int((text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0 }
+    return isFoundation(fsCapability: number(fsCapability), vddCapability: number(vddCapability))
+  }
+
+  /// `state` is the serverinfo state tag ("SUNSHINE_SERVER_FREE", "MJOLNIR_STATE_SERVER_AVAILABLE"); only its family counts.
+  static func classify(isFoundation: Bool, sunshineVersion: String, gfeVersion: String, state: String, platform: String) -> Info {
+    let family = state.uppercased()
+    let platformWords = platform.lowercased()
+    let osKnown: Windows = platformWords.isEmpty ? .unknown : (platformWords.contains("win") ? .yes : .no)
+    if isFoundation {
+      return Info(kind: .foundation(version: versionNumber(sunshineVersion)), windows: .yes, fullVersion: fullVersion(sunshineVersion))
+    }
+    if family.hasPrefix("MJOLNIR") {
+      return Info(kind: .gfe(version: versionNumber(gfeVersion, maxParts: 4)), windows: .yes, fullVersion: fullVersion(gfeVersion))
+    }
+    if family.hasPrefix("SUNSHINE") || !sunshineVersion.isEmpty {
+      return Info(kind: .sunshine(version: versionNumber(sunshineVersion)), windows: osKnown, fullVersion: fullVersion(sunshineVersion))
+    }
+    return Info(kind: .compatible, windows: osKnown)
+  }
+
+  /// The row text. Unknown stays unknown: a version is only shown when the host sent one.
+  /// `names` carries the localised words so the rules stay free of the language layer.
+  struct Names { var foundation = "Foundation Sunshine", sunshine = "Sunshine", gfe = "GeForce Experience", compatible = "GameStream" }
+  static func title(_ info: Info, names: Names) -> String {
+    func join(_ name: String, _ version: String) -> String { version.isEmpty ? name : "\(name) \(version)" }
+    switch info.kind {
+    case .foundation(let v): return join(names.foundation, v)
+    case .sunshine(let v): return join(names.sunshine, v)
+    case .gfe(let v): return join(names.gfe, v)
+    case .compatible: return names.compatible
+    }
+  }
+
+  /// The hover text: the title with the version string the host sent, suffixes and all. Equal to the title when there is
+  /// nothing more to say.
+  static func detail(_ info: Info, names: Names) -> String {
+    let short = title(info, names: names)
+    guard !info.fullVersion.isEmpty else { return short }
+    let name: String
+    switch info.kind {
+    case .foundation: name = names.foundation
+    case .sunshine: name = names.sunshine
+    case .gfe: name = names.gfe
+    case .compatible: return short
+    }
+    return "\(name) \(info.fullVersion)"
+  }
+}
+
+/// When the one-time recommendation banner shows on a computer's page.
+enum DeckFsPromoRules {
+  enum Banner: Equatable {
+    case none
+    /// The computer is Windows (or GeForce Experience): the plain text.
+    case windows
+    /// Cannot tell the operating system: the text says "if this computer is Windows".
+    case ifWindows
+  }
+
+  /// - dismissed: 「不再提示」 was chosen for this computer.
+  /// - shownBefore: the banner was shown on an earlier launch of the app (at most once per computer: it does not come back).
+  /// - shownThisLaunch: it was shown during this launch (it stays until dismissed or the app quits, so it does not vanish on a reload).
+  static func banner(_ info: DeckHostSoftware.Info, dismissed: Bool, shownBefore: Bool, shownThisLaunch: Bool) -> Banner {
+    if info.isFoundation || dismissed { return .none }
+    if shownBefore && !shownThisLaunch { return .none }
+    switch info.windows {
+    case .yes: return .windows
+    case .no: return .none
+    case .unknown: return .ifWindows
+    }
+  }
+
+  /// Foundation Sunshine only runs on Windows: a computer known not to be Windows is told what is limited, not sold anything.
+  static func recommends(_ info: DeckHostSoftware.Info) -> Bool { !info.isFoundation && info.windows != .no }
+}
+
+
+/// A Foundation Sunshine computer that lacks functions the client knows: told by capability, not by a date.
+/// Signals: no Fs* capability at all (FsCapabilityVersion absent or below what this client knows), or an app list in which
+/// no app carries FsKind (big screen, covers by kind and the like depend on it). The version's date is never used to decide.
+enum DeckFsUpdateRules {
+  /// The newest FsCapabilityVersion this client knows (host src/client_interface.h, capability_version).
+  static let latestCapability = 1
+  enum Reason: Equatable { case oldCapability, noFsKind }
+
+  /// - kindSeen: nil when the app list has not been read yet (then only the capability counts).
+  static func reason(isFoundation: Bool, fsCapability: Int, kindSeen: Bool?) -> Reason? {
+    guard isFoundation else { return nil }
+    if fsCapability < latestCapability { return .oldCapability }
+    if kindSeen == false { return .noFsKind }
+    return nil
+  }
+
+  /// What "not again" is remembered against: the host's version, or its capability level when it sends no version.
+  /// After the host is updated and is behind again the token differs and the banner may come back once.
+  static func token(version: String, fsCapability: Int) -> String { version.isEmpty ? "cap\(fsCapability)" : version }
+
+  static func shouldShow(reason: Reason?, token: String, dismissedFor: String?, shownFor: String?, shownThisLaunch: Bool) -> Bool {
+    guard reason != nil, dismissedFor != token else { return false }
+    if shownFor == token && !shownThisLaunch { return false }
+    return true
+  }
+}
+
+// MARK: - 最近使用
+
+/// Only what was really used: an app the host says it ran (FsLastPlayed) or this Mac launched, each with a valid time.
+/// Never the order of the app list, never an entry with no time. Newest first. (Apple TV's 继续观看 and Apple Music's
+/// 最近播放 are simply not there when there is nothing to put in them: the section hides.)
+struct DeckRecentCandidate: Equatable {
+  var id: String
+  /// FsLastPlayed from a Foundation Sunshine host
+  var hostLastPlayed: Date?
+  /// the start of the newest session this client recorded
+  var ownLastStart: Date?
+}
+
+enum DeckRecentRules {
+  static func recent(_ candidates: [DeckRecentCandidate], limit: Int = 10, now: Date = Date()) -> [String] {
+    var dated: [(id: String, when: Date)] = []
+    for c in candidates {
+      let times = [DeckTimeRules.valid(c.hostLastPlayed, now: now), DeckTimeRules.valid(c.ownLastStart, now: now)].compactMap { $0 }
+      if let newest = times.max() { dated.append((c.id, newest)) }
+    }
+    return dated.sorted { $0.when > $1.when }.prefix(limit).map { $0.id }
+  }
+}
+
+
+// MARK: - A coloured tile on the sidebar's selection
+
+/// A host's icon is a pale tile of its colour with the glyph in the colour itself. On the selected row the selection fill is the
+/// system accent (blue by default): a blue tile with a blue glyph melts into it. System Settings lifts its coloured squares off the
+/// selection with a light edge; here the edge is always added on a light appearance, and when the glyph and the tile it sits on are
+/// too alike (colour difference below `similar`) the tile is lifted to a light base as well.
+enum DeckSelectionRules {
+  struct RGB: Equatable { var r: Double, g: Double, b: Double }   // sRGB, 0...1
+
+  /// CIE76 colour difference in L*a*b* (D65). One just-noticeable difference is about 2.3; two hues that are clearly different
+  /// as small shapes start around 35-40.
+  static func deltaE(_ a: RGB, _ b: RGB) -> Double {
+    let la = lab(a), lb = lab(b)
+    return ((la.l - lb.l) * (la.l - lb.l) + (la.a - lb.a) * (la.a - lb.a) + (la.b - lb.b) * (la.b - lb.b)).squareRoot()
+  }
+
+  /// The threshold of the lift. Palette check (macOS 26 system colours on the default blue accent, tile 16 %): dE76 of the glyph
+  /// against its tile is blue 0, indigo 17, purple 39 (all lifted); teal 61, gray 63, pink 112, green 121, red 127, orange 133,
+  /// yellow 137 (not lifted).
+  static let similar = 40.0
+
+  static func blend(_ top: RGB, over bottom: RGB, alpha: Double) -> RGB {
+    RGB(r: top.r * alpha + bottom.r * (1 - alpha), g: top.g * alpha + bottom.g * (1 - alpha), b: top.b * alpha + bottom.b * (1 - alpha))
+  }
+
+  /// - tint: the icon colour; `tileAlpha` is how strongly the tile shows it; `selection` the row's selection fill.
+  static func needsLift(tint: RGB, selection: RGB, tileAlpha: Double = 0.16) -> Bool {
+    deltaE(tint, blend(tint, over: selection, alpha: tileAlpha)) < similar
+  }
+
+  private static func lab(_ c: RGB) -> (l: Double, a: Double, b: Double) {
+    func lin(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+    let r = lin(c.r), g = lin(c.g), b = lin(c.b)
+    let x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047
+    let y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
+    let z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883
+    func f(_ t: Double) -> Double { t > 0.008856 ? cbrt(t) : 7.787 * t + 16.0 / 116.0 }
+    return (116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z)))
+  }
+}
+
+
+// MARK: - When the app list is fetched again
+
+/// The apps of a computer change on the host (a Sparxie app added, apps.json edited) without the client being told, so the client
+/// looks: when the page opens, when the computer comes online, when its /serverinfo says the list changed (appListEtag differs
+/// from the value saved with the last fetch), and, for a host that sends no etag, every 60 s while the page is visible.
+enum DeckAppListRules {
+  enum Reason: String { case pageOpen = "page-open", etagChanged = "etag-changed", interval, online }
+  static let interval: TimeInterval = 60
+  /// The shortest time between two fetches that an etag may trigger (a host whose list cannot be fetched is not asked every tick).
+  static let etagThrottle: TimeInterval = 15
+
+  static func etagDiffers(seen: String?, fetched: String?) -> Bool {
+    guard let seen, !seen.isEmpty else { return false }
+    return seen != fetched
+  }
+
+  /// Called every few seconds while the computer's page is visible.
+  static func due(online: Bool, wasOnline: Bool, seenEtag: String?, fetchedEtag: String?, lastFetch: Date?, now: Date) -> Reason? {
+    guard online else { return nil }
+    if !wasOnline { return .online }
+    let since = lastFetch.map { now.timeIntervalSince($0) }
+    if etagDiffers(seen: seenEtag, fetched: fetchedEtag), since == nil || since! >= etagThrottle { return .etagChanged }
+    // no etag from this host: it cannot tell, so ask on a timer
+    if (seenEtag ?? "").isEmpty, since == nil || since! >= interval { return .interval }
+    return nil
+  }
+}
+
+// MARK: - Cold start: what is drawn before discovery has answered
+
