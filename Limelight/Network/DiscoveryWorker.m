@@ -7,9 +7,10 @@
 //
 
 #import "DiscoveryWorker.h"
+#import "LatencyProbe.h"
+#import "ConceptHarness.h"
 #import "Utils.h"
 #import "ConnectionEndpointStore.h"
-#import "LatencyProbe.h"
 #import "HttpManager.h"
 #import "ServerInfoResponse.h"
 #import "HttpRequest.h"
@@ -17,22 +18,31 @@
 #import "StreamingSessionManager.h" // Import for streaming state check
 #import "MoonlightEnhanced-Swift.h"
 
+#import "HostPathRank.h"
+#import "HostPathRoute.h"
+#include <stdlib.h>
+#include <string.h>
+
+static dispatch_semaphore_t gProbeSlots = NULL;
+static dispatch_once_t gProbeSlotsOnce;
+static const int kProbeSlots = 8;
+
 @implementation DiscoveryWorker {
     TemporaryHost* _host;
     NSString* _uniqueId;
+    int _stablePolls;
+    int _offlinePolls;
+    BOOL _fsEvents;
+    NSInteger _fsSeq;
+    NSInteger _raceEpoch;
 }
 
-static const float POLL_RATE = 2.0f; // Poll every 2 seconds
 static const NSTimeInterval ADDRESS_FAILURE_COOLDOWN_SEC = 30.0;
 static NSMutableDictionary<NSString*, NSMutableDictionary<NSString*, NSNumber*>*> *gAddressCooldownByHost = nil;
 static NSObject *gAddressCooldownLock = nil;
 static dispatch_once_t gAddressCooldownOnceToken;
-static const double AUTO_SWITCH_PING_IMPROVEMENT_MS = 20.0;
-static const NSTimeInterval AUTO_SWITCH_COOLDOWN_SEC = 30.0;
-static NSMutableDictionary<NSString*, NSNumber*> *gAutoSwitchCooldownByHost = nil;
-static NSObject *gAutoSwitchCooldownLock = nil;
-static dispatch_once_t gAutoSwitchCooldownOnceToken;
-static const NSInteger PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED = 3;
+// Paired -> Unpaired: a TLS answer must say PairStatus=0 in this round and in the next one as well
+static const NSInteger PAIR_DOWNGRADE_CONFIRMATIONS_REQUIRED = 2;
 static NSMutableDictionary<NSString*, NSNumber*> *gUnpairedObservationCountByHost = nil;
 static NSObject *gUnpairedObservationLock = nil;
 static dispatch_once_t gUnpairedObservationOnceToken;
@@ -49,13 +59,135 @@ static dispatch_once_t gUnpairedObservationOnceToken;
 }
 
 - (void)main {
+    [[MLHostPathSignals shared] start];
     while (!self.cancelled) {
+        // A launch is pending or a stream is open: nothing is asked of any computer until it is over (probes on
+        // five addresses, latency probes and the events wait all shared the link with the stream).
+        if ([MLNetworkQuiet isQuiet]) {
+            [NSThread sleepForTimeInterval:0.25];
+            continue;
+        }
+        NSInteger wake = [[MLHostPathSignals shared] generation];
         [self discoverHost];
         if (!self.cancelled) {
-            // Keep cancellation responsive even between discovery cycles.
-            for (float waited = 0; waited < POLL_RATE && !self.cancelled; waited += 0.1f)
+            if ([self fsEventsEnabled] && [self longPollEvents]) {
+                continue;
+            }
+            NSTimeInterval wait = [self backoffInterval];
+            for (NSTimeInterval waited = 0; waited < wait && !self.cancelled; waited += 0.1) {
+                if ([[MLHostPathSignals shared] generation] != wake) {
+                    break;
+                }
                 [NSThread sleepForTimeInterval:0.1];
+            }
         }
+    }
+}
+
+/// _fsEvents is written by the commit of a round (another thread) and read by this worker's loop: read it under the
+/// same lock the writers hold. Nothing is called while it is held.
+- (BOOL)fsEventsEnabled {
+    @synchronized (self) {
+        return _fsEvents;
+    }
+}
+
+- (NSTimeInterval)backoffInterval {
+    if (_host.state != StateOnline) {
+        _stablePolls = 0;
+        _offlinePolls++;
+        if (_offlinePolls <= 1) {
+            return 5.0;
+        }
+        if (_offlinePolls == 2) {
+            return 10.0;
+        }
+        if (_offlinePolls == 3) {
+            return 20.0;
+        }
+        return 30.0;
+    }
+    _offlinePolls = 0;
+    _stablePolls++;
+    /* Failure backoff is only for an offline host. An online host stays on the
+       event long-poll, or on this quiet refresh when the host has no events.
+       A wake, focus, mDNS result, or the host page ends the wait immediately. */
+    return [MLHostEventsRules refreshIntervalWithEventsEnabled:[self fsEventsEnabled]];
+}
+
+- (void)releaseProbeSlot:(BOOL)held group:(dispatch_group_t)group {
+    if (held && gProbeSlots != NULL) {
+        dispatch_semaphore_signal(gProbeSlots);
+    }
+    dispatch_group_leave(group);
+}
+
+- (int)smoothedRttMsForAddress:(NSString *)address sample:(int)sample success:(BOOL)success {
+    static NSMutableDictionary<NSString *, NSMutableDictionary<NSString *, NSNumber *> *> *memory;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ memory = [NSMutableDictionary dictionary]; });
+    NSString *uuid = _host.uuid ?: @"";
+    if (uuid.length == 0 || address.length == 0 || !success || sample < 0) {
+        return sample;
+    }
+    @synchronized (memory) {
+        NSMutableDictionary *host = memory[uuid];
+        if (host == nil) {
+            host = [NSMutableDictionary dictionary];
+            memory[uuid] = host;
+        }
+        double previous = host[address] != nil ? [host[address] doubleValue] : -1;
+        double next = host_path_smooth_rtt(previous, sample);
+        host[address] = @(next);
+        return (int)(next + 0.5);
+    }
+}
+
+- (BOOL)longPollEvents {
+    NSString *address = nil;
+    NSData *cert = nil;
+    NSInteger seqSnapshot = 0;
+    @synchronized (self) {
+        address = _host.activeAddress;
+        cert = _host.serverCert;
+        seqSnapshot = _fsSeq;
+    }
+    if (address.length == 0) {
+        return NO;
+    }
+    NSDate *started = [NSDate date];
+    HttpManager *manager = [[HttpManager alloc] initWithHost:address uniqueId:_uniqueId serverCert:cert];
+    ServerInfoResponse *response = [[ServerInfoResponse alloc] init];
+    NSURLRequest *request = [manager newServerInfoWaitRequestAfterSeq:seqSnapshot timeoutSec:25];
+    [manager executeRequestSynchronously:[HttpRequest requestForResponse:response
+                                                          withUrlRequest:request
+                                           fallbackError:401
+                                           fallbackRequest:[manager newHttpServerInfoRequest:YES]]];
+    NSTimeInterval elapsed = -[started timeIntervalSinceNow];
+    @synchronized (self) {
+        BOOL valid = [self checkResponse:response];
+        MLHostEventsAnswer *answer = [MLHostEventsRules answerWithValid:valid
+                                                            previousSeq:_fsSeq
+                                                            answeredSeq:valid ? [MLHostEventsRules integer:[response getStringTag:@"FsEventSeq"]] : 0
+                                                                elapsed:elapsed];
+        if (!answer.accepted) {
+            if (!answer.eventsStillEnabled) {
+                _fsEvents = NO;
+            }
+            return NO;
+        }
+        _fsSeq = answer.nextSeq;
+        if (!answer.eventsStillEnabled) {
+            /* The host ignored fsWait and answered immediately. Fall back to probes. */
+            _fsEvents = NO;
+            return NO;
+        }
+        if (answer.changed) {
+            // an events answer can be the plain-HTTP fallback: it never decides the pair state (the discovery round does)
+            [response populateHost:_host updatePairState:NO];
+            _stablePolls = 0;
+        }
+        return answer.changed;
     }
 }
 
@@ -145,6 +277,13 @@ static dispatch_once_t gUnpairedObservationOnceToken;
 }
 
 - (void) discoverHost {
+    if ([ConceptHarness networkMocked]) {
+        return;
+    }
+    // also for the callers outside the worker loop (an mDNS answer, the page's own timer)
+    if ([MLNetworkQuiet isQuiet]) {
+        return;
+    }
     NSArray *addresses = [self getHostAddressList];
     // Probe every known endpoint for host liveness even when the user pinned
     // one connection method. A pinned route controls streaming, but it must
@@ -160,13 +299,10 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             selectedConnectionMethod = hostSettings[@"connectionMethod"];
             if (selectedConnectionMethod.length > 0 && ![selectedConnectionMethod isEqualToString:@"Auto"]) {
                 autoConnectionMode = NO;
+                // The pinned address is probed with the others. It does not go first:
+                // a user-chosen default overrides 自动 only when connecting.
                 if (![probeAddresses containsObject:selectedConnectionMethod]) {
-                    [probeAddresses insertObject:selectedConnectionMethod atIndex:0];
-                } else {
-                    NSUInteger selectedIndex = [probeAddresses indexOfObject:selectedConnectionMethod];
-                    if (selectedIndex != 0) {
-                        [probeAddresses exchangeObjectAtIndex:0 withObjectAtIndex:selectedIndex];
-                    }
+                    [probeAddresses addObject:selectedConnectionMethod];
                 }
             }
         }
@@ -174,11 +310,38 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     
     Log(LOG_D, @"%@ has %d unique addresses (selected=%@)", _host.name, [probeAddresses count],
         selectedConnectionMethod ?: @"Auto");
+    int lastGood = [self lastGoodIndexInAddresses:probeAddresses];
+    [self orderProbesForHappyEyeballs:probeAddresses lastGood:lastGood];
     
     dispatch_group_t group = dispatch_group_create();
-    NSMutableDictionary *latencies = [[NSMutableDictionary alloc] init];
-    NSMutableDictionary *states = [[NSMutableDictionary alloc] init];
+    // Start from the last round's results: an address that answers (or fails) is overwritten the moment its own
+    // probe ends, and the others keep their last value instead of vanishing from the page for the length of
+    // the round (a dead route takes a full timeout).
+    NSMutableDictionary *latencies = [_host.addressLatencies mutableCopy] ?: [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *states = [_host.addressStates mutableCopy] ?: [[NSMutableDictionary alloc] init];
+    // `lock` guards the two dictionaries and the flags below and nothing else: nothing is called while it is held
     NSLock *lock = [[NSLock alloc] init];
+    NSString *notifyUUID = _host.uuid ?: @"";
+    // One address' result, published at once: copied under the lock, merged into the host as immutable copies and
+    // broadcast on the main queue, so 局域网 shows its latency after one round trip and a dead route turns 超时 when
+    // its own timeout ends, not when the round does.
+    void (^publishPartial)(void) = ^{
+        NSDictionary *statesCopy = nil, *latenciesCopy = nil;
+        [lock lock];
+        statesCopy = [states copy];
+        latenciesCopy = [latencies copy];
+        [lock unlock];
+        TemporaryHost *hostForPartial = [self getHost];
+        hostForPartial.addressStates = statesCopy;
+        hostForPartial.addressLatencies = latenciesCopy;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (notifyUUID.length > 0) {
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"HostLatencyUpdated" object:nil userInfo:@{
+                    @"uuid": notifyUUID, @"latencies": latenciesCopy, @"states": statesCopy
+                }];
+            }
+        });
+    };
     
     __block BOOL receivedResponse = NO;
     __block BOOL publishedOnline = NO;
@@ -187,8 +350,13 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     __block ServerInfoResponse *bestResp = nil;
     __block BOOL sawExplicitPairedStatus = NO;
     __block BOOL sawExplicitUnpairedStatus = NO;
+    __block int attempted = 0;
 
     __weak typeof(self) weakSelf = self;
+    NSInteger wakeGen = [[MLHostPathSignals shared] generation];
+    _raceEpoch += 1;
+    NSInteger epoch = _raceEpoch;
+    NSUInteger probePosition = 0;
     for (NSString *address in probeAddresses) {
         if (self.cancelled) break;
         
@@ -197,19 +365,40 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             continue;
         }
         
+        NSTimeInterval delay = host_path_presence_start_ms((int)probePosition) / 1000.0;
+        probePosition++;
         dispatch_group_enter(group);
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+                       dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) {
                 dispatch_group_leave(group);
                 return;
             }
+            dispatch_once(&gProbeSlotsOnce, ^{
+                gProbeSlots = dispatch_semaphore_create(kProbeSlots);
+            });
+            int timeoutMs = [strongSelf presenceTimeoutMsForAddress:address];
+            NSDate *budgetStarted = [NSDate date];
+            if (dispatch_semaphore_wait(gProbeSlots, dispatch_time(DISPATCH_TIME_NOW, (int64_t)timeoutMs * NSEC_PER_MSEC)) != 0) {
+                Log(LOG_D, @"Skipping %@ for %@ (probe slots busy)", address, [strongSelf getHost].name);
+                dispatch_group_leave(group);
+                return;
+            }
+            NSTimeInterval budget = (timeoutMs / 1000.0) - (-[budgetStarted timeIntervalSinceNow]);
+            if (budget < 0.05) {
+                [strongSelf releaseProbeSlot:YES group:group];
+                return;
+            }
+            [lock lock];
+            attempted++;
+            [lock unlock];
 
             NSDate *start = [NSDate date];
-            ServerInfoResponse* serverInfoResp = [strongSelf requestInfoAtAddress:address cert:[strongSelf getHost].serverCert];
+            ServerInfoResponse* serverInfoResp = [strongSelf requestInfoAtAddress:address cert:[strongSelf getHost].serverCert budget:budget];
             NSTimeInterval rtt = -[start timeIntervalSinceNow] * 1000.0;
             if (strongSelf.cancelled) {
-                dispatch_group_leave(group);
+                [strongSelf releaseProbeSlot:YES group:group];
                 return;
             }
             
@@ -233,85 +422,105 @@ static dispatch_once_t gUnpairedObservationOnceToken;
                     publishedOnline = YES;
                     publish = YES;
                     states[address] = @1;
-                    latencies[address] = @((int)rtt);
+                    // no latency yet: the time of this whole serverinfo request is not a latency (see LatencyProbe)
                     earlyStates = [states copy];
                     earlyLatencies = [latencies copy];
                 }
                 [lock unlock];
                 if (publish) {
+                    // takes the worker's own lock: called after the results lock is released, never nested
+                    [strongSelf noteEventsFromResponse:serverInfoResp];
                     TemporaryHost *host = [strongSelf getHost];
-                    BOOL wasOnline = host.state == StateOnline;
-                    host.state = StateOnline;
-                    host.addressStates = earlyStates;
-                    host.addressLatencies = earlyLatencies;
-                    if (autoConnectionMode && (!wasOnline || host.activeAddress.length == 0) &&
-                        ![[StreamingSessionManager shared] isStreamingHost:host.uuid]) {
-                        host.activeAddress = address;
+                    BOOL wasOnline = NO;
+                    @synchronized (strongSelf) {
+                        wasOnline = host.state == StateOnline;
+                        host.state = StateOnline;
+                        host.addressStates = earlyStates;
+                        host.addressLatencies = earlyLatencies;
+                        if (autoConnectionMode && (!wasOnline || host.activeAddress.length == 0) &&
+                            ![[StreamingSessionManager shared] isStreamingHost:host.uuid]) {
+                            host.activeAddress = address;
+                        }
                     }
-                    if (!wasOnline && strongSelf.onlineHandler) strongSelf.onlineHandler(host);
+                    if (!wasOnline && strongSelf.onlineHandler && !strongSelf.probeOnly) strongSelf.onlineHandler(host);
                     Log(LOG_I, @"[discovery] First verified endpoint: host=%@ elapsedMs=%.0f", host.name, rtt);
                 }
             }
-            NSNumber *pingMs = success ? [LatencyProbe icmpPingMsForAddress:address] : nil;
+            // the probe slot is free as soon as the answer is in: the round-trip measurement below can take seconds on a slow path
+            // and must not make the other addresses wait for a slot
+            if (gProbeSlots != NULL) {
+                dispatch_semaphore_signal(gProbeSlots);
+            }
+            // the latency: the application round trip, measured after the answer, outside every lock
+            NSNumber *appRtt = nil;
+            if (success && !strongSelf.cancelled) {
+                appRtt = [LatencyProbe appRttMsForAddress:address probeTotalMs:(int)rtt];
+            }
             [lock lock];
             if (success) {
                 receivedResponse = YES;
                 NSInteger rawPairStatus = 0;
-                if ([serverInfoResp getIntTag:TAG_PAIR_STATUS value:&rawPairStatus]) {
+                BOOL hasPairTag = [serverInfoResp getIntTag:TAG_PAIR_STATUS value:&rawPairStatus];
+                // With a pinned certificate only an answer over HTTPS with our client certificate is evidence about pairing;
+                // a plain-HTTP answer (HTTPS failed or ran out of budget) says PairStatus=0 to everybody.
+                BOOL evidence = hasPairTag && (serverInfoResp.receivedOverClientTLS || [strongSelf getHost].serverCert == nil);
+                if (evidence) {
                     if (rawPairStatus == 0) {
                         sawExplicitUnpairedStatus = YES;
                     } else {
                         sawExplicitPairedStatus = YES;
                     }
                 }
-                if (pingMs != nil) {
-                    [latencies setObject:pingMs forKey:address];
+                Log(LOG_I, @"[pair] %@ %@ via %@: PairStatus=%@ -> %@", [strongSelf getHost].name, address,
+                    serverInfoResp.receivedOverClientTLS ? @"HTTPS+cert" : @"HTTP",
+                    hasPairTag ? [NSString stringWithFormat:@"%ld", (long)rawPairStatus] : @"absent",
+                    evidence ? @"evidence" : @"ignored for pairing");
+                if (appRtt != nil) {
+                    [latencies setObject:appRtt forKey:address];
                 } else {
-                    [latencies setObject:@((int)rtt) forKey:address];
+                    [latencies removeObjectForKey:address];
                 }
                 [states setObject:@(1) forKey:address];
 
-                double bestMetric = pingMs != nil ? pingMs.doubleValue : rtt;
+                double bestMetric = appRtt != nil ? appRtt.doubleValue : rtt;
                 if (bestMetric < minLatency) {
                     minLatency = bestMetric;
                     bestAddress = address;
                     bestResp = serverInfoResp;
                 }
-                [strongSelf recordAddress:address success:YES];
             } else {
                 [states setObject:@(0) forKey:address];
-                [strongSelf recordAddress:address success:NO];
             }
             [lock unlock];
+            // the address cooldown has its own lock: taken here, after the results lock is released, never nested
+            [strongSelf recordAddress:address success:success];
+            if (!strongSelf.cancelled) {
+                publishPartial();
+            }
             
-            dispatch_group_leave(group);
+            [strongSelf releaseProbeSlot:NO group:group];   // the slot itself was released after the answer
         });
     }
     
-    // Wait for requests to complete, checking for cancellation periodically
-    // This allows stopDiscoveryBlocking to return quickly even if network requests are hanging
-    while (dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC)) != 0) {
-        if (self.cancelled) {
+    __block BOOL committed = NO;
+    NSLock *commitLock = [[NSLock alloc] init];
+    void (^commit)(void) = ^{
+        [commitLock lock];
+        BOOL run = !committed;
+        committed = YES;
+        [commitLock unlock];
+        if (!run || _raceEpoch != epoch) {
             return;
         }
-    }
-    
-    if (self.cancelled) return;
-
-    _host.addressLatencies = latencies;
-    _host.addressStates = states;
-
-    // Check if this host is currently streaming
-    BOOL isStreamingThisHost = [[StreamingSessionManager shared] isStreamingHost:_host.uuid];
-
-    NSString *firstOnlineAddress = nil;
-    int onlineCount = 0;
-    for (NSString *addr in probeAddresses) {
-        NSNumber *state = states[addr];
-        if (state && state.intValue == 1) {
-            onlineCount++;
-            if (!firstOnlineAddress) {
-                firstOnlineAddress = addr;
+        [lock lock];
+        int tries = attempted;
+        BOOL any = receivedResponse;
+        [lock unlock];
+        if (tries == 0 && !any) {
+            // Cooldown or a busy probe slot skipped every address. Leave the
+            // current state alone. An empty address list is still offline.
+            if (probeAddresses.count > 0) {
+                return;
             }
         }
     }
