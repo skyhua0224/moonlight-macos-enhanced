@@ -14,6 +14,10 @@ import SwiftUI
   case up, down, left, right, accept, back, previousColumn, nextColumn
   // Used by the on-screen keyboard: X, Y and the Menu button.
   case delete, space, done
+  // Deck: the Menu button lists the focused item's context menu.
+  case contextMenu
+  // LT / RT: the previous / next section of the page (a page's worth of controls where the window has no sections).
+  case previousSection, nextSection
 }
 
 // MARK: - SwiftUI anchors
@@ -34,6 +38,17 @@ final class ControllerFocusAnchorView: NSView {
   /// Builds the NSMenu (submenus and checkmarks included) A lists in the controller menu.
   var menuProvider: (() -> (title: String, menu: NSMenu))?
   var isTargetEnabled = true
+  /// Identity of the control across SwiftUI rebuilds ("app:<id>", "primary"): a page that is rebuilt (a stream
+  /// ended, the host list refreshed) gets new marker views, and the focus finds its control again by this key.
+  var focusKey: String?
+  /// Corner radius of the focus ring; negative: a pill for controls up to 64 pt high, 12 pt for bigger ones.
+  var ringRadius: CGFloat = -1
+  /// What the Menu button lists while this control is focused, or while the focus is inside this region.
+  var contextMenu: (() -> (title: String, menu: NSMenu))?
+  /// False: the marker only supplies `contextMenu` for the region it covers and never takes the focus.
+  var isFocusable = true
+  /// The page section the control is in (see `controllerSection`): LT / RT jump between sections.
+  var section: String?
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
@@ -44,36 +59,81 @@ final class ControllerPresence: ObservableObject {
 
   @Published private(set) var isConnected = !GCController.controllers().isEmpty
   private var observers: [NSObjectProtocol] = []
+  /// A DualSense that only the raw HID bridge sees, and the harness's scripted pad.
+  private var rawPad = false
+  private var simulated = false
 
   private init() {
     for name in [Notification.Name.GCControllerDidConnect, .GCControllerDidDisconnect] {
       observers.append(
         NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) {
-          [weak self] _ in
-          let connected = !GCController.controllers().isEmpty
-          if self?.isConnected != connected { self?.isConnected = connected }
+          [weak self] _ in self?.refresh()
         })
     }
   }
+
+  private func refresh() {
+    let connected = !GCController.controllers().isEmpty || rawPad || simulated
+    if isConnected != connected { isConnected = connected }
+  }
+
+  func setRawPad(_ on: Bool) { rawPad = on; refresh() }
+  func setSimulated(_ on: Bool) { simulated = on; refresh() }
+
+  /// Whether the buttons shown are a PlayStation pad's: GameController says so, or the raw bridge is the only source.
+  var rawPadOnly: Bool { rawPad && GCController.controllers().isEmpty }
+}
+
+/// What ControllerNavigation.m sets: which sources of pad input exist besides GameController.
+@objc final class ControllerPresenceBridge: NSObject {
+  @objc static func setRawPad(_ on: Bool) { ControllerPresence.shared.setRawPad(on) }
+  @objc static func setSimulated(_ on: Bool) { ControllerPresence.shared.setSimulated(on) }
 }
 
 /// The marker behind a control, present only while a controller is connected. Every marker
 /// is an AppKit view inside the SwiftUI tree, and a settings page has one per control: they
 /// are much of what building the page, scrolling it and finding what is under the pointer
 /// cost. Without a controller nothing looks for them.
+private struct ControllerFocusKeyEnvironment: EnvironmentKey { static let defaultValue: String? = nil }
+private struct ControllerRingRadiusEnvironment: EnvironmentKey { static let defaultValue: CGFloat = -1 }
+private struct ControllerSectionEnvironment: EnvironmentKey { static let defaultValue: String? = nil }
+
+extension EnvironmentValues {
+  var controllerFocusKey: String? {
+    get { self[ControllerFocusKeyEnvironment.self] }
+    set { self[ControllerFocusKeyEnvironment.self] = newValue }
+  }
+  var controllerRingRadius: CGFloat {
+    get { self[ControllerRingRadiusEnvironment.self] }
+    set { self[ControllerRingRadiusEnvironment.self] = newValue }
+  }
+  var controllerSection: String? {
+    get { self[ControllerSectionEnvironment.self] }
+    set { self[ControllerSectionEnvironment.self] = newValue }
+  }
+}
+
 private struct ControllerFocusAnchor: View {
   let enabled: Bool
   var trigger: (() -> Void)?
   var adjust: ((Int) -> Void)?
   var choices: (() -> ControllerFocusChoices)?
   var menuProvider: (() -> (title: String, menu: NSMenu))?
+  var key: String?
+  var radius: CGFloat = -1
+  var context: (() -> (title: String, menu: NSMenu))?
+  var focusable = true
   @ObservedObject private var presence = ControllerPresence.shared
+  @Environment(\.controllerFocusKey) private var environmentKey
+  @Environment(\.controllerRingRadius) private var environmentRadius
+  @Environment(\.controllerSection) private var environmentSection
 
   var body: some View {
     if presence.isConnected {
       ControllerFocusAnchorRepresentable(
         enabled: enabled, trigger: trigger, adjust: adjust, choices: choices,
-        menuProvider: menuProvider
+        menuProvider: menuProvider, key: key ?? environmentKey, radius: radius >= 0 ? radius : environmentRadius,
+        context: context, focusable: focusable, section: environmentSection
       )
       // The marker never takes a click; saying so keeps it out of pointer hit testing.
       .allowsHitTesting(false)
@@ -87,6 +147,11 @@ private struct ControllerFocusAnchorRepresentable: NSViewRepresentable {
   var adjust: ((Int) -> Void)?
   var choices: (() -> ControllerFocusChoices)?
   var menuProvider: (() -> (title: String, menu: NSMenu))?
+  var key: String?
+  var radius: CGFloat = -1
+  var context: (() -> (title: String, menu: NSMenu))?
+  var focusable = true
+  var section: String?
 
   func makeNSView(context: Context) -> ControllerFocusAnchorView {
     let view = ControllerFocusAnchorView()
@@ -100,6 +165,11 @@ private struct ControllerFocusAnchorRepresentable: NSViewRepresentable {
     view.choices = choices
     view.menuProvider = menuProvider
     view.isTargetEnabled = enabled
+    view.focusKey = key
+    view.ringRadius = radius
+    view.contextMenu = self.context
+    view.isFocusable = focusable
+    view.section = section
   }
 }
 
@@ -124,15 +194,66 @@ struct ControllerFocusButtonStyle<Base: PrimitiveButtonStyle>: PrimitiveButtonSt
   }
 }
 
+private struct ControllerFocusPlainButtonBody<Base: ButtonStyle>: View {
+  let configuration: PrimitiveButtonStyleConfiguration
+  let base: Base
+  @Environment(\.isEnabled) private var isEnabled
+
+  var body: some View {
+    Button(configuration)
+      .buttonStyle(base)
+      .background(ControllerFocusAnchor(enabled: isEnabled, trigger: configuration.trigger))
+  }
+}
+
+/// The same for a custom `ButtonStyle` (the Deck capsules and glass buttons).
+struct ControllerFocusCustomButtonStyle<Base: ButtonStyle>: PrimitiveButtonStyle {
+  let base: Base
+
+  func makeBody(configuration: Configuration) -> some View {
+    ControllerFocusPlainButtonBody(configuration: configuration, base: base)
+  }
+}
+
 extension View {
   /// Drop-in for `.buttonStyle(_:)` that keeps the button reachable by controller.
   func controllerButtonStyle<S: PrimitiveButtonStyle>(_ style: S) -> some View {
     buttonStyle(ControllerFocusButtonStyle(base: style))
   }
 
-  /// Makes a gesture-driven control reachable by controller; A runs `action`.
-  func controllerFocusTarget(enabled: Bool = true, _ action: @escaping () -> Void) -> some View {
-    background(ControllerFocusAnchor(enabled: enabled, trigger: action))
+  /// Same for a custom `ButtonStyle`.
+  func controllerButtonStyle<S: ButtonStyle>(_ style: S) -> some View {
+    buttonStyle(ControllerFocusCustomButtonStyle(base: style))
+  }
+
+  /// Makes a gesture-driven control reachable by controller; A runs `action`. `key` is its identity
+  /// across page rebuilds, `radius` the corner radius of its focus ring (tiles and cards), `context`
+  /// what the Menu button lists for it.
+  func controllerFocusTarget(
+    enabled: Bool = true, key: String? = nil, radius: CGFloat = -1,
+    context: (() -> (title: String, menu: NSMenu))? = nil, _ action: @escaping () -> Void
+  ) -> some View {
+    background(ControllerFocusAnchor(enabled: enabled, trigger: action, key: key, radius: radius, context: context))
+  }
+
+  /// Marks the controls inside as one section of the page: LT / RT jump from section to section.
+  func controllerSection(_ id: String) -> some View {
+    environment(\.controllerSection, id)
+  }
+
+  /// Names the controller targets inside (a stable identity for the focus, and the name in harness logs).
+  func controllerKey(_ key: String, radius: CGFloat = -1) -> some View {
+    environment(\.controllerFocusKey, key).environment(\.controllerRingRadius, radius)
+  }
+
+  /// A region whose Menu-button list is `menu` while the focus is inside it (an inner region wins). It takes no focus itself.
+  func controllerContextMenu(_ menu: @escaping () -> (title: String, menu: NSMenu)) -> some View {
+    background(ControllerFocusAnchor(enabled: true, context: menu, focusable: false))
+  }
+
+  /// A menu control: A lists `menu`, the Menu button lists it too.
+  func controllerFocusMenu(key: String? = nil, radius: CGFloat = -1, _ menu: @escaping () -> (title: String, menu: NSMenu)) -> some View {
+    background(ControllerFocusAnchor(enabled: true, menuProvider: menu, key: key, radius: radius))
   }
 
   /// Makes a picker reachable by controller. SwiftUI no longer backs menu
@@ -248,12 +369,24 @@ private struct ControllerSliderModifier<V: BinaryFloatingPoint>: ViewModifier {
 
 // MARK: - Focus ring
 
+/// A dark hairline, a white halo and the accent colour: one of the three always stands out, on a
+/// light page, a dark page and a poster alike. The ring is a child window around the control, so
+/// showing it moves nothing in the page.
 private final class ControllerFocusRingView: NSView {
+  var radius: CGFloat = 10 { didSet { if radius != oldValue { needsDisplay = true } } }
+
   override func draw(_ dirtyRect: NSRect) {
-    let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8)
-    path.lineWidth = 3
-    NSColor.controlAccentColor.setStroke()
-    path.stroke()
+    let rect = bounds.insetBy(dx: 4.5, dy: 4.5)
+    let corner = min(max(radius, 3), min(rect.width, rect.height) / 2)
+    func stroke(_ width: CGFloat, _ color: NSColor) {
+      let path = NSBezierPath(roundedRect: rect, xRadius: corner, yRadius: corner)
+      path.lineWidth = width
+      color.setStroke()
+      path.stroke()
+    }
+    stroke(8, NSColor.black.withAlphaComponent(0.28))
+    stroke(5.5, NSColor.white.withAlphaComponent(0.95))
+    stroke(3, NSColor.controlAccentColor)
   }
 }
 
@@ -261,7 +394,11 @@ private final class ControllerFocusRing {
   private var panel: NSPanel?
   private weak var parent: NSWindow?
 
-  func show(_ frame: NSRect, in window: NSWindow) {
+  var isVisible: Bool { panel?.isVisible == true }
+
+  func show(_ frame: NSRect, in window: NSWindow, radius: CGFloat) {
+    // never into a window that is off screen: a child window brings its parent back
+    guard window.isVisible else { return hide() }
     let rect = frame.insetBy(dx: -5, dy: -5).integral
     let panel = self.panel ?? makePanel()
     self.panel = panel
@@ -269,6 +406,9 @@ private final class ControllerFocusRing {
       parent?.removeChildWindow(panel)
       window.addChildWindow(panel, ordered: .above)
       parent = window
+    }
+    if let ring = panel.contentView as? ControllerFocusRingView {
+      ring.radius = radius + 5
     }
     if panel.frame != rect {
       panel.setFrame(rect, display: true)
@@ -299,6 +439,64 @@ private final class ControllerFocusRing {
   }
 }
 
+// MARK: - Back actions
+
+/// What B does before it goes back a column: a page that has something to cancel (a connection
+/// being made) registers it while that is the case; the newest registration answers first.
+final class ControllerBackRegistry {
+  static let shared = ControllerBackRegistry()
+  private var entries: [(id: UUID, action: () -> Bool)] = []
+
+  func register(_ id: UUID, _ action: @escaping () -> Bool) {
+    entries.removeAll { $0.id == id }
+    entries.append((id, action))
+  }
+
+  func remove(_ id: UUID) { entries.removeAll { $0.id == id } }
+
+  var count: Int { entries.count }
+
+  /// Runs the newest action that takes the press (an action returns false when it has nothing to do any more,
+  /// as a popover that is already closed); false when none does.
+  @discardableResult
+  func fire() -> Bool {
+    for entry in entries.reversed() where entry.action() {
+      LogMessage(LOG_I, "[controller-ui] B ran a registered back action (\(entries.count) registered)")
+      return true
+    }
+    return false
+  }
+}
+
+private struct ControllerBackModifier: ViewModifier {
+  let active: Bool
+  let action: () -> Bool
+  @SwiftUI.State private var id = UUID()
+
+  func body(content: Content) -> some View {
+    content
+      // runs when the view appears and every time `active` changes
+      .task(id: active) { sync() }
+      .onDisappear { ControllerBackRegistry.shared.remove(id) }
+  }
+
+  private func sync() {
+    if active { ControllerBackRegistry.shared.register(id, action) } else { ControllerBackRegistry.shared.remove(id) }
+  }
+}
+
+extension View {
+  /// While `active`, B runs `action` (cancel a connection) instead of going back.
+  func controllerBackAction(active: Bool, _ action: @escaping () -> Void) -> some View {
+    modifier(ControllerBackModifier(active: active, action: { action(); return true }))
+  }
+
+  /// Same, for an action that says whether it took the press.
+  func controllerBackHandler(active: Bool, _ action: @escaping () -> Bool) -> some View {
+    modifier(ControllerBackModifier(active: active, action: action))
+  }
+}
+
 // MARK: - Navigator
 
 /// Moves a focus ring over a window's controls. Windows with a sidebar split
@@ -313,7 +511,19 @@ private final class ControllerFocusRing {
     var row = -1
 
     func same(as other: Target) -> Bool { view === other.view && row == other.row }
+    var key: String? { (view as? ControllerFocusAnchorView)?.focusKey ?? (row >= 0 ? "row:\(row)" : nil) }
   }
+
+  /// Where the focus was in the main window when a sheet, a popover or a stream took the screen.
+  private struct Memory {
+    let key: String?
+    let kind: Kind
+    let center: NSPoint
+    let column: Column
+  }
+
+  /// The Deck page's own menu (Menu button where the focused control has none), set by the computer list.
+  static var pageMenu: (() -> (title: String, menu: NSMenu)?)?
 
   private weak var window: NSWindow?
   private var column: Column = .detail
@@ -323,6 +533,30 @@ private final class ControllerFocusRing {
   private var pendingTicks = 0
   private var pendingRetries = 0
   private var pendingKeyboardTicks = 0
+  /// The Deck main window (and the sheets, alerts and popovers over it): LB/RB switch computers, the Menu button lists
+  /// the context menu, B cancels what is pending. Set by ControllerNavigation before every call.
+  @objc var isDeck = false
+  private var currentCenter: NSPoint?
+  /// The control last focused in each section of the page: a jump back into the section returns there.
+  private var sectionMemory: [String: (view: NSView, row: Int)] = [:]
+  private var memory: Memory?
+  private var restoreTicks = 0
+  private var pendingInitialTicks = 0
+  private var staleTicks = 0
+  /// polls left before the page default takes the focus when no control of the page matches the remembered one
+  private var initialRetries = 0
+  private static let mainIdentifier = "MainWindow"
+
+  override init() {
+    super.init()
+    // the LB / RB feedback listens from the start
+    _ = ControllerHostToast.shared
+  }
+
+  /// The Deck main window: its computer sidebar is never part of the focus graph (LB / RB switch computers).
+  private func isDeckMain(_ window: NSWindow) -> Bool {
+    isDeck && window.sheetParent == nil && window.identifier?.rawValue == Self.mainIdentifier
+  }
 
   // MARK: Entry points
 
@@ -331,19 +565,32 @@ private final class ControllerFocusRing {
   @discardableResult
   func handle(_ input: ControllerFocusInput, window: NSWindow) -> Bool {
     if self.window !== window {
-      self.window = window
-      current = nil
-      column = sidebarFrame(in: window) != nil ? .sidebar : .detail
+      enter(window, showFocus: false)
     }
     pendingDirection = nil
+    pendingInitialTicks = 0
 
     var targets = collectTargets(in: window)
-    if let current, !targets.contains(where: { $0.same(as: current) }) {
-      self.current = nil
+    if let old = current, !targets.contains(where: { $0.same(as: old) }) {
+      current = relocate(old, key: old.key, center: currentCenter, in: targets)
     }
 
     switch input {
+    case .contextMenu:
+      presentContextMenu(in: window)
+      return true
     case .previousColumn, .nextColumn:
+      if isDeck && window.sheetParent == nil && window.identifier?.rawValue == Self.mainIdentifier {
+        // LB/RB: the previous / next computer in the sidebar order. The page behind is rebuilt, so the focus
+        // is placed again a moment later (the connect button, or the selected row when the sidebar has it).
+        NotificationCenter.default.post(name: .init("MLDeckPadSwitchHost"), object: nil,
+                                        userInfo: ["delta": input == .previousColumn ? -1 : 1])
+        current = nil
+        column = .detail
+        pendingInitialTicks = 24
+        initialRetries = 4
+        return true
+      }
       let wanted: Column = input == .previousColumn ? .sidebar : .detail
       if sidebarFrame(in: window) != nil && column != wanted {
         switchColumn(to: wanted, targets: targets, window: window)
@@ -355,7 +602,10 @@ private final class ControllerFocusRing {
       if endTextEditing(in: window) {
         return true
       }
-      if column == .detail && sidebarFrame(in: window) != nil {
+      if isDeck && ControllerBackRegistry.shared.fire() {
+        return true
+      }
+      if !isDeckMain(window), column == .detail && sidebarFrame(in: window) != nil {
         switchColumn(to: .sidebar, targets: targets, window: window)
         return true
       }
@@ -386,7 +636,11 @@ private final class ControllerFocusRing {
       }
       if let next = neighbor(of: current, toward: input, in: targets) {
         focus(next, window: window)
-      } else if sidebarFrame(in: window) != nil {
+      } else if pageScroll(toward: input, from: current) {
+        pendingDirection = input
+        pendingTicks = 3
+        pendingRetries = 2
+      } else if !isDeckMain(window), sidebarFrame(in: window) != nil {
         if input == .left && column == .detail {
           switchColumn(to: .sidebar, targets: targets, window: window)
         } else if input == .right && column == .sidebar {
@@ -396,9 +650,56 @@ private final class ControllerFocusRing {
       }
     case .accept:
       activate(current, window: window)
+    case .previousSection, .nextSection:
+      endTextEditing(in: window)
+      let hasSections = targets.contains { ($0.view as? ControllerFocusAnchorView)?.section != nil }
+      if !jumpSection(from: current, forward: input == .nextSection, targets: targets, window: window),
+         !hasSections || input == .previousSection {
+        // Nothing to jump to among the controls that are on screen. A long list without sections: the controls a page
+        // further are not built yet. A page with sections: the sections above (the hero) are scrolled away. Scroll, then
+        // look again. Going on past the last section does nothing: no wrap, and the focus is not scrolled off screen.
+        if pageScroll(toward: input == .nextSection ? .down : .up, from: current) {
+          pendingDirection = input
+          pendingTicks = 3
+          pendingRetries = 2
+        }
+      }
     default:
       break
     }
+    return true
+  }
+
+  /// LT / RT: the previous / next section of the page, where the page has sections; else a page's worth of controls
+  /// further. Returns false when there is nowhere to go with the controls that exist now.
+  @discardableResult
+  private func jumpSection(from current: Target, forward: Bool, targets: [Target], window: NSWindow) -> Bool {
+    var items: [PadSectionItem] = []
+    var byID: [String: Target] = [:]
+    var pageItems: [PadPageItem] = []
+    for (index, target) in targets.enumerated() {
+      guard let f = frame(of: target) else { continue }
+      let id = "\(index)"
+      byID[id] = target
+      items.append(PadSectionItem(id: id, section: (target.view as? ControllerFocusAnchorView)?.section,
+                                  top: Double(-f.maxY), left: Double(f.minX),
+                                  isEntry: target.key == "primary" || target.key?.hasPrefix("app:") == true))
+      pageItems.append(PadPageItem(id: id, midX: Double(f.midX), midY: Double(-f.midY)))
+    }
+    guard let here = targets.firstIndex(where: { $0.same(as: current) }).map({ "\($0)" }) else { return false }
+    var preferred: [String: String] = [:]
+    for (section, remembered) in sectionMemory {
+      if let match = targets.enumerated().first(where: { $0.element.view === remembered.view && $0.element.row == remembered.row }) {
+        preferred[section] = "\(match.offset)"
+      }
+    }
+    var destination = PadSectionJump.target(items: items, current: here, forward: forward, preferred: preferred)
+    if destination == nil, !items.contains(where: { $0.section != nil }) {
+      let page = Double(visibleFrame(of: current, in: window).height)
+      destination = PadPageJump.target(items: pageItems, current: here, pageHeight: page, forward: forward)
+    }
+    guard let destination, let target = byID[destination] else { return false }
+    focus(target, window: window)
     return true
   }
 
@@ -406,6 +707,15 @@ private final class ControllerFocusRing {
   @objc(focusSearchFieldInWindow:)
   func focusSearchField(in window: NSWindow) {
     self.window = window
+    if isDeckMain(window) {
+      // The search field sits in the computer sidebar: View raises its keyboard, the focus stays on the page.
+      column = .detail
+      let search = collectTargets(in: window, ignoreScope: true).first { $0.view is NSSearchField }
+      if let field = search?.view as? NSControl, window.makeFirstResponder(field) {
+        pendingKeyboardTicks = 30
+      }
+      return
+    }
     column = sidebarFrame(in: window) != nil ? .sidebar : .detail
     let targets = collectTargets(in: window)
     if let search = targets.first(where: { $0.view is NSSearchField }) {
@@ -426,7 +736,15 @@ private final class ControllerFocusRing {
         ControllerKeyboardPanel.shared.present(in: window)
       }
     }
-    guard let window, window === self.window, showRing, let current else {
+    if let window, isDeck, window !== self.window {
+      enter(window, showFocus: showRing)
+    }
+    if let window, let old = self.window, window !== old, !isDeck {
+      // The settings window (a window of its own) took the pad: the page keeps its place for the way back, also when
+      // the pad has not moved anything in the new window yet.
+      rememberFocus(leaving: old)
+    }
+    guard let window, window === self.window else {
       ring.hide()
       if window == nil || window !== self.window {
         pendingDirection = nil
