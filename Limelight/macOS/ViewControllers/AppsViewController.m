@@ -1886,7 +1886,63 @@ static const CGFloat runningAnimationDuration = 1.0;
     } completionHandler:nil];
 }
 
+/// One /serverinfo, and the running mark follows what the host says: another client started or quit an app.
+/// A failed request changes nothing (MLHostSessionPolicy.reconcile). Called on every tick of the app-list timer
+/// (3 s) while the page is visible, when the page appears and when the window becomes key.
+- (void)refreshRunningAppFromServerInfo {
+    [self refreshRunningAppFromServerInfoThen:nil];
+}
+
+/// The same, and `then` runs on the main queue when the answer has been applied (also when there is nothing to ask,
+/// or the host did not answer). Starting an app waits for it: the host's own word on what runs, not the page's last guess.
+- (void)refreshRunningAppFromServerInfoThen:(void (^)(void))then {
+    TemporaryHost *host = self.host;
+    if (host == nil || !host.canUseHttps || host.activeAddress.length == 0 || [ConceptHarness networkMocked]) {
+        if (then) then();
+        return;
+    }
+    if ([[StreamingSessionManager shared] isStreamingHost:host.uuid]) {
+        if (then) then();
+        return;
+    }
+    @synchronized (self) {
+        if (self.runningProbeInFlight && then == nil) return;
+        self.runningProbeInFlight = YES;
+    }
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        HttpManager *hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:[IdManager getUniqueId] serverCert:host.serverCert];
+        ServerInfoResponse *resp = [[ServerInfoResponse alloc] init];
+        // A click waits for this: bounded, the HTTPS ask and its HTTP fallback together 2.5 s (they were 5 s + 2 s
+        // each, 14 s on a congested link, and nothing seemed to happen). The stream's own start asks again.
+        NSDate *deadline = then != nil ? [NSDate dateWithTimeIntervalSinceNow:2.5] : nil;
+        [hMan executeRequestSynchronously:[HttpRequest requestForResponse:resp withUrlRequest:[hMan newServerInfoRequest:NO] fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]
+                                waitSlack:then != nil ? 0 : 2.0 deadline:deadline];
+        BOOL reachable = [resp isStatusOk];
+        NSString *state = reachable ? [[resp getStringTag:TAG_STATE] trim] : nil;
+        NSString *currentGame = reachable ? [[resp getStringTag:TAG_CURRENT_GAME] trim] : nil;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            AppsViewController *strongSelf = weakSelf;
+            if (strongSelf == nil) return;
+            @synchronized (strongSelf) { strongSelf.runningProbeInFlight = NO; }
+            void (^finish)(void) = ^{ if (then) then(); };
+            if (![strongSelf.host.uuid isEqualToString:host.uuid]) { finish(); return; }
+            // an app this client is starting is not on the host's books yet
+            if ([[StreamingSessionManager shared] isStreamingHost:host.uuid]) { finish(); return; }
+            BOOL changed = NO;
+            NSString *runningId = [MLHostSessionPolicy reconciledRunningIdWithCurrent:strongSelf.runningApp.id reachable:reachable state:state currentGame:currentGame changed:&changed];
+            if (changed) {
+                Log(LOG_I, @"[running] host reports %@ (was %@)", runningId ?: @"no app", strongSelf.runningApp.id ?: @"none");
+                strongSelf.host.currentGame = runningId ?: @"0";
+                [strongSelf setRunningApp:[strongSelf findRunningApp:strongSelf.host]];
+            }
+            finish();
+        });
+    });
+}
+
 - (void)updateRunningAppState {
+    [self refreshRunningAppFromServerInfo];
     __weak typeof(self) weakSelf = self;
     NSOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
         DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:weakSelf.host uniqueId:[IdManager getUniqueId]];
@@ -2027,6 +2083,7 @@ static const CGFloat runningAnimationDuration = 1.0;
 }
 
 - (void)updateCollectionViewDataWithOld:(NSArray<TemporaryApp *> *)old new:(NSArray<TemporaryApp *> *)new {
+    [self refreshDeckApps];
     NSDictionary *updates = [self calculateUpateIndexPathsFromOld:old toNew:new];
     NSSet<NSIndexPath *> *deletions = updates[@"deletions"];
     NSSet<NSIndexPath *> *insertions = updates[@"insertions"];
@@ -2045,9 +2102,7 @@ static const CGFloat runningAnimationDuration = 1.0;
 
 - (void)updateCollectionViewWithNewPinnedChangedApp:(TemporaryApp *)app newPinnedState:(BOOL)newPinnedState previousIndex:(NSInteger)previousIndex {
     NSArray<TemporaryApp *> *apps = [self itemsForSection:newPinnedState == YES ? 0 : 1];
-    NSArray<NSString *> *appNames = [F mapArray:apps withBlock:^id(TemporaryApp *obj) {
-        return obj.name;
-    }];
+    NSArray<NSString *> *appNames = [apps valueForKey:@"name"];
     NSInteger newIndex = [appNames indexOfObject:app.name inSortedRange:NSMakeRange(0, appNames.count) options:NSBinarySearchingInsertionIndex usingComparator:^NSComparisonResult(NSString * _Nonnull obj1, NSString * _Nonnull obj2) {
         return [obj1 caseInsensitiveCompare:obj2];
     }];
@@ -2075,8 +2130,14 @@ static const CGFloat runningAnimationDuration = 1.0;
     self.appManager = [[AppAssetManager alloc] initWithCallback:self];
 
     // If definitely offline, show overlay immediately and skip app display
+    // (the computer-first page shows the cached list, muted, instead)
     if (self.host.state == StateOffline) {
-        [self showOfflineOverlayIfCurrentHost];
+        if ([MLDeckVariant isComputerPage]) {
+            // the page shows the cached list, muted; nothing is requested from an offline host
+            [self displayApps];
+        } else {
+            [self showOfflineOverlayIfCurrentHost];
+        }
         return;
     }
 
@@ -2098,24 +2159,46 @@ static const CGFloat runningAnimationDuration = 1.0;
     }
     NSArray<TemporaryApp *> *filteredApps = [self.host.appList.allObjects filteredArrayUsingPredicate:predicate];
     
-    NSArray<TemporaryApp *> *hiddenAwareApps = [F filterArray:filteredApps withBlock:^BOOL(TemporaryApp *obj) {
-        if (self.host.showHiddenApps) {
-            return YES;
-        } else {
-            return obj.hidden == NO;
-        }
-    }];
+    NSArray<TemporaryApp *> *hiddenAwareApps = self.host.showHiddenApps
+        ? filteredApps
+        : [filteredApps filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"hidden == NO"]];
     
     return [hiddenAwareApps sortedArrayUsingSelector:@selector(compare:)];
 }
 
 - (void)displayApps {
     self.apps = [self fetchApps];
+    [self refreshDeckApps];
 }
 
 - (void)discoverAppsForHost:(TemporaryHost *)host {
+    [self discoverAppsForHost:host reason:@"page-open"];
+}
+
+- (void)discoverAppsForHost:(TemporaryHost *)host reason:(NSString *)reason {
+    if (!host.canUseHttps) {
+        // Unpaired, duplicate and old-record hosts have no certificate: asking for the app list is an
+        // HTTPS request that cannot succeed (and used to crash). Their page shows the 配对 state instead.
+        Log(LOG_I, @"[apps] Not asking %@ for its app list: not paired or no server certificate", host.name ?: @"?");
+        return;
+    }
+    if ([ConceptHarness networkMocked]) {
+        return;
+    }
+    @synchronized (self) {
+        if (self.appListFetchInFlight) {
+            Log(LOG_D, @"[applist] fetch reason=%@ skipped: one is already running", reason);
+            return;
+        }
+        self.appListFetchInFlight = YES;
+    }
+    self.lastAppListFetch = [NSDate date];
+    void (^finished)(void) = ^{
+        @synchronized (self) { self.appListFetchInFlight = NO; }
+    };
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         if (host.activeAddress == nil || host.activeAddress.length == 0) {
+            finished();
             dispatch_async(dispatch_get_main_queue(), ^{
                 if ([self.host.uuid isEqualToString:host.uuid]) {
                     [self requestHostRefresh];
@@ -2125,11 +2208,14 @@ static const CGFloat runningAnimationDuration = 1.0;
         }
 
         NSString *uniqueId = [IdManager getUniqueId];
+        // what the host's serverinfo says now: saved with the fetch, so a change DURING the fetch is still seen as a change
+        NSString *etagBefore = [MLDeckActivity appListEtagSeenWithHostUUID:host.uuid ?: @""];
         
-        AppListResponse* appListResp = [ConnectionHelper getAppListForHostWithHostIP:host.activeAddress serverCert:host.serverCert uniqueID:uniqueId];
+        AppListResponse* appListResp = [ConnectionHelper getAppListForHost:host uniqueID:uniqueId];
         
+        finished();
         if (appListResp == nil || ![appListResp isStatusOk] || [appListResp getAppList] == nil) {
-            Log(LOG_W, @"Failed to get applist: %@", appListResp.statusMessage);
+            Log(LOG_W, @"[applist] fetch reason=%@ failed: %@", reason, appListResp.statusMessage);
             dispatch_async(dispatch_get_main_queue(), ^{
                 // Don't override host state based on app list failure. Rely on discovery state.
                 if ([self.host.uuid isEqualToString:host.uuid]) {
@@ -2141,9 +2227,12 @@ static const CGFloat runningAnimationDuration = 1.0;
             NSArray<TemporaryApp *> *oldItems = [self fetchApps];
 
             [self updateApplist:[appListResp getAppList] forHost:host];
+            [MLDeckActivity markAppListFetchedWithHostUUID:host.uuid ?: @"" etag:etagBefore];
+            Log(LOG_I, @"[applist] fetch reason=%@ count=%lu etag=%@", reason, (unsigned long)[appListResp getAppList].count, etagBefore.length > 0 ? etagBefore : @"-");
             
-            [self.appManager stopRetrieving];
-            [self.appManager retrieveAssetsFromHost:self.host];
+            AppAssetManager *assetManager = self.appManager;
+            [assetManager stopRetrieving];
+            [assetManager retrieveAssetsFromHost:host];
             
             dispatch_async(dispatch_get_main_queue(), ^{
                 NSArray<TemporaryApp *> *newItems = [self fetchApps];
@@ -2163,6 +2252,7 @@ static const CGFloat runningAnimationDuration = 1.0;
             if ([app.id isEqualToString:savedApp.id]) {
                 savedApp.name = app.name;
                 savedApp.superCommands = app.superCommands;
+                savedApp.fsExtras = app.fsExtras;
                 appAlreadyInList = YES;
                 break;
             }
