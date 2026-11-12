@@ -156,6 +156,12 @@ private final class StartupOverlayView: NSView {
       .appendingPathComponent("\(safe(host))-\(safe(app)).jpg")
   }
 
+  /// The saved frame of this host's app, when there is one (used by the computer-first page).
+  @objc static func frameURL(host: String, app: String) -> URL? {
+    guard let url = url(host: host, app: app), FileManager.default.fileExists(atPath: url.path) else { return nil }
+    return url
+  }
+
   /// Writes the frame in the background.
   @objc static func save(_ image: CGImage, host: String, app: String) {
     guard let url = url(host: host, app: app) else { return }

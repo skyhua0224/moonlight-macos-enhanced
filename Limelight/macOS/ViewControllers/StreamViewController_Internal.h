@@ -371,6 +371,9 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 
 @property (nonatomic) BOOL shouldAttemptReconnect;
 @property (nonatomic) NSInteger reconnectAttemptCount;
+/// This stream's path already got its verdict (a failure was recorded), so it is not also recorded as good or failed twice.
+@property (nonatomic) BOOL streamPathFailureNoted;
+@property (nonatomic) BOOL routeStopPresented;
 @property (nonatomic) BOOL reconnectInProgress;
 @property (atomic) NSUInteger activeStreamGeneration;
 @property (nonatomic, copy) NSString *awdlSessionOwnerID;
@@ -887,6 +890,9 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)stopAdaptiveBitrate;
 - (void)hideReconnectOverlay;
 - (void)attemptReconnectWithReason:(NSString *)reason;
+- (void)notePathVerdictForTerminationCode:(int)errorCode;
+- (void)scheduleStreamPathSuccessCheck;
+- (void)presentRouteFailureStop;
 - (void)setupOverlay;
 - (void)updateStats;
 - (void)publishSunshineDisplayRuntimeState:(NSString *)phase;

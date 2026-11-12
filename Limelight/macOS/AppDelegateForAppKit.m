@@ -7,6 +7,7 @@
 //
 
 #import "AppDelegateForAppKit.h"
+#import "ConceptHarness.h"
 #import "DatabaseSingleton.h"
 #import "AboutViewController.h"
 #import "NSWindow+Moonlight.h"
@@ -109,6 +110,7 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     self.controllerNavigation = [[ControllerNavigation alloc] init];
     [self refreshLocalizedChrome];
     [self showWelcomePermissionsIfNeeded];
+    [ConceptHarness startScripted];
 }
 
 - (void)installUpdateMenuItem {
@@ -136,6 +138,7 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
+    [ConceptHarness seedIfNeeded];
     [SettingsClass applyLoggerSettings];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
     [[LanguageManager shared] applyAppLanguage];
@@ -170,6 +173,9 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
 }
 
 - (void)showWelcomePermissionsIfNeeded {
+    if ([ConceptHarness enabled]) {
+        return;
+    }
     if (![WelcomePermissionsWindowObjCBridge shouldShowWelcomeWindow]) {
         return;
     }
