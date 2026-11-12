@@ -78,6 +78,9 @@
     }
     if (host.uuid.length > 0) {
         [MLDeckActivity ingestServerInfoWithHostUUID:host.uuid fields:fs];
+        // A host that advertises poster_variants serves a small preview of a poster first and the lossless
+        // picture on request; any other host serves one picture (MLPosterTier).
+        [MLPosterVariants noteWithHostUUID:host.uuid value:[[self getStringTag:@"poster_variants"] trim]];
     }
 }
 
