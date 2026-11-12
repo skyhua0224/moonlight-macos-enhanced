@@ -290,3 +290,298 @@ public final class OverlayPrefsBridge: NSObject {
 
 // MARK: - Values
 
+struct OverlayValue {
+  var text: String
+  var unit: String
+  var level: OverlayLevel = .normal
+  /// Widest text this value normally takes (digits only): the slot is reserved, so a number that gains or loses
+  /// a digit does not move the rest of the line. Empty for text that does not change width.
+  var slot = ""
+}
+
+extension OverlayHealthLevel {
+  var overlayLevel: OverlayLevel { self == .bad ? .bad : (self == .high ? .high : .normal) }
+}
+
+/// The reserved width (as a string of digits) of each field's number: the digits it normally has (a stream of
+/// 144 fps needs three for the frame rate, one of 60 two), and never fewer than it has had in this stream, so a
+/// number that gains a digit widens its slot once and the line does not move again.
+func overlaySlot(_ field: OverlayField, text: String, metrics m: OverlayMetrics) -> String {
+  let fpsDigits = String(max(m.configuredFps, 1)).count
+  let (base, decimals): (Int, Int)
+  switch field {
+  case .fps, .onePercentLow: (base, decimals) = (fpsDigits, 0)
+  case .fpsReceived, .fpsDecoded: (base, decimals) = (fpsDigits, 1)
+  // wide enough for the values these reach in bad moments (a latency over 100 ms), so the panel never changes width
+  case .streamLatency, .rtt, .battery: (base, decimals) = (3, 0)
+  case .bitrate, .renderP99: (base, decimals) = (3, 1)
+  case .pipeline, .hostEncode, .decode, .queue: (base, decimals) = (2, 1)
+  case .loss, .netLoss, .jitter, .pacing: (base, decimals) = (2, 1)
+  case .stalls: (base, decimals) = (2, 0)
+  case .parity, .fec, .elapsed, .clock, .route, .quality, .resolution, .codec, .chroma, .hdr: return ""
+  }
+  let digits = max(base, m.slotDigits[field] ?? 0)
+  return (text.hasPrefix("~") ? "~" : "") + String(repeating: "0", count: digits) + (decimals > 0 ? "." + String(repeating: "0", count: decimals) : "")
+}
+
+/// Integer digits of a number text ("~27" -> 2, "45.8" -> 2, "--" -> 0).
+func overlayIntegerDigits(_ text: String) -> Int {
+  text.drop(while: { !$0.isNumber }).prefix(while: { $0.isNumber }).count
+}
+
+func overlayDuration(_ seconds: Double) -> String {
+  let s = max(0, Int(seconds))
+  return String(format: "%02d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60)
+}
+
+func overlayValue(_ field: OverlayField, _ m: OverlayMetrics) -> OverlayValue? {
+  guard var value = overlayValueUnslotted(field, m) else { return nil }
+  if value.text != "--" { value.slot = overlaySlot(field, text: value.text, metrics: m) }
+  return value
+}
+
+func overlayValueUnslotted(_ field: OverlayField, _ m: OverlayMetrics) -> OverlayValue? {
+  func lvl(_ v: Float, high: Float, bad: Float) -> OverlayLevel { v >= bad ? .bad : (v >= high ? .high : .normal) }
+  switch field {
+  case .elapsed:
+    return m.elapsedSeconds >= 0 ? OverlayValue(text: overlayDuration(m.elapsedSeconds), unit: "") : nil
+  case .route:
+    if m.route == "lan" { return OverlayValue(text: DL("deck.lan"), unit: "") }
+    if m.route == "remote" { return OverlayValue(text: DL("deck.remote"), unit: "") }
+    if !m.route.isEmpty { return OverlayValue(text: m.route, unit: "") }
+    return nil
+  case .quality:
+    guard m.width > 0 else { return nil }
+    var text = "\(m.width)×\(m.height)"
+    if m.configuredFps > 0 { text += "@\(m.configuredFps)" }
+    return OverlayValue(text: text, unit: m.autoBitrateKnown ? (m.autoBitrate ? DL("ov.auto") : DL("ov.fixed")) : "")
+  case .clock: return m.clientTime.isEmpty ? nil : OverlayValue(text: m.clientTime, unit: "")
+  case .battery:
+    guard m.clientBatteryPercent >= 0 else { return nil }
+    return OverlayValue(text: "\(m.clientBatteryPercent)", unit: m.clientCharging ? "% ⚡︎" : "%",
+                        level: (!m.clientCharging && m.clientBatteryPercent <= 15) ? .bad : ((!m.clientCharging && m.clientBatteryPercent <= 25) ? .high : .normal))
+  case .resolution:
+    return m.width > 0 ? OverlayValue(text: "\(m.width)×\(m.height)", unit: "") : nil
+  case .codec: return m.codec.isEmpty ? nil : OverlayValue(text: m.codec, unit: "")
+  case .chroma: return m.chroma.isEmpty ? nil : OverlayValue(text: m.chroma, unit: "")
+  case .hdr:
+    guard !m.hdrName.isEmpty else { return nil }
+    return OverlayValue(text: m.hdrName, unit: m.hdrFallback)
+  case .fps:
+    // judged against what the host sent, not against the configured rate (see OverlayHealth.swift)
+    return OverlayValue(text: String(format: "%.0f", m.renderedFps), unit: "fps",
+                        level: OverlayHealth.fpsLevel(rendered: m.renderedFps, received: m.receivedFps).overlayLevel)
+  case .fpsReceived: return OverlayValue(text: String(format: "%.1f", m.receivedFps), unit: "fps")
+  case .fpsDecoded: return OverlayValue(text: String(format: "%.1f", m.decodedFps), unit: "fps")
+  case .onePercentLow:
+    guard m.onePercentLow > 0 else { return OverlayValue(text: "--", unit: "") }
+    let level = OverlayHealth.onePercentLowLevel(low: m.onePercentLow, baseline: m.fpsBaseline, configured: Float(m.configuredFps))
+    return OverlayValue(text: String(format: "%.0f", m.onePercentLow), unit: "fps", level: level.overlayLevel)
+  case .streamLatency:
+    guard m.streamLatencyAvailable else { return OverlayValue(text: "--", unit: "") }
+    return OverlayValue(text: (m.streamLatencyApproximate ? "~" : "") + String(format: "%.0f", m.streamLatencyMs), unit: "ms",
+                        level: lvl(m.streamLatencyMs, high: 40, bad: 80))
+  case .rtt: return m.rttAvailable ? OverlayValue(text: String(format: "%.0f", m.rttMs), unit: "ms", level: lvl(m.rttMs, high: 50, bad: 120)) : nil
+  case .loss:
+    // the 10 s figure when the model has one: the 3 s window of the stream library jumps on a single frame
+    let percent = (!m.netAvailable && m.lossSmoothedPercent >= 0) ? m.lossSmoothedPercent : m.lossPercent
+    return OverlayValue(text: String(format: "%.1f", percent), unit: "%", level: OverlayHealth.lossLevel(percent).overlayLevel)
+  case .netLoss:
+    guard m.netAvailable else { return nil }
+    let percent = m.lossSmoothedPercent >= 0 ? m.lossSmoothedPercent : m.netLossPercent
+    return OverlayValue(text: String(format: "%.1f", percent), unit: "%", level: OverlayHealth.lossLevel(percent).overlayLevel)
+  case .fec:
+    guard m.netAvailable, m.fecRecovered > 0 || m.fecFailed > 0 else { return nil }
+    return OverlayValue(text: "+\(m.fecRecovered) / −\(m.fecFailed)", unit: "", level: m.fecFailed > 0 ? .high : .normal)
+  case .parity:
+    guard m.netAvailable, m.fecFeedbackActive else { return nil }
+    return OverlayValue(text: "\(m.blockParityPercent)", unit: "%  \(m.fecFeedbackMissing)/\(m.fecFeedbackData)")
+  case .jitter: return OverlayValue(text: String(format: "%.1f", m.jitterMs), unit: "ms", level: lvl(m.jitterMs, high: 15, bad: 40))
+  case .bitrate: return OverlayValue(text: String(format: "%.1f", m.bitrateMbps), unit: "Mbps")
+  case .pacing: return OverlayValue(text: String(format: "%.1f", m.pacingJitterMs), unit: "ms", level: lvl(m.pacingJitterMs, high: 3, bad: 8))
+  case .renderP99:
+    // The intervals the viewer saw, a host that sends only changed frames included: no colour of its own.
+    return OverlayValue(text: String(format: "%.1f", m.renderP99Ms), unit: "ms")
+  case .stalls: return OverlayValue(text: "\(m.clientStallRecent)", unit: "", level: m.clientStallRecent >= 3 ? .high : .normal)
+  case .pipeline: return OverlayValue(text: String(format: "%.1f", m.pipelineMs), unit: "ms", level: lvl(m.pipelineMs, high: 25, bad: 50))
+  case .hostEncode: return OverlayValue(text: String(format: "%.1f", m.hostMs), unit: "ms")
+  case .decode: return OverlayValue(text: String(format: "%.1f", m.decodeMs), unit: "ms", level: lvl(m.decodeMs, high: 8, bad: 16))
+  case .queue: return OverlayValue(text: String(format: "%.1f", m.queueMs), unit: "ms", level: lvl(m.queueMs, high: 8, bad: 16))
+  }
+}
+
+// MARK: - The client Mac: clock and battery (not the host)
+
+enum OverlayClient {
+  private static var cache: (Date, (Int, Bool))?
+
+  /// Percent and charging of this Mac's internal battery; nil on a Mac without one.
+  static func battery() -> (Int, Bool)? {
+    if let (when, value) = cache, Date().timeIntervalSince(when) < 30 { return value.0 < 0 ? nil : value }
+    var result: (Int, Bool) = (-1, false)
+    if let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+       let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] {
+      for source in list {
+        guard let info = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue() as? [String: Any],
+              (info[kIOPSTypeKey] as? String) == kIOPSInternalBatteryType,
+              let current = info[kIOPSCurrentCapacityKey] as? Int, let max = info[kIOPSMaxCapacityKey] as? Int, max > 0 else { continue }
+        let charging = (info[kIOPSIsChargingKey] as? Bool) ?? false
+        result = (current * 100 / max, charging)
+      }
+    }
+    cache = (Date(), result)
+    return result.0 < 0 ? nil : result
+  }
+
+  static func timeText(_ date: Date = Date()) -> String {
+    let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.dateFormat = "HH:mm"
+    return f.string(from: date)
+  }
+
+  /// Fills the client fields unless the caller (the concept fixture) set them.
+  static func fill(_ m: OverlayMetrics) {
+    if m.clientTime.isEmpty { m.clientTime = timeText() }
+    if m.clientBatteryPercent == -2 {
+      if let (percent, charging) = battery() { m.clientBatteryPercent = percent; m.clientCharging = charging }
+      else { m.clientBatteryPercent = -1 }
+    }
+  }
+}
+
+// MARK: - Camera housing (notch): the two ears of the top band
+
+/// Widths and band height, in points, of the usable areas beside the camera housing.
+struct OverlayNotch: Equatable {
+  var leftWidth: CGFloat
+  var gap: CGFloat
+  var rightWidth: CGFloat
+  var height: CGFloat
+  /// Where the band starts in the view (SwiftUI coordinates: from the left, from the top).
+  var originX: CGFloat = 0
+  var topOffset: CGFloat = 0
+}
+
+/// Geometry of the ears in the parent view's coordinates (origin bottom left).
+struct OverlayNotchGeometry {
+  var left: NSRect
+  var right: NSRect
+  /// Concept fixture only: a simulated screen (the Mac the shots are taken on has no notch).
+  static var simulated: OverlayNotchGeometry?
+
+  /// Real geometry: NSScreen.safeAreaInsets / auxiliaryTopLeftArea / auxiliaryTopRightArea (macOS 12+,
+  /// https://developer.apple.com/documentation/appkit/nsscreen/auxiliarytopleftarea). Only when the
+  /// window covers the top band, i.e. the view reaches the ears (borderless full screen); in native
+  /// full screen the content starts below the band, the ears fall outside the view, and this returns nil.
+  static func resolve(for parent: NSView) -> OverlayNotchGeometry? {
+    if let simulated { return simulated }
+    guard #available(macOS 12.0, *), let window = parent.window, let screen = window.screen,
+          screen.safeAreaInsets.top > 0,
+          let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea, !l.isEmpty, !r.isEmpty else { return nil }
+    func local(_ rect: NSRect) -> NSRect { parent.convert(window.convertFromScreen(rect), from: nil) }
+    let left = local(l), right = local(r)
+    let visible = parent.bounds
+    guard visible.contains(NSPoint(x: left.midX, y: left.midY)), visible.contains(NSPoint(x: right.midX, y: right.midY)) else { return nil }
+    return OverlayNotchGeometry(left: left, right: right)
+  }
+}
+
+// MARK: - Model (history ring buffers, anomaly detection)
+
+struct OverlayRing {
+  private(set) var values: [Double] = []
+  let capacity: Int
+  init(capacity: Int = 60) { self.capacity = capacity }
+  mutating func append(_ v: Double) {
+    values.append(v)
+    if values.count > capacity { values.removeFirst(values.count - capacity) }
+  }
+}
+
+@available(macOS 14.0, *)
+final class OverlayModel: ObservableObject {
+  @Published var m = OverlayMetrics()
+  @Published var hasData = false
+  @Published var poor = false
+  @Published var healthLevel = OverlayHealthLevel.normal
+  @Published var anomalies: [String] = []
+  @Published var faded = false
+  /// Set by the settings preview only: the panel reports its size (OverlayPanelSizeKey).
+  var reportsSize = false
+  /// The size of the view the panel sits in; set when the stream view changes size, never by a tick.
+  @Published var geometry = OverlayGeometry()
+  /// Set when the overlay is split into the two ears beside a camera housing.
+  @Published var notch: OverlayNotch?
+  @Published var fps = OverlayRing()
+  @Published var latency = OverlayRing()
+  @Published var bitrate = OverlayRing()
+  @Published var loss = OverlayRing()
+  @Published var pipeline = OverlayRing()
+  @Published var interval = OverlayRing()
+  private let detector = OverlayHealthDetector()
+  private var slotDigits: [OverlayField: Int] = [:]
+  private var quietSince: Date = Date()
+
+  /// The text of a warning, in the user's language.
+  static func text(_ warning: OverlayWarning) -> String {
+    switch warning {
+    case .netLoss(let p): return DLf("ov.an.netLoss", String(format: "%.1f", p))
+    case .clientLoss(let p): return DLf("ov.an.loss", String(format: "%.1f", p))
+    case .stalls(let n): return DLf("ov.an.stall", n)
+    case .lowPacing(let fps): return DLf("ov.an.low", String(format: "%.0f", fps))
+    case .noData(let seconds): return DLf("ov.an.noData", seconds)
+    case .frozen(let seconds): return DLf("ov.an.frozen", seconds)
+    case .poor: return DL("ov.an.poor")
+    }
+  }
+
+  func apply(_ new: OverlayMetrics, now: Date = Date()) {
+    OverlayClient.fill(new)
+    // Warnings come from the detector: counts and rates over a 10 s window, kept for 4 s (OverlayHealth.swift).
+    let state = detector.ingest(OverlayHealthSample(
+      time: now.timeIntervalSinceReferenceDate, renderedFps: new.renderedFps, receivedFps: new.receivedFps,
+      onePercentLow: new.onePercentLow, netAvailable: new.netAvailable, netLossPercent: new.netLossPercent,
+      clientDropPercent: new.lossPercent, clientStallTotal: new.clientStallTotal,
+      noPayloadSeconds: new.noPayloadStreakSeconds, frozenSeconds: new.frozenStatsStreakSeconds, poor: poor))
+    new.lossSmoothedPercent = state.lossPercent
+    new.clientStallRecent = state.recentStalls
+    new.fpsBaseline = state.baselineFps
+    for field in OverlayField.allCases {
+      if let value = overlayValueUnslotted(field, new) { slotDigits[field] = max(slotDigits[field] ?? 0, overlayIntegerDigits(value.text)) }
+    }
+    new.slotDigits = slotDigits
+    if !state.warnings.isEmpty { quietSince = now }
+
+    m = new
+    healthLevel = state.level
+    hasData = true
+    fps.append(Double(new.renderedFps))
+    latency.append(new.streamLatencyAvailable ? Double(new.streamLatencyMs) : 0)
+    bitrate.append(new.bitrateMbps)
+    loss.append(Double(state.lossPercent))
+    pipeline.append(Double(new.pipelineMs))
+    interval.append(Double(new.renderP99Ms))
+    let lines = state.warnings.map(Self.text)
+    if lines != anomalies { anomalies = lines }
+    faded = now.timeIntervalSince(quietSince) > 5
+  }
+
+  /// The worst level among the metrics that matter, for the status dot.
+  var overall: OverlayLevel {
+    // the detector's verdict, plus the latency colour; single-window colours do not turn the dot
+    var level = healthLevel.overlayLevel
+    if let v = overlayValue(.streamLatency, m) { level = max(level, v.level) }
+    if poor { level = .bad }
+    return level
+  }
+}
+
+// MARK: - Presenter (the one object the stream controller talks to)
+
+/// Click-through container: it never takes a mouse event or focus, so the stream underneath behaves
+/// exactly as if the overlay were not there.
+public final class OverlayHostView: NSView {
+  public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  public override var acceptsFirstResponder: Bool { false }
+  public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
+}
+
