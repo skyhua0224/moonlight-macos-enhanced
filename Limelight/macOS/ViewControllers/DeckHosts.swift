@@ -303,3 +303,361 @@ struct DeckHostHero: View {
   }
 }
 
+@available(macOS 14.0, *)
+struct DeckHostCard: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckHostsModel
+  @ObservedObject private var touch = DeckTouchState.shared
+  @SwiftUI.State private var hovering = false
+
+  private var cardMenu: (title: String, menu: NSMenu) {
+    let menu = NSMenu()
+    menu.autoenablesItems = false
+    for (title, action) in [(DL("deck.menu.rename"), "rename"), (DL("deck.menu.details"), "details"), (DL("deck.menu.editor"), "editor"), (DL("deck.menu.settings"), "settings")] {
+      menu.addItem(ControllerMenuBuilder.item(title: title) { model.actions.menu?(host.raw, action) })
+    }
+    if host.online && host.paired { menu.addItem(ControllerMenuBuilder.item(title: DL("deck.menu.sleep")) { model.actions.menu?(host.raw, "sleep") }) }
+    menu.addItem(.separator())
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.menu.remove")) { model.actions.menu?(host.raw, "remove") })
+    return (host.name, menu)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .top, spacing: 12) {
+        DeckGlyph(platform: host.platform, size: 44, muted: !host.online)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(host.name).font(.headline).lineLimit(1)
+          Text(deckSubtitle(host, withRoute: false)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+        Spacer(minLength: 0)
+        Menu {
+          Button(DL("deck.menu.rename")) { model.actions.menu?(host.raw, "rename") }
+          Button(DL("deck.menu.details")) { model.actions.menu?(host.raw, "details") }
+          Button(DL("deck.menu.editor")) { model.actions.menu?(host.raw, "editor") }
+          Button(DL("deck.menu.settings")) { model.actions.menu?(host.raw, "settings") }
+          if host.online && host.paired { Button(DL("deck.menu.sleep")) { model.actions.menu?(host.raw, "sleep") } }
+          Divider()
+          Button(DL("deck.menu.remove"), role: .destructive) { model.actions.menu?(host.raw, "remove") }
+        } label: {
+          Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 26, height: 26)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .deckTouchTarget()
+        .controllerFocusMenu(key: "card.more:\(host.id)") { cardMenu }
+        .opacity(hovering || touch.hasTouch ? 1 : 0.55)
+      }
+      DeckHostChips(host: host, showStatus: false)
+      if host.isFoundation && host.paired { DeckFsLabel(host: host) }
+      Spacer(minLength: 0)
+      footer
+    }
+    .padding(16)
+    .controlSize(.large)
+    .frame(height: 164)
+    .deckCard(radius: 16, stroke: host.isNearbyUnpaired ? Color.orange.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.5))
+    .overlay(alignment: .topTrailing) {
+      if host.runningAppId != nil && host.online {
+        DeckChip(text: DL("deck.running"), symbol: "play.fill", tint: .green, strong: true).padding(10).offset(x: 0, y: -22)
+      }
+    }
+    .opacity(host.online ? 1 : 0.7)
+    .offset(y: hovering ? -1 : 0)
+    .shadow(color: .black.opacity(hovering ? 0.16 : 0.06), radius: hovering ? 14 : 5, y: hovering ? 6 : 2)
+    .animation(.smooth(duration: 0.2), value: hovering)
+    .onHover { hovering = $0 }
+  }
+
+  @ViewBuilder
+  private var footer: some View {
+    if let pin = model.pins[host.id] {
+      DeckPinView(pin: pin, hostName: host.name)
+    } else if host.online && host.paired {
+      HStack {
+        Button { model.actions.open?(host.raw) } label: { Text(DL("deck.connect")).frame(minWidth: 64) }
+          .deckProminent()
+        Spacer()
+        Text(DLf("deck.appCount", host.appCount)).font(.caption).foregroundStyle(.secondary)
+      }
+    } else if host.online {
+      HStack {
+        Button { model.actions.pair?(host.raw) } label: { Text(DL("deck.pair")).frame(minWidth: 64) }
+          .deckProminent()
+        Spacer()
+      }
+    } else {
+      HStack {
+        Button { model.actions.wake?(host.raw) } label: { Label(DL("deck.wake"), systemImage: "power").frame(minWidth: 64) }
+          .deckSecondary()
+          .disabled(!host.canWake)
+        Spacer()
+        if !host.canWake { DeckChip(text: DL("deck.noMac"), tint: .gray) }
+      }
+    }
+  }
+}
+
+@available(macOS 14.0, *)
+struct DeckStaleSection: View {
+  @ObservedObject var model: DeckHostsModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(spacing: 10) {
+        Image(systemName: "square.on.square.dashed").font(.system(size: 18)).foregroundStyle(.secondary)
+        Text(model.staleSummary).font(.system(size: 13, weight: .semibold))
+        Spacer()
+        Button(DL("deck.cleanup")) { model.actions.cleanup?(model.stale.map { $0.raw }) }.deckSecondary()
+      }
+      ForEach(model.stale) { host in
+        HStack(spacing: 10) {
+          DeckGlyph(platform: host.platform, size: 26, muted: true)
+          Text(host.name).font(.callout)
+          Text(host.address ?? "").font(.caption).foregroundStyle(.secondary)
+          Spacer()
+          Text(deckSubtitle(host)).font(.caption).foregroundStyle(.tertiary)
+        }
+      }
+    }
+    .padding(16)
+    .deckCard(radius: 16)
+  }
+}
+
+// MARK: - Variant A: sidebar and state pane
+
+@available(macOS 14.0, *)
+struct DeckSidebarView: View {
+  @ObservedObject var model: DeckHostsModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      DeckSearchField(text: $model.filter, placeholder: DL("deck.searchHosts"))
+        .frame(height: 24)
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+
+      List(selection: Binding(get: { model.selected }, set: { model.selected = $0 })) {
+        section(DL("deck.online"), model.ready)
+        section(DL("deck.nearby"), model.nearby)
+        section(DL("deck.offline"), model.offline)
+        if !model.stale.isEmpty {
+          Section(DL("deck.staleTitle")) {
+            ForEach(model.stale) { row($0).tag($0.id) }
+            Button { model.actions.cleanup?(model.stale.map { $0.raw }) } label: {
+              Label(DLf("deck.cleanupCount", model.stale.count), systemImage: "trash")
+                .font(.system(size: 12, weight: .medium))
+            }
+            .controllerButtonStyle(.plain)
+            .controllerKey("cleanup")
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 4)
+          }
+        }
+      }
+      .listStyle(.sidebar)
+      .scrollContentBackground(.hidden)
+      .onChange(of: model.selected) { _, uuid in
+        if let uuid, let host = model.hosts.first(where: { $0.id == uuid }) { model.actions.select?(host.raw) }
+      }
+
+      Button { model.actions.add?() } label: {
+        Label(DL("deck.addHost"), systemImage: "plus").font(.system(size: 13, weight: .medium))
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .buttonStyle(.borderless)
+      .padding(.horizontal, 16)
+      .padding(.vertical, 12)
+      .controllerFocusTarget(key: "add") { model.actions.add?() }
+    }
+    .frame(minWidth: 230)
+    // the system sidebar material, so the sidebar keeps its vibrancy and stays readable over any desktop,
+    // active or not; every label inside uses the semantic colours
+    // one material from the very top edge (the traffic-light zone included) to the bottom: the background
+    // ignores the titlebar inset, so the strip behind the traffic lights is not a different tint
+    .background(DeckSidebarMaterial().ignoresSafeArea())
+  }
+
+  @ViewBuilder
+  private func section(_ title: String, _ hosts: [DeckHost]) -> some View {
+    if !hosts.isEmpty {
+      Section(title) { ForEach(hosts) { row($0).tag($0.id) } }
+    }
+  }
+
+  /// The row's context menu for the pad (the Menu button), the same items as the pointer's.
+  private func padMenu(_ host: DeckHost) -> (title: String, menu: NSMenu) {
+    let menu = NSMenu()
+    menu.autoenablesItems = false
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.changeIcon")) { model.iconPickerHost = host.id })
+    if host.canWake && !host.online { menu.addItem(ControllerMenuBuilder.item(title: DL("deck.wake")) { model.actions.wake?(host.raw) }) }
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.menu.rename")) { model.actions.menu?(host.raw, "rename") })
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.menu.details")) { model.actions.menu?(host.raw, "details") })
+    menu.addItem(.separator())
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.menu.remove")) { model.actions.menu?(host.raw, "remove") })
+    return (host.name, menu)
+  }
+
+  private func row(_ host: DeckHost) -> some View {
+    // the selected row: its icon is set off from the selection and its marks carry no backplate (see DeckHostIcon, DeckRowBadge)
+    let selected = model.selected == host.id
+    return HStack(spacing: 10) {
+      DeckHostIcon(host: host, size: 32, muted: !host.online, selected: selected)
+      VStack(alignment: .leading, spacing: 1) {
+        Text(host.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+        Text(deckSubtitle(host)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+      }
+      Spacer(minLength: 0)
+      if host.isFoundation { DeckFsMark(host: host) }
+      if host.online && host.runningAppId != nil {
+        DeckRowBadge(symbol: "play.circle.fill", tint: .green, onAccent: selected)
+      } else if host.isNearbyUnpaired {
+        DeckRowBadge(symbol: "link.badge.plus", tint: .orange, onAccent: selected)
+      }
+    }
+    .padding(.vertical, 3)
+    .controllerContextMenu { padMenu(host) }
+    .controllerBackAction(active: model.iconPickerHost == host.id) { model.iconPickerHost = nil }
+    .opacity(host.online || model.selected == host.id ? 1 : 0.62)
+    .popover(isPresented: Binding(get: { model.iconPickerHost == host.id }, set: { if !$0 { model.iconPickerHost = nil } }),
+             arrowEdge: .trailing) {
+      DeckIconPicker(host: host) { model.reload() }
+        .deckPopoverContent()
+    }
+    .contextMenu {
+      Button(DL("deck.changeIcon")) { model.iconPickerHost = host.id }
+      if host.canWake && !host.online { Button(DL("deck.wake")) { model.actions.wake?(host.raw) } }
+      Button(DL("deck.menu.rename")) { model.actions.menu?(host.raw, "rename") }
+      Button(DL("deck.menu.details")) { model.actions.menu?(host.raw, "details") }
+      Divider()
+      Button(DL("deck.menu.remove"), role: .destructive) { model.actions.menu?(host.raw, "remove") }
+    }
+  }
+}
+
+/// Shown in the content area for a host that has no apps page yet: unpaired or offline.
+@available(macOS 14.0, *)
+struct DeckHostStatePane: View {
+  let host: DeckHost
+  let pin: String?
+  let onPair: () -> Void
+  let onWake: () -> Void
+
+  var body: some View {
+    ScrollView {
+      VStack(spacing: 22) {
+        if DeckVariant.isPolished {
+          DeckHostIcon(host: host, size: 88, muted: !host.online)
+        } else {
+          DeckGlyph(platform: host.platform, size: 88, muted: !host.online)
+        }
+        VStack(spacing: 10) {
+          Text(host.name).font(.system(size: 30, weight: .bold))
+          if DeckVariant.isPolished {
+            Text(host.online ? (host.paired ? deckStatusLine(host) : DL("deck.unpaired")) : DL("deck.offline"))
+              .font(.system(size: 14)).foregroundStyle(.secondary)
+          } else {
+            DeckHostChips(host: host)
+          }
+        }
+        VStack(spacing: 0) {
+          fact(DL("deck.fact.address"), host.address ?? "—")
+          Divider()
+          fact(DL("deck.fact.route"), routeText)
+          Divider()
+          if let when = DeckTime.relative(host.online ? host.facts.lastConnected : (host.facts.lastSeen ?? host.facts.lastConnected)) {
+            fact(host.online ? DL("deck.fact.lastStream") : DL("deck.fact.lastOnline"), when)
+            Divider()
+          }
+          fact(DL("deck.fact.codecs"), deckCapabilityText(host))
+        }
+        .padding(.horizontal, 14)
+        .deckCard(radius: 12)
+        if let pin {
+          DeckPinView(pin: pin, hostName: host.name)
+        } else if host.online {
+          Button(action: onPair) { Text(DL("deck.pair")).frame(minWidth: 120) }.deckProminent().controlSize(.large)
+        } else {
+          Button(action: onWake) { Label(DL("deck.wake"), systemImage: "power").frame(minWidth: 120) }
+            .deckProminent().controlSize(.large).disabled(!host.canWake)
+          if !host.canWake { DeckChip(text: DL("deck.noMac"), tint: .gray) }
+        }
+      }
+      .frame(maxWidth: 440)
+      .padding(.vertical, 48)
+      .frame(maxWidth: .infinity)
+    }
+    .background(Color(nsColor: .windowBackgroundColor))
+  }
+
+  private var routeText: String {
+    switch host.route {
+    case .lan: return DL("deck.lan")
+    case .remote: return DL("deck.remote")
+    case .unknown: return "—"
+    }
+  }
+
+  private func fact(_ label: String, _ value: String) -> some View {
+    HStack {
+      Text(label)
+      Spacer()
+      Text(value).foregroundStyle(.secondary)
+    }
+    .font(.system(size: 13))
+    .padding(.vertical, 10)
+  }
+}
+
+@available(macOS 14.0, *)
+@objc(MLDeckStatePaneFactory)
+public final class DeckStatePaneFactory: NSObject {
+  @objc public static func make(host: TemporaryHost, pin: String?, onPair: @escaping () -> Void, onWake: @escaping () -> Void) -> NSViewController {
+    NSHostingController(rootView: DeckHostStatePane(host: DeckHost(host), pin: pin, onPair: onPair, onWake: onWake))
+  }
+}
+
+/// The standard AppKit search field.
+@available(macOS 14.0, *)
+struct DeckSearchField: NSViewRepresentable {
+  @Binding var text: String
+  let placeholder: String
+
+  func makeNSView(context: Context) -> NSSearchField {
+    let field = NSSearchField()
+    field.placeholderString = placeholder
+    field.delegate = context.coordinator
+    field.controlSize = .regular
+    return field
+  }
+
+  func updateNSView(_ field: NSSearchField, context: Context) {
+    if field.stringValue != text { field.stringValue = text }
+  }
+
+  func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+  final class Coordinator: NSObject, NSSearchFieldDelegate {
+    let parent: DeckSearchField
+    init(_ parent: DeckSearchField) { self.parent = parent }
+    func controlTextDidChange(_ notification: Notification) {
+      if let field = notification.object as? NSSearchField { parent.text = field.stringValue }
+    }
+  }
+}
+
+/// The standard sidebar material (what Finder, Music and TV use), following the window's active state.
+struct DeckSidebarMaterial: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSVisualEffectView {
+    let view = NSVisualEffectView()
+    view.material = .sidebar
+    view.blendingMode = .behindWindow
+    view.state = .followsWindowActiveState
+    return view
+  }
+
+  func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+}
