@@ -1210,4 +1210,139 @@
     [self transitionToAppsVCWithHost:self.selectedHost];
 }
 
+#pragma mark - Redesigned host pages (concept)
+
+- (void)deckInstallIfNeeded {
+    if (![MLDeckVariant isDeck]) {
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    [center addObserver:self selector:@selector(deckHandleCommand:) name:@"MLDeckHostCommand" object:nil];
+    [center addObserver:self selector:@selector(deckHandlePIN:) name:@"MLDeckPairingPIN" object:nil];
+
+    if (@available(macOS 14.0, *)) {
+        if (![MLDeckVariant isCardsVariant]) {
+            return;
+        }
+        MLDeckHostsActions *actions = [[MLDeckHostsActions alloc] init];
+        actions.open = ^(TemporaryHost *host) { [weakSelf openHost:host]; };
+        actions.resume = ^(TemporaryHost *host, TemporaryApp *app) {
+            weakSelf.pendingLaunchAppId = app.id;
+            [weakSelf openHost:host];
+        };
+        actions.wake = ^(TemporaryHost *host) {
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
+        };
+        actions.pair = ^(TemporaryHost *host) {
+            weakSelf.selectedHost = host;
+            [weakSelf setupPairing:host];
+        };
+        actions.menu = ^(TemporaryHost *host, NSString *action) { [weakSelf deckPerformMenuAction:action forHost:host]; };
+        actions.cleanup = ^(NSArray<TemporaryHost *> *hosts) { [weakSelf deckCleanupHosts:hosts]; };
+        actions.add = ^{ [weakSelf addHostButtonClicked:nil]; };
+        MLDeckHostsController *deck = [[MLDeckHostsController alloc] initWithStyle:@"cards" actions:actions provider:^NSArray<TemporaryHost *> * {
+            return weakSelf.hostList.count > 0 ? weakSelf.hostList : weakSelf.hosts;
+        }];
+        self.deckController = deck;
+        NSView *deckView = deck.viewController.view;
+        deckView.frame = self.view.bounds;
+        deckView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        [self.view addSubview:deckView];
+        [self addChildViewController:deck.viewController];
+        self.collectionView.enclosingScrollView.hidden = YES;
+    }
+}
+
+- (void)deckOpenPreferredHostIfNeeded {
+    if (![MLDeckVariant isSidebarVariant] || self.deckDidAutoOpen || self.hosts.count == 0) {
+        return;
+    }
+    if (@available(macOS 14.0, *)) {
+        self.deckDidAutoOpen = YES;
+        TemporaryHost *host = [MLDeckHostPicker preferredFrom:self.hosts];
+        if (host != nil) {
+            self.selectedHost = host;
+            [self transitionToAppsVCWithHost:host];
+        }
+    }
+}
+
+- (void)deckPostPIN:(NSString *)pin forHost:(TemporaryHost *)host {
+    if (![MLDeckVariant isDeck] || host.uuid == nil) {
+        return;
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckPairingPIN" object:nil
+                                                      userInfo:@{@"uuid": host.uuid, @"pin": pin ?: @""}];
+}
+
+- (void)deckHandlePIN:(NSNotification *)note {
+    if (@available(macOS 14.0, *)) {
+        NSString *uuid = note.userInfo[@"uuid"];
+        [(MLDeckHostsController *)self.deckController setPairingPIN:note.userInfo[@"pin"] forHostUUID:uuid];
+    }
+}
+
+/// Commands from the sidebar variant, whose window no longer has this page on screen.
+- (void)deckHandleCommand:(NSNotification *)note {
+    NSString *command = note.userInfo[@"command"];
+    TemporaryHost *host = note.userInfo[@"host"];
+    if ([command isEqualToString:@"pair"] && host != nil) {
+        self.selectedHost = host;
+        [self setupPairing:host];
+    } else if ([command isEqualToString:@"menu"] && host != nil) {
+        [self deckPerformMenuAction:note.userInfo[@"action"] forHost:host];
+    } else if ([command isEqualToString:@"cleanup"]) {
+        [self deckCleanupHosts:note.userInfo[@"hosts"]];
+    } else if ([command isEqualToString:@"add"]) {
+        [self addHostButtonClicked:nil];
+    } else if ([command isEqualToString:@"addAddress"] && [note.userInfo[@"address"] length] > 0) {
+        // the same path the add-by-address sheet takes after OK
+        [self addHostManuallyHandlerWithInputValue:note.userInfo[@"address"]];
+    }
+}
+
+- (void)deckPerformMenuAction:(NSString *)action forHost:(TemporaryHost *)host {
+    NSMenuItem *item = [[NSMenuItem alloc] init];
+    item.representedObject = host;
+    self.selectedHost = host;
+    if ([action isEqualToString:@"rename"]) {
+        [self renameHostMenuItemClicked:item];
+    } else if ([action isEqualToString:@"details"]) {
+        [self showConnectionDetails:item];
+    } else if ([action isEqualToString:@"editor"]) {
+        [self showConnectionEditor:item];
+    } else if ([action isEqualToString:@"settings"]) {
+        [self openHostSettings:item];
+    } else if ([action isEqualToString:@"sleep"]) {
+        [self sleepHostMenuItemClicked:item];
+    } else if ([action isEqualToString:@"remove"]) {
+        [self removeHostMenuItemClicked:item];
+    } else if ([action isEqualToString:@"wake"]) {
+        [self wakeMenuItemClicked:item];
+    } else if ([action isEqualToString:@"showHidden"]) {
+        host.showHiddenApps = !host.showHiddenApps;
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostsChanged" object:nil];
+    }
+}
+
+/// Removes the old records of a host that came back under a new uuid.
+- (void)deckCleanupHosts:(NSArray<TemporaryHost *> *)stale {
+    DataManager *dataMan = [[DataManager alloc] init];
+    NSMutableSet<NSString *> *gone = [NSMutableSet set];
+    for (TemporaryHost *host in stale) {
+        [self.discMan removeHostFromDiscovery:host];
+        [dataMan removeHost:host];
+        if (host.uuid != nil) {
+            [gone addObject:host.uuid];
+        }
+    }
+    NSPredicate *keep = [NSPredicate predicateWithBlock:^BOOL(TemporaryHost *candidate, NSDictionary *bindings) {
+        return ![gone containsObject:candidate.uuid];
+    }];
+    self.hosts = [self.hosts filteredArrayUsingPredicate:keep];
+    self.hostList = [self.hostList filteredArrayUsingPredicate:keep];
+    [self updateHosts];
+}
+
 @end
