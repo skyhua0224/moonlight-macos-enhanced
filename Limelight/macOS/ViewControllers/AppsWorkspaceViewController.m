@@ -10,12 +10,20 @@
 #import "MoonlightEnhanced-Swift.h" // Import Swift bridge for HostSidebarViewFactory
 #import "DataManager.h"
 #import "TemporaryHost.h"
+#import "WakeOnLanManager.h"
+#import "AppsViewControllerDelegate.h"
+#import "MLLaunchTrace.h"
 
 @interface AppsWorkspaceViewController () <AppsViewControllerNavigationDelegate>
 
 @property (nonatomic, strong) AppsViewController *appsViewController;
 @property (nonatomic, strong) NSArray<TemporaryHost *> *initialHostsSnapshot;
 @property (nonatomic, strong) NSSplitViewItem *hostSidebarItem;
+@property (nonatomic, strong) id deckSidebar;
+@property (nonatomic, strong) NSViewController *deckStatePane;
+@property (nonatomic, copy) NSString *deckStatePaneUUID;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *deckPins;
+@property (nonatomic, strong) NSTimer *deckTimer;
 
 @end
 
@@ -43,39 +51,42 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    MLLaunchTrace(@"workspace viewDidLoad host=%@", self.initialHost.displayName);
 
-    // 1. Create Left Sidebar (SwiftUI)
-    // We use the Factory method we created in the Swift file to get an NSHostingController
-    __weak typeof(self) weakSelf = self;
-                NSViewController *sidebarVC = [HostSidebarViewFactory createSidebarWithSelectedHostUUID:self.initialHost.uuid
-                                                                                                                                                                         initialHost:self.initialHost
-                                                                                                                                                                     initialHosts:self.initialHostsSnapshot
-                                                                                                                                                                 onHostSelected:^(NSString * _Nonnull uuid, NSInteger stateRaw) {
-                [weakSelf handleHostSelection:uuid stateRaw:stateRaw];
-    }];
-
-    NSSplitViewItem *sidebarItem = [NSSplitViewItem sidebarWithViewController:sidebarVC];
-    sidebarItem.minimumThickness = 200;
-    sidebarItem.maximumThickness = 300;
-    sidebarItem.canCollapse = YES;
-    self.hostSidebarItem = sidebarItem;
-
-    // 2. Create Right Content (AppsViewController)
-    // We instantiate from the Main storyboard as before to keep all existing connections valid
+    // The apps page, instantiated from the Main storyboard as before so its connections stay valid.
     NSStoryboard *storyboard = [NSStoryboard storyboardWithName:@"Main" bundle:nil];
     self.appsViewController = [storyboard instantiateControllerWithIdentifier:@"appsVC"];
-
-    // Configure the appsVC
     self.appsViewController.host = self.initialHost;
-    self.appsViewController.navigationDelegate = self; // Set delegate instead of hostsVC reference
+    self.appsViewController.navigationDelegate = self;
+    self.appsViewController.pendingLaunchAppId = self.pendingLaunchAppId;
+
+    // Variant B shows the apps page alone; variant A puts the redesigned host list beside it.
+    if (![MLDeckVariant isCardsVariant]) {
+        __weak typeof(self) weakSelf = self;
+        NSViewController *sidebarVC = [self deckSidebarViewController];
+        if (sidebarVC == nil) {
+            sidebarVC = [HostSidebarViewFactory createSidebarWithSelectedHostUUID:self.initialHost.uuid
+                                                                      initialHost:self.initialHost
+                                                                     initialHosts:self.initialHostsSnapshot
+                                                                   onHostSelected:^(NSString * _Nonnull uuid, NSInteger stateRaw) {
+                [weakSelf handleHostSelection:uuid stateRaw:stateRaw];
+            }];
+        }
+        NSSplitViewItem *sidebarItem = [NSSplitViewItem sidebarWithViewController:sidebarVC];
+        sidebarItem.minimumThickness = [MLDeckVariant isSidebarVariant] ? 240 : 200;
+        sidebarItem.maximumThickness = 300;
+        sidebarItem.canCollapse = YES;
+        self.hostSidebarItem = sidebarItem;
+        [self addSplitViewItem:sidebarItem];
+    }
 
     NSSplitViewItem *contentItem = [NSSplitViewItem splitViewItemWithViewController:self.appsViewController];
-
-    // 3. Add items to split view
-    [self addSplitViewItem:sidebarItem];
+    if ([MLDeckVariant isPolished]) {
+        // The floating sidebar overlaps the content; the hero extends under it.
+        contentItem.automaticallyAdjustsSafeAreaInsets = YES;
+    }
     [self addSplitViewItem:contentItem];
 
-    // Enable state persistence
     self.splitView.autosaveName = @"AppsWorkspaceSplitView";
 }
 
@@ -124,6 +135,9 @@
 #pragma mark - AppsViewControllerDelegate
 
 - (void)appsViewControllerDidRequestBack:(AppsViewController *)controller {
+    if ([MLDeckVariant isSidebarVariant]) {
+        return;   // the host list is the sidebar; there is no old page to go back to
+    }
     // Pass the back request up to the parent (ContainerViewController)
     // We are the child of ContainerViewController (added via transitionToAppsVCWithHost)
     // So we can trigger the transition back to hostsVC here, OR delegate it further up.
@@ -198,6 +212,141 @@
         return [self.view.window makeFirstResponder:self.appsViewController];
     }
     return [super becomeFirstResponder];
+}
+
+#pragma mark - Redesigned sidebar (concept, variant A)
+
+- (NSViewController *)deckSidebarViewController {
+    if (![MLDeckVariant isSidebarVariant]) {
+        return nil;
+    }
+    if (@available(macOS 14.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        void (^post)(NSDictionary *) = ^(NSDictionary *info) {
+            [center postNotificationName:@"MLDeckHostCommand" object:nil userInfo:info];
+        };
+        MLDeckHostsActions *actions = [[MLDeckHostsActions alloc] init];
+        actions.select = ^(TemporaryHost *host) { [weakSelf deckSelectHost:host]; };
+        actions.wake = ^(TemporaryHost *host) {
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
+        };
+        actions.pair = ^(TemporaryHost *host) { post(@{@"command": @"pair", @"host": host}); };
+        actions.menu = ^(TemporaryHost *host, NSString *action) { post(@{@"command": @"menu", @"host": host, @"action": action}); };
+        actions.cleanup = ^(NSArray<TemporaryHost *> *hosts) { post(@{@"command": @"cleanup", @"hosts": hosts}); };
+        actions.add = ^{ post(@{@"command": @"add"}); };
+        actions.resumeApp = ^(TemporaryHost *host, TemporaryApp *app) {
+            [weakSelf deckSelectHost:host];
+            [(id<AppsViewControllerDelegate>)weakSelf.appsViewController openApp:app];
+        };
+        actions.quitApp = ^(TemporaryHost *host, TemporaryApp *app) {
+            [weakSelf deckSelectHost:host];
+            [(id<AppsViewControllerDelegate>)weakSelf.appsViewController quitApp:app completion:nil];
+        };
+        MLDeckHostsController *deck = [[MLDeckHostsController alloc] initWithStyle:@"sidebar" actions:actions provider:^NSArray<TemporaryHost *> * {
+            NSArray<TemporaryHost *> *live = weakSelf.hostsProvider ? weakSelf.hostsProvider() : nil;
+            return live.count > 0 ? live : weakSelf.initialHostsSnapshot;
+        }];
+        self.deckSidebar = deck;
+        self.deckPins = [NSMutableDictionary dictionary];
+        [deck selectWithHostUUID:self.initialHost.uuid];
+        [center addObserver:self selector:@selector(deckHandlePIN:) name:@"MLDeckPairingPIN" object:nil];
+        [center addObserver:self selector:@selector(deckHandleSelect:) name:@"MLDeckSelectHost" object:nil];
+        [center addObserver:self selector:@selector(deckReload) name:@"HostLatencyUpdated" object:nil];
+        [center addObserver:self selector:@selector(deckReload) name:@"MLDeckHostsChanged" object:nil];
+        self.deckTimer = [NSTimer scheduledTimerWithTimeInterval:3.0 target:self selector:@selector(deckReload) userInfo:nil repeats:YES];
+        return deck.viewController;
+    }
+    return nil;
+}
+
+- (void)deckReload {
+    if (@available(macOS 14.0, *)) {
+        [(MLDeckHostsController *)self.deckSidebar reload];
+    }
+}
+
+- (TemporaryHost *)deckHostForUUID:(NSString *)uuid {
+    NSArray<TemporaryHost *> *hosts = self.hostsProvider ? self.hostsProvider() : self.initialHostsSnapshot;
+    for (TemporaryHost *host in hosts) {
+        if ([host.uuid isEqualToString:uuid]) {
+            return host;
+        }
+    }
+    return nil;
+}
+
+- (void)deckSelectHost:(TemporaryHost *)host {
+    if (@available(macOS 14.0, *)) {
+        NSInteger state = [(MLDeckHostsController *)self.deckSidebar hostStateForUUID:host.uuid];
+        [self deckHideStatePane];
+        if (state == 2 || [MLDeckVariant isComputerPage]) {
+            // the computer-first page draws offline and unpaired hosts itself, in the card
+            [self.appsViewController switchToHost:host];
+        } else {
+            [self deckShowStatePaneForHost:host];
+        }
+    }
+}
+
+- (void)deckHandleSelect:(NSNotification *)note {
+    if (@available(macOS 14.0, *)) {
+        NSString *uuid = note.userInfo[@"uuid"];
+        [self deckReload];
+        [(MLDeckHostsController *)self.deckSidebar selectWithHostUUID:uuid];
+        TemporaryHost *host = [self deckHostForUUID:uuid];
+        if (host != nil) {
+            [self deckSelectHost:host];
+        }
+    }
+}
+
+- (void)deckHandlePIN:(NSNotification *)note {
+    if (@available(macOS 14.0, *)) {
+        NSString *uuid = note.userInfo[@"uuid"];
+        NSString *pin = note.userInfo[@"pin"];
+        if (pin.length > 0) {
+            self.deckPins[uuid] = pin;
+        } else {
+            [self.deckPins removeObjectForKey:uuid];
+        }
+        [(MLDeckHostsController *)self.deckSidebar setPairingPIN:pin forHostUUID:uuid];
+        if (![MLDeckVariant isComputerPage] && [self.deckStatePaneUUID isEqualToString:uuid]) {
+            TemporaryHost *host = [self deckHostForUUID:uuid];
+            if (host != nil) {
+                [self deckShowStatePaneForHost:host];
+            }
+        }
+    }
+}
+
+- (void)deckShowStatePaneForHost:(TemporaryHost *)host {
+    if (@available(macOS 14.0, *)) {
+        [self deckHideStatePane];
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        NSViewController *pane = [MLDeckStatePaneFactory makeWithHost:host pin:self.deckPins[host.uuid] onPair:^{
+            [center postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"pair", @"host": host}];
+        } onWake:^{
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
+        }];
+        NSView *content = self.appsViewController.view;
+        pane.view.frame = content.bounds;
+        pane.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        [content addSubview:pane.view];
+        [self.appsViewController addChildViewController:pane];
+        self.deckStatePane = pane;
+        self.deckStatePaneUUID = host.uuid;
+        // The window title follows the host shown, also while the apps page sits underneath.
+        self.title = host.displayName;
+        self.view.window.subtitle = @"";
+    }
+}
+
+- (void)deckHideStatePane {
+    [self.deckStatePane.view removeFromSuperview];
+    [self.deckStatePane removeFromParentViewController];
+    self.deckStatePane = nil;
+    self.deckStatePaneUUID = nil;
 }
 
 @end
