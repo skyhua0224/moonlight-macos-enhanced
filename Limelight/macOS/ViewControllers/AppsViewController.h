@@ -21,9 +21,12 @@
 @end
 
 @interface AppsViewController : NSViewController
-@property (nonatomic, strong) TemporaryHost *host;
+// atomic: background tasks (app list, assets) read it while the main thread switches computers
+@property (atomic, strong) TemporaryHost *host;
 @property (nonatomic, weak) id<AppsViewControllerNavigationDelegate> navigationDelegate;
 @property (weak) IBOutlet CollectionView *collectionView;
+/// An app to start as soon as the page has loaded (resume from the host page).
+@property (nonatomic, copy, nullable) NSString *pendingLaunchAppId;
 
 - (void)switchToHost:(TemporaryHost *)newHost;
 
