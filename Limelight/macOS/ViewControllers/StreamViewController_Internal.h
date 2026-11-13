@@ -55,6 +55,7 @@ typedef NS_ENUM(NSInteger, MLFreeMouseExitEdge) {
 
 static NSString * const MLShortcutActionReleaseMouseCapture = @"releaseMouseCapture";
 static NSString * const MLShortcutActionTogglePerformanceOverlay = @"togglePerformanceOverlay";
+static NSString * const MLShortcutActionCyclePerformanceOverlayStyle = @"cyclePerformanceOverlayStyle";
 static NSString * const MLShortcutActionToggleMouseMode = @"toggleMouseMode";
 static NSString * const MLShortcutActionToggleFullscreenControlBall = @"toggleFullscreenControlBall";
 static NSString * const MLShortcutActionShowDisconnectOptions = @"showDisconnectOptions";
@@ -289,7 +290,9 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 
 @property (nonatomic) IOPMAssertionID powerAssertionID;
 
-@property (nonatomic, strong) NSVisualEffectView *overlayContainer;
+@property (nonatomic, strong) NSView *overlayContainer;
+// MLOverlayPresenter (macOS 14+) when the SwiftUI overlay is in use; nil for the original one-line overlay.
+@property (nonatomic, strong) id overlayPresenter;
 @property (nonatomic, strong) NSTextField *overlayLabel;
 @property (nonatomic, strong) NSTimer *statsTimer;
 @property (nonatomic, strong) NSTimer *streamHealthTimer;
@@ -616,6 +619,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (KeyboardTranslationRule *)keyboardTranslationRuleMatchingEvent:(NSEvent *)event;
 - (BOOL)performKeyboardTranslationLocalAction:(NSString *)action;
 - (BOOL)handleKeyboardTranslationRuleForEvent:(NSEvent *)event;
+- (BOOL)handleOverlayShortcutForEvent:(NSEvent *)event route:(NSString *)route;
 - (BOOL)shouldDeferCommandModifierForShortcutHandlingWithEvent:(NSEvent *)event;
 - (void)resolveDeferredCommandModifierWithoutRemoteTapWithReason:(NSString *)reason event:(NSEvent *)event;
 @end
@@ -879,6 +883,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)markUserInitiatedDisconnectAndSuppressWarningsForSeconds:(double)seconds reason:(NSString *)reason;
 - (void)cancelPendingReconnectForUserExitWithReason:(NSString *)reason;
 - (void)toggleOverlay;
+- (void)cycleOverlayStyle;
 - (void)toggleLogOverlay;
 - (void)handleTimeoutCopyLogs:(id)sender;
 - (void)showLogOverlay;

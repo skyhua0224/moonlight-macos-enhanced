@@ -1412,6 +1412,7 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     double _arrivalIntervalSamples[kMLRenderIntervalSampleCapacity];
     NSUInteger _renderIntervalSampleCount;
     NSUInteger _renderIntervalSampleIndex;
+    uint32_t _renderClientStallTotal;
     uint64_t _lastRenderedEnqueueTimeMs;
     MLRenderPacingMetrics _cachedPacingMetrics;
     double _cachedPacingMetricsAtMs;
@@ -2024,6 +2025,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
         double arrivalInterval = (enqueueTimeMs != 0 && _lastRenderedEnqueueTimeMs != 0 &&
                                   enqueueTimeMs >= _lastRenderedEnqueueTimeMs)
             ? (double)(enqueueTimeMs - _lastRenderedEnqueueTimeMs) : renderInterval;
+        if (renderInterval > 100.0 && renderInterval - arrivalInterval > 50.0) _renderClientStallTotal++;
         _renderIntervalSamples[_renderIntervalSampleIndex] = renderInterval;
         _arrivalIntervalSamples[_renderIntervalSampleIndex] = arrivalInterval;
         _renderIntervalSampleIndex = (_renderIntervalSampleIndex + 1) % kMLRenderIntervalSampleCapacity;
@@ -2040,6 +2042,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     VideoStats snapshotStats = _activeWndVideoStats;
     snapshotStats.jitterMs = _jitterMsEstimate;
     [self applyRenderPacingMetricsToStats:&snapshotStats];
+    snapshotStats.renderClientStallTotal = _renderClientStallTotal;
     snapshotStats.lastUpdatedTimestamp = renderSampleNowMs;
     _videoStats = snapshotStats;
 
@@ -3111,6 +3114,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _jitterMsEstimate = 0;
     _renderIntervalSampleCount = 0;
     _renderIntervalSampleIndex = 0;
+    _renderClientStallTotal = 0;
     _lastRenderedSampleTimeMs = 0;
     _lastRenderedEnqueueTimeMs = 0;
     _cachedPacingMetrics = (MLRenderPacingMetrics){0};
