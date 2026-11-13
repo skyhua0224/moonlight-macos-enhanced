@@ -585,3 +585,235 @@ public final class OverlayHostView: NSView {
   public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
 }
 
+@available(macOS 14.0, *)
+final class OverlayHostingView: NSHostingView<OverlayRoot> {
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  override var acceptsFirstResponder: Bool { false }
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
+}
+
+/// The presenter only keeps the hosting view the size of the stream view and tells the model about that size. It never
+/// measures the panel and never moves it: SwiftUI aligns the panel to its anchor inside the view (StreamOverlayViews.swift).
+@available(macOS 14.0, *)
+@objc(MLOverlayPresenter)
+public final class OverlayPresenter: NSObject {
+  /// Add this to the stream view; it resizes itself.
+  @objc public let view = OverlayHostView()
+  let model = OverlayModel()
+  private let prefs = OverlayPrefs.shared
+  private let hosting: OverlayHostingView
+  private var observer: NSObjectProtocol?
+  #if MLC_CONCEPT_HARNESS
+  /// Harness: how many times the container's frame was set after the first time (a steady stream: 0).
+  var frameSets = 0
+  #endif
+
+  @objc public override init() {
+    hosting = OverlayHostingView(rootView: OverlayRoot(model: model, prefs: OverlayPrefs.shared))
+    super.init()
+    // the panel's margins are its own (OverlayGeometry); the hosting view must not add the notch inset on top
+    if #available(macOS 13.3, *) { hosting.safeAreaRegions = [] }
+    view.wantsLayer = true
+    view.autoresizesSubviews = false
+    hosting.autoresizingMask = []
+    view.addSubview(hosting)
+    view.isHidden = true
+    view.setAccessibilityElement(false)
+    observer = NotificationCenter.default.addObserver(forName: OverlayPrefs.changed, object: nil, queue: .main) { [weak self] _ in
+      self?.relayout()
+    }
+  }
+
+  deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+
+  @objc public func update(_ metrics: OverlayMetrics) {
+    model.apply(metrics)
+    relayout()
+  }
+
+  /// The old 「网络不佳」 warning, folded into the overlay.
+  @objc public func setPoorConnection(_ poor: Bool) {
+    model.poor = poor
+    if poor { model.apply(model.m) }
+    relayout()
+  }
+
+  @objc public var hasWarningHandled: Bool { true }
+
+  /// Cheap and idempotent: nothing is assigned unless the stream view's size, the top inset or the camera housing changed.
+  @objc public func relayout() {
+    guard let parent = view.superview else { return }
+    let visible = prefs.style != .legacy && (model.hasData || model.poor)
+    if view.isHidden == visible { view.isHidden = !visible }
+    guard visible else { return }
+
+    let bounds = parent.bounds
+    if view.frame != bounds {
+      #if MLC_CONCEPT_HARNESS
+      if view.frame.size != .zero { frameSets += 1 }
+      #endif
+      view.frame = bounds
+    }
+    if hosting.frame != view.bounds { hosting.frame = view.bounds }
+
+    // Borderless full screen on a notched display: two groups in the ears beside the camera housing.
+    var notch: OverlayNotch?
+    if prefs.notchSplit, let g = OverlayNotchGeometry.resolve(for: parent) {
+      notch = OverlayNotch(leftWidth: g.left.width, gap: g.right.minX - g.left.maxX, rightWidth: g.right.width, height: g.left.height,
+                           originX: g.left.minX, topOffset: bounds.height - g.left.maxY)
+    }
+    if model.notch != notch { model.notch = notch }
+    let geometry = OverlayGeometry(width: bounds.width, height: bounds.height, safeTop: parent.safeAreaInsets.top)
+    if model.geometry != geometry { model.geometry = geometry }
+  }
+}
+
+// MARK: - Sample data (also what the harness fixture draws)
+
+enum OverlaySample {
+  /// A steady 60 fps session with small jitter; `anomaly` adds a loss burst and a stall (from tick 79 on).
+  static func metrics(tick: Int, anomaly: Bool) -> OverlayMetrics {
+    let m = OverlayMetrics()
+    let t = Double(tick)
+    m.width = 3840; m.height = 2160; m.configuredFps = 60
+    m.codec = "HEVC 10-bit"; m.chroma = "4:4:4"; m.hdrName = "HDR10"
+    m.renderedFps = Float(60 - (anomaly && tick > 78 ? 9 : 0) - Float(abs(sin(t * 0.7)) * 0.9))
+    m.receivedFps = 60; m.decodedFps = 60
+    m.onePercentLow = anomaly ? 24 : 57
+    m.streamLatencyMs = Float(26 + sin(t * 0.4) * 3 + (anomaly && tick > 78 ? 18 : 0)); m.streamLatencyAvailable = true
+    m.rttMs = 9; m.rttAvailable = true
+    m.lossPercent = anomaly && tick > 78 ? 3.4 : 0.0
+    m.netAvailable = true
+    m.netLossPercent = anomaly && tick > 78 ? 3.2 : 0.0
+    m.fecRecovered = 12; m.fecFailed = anomaly ? 2 : 0
+    m.fecFeedbackActive = true; m.blockParityPercent = 20; m.fecFeedbackMissing = 1; m.fecFeedbackData = 210
+    m.jitterMs = Float(1.2 + abs(sin(t * 0.9)) * 0.8 + (anomaly && tick > 78 ? 7 : 0))
+    m.bitrateMbps = 48 + sin(t * 0.5) * 6
+    m.pacingJitterMs = Float(0.6 + abs(sin(t * 0.3)) * 0.4)
+    m.renderP99Ms = Float(17.6 + abs(sin(t * 0.8)) * 2.4 + (anomaly && tick > 78 ? 26 : 0))
+    m.stallCount = anomaly && tick > 78 ? UInt32(tick - 78) : 0
+    m.clientStallTotal = anomaly && tick > 78 ? UInt32((tick - 78) / 2) : 0
+    m.pipelineMs = Float(14.8 + sin(t * 0.35) * 1.4)
+    m.hostMs = 6.2; m.decodeMs = 4.6; m.queueMs = 4.0
+    m.transportMs = 4.5; m.transportAvailable = true
+    m.clientTime = "23:14"; m.clientBatteryPercent = 78; m.clientCharging = false
+    m.elapsedSeconds = 42 * 60 + 14
+    m.route = "lan"
+    m.autoBitrateKnown = true; m.autoBitrate = true
+    return m
+  }
+}
+
+#if MLC_CONCEPT_HARNESS
+// MARK: - Fixture (concept builds only): mock numbers over a frame, through the real views
+
+@objc(MLOverlayFixture)
+public final class OverlayFixture: NSObject {
+  /// Mock numbers: a steady 60 fps session with small jitter; `anomaly` adds a loss burst and a stall.
+  @objc public static func mockMetrics(tick: Int, anomaly: Bool) -> OverlayMetrics {
+    let m = OverlaySample.metrics(tick: tick, anomaly: anomaly)
+    let t = Double(tick)
+    if conceptEnv("MLC_OV_LIMITED") == "1" {
+      // A recorded stream: configured 144, the game limits itself to about 60 (received == rendered),
+      // the host sends only changed frames on a quiet screen, and one frame is lost now and then.
+      m.configuredFps = 144
+      let rate = Float(60 - abs(sin(t * 0.7)) * 1.5)
+      m.receivedFps = rate; m.decodedFps = rate; m.renderedFps = rate
+      m.onePercentLow = 54
+      m.netLossPercent = (tick % 24) < 6 ? 1.3 : 0.0
+      m.lossPercent = m.netLossPercent
+      m.stallCount = 26; m.renderP99Ms = 93.8
+      m.bitrateMbps = 9.4 + sin(t * 0.5) * 6
+    }
+    return m
+  }
+
+  /// Puts the real overlay over `parent` and feeds it `ticks` mock updates (the history fills like a session would).
+  /// Simulated camera housing for a 14-inch MacBook Pro screen, 1512×982 points: a 38 pt band and a ~200 pt notch,
+  /// the ears 656 pt wide each. The real values must be read from NSScreen on the machine; these are approximate.
+  @objc public static func simulateNotch(screenWidth: CGFloat, screenHeight: CGFloat, band: CGFloat, notchWidth: CGFloat) {
+    let ear = (screenWidth - notchWidth) / 2
+    OverlayNotchGeometry.simulated = OverlayNotchGeometry(
+      left: NSRect(x: 0, y: screenHeight - band, width: ear, height: band),
+      right: NSRect(x: screenWidth - ear, y: screenHeight - band, width: ear, height: band))
+  }
+
+  @objc public static func attach(to parent: NSView, anomaly: Bool) -> NSObject? {
+    guard #available(macOS 14.0, *) else { return nil }
+    let presenter = OverlayPresenter()
+    parent.addSubview(presenter.view, positioned: .above, relativeTo: nil)
+    for tick in 0..<96 { presenter.model.apply(mockMetrics(tick: tick, anomaly: anomaly), now: Date().addingTimeInterval(Double(tick) * 0.5 - 48)) }
+    presenter.relayout()
+    return presenter
+  }
+
+  /// Values that change as much as they can: every field crosses a digit boundary many times in `seconds` (a tick every
+  /// 0.5 s, like the real stats). With `warnings`, a loss burst in the middle brings the warning item and takes it away.
+  static func stabilityMetrics(tick: Int, warnings: Bool) -> OverlayMetrics {
+    let m = OverlaySample.metrics(tick: tick, anomaly: false)
+    // a deterministic generator, so a run can be repeated
+    var seed = UInt64(tick &* 2654435761 &+ 12345)
+    func next() -> Double { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return Double((seed >> 33) & 0xFFFFF) / Double(0xFFFFF) }
+    m.configuredFps = 144
+    let rates: [Float] = [144, 98, 59, 61, 9, 120, 7, 143, 100, 33]
+    m.renderedFps = rates[tick % rates.count]; m.receivedFps = m.renderedFps; m.decodedFps = m.renderedFps
+    m.onePercentLow = Float(next() * 140)
+    m.streamLatencyMs = Float(1 + next() * 160)
+    m.rttMs = Float(1 + next() * 140)
+    m.bitrateMbps = 0.4 + next() * 230
+    m.jitterMs = Float(next() * 30)
+    m.pacingJitterMs = Float(next() * 12)
+    m.renderP99Ms = Float(4 + next() * 140)
+    m.pipelineMs = Float(2 + next() * 90)
+    m.hostMs = Float(next() * 30); m.decodeMs = Float(next() * 25); m.queueMs = Float(next() * 20)
+    m.lossPercent = Float(next() * 3); m.netLossPercent = m.lossPercent
+    m.clientStallTotal = UInt32(tick / 6)
+    m.elapsedSeconds = Double(tick) * 0.5 + 9 * 60 + 59.5 - 0.5
+    m.clientTime = String(format: "%02d:%02d", 23, (14 + tick / 120) % 60)
+    if warnings && tick >= 24 && tick < 44 { m.netLossPercent = 18; m.lossPercent = 18 }
+    return m
+  }
+
+  /// Feeds `seconds` of changing values to the overlay in real time and writes the measured panel frames to `path`:
+  /// the number of distinct frames, and the minimum and maximum of x, y, width and height (window coordinates).
+  @objc public static func runStability(on presenterObject: NSObject, seconds: Int, warnings: Bool, path: String) {
+    guard #available(macOS 14.0, *), let presenter = presenterObject as? OverlayPresenter else { return }
+    var tick = 96
+    // The first tick brings this run's configured rate and number widths (the mock history of attachTo is a 60 fps stream);
+    // the frames are counted from one second later, when the panel has settled: what follows is a steady stream.
+    presenter.update(stabilityMetrics(tick: tick, warnings: warnings))
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { OverlayStability.shared.reset() }
+    let start = Date().addingTimeInterval(1.0)
+    let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
+      tick += 1
+      presenter.update(stabilityMetrics(tick: tick, warnings: warnings))
+      if warnings {
+        // a warning item for ticks 24 ... 43 of the run: what the detector would show in a loss burst, set directly
+        let n = tick - 96
+        presenter.model.anomalies = (n >= 24 && n < 44) ? [OverlayModel.text(.netLoss(percent: 18))] : []
+      }
+      if Date().timeIntervalSince(start) >= Double(seconds) {
+        timer.invalidate()
+        let frames = OverlayStability.shared.frames
+        let distinct = Set(frames.map { "\($0.origin.x),\($0.origin.y),\($0.width),\($0.height)" })
+        func range(_ f: (CGRect) -> CGFloat) -> String { String(format: "%.2f .. %.2f", frames.map(f).min() ?? 0, frames.map(f).max() ?? 0) }
+        let report = """
+        stability: seconds=\(seconds) (after 1 s of settling) ticks=\(tick - 96) warnings=\(warnings) panel-frame-changes=\(frames.count) distinct-frames=\(distinct.count)
+          x      \(range { $0.minX })
+          maxX   \(range { $0.maxX })
+          y      \(range { $0.minY })
+          width  \(range { $0.width })
+          height \(range { $0.height })
+          container-frame-sets-after-first=\(presenter.frameSets)
+        \(distinct.sorted().map { "  frame \($0)" }.joined(separator: "\n"))
+
+        """
+        fputs(report, stderr)
+        try? report.write(toFile: path, atomically: true, encoding: .utf8)
+      }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+  }
+}
+
+#endif
