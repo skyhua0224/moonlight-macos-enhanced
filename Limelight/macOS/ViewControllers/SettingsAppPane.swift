@@ -59,7 +59,6 @@ struct AppView: View {
         }
         ToggleCell(title: "Quit App After Stream", boolBinding: $settingsModel.quitAppAfterStream)
         ToggleCell(title: "Dim Unfocused Artwork", boolBinding: $settingsModel.dimNonHoveredArtwork)
-        ToggleCell(title: "Show Performance Overlay", boolBinding: $settingsModel.showPerformanceOverlay)
         ToggleCell(title: "Show Connection Warnings", boolBinding: $settingsModel.showConnectionWarnings)
       }
 

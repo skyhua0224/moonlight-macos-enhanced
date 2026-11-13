@@ -18,9 +18,10 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
   case about = 10
   case updates = 11
   case profiles = 12
+  case overlay = 13
 
   static var allCases: [SettingsPaneType] {
-    [.stream, .display, .video, .audio, .input, .keyboard, .usb, .fileMapping, .profiles, .app, .about]
+    [.stream, .display, .video, .audio, .overlay, .input, .keyboard, .usb, .fileMapping, .profiles, .app, .about]
   }
 
   var titleKey: String {
@@ -38,12 +39,13 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .updates: return "Updates"
     case .legacy: return "Legacy"
     case .profiles: return "settingProfiles"
+    case .overlay: return "Performance HUD"
     }
   }
 
   var categoryKey: String {
     switch self {
-    case .stream, .video, .display, .audio: return "Media"
+    case .stream, .video, .display, .audio, .overlay: return "Media"
     case .input, .keyboard, .usb, .fileMapping: return "Input & Devices"
     case .profiles, .app, .about, .updates, .legacy: return "Application"
     }
@@ -64,6 +66,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .updates: return "arrow.down.circle.fill"
     case .legacy: return "archivebox.fill"
     case .profiles: return "person.2.fill"
+    case .overlay: return "gauge.with.dots.needle.67percent"
     }
   }
 
@@ -81,6 +84,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .updates: return "Updates settings subtitle"
     case .app, .legacy: return "App diagnostics settings subtitle"
     case .profiles: return "settingProfiles subtitle"
+    case .overlay: return "Performance HUD settings subtitle"
     }
   }
 
@@ -98,6 +102,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .updates: return .blue
     case .legacy: return .gray
     case .profiles: return .indigo
+    case .overlay: return .mint
     }
   }
 }
@@ -628,6 +633,7 @@ private struct SettingsDetail: View {
         case .usb: InputView(scope: .usb)
         case .fileMapping: FileMappingSettingsPage()
         case .profiles: ProfilesSettingsPage()
+        case .overlay: OverlayPaneRoot()
         case .app: AppView()
         case .about: AboutUpdatesSettingsPage()
         case .updates: AboutUpdatesSettingsPage()
