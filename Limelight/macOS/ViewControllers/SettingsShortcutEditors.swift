@@ -4,7 +4,7 @@ import Carbon.HIToolbox
 import GameController
 import SwiftUI
 
-private struct ShortcutReferenceItem: Hashable, Identifiable {
+struct ShortcutReferenceItem: Hashable, Identifiable {
   let action: String
   let actionKey: String
 
@@ -92,7 +92,7 @@ private struct ShortcutReferenceCard: View {
   }
 }
 
-private struct ShortcutCaptureSheet: View {
+struct ShortcutCaptureSheet: View {
   @Environment(\.dismiss) private var dismiss
   @ObservedObject var settingsModel: SettingsModel
   @ObservedObject var languageManager = LanguageManager.shared
@@ -101,6 +101,10 @@ private struct ShortcutCaptureSheet: View {
 
   @SwiftUI.State private var eventMonitor: Any?
   @SwiftUI.State private var errorKey: String?
+  /// A conflict with the system or a well-known app, said in words (not a key into the strings file).
+  @SwiftUI.State private var conflictText: String?
+  /// A combination a well-known app usually takes: the same press once more keeps it.
+  @SwiftUI.State private var pendingConfirm: StreamShortcut?
 
   init(settingsModel: SettingsModel, item: ShortcutReferenceItem) {
     _settingsModel = ObservedObject(wrappedValue: settingsModel)
@@ -127,8 +131,16 @@ private struct ShortcutCaptureSheet: View {
 
       if let errorKey {
         Text(languageManager.localize(errorKey))
+          .font(.footnote).settingsLineCheck("SettingsShortcutEditors:130")
+          .foregroundColor(.red)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+
+      if let conflictText {
+        Text(conflictText)
           .font(.footnote)
           .foregroundColor(.red)
+          .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
 
@@ -212,7 +224,30 @@ private struct ShortcutCaptureSheet: View {
       keyboardTranslationRules: settingsModel.keyboardTranslationRules)
     {
       self.errorKey = errorKey
+      conflictText = nil
       return nil
+    }
+    errorKey = nil
+
+    // macOS and the usual global shortcuts of other apps (OverlayShortcutRules): a combination they take never reaches a stream
+    if shortcut.hasKeyCode, !shortcut.modifierOnly,
+      let conflict = OverlayShortcutRules.conflict(
+        keyCode: shortcut.keyCode, flags: shortcut.modifierFlags, action: item.action, shortcuts: settingsModel.streamShortcuts)
+    {
+      switch conflict.kind {
+      case .system:
+        conflictText = String(format: languageManager.localize("ov.conflict.system"), languageManager.localize(conflict.owner))
+        pendingConfirm = nil
+        return nil
+      case .knownApp:
+        if pendingConfirm != shortcut {
+          pendingConfirm = shortcut
+          conflictText = String(format: languageManager.localize("ov.conflict.known"), conflict.owner) + " " + languageManager.localize("ov.conflict.again")
+          return nil
+        }
+      case .stream:
+        break
+      }
     }
 
     settingsModel.setShortcut(shortcut, for: item.action)
@@ -982,7 +1017,7 @@ private struct KeyboardTranslationRuleEditorSheet: View {
   }
 }
 
-private struct ShortcutTokenRowView: View {
+struct ShortcutTokenRowView: View {
   let tokens: [String]
 
   var body: some View {
@@ -1004,7 +1039,7 @@ private struct ShortcutTokenRowView: View {
   }
 }
 
-private struct ShortcutKeycapView: View {
+struct ShortcutKeycapView: View {
   let key: String
 
   /// ⌃ ⌥ ⇧ ⌘ and the arrows are symbols the monospaced design (SF Mono) draws small and off the baseline, or not at all; the

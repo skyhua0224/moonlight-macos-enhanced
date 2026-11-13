@@ -67,6 +67,7 @@ final class StreamShortcut: NSObject, Codable {
 final class StreamShortcutProfile: NSObject {
   static let releaseMouseCaptureAction = "releaseMouseCapture"
   static let togglePerformanceOverlayAction = "togglePerformanceOverlay"
+  static let cyclePerformanceOverlayStyleAction = "cyclePerformanceOverlayStyle"
   static let toggleMouseModeAction = "toggleMouseMode"
   static let toggleFullscreenControlBallAction = "toggleFullscreenControlBall"
   static let showDisconnectOptionsAction = "showDisconnectOptions"
@@ -80,6 +81,7 @@ final class StreamShortcutProfile: NSObject {
   private static let orderedActions = [
     releaseMouseCaptureAction,
     togglePerformanceOverlayAction,
+    cyclePerformanceOverlayStyleAction,
     toggleMouseModeAction,
     toggleFullscreenControlBallAction,
     showDisconnectOptionsAction,
@@ -192,6 +194,7 @@ final class StreamShortcutProfile: NSObject {
     switch action {
     case releaseMouseCaptureAction: "Release mouse capture"
     case togglePerformanceOverlayAction: "Toggle performance overlay"
+    case cyclePerformanceOverlayStyleAction: "Cycle performance overlay style"
     case toggleMouseModeAction: "Toggle mouse mode"
     case toggleFullscreenControlBallAction: "Toggle fullscreen control ball"
     case showDisconnectOptionsAction: "Show Disconnect Options"
@@ -209,10 +212,27 @@ final class StreamShortcutProfile: NSObject {
     orderedActions
   }
 
+  /// Which of the two overlay actions a key press is: the toggle (default ⌃⌥S) or the style cycle (default
+  /// ⌃⌥⇧S); nil for anything else. Modifiers must match exactly, so the two never answer the same press.
+  @objc static func overlayAction(
+    forKeyCode keyCode: Int, modifierFlags: NSEvent.ModifierFlags, shortcuts: [String: StreamShortcut]?
+  ) -> String? {
+    let merged = normalizedShortcuts(shortcuts)
+    let pressed = relevantModifierFlags(modifierFlags)
+    for action in [cyclePerformanceOverlayStyleAction, togglePerformanceOverlayAction] {
+      guard let shortcut = merged[action], !shortcut.modifierOnly, shortcut.keyCode == keyCode,
+        relevantModifierFlags(shortcut.modifierFlags) == pressed
+      else { continue }
+      return action
+    }
+    return nil
+  }
+
   @objc static func defaultShortcuts() -> [String: StreamShortcut] {
     [
       releaseMouseCaptureAction: StreamShortcut(modifierFlags: [.control, .option], modifierOnly: true),
       togglePerformanceOverlayAction: StreamShortcut(keyCode: kVK_ANSI_S, modifierFlags: [.control, .option]),
+      cyclePerformanceOverlayStyleAction: StreamShortcut(keyCode: kVK_ANSI_S, modifierFlags: [.control, .option, .shift]),
       toggleMouseModeAction: StreamShortcut(keyCode: kVK_ANSI_M, modifierFlags: [.control, .option]),
       toggleFullscreenControlBallAction: StreamShortcut(keyCode: kVK_ANSI_G, modifierFlags: [.control, .option]),
       showDisconnectOptionsAction: StreamShortcut(keyCode: kVK_ANSI_W, modifierFlags: [.command]),
