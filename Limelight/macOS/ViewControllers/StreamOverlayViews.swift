@@ -375,3 +375,230 @@ extension View {
 
 // MARK: - Items
 
+/// The shown items in the user's order, cut into runs of one group each (a divider sits between two runs).
+@available(macOS 14.0, *)
+func overlayGrouped(_ prefs: OverlayPrefs, _ m: OverlayMetrics) -> [(OverlayGroup, [(OverlayField, OverlayValue)])] {
+  var result: [(OverlayGroup, [(OverlayField, OverlayValue)])] = []
+  for field in prefs.style.shown(prefs.fields) {
+    guard let value = overlayValue(field, m) else { continue }
+    if let last = result.last, last.0 == field.group { result[result.count - 1].1.append((field, value)) }
+    else { result.append((field.group, [(field, value)])) }
+  }
+  return result
+}
+
+/// One "caption value" pair in running text.
+@available(macOS 14.0, *)
+struct OverlayPair: View {
+  let field: OverlayField
+  let value: OverlayValue
+  static let unlabelled: Set<OverlayField> = [.resolution, .codec, .chroma, .hdr, .elapsed, .route, .quality, .clock, .battery]
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 4) {
+      if !Self.unlabelled.contains(field) { OverlayCaption(text: field.title) }
+      OverlayValueText(value: value)
+    }
+    .fixedSize()
+  }
+}
+
+// MARK: - 1. Compact: one row, as wide as its items
+
+@available(macOS 14.0, *)
+struct OverlayCompact: View {
+  @ObservedObject var model: OverlayModel
+  @ObservedObject var prefs: OverlayPrefs
+  @Environment(\.overlayScale) private var s
+
+  /// Half of the space between two items; every item carries it on both sides, so a wrapped row needs no special case.
+  private var gap: CGFloat { 4.5 * s }
+
+  private var divider: some View {
+    Rectangle().fill(OverlayInk.rule).frame(width: 1, height: 12 * s).padding(.horizontal, gap)
+      .layoutValue(key: OverlayFlowRoleKey.self, value: .divider)
+  }
+
+  var body: some View {
+    let groups = overlayGrouped(prefs, model.m)
+    let warning = prefs.expandOnAnomaly ? model.anomalies : []
+    // Every pair is its own item, so a row can break between any two of them and only when it has to; the divider
+    // between two groups is dropped where a row starts (OverlayFlowPlanner).
+    OverlayFlowLayout(maxWidth: model.geometry.maxWidth - 2 * (12 * s - gap), rowSpacing: 4 * s) {
+      ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+        if index > 0 { divider }
+        ForEach(group.1, id: \.0) { OverlayPair(field: $0.0, value: $0.1).padding(.horizontal, gap) }
+      }
+      if !warning.isEmpty {
+        if !groups.isEmpty { divider }
+        OverlayWarningItem(text: warning.joined(separator: " · ")).padding(.horizontal, gap)
+      }
+    }
+    .padding(.horizontal, 12 * s - gap).padding(.vertical, 7 * s)
+    .overlayPanel(RoundedRectangle(cornerRadius: 10 * s, style: .continuous), opacity: prefs.plateOpacity)
+  }
+}
+
+// MARK: - 2. Corner: icons and values in a column
+
+@available(macOS 14.0, *)
+struct OverlayCorner: View {
+  @ObservedObject var model: OverlayModel
+  @ObservedObject var prefs: OverlayPrefs
+  @Environment(\.overlayScale) private var s
+
+  private func ring(_ field: OverlayField) -> OverlayRing? {
+    switch field {
+    case .fps: return model.fps
+    case .streamLatency: return model.latency
+    case .bitrate: return model.bitrate
+    default: return nil
+    }
+  }
+
+  private func symbol(_ field: OverlayField) -> String {
+    guard field == .route else { return field.symbol }
+    let route = model.m.route
+    if route == "remote" || route.contains(DL("deck.route.public")) { return "globe" }
+    return route.contains(DL("deck.route.relay")) ? "point.3.connected.trianglepath.dotted" : "wifi"
+  }
+
+  var body: some View {
+    let rows = prefs.style.shown(prefs.fields).compactMap { f in overlayValue(f, model.m).map { (f, $0) } }
+    let hasGraph = rows.contains { ring($0.0) != nil }
+    VStack(alignment: .leading, spacing: 6 * s) {
+      Grid(alignment: .leading, horizontalSpacing: 7 * s, verticalSpacing: 4 * s) {
+        ForEach(rows, id: \.0) { field, value in
+          GridRow {
+            Image(systemName: symbol(field)).ovFont(10.5).foregroundStyle(OverlayInk.label)
+              .frame(width: 14 * s).gridColumnAlignment(.center)
+            if value.slot.isEmpty {
+              // text that does not change width (resolution, codec, the time): one cell across the number and unit columns
+              Text(value.text).ovFont(12.5, .medium).foregroundStyle(value.level.color).lineLimit(1).fixedSize()
+                .gridCellColumns(2).gridColumnAlignment(.leading)
+            } else {
+              // the numbers of all rows end on one line, the units start on another
+              ZStack(alignment: .trailing) {
+                Text(value.slot).ovFont(12.5, .medium).hidden()
+                Text(value.text).ovFont(12.5, .medium).foregroundStyle(value.level.color)
+              }
+              .fixedSize().gridColumnAlignment(.trailing)
+              Text(value.unit).ovFont(9.5, .medium).foregroundStyle(OverlayInk.unit).lineLimit(1).fixedSize().gridColumnAlignment(.leading)
+            }
+            if hasGraph {
+              if let ring = ring(field) { OverlaySparkline(values: ring.values).frame(width: 36 * s, height: 11 * s) }
+              else { Color.clear.frame(width: 36 * s, height: 1) }
+            }
+          }
+        }
+      }
+      if prefs.expandOnAnomaly, !model.anomalies.isEmpty { OverlayWarningItem(text: model.anomalies.joined(separator: " · ")) }
+    }
+    .padding(.horizontal, 11 * s).padding(.vertical, 9 * s)
+    .overlayPanel(RoundedRectangle(cornerRadius: 12 * s, style: .continuous), opacity: prefs.plateOpacity)
+  }
+}
+
+// MARK: - 3. Chart: big frame rate, interval bars, mini graphs
+
+@available(macOS 14.0, *)
+struct OverlayChart: View {
+  @ObservedObject var model: OverlayModel
+  @ObservedObject var prefs: OverlayPrefs
+  @Environment(\.overlayScale) private var s
+
+  private func mini(_ field: OverlayField, _ ring: OverlayRing) -> some View {
+    let value = overlayValue(field, model.m)
+    return GridRow {
+      OverlayCaption(text: field.title).gridColumnAlignment(.leading)
+      OverlaySparkline(values: ring.values, tint: OverlayInk.graph).frame(width: 84 * s, height: 14 * s)
+      if let value { OverlayValueText(value: value, size: 12).gridColumnAlignment(.leading) } else { Color.clear.frame(width: 1, height: 1) }
+    }
+  }
+
+  /// The graph rows in the user's order; loss and network loss are one row.
+  private func miniRows(shown: Set<OverlayField>, order: [OverlayField]) -> [(OverlayField, OverlayRing)] {
+    var rows: [(OverlayField, OverlayRing)] = []
+    var lossDone = false
+    for field in order {
+      switch field {
+      case .streamLatency: rows.append((field, model.latency))
+      case .bitrate: rows.append((field, model.bitrate))
+      case .pipeline: rows.append((field, model.pipeline))
+      case .loss, .netLoss:
+        if !lossDone { lossDone = true; rows.append((model.m.netAvailable && shown.contains(.netLoss) ? .netLoss : .loss, model.loss)) }
+      default: break
+      }
+    }
+    return rows
+  }
+
+  var body: some View {
+    let m = model.m
+    let order = prefs.style.shown(prefs.fields)
+    let shown = Set(order)
+    let interval = 1000 / Double(max(m.configuredFps, 1))
+    let chips = [OverlayField.resolution, .codec, .chroma, .hdr].filter { shown.contains($0) }.compactMap { f in overlayValue(f, m).map { (f, $0) } }
+    VStack(alignment: .leading, spacing: 7 * s) {
+      if shown.contains(.fps), let fps = overlayValue(.fps, m) {
+        HStack(alignment: .firstTextBaseline, spacing: 5 * s) {
+          OverlayDot(level: model.overall)
+          ZStack(alignment: .trailing) {
+            Text(fps.slot).ovFont(26, .medium).hidden()
+            Text(fps.text).ovFont(26, .medium).foregroundStyle(fps.level.color)
+          }.fixedSize()
+          OverlayCaption(text: "fps")
+          Spacer(minLength: 8 * s)
+          Text("\(DL("ov.target")) \(m.configuredFps)").ovFont(9.5).foregroundStyle(OverlayInk.label).fixedSize()
+        }
+      }
+      if !chips.isEmpty {
+        HStack(spacing: 7 * s) { ForEach(chips, id: \.0) { Text($0.1.text).ovFont(10.5, .medium).foregroundStyle(OverlayInk.value).fixedSize() } }
+      }
+      if shown.contains(.renderP99) {
+        OverlaySparkline(values: model.interval.values, tint: OverlayInk.graph, target: interval, bars: true)
+          .frame(maxWidth: .infinity).frame(height: 28 * s)
+      }
+      Grid(alignment: .leading, horizontalSpacing: 8 * s, verticalSpacing: 5 * s) {
+        ForEach(miniRows(shown: shown, order: order), id: \.0) { mini($0.0, $0.1) }
+      }
+      if prefs.expandOnAnomaly, !model.anomalies.isEmpty { OverlayWarningItem(text: model.anomalies.joined(separator: " · ")) }
+    }
+    .padding(.horizontal, 12 * s).padding(.vertical, 10 * s)
+    .overlayPanel(RoundedRectangle(cornerRadius: 12 * s, style: .continuous), opacity: prefs.plateOpacity)
+  }
+}
+
+// MARK: - Notch split: left group | camera housing | right group
+
+@available(macOS 14.0, *)
+struct OverlayNotchSplit: View {
+  @ObservedObject var model: OverlayModel
+  @ObservedObject var prefs: OverlayPrefs
+  let notch: OverlayNotch
+
+  private func pill(_ fields: [OverlayField]) -> some View {
+    let items = fields.compactMap { f in overlayValue(f, model.m).map { (f, $0) } }
+    return HStack(spacing: 8) {
+      ForEach(items, id: \.0) { item in OverlayValueText(value: item.1, size: 11) }
+    }
+    .padding(.horizontal, 9).frame(height: min(notch.height - 8, 22))
+    .overlayPanel(Capsule(), opacity: prefs.plateOpacity)
+    .fixedSize()
+    .opacity(items.isEmpty ? 0 : 1)
+  }
+
+  var body: some View {
+    let shown = prefs.style.shown(prefs.fields)
+    // video and frame rate on the left, network and the rest on the right
+    let leftGroups: Set<OverlayGroup> = [.video, .rate]
+    let left = shown.filter { leftGroups.contains($0.group) }
+    let right = shown.filter { !leftGroups.contains($0.group) }
+    HStack(spacing: 0) {
+      HStack(spacing: 6) { OverlayDot(level: model.overall); pill(left) }.frame(width: notch.leftWidth - 12, alignment: .trailing)
+      Color.clear.frame(width: notch.gap + 12)
+      pill(right).frame(width: notch.rightWidth - 12, alignment: .leading)
+    }
+    .frame(width: notch.leftWidth + notch.gap + notch.rightWidth, height: notch.height)
+    .transaction { $0.animation = nil }
+  }
+}
