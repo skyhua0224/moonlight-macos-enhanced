@@ -117,7 +117,15 @@ BOOL MLAppleDolbyVisionDirectSurfaceAvailable(unsigned int targetDisplayID);
 // Call once, before the connection is started.
 - (void)bindLaunchResultWithSessionUrl:(NSString *)sessionUrl;
 - (void *)inputStreamContext;
-- (void *)controlStreamContext;
+// Session handle for callers outside the library's threads (timers, overlay, menus).
+// Each call reaches this connection's own context, never the thread-bound one, and
+// returns NO / the not-connected code once the session is not started or -terminate ran.
+- (BOOL)requestIdrFrame;
+- (BOOL)getEstimatedRtt:(uint32_t *)rtt variance:(uint32_t *)rttVariance;
+- (BOOL)hostDisplayHdrEnabled;
+- (int)negotiatedDynamicHdrFormat;
+- (int)negotiatedDynamicHdrFallback;
+- (BOOL)hostFecControlSupported;
 - (BOOL)isClipboardControlReady;
 - (NSString *)clipboardControlReadinessReason;
 - (uint32_t)clipboardHostFeatureFlags;

@@ -11,6 +11,7 @@
 #import "DS5BluetoothPolicy.h"
 #import "DS5RawHIDBridge.h"
 #import "MLAudioBitstreamOutput.h"
+#import "MLSessionGate.h"
 #import "MLAV1SoftwareDecoder.h"
 #import "Logger.h"
 #import "Utils.h"
@@ -237,6 +238,9 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     char _rtspSessionUrl[1024];
 
     ML_CONNECTION_CONTEXT _connectionContext;
+    // Open from a successful LiStartConnectionCtx() until -terminate. Calls made
+    // from outside the library's own threads go through it (see MLSessionGate.h).
+    MLSessionGate _controlGate;
     NSLock *_initLock;
     BOOL _foundationHost;
     BOOL _wantsRemoteTextContext;
@@ -4435,8 +4439,33 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
+// Main-thread input handlers bind the main thread to the context they send on
+// (LiSetThreadConnectionContext) and nothing unbinds it. Once this connection
+// is gone, a process-wide call such as LiRequestIdrFrame() on the main thread
+// would resolve to its freed context, so drop the binding if it is still ours.
+static void ConnectionForgetMainThreadContext(Connection *conn) {
+    PML_CONNECTION_CONTEXT ctx = &conn->_connectionContext;
+    void (^forget)(void) = ^{
+        if (LiGetThreadConnectionContext() == ctx) {
+            LiSetThreadConnectionContext(NULL);
+        }
+        // Holding conn keeps its address from being reused before the comparison.
+        (void)conn;
+    };
+    if ([NSThread isMainThread]) {
+        forget();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), forget);
+    }
+}
+
 -(void) terminate
 {
+    // Close the session handle first: after this no timer, overlay or bitrate
+    // call is inside the control stream, and LiStopConnectionCtx() below may
+    // destroy its mutexes and ENet peer.
+    MLSessionGateRetire(&_controlGate);
+    ConnectionForgetMainThreadContext(self);
     if (!_connectionLayoutCompatible) {
         UnregisterConnection(&_connectionContext);
         return;
@@ -4469,6 +4498,8 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
         LiStopConnectionCtx(ctx);
         os_unfair_lock_unlock(&gConnectionLifecycleLock);
         UnregisterConnection(ctx);
+        // Input events between -terminate and here may have bound the main thread again.
+        ConnectionForgetMainThreadContext(conn);
         id<NSObject> activity = nil;
         @synchronized (conn) {
             activity = conn->_streamActivity;
@@ -4572,6 +4603,7 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
     memset(&_connectionContext, 0, sizeof(_connectionContext));
     _connectionContext.controlContext.connectionContext = &_connectionContext;
+    MLSessionGateInit(&_controlGate);
 
     // Initialize all socket fields to INVALID_SOCKET (-1) after memset zeroes them to 0.
     // This prevents EXC_GUARD crashes on macOS when closeSocket() is called on an
@@ -5031,8 +5063,38 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     return LiGetInputContextFromConnectionCtx(&_connectionContext);
 }
 
-- (void *)controlStreamContext {
-    return &_connectionContext.controlContext;
+- (BOOL)requestIdrFrame {
+    if (!MLSessionGateEnter(&_controlGate)) {
+        return NO;
+    }
+    LiRequestIdrFrameCtx(&_connectionContext.controlContext);
+    MLSessionGateLeave(&_controlGate);
+    return YES;
+}
+
+- (BOOL)getEstimatedRtt:(uint32_t *)rtt variance:(uint32_t *)rttVariance {
+    if (!MLSessionGateEnter(&_controlGate)) {
+        return NO;
+    }
+    BOOL ok = LiGetEstimatedRttInfoCtx(&_connectionContext.controlContext, rtt, rttVariance) ? YES : NO;
+    MLSessionGateLeave(&_controlGate);
+    return ok;
+}
+
+- (BOOL)hostDisplayHdrEnabled {
+    return LiGetCurrentHostDisplayHdrModeCtx(&_connectionContext.controlContext) ? YES : NO;
+}
+
+- (int)negotiatedDynamicHdrFormat {
+    return _connectionContext.NegotiatedDynamicHdrFormat;
+}
+
+- (int)negotiatedDynamicHdrFallback {
+    return _connectionContext.NegotiatedDynamicHdrFallback;
+}
+
+- (BOOL)hostFecControlSupported {
+    return _connectionContext.controlContext.videoFecControlSupported ? YES : NO;
 }
 
 - (BOOL)isClipboardControlReady {
@@ -5106,22 +5168,34 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
 - (int)sendLiveStreamBitrateKbps:(int)kbps {
     [self ensureControlContextBacklink];
+    if (!MLSessionGateEnter(&_controlGate)) {
+        return LI_DYNAMIC_SDR_WHITE_ERR_NOT_CONNECTED;
+    }
     int err = LiSendStreamBitrateCtx(&_connectionContext.controlContext, kbps);
+    MLSessionGateLeave(&_controlGate);
     Log(LOG_I, @"[live] bitrate %d kbps -> result=%d", kbps, err);
     return err;
 }
 
 - (int)sendLiveStreamFramerate:(int)fps {
     [self ensureControlContextBacklink];
+    if (!MLSessionGateEnter(&_controlGate)) {
+        return LI_DYNAMIC_SDR_WHITE_ERR_NOT_CONNECTED;
+    }
     int err = LiSendStreamFramerateCtx(&_connectionContext.controlContext, (float)fps);
+    MLSessionGateLeave(&_controlGate);
     Log(LOG_I, @"[live] framerate %d fps -> result=%d", fps, err);
     return err;
 }
 
 - (int)sendLiveStreamResolutionWidth:(int)width height:(int)height {
     [self ensureControlContextBacklink];
+    if (!MLSessionGateEnter(&_controlGate)) {
+        return LI_DYNAMIC_SDR_WHITE_ERR_NOT_CONNECTED;
+    }
     // qiin/mic API (#48): -1 invalid size (odd or over 16384), -2 unsupported host, -3 not connected, -4 send failed.
     int err = LiRequestResolutionChangeCtx(&_connectionContext.controlContext, width, height);
+    MLSessionGateLeave(&_controlGate);
     Log(LOG_I, @"[live] resolution %dx%d -> result=%d", width, height, err);
     return err;
 }
@@ -5321,7 +5395,12 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
 
 - (int)sendClientSdrWhiteNits:(float)nits {
     [self ensureControlContextBacklink];
-    return LiSendClientSdrWhiteNitsCtx(&_connectionContext.controlContext, nits);
+    if (!MLSessionGateEnter(&_controlGate)) {
+        return LI_DYNAMIC_SDR_WHITE_ERR_NOT_CONNECTED;
+    }
+    int result = LiSendClientSdrWhiteNitsCtx(&_connectionContext.controlContext, nits);
+    MLSessionGateLeave(&_controlGate);
+    return result;
 }
 
 #if defined(LI_MIC_CONTROL_START)
@@ -5772,14 +5851,19 @@ static void FillOutputBuffer(void *aqData,
     }
     _rendererStreamConfig.startupConnectMs = LiGetMillis();
     Log(LOG_I, @"LiStartConnectionCtx: connCtx=%p globalCtx=%p inputCtx=%p", &_connectionContext, LiGetGlobalConnectionContextPtr(), LiGetInputContextFromConnectionCtx(&_connectionContext));
-    LiStartConnectionCtx(&_connectionContext,
-                         &_serverInfo,
-                         &_streamConfig,
-                         &_clCallbacks,
-                         &_drCallbacks,
-                         &_arCallbacks,
-                         (__bridge void *)self, 0,
-                         (__bridge void *)self, 0);
+    int startErr = LiStartConnectionCtx(&_connectionContext,
+                                        &_serverInfo,
+                                        &_streamConfig,
+                                        &_clCallbacks,
+                                        &_drCallbacks,
+                                        &_arCallbacks,
+                                        (__bridge void *)self, 0,
+                                        (__bridge void *)self, 0);
+    // The control stream exists only after a successful start; -terminate may
+    // already have retired the gate, in which case it stays closed.
+    if (startErr == 0 && !MLSessionGateOpen(&_controlGate)) {
+        Log(LOG_I, @"[session] connection %p stopped while starting; control calls stay closed", self);
+    }
     os_unfair_lock_unlock(&gConnectionLifecycleLock);
 }
 
