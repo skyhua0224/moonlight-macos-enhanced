@@ -3,6 +3,9 @@
 
 #import "../Utility/Logger.h"
 
+#import <signal.h>
+#import <unistd.h>
+
 static NSString * const MLRemoteUSBErrorDomain = @"com.skyhua.moonlight.remote-usb";
 static const NSUInteger kMLRemoteUSBMaxLineBytes = 4096;
 static const NSTimeInterval kMLRemoteUSBStartupTimeout = 12.0;
@@ -133,7 +136,12 @@ static id MLRemoteUSBJSONObjectFromData(NSData *data, NSError **errorOut) {
 @property(nonatomic, strong, nullable) NSTask *exporter;
 @property(nonatomic, strong, nullable) NSPipe *exporterInput;
 @property(nonatomic, strong, nullable) MLRemoteUSBReverseTunnel *tunnel;
+@property(nonatomic) pid_t elevatedPID;
+@property(nonatomic, copy, nullable) NSString *elevatedReadyFile;
 @property(nonatomic) dispatch_queue_t workerQueue;
+- (void)startElevatedExporterLockedForDevice:(MLRemoteUSBDevice *)device
+                                  helperPath:(NSString *)helperPath
+                                  completion:(void (^)(uint16_t, NSError *))completion;
 @end
 
 @implementation MLRemoteUSBForwardingSession
@@ -255,6 +263,11 @@ static id MLRemoteUSBJSONObjectFromData(NSData *data, NSError **errorOut) {
             return;
         }
 
+        if (geteuid() != 0) {
+            [self startElevatedExporterLockedForDevice:device helperPath:helperPath completion:completion];
+            return;
+        }
+
         NSTask *task = [[NSTask alloc] init];
         NSPipe *input = [NSPipe pipe];
         NSPipe *output = [NSPipe pipe];
@@ -295,6 +308,60 @@ static id MLRemoteUSBJSONObjectFromData(NSData *data, NSError **errorOut) {
     });
 }
 
+- (void)startElevatedExporterLockedForDevice:(MLRemoteUSBDevice *)device
+                                  helperPath:(NSString *)helperPath
+                                  completion:(void (^)(uint16_t, NSError *))completion {
+    NSString *(^shellQuote)(NSString *) = ^NSString *(NSString *value) {
+        return [NSString stringWithFormat:@"'%@'", [value stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"]];
+    };
+    NSString *readyFile = [NSTemporaryDirectory() stringByAppendingPathComponent:
+        [NSString stringWithFormat:@"moonlight-usbd-%@.ready", NSUUID.UUID.UUIDString]];
+    self.elevatedReadyFile = readyFile;
+    NSString *command = [NSString stringWithFormat:@"nohup %@ serve --bind %@ --listen 127.0.0.1:0 --detach > %@ 2>&1 < /dev/null & echo $!",
+                         shellQuote(helperPath), shellQuote(device.busID), shellQuote(readyFile)];
+    NSString *appleCommand = [command stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"];
+    appleCommand = [appleCommand stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+    NSString *source = [NSString stringWithFormat:@"do shell script \"%@\" with administrator privileges", appleCommand];
+    NSAppleScript *script = [[NSAppleScript alloc] initWithSource:source];
+    NSDictionary *scriptError = nil;
+    NSAppleEventDescriptor *result = [script executeAndReturnError:&scriptError];
+    pid_t pid = (pid_t)result.stringValue.intValue;
+    if (pid <= 0) {
+        NSError *error = MLRemoteUSBError(7, @"Administrator authorization did not start the USB/IP helper");
+        self.state = MLRemoteUSBForwardingStateFailed;
+        self.error = error;
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(0, error); });
+        return;
+    }
+    self.elevatedPID = pid;
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:kMLRemoteUSBStartupTimeout];
+    NSRegularExpression *ready = [NSRegularExpression regularExpressionWithPattern:@"\\AREADY ([1-9][0-9]{0,4})\\z" options:0 error:NULL];
+    NSInteger port = 0;
+    while ([deadline timeIntervalSinceNow] > 0) {
+        NSString *line = [NSString stringWithContentsOfFile:readyFile encoding:NSUTF8StringEncoding error:NULL];
+        NSTextCheckingResult *match = [ready firstMatchInString:[line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+                                                        options:0 range:NSMakeRange(0, line.length)];
+        if (match != nil) {
+            NSString *text = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            port = [[[text substringWithRange:[match rangeAtIndex:1]] description] integerValue];
+            break;
+        }
+        [NSThread sleepForTimeInterval:0.1];
+    }
+    if (port <= 0 || port > UINT16_MAX) {
+        [self stopExporterLocked];
+        NSError *error = MLRemoteUSBError(8, @"The authorized USB/IP exporter did not become ready");
+        self.state = MLRemoteUSBForwardingStateFailed;
+        self.error = error;
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(0, error); });
+        return;
+    }
+    self.localPort = (uint16_t)port;
+    self.state = MLRemoteUSBForwardingStateReady;
+    uint16_t resultPort = self.localPort;
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(resultPort, nil); });
+}
+
 - (NSData *)readLineFromHandle:(NSFileHandle *)handle timeout:(NSTimeInterval)timeout {
     NSMutableData *data = [NSMutableData data];
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
@@ -317,6 +384,14 @@ static id MLRemoteUSBJSONObjectFromData(NSData *data, NSError **errorOut) {
     self.exporter = nil;
     self.exporterInput = nil;
     self.localPort = 0;
+    if (self.elevatedPID > 0) {
+        (void)kill(self.elevatedPID, SIGTERM);
+        self.elevatedPID = 0;
+    }
+    if (self.elevatedReadyFile.length > 0) {
+        [[NSFileManager defaultManager] removeItemAtPath:self.elevatedReadyFile error:NULL];
+        self.elevatedReadyFile = nil;
+    }
     if (task == nil) return;
     if (task.running) [task terminate];
     [task waitUntilExit];

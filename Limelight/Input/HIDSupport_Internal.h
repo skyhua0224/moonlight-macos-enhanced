@@ -344,12 +344,6 @@ static inline BOOL isPS4(IOHIDDeviceRef device) {
     return vendorId == 0x054C && (productId == 0x09CC || productId == 0x05c4);
 }
 
-static inline BOOL isPS5(IOHIDDeviceRef device) {
-    UInt16 vendorId = usbIdFromDevice(device, @kIOHIDVendorIDKey);
-    UInt16 productId = usbIdFromDevice(device, @kIOHIDProductIDKey);
-    return vendorId == 0x054C && (productId == 0x0ce6);
-}
-
 static inline PML_INPUT_STREAM_CONTEXT HIDInputContext(HIDSupport *support) {
     PML_INPUT_STREAM_CONTEXT ctx = (PML_INPUT_STREAM_CONTEXT)support.inputContext;
     if (ctx != NULL && ctx->connectionContext != NULL) {

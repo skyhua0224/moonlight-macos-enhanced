@@ -8,6 +8,8 @@
 
 #import "Connection.h"
 #import "Ds5HapticsAudioRenderer.h"
+#import "DS5BluetoothPolicy.h"
+#import "DS5RawHIDBridge.h"
 #import "MLAudioBitstreamOutput.h"
 #import "MLAV1SoftwareDecoder.h"
 #import "Logger.h"
@@ -238,6 +240,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
     NSLock *_initLock;
     BOOL _foundationHost;
     BOOL _wantsRemoteTextContext;
+    BOOL _wantsDs5Extensions;
 
     VideoDecoderRenderer *_renderer;
     id<ConnectionCallbacks> _callbacks;
@@ -4330,6 +4333,16 @@ void ClSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlags, uint8_
     }
 }
 
+void ClDs5OutputExtension(const LI_DS5_OUTPUT_EXTENSION *output)
+{
+    Connection *conn = CurrentConnection();
+    id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
+    if (callbacks != nil && output != NULL &&
+        [callbacks respondsToSelector:@selector(ds5OutputExtension:)]) {
+        [callbacks ds5OutputExtension:output];
+    }
+}
+
 void ClDs5HapticsIrV2(const LI_DS5_HAPTICS_IR_FRAME_V2 *frame) {
     Connection *conn = CurrentConnection();
     id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(conn);
@@ -4945,13 +4958,57 @@ void ClClipboardDataReceived(const uint8_t *data, uint32_t length)
     _clCallbacks.resolutionChanged = ClResolutionChanged;
     _foundationHost = config.foundationHost;
     _wantsRemoteTextContext = config.wantsRemoteTextContext;
-    // Foundation prioritizes PCM if both feature flags are set. Bluetooth
-    // must request IR alone or it will never receive the analyzed frames.
+    _wantsDs5Extensions = config.wantsDs5Extensions;
     BOOL physicalDs5Audio = config.controllerHapticsMode == 0 &&
+        [Ds5HapticsAudioRenderer usbPcmRequested] &&
         [Ds5HapticsAudioRenderer hasPhysicalEndpoint];
-    _clCallbacks.ds5HapticsPcm = physicalDs5Audio ? ClDs5HapticsPcm : NULL;
-    _clCallbacks.ds5HapticsIrV2 = physicalDs5Audio ? NULL : ClDs5HapticsIrV2;
-    Log(LOG_I, @"[controller-haptics] Negotiation mode=%@", physicalDs5Audio ? @"USB-PCM" : @"Bluetooth-IR-v2");
+    // Tuning keys 10 and 100 choose what a Bluetooth pad is offered: analysed haptics (IR v2) or, by not
+    // offering them, the host's plain rumble.
+    bool btConflict = false;
+    const DS5BluetoothMode btMode = ds5_resolve_bluetooth_mode((int)config.ds5BtHapticsFallback, (int)config.ds5BtOutput, &btConflict);
+    const BOOL offerIr = !physicalDs5Audio && ds5_bluetooth_negotiates_ir(btMode);
+    // A DualSense pad also plays the host's speaker pair ("pad-speaker"): USB
+    // uses its four-channel endpoint and Bluetooth uses the raw HID Opus path.
+    // A host without the token keeps sending IR only.
+    const BOOL padSpeaker = offerIr && config.controllerHapticsMode == 0 &&
+        [Ds5HapticsAudioRenderer padSpeakerEnabled];
+    _clCallbacks.ds5HapticsPcm = (physicalDs5Audio || padSpeaker) ? ClDs5HapticsPcm : NULL;
+    _clCallbacks.ds5HapticsIrV2 = offerIr ? ClDs5HapticsIrV2 : NULL;
+    LiSetDs5PadAudioOffer(padSpeaker ? 2 : 0);
+    // USB passthrough is unchanged. Automatic asks for analysed haptics (IR v2).
+    // Only the experimental haptics-PCM choice, or DS5_BT_FULL_PCM=1 while both
+    // keys are still automatic, asks for actuator PCM. It does not offer the pad
+    // speaker. IR stays registered so a host that does not grant PCM can still
+    // deliver analysed frames.
+    int usbCount = 0, bluetoothCount = 0, otherCount = 0;
+    const int padLink = [DS5RawHIDBridge connectedPadLinkUsb:&usbCount bluetooth:&bluetoothCount other:&otherCount];
+    const BOOL usbEndpoint = [Ds5HapticsAudioRenderer hasPhysicalEndpoint];
+    const BOOL settingFullPcm = ds5_bluetooth_requests_full_pcm((int)config.ds5BtOutput, btMode);
+    const BOOL fullPcm = ds5_full_pcm_for_link(settingFullPcm, padLink, physicalDs5Audio, usbEndpoint);
+    NSString *linkName = padLink == DS5_LINK_BLUETOOTH ? @"bluetooth" :
+        padLink == DS5_LINK_USB ? @"usb" :
+        padLink == DS5_LINK_MIXED ? @"mixed" :
+        padLink == DS5_LINK_NONE ? @"none" : @"unknown";
+    Log(LOG_I, @"[controller-haptics] Connected pad at stream start: link=%@ usb=%d bluetooth=%d other=%d btOutput=%ld fallback=%ld resolved=%d settingFullPcm=%d usbEndpoint=%d",
+        linkName, usbCount, bluetoothCount, otherCount, (long)config.ds5BtOutput, (long)config.ds5BtHapticsFallback,
+        (int)btMode, settingFullPcm ? 1 : 0, usbEndpoint ? 1 : 0);
+    if (fullPcm) {
+        _clCallbacks.ds5HapticsPcm = ClDs5HapticsPcm;
+        _clCallbacks.ds5HapticsIrV2 = ClDs5HapticsIrV2;
+        // Offer 3 is actuator PCM and IR, without the pad-speaker token.
+        // apple-iohid-device-keys-20261110: MaxOutputReportSize is the descriptor
+        // maximum. On this Bluetooth pad a 547-byte report does not sustain
+        // 46.875/s, so the speaker stays on USB. Haptics use the 142-byte report.
+        LiSetDs5PadAudioOffer(3);
+        if (!config.wantsDs5Extensions) {
+            Log(LOG_W, @"[controller-haptics] Bluetooth haptics PCM needs the DualSense host extension, but it is off");
+        }
+    }
+    Log(LOG_I, @"[controller-haptics] Negotiation mode=%@", fullPcm ? @"Bluetooth-haptics-PCM" : (physicalDs5Audio ? @"USB-PCM" : (offerIr ? (padSpeaker ? @"USB-IR-v2+pad-speaker" : @"Bluetooth-IR-v2") : (btMode == DS5_BT_OFF ? @"Bluetooth-haptics-off" : @"Bluetooth-plain-rumble"))));
+    if (btConflict) {
+        Log(LOG_W, @"[controller-haptics] Bluetooth haptics fallback (%ld) and Bluetooth output (%ld) disagree; the output setting wins",
+            (long)config.ds5BtHapticsFallback, (long)config.ds5BtOutput);
+    }
 
     return self;
 }
@@ -5703,6 +5760,9 @@ static void FillOutputBuffer(void *aqData,
     // Advertising the remote text context makes the host stream caret updates,
     // so it is only requested when the local input method wants them.
     LiSetRemoteTextContextCallbackCtx(&_connectionContext, _wantsRemoteTextContext ? ClRemoteTextContext : NULL);
+    // Offering the DualSense output extension is a plain opt-in: without the callback the launch
+    // SDP carries no trace of it and the host never sends 0x5515.
+    LiSetDs5OutputExtensionCallbackCtx(&_connectionContext, _wantsDs5Extensions ? ClDs5OutputExtension : NULL);
     @synchronized (self) {
         if (_streamActivity == nil) {
             _streamActivity = [[NSProcessInfo processInfo]

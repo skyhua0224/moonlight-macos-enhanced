@@ -28,6 +28,8 @@
 @property(nonatomic) BOOL streamingRemotely;
 @property(nonatomic, copy) NSData *riKey;
 @property(nonatomic) int gamepadMask;
+/// ControllerSupport runs beside the HID driver and takes over DualSense pads only (set when no pad needed it at stream start).
+@property(nonatomic) BOOL controllerSupportDualSenseOnly;
 @property(nonatomic) BOOL optimizeGameSettings;
 @property(nonatomic) BOOL playAudioOnPC;
 @property(nonatomic) int audioConfiguration;
@@ -114,6 +116,18 @@
 @property(nonatomic) BOOL foundationHost;
 /// Ask the host for remote text context updates (caret position for the local input method).
 @property(nonatomic) BOOL wantsRemoteTextContext;
+/// Offer the DualSense control extensions (0x5515 output, 0x5516 input status) in the launch SDP.
+@property(nonatomic) BOOL wantsDs5Extensions;
+@property(nonatomic) NSInteger controllerMotionSource;
+@property(nonatomic) CGFloat gyroSensitivity;
+@property(nonatomic) CGFloat rumbleStrength;
+@property(nonatomic) BOOL ds5ApplyHostLights;
+@property(nonatomic) BOOL ds5ApplyHostAudio;
+@property(nonatomic) BOOL ds5ReportHeadset;
+@property(nonatomic) NSInteger ds5VolumeLimitPercent;
+@property(nonatomic) NSInteger ds5BtHapticsFallback;
+@property(nonatomic) NSInteger ds5BtOutput;
+@property(nonatomic) NSInteger reportRateCapHz;
 @property(nonatomic) int serverCodecModeSupport;
 @property(nonatomic, copy) NSString *sessionUrl;
 @property(nonatomic, copy) NSString *hostUUID;

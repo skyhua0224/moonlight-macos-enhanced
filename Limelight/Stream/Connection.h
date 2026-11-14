@@ -44,6 +44,8 @@
 - (void)clipboardDataReceived:(const uint8_t *)data length:(uint32_t)length;
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame;
 - (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame;
+// DualSense output extension (player and mute LEDs, volumes, microphone mute, routing, lightbar brightness).
+- (void)ds5OutputExtension:(const LI_DS5_OUTPUT_EXTENSION *)output;
 // The host reconfigured the stream resolution (display rotation or a runtime resolution change).
 - (void)streamResolutionChanged:(uint32_t)width height:(uint32_t)height;
 // Host text focus / caret updates, only delivered when wantsRemoteTextContext is set.

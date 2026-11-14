@@ -381,6 +381,14 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }];
 }
 
+- (void)ds5OutputExtension:(const LI_DS5_OUTPUT_EXTENSION *)output {
+    if (output == NULL) return;
+    const LI_DS5_OUTPUT_EXTENSION copy = *output;
+    [self forwardIfCurrentNamed:@"ds5OutputExtension" block:^(id<MLStreamScopedCallbackOwner> owner) {
+        if ([owner respondsToSelector:@selector(ds5OutputExtension:)]) [owner ds5OutputExtension:&copy];
+    }];
+}
+
 - (void)ds5HapticsPcm:(const LI_DS5_HAPTICS_PCM_FRAME *)frame {
     [self forwardIfCurrentNamed:@"ds5HapticsPcm" block:^(id<MLStreamScopedCallbackOwner> owner) {
         if ([owner respondsToSelector:@selector(ds5HapticsPcm:)]) {
@@ -1314,6 +1322,20 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)prepareForStreaming {
     const uint64_t startupBeginMs = LiGetMillis();
+    // One line per attempt that talks to the host, so a second launch within a second of the first shows who asked for it:
+    // the caller, whether the earlier attempt had connected, and how long ago it began.
+    {
+        static uint64_t lastBeginMs = 0;
+        const uint64_t sincePrevious = lastBeginMs == 0 ? 0 : startupBeginMs - lastBeginMs;
+        NSArray<NSString *> *stack = [NSThread callStackSymbols];
+        Log(LOG_I, @"[session] prepareForStreaming begin generation=%lu sincePreviousMs=%llu hadStreamMan=%d reconnectInProgress=%d caller=%@",
+            (unsigned long)self.activeStreamGeneration + 1, (unsigned long long)sincePrevious, self.streamMan != nil ? 1 : 0,
+            self.reconnectInProgress ? 1 : 0, stack.count > 1 ? stack[1] : @"?");
+        if (lastBeginMs != 0 && sincePrevious < 5000) {
+            Log(LOG_W, @"[session] a second stream start %llu ms after the previous one: the host may allocate a virtual pad for each", (unsigned long long)sincePrevious);
+        }
+        lastBeginMs = startupBeginMs;
+    }
     self.startupSummaryLogged = NO;
     [self stopStreamHealthDiagnostics];
     [self resetStreamHealthDiagnostics];
@@ -1765,6 +1787,18 @@ highFreqMotor:(unsigned short)highFreqMotor {
     streamConfig.gamepadMouseMode = [SettingsClass gamepadMouseModeFor:self.app.host.uuid];
     streamConfig.gamepadMouseModeLongPressMenu = [SettingsClass gamepadMouseModeLongPressMenuFor:self.app.host.uuid];
     streamConfig.wantsRemoteTextContext = [SettingsClass imeTextInputFor:self.app.host.uuid];
+    NSDictionary<NSString *, NSNumber *> *dualSense = [SettingsClass dualSenseClientValuesFor:self.app.host.uuid];
+    streamConfig.wantsDs5Extensions = dualSense[@"extensionsEnabled"].boolValue;
+    streamConfig.controllerMotionSource = dualSense[@"motionSource"].integerValue;
+    streamConfig.gyroSensitivity = dualSense[@"gyroSensitivity"].doubleValue;
+    streamConfig.rumbleStrength = dualSense[@"rumbleStrength"].doubleValue;
+    streamConfig.ds5ApplyHostLights = dualSense[@"applyHostLights"].boolValue;
+    streamConfig.ds5ApplyHostAudio = dualSense[@"applyHostAudio"].boolValue;
+    streamConfig.ds5ReportHeadset = dualSense[@"reportHeadset"].boolValue;
+    streamConfig.ds5BtHapticsFallback = dualSense[@"btHapticsFallback"].integerValue;
+    streamConfig.ds5BtOutput = dualSense[@"btOutput"].integerValue;
+    streamConfig.reportRateCapHz = (NSInteger)llround(dualSense[@"reportRateCapHz"].doubleValue);
+    streamConfig.ds5VolumeLimitPercent = (NSInteger)llround(dualSense[@"volumeLimitPercent"].doubleValue);
     streamConfig.nativeTouchpad = [SettingsClass nativeTouchpadFor:self.app.host.uuid];
     streamConfig.dualSensePrecisionTouchpad = [SettingsClass dualSensePrecisionTouchpadFor:self.app.host.uuid];
     streamConfig.gamepadTrackpadPointerSensitivity = [SettingsClass pointerSensitivityFor:self.app.host.uuid];
@@ -1821,11 +1855,11 @@ highFreqMotor:(unsigned short)highFreqMotor {
                                                         generation:streamGeneration
                                                            ownerID:self.awdlSessionOwnerID];
 
-    if (self.useSystemControllerDriver) {
-
-        if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
-            self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig presenceDelegate:self];
-        }
+    // ControllerSupport always runs. When nothing needed it at stream start it takes DualSense pads only, so a pad
+    // that connects during the stream is picked up without leaving the stream.
+    streamConfig.controllerSupportDualSenseOnly = !self.useSystemControllerDriver;
+    if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
+        self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig presenceDelegate:self];
     }
     self.hidSupport = [[HIDSupport alloc] init:self.app.host];
     [self configurePrecisionTouchpadInput];
@@ -2062,11 +2096,18 @@ highFreqMotor:(unsigned short)highFreqMotor {
             });
         }
         @try {
-                // Notify session manager (main-thread only for window access)
-                [[StreamingSessionManager shared] startStreamingWithHost:self.app.host.uuid
-                                                                                                                     appId:self.app.id
-                                                                                                                 appName:self.app.name
-                                                                                                windowController:self.view.window.windowController];
+            CFAbsoluteTime mainThreadStartupStartedAt = CFAbsoluteTimeGetCurrent();
+            Log(LOG_W, @"[ds5-hid] stream startup main-thread stall guard active; raw HID feature reads and output are asynchronous");
+            // Notify session manager (main-thread only for window access).
+            [[StreamingSessionManager shared] startStreamingWithHost:self.app.host.uuid
+                                                                 appId:self.app.id
+                                                               appName:self.app.name
+                                                  windowController:self.view.window.windowController];
+            CFAbsoluteTime mainThreadStartupElapsed = CFAbsoluteTimeGetCurrent() - mainThreadStartupStartedAt;
+            if (mainThreadStartupElapsed > 0.050) {
+                Log(LOG_W, @"[ds5-hid] stream startup main-thread stall: session setup took %.1f ms",
+                    mainThreadStartupElapsed * 1000.0);
+            }
 
                 [self resetClipboardActivationDiagnosticState];
                 self.clipboardRuntimeConnection = callbackConn ?: self.streamMan.connection;
@@ -2388,10 +2429,15 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self closeWindowFromMainQueueWithMessage:message];
 }
 
+// ControllerSupport owns a player when it is the only pad backend, or when it holds a pad for that number.
+- (BOOL)controllerSupportOwnsPlayer:(unsigned short)player {
+    return self.controllerSupport != nil && (!self.controllerSupport.dualSenseOnly || [self.controllerSupport hasPlayer:player]);
+}
+
 - (void)rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor {
     if ([SettingsClass rumbleFor:self.app.host.uuid]) {
         if (self.hidSupport.shouldSendInputEvents) {
-            if (self.controllerSupport != nil) {
+            if ([self controllerSupportOwnsPlayer:controllerNumber]) {
                 [self.controllerSupport rumble:controllerNumber lowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
             } else {
                 [self.hidSupport rumbleLowFreqMotor:lowFreqMotor highFreqMotor:highFreqMotor];
@@ -2431,10 +2477,15 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [self.controllerSupport setAdaptiveTriggers:controllerNumber eventFlags:eventFlags typeLeft:typeLeft typeRight:typeRight left:left right:right];
 }
 
+- (void)ds5OutputExtension:(const LI_DS5_OUTPUT_EXTENSION *)output {
+    if (output == NULL || !self.hidSupport.shouldSendInputEvents) return;
+    [self.controllerSupport applyDualSenseOutputExtension:output];
+}
+
 - (void)ds5HapticsIrV2:(const LI_DS5_HAPTICS_IR_FRAME_V2 *)frame {
     if (frame == NULL || ![SettingsClass rumbleFor:self.app.host.uuid] ||
         !self.hidSupport.shouldSendInputEvents) return;
-    if (self.controllerSupport != nil) {
+    if ([self controllerSupportOwnsPlayer:frame->controllerNumber]) {
         [self.controllerSupport ds5HapticsIrV2:frame];
     } else if (frame->controllerNumber == 0) {
         ControllerActuatorEnvelope envelopes[2];
