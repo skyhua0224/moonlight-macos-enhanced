@@ -24,7 +24,7 @@
 
 ## 当前版本
 
-**1.3.9 RC8** 的变更见 [1.3.9 RC8 更新说明](.github/release-notes/v1.3.9-rc.8.md)。主页重新设计，以你的电脑为中心；新增性能浮窗；手柄可以操作主页和设置。已发布的安装包仍以 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 为准。1.3.9 是原生架构重建前最后一个版本。
+**1.3.9 RC8** 的变更见 [1.3.9 RC8 更新说明](.github/release-notes/v1.3.9-rc.8.md)。主界面重新设计，可个性化调节界面各处细节，提供卡片/大图两种视图，全新支持横版海报；新增性能浮窗；全面支持用手柄操作主页与设置。已发布的安装包仍以 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 为准。1.3.9 是原生架构重建前最后一个版本。
 
 - 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载。安装包有 `universal`、`arm64`、`x86_64` 三种，不确定时选 `universal`。
 - 已安装 1.3.9 的用户可以在 `设置 → 关于与更新` 检查更新。
@@ -32,7 +32,7 @@
 
 1.3.9 相比 1.3.8 的主要变化：
 
-- **所有页面全面焕新**：主页以你的电脑为中心，设置可以搜索到具体选项，整个应用都能用手柄操作。
+- **所有页面全面焕新**：主界面可个性化调节，设置可以搜索到具体选项，整个应用都能用手柄操作。
 - **配置方案**：对照每台主机与默认配置的差异，复制设置、保存预设、导入与导出。
 - **音频**：新增无损 PCM、AC3、E-AC3 与杜比直通，串流中可切换输出设备；音效增强新增参数均衡器、耳机校正预设和耳机上的双耳环绕声。
 - **输入**：新增精确式触控板、macOS 输入法输入文字、按字符的按键映射、捕获系统快捷键、Windows 键位顺序和键入剪贴板文本；带触摸屏的 Mac 可以直接触控。DualSense 支持触控板、灯光、电量与触觉反馈。
@@ -65,11 +65,6 @@
 其中一部分需要 Foundation Sunshine，见下一节。
 
 ## 截图
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/home-dark.png">
-  <img src="readme-assets/images/home.png" width="760" alt="主界面">
-</picture>
 
 <table>
 <tr>
