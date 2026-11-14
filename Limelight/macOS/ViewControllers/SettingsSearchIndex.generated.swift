@@ -121,6 +121,20 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "audio/Microphone/Start Test", pane: .audio, kind: .row, sectionKey: "Microphone", titleKey: "Start Test", detailKey: nil, keywords: []),
   ]
 
+  static let generatedOverlayEntries: [SettingsSearchEntry] = [
+    SettingsSearchEntry(id: "overlay/pane", pane: .overlay, kind: .pane, sectionKey: "Media", titleKey: "Performance HUD", detailKey: "Performance HUD settings subtitle", keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Appearance/HUD Style", pane: .overlay, kind: .row, sectionKey: "HUD Appearance", titleKey: "HUD Style", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Appearance/HUD Position", pane: .overlay, kind: .row, sectionKey: "HUD Appearance", titleKey: "HUD Position", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Appearance/HUD Panel Opacity", pane: .overlay, kind: .row, sectionKey: "HUD Appearance", titleKey: "HUD Panel Opacity", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Appearance/HUD Size", pane: .overlay, kind: .row, sectionKey: "HUD Appearance", titleKey: "HUD Size", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Behaviour/Show Performance Overlay", pane: .overlay, kind: .row, sectionKey: "HUD Behaviour", titleKey: "Show Performance Overlay", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Behaviour/HUD Fade When Quiet", pane: .overlay, kind: .row, sectionKey: "HUD Behaviour", titleKey: "HUD Fade When Quiet", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Behaviour/HUD Warn On Problems", pane: .overlay, kind: .row, sectionKey: "HUD Behaviour", titleKey: "HUD Warn On Problems", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Behaviour/HUD Split At Notch", pane: .overlay, kind: .row, sectionKey: "HUD Behaviour", titleKey: "HUD Split At Notch", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Items/HUD Items", pane: .overlay, kind: .section, sectionKey: "HUD Items", titleKey: "HUD Items", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "overlay/HUD Shortcuts/HUD Shortcuts", pane: .overlay, kind: .section, sectionKey: "HUD Shortcuts", titleKey: "HUD Shortcuts", detailKey: nil, keywords: []),
+  ]
+
   static let generatedInputEntries: [SettingsSearchEntry] = [
     SettingsSearchEntry(id: "input/pane", pane: .input, kind: .pane, sectionKey: "Input & Devices", titleKey: "Controller", detailKey: "Controller settings subtitle", keywords: []),
     SettingsSearchEntry(id: "input/Controller/Connected Controllers", pane: .input, kind: .row, sectionKey: "Controller", titleKey: "Connected Controllers", detailKey: nil, keywords: ["None"]),
@@ -210,7 +224,6 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "app/Application/Custom Artwork Dimensions", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Custom Artwork Dimensions", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Application/Quit App After Stream", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Quit App After Stream", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Application/Dim Unfocused Artwork", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Dim Unfocused Artwork", detailKey: nil, keywords: []),
-    SettingsSearchEntry(id: "app/Application/Show Performance Overlay", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Show Performance Overlay", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Application/Show Connection Warnings", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Show Connection Warnings", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Network Compatibility/Automatically Discover New Hosts", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "Automatically Discover New Hosts", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Network Compatibility/AWDL Stability Helper", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "AWDL Stability Helper", detailKey: "AWDL Stability Helper detail", keywords: []),
@@ -237,6 +250,7 @@ extension SettingsSearchIndex {
     all.append(contentsOf: generatedDisplayEntries)
     all.append(contentsOf: generatedVideoEntries)
     all.append(contentsOf: generatedAudioEntries)
+    all.append(contentsOf: generatedOverlayEntries)
     all.append(contentsOf: generatedInputEntries)
     all.append(contentsOf: generatedKeyboardEntries)
     all.append(contentsOf: generatedUsbEntries)
