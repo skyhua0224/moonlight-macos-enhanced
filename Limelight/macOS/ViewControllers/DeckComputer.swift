@@ -342,3 +342,291 @@ final class DeckPairingState: ObservableObject {
 
 // MARK: - Desktop thumbnail and running art
 
+extension DeckArt {
+  /// The host's own thumbnail (Foundation Sunshine, later): the second fallback.
+  static func thumbURL(_ uuid: String) -> URL {
+    let caches = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true).first ?? NSTemporaryDirectory()
+    return URL(fileURLWithPath: caches).appendingPathComponent(Bundle.main.bundleIdentifier ?? "").appendingPathComponent(uuid).appendingPathComponent("_desktop.jpg")
+  }
+
+  private static let previews = NSCache<NSString, NSImage>()
+  private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+
+  /// A frosted copy of a picture, made once and cached (never blurred while drawing): Gaussian blur of
+  /// `radius` points at a display width of `displayWidth` points, saturation lifted a little.
+  private static func frosted(_ cg: CGImage, radius: CGFloat, displayWidth: CGFloat, saturation: CGFloat) -> NSImage? {
+    let px = radius * CGFloat(cg.width) / max(displayWidth, 200)
+    let input = CIImage(cgImage: cg)
+    guard let blur = CIFilter(name: "CIGaussianBlur") else { return nil }
+    blur.setValue(input.clampedToExtent(), forKey: kCIInputImageKey)
+    blur.setValue(max(1, px), forKey: kCIInputRadiusKey)
+    guard var out = blur.outputImage else { return nil }
+    if let tone = CIFilter(name: "CIColorControls") {
+      tone.setValue(out, forKey: kCIInputImageKey)
+      tone.setValue(saturation, forKey: kCIInputSaturationKey)
+      out = tone.outputImage ?? out
+    }
+    guard let result = ciContext.createCGImage(out.cropped(to: input.extent), from: input.extent) else { return nil }
+    return NSImage(cgImage: result, size: NSSize(width: result.width, height: result.height))
+  }
+
+  private static func decode(_ url: URL, maxPixel: Int) -> CGImage? {
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+    let options: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceShouldCacheImmediately: true,
+      kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+    ]
+    return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+  }
+
+  private static func modified(_ url: URL) -> TimeInterval {
+    ((try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)?.timeIntervalSince1970 ?? 0
+  }
+
+  /// The client's own last frame (StreamBackdropStore, saved when a stream ends): the desktop's if there
+  /// is one, otherwise the newest of the host's apps; then the host-provided thumbnail. It is stored as a
+  /// 960 px JPEG, which looks soft when shown large, so it is shown frosted: blurred (about 25 pt at the
+  /// displayed size) with a little more saturation, rendered once and cached by file and size.
+  static func loadLastFrame(_ host: DeckHost, displayWidth: CGFloat) async -> NSImage? {
+    let apps = host.raw.appList.compactMap { $0 as? TemporaryApp }
+    let uuid = host.id
+    let candidates: [(String, Bool)] = apps.map { ($0.id ?? "", deckIsDesktopLike($0)) }
+    return await Task.detached(priority: .userInitiated) {
+      var best: (URL, Date, Bool)?
+      for (appId, desktop) in candidates {
+        guard let url = StreamBackdropStore.frameURL(host: uuid, app: appId),
+              let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate else { continue }
+        if best == nil || (desktop && !best!.2) || (desktop == best!.2 && date > best!.1) { best = (url, date, desktop) }
+      }
+      let url = best?.0 ?? thumbURL(uuid)
+      guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+      let key = "frame/\(url.path)/\(modified(url))/\(Int(displayWidth / 100))" as NSString
+      if let hit = previews.object(forKey: key) { return hit }
+      guard let cg = decode(url, maxPixel: 1280), let image = frosted(cg, radius: 25, displayWidth: displayWidth, saturation: 1.15) else { return nil }
+      previews.setObject(image, forKey: key)
+      return image
+    }.value
+  }
+
+  /// The host's wallpaper: the poster of its Desktop app. A Foundation Sunshine host on Windows serves
+  /// the real wallpaper there (apps.json image-path "desktop", resolved in process.cpp
+  /// validate_app_image_path); any other host serves its generic portrait desktop.png, which is not a
+  /// wallpaper, so only a landscape picture counts. The Desktop app is FsKind=desktop, else named
+  /// Desktop / 桌面 (deckIsDesktopLike). It stays sharp, unless it has fewer than 1/1.5 of the pixels
+  /// the display needs: then a light blur (8 pt) hides the softness.
+  static func loadWallpaper(_ host: DeckHost, displayWidth: CGFloat) async -> NSImage? {
+    guard let app = host.raw.appList.compactMap({ $0 as? TemporaryApp }).first(where: deckIsDesktopLike) else { return nil }
+    let file = path(app)
+    guard !file.isEmpty else { return nil }
+    let url = URL(fileURLWithPath: file)
+    let scale = await MainActor.run { NSScreen.main?.backingScaleFactor ?? 2 }
+    let key = "wall/\(file)/\(modified(url))/\(Int(displayWidth / 100))" as NSString
+    if let hit = previews.object(forKey: key) { return hit }
+    let image: NSImage? = await Task.detached(priority: .userInitiated) {
+      guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+            let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            let width = props[kCGImagePropertyPixelWidth] as? Double,
+            let height = props[kCGImagePropertyPixelHeight] as? Double,
+            width >= height * 1.2,
+            let cg = decode(url, maxPixel: displayWidth < 800 ? 1280 : 2400) else { return nil }
+      if Double(cg.width) * 1.5 < Double(displayWidth * scale) {
+        return frosted(cg, radius: 8, displayWidth: displayWidth, saturation: 1.05)
+      }
+      return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }.value
+    if let image { previews.setObject(image, forKey: key) }
+    return image
+  }
+
+  /// What is already decoded in memory for this computer's picture, found without touching the disk beyond one stat: the first
+  /// frame of a page that was drawn before (switching computers, a window opened again) shows it at once. nil = not decoded yet.
+  static func peekPreview(_ host: DeckHost, preference: DeckHostPreview, displayWidth: CGFloat, grey: Bool) -> NSImage? {
+    guard !grey, preference == .wallpaper,
+          let app = host.raw.appList.compactMap({ $0 as? TemporaryApp }).first(where: deckIsDesktopLike) else { return nil }
+    let file = path(app)
+    guard !file.isEmpty else { return nil }
+    let url = URL(fileURLWithPath: file)
+    let key = "wall/\(file)/\(modified(url))/\(Int(displayWidth / 100))" as NSString
+    if let hit = previews.object(forKey: key) { return hit }
+    // Not decoded in this run yet (a cold launch): the first frame still draws the picture. A quick decode at screen size, once
+    // (about 20 ms for a wallpaper); the full decode that follows replaces it with a cross-fade, which is not visible.
+    let quickKey = "wallq/\(file)/\(modified(url))" as NSString
+    if let hit = previews.object(forKey: quickKey) { return hit }
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+          let width = props[kCGImagePropertyPixelWidth] as? Double, let height = props[kCGImagePropertyPixelHeight] as? Double,
+          width >= height * 1.2, let cg = decode(url, maxPixel: 1280) else { return nil }
+    let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    previews.setObject(image, forKey: quickKey)
+    return image
+  }
+
+  /// The preview image of a computer, in the order the user chose; nil = the caller draws the placeholder.
+  /// `displayWidth` is the width in points it will be shown at (the blur is scaled to it).
+  static func loadPreview(_ host: DeckHost, preference: DeckHostPreview, displayWidth: CGFloat, desaturate: Bool = false) async -> NSImage? {
+    var found: NSImage?
+    switch preference {
+    case .wallpaper:
+      found = await loadWallpaper(host, displayWidth: displayWidth)
+      if found == nil { found = await loadLastFrame(host, displayWidth: displayWidth) }
+    case .lastFrame:
+      found = await loadLastFrame(host, displayWidth: displayWidth)
+      if found == nil { found = await loadWallpaper(host, displayWidth: displayWidth) }
+    }
+    // A computer that is off shows its picture in grey. Done to the picture itself, once: a live saturation
+    // filter on a page that is drawn scaled came out at the wrong size.
+    guard desaturate, let found else { return found }
+    return await Task.detached(priority: .userInitiated) { grayscale(found) }.value
+  }
+
+  private static func grayscale(_ image: NSImage) -> NSImage {
+    guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+          let tone = CIFilter(name: "CIColorControls") else { return image }
+    tone.setValue(CIImage(cgImage: cg), forKey: kCIInputImageKey)
+    tone.setValue(0, forKey: kCIInputSaturationKey)
+    tone.setValue(-0.08, forKey: kCIInputBrightnessKey)
+    guard let out = tone.outputImage, let result = ciContext.createCGImage(out, from: out.extent) else { return image }
+    // the paler look of a computer that is off is part of the picture too (alpha), not a live opacity on a
+    // view that is drawn scaled
+    let size = NSSize(width: result.width, height: result.height)
+    let faded = NSImage(size: size)
+    faded.lockFocus()
+    NSImage(cgImage: result, size: size).draw(in: NSRect(origin: .zero, size: size), from: .zero, operation: .sourceOver, fraction: 0.5)
+    faded.unlockFocus()
+    return faded
+  }
+}
+
+/// What you will see when you connect. Without a thumbnail a small card with the platform glyph.
+@available(macOS 14.0, *)
+struct DeckDesktopThumb: View {
+  let host: DeckHost
+  var version = 0
+  @ObservedObject private var config = DeckHomeConfig.shared
+  @SwiftUI.State private var image: NSImage?
+  @SwiftUI.State private var loaded = false
+
+  var body: some View {
+    Group {
+      if let image {
+        DeckFilledImage(image: image, aspect: 16.0 / 9.0)
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+          .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+          .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
+      } else if loaded {
+        placeholder
+      } else {
+        Color.clear.aspectRatio(16.0 / 9.0, contentMode: .fit)
+      }
+    }
+    .task(id: "\(host.id)/\(version)/\(config.preview.rawValue)/\(host.settledOffline)") {
+      // grey only for a computer found off; a load that was replaced meanwhile does not write (see DeckHeroHeader)
+      let next = await DeckArt.loadPreview(host, preference: config.preview, displayWidth: 560, desaturate: DeckPresenceRules.greyHero(state: host.state))
+      guard !Task.isCancelled else { return }
+      image = next
+      loaded = true
+    }
+  }
+
+  /// No thumbnail: a card of the same size and place, the host's icon large on a soft gradient of its colour.
+  private var placeholder: some View {
+    let color = (!host.online || host.icon.colorName == "gray") ? (host.online ? Color.accentColor : Color.gray) : DeckPalette.color(host.icon.colorName)
+    return ZStack {
+      LinearGradient(colors: [color.opacity(0.34), color.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
+      Circle().fill(color.opacity(0.10)).frame(width: 340, height: 340).offset(x: 150, y: -90)
+      if let picture = host.icon.image {
+        Image(nsImage: picture).resizable().scaledToFill().frame(width: 128, height: 128)
+          .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+      } else {
+        Image(systemName: host.icon.symbol.isEmpty ? "display" : host.icon.symbol)
+          .font(.system(size: 100, weight: .light)).foregroundStyle(color.opacity(0.9))
+      }
+    }
+    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+    .shadow(color: .black.opacity(0.16), radius: 18, y: 9)
+  }
+}
+
+/// Pairing in progress, in the place of the thumbnail: a clear title, the PIN in large digit boxes
+/// (the way Apple shows a verification code), and where to enter it.
+@available(macOS 14.0, *)
+struct DeckPairingPanel: View {
+  let host: DeckHost
+  let pin: String?
+
+  var body: some View {
+    let tint = Color.orange
+    ZStack {
+      LinearGradient(colors: [tint.opacity(0.30), tint.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
+      VStack(spacing: 18) {
+        HStack(spacing: 8) {
+          ProgressView().controlSize(.small)
+          Text(DL("deck.pairingTitle")).font(.system(size: 24, weight: .bold))
+        }
+        HStack(spacing: 12) {
+          ForEach(Array((pin ?? "    ").enumerated()), id: \.offset) { _, digit in
+            Text(String(digit).trimmingCharacters(in: .whitespaces))
+              .font(.system(size: 60, weight: .bold, design: .monospaced))
+              .frame(width: 74, height: 96)
+              .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(nsColor: .textBackgroundColor)))
+              .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.18), lineWidth: 1))
+              .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
+          }
+        }
+        Text(DLf("deck.pinWeb", host.name)).font(.system(size: 14, weight: .medium)).foregroundStyle(.secondary)
+          .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).frame(maxWidth: 330)
+      }
+      .padding(20)
+    }
+    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+    .shadow(color: .black.opacity(0.16), radius: 18, y: 9)
+  }
+}
+
+/// R2: the running game in the thumbnail's place: the host's landscape art, or the poster enlarged.
+@available(macOS 14.0, *)
+struct DeckRunningArt: View {
+  let app: TemporaryApp
+  var version = 0
+
+  var body: some View {
+    DeckLandscapeArt(app: app, version: version, posterFraction: 0.82)
+      .aspectRatio(16.0 / 9.0, contentMode: .fit)
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      .overlay(alignment: .topLeading) {
+        HStack(spacing: 5) {
+          Circle().fill(Color.green).frame(width: 7, height: 7)
+          Text(DL("deck.running")).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
+        }
+        .padding(.horizontal, 9).padding(.vertical, 5)
+        .deckGlass(Capsule(), tint: .green)
+        .padding(12)
+      }
+      .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+      .shadow(color: .black.opacity(0.22), radius: 18, y: 9)
+  }
+}
+
+// MARK: - The computer card
+
+/// The one quiet line under a computer's name, in every state and both layouts.
+@available(macOS 14.0, *)
+func deckCardStatus(_ host: DeckHost, pairing: DeckPairingState) -> String {
+  if !host.online {
+    // 离线 · 上次在线 3 小时前, or 从未连接
+    if DeckTime.relative(host.facts.lastSeen ?? host.facts.lastConnected) == nil { return DL("deck.neverConnected") }
+    return DL("deck.offline") + " · " + deckSubtitle(host)
+  }
+  if !host.paired {
+    if pairing.started.contains(host.id) || pairing.pins[host.id] != nil { return DLf("deck.waitingConfirm", host.name) }
+    return [host.address, DL("deck.unpaired")].compactMap { $0 }.joined(separator: " · ")
+  }
+  return deckStatusLine(host)
+}
+
