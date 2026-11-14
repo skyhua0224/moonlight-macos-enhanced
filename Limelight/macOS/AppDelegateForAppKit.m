@@ -13,8 +13,6 @@
 #import "NSResponder+Moonlight.h"
 #import "ControllerNavigation.h"
 
-#import "MASPreferencesWindowController.h"
-#import "GeneralPrefsPaneVC.h"
 
 #import "AppsViewController.h"
 #import "AppsWorkspaceViewController.h"
