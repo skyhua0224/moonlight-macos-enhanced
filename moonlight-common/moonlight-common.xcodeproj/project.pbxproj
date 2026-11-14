@@ -15,6 +15,11 @@
 		B10000042F00000000E39078 /* Ds5HapticsStream.c in Sources */ = {isa = PBXBuildFile; fileRef = B10000052F00000000E39078 /* Ds5HapticsStream.c */; };
 		B10000082F00000000E39078 /* Ds5HapticsIrStream.c in Sources */ = {isa = PBXBuildFile; fileRef = B10000092F00000000E39078 /* Ds5HapticsIrStream.c */; };
 		B100000C2F00000000E39078 /* RemoteTextContextStream.c in Sources */ = {isa = PBXBuildFile; fileRef = B100000D2F00000000E39078 /* RemoteTextContextStream.c */; };
+		B10000212F00000000E39078 /* EndpointRefresh.c in Sources */ = {isa = PBXBuildFile; fileRef = B10000202F00000000E39078 /* EndpointRefresh.c */; };
+		B10000232F00000000E39078 /* EndpointRefreshProtocol.c in Sources */ = {isa = PBXBuildFile; fileRef = B10000222F00000000E39078 /* EndpointRefreshProtocol.c */; };
+		B10000252F00000000E39078 /* MatDepacketizer.c in Sources */ = {isa = PBXBuildFile; fileRef = B10000242F00000000E39078 /* MatDepacketizer.c */; };
+		B10000272F00000000E39078 /* MatLivePlayback.c in Sources */ = {isa = PBXBuildFile; fileRef = B10000262F00000000E39078 /* MatLivePlayback.c */; };
+		B10000292F00000000E39078 /* MatReceiver.c in Sources */ = {isa = PBXBuildFile; fileRef = B10000282F00000000E39078 /* MatReceiver.c */; };
 		9857AEF01EBE85E10084F99E /* rs.c in Sources */ = {isa = PBXBuildFile; fileRef = 9857AEEE1EBE85E10084F99E /* rs.c */; };
 		98AB2E401CAD425A0089BB98 /* AudioStream.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1A1CAD423B0089BB98 /* AudioStream.c */; };
 		98AB2E411CAD425A0089BB98 /* ByteBuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 98AB2E1B1CAD423B0089BB98 /* ByteBuffer.c */; };
@@ -117,6 +122,11 @@
 		B10000092F00000000E39078 /* Ds5HapticsIrStream.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = Ds5HapticsIrStream.c; sourceTree = "<group>"; };
 		B100000A2F00000000E39078 /* Ds5HapticsIrStream.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Ds5HapticsIrStream.h; sourceTree = "<group>"; };
 		B100000D2F00000000E39078 /* RemoteTextContextStream.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = RemoteTextContextStream.c; sourceTree = "<group>"; };
+		B10000202F00000000E39078 /* EndpointRefresh.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = EndpointRefresh.c; sourceTree = "<group>"; };
+		B10000222F00000000E39078 /* EndpointRefreshProtocol.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = EndpointRefreshProtocol.c; sourceTree = "<group>"; };
+		B10000242F00000000E39078 /* MatDepacketizer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = MatDepacketizer.c; sourceTree = "<group>"; };
+		B10000262F00000000E39078 /* MatLivePlayback.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = MatLivePlayback.c; sourceTree = "<group>"; };
+		B10000282F00000000E39078 /* MatReceiver.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = MatReceiver.c; sourceTree = "<group>"; };
 		B100000E2F00000000E39078 /* RemoteTextContextStream.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RemoteTextContextStream.h; sourceTree = "<group>"; };
 		B100000F2F00000000E39078 /* ControlStreamPacket.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ControlStreamPacket.h; sourceTree = "<group>"; };
 		B10000102F00000000E39078 /* DynamicHdr.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DynamicHdr.h; sourceTree = "<group>"; };
@@ -261,6 +271,11 @@
 				B100000A2F00000000E39078 /* Ds5HapticsIrStream.h */,
 				B100000D2F00000000E39078 /* RemoteTextContextStream.c */,
 				B100000E2F00000000E39078 /* RemoteTextContextStream.h */,
+				B10000202F00000000E39078 /* EndpointRefresh.c */,
+				B10000222F00000000E39078 /* EndpointRefreshProtocol.c */,
+				B10000242F00000000E39078 /* MatDepacketizer.c */,
+				B10000262F00000000E39078 /* MatLivePlayback.c */,
+				B10000282F00000000E39078 /* MatReceiver.c */,
 				B100000F2F00000000E39078 /* ControlStreamPacket.h */,
 				B10000102F00000000E39078 /* DynamicHdr.h */,
 				4C7CB9192446D19D002B8D4E /* SimpleStun.c */,
@@ -349,6 +364,11 @@
 				B10000042F00000000E39078 /* Ds5HapticsStream.c in Sources */,
 				B10000082F00000000E39078 /* Ds5HapticsIrStream.c in Sources */,
 				B100000C2F00000000E39078 /* RemoteTextContextStream.c in Sources */,
+				B10000212F00000000E39078 /* EndpointRefresh.c in Sources */,
+				B10000232F00000000E39078 /* EndpointRefreshProtocol.c in Sources */,
+				B10000252F00000000E39078 /* MatDepacketizer.c in Sources */,
+				B10000272F00000000E39078 /* MatLivePlayback.c in Sources */,
+				B10000292F00000000E39078 /* MatReceiver.c in Sources */,
 				98AB2E441CAD425A0089BB98 /* FakeCallbacks.c in Sources */,
 				98AB2E451CAD425A0089BB98 /* InputStream.c in Sources */,
 				98AB2E461CAD425A0089BB98 /* LinkedBlockingQueue.c in Sources */,
