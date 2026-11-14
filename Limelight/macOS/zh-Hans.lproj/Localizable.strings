@@ -2120,3 +2120,16 @@
 "Turn On Anyway" = "仍要开启";
 "Turn On Anyway (%d)" = "仍要开启（%d）";
 "None" = "无";
+
+"deck.nic" = "网卡";
+"deck.nic.wifi" = "Wi-Fi";
+"deck.nic.ethernet" = "以太网";
+"deck.nic.tunnel" = "隧道";
+"deck.nic.unavailable" = "不可用";
+"deck.nic.pin" = "串流固定使用这块网卡";
+"deck.nic.pinned" = "已固定,点「自动」恢复";
+"deck.nic.auto" = "按系统路由选网卡";
+"deck.nic.streamUnavailable" = "所选网卡 %@ 当前不可用";
+"deck.path.proxy" = "经代理";
+"deck.evidence.proxy" = "公网地址经过隧道,隧道自身地址在 198.18.0.0/15(代理的虚拟 IP 网卡)";
+"deck.addr.reachableNoMs" = "可达";

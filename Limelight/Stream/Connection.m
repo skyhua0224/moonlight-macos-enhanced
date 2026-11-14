@@ -227,6 +227,7 @@ typedef NS_ENUM(NSInteger, MLAudioRendererBackend) {
 @end
 
 @implementation Connection {
+    NSString *_networkInterfaceName;
     SERVER_INFORMATION _serverInfo;
     STREAM_CONFIGURATION _streamConfig;
     CONNECTION_LISTENER_CALLBACKS _clCallbacks;
@@ -4620,6 +4621,7 @@ static void ConnectionForgetMainThreadContext(Connection *conn) {
         renderer.depacketizerContext = &_connectionContext.videoContext.depacketizerContext;
     }
 
+    _networkInterfaceName = [config.networkInterface copy];
     LiInitializeStreamConfiguration(&_streamConfig);
     _streamConfig.width = config.width;
     _streamConfig.height = config.height;
@@ -5849,6 +5851,25 @@ static void FillOutputBuffer(void *aqData,
                                   reason:@"Receiving a live stream"];
         }
     }
+    // 网卡: every socket the stream opens in moonlight-common-c is bound to the chosen interface before it connects or sends.
+    // The interface index is looked up now (an index does not outlive a rebuilt interface). No fallback: when it is gone, or a
+    // bind fails, the stream does not start. HTTP requests (serverinfo, launch, applist) stay on the system route.
+    unsigned int pinIndex = 0;
+    if (_networkInterfaceName.length > 0) {
+        pinIndex = [Utils usableInterfaceIndexForName:_networkInterfaceName];
+        if (pinIndex == 0) {
+            Log(LOG_E, @"[nic] Pinned interface %@ is not available; the stream does not start", _networkInterfaceName);
+            LiSetBoundInterface(0);
+            id<ConnectionCallbacks> callbacks = ConnectionGetCallbacksSnapshot(self);
+            [callbacks launchFailed:[NSString stringWithFormat:[[LanguageManager shared] localize:@"deck.nic.streamUnavailable"], _networkInterfaceName]];
+            LiSetThreadConnectionContext(NULL);
+            os_unfair_lock_unlock(&gConnectionLifecycleLock);
+            return;
+        }
+    }
+    if (LiSetBoundInterface(pinIndex) != 0) {
+        Log(LOG_E, @"[nic] This platform cannot bind a socket to an interface");
+    }
     _rendererStreamConfig.startupConnectMs = LiGetMillis();
     Log(LOG_I, @"LiStartConnectionCtx: connCtx=%p globalCtx=%p inputCtx=%p", &_connectionContext, LiGetGlobalConnectionContextPtr(), LiGetInputContextFromConnectionCtx(&_connectionContext));
     int startErr = LiStartConnectionCtx(&_connectionContext,
@@ -5859,6 +5880,20 @@ static void FillOutputBuffer(void *aqData,
                                         &_arCallbacks,
                                         (__bridge void *)self, 0,
                                         (__bridge void *)self, 0);
+    {
+        LI_BOUND_INTERFACE_STATUS pin;
+        LiGetBoundInterfaceStatus(&pin);
+        if (pin.ifIndex == 0) {
+            Log(LOG_I, @"[nic] stream interface: automatic (system route); sockets not bound");
+        } else {
+            Log(LOG_I, @"[nic] stream interface: %@ index %u; bind ok/failed: rtsp+input tcp %d/%d, video+audio+mic udp %d/%d, enet control %d/%d%s; http on the system route",
+                _networkInterfaceName ?: @"?", pin.ifIndex,
+                pin.ok[LI_BOUND_IF_KIND_TCP], pin.failed[LI_BOUND_IF_KIND_TCP],
+                pin.ok[LI_BOUND_IF_KIND_UDP], pin.failed[LI_BOUND_IF_KIND_UDP],
+                pin.ok[LI_BOUND_IF_KIND_ENET], pin.failed[LI_BOUND_IF_KIND_ENET],
+                pin.lastError != 0 ? [NSString stringWithFormat:@" lastError=%d", pin.lastError].UTF8String : "");
+        }
+    }
     // The control stream exists only after a successful start; -terminate may
     // already have retired the gate, in which case it stays closed.
     if (startErr == 0 && !MLSessionGateOpen(&_controlGate)) {

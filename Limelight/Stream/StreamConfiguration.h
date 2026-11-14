@@ -77,6 +77,8 @@
 @property(nonatomic) BOOL enableYuv444;
 @property(nonatomic) BOOL requestedYuv444;
 @property(nonatomic) BOOL suppressDolbyVision;
+/// The network interface every socket of this stream is bound to (its name); nil = the system route decides. Chosen per computer.
+@property(nonatomic, copy) NSString *networkInterface;
 @property(nonatomic, copy) NSString *sunshineTargetDisplayName;
 @property(nonatomic) BOOL sunshineUseVirtualDisplay;
 @property(nonatomic) int sunshineScreenMode;
