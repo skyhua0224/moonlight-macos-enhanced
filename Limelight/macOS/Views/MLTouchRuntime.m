@@ -746,3 +746,222 @@ typedef NS_ENUM(NSInteger, MLTouchDotState) {
     }
 }
 
+- (void)startHoldTimer {
+    if (_holdTimer != nil) return;
+    StreamViewMac *view = _streamView;
+    if (view != nil && _ringView == nil) {
+        _ringView = [[MLTouchHoldRingView alloc] initWithFrame:view.bounds];
+    }
+    if (view != nil && _ringView.superview == nil) [view raiseSubviewAboveContent:_ringView];
+    __weak typeof(self) weakSelf = self;
+    _holdTimer = [NSTimer timerWithTimeInterval:1.0 / 60.0 repeats:YES block:^(NSTimer *timer) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil) { [timer invalidate]; return; }
+        NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+        double progress = [strongSelf->_hold progressAtTime:now];
+        if (strongSelf->_hold.state == MLTouchHoldStateArming) {
+            [strongSelf->_ringView showProgress:progress at:strongSelf->_hold.centroid];
+        }
+        [strongSelf->_hold pollAtTime:now];
+    }];
+    [NSRunLoop.mainRunLoop addTimer:_holdTimer forMode:NSRunLoopCommonModes];
+}
+
+- (void)stopHoldTimer {
+    [_holdTimer invalidate];
+    _holdTimer = nil;
+}
+
+#pragma mark One-time hint
+
+- (void)showFiveFingerHintIfNeeded {
+    StreamViewMac *view = _streamView;
+    if (_tornDown || view == nil || _hintShownThisRun || _hintView != nil) return;
+    if (![MLTouchRuntime anyScreenHasTouch]) return;
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    if ([defaults boolForKey:@"MLTouchFiveFingerHintShown"] && ![defaults boolForKey:@"MLTouchHintForce"]) return;
+    _hintShownThisRun = YES;
+    [defaults setBool:YES forKey:@"MLTouchFiveFingerHintShown"];
+
+    NSString *text = [LanguageManager.shared localize:@"Hold five fingers to open Control Center"];
+    MLTouchHintView *hint = [[MLTouchHintView alloc] initWithText:text];
+    NSSize size = hint.frame.size;
+    hint.frame = NSMakeRect(NSMidX(view.bounds) - size.width / 2, 56, size.width, size.height);
+    hint.autoresizingMask = NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin;
+    hint.alphaValue = 0;
+    [view raiseSubviewAboveContent:hint];
+    _hintView = hint;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.25;
+        hint.animator.alphaValue = 1;
+    }];
+    os_log(MLTouchLog(), "five-finger hint shown (once; defaults MLTouchFiveFingerHintShown)");
+    __weak typeof(self) weakSelf = self;
+    __weak MLTouchHintView *weakHint = hint;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(7.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf != nil && strongSelf->_hintView == weakHint) [strongSelf dismissHint];
+    });
+}
+
+- (void)dismissHint {
+    MLTouchHintView *hint = _hintView;
+    _hintView = nil;
+    if (hint == nil) return;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.25;
+        hint.animator.alphaValue = 0;
+    } completionHandler:^{
+        [hint removeFromSuperview];
+    }];
+}
+
+#pragma mark Sending
+
+- (void)sendWire:(MLTouchWireEvent)event pointerId:(uint32_t)pointerId x:(float)x y:(float)y {
+    _totalWire++;
+    _sumWire++;
+    [_hid sendTouchWireEvent:event pointerId:pointerId x:x y:y];
+}
+
+- (CGFloat)hostPixelsPerViewPoint {
+    StreamViewMac *view = _streamView;
+    if (view == nil || _videoSize.width <= 0) return 1.0;
+    CGRect rect = MLTouchVideoRect(view.bounds.size, _videoSize, _stretch);
+    return rect.size.width > 0 ? _videoSize.width / rect.size.width : 1.0;
+}
+
+- (void)sendEmulated:(MLTouchEmuEvent)event {
+    HIDSupport *hid = _hid;
+    if (hid == nil) return;
+    switch (event.kind) {
+        case MLTouchEmuKindMoveRelative: {
+            CGFloat sensitivity = [SettingsClass pointerSensitivityFor:_hostUUID];
+            if (!isfinite(sensitivity) || sensitivity <= 0) sensitivity = 1.0;
+            float scale = (float)([self hostPixelsPerViewPoint] * MIN(MAX(sensitivity, 0.25), 3.0));
+            _relRemainderX += event.a * scale;
+            _relRemainderY += -event.b * scale;      // view y is up, the host's is down
+            short dx = (short)truncf(_relRemainderX), dy = (short)truncf(_relRemainderY);
+            _relRemainderX -= dx;
+            _relRemainderY -= dy;
+            [hid sendTouchRelativeDeltaX:dx deltaY:dy];
+            break;
+        }
+        case MLTouchEmuKindMoveAbsolute: {
+            CGSize reference = _videoSize.width > 0 ? _videoSize : CGSizeMake(10000, 10000);
+            [hid sendTouchAbsoluteX:event.a y:event.b referenceSize:reference];
+            break;
+        }
+        case MLTouchEmuKindButton:
+            [hid sendTouchMouseButton:event.button pressed:event.pressed];
+            break;
+        case MLTouchEmuKindScroll: {
+            // About 15 points of finger travel to one wheel notch (120 units); fingers up scrolls content up.
+            CGFloat speed = [SettingsClass gestureScrollSpeedFor:_hostUUID];
+            if (!isfinite(speed) || speed <= 0) speed = 1.0;
+            float direction = [SettingsClass reverseScrollDirectionFor:_hostUUID] ? 1.0f : -1.0f;
+            _scrollRemainder += event.a * 8.0f * (float)speed * direction;
+            short amount = (short)truncf(_scrollRemainder);
+            _scrollRemainder -= amount;
+            [hid sendTouchHighResScroll:amount];
+            break;
+        }
+    }
+}
+
+#pragma mark Poll and summary timers
+
+- (void)startPollTimer {
+    if (_pollTimer != nil) return;
+    __weak typeof(self) weakSelf = self;
+    _pollTimer = [NSTimer timerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil) { [timer invalidate]; return; }
+        [strongSelf->_emulator pollAtTime:NSProcessInfo.processInfo.systemUptime];
+    }];
+    [NSRunLoop.mainRunLoop addTimer:_pollTimer forMode:NSRunLoopCommonModes];
+}
+
+- (void)stopPollTimer {
+    [_pollTimer invalidate];
+    _pollTimer = nil;
+}
+
+// One line a second while touches or touch-made mouse events are happening: no line per move.
+- (void)startSummaryTimerIfNeeded {
+    _summaryQuiet = NO;
+    if (_summaryTimer != nil) return;
+    __weak typeof(self) weakSelf = self;
+    _summaryTimer = [NSTimer timerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil) { [timer invalidate]; return; }
+        [strongSelf emitSummary];
+    }];
+    [NSRunLoop.mainRunLoop addTimer:_summaryTimer forMode:NSRunLoopCommonModes];
+}
+
+- (void)emitSummary {
+    BOOL idle = _sumMoves == 0 && _sumWire == 0 && _sumBegan == 0 && _sumEnded == 0 && _sumMouseEvents == 0 && _downCount == 0;
+    if (idle) {
+        if (_summaryQuiet) {
+            [_summaryTimer invalidate];
+            _summaryTimer = nil;
+        }
+        _summaryQuiet = YES;
+        return;
+    }
+    _summaryQuiet = NO;
+    if (_hid.touchSendFailures > 0) {
+        os_log(MLTouchLog(), "send failures so far=%lu last=%d", (unsigned long)_hid.touchSendFailures, _hid.touchLastSendError);
+    }
+    os_log(MLTouchLog(), "summary 1s moves=%lu began=%lu ended=%lu wire=%lu maxDown=%lu down=%lu mouseEvents=%lu mouseDropped=%lu mouseLeakedNearTouch(total)=%lu",
+           (unsigned long)_sumMoves, (unsigned long)_sumBegan, (unsigned long)_sumEnded, (unsigned long)_sumWire,
+           (unsigned long)_sumMaxDown, (unsigned long)_downCount, (unsigned long)_sumMouseEvents,
+           (unsigned long)_sumMouseDropped, (unsigned long)_gate.passedNearTouchCount);
+    _sumMoves = _sumBegan = _sumEnded = _sumWire = _sumMouseEvents = _sumMouseDropped = 0;
+    _sumMaxDown = _downCount;
+    [_overlay removeStaleDotsOlderThan:2.0];
+}
+
+#pragma mark Mouse emulation gate
+
+- (BOOL)shouldDropMouseEvent:(NSEvent *)event kind:(MLTouchGateMouseKind)kind {
+    if (_tornDown || !_gate.enabled) return NO;
+    StreamViewMac *view = _streamView;
+    NSPoint point = view != nil ? [view convertPoint:event.locationInWindow fromView:nil] : event.locationInWindow;
+    BOOL subtype = event.subtype == NSEventSubtypeTouch;
+    _gate.subtypeAlwaysDrops = MLTouchSubtypeBelievedWithoutTouch([MLTouchRuntime anyScreenHasTouch], view.window.isKeyWindow);
+    NSTimeInterval age = -1;
+    MLTouchGateVerdict verdict = [_gate verdictForMouseKind:kind
+                                                     button:event.type == NSEventTypeMouseMoved ? 0 : (NSInteger)event.buttonNumber
+                                                      point:point
+                                                       time:event.timestamp
+                                               touchSubtype:subtype
+                                              ageSinceTouch:&age];
+    BOOL drop = verdict != MLTouchGateVerdictPass;
+    if (drop && kind == MLTouchGateMouseDown && verdict == MLTouchGateVerdictDropSubtype &&
+        _downCount == 0 && view != nil && !view.window.isKeyWindow && self.touchEngageHandler != nil) {
+        // The click that would have activated the window: do that, and keep the click itself from the host.
+        self.touchEngageHandler();
+    }
+    if (drop && kind == MLTouchGateMouseDown && !_loggedFirstClickDrop) {
+        _loggedFirstClickDrop = YES;
+        Log(LOG_W, @"[touch] first dropped click this stream: verdict=%d subtype-touch=%d touchDown=%lu ageSinceTouch=%.0fms touchScreen=%d keyWindow=%d",
+            (int)verdict, subtype ? 1 : 0, (unsigned long)_downCount, age >= 0 ? age * 1000.0 : -1.0,
+            [MLTouchRuntime anyScreenHasTouch] ? 1 : 0, view.window.isKeyWindow ? 1 : 0);
+    }
+    BOOL recentTouch = age >= 0 && age <= 2.0;
+    if (kind != MLTouchGateMouseMove && (drop || recentTouch || subtype)) {
+        static const char *names[] = { "pass", "drop-subtype", "drop-correlated", "drop-sequence" };
+        os_log(MLTouchLog(), "mouse event %{public}@ button=%ld verdict=%{public}s age-since-touch=%.0fms subtype-touch=%d down=%lu (a click that follows a touch within 350 ms is the system's emulation)",
+               kind == MLTouchGateMouseDown ? @"down" : @"up", (long)event.buttonNumber, names[verdict],
+               age >= 0 ? age * 1000.0 : -1.0, subtype ? 1 : 0, (unsigned long)_downCount);
+        [self startSummaryTimerIfNeeded];
+    }
+    _sumMouseEvents += recentTouch || drop ? 1 : 0;
+    if (drop) _sumMouseDropped++;
+    if (_overlay != nil && (drop || recentTouch)) [self updateHud];
+    return drop;
+}
+
+@end
