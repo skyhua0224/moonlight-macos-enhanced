@@ -26,6 +26,7 @@
 #import "MLSystemShortcutCapture.h"
 #import "MoonlightEnhanced-Swift.h"
 #import "Logger.h"
+#import "MLEdgeMenuGeometry.h"
 
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Carbon/Carbon.h>
@@ -71,8 +72,8 @@ static CGFloat const MLEdgeMenuButtonInsetY = 88.0;
 static CGFloat const MLEdgeMenuPlateRatio = 0.58;
 // Gap between the visible plate and the stream edge when docked.
 static CGFloat const MLEdgeMenuPlateEdgeGap = 4.0;
-// While idle, only this fraction of the plate stays on screen.
-static CGFloat const MLEdgeMenuCollapsedPlateFraction = 0.25;
+// While idle, half of the plate stays on screen: 0.25 (11 pt) was read as "the ball is gone".
+static CGFloat const MLEdgeMenuCollapsedPlateFraction = 0.5;
 static NSTimeInterval const MLEdgeMenuSnapDuration = 0.22;
 static CGFloat const MLEdgeMenuInteractionOutwardPadding = 18.0;
 static CGFloat const MLEdgeMenuInteractionInwardPadding = 26.0;
@@ -942,6 +943,12 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 
 @interface StreamViewController (InputExtensions) <NSTextInputClient>
 - (void)configurePrecisionTouchpadInput;
+// Direct touch (touchscreen Mac, Sidecar iPad): StreamViewController+Touch.m
+- (void)configureDirectTouchInputWithVideoWidth:(int)width height:(int)height stretch:(BOOL)stretch;
+- (void)refreshDirectTouchInput;
+- (void)updateDirectTouchVideoWidth:(int)width height:(int)height;
+- (void)updateDirectTouchStretch:(BOOL)stretch;
+- (void)tearDownDirectTouchInput;
 /// Installs or removes the macOS system gesture filter so it only runs while the stream owns the trackpad.
 - (void)refreshSystemGestureBlockWithReason:(NSString *)reason;
 - (void)refreshSystemShortcutCaptureWithReason:(NSString *)reason;

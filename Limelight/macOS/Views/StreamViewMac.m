@@ -10,6 +10,7 @@
 #import "NSView+Moonlight.h"
 #import "MoonlightEnhanced-Swift.h"
 #import "Logger.h"
+#import "MLTouchRuntime.h"
 
 @interface StreamViewMac ()
 @property (nonatomic, strong) NSView *startupOverlay;
@@ -271,6 +272,38 @@
     if (self.touchHandler != nil) {
         self.touchHandler(event, self);
     }
+}
+
+#pragma mark - Touch-made mouse events
+
+// With direct touch on macOS 27, AppKit can still turn a touch into mouse events for the views under it.
+// Those reach this view through the responder chain on their way to the stream view controller, which
+// would send them to the host as a click on top of the real touch. The runtime tells them from a real
+// mouse (a subtype, or a touch that was just there); everything else goes on unchanged.
+#define ML_TOUCH_GATED_MOUSE(selectorName, gateKind) \
+- (void)selectorName:(NSEvent *)event { \
+    if ([self.touchRuntime shouldDropMouseEvent:event kind:gateKind]) return; \
+    [super selectorName:event]; \
+}
+
+ML_TOUCH_GATED_MOUSE(mouseDown, MLTouchGateMouseDown)
+ML_TOUCH_GATED_MOUSE(mouseUp, MLTouchGateMouseUp)
+ML_TOUCH_GATED_MOUSE(mouseDragged, MLTouchGateMouseMove)
+ML_TOUCH_GATED_MOUSE(rightMouseDown, MLTouchGateMouseDown)
+ML_TOUCH_GATED_MOUSE(rightMouseUp, MLTouchGateMouseUp)
+ML_TOUCH_GATED_MOUSE(rightMouseDragged, MLTouchGateMouseMove)
+ML_TOUCH_GATED_MOUSE(otherMouseDown, MLTouchGateMouseDown)
+ML_TOUCH_GATED_MOUSE(otherMouseUp, MLTouchGateMouseUp)
+ML_TOUCH_GATED_MOUSE(otherMouseDragged, MLTouchGateMouseMove)
+ML_TOUCH_GATED_MOUSE(mouseMoved, MLTouchGateMouseMove)
+
+// macOS 26 and later tell a view that the mouse input it was given was withdrawn (a gesture recognizer took the
+// touch it came from). Logged, so a real run shows whether the claim worked; nothing was forwarded for it.
+- (void)mouseCancelled:(NSEvent *)event {
+    if (self.touchRuntime != nil) {
+        os_log(MLTouchLog(), "mouseCancelled received: the system withdrew emulated mouse input for a claimed touch");
+    }
+    [super mouseCancelled:event];
 }
 
 - (BOOL)performKeyEquivalent:(NSEvent *)event {

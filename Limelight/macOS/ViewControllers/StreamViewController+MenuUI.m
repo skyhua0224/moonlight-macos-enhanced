@@ -5,6 +5,7 @@
 
 #import "StreamViewController_Internal.h"
 #import "MLMenuItemImage.h"
+#import "MLTouchRuntime.h"
 #import "MLAudioBitstreamOutput.h"
 #import <CoreAudio/CoreAudio.h>
 
@@ -94,9 +95,13 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
 - (void)updateControlCenterEntrypointHints {
     NSString *openHint = [self openControlCenterHintText];
     NSString *releaseHint = (!self.isRemoteDesktopMode && self.isMouseCaptured) ? [self releaseMouseHintText] : @"";
-    NSString *tooltip = releaseHint.length > 0
-        ? [@[openHint, releaseHint] componentsJoinedByString:@"\n"]
-        : openHint;
+    NSMutableArray<NSString *> *tooltipLines = [NSMutableArray arrayWithObject:openHint];
+    // The controller chord and the touch gesture open the same Control Center.
+    [tooltipLines addObject:MLString(@"Also: controller chord, hold five fingers", nil)];
+    if (releaseHint.length > 0) {
+        [tooltipLines addObject:releaseHint];
+    }
+    NSString *tooltip = [tooltipLines componentsJoinedByString:@"\n"];
 
     self.menuTitlebarButton.toolTip = tooltip;
     self.edgeMenuButton.toolTip = tooltip;
@@ -154,7 +159,9 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
 
     __weak typeof(self) weakSelf = self;
     [ControllerMenuPanel.shared presentMenu:self.streamMenu
-                                      title:MLString(@"Control Center", nil)
+                                      title:[MLTouchRuntime anyScreenHasTouch]
+                                                ? [NSString stringWithFormat:@"%@  ·  %@", MLString(@"Control Center", nil), MLString(@"Hold five fingers", nil)]
+                                                : MLString(@"Control Center", nil)
                                    inWindow:window
                               selectedIndex:-1
                                  firstIndex:0
@@ -460,30 +467,57 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     return minValue + available * MIN(MAX(self.edgeMenuButtonEdgeRatio, 0.0), 1.0);
 }
 
-- (NSRect)edgeMenuFrameInRect:(NSRect)rect expanded:(BOOL)expanded {
-    // The ball is a subview of the stream view. Expanded, its plate docks a
-    // few points from the edge; idle, it slides out so only a sliver remains.
-    CGFloat coordinate = [self resolvedEdgeMenuCoordinateInRect:rect];
-    CGFloat plateSize = MLEdgeMenuButtonWidth * MLEdgeMenuPlateRatio;
-    CGFloat platePadding = (MLEdgeMenuButtonWidth - plateSize) / 2.0;
-    // Offset by the transparent margin around the plate so the plate itself docks.
-    CGFloat inset = expanded
-        ? MLEdgeMenuPlateEdgeGap - platePadding
-        : plateSize * MLEdgeMenuCollapsedPlateFraction - plateSize - platePadding;
-    switch (self.edgeMenuDockEdge) {
-        case MLFreeMouseExitEdgeLeft:
-            return NSMakeRect(NSMinX(rect) + inset, coordinate, MLEdgeMenuButtonWidth, MLEdgeMenuButtonHeight);
-        case MLFreeMouseExitEdgeTop:
-            return NSMakeRect(coordinate, NSMaxY(rect) - MLEdgeMenuButtonHeight - inset,
-                              MLEdgeMenuButtonWidth, MLEdgeMenuButtonHeight);
-        case MLFreeMouseExitEdgeBottom:
-            return NSMakeRect(coordinate, NSMinY(rect) + inset, MLEdgeMenuButtonWidth, MLEdgeMenuButtonHeight);
+// On a screen that takes touch (a touchscreen Mac, a Sidecar iPad: a connected touch Sidecar makes every display report
+// touch) the ball has no hover to slide it out, and the 11 pt of plate left at the edge is neither visible nor easy to
+// hit: it stays fully docked.
+- (BOOL)edgeMenuKeepsFullyVisible {
+    if (@available(macOS 27.0, *)) {
+        NSScreen *screen = self.view.window.screen;
+        if (screen != nil && (screen.touchCapabilities & NSScreenTouchCapabilitiesMultiTouch) != 0) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (MLEdgeMenuMetrics)edgeMenuMetrics {
+    MLEdgeMenuMetrics m;
+    m.size = MLEdgeMenuButtonWidth;
+    m.plateRatio = MLEdgeMenuPlateRatio;
+    m.plateEdgeGap = MLEdgeMenuPlateEdgeGap;
+    m.collapsedFraction = MLEdgeMenuCollapsedPlateFraction;
+    m.crossInset = MLEdgeMenuButtonInsetY;
+    return m;
+}
+
+- (MLEdgeMenuInsets)edgeMenuSafeInsets {
+    MLEdgeMenuInsets safe = {0, 0, 0, 0};
+    NSView *view = self.view;
+    if (@available(macOS 11.0, *)) {
+        NSEdgeInsets insets = view.safeAreaInsets;
+        safe.top = insets.top; safe.left = insets.left; safe.bottom = insets.bottom; safe.right = insets.right;
+    }
+    return safe;
+}
+
+static MLEdgeMenuDock MLEdgeMenuDockFromExitEdge(MLFreeMouseExitEdge edge) {
+    switch (edge) {
+        case MLFreeMouseExitEdgeLeft: return MLEdgeMenuDockLeft;
+        case MLFreeMouseExitEdgeTop: return MLEdgeMenuDockTop;
+        case MLFreeMouseExitEdgeBottom: return MLEdgeMenuDockBottom;
         case MLFreeMouseExitEdgeRight:
         case MLFreeMouseExitEdgeNone:
-        default:
-            return NSMakeRect(NSMaxX(rect) - MLEdgeMenuButtonWidth - inset, coordinate,
-                              MLEdgeMenuButtonWidth, MLEdgeMenuButtonHeight);
+        default: return MLEdgeMenuDockRight;
     }
+}
+
+- (NSRect)edgeMenuFrameInRect:(NSRect)rect expanded:(BOOL)expanded {
+    // The ball is a subview of the stream view. Expanded, its plate docks a few points from the edge; idle, it
+    // slides toward the edge so that half of the plate stays on screen (never less, MLEdgeMenuGeometry.h).
+    BOOL tucked = !(expanded || [self edgeMenuKeepsFullyVisible]);
+    return NSRectFromCGRect(MLEdgeMenuComputeFrame(NSRectToCGRect(rect), [self edgeMenuSafeInsets],
+                                                   MLEdgeMenuDockFromExitEdge(self.edgeMenuDockEdge),
+                                                   self.edgeMenuButtonEdgeRatio, tucked, [self edgeMenuMetrics]));
 }
 
 - (void)persistFullscreenControlBallPlacement {
@@ -685,7 +719,10 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
     self.edgeMenuFrameLogSuppressed = 0;
     self.edgeMenuFrameLogLastTime = now;
     self.edgeMenuFrameLogLastReason = reason;
-    Log(LOG_I, @"[diag] control-orb frame reason=%@ from=%@ to=%@ animated=%d dock=%@ ratio=%.3f bounds=%@ expanded=%d dragging=%d menu=%d%@",
+    NSRect visiblePlate = NSRectFromCGRect(MLEdgeMenuVisiblePlate(NSRectToCGRect(to), NSRectToCGRect(self.view.bounds),
+                                                                  [self edgeMenuMetrics]));
+    CGFloat plateSide = MLEdgeMenuButtonWidth * MLEdgeMenuPlateRatio;
+    Log(LOG_I, @"[diag] control-orb frame reason=%@ from=%@ to=%@ animated=%d dock=%@ ratio=%.3f bounds=%@ expanded=%d dragging=%d menu=%d plateVisible=%.0f%%%@",
         reason ?: @"unspecified",
         NSStringFromRect(from),
         NSStringFromRect(to),
@@ -696,6 +733,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
         self.edgeMenuButtonExpanded ? 1 : 0,
         self.edgeMenuDragging ? 1 : 0,
         self.edgeMenuMenuVisible ? 1 : 0,
+        NSWidth(visiblePlate) * NSHeight(visiblePlate) / (plateSide * plateSide) * 100.0,
         suppressed > 0 ? [NSString stringWithFormat:@" (+%lu similar)", (unsigned long)suppressed] : @"");
 }
 
@@ -888,7 +926,7 @@ static BOOL MLSyncMenuItems(NSMenu *menu, NSArray<NSDictionary<NSString *, id> *
 
     BOOL active = self.edgeMenuButtonExpanded || self.edgeMenuPointerInside || self.edgeMenuTemporaryReleaseActive || self.edgeMenuDragging || self.edgeMenuMenuVisible;
     self.edgeMenuButton.activeAppearance = active;
-    self.edgeMenuButton.compactAppearance = !self.edgeMenuButtonExpanded && !self.edgeMenuTemporaryReleaseActive && !self.edgeMenuDragging && !self.edgeMenuMenuVisible;
+    self.edgeMenuButton.compactAppearance = !self.edgeMenuButtonExpanded && !self.edgeMenuTemporaryReleaseActive && !self.edgeMenuDragging && !self.edgeMenuMenuVisible && ![self edgeMenuKeepsFullyVisible];
     self.edgeMenuButton.dockEdge = self.edgeMenuDockEdge;
 }
 

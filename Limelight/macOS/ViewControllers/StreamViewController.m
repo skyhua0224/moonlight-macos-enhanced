@@ -828,6 +828,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [[AwdlHelperManager sharedManager] endStreamSessionForOwner:self.awdlSessionOwnerID withReason:reason ?: @"begin-stop"];
     [self tearDownStreamLifecycleObserversAndTimers];
 
+    [self tearDownDirectTouchInput];
     self.hidSupport.shouldSendInputEvents = NO;
     self.controllerSupport.shouldSendInputEvents = NO;
     self.hidSupport.inputContext = NULL;
@@ -1863,6 +1864,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     }
     self.hidSupport = [[HIDSupport alloc] init:self.app.host];
     [self configurePrecisionTouchpadInput];
+    [self configureDirectTouchInputWithVideoWidth:streamConfig.width height:streamConfig.height stretch:streamConfig.stretchToFill];
     [self refreshTextInputConfiguration];
     __weak StreamViewController *shortcutOwner = self;
     uint64_t (^shortcutHandler)(unsigned short, uint32_t) = ^uint64_t(unsigned short player, uint32_t buttons) {
@@ -2129,6 +2131,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
                     // Ensure input is enabled immediately after stream start
                     self.hidSupport.shouldSendInputEvents = YES;
                     self.controllerSupport.shouldSendInputEvents = YES;
+                    // The host's feature flags are readable now: decide native touch or a fallback.
+                    [self refreshDirectTouchInput];
 
                     // If input stream isn't initialized yet, retry briefly to bind after start
                     __block int remainingAttempts = 20;

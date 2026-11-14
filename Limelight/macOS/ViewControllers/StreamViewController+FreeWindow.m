@@ -402,6 +402,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     self.freeWindowRequestInFlight = NO;
     NSDictionary *prefs = [SettingsClass getSettingsFor:self.app.host.uuid];
     self.streamMan.connection.renderer.stretchToFill = [prefs[@"ignoreAspectRatio"] boolValue];
+    [self updateDirectTouchStretch:[prefs[@"ignoreAspectRatio"] boolValue]];
 
     NSWindow *window = self.view.window;
     struct Resolution res = [self effectiveStreamResolution];
@@ -434,6 +435,7 @@ static const NSInteger MLDisplayModeFreeWindow = 3;
     self.freeWindowActive = YES;
     self.freeWindowHostScaleApplied = NO;
     self.streamMan.connection.renderer.stretchToFill = YES;
+    [self updateDirectTouchStretch:YES];
     if (connection != nil) {
         struct Resolution current = [self effectiveStreamResolution];
         self.freeWindowDecodedSize = CGSizeMake(current.width, current.height);
