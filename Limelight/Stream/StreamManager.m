@@ -287,7 +287,6 @@
 
 // Fraction of the measured throughput treated as sustainable for a video stream.
 static const double kProbeSafeBandwidthFraction = 0.65;
-static const int kProbeMaxBitrateKbps = 150000;
 static const int kProbeBitrateStepKbps = 500;
 // Only intervene when the configured bitrate clearly exceeds what the link carried.
 static const double kProbeCapTolerance = 1.15;
@@ -303,11 +302,15 @@ static const double kProbeCapTolerance = 1.15;
     }
 
     double mbps = [result[@"bandwidthMbps"] doubleValue];
-    int safeKbps = (int)floor(mbps * 1000.0 * kProbeSafeBandwidthFraction);
-    safeKbps = MIN(safeKbps, kProbeMaxBitrateKbps) / kProbeBitrateStepKbps * kProbeBitrateStepKbps;
-    Log(LOG_I, @"[netprobe] bandwidth=%.1fMbps latency=%.1fms jitter=%.1fms bytes=%@ partial=%d safeBitrate=%dkbps configured=%dkbps elapsed=%llums",
+    // The host's own ceiling when its capabilities answer states one, else the advanced setting (150 Mbps by default).
+    NSInteger hostCeilingKbps = [result[@"hostMaxBitrateKbps"] integerValue];
+    NSInteger storedMbps = [[NSUserDefaults standardUserDefaults] integerForKey:MLBandwidthProbeRules.settingKey];
+    int ceilingKbps = (int)[MLBandwidthProbeRules ceilingKbpsWithHostOfferedKbps:hostCeilingKbps storedMbps:storedMbps];
+    int safeKbps = (int)[MLBandwidthProbeRules safeBitrateKbpsWithMeasuredMbps:mbps ceilingKbps:ceilingKbps];
+    Log(LOG_I, @"[netprobe] bandwidth=%.1fMbps latency=%.1fms jitter=%.1fms bytes=%@ partial=%d safeBitrate=%dkbps ceiling=%dkbps(%@) configured=%dkbps elapsed=%llums",
         mbps, [result[@"latencyMs"] doubleValue], [result[@"jitterMs"] doubleValue],
-        result[@"bytes"], [result[@"partial"] boolValue], safeKbps, _config.bitRate, (unsigned long long)elapsedMs);
+        result[@"bytes"], [result[@"partial"] boolValue], safeKbps, ceilingKbps, hostCeilingKbps > 0 ? @"host" : @"setting",
+        _config.bitRate, (unsigned long long)elapsedMs);
     if (safeKbps < kProbeBitrateStepKbps) {
         return;
     }

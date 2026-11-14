@@ -2133,3 +2133,5 @@
 "deck.path.proxy" = "经代理";
 "deck.evidence.proxy" = "公网地址经过隧道,隧道自身地址在 198.18.0.0/15(代理的虚拟 IP 网卡)";
 "deck.addr.reachableNoMs" = "可达";
+"Probe bitrate ceiling" = "测速码率上限";
+"Probe bitrate ceiling hint" = "开始前测速最多允许的码率。万兆有线网可调高。主机自己给出上限时以主机为准。";

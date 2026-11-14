@@ -1152,6 +1152,7 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
     // the TLS handshake and is dropped from the latency estimate.
     NSMutableArray<NSNumber*>* latencies = [NSMutableArray array];
     uint64_t minBytes = 0, maxBytes = 0;
+    NSInteger hostMaxBitrateKbps = 0;
     NSURL* capsURL = [NSURL URLWithString:[NSString stringWithFormat:@"%@/api/network/capabilities", _baseHTTPSURL]];
     for (int i = 0; i < kLatencySamples; i++) {
         __block NSData* body = nil;
@@ -1179,6 +1180,7 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
             if ([root[@"version"] integerValue] < 1 || [probe[@"version"] integerValue] < 1) {
                 return fail(@"unsupported_version", 0);
             }
+            hostMaxBitrateKbps = [MLBandwidthProbeRules hostOfferedCeilingKbpsWithCapabilities:root];
             minBytes = [probe[@"minBytes"] unsignedLongLongValue];
             maxBytes = [probe[@"maxBytes"] unsignedLongLongValue];
             if (![probe[@"endpoint"] isEqualToString:@"/api/network/probe"] || minBytes == 0 || maxBytes < minBytes || minBytes > kMaxProbeBytes) {
@@ -1231,6 +1233,7 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
     return @{
         @"ok": @YES,
         @"partial": @(!complete),
+        @"hostMaxBitrateKbps": @(hostMaxBitrateKbps),
         @"bandwidthMbps": @((double)collector.receivedBytes * 8.0 / seconds / 1e6),
         @"latencyMs": @(latencyMs),
         @"jitterMs": @(jitterMs),

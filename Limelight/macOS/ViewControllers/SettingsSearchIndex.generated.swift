@@ -22,6 +22,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "stream/Picture/Picture Aspect", pane: .stream, kind: .row, sectionKey: "Picture", titleKey: "Picture Aspect", detailKey: nil, keywords: ["Keep Aspect", "Stretch to Fill"]),
     SettingsSearchEntry(id: "stream/Bitrate/Auto Adjust Bitrate", pane: .stream, kind: .row, sectionKey: "Bitrate", titleKey: "Auto Adjust Bitrate", detailKey: "Auto bitrate hint", keywords: []),
     SettingsSearchEntry(id: "stream/Bitrate/Adaptive Bitrate", pane: .stream, kind: .row, sectionKey: "Bitrate", titleKey: "Adaptive Bitrate", detailKey: "Adaptive Bitrate hint", keywords: []),
+    SettingsSearchEntry(id: "stream/Bitrate/Probe bitrate ceiling", pane: .stream, kind: .row, sectionKey: "Bitrate", titleKey: "Probe bitrate ceiling", detailKey: "Probe bitrate ceiling hint", keywords: ["Mbps"]),
     SettingsSearchEntry(id: "stream/Bitrate/Unlock max bitrate (1000 Mbps)", pane: .stream, kind: .row, sectionKey: "Bitrate", titleKey: "Unlock max bitrate (1000 Mbps)", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "stream/Bitrate/Target Bitrate", pane: .stream, kind: .row, sectionKey: "Bitrate", titleKey: "Target Bitrate", detailKey: nil, keywords: ["Mbps"]),
     SettingsSearchEntry(id: "stream/Bitrate/Bitrate", pane: .stream, kind: .row, sectionKey: "Bitrate", titleKey: "Bitrate", detailKey: nil, keywords: ["Mbps"]),
