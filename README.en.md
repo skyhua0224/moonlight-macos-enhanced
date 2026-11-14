@@ -76,21 +76,21 @@ Some of these require Foundation Sunshine; see the next section.
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/hud-chartHUD-dark.png">
-  <img src="readme-assets/images/en/hud-chartHUD.png" width="370" alt="Performance HUD">
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/home-card-dark.png">
+  <img src="readme-assets/images/en/home-card.png" width="370" alt="Card view">
 </picture>
 
-<b>Performance HUD</b>
+<b>Card view</b>
 
 </td>
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-video-dark.png">
-  <img src="readme-assets/images/en/settings-video.png" width="370" alt="Video & HDR">
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/home-portrait-dark.png">
+  <img src="readme-assets/images/en/home-portrait.png" width="370" alt="Large-image view">
 </picture>
 
-<b>Video & HDR</b>
+<b>Large-image view</b>
 
 </td>
 </tr>
@@ -98,21 +98,43 @@ Some of these require Foundation Sunshine; see the next section.
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-audio-dark.png">
-  <img src="readme-assets/images/en/settings-audio.png" width="370" alt="Audio & Microphone">
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/search-dark.png">
+  <img src="readme-assets/images/en/search.png" width="370" alt="Search">
 </picture>
 
-<b>Audio & Microphone</b>
+<b>Search</b>
 
 </td>
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-keyboard-mouse-dark.png">
-  <img src="readme-assets/images/en/settings-keyboard-mouse.png" width="370" alt="Keyboard & Mouse">
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-audio-dark.png">
+  <img src="readme-assets/images/en/settings-audio.png" width="370" alt="Audio and microphone">
 </picture>
 
-<b>Keyboard & Mouse</b>
+<b>Audio and microphone</b>
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/control-center-dark.png">
+  <img src="readme-assets/images/en/control-center.png" width="370" alt="In-stream control center">
+</picture>
+
+<b>In-stream control center</b>
+
+</td>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/hud-chartHUD-dark.png">
+  <img src="readme-assets/images/en/hud-chartHUD.png" width="370" alt="Performance HUD">
+</picture>
+
+<b>Performance HUD</b>
 
 </td>
 </tr>
@@ -120,7 +142,7 @@ Some of these require Foundation Sunshine; see the next section.
 
 [More screenshots →](SCREENSHOT.en.md)
 
-Computer names, addresses, and artwork in the screenshots are examples.
+Computer names and addresses in the screenshots are examples. Game artwork belongs to its owners.
 
 ## Host Compatibility
 

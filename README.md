@@ -76,25 +76,35 @@
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/hud-chartHUD-dark.png">
-  <img src="readme-assets/images/hud-chartHUD.png" width="370" alt="性能浮窗">
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/home-card-dark.png">
+  <img src="readme-assets/images/home-card.png" width="370" alt="卡片视图">
 </picture>
 
-<b>性能浮窗</b>
+<b>卡片视图</b>
 
 </td>
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-video-dark.png">
-  <img src="readme-assets/images/settings-video.png" width="370" alt="视频与 HDR">
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/home-portrait-dark.png">
+  <img src="readme-assets/images/home-portrait.png" width="370" alt="大图视图">
 </picture>
 
-<b>视频与 HDR</b>
+<b>大图视图</b>
 
 </td>
 </tr>
 <tr>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/search-dark.png">
+  <img src="readme-assets/images/search.png" width="370" alt="搜索">
+</picture>
+
+<b>搜索</b>
+
+</td>
 <td width="50%" valign="top">
 
 <picture>
@@ -105,14 +115,26 @@
 <b>音频与麦克风</b>
 
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-keyboard-mouse-dark.png">
-  <img src="readme-assets/images/settings-keyboard-mouse.png" width="370" alt="键盘与鼠标">
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/control-center-dark.png">
+  <img src="readme-assets/images/control-center.png" width="370" alt="串流中的控制中心">
 </picture>
 
-<b>键盘与鼠标</b>
+<b>串流中的控制中心</b>
+
+</td>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/hud-chartHUD-dark.png">
+  <img src="readme-assets/images/hud-chartHUD.png" width="370" alt="性能浮窗">
+</picture>
+
+<b>性能浮窗</b>
 
 </td>
 </tr>
@@ -120,7 +142,7 @@
 
 [更多截图 →](SCREENSHOT.md)
 
-截图里的电脑名、地址和封面都是示例。
+截图里的电脑名和地址是示例，游戏封面归其版权方所有。
 
 ## 主机端兼容性
 
