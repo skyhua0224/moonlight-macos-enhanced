@@ -24,7 +24,7 @@
 
 ## Current Release
 
-**1.3.9 RC8** is described in the [1.3.9 RC8 release notes](.github/release-notes/v1.3.9-rc.8.md). The home page has been redesigned around your computers, there is a new performance HUD, and a controller can operate the home page and Settings. Published packages remain the ones on [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). 1.3.9 is the final release before the native architecture rebuild.
+**1.3.9 RC8** is described in the [1.3.9 RC8 release notes](.github/release-notes/v1.3.9-rc.8.md). The main window has been redesigned, with fine-grained personalisation, Card and Big Picture views and landscape posters; there is a new performance HUD, and a controller can operate the home page and Settings. Published packages remain the ones on [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). 1.3.9 is the final release before the native architecture rebuild.
 
 - Download it from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). Packages come as `universal`, `arm64`, and `x86_64`; choose `universal` if unsure.
 - If 1.3.9 is already installed, check for updates in `Settings → About & Updates`.
@@ -32,7 +32,7 @@
 
 What changed in 1.3.9 compared with 1.3.8:
 
-- **Every page redesigned**: the home page is built around your computers, Settings can be searched down to individual options, and the whole app works with a controller.
+- **Every page redesigned**: the main window can be personalised, Settings can be searched down to individual options, and the whole app works with a controller.
 - **Setting Profiles**: compare each host with the Default Profile, copy settings, keep presets, import and export.
 - **Audio**: lossless PCM, AC3, E-AC3 and Dolby passthrough, and an output device you can switch during a stream. Audio Enhancement adds a parametric equalizer, headphone correction presets and binaural surround on headphones.
 - **Input**: Precision Touchpad, text entry through macOS input methods, key mapping by typed character, system shortcut capture, Windows key order and Type Clipboard Text. Touchscreen Macs can stream with direct touch. DualSense supports its touchpad, lighting, battery and haptics.
@@ -65,11 +65,6 @@ What changed in 1.3.9 compared with 1.3.8:
 Some of these require Foundation Sunshine; see the next section.
 
 ## Screenshots
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/home-dark.png">
-  <img src="readme-assets/images/en/home.png" width="760" alt="Main window">
-</picture>
 
 <table>
 <tr>
