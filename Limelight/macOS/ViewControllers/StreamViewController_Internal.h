@@ -470,9 +470,11 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL menuTitlebarAccessoryInstalled;
 
 @property (nonatomic, strong) id localKeyDownMonitor;
+@property (nonatomic, strong) id localKeyUpMonitor;
 @property (nonatomic, strong) id localModifierMonitor;
 @property (nonatomic, strong) id localMouseClickMonitor;
 @property (nonatomic, strong) id globalMouseMovedMonitor;
+@property (nonatomic, strong) NSMutableSet<NSNumber *> *windowsHeldKeyEquivalentCodes;
 @property (nonatomic) BOOL deferredCommandModifierPendingForShortcutTranslation;
 @property (nonatomic) BOOL deferredCommandModifierForwardedAsHeld;
 @property (nonatomic) NSUInteger deferredCommandModifierDispatchToken;

@@ -6,6 +6,7 @@
 //  Copyright © 2017 Moonlight Stream. All rights reserved.
 //
 #import "HIDSupport_Internal.h"
+#import "KeyboardRouting.h"
 
 #import <IOKit/hid/IOHIDElement.h>
 #import <IOKit/hidsystem/IOLLEvent.h>
@@ -154,28 +155,6 @@ static struct KeyMapping keys[] = {
     {kVK_F20, 0x83},
 };
 
-typedef NS_OPTIONS(NSUInteger, HIDKeyboardPhysicalModifierMask) {
-    HIDKeyboardPhysicalModifierMaskLeftShift = 1 << 0,
-    HIDKeyboardPhysicalModifierMaskRightShift = 1 << 1,
-    HIDKeyboardPhysicalModifierMaskLeftControl = 1 << 2,
-    HIDKeyboardPhysicalModifierMaskRightControl = 1 << 3,
-    HIDKeyboardPhysicalModifierMaskLeftOption = 1 << 4,
-    HIDKeyboardPhysicalModifierMaskRightOption = 1 << 5,
-    HIDKeyboardPhysicalModifierMaskLeftCommand = 1 << 6,
-    HIDKeyboardPhysicalModifierMaskRightCommand = 1 << 7,
-};
-
-typedef NS_OPTIONS(NSUInteger, HIDKeyboardRemoteModifierMask) {
-    HIDKeyboardRemoteModifierMaskLeftShift = 1 << 0,
-    HIDKeyboardRemoteModifierMaskRightShift = 1 << 1,
-    HIDKeyboardRemoteModifierMaskLeftControl = 1 << 2,
-    HIDKeyboardRemoteModifierMaskRightControl = 1 << 3,
-    HIDKeyboardRemoteModifierMaskLeftAlt = 1 << 4,
-    HIDKeyboardRemoteModifierMaskRightAlt = 1 << 5,
-    HIDKeyboardRemoteModifierMaskLeftMeta = 1 << 6,
-    HIDKeyboardRemoteModifierMaskRightMeta = 1 << 7,
-};
-
 static HIDKeyboardPhysicalModifierMask HIDPhysicalModifierMaskForKeyCode(unsigned short keyCode) {
     switch (keyCode) {
         case kVK_Shift:
@@ -247,6 +226,10 @@ static HIDKeyboardPhysicalModifierMask HIDEffectivePhysicalModifierMaskForEvent(
         return physicalMask;
     }
 
+    // A flagsChanged event describes one physical modifier transition. The
+    // per-key state above is authoritative for that transition. Aggregate
+    // device-independent flags are also needed when a deferred Command edge
+    // is followed by another modifier edge.
     NSEventModifierFlags modifierFlags = event.modifierFlags;
 
     if ((modifierFlags & NSEventModifierFlagShift) != 0 &&
@@ -267,29 +250,6 @@ static HIDKeyboardPhysicalModifierMask HIDEffectivePhysicalModifierMaskForEvent(
     }
 
     return physicalMask;
-}
-
-static unsigned short HIDRemoteModifierKeyCode(HIDKeyboardRemoteModifierMask mask) {
-    switch (mask) {
-        case HIDKeyboardRemoteModifierMaskLeftShift:
-            return 0xA0;
-        case HIDKeyboardRemoteModifierMaskRightShift:
-            return 0xA1;
-        case HIDKeyboardRemoteModifierMaskLeftControl:
-            return 0xA2;
-        case HIDKeyboardRemoteModifierMaskRightControl:
-            return 0xA3;
-        case HIDKeyboardRemoteModifierMaskLeftAlt:
-            return 0xA4;
-        case HIDKeyboardRemoteModifierMaskRightAlt:
-            return 0xA5;
-        case HIDKeyboardRemoteModifierMaskLeftMeta:
-            return 0x5B;
-        case HIDKeyboardRemoteModifierMaskRightMeta:
-            return 0x5C;
-        default:
-            return 0;
-    }
 }
 
 static BOOL HIDIsModifierKeyCode(unsigned short keyCode) {
@@ -1035,69 +995,18 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
 }
 
 - (NSUInteger)desiredRemoteKeyboardModifierMaskForEvent:(NSEvent *)event {
-    NSUInteger desired = 0;
     NSUInteger physical = HIDEffectivePhysicalModifierMaskForEvent(self.keyboardPhysicalModifierSourceMask, event);
-    BOOL swapLeftControlAndWin = [self usesKeyboardLeftControlWinSwapCompatibility];
-    BOOL hardMapCommandToControl = [self usesKeyboardCommandToControlCompatibility];
-    BOOL translateShortcutCommandToControl = [self shouldApplyKeyboardShortcutTranslationForEvent:event];
-    BOOL swapOptionAndCommand = [self usesKeyboardOptionCommandSwapCompatibility];
-    BOOL deferredLeftCommandToControl =
-        (self.keyboardDeferredShortcutTranslationCommandMask & HIDKeyboardPhysicalModifierMaskLeftCommand) != 0;
-    BOOL deferredRightCommandToControl =
-        (self.keyboardDeferredShortcutTranslationCommandMask & HIDKeyboardPhysicalModifierMaskRightCommand) != 0;
-
-    if (physical & HIDKeyboardPhysicalModifierMaskLeftShift) {
-        desired |= HIDKeyboardRemoteModifierMaskLeftShift;
-    }
-    if (physical & HIDKeyboardPhysicalModifierMaskRightShift) {
-        desired |= HIDKeyboardRemoteModifierMaskRightShift;
-    }
-    if (physical & HIDKeyboardPhysicalModifierMaskLeftControl) {
-        desired |= swapLeftControlAndWin
-        ? HIDKeyboardRemoteModifierMaskLeftMeta
-        : HIDKeyboardRemoteModifierMaskLeftControl;
-    }
-    if (physical & HIDKeyboardPhysicalModifierMaskRightControl) {
-        desired |= HIDKeyboardRemoteModifierMaskRightControl;
-    }
-    if (physical & HIDKeyboardPhysicalModifierMaskLeftOption) {
-        desired |= swapOptionAndCommand ? HIDKeyboardRemoteModifierMaskLeftMeta : HIDKeyboardRemoteModifierMaskLeftAlt;
-    }
-    if (physical & HIDKeyboardPhysicalModifierMaskRightOption) {
-        desired |= swapOptionAndCommand ? HIDKeyboardRemoteModifierMaskRightMeta : HIDKeyboardRemoteModifierMaskRightAlt;
-    }
-
-    if (swapOptionAndCommand) {
-        if (physical & HIDKeyboardPhysicalModifierMaskLeftCommand) {
-            desired |= HIDKeyboardRemoteModifierMaskLeftAlt;
-        }
-        if (physical & HIDKeyboardPhysicalModifierMaskRightCommand) {
-            desired |= HIDKeyboardRemoteModifierMaskRightAlt;
-        }
-        return desired;
-    }
-
-    if (physical & HIDKeyboardPhysicalModifierMaskLeftCommand) {
-        if (hardMapCommandToControl ||
-            swapLeftControlAndWin ||
-            translateShortcutCommandToControl ||
-            deferredLeftCommandToControl) {
-            desired |= HIDKeyboardRemoteModifierMaskLeftControl;
-        } else {
-            desired |= HIDKeyboardRemoteModifierMaskLeftMeta;
-        }
-    }
-    if (physical & HIDKeyboardPhysicalModifierMaskRightCommand) {
-        if (hardMapCommandToControl ||
-            translateShortcutCommandToControl ||
-            deferredRightCommandToControl) {
-            desired |= HIDKeyboardRemoteModifierMaskRightControl;
-        } else {
-            desired |= HIDKeyboardRemoteModifierMaskRightMeta;
-        }
-    }
-
-    return desired;
+    MLModifierPolicy policy = {
+        .swapLeftControlAndWin = [self usesKeyboardLeftControlWinSwapCompatibility],
+        .hardMapCommandToControl = [self usesKeyboardCommandToControlCompatibility],
+        .translateShortcutCommandToControl = [self shouldApplyKeyboardShortcutTranslationForEvent:event],
+        .swapOptionAndCommand = [self usesKeyboardOptionCommandSwapCompatibility],
+        .deferredLeftCommandToControl =
+            (self.keyboardDeferredShortcutTranslationCommandMask & HIDKeyboardPhysicalModifierMaskLeftCommand) != 0,
+        .deferredRightCommandToControl =
+            (self.keyboardDeferredShortcutTranslationCommandMask & HIDKeyboardPhysicalModifierMaskRightCommand) != 0,
+    };
+    return MLDesiredRemoteModifierMask(physical, policy);
 }
 
 - (void)syncKeyboardModifierStateForEvent:(NSEvent *)event {
@@ -1115,32 +1024,11 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         return;
     }
 
-    static const HIDKeyboardRemoteModifierMask remoteOrder[] = {
-        HIDKeyboardRemoteModifierMaskLeftShift,
-        HIDKeyboardRemoteModifierMaskRightShift,
-        HIDKeyboardRemoteModifierMaskLeftControl,
-        HIDKeyboardRemoteModifierMaskRightControl,
-        HIDKeyboardRemoteModifierMaskLeftAlt,
-        HIDKeyboardRemoteModifierMaskRightAlt,
-        HIDKeyboardRemoteModifierMaskLeftMeta,
-        HIDKeyboardRemoteModifierMaskRightMeta,
-    };
-
+    MLModifierEdgeList edgeList = MLModifierEdges(previous, desired);
     self.keyboardRemoteModifierMask = desired;
     HIDDispatchInput(self, inputCtx, ^{
-        for (NSUInteger i = 0; i < sizeof(remoteOrder) / sizeof(remoteOrder[0]); i++) {
-            HIDKeyboardRemoteModifierMask mask = remoteOrder[i];
-            if ((changed & mask) == 0) {
-                continue;
-            }
-
-            unsigned short keyCode = HIDRemoteModifierKeyCode(mask);
-            if (keyCode == 0) {
-                continue;
-            }
-
-            char action = (desired & mask) != 0 ? KEY_ACTION_DOWN : KEY_ACTION_UP;
-            LiSendKeyboardEventCtx(inputCtx, keyCode, action, modifiers);
+        for (int i = 0; i < edgeList.count; i++) {
+            LiSendKeyboardEventCtx(inputCtx, edgeList.edges[i].vk, edgeList.edges[i].down ? KEY_ACTION_DOWN : KEY_ACTION_UP, modifiers);
         }
     });
 }

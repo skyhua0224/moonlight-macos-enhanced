@@ -4,6 +4,7 @@
 //
 
 #import "StreamViewController_Internal.h"
+#import "KeyboardRouting.h"
 
 static inline BOOL MLCGCursorIsVisibleCompat(void) {
 #pragma clang diagnostic push
@@ -2011,6 +2012,35 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
         return event;
     }];
+
+    self.localKeyUpMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyUp handler:^NSEvent * _Nullable(NSEvent * _Nonnull event) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return event;
+        }
+
+        NSWindow *window = strongSelf.view.window;
+        NSNumber *keyCode = @(event.keyCode);
+        BOOL windowsKeyOrder = [SettingsClass keyboardCompatibilityModeFor:strongSelf.app.host.uuid] ==
+            KeyboardCompatibilityModeSwapOptionAndCommand;
+        MLHeldKeyUpAction action = MLHeldKeyUpDecision(window != nil && (event.window == nil || event.window == window),
+                                                       strongSelf.hidSupport.shouldSendInputEvents, windowsKeyOrder,
+                                                       [strongSelf.windowsHeldKeyEquivalentCodes containsObject:keyCode]);
+        if (action == MLHeldKeyUpForgetAndLetThrough) {
+            [strongSelf.windowsHeldKeyEquivalentCodes removeObject:keyCode];
+            return event;
+        }
+        if (action == MLHeldKeyUpLetThrough) {
+            return event;
+        }
+        [strongSelf.windowsHeldKeyEquivalentCodes removeObject:keyCode];
+
+        // Key equivalents may consume the key-down responder path while the
+        // Command modifier is held. Route the release once here and stop it
+        // from reaching the normal responder path a second time.
+        [strongSelf keyUp:event];
+        return nil;
+    }];
 }
 
 - (NSString *)mouseClickDiagnosticPhaseForMonitoredEvent:(NSEvent *)event {
@@ -2576,6 +2606,13 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return NO;
     }
 
+    // In Windows key order mode Command is the held LeftAlt key. It must reach
+    // HIDSupport immediately so a host shortcut can use it for the whole hold.
+    if ([SettingsClass keyboardCompatibilityModeFor:self.app.host.uuid] ==
+        KeyboardCompatibilityModeSwapOptionAndCommand) {
+        return NO;
+    }
+
     // A bare Command key opens Start on release even in free-mouse mode,
     // where pointer capture can be disabled while the stream window is key.
     return YES;
@@ -2842,7 +2879,23 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     
     [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"keyboard-equivalent-pass-through" event:event];
     [self.hidSupport keyDown:event];
-    [self.hidSupport keyUp:event];
+    // performKeyEquivalent: receives the key-down side of a key equivalent.
+    // Keep pass-through chords held so HIDSupport can preserve native repeat
+    // behaviour. Windows Command chords are released by the local key-up
+    // monitor because AppKit may consume their responder key-up path.
+    BOOL windowsKeyOrder = [SettingsClass keyboardCompatibilityModeFor:self.app.host.uuid] ==
+        KeyboardCompatibilityModeSwapOptionAndCommand;
+    MLPassThroughPlan plan = MLPassThroughChordPlan((eventModifierFlags & NSEventModifierFlagControl) != 0,
+                                                    (eventModifierFlags & NSEventModifierFlagCommand) != 0,
+                                                    windowsKeyOrder);
+    if (plan.keyUpNow) {
+        [self.hidSupport keyUp:event];
+    } else if (plan.holdUntilKeyUp) {
+        if (self.windowsHeldKeyEquivalentCodes == nil) {
+            self.windowsHeldKeyEquivalentCodes = [NSMutableSet set];
+        }
+        [self.windowsHeldKeyEquivalentCodes addObject:@(event.keyCode)];
+    }
     
     return YES;
 }
