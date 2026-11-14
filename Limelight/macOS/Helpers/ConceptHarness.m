@@ -984,3 +984,537 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
 
 static NSString *sPadMark = @"";
 
+// kind, key and place of the focused control (a line to compare, not to read)
++ (NSString *)padFocusSignature {
+    NSString *state = [ControllerNavigation harnessState];
+    NSRange from = [state rangeOfString:@"kind="];
+    NSRange to = [state rangeOfString:@" ring="];
+    if (from.location == NSNotFound || to.location == NSNotFound || to.location < from.location) return @"none";
+    return [state substringWithRange:NSMakeRange(from.location, to.location - from.location)];
+}
+
++ (void)runPadScript {
+    NSArray<NSString *> *tokens = [[NSString stringWithUTF8String:getenv("MLC_PAD")] componentsSeparatedByString:@","];
+    NSString *dir = getenv("MLC_PAD_OUT") ? [NSString stringWithUTF8String:getenv("MLC_PAD_OUT")] : @"/tmp/apps-concept/out/pad";
+    double step = getenv("MLC_PAD_STEP") ? atof(getenv("MLC_PAD_STEP")) / 1000.0 : 0.45;
+    __block NSUInteger index = 0;
+    __block int pressCount = 0;
+    __block void (^next)(void) = nil;
+    next = ^{
+        if (index >= tokens.count) {
+            fprintf(stderr, "PAD done presses=%d\n", pressCount);
+            [NSApp terminate:nil];
+            return;
+        }
+        NSString *token = tokens[index++];
+        double delay = step;
+        if ([token hasPrefix:@"wait="]) {
+            delay = atof([token substringFromIndex:5].UTF8String) / 1000.0;
+        } else if ([token hasPrefix:@"shot="]) {
+            [self padShot:[dir stringByAppendingPathComponent:[[token substringFromIndex:5] stringByAppendingString:@".png"]]];
+            delay = 0.05;
+        } else if ([token hasPrefix:@"log="]) {
+            fprintf(stderr, "PAD log %s | %s\n", [token substringFromIndex:4].UTF8String, [ControllerNavigation harnessState].UTF8String);
+            delay = 0.05;
+        } else if ([token hasPrefix:@"alert="]) {
+            // an alert sheet the way the host menu's 移除 and the pairing flows show one
+            NSAlert *alert = [[NSAlert alloc] init];
+            alert.alertStyle = NSAlertStyleWarning;
+            alert.messageText = [token substringFromIndex:6];
+            alert.informativeText = @"This is a scripted alert sheet.";
+            [alert addButtonWithTitle:@"Remove"];
+            [alert addButtonWithTitle:@"Cancel"];
+            [alert beginSheetModalForWindow:[self mainWindow] completionHandler:^(NSModalResponse code) {
+                fprintf(stderr, "PAD alert returned %ld\n", (long)code);
+            }];
+            delay = 0.9;
+        } else if ([token isEqualToString:@"streamreturn"]) {
+            // a stream ending: the main window leaves and comes back
+            NSWindow *w = [self mainWindow];
+            [w orderOut:nil];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [w makeKeyAndOrderFront:nil]; });
+            delay = 1.6;
+        } else if ([token isEqualToString:@"rebuild"]) {
+            // the host list and the pages are rebuilt (discovery, an app list update)
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostsChanged" object:nil];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckAppListTick" object:nil];
+            delay = 1.0;
+        } else if ([token isEqualToString:@"mouse"]) {
+            // the pointer moves: the pad's ring goes away (the local event monitor sees every event sent to the app)
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLControllerPointerArmed" object:nil];
+            NSEvent *move = [NSEvent mouseEventWithType:NSEventTypeMouseMoved location:NSMakePoint(400, 300) modifierFlags:0
+                                              timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:[self mainWindow].windowNumber
+                                                context:nil eventNumber:0 clickCount:0 pressure:0];
+            [NSApp sendEvent:move];
+            delay = 0.4;
+        } else if ([token isEqualToString:@"mark"]) {
+            // remembers where the focus is, for expectmoved
+            sPadMark = [self padFocusSignature];
+            delay = 0.02;
+        } else if ([token hasPrefix:@"expectmoved="]) {
+            BOOL wanted = [token substringFromIndex:12].intValue != 0;
+            NSString *now = [self padFocusSignature];
+            BOOL moved = ![now isEqualToString:sPadMark];
+            fprintf(stderr, "PAD expectmoved %d %s | %s\n", wanted, moved == wanted ? "OK" : "FAIL", now.UTF8String);
+            sPadMark = now;
+            delay = 0.02;
+        } else if ([token hasPrefix:@"expectno="]) {
+            // no reachable control matches (the targets line is "kind key x,y,WxH ; ..."): the computer sidebar is out of the graph
+            NSString *unwanted = [token substringFromIndex:9];
+            NSString *targets = [ControllerNavigation harnessTargets];
+            fprintf(stderr, "PAD expectno %s %s\n", unwanted.UTF8String, [targets containsString:unwanted] ? "FAIL" : "OK");
+            delay = 0.02;
+        } else if ([token hasPrefix:@"expectsettings="]) {
+            // whether the settings window is on screen (1) or closed (0)
+            BOOL open = NO;
+            for (NSWindow *candidate in NSApp.windows) {
+                if (candidate.isVisible && [candidate.identifier isEqualToString:@"ClientSettingsWindow"]) open = YES;
+            }
+            BOOL wanted = [token substringFromIndex:15].intValue != 0;
+            fprintf(stderr, "PAD expectsettings %d %s | %s\n", wanted, open == wanted ? "OK" : "FAIL", [ControllerNavigation harnessState].UTF8String);
+            delay = 0.02;
+        } else if ([token isEqualToString:@"targets"]) {
+            fprintf(stderr, "PAD targets %s\n", [ControllerNavigation harnessTargets].UTF8String);
+            delay = 0.05;
+        } else if ([token hasPrefix:@"expect="]) {
+            NSString *wanted = [token substringFromIndex:7];
+            NSString *actual = [ControllerNavigation harnessFocusedKey];
+            BOOL ok = [wanted hasSuffix:@"*"] ? [actual hasPrefix:[wanted substringToIndex:wanted.length - 1]] : [actual isEqualToString:wanted];
+            fprintf(stderr, "PAD expect %s actual=%s %s\n", wanted.UTF8String, actual.UTF8String, ok ? "OK" : "FAIL");
+            delay = 0.02;
+        } else if ([token hasPrefix:@"expectstate="]) {
+            NSString *wanted = [token substringFromIndex:12];
+            NSString *state = [ControllerNavigation harnessState];
+            fprintf(stderr, "PAD expectstate %s %s | %s\n", wanted.UTF8String, [state containsString:wanted] ? "OK" : "FAIL", state.UTF8String);
+            delay = 0.02;
+        } else {
+            BOOL raw = [token hasPrefix:@"R"] && token.length > 1;
+            NSString *name = raw ? [token substringFromIndex:1] : token;
+            pressCount++;
+            if (raw) {
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"MLControllerInjectRaw" object:nil userInfo:[self padRawForToken:name]];
+            } else {
+                uint32_t mask = [self padMaskForToken:name];
+                if (mask == 0) {
+                    fprintf(stderr, "PAD unknown token %s\n", token.UTF8String);
+                } else {
+                    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLControllerInject" object:nil userInfo:@{@"mask": @(mask)}];
+                }
+            }
+            int number = pressCount;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(step * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                fprintf(stderr, "PAD %d %s t=%.2f %s\n", number, token.UTF8String, NSProcessInfo.processInfo.systemUptime, [ControllerNavigation harnessState].UTF8String);
+            });
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((delay + 0.03) * NSEC_PER_SEC)), dispatch_get_main_queue(), next);
+    };
+    fprintf(stderr, "PAD start tokens=%lu\n", (unsigned long)tokens.count);
+    next();
+}
+
++ (NSWindow *)mainWindow {
+    if (sOverlayWindow != nil) return sOverlayWindow;
+    if (sSettingsWindowController.window != nil) return sSettingsWindowController.window;
+    NSWindow *w = [Helpers getMainWindow];
+    if (w == nil) w = NSApp.windows.firstObject;
+    return w;
+}
+
++ (void)prepareWindow {
+    NSString *ap = getenv("MLC_APPEARANCE") ? [NSString stringWithUTF8String:getenv("MLC_APPEARANCE")] : @"light";
+    // "system": the app's own theme setting at its default (follow the system), the usual configuration
+    if ([ap isEqualToString:@"system"]) NSApp.appearance = nil;
+    else NSApp.appearance = [NSAppearance appearanceNamed:[ap isEqualToString:@"dark"] ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
+    NSWindow *w = [self mainWindow];
+    int width = 1280, height = 800;
+    if (getenv("MLC_SIZE")) sscanf(getenv("MLC_SIZE"), "%dx%d", &width, &height);
+    // MLC_WINX: the window's left edge (the default 20): a window pushed against the right edge of the screen puts the toolbar button,
+    // and so the popover's anchor, there
+    [w setFrame:NSMakeRect(getenv("MLC_WINX") ? atof(getenv("MLC_WINX")) : 20,
+                           getenv("MLC_WINY") ? atof(getenv("MLC_WINY")) : ((getenv("MLC_ICONPICKER") || getenv("MLC_CUSTOMIZE")) ? 120 : -60),
+                           width, height) display:YES];
+    [w makeKeyAndOrderFront:nil];
+}
+
++ (void)openOverlayScene {
+    NSWindow *main = [Helpers getMainWindow] ?: NSApp.windows.firstObject;
+    [main orderOut:nil];
+    int width = 1280, height = 800;
+    if (getenv("MLC_SIZE")) sscanf(getenv("MLC_SIZE"), "%dx%d", &width, &height);
+    BOOL notchSim = getenv("MLC_OV_NOTCHSIM") != NULL;
+    NSWindowStyleMask mask = notchSim ? NSWindowStyleMaskBorderless
+        : (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskFullSizeContentView);
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(20, -60, width, height) styleMask:mask backing:NSBackingStoreBuffered defer:NO];
+    window.titlebarAppearsTransparent = YES;
+    window.titleVisibility = NSWindowTitleHidden;
+    window.releasedWhenClosed = NO;
+    NSString *frameName = getenv("MLC_OV_FRAME") ? [NSString stringWithUTF8String:getenv("MLC_OV_FRAME")] : @"bright";
+    NSString *posters = [NSString stringWithUTF8String:getenv("MLC_POSTERS") ?: ""];
+    MLCFrameView *view = [[MLCFrameView alloc] initWithFrame:NSMakeRect(0, 0, width, height)];
+    view.frameImage = [[NSImage alloc] initWithContentsOfFile:[posters stringByAppendingPathComponent:[NSString stringWithFormat:@"frame_%@.jpg", frameName]]];
+    if (notchSim) {
+        view.notchWidth = 200;
+        view.notchHeight = 38;
+        [MLOverlayFixture simulateNotchWithScreenWidth:width screenHeight:height band:38 notchWidth:200];
+    }
+    window.contentView = view;
+    [window setFrame:NSMakeRect(20, -60, width, height) display:YES];
+    [window makeKeyAndOrderFront:nil];
+    sOverlayWindow = window;
+    BOOL anomaly = getenv("MLC_OV_ANOMALY") != NULL;
+    if (getenv("MLC_OV_STYLE") && strcmp(getenv("MLC_OV_STYLE"), "legacy") == 0) {
+        NSTextField *label = nil;
+        NSVisualEffectView *container = [MLLegacyOverlay makeContainerWithLabel:&label];
+        [view addSubview:container];
+        MLOverlayMetrics *m = [MLOverlayFixture mockMetricsWithTick:60 anomaly:anomaly];
+        label.attributedStringValue = [MLLegacyOverlay attributedStringForMetrics:m];
+        [MLLegacyOverlay layoutContainer:container label:label inParent:view];
+    } else {
+        NSObject *presenter = [MLOverlayFixture attachTo:view anomaly:anomaly];
+        if (getenv("MLC_OV_STABILITY") != NULL && presenter != nil) {
+            // values change for N seconds at the real tick rate; the panel's frame is measured (see OverlayFixture.runStability)
+            NSString *report = getenv("MLC_OV_STABILITY_OUT") ? [NSString stringWithUTF8String:getenv("MLC_OV_STABILITY_OUT")] : @"/tmp/apps-concept/out/stability.txt";
+            [MLOverlayFixture runStabilityOn:presenter seconds:atoi(getenv("MLC_OV_STABILITY")) warnings:getenv("MLC_OV_WARN") != NULL path:report];
+            if (getenv("MLC_OV_FRAMES") != NULL) {
+                NSString *dir = [NSString stringWithUTF8String:getenv("MLC_OV_FRAMES")];
+                for (int t = 2; t <= atoi(getenv("MLC_OV_STABILITY")); t += 1) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        [self captureWindowTo:[dir stringByAppendingPathComponent:[NSString stringWithFormat:@"t%02d.png", t]]];
+                    });
+                }
+            }
+        }
+        // Click-through check: a click in the middle of the overlay must reach the stream view, not the overlay.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            for (NSView *sub in view.subviews) {
+                if (![NSStringFromClass([sub class]) containsString:@"OverlayHostView"]) continue;
+                NSPoint center = NSMakePoint(NSMidX(sub.frame), NSMidY(sub.frame));
+                NSView *hit = [view hitTest:center];
+                fprintf(stderr, "ConceptHarness: click-through hitTest at overlay centre -> %s (overlay frame %.0f,%.0f %.0fx%.0f)\n",
+                        NSStringFromClass([hit class]).UTF8String, sub.frame.origin.x, sub.frame.origin.y, sub.frame.size.width, sub.frame.size.height);
+            }
+        });
+    }
+}
+
+// The control ball in a stand-in stream window: the real MLEdgeMenuHandleView at the frame the real
+// MLEdgeMenuComputeFrame gives. MLC_ORB_MODE = borderless | fullscreen (notch band simulated) | windowed;
+// MLC_ORB_STATE = idle (tucked) | shown (docked); MLC_ORB_DOCK = right | left | top | bottom; MLC_ORB_RATIO.
++ (void)openOrbScene {
+    NSWindow *main = [Helpers getMainWindow] ?: NSApp.windows.firstObject;
+    [main orderOut:nil];
+    const char *modeEnv = getenv("MLC_ORB_MODE");
+    NSString *mode = modeEnv ? [NSString stringWithUTF8String:modeEnv] : @"borderless";
+    BOOL tucked = !(getenv("MLC_ORB_STATE") && strcmp(getenv("MLC_ORB_STATE"), "shown") == 0);
+    NSString *dockName = getenv("MLC_ORB_DOCK") ? [NSString stringWithUTF8String:getenv("MLC_ORB_DOCK")] : @"right";
+    CGFloat ratio = getenv("MLC_ORB_RATIO") ? atof(getenv("MLC_ORB_RATIO")) : 0.5;
+    int width = 1920, height = 1080;
+    if (getenv("MLC_SIZE")) sscanf(getenv("MLC_SIZE"), "%dx%d", &width, &height);
+    BOOL windowed = [mode isEqualToString:@"windowed"];
+    BOOL notch = [mode isEqualToString:@"fullscreen"];
+    NSWindowStyleMask mask = windowed
+        ? (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable)
+        : NSWindowStyleMaskBorderless;
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, width, height) styleMask:mask backing:NSBackingStoreBuffered defer:NO];
+    window.releasedWhenClosed = NO;
+    NSString *posters = [NSString stringWithUTF8String:getenv("MLC_POSTERS") ?: ""];
+    NSString *frameName = getenv("MLC_OV_FRAME") ? [NSString stringWithUTF8String:getenv("MLC_OV_FRAME")] : @"bright";
+    MLCFrameView *view = [[MLCFrameView alloc] initWithFrame:NSMakeRect(0, 0, width, height)];
+    view.frameImage = [[NSImage alloc] initWithContentsOfFile:[posters stringByAppendingPathComponent:[NSString stringWithFormat:@"frame_%@.jpg", frameName]]];
+    MLEdgeMenuInsets safe = {0, 0, 0, 0};
+    if (notch) { view.notchWidth = 200; view.notchHeight = 38; safe.top = 38; }
+    window.contentView = view;
+    [window setFrameOrigin:NSMakePoint(0, 0)];
+    [window makeKeyAndOrderFront:nil];
+    sOverlayWindow = window;
+
+    MLEdgeMenuMetrics m = { .size = MLEdgeMenuButtonWidth, .plateRatio = MLEdgeMenuPlateRatio, .plateEdgeGap = MLEdgeMenuPlateEdgeGap,
+                            .collapsedFraction = MLEdgeMenuCollapsedPlateFraction, .crossInset = MLEdgeMenuButtonInsetY };
+    MLEdgeMenuDock dock = MLEdgeMenuDockRight;
+    if ([dockName isEqualToString:@"left"]) dock = MLEdgeMenuDockLeft;
+    else if ([dockName isEqualToString:@"top"]) dock = MLEdgeMenuDockTop;
+    else if ([dockName isEqualToString:@"bottom"]) dock = MLEdgeMenuDockBottom;
+    NSRect bounds = view.bounds;
+    CGRect frame = MLEdgeMenuComputeFrame(NSRectToCGRect(bounds), safe, dock, ratio, tucked, m);
+    MLEdgeMenuHandleView *ball = [[MLEdgeMenuHandleView alloc] initWithFrame:NSRectFromCGRect(frame)];
+    NSImage *image = [NSImage imageWithSystemSymbolName:@"slider.horizontal.3" accessibilityDescription:nil];
+    NSImageSymbolConfiguration *config = [NSImageSymbolConfiguration configurationWithPointSize:18 weight:NSFontWeightSemibold scale:NSImageSymbolScaleLarge];
+    ball.iconView.image = [image imageWithSymbolConfiguration:config];
+    MLFreeMouseExitEdge edge = dock == MLEdgeMenuDockLeft ? MLFreeMouseExitEdgeLeft : dock == MLEdgeMenuDockTop ? MLFreeMouseExitEdgeTop
+        : dock == MLEdgeMenuDockBottom ? MLFreeMouseExitEdgeBottom : MLFreeMouseExitEdgeRight;
+    ball.dockEdge = edge;
+    ball.compactAppearance = tucked;
+    ball.activeAppearance = !tucked;
+    [view addSubview:ball];
+    CGRect visible = MLEdgeMenuVisiblePlate(frame, NSRectToCGRect(bounds), m);
+    double plate = m.size * m.plateRatio;
+    fprintf(stderr, "ConceptHarness: orb mode=%s state=%s dock=%s window=%dx%d frame={%.1f,%.1f,%.0f,%.0f} plateVisible=%.0f%% (%.1f of %.1f pt across the edge) safeTop=%.0f\n",
+            mode.UTF8String, tucked ? "idle" : "shown", dockName.UTF8String, width, height, frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
+            visible.size.width * visible.size.height / (plate * plate) * 100.0, (dock == MLEdgeMenuDockLeft || dock == MLEdgeMenuDockRight) ? visible.size.width : visible.size.height, plate, safe.top);
+}
+
++ (void)openSettingsScene {
+    NSWindow *main = [Helpers getMainWindow] ?: NSApp.windows.firstObject;
+    [main orderOut:nil];
+    // the App pane of the real settings window ("selected-settings-pane" = 3)
+    NSInteger pane = getenv("MLC_PANE") ? atoi(getenv("MLC_PANE")) : 3;
+    [[NSUserDefaults standardUserDefaults] setInteger:pane forKey:@"selected-settings-pane"];
+    sSettingsWindowController = [SettingsWindowObjCBridge makeSettingsWindowWithHostId:nil];
+    int width = 980, height = 1500;
+    if (getenv("MLC_SIZE")) sscanf(getenv("MLC_SIZE"), "%dx%d", &width, &height);
+    [sSettingsWindowController showWindow:nil];
+    int winY = getenv("MLC_WINY") ? atoi(getenv("MLC_WINY")) : -300;
+    [sSettingsWindowController.window setFrame:NSMakeRect(20, winY, width, height) display:YES];
+    if (getenv("MLC_LINECHECK")) {
+        // the size the settings window really opens at, content area: SettingsHostingController
+        [sSettingsWindowController.window setContentSize:NSMakeSize(960, 680)];
+        [SettingsLineCheckDriver run];
+    }
+    [sSettingsWindowController.window makeKeyAndOrderFront:nil];
+    if (getenv("MLC_SCROLL")) {
+        // MLC_SCROLL=bottom (or a number of points): the pane's largest scroll view scrolled to its end (the Advanced section of the Input pane)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NSScrollView *best = nil;
+            NSMutableArray<NSView *> *queue = [NSMutableArray arrayWithObject:sSettingsWindowController.window.contentView];
+            while (queue.count > 0) {
+                NSView *v = queue.firstObject; [queue removeObjectAtIndex:0];
+                if ([v isKindOfClass:[NSScrollView class]] && (best == nil || v.frame.size.width > best.frame.size.width)) best = (NSScrollView *)v;
+                [queue addObjectsFromArray:v.subviews];
+            }
+            NSView *doc = best.documentView;
+            if (doc != nil) {
+                CGFloat y = doc.isFlipped ? MAX(0, NSHeight(doc.frame) - NSHeight(best.contentView.bounds)) : 0;
+                if (isdigit(getenv("MLC_SCROLL")[0])) y = MIN(y, atof(getenv("MLC_SCROLL")));   // a number: that many points down
+                [best.contentView scrollToPoint:NSMakePoint(0, y)];
+                [best reflectScrolledClipView:best.contentView];
+            }
+            fprintf(stderr, "ConceptHarness: scrolled %s\n", doc != nil ? "yes" : "no scroll view");
+        });
+    }
+    if (getenv("MLC_BTWARN")) {
+        // The Full Bluetooth Haptics warning over the settings window (pane 2 = Input); MLC_SETTLE decides how far
+        // into its 5 s countdown the picture is taken, MLC_SHEETCOMP=1 puts the sheet in the picture.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            // MLC_BTWARN=act: only the scripted steps below, the sheet comes from the real switch
+            if (strcmp(getenv("MLC_BTWARN"), "act") != 0)
+            [MLBluetoothFullHapticsWarning presentOn:sSettingsWindowController.window completion:^(BOOL confirmed) {
+                fprintf(stderr, "ConceptHarness: btwarn answered %d\n", confirmed);
+            }];
+        });
+        // MLC_BTWARN_ACT=<token>@<seconds>,...: esc = Esc key, click = the second button, log = every sheet button's state
+        const char *act = getenv("MLC_BTWARN_ACT");
+        if (act) {
+            for (NSString *step in [[NSString stringWithUTF8String:act] componentsSeparatedByString:@","]) {
+                NSArray<NSString *> *parts = [step componentsSeparatedByString:@"@"];
+                if (parts.count != 2) continue;
+                NSString *token = parts[0];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(parts[1].doubleValue * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    NSWindow *sheet = sSettingsWindowController.window.attachedSheet;
+                    NSMutableArray<NSButton *> *buttons = [NSMutableArray array];
+                    NSMutableArray<NSView *> *queue = [NSMutableArray arrayWithObject:sheet.contentView ?: [NSView new]];
+                    while (queue.count > 0) {
+                        NSView *v = queue.firstObject; [queue removeObjectAtIndex:0];
+                        if ([v isKindOfClass:[NSButton class]]) [buttons addObject:(NSButton *)v];
+                        [queue addObjectsFromArray:v.subviews];
+                    }
+                    if ([token isEqualToString:@"views"] || [token isEqualToString:@"vtoggle"] || [token isEqualToString:@"vvalue"]) {
+                        // the last NSSwitch / switch-type NSButton in the settings window: print, press or read it
+                        NSControl *found = nil;
+                        NSMutableArray<NSView *> *q = [NSMutableArray arrayWithObject:sSettingsWindowController.window.contentView];
+                        while (q.count > 0) {
+                            NSView *v = q.firstObject; [q removeObjectAtIndex:0];
+                            NSString *cn = NSStringFromClass([v class]);
+                            BOOL isSwitch = [cn containsString:@"Switch"] || ([v isKindOfClass:[NSButton class]] && [(NSButton *)v bezelStyle] == 0 && [cn containsString:@"Toggle"]);
+                            if (isSwitch && [v isKindOfClass:[NSControl class]]) {
+                                found = (NSControl *)v;
+                                if ([token isEqualToString:@"views"]) fprintf(stderr, "ConceptHarness: btwarn view %s y=%.0f value=%ld\n", cn.UTF8String, [v convertPoint:NSZeroPoint toView:nil].y, (long)[(NSControl *)v integerValue]);
+                            }
+                            [q addObjectsFromArray:v.subviews];
+                        }
+                        if ([token isEqualToString:@"vvalue"]) fprintf(stderr, "ConceptHarness: btwarn vvalue %ld\n", found ? (long)found.integerValue : -1L);
+                        if ([token isEqualToString:@"vtoggle"] && found) { fprintf(stderr, "ConceptHarness: btwarn vtoggle press (value was %ld)\n", (long)found.integerValue); [found performClick:nil]; }
+                    } else if ([token isEqualToString:@"axtoggle"] || [token isEqualToString:@"axvalue"]) {
+                        // the last switch of the settings window (the Advanced "Full Bluetooth Haptics" row): press it / read its value
+                        id found = nil;
+                        NSMutableArray *q = [NSMutableArray arrayWithObject:sSettingsWindowController.window];
+                        while (q.count > 0) {
+                            id el = q.firstObject; [q removeObjectAtIndex:0];
+                            NSString *role = [el respondsToSelector:@selector(accessibilityRole)] ? [el accessibilityRole] : nil;
+                            if ([role isEqualToString:NSAccessibilityCheckBoxRole] || [role isEqualToString:@"AXSwitch"]) found = el;
+                            NSArray *kids = [el respondsToSelector:@selector(accessibilityChildren)] ? [el accessibilityChildren] : nil;
+                            if (kids) [q addObjectsFromArray:kids];
+                        }
+                        fprintf(stderr, "ConceptHarness: btwarn %s value=%s\n", token.UTF8String, found ? [[found accessibilityValue] description].UTF8String : "no switch");
+                        if ([token isEqualToString:@"axtoggle"] && found) [found accessibilityPerformPress];
+                    } else if ([token isEqualToString:@"log"]) {
+                        for (NSButton *b in buttons) fprintf(stderr, "ConceptHarness: btwarn button \"%s\" enabled=%d default=%d\n", b.title.UTF8String, b.isEnabled, [b.keyEquivalent isEqualToString:@"\r"]);
+                        if (sheet == nil) fprintf(stderr, "ConceptHarness: btwarn no sheet\n");
+                    } else if ([token isEqualToString:@"click"]) {
+                        for (NSButton *b in buttons) if (b.tag == NSAlertSecondButtonReturn || [b.title hasPrefix:@"Turn On"] || [b.title hasPrefix:@"仍要开启"]) { fprintf(stderr, "ConceptHarness: btwarn click \"%s\" enabled=%d\n", b.title.UTF8String, b.isEnabled); [b performClick:nil]; break; }
+                    } else if ([token isEqualToString:@"esc"]) {
+                        NSEvent *e = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:0 windowNumber:sheet.windowNumber
+                                                       context:nil characters:@"\x1b" charactersIgnoringModifiers:@"\x1b" isARepeat:NO keyCode:53];
+                        [NSApp sendEvent:e];
+                    }
+                });
+            }
+        }
+    }
+}
+
++ (void)openScene {
+    NSString *scene = getenv("MLC_SCENE") ? [NSString stringWithUTF8String:getenv("MLC_SCENE")] : @"hosts";
+    if ([scene isEqualToString:@"overlay"]) { [self openOverlayScene]; return; }
+    if ([scene isEqualToString:@"orb"]) { [self openOrbScene]; return; }
+    if ([scene isEqualToString:@"settings"]) { [self openSettingsScene]; return; }
+    NSString *uuid = getenv("MLC_HOST") ? [NSString stringWithUTF8String:getenv("MLC_HOST")] : @"0A11-GAMINGPC-LIVE";
+    if (getenv("MLC_PIN")) {
+        // A pairing in progress: the PIN is shown inline on the host.
+        NSString *pin = [NSString stringWithUTF8String:getenv("MLC_PIN")];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckPairingPIN" object:nil userInfo:@{@"uuid": uuid, @"pin": pin}];
+        });
+    }
+    if (getenv("MLC_PAIRFAIL")) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckPairingFailed" object:nil
+                                                              userInfo:@{@"uuid": uuid, @"message": @"PIN 不正确,或另一台电脑正在配对。"}];
+        });
+    }
+    if (getenv("MLC_CUSTOMIZE")) {
+        // The 自定义主页 popover open, with a row mid-drag when MLC_DRAG / MLC_DROP are set.
+        NSMutableDictionary *info = [NSMutableDictionary dictionary];
+        if (getenv("MLC_DRAG")) info[@"drag"] = [NSString stringWithUTF8String:getenv("MLC_DRAG")];
+        if (getenv("MLC_DROP")) info[@"drop"] = [NSString stringWithUTF8String:getenv("MLC_DROP")];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckCustomize" object:nil userInfo:info];
+        });
+    }
+    if (getenv("MLC_ICONPICKER")) {
+        NSString *pickerHost = [NSString stringWithUTF8String:getenv("MLC_ICONPICKER")];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckIconPicker" object:nil userInfo:@{@"uuid": pickerHost}];
+        });
+    }
+    if (getenv("MLC_EMPHASIZE") && getenv("MLC_INACTIVE") == NULL) {
+        // The login-window Mac cannot give the app real focus; make the sidebar list the first responder of the (reported key)
+        // window so its selection is drawn the way it is in use: the accent fill.
+        void (^emphasize)(void) = ^{
+            NSWindow *win = [self mainWindow];
+            NSMutableArray<NSView *> *queue = [NSMutableArray arrayWithObject:win.contentView];
+            while (queue.count > 0) {
+                NSView *v = queue.firstObject; [queue removeObjectAtIndex:0];
+                if ([v isKindOfClass:[NSTableView class]] && v.frame.size.width < 400) {
+                    [win makeFirstResponder:v]; [v setNeedsDisplay:YES];
+                    fprintf(stderr, "ConceptHarness: emphasized %s\n", NSStringFromClass([v class]).UTF8String);
+                    return;
+                }
+                [queue addObjectsFromArray:v.subviews];
+            }
+        };
+        for (double t = 2.0; t < 12.0; t += 2.0)
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t * NSEC_PER_SEC)), dispatch_get_main_queue(), emphasize);
+    }
+    if (![scene isEqualToString:@"apps"]) return;
+    if ([[self variant] hasPrefix:@"A"]) {
+        // The window already shows the host list; pick the host in the sidebar.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckSelectHost" object:nil userInfo:@{@"uuid": uuid}];
+        });
+        return;
+    }
+    NSWindow *w = [self mainWindow];
+    for (NSViewController *vc in w.contentViewController.childViewControllers) {
+        if ([vc respondsToSelector:NSSelectorFromString(@"transitionToAppsVCWithHost:")]) {
+            for (TemporaryHost *h in [vc valueForKey:@"hosts"]) {
+                if ([h.uuid isEqualToString:uuid]) {
+                    [vc performSelector:NSSelectorFromString(@"transitionToAppsVCWithHost:") withObject:h];
+                    return;
+                }
+            }
+        }
+    }
+}
+
+// One picture of the main window to `path` (the stability run takes several while the values change).
++ (void)captureWindowTo:(NSString *)path {
+    NSWindow *w = [self mainWindow];
+    MLCWindowListCreateImage create = (MLCWindowListCreateImage)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+    if (create == NULL || w == nil) return;
+    CGImageRef img = create(CGRectNull, kCGWindowListOptionIncludingWindow, (uint32_t)w.windowNumber,
+                            kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution);
+    if (img == NULL) return;
+    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:img];
+    [[NSFileManager defaultManager] createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+    [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
+    CGImageRelease(img);
+}
+
++ (void)captureAndQuit {
+    NSWindow *w = [self mainWindow];
+    MLCWindowListCreateImage create = (MLCWindowListCreateImage)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+    NSString *out = getenv("MLC_OUT") ? [NSString stringWithUTF8String:getenv("MLC_OUT")] : @"/tmp/apps-concept/out/shot.png";
+    if (getenv("MLC_ICONPICKER")) {
+        for (NSWindow *other in NSApp.windows) {
+            fprintf(stderr, "ConceptHarness: window %s visible=%d\n", NSStringFromClass([other class]).UTF8String, other.isVisible);
+        }
+    }
+    MLCWindowListCreateImageFromArray createFromArray = (MLCWindowListCreateImageFromArray)dlsym(RTLD_DEFAULT, "CGWindowListCreateImageFromArray");
+    if (create != NULL && w != nil) {
+        CGImageRef img = NULL;
+        NSMutableArray<NSWindow *> *popovers = [NSMutableArray array];
+        if (getenv("MLC_ICONPICKER") || getenv("MLC_CUSTOMIZE")) {
+            for (NSWindow *other in NSApp.windows) {
+                if (other != w && other.isVisible && [NSStringFromClass([other class]) containsString:@"Popover"]) [popovers addObject:other];
+            }
+        }
+        if (getenv("MLC_SHEETCOMP") && w.attachedSheet != nil) [popovers addObject:w.attachedSheet];   // window with its sheet over it
+        if (getenv("MLC_SHEETONLY") && w.attachedSheet != nil) {
+            // the add-computer sheet's own window
+            img = create(CGRectNull, kCGWindowListOptionIncludingWindow, (uint32_t)w.attachedSheet.windowNumber,
+                         kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution);
+        }
+        if (getenv("MLC_POPOVERONLY") && popovers.count > 0) {
+            // the popover's own window, nothing else (so it is seen whole whatever the window under it)
+            img = create(CGRectNull, kCGWindowListOptionIncludingWindow, (uint32_t)popovers.firstObject.windowNumber,
+                         kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution);
+            [popovers removeAllObjects];
+        }
+        if (img == NULL) {
+            img = create(CGRectNull, kCGWindowListOptionIncludingWindow, (uint32_t)w.windowNumber,
+                         kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution);
+        }
+        if (img != NULL) {
+            if (popovers.count > 0) {
+                // The window with its popover over it, composited by the window server so the popover's
+                // glass has the page behind it. Only the window's rectangle, only windows above it.
+                CGFloat screenHeight = NSScreen.screens.firstObject.frame.size.height;
+                CGRect cgRect = CGRectMake(w.frame.origin.x, screenHeight - NSMaxY(w.frame), w.frame.size.width, w.frame.size.height);
+                CGImageRef composite = create(cgRect, kCGWindowListOptionOnScreenAboveWindow | kCGWindowListOptionIncludingWindow,
+                                              (uint32_t)w.windowNumber, kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution);
+                if (composite != NULL) { CGImageRelease(img); img = composite; }
+            }
+            NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:img];
+            [[NSFileManager defaultManager] createDirectoryAtPath:out.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+            [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:out atomically:YES];
+            CGImageRelease(img);
+            fprintf(stderr, "ConceptHarness: wrote %s\n", out.UTF8String);
+        }
+    }
+    [NSApp terminate:nil];
+}
+
+@end
+#else
+// Release builds: the fixture does not exist. These calls are the only trace of it and do nothing.
+#import "ConceptHarness.h"
+@implementation ConceptHarness
++ (BOOL)enabled { return NO; }
++ (BOOL)networkMocked { return NO; }
++ (NSString *)variant { return @""; }
++ (void)applyMockRuntimeStateToHost:(TemporaryHost *)host {}
++ (void)applyMockExtrasToApp:(TemporaryApp *)app {}
++ (void)seedIfNeeded {}
++ (void)startScripted {}
+@end
+#endif
