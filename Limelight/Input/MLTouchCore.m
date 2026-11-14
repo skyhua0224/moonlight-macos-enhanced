@@ -446,3 +446,245 @@ static CGFloat MLDistance(CGPoint a, CGPoint b) {
     return sorted.count > 2 ? [sorted subarrayWithRange:NSMakeRange(0, 2)] : sorted;
 }
 
+- (CGPoint)centroidOfFirstTwo {
+    NSArray<MLTouchTrack *> *two = [self firstTwoTracks];
+    if (two.count == 0) return CGPointZero;
+    CGFloat x = 0, y = 0;
+    for (MLTouchTrack *t in two) { x += t.last.x; y += t.last.y; }
+    return CGPointMake(x / two.count, y / two.count);
+}
+
+- (void)resetSessionIfIdle {
+    if (_tracks.count > 0) return;
+    _multi = NO;
+    _twoHandled = NO;
+    _twoScrolled = NO;
+    _longPressFired = NO;
+    _twoMaxDisplacement = 0;
+    _centroidTravel = 0;
+}
+
+- (void)processSamples:(NSArray<MLTouchSample *> *)samples {
+    BOOL direct = self.mode == MLTouchInputModeDirect;
+    for (MLTouchSample *sample in samples) {
+        id identity = sample.identity;
+        MLTouchTrack *track = _tracks[identity];
+        switch (sample.phase) {
+            case MLTouchPhaseBegan: {
+                if (track != nil) break;
+                if (_tracks.count == 0) {
+                    _multi = NO; _twoHandled = NO; _twoScrolled = NO; _longPressFired = NO;
+                    _twoMaxDisplacement = 0; _centroidTravel = 0;
+                }
+                track = [[MLTouchTrack alloc] init];
+                track.identity = identity;
+                track.start = track.last = sample.point;
+                track.startTime = sample.timestamp;
+                track.order = _orderCounter++;
+                _tracks[identity] = track;
+                if (_tracks.count == 1) {
+                    if (direct) {
+                        [self sendAbsoluteAtViewPoint:sample.point];
+                        _leftDown = YES;
+                        [self sendButton:MLTouchEmuButtonLeft pressed:YES];
+                    }
+                } else if (_tracks.count == 2 && !_multi) {
+                    MLTouchTrack *first = [self firstTwoTracks].firstObject;
+                    BOOL firstStill = first.maxDisplacement < self.slop;
+                    // A held or moving first finger keeps its drag; a second finger does not join it.
+                    BOOL dragging = _leftDown && (!direct || !firstStill || _longPressFired);
+                    if (!dragging) {
+                        if (direct) [self releaseLeftIfDown];
+                        _multi = YES;
+                        _twoStartTime = sample.timestamp;
+                        _twoLastCentroid = [self centroidOfFirstTwo];
+                    }
+                }
+                break;
+            }
+            case MLTouchPhaseMoved: {
+                if (track == nil) break;
+                CGPoint previous = track.last;
+                track.last = sample.point;
+                track.maxDisplacement = MAX(track.maxDisplacement, MLDistance(track.start, sample.point));
+                if (_multi) {
+                    if (_tracks.count >= 2) {
+                        _twoMaxDisplacement = MAX(_twoMaxDisplacement, track.maxDisplacement);
+                        CGPoint centroid = [self centroidOfFirstTwo];
+                        CGFloat dy = centroid.y - _twoLastCentroid.y;
+                        _centroidTravel += fabs(dy) + fabs(centroid.x - _twoLastCentroid.x);
+                        _twoLastCentroid = centroid;
+                        if (_twoScrolled || _centroidTravel >= self.slop * 0.5) {
+                            _twoScrolled = YES;
+                            if (dy != 0) [self send:MLTouchEmuKindScroll a:dy b:0 button:0 pressed:NO];
+                        }
+                    }
+                    break;
+                }
+                if (_tracks.count != 1) break;
+                if (direct) {
+                    [self sendAbsoluteAtViewPoint:sample.point];
+                } else {
+                    float dx = sample.point.x - previous.x;
+                    float dy = sample.point.y - previous.y;
+                    if (dx != 0 || dy != 0) [self send:MLTouchEmuKindMoveRelative a:dx b:dy button:0 pressed:NO];
+                }
+                break;
+            }
+            case MLTouchPhaseStationary:
+                break;
+            case MLTouchPhaseEnded: {
+                if (track == nil) break;
+                track.last = sample.point;
+                track.maxDisplacement = MAX(track.maxDisplacement, MLDistance(track.start, sample.point));
+                if (_multi) {
+                    if (!_twoHandled) {
+                        _twoHandled = YES;
+                        BOOL tap = !_twoScrolled && _twoMaxDisplacement < self.slop &&
+                                   (sample.timestamp - _twoStartTime) <= self.twoFingerTapMaxDuration;
+                        if (tap) {
+                            if (direct) {
+                                [self sendAbsoluteAtViewPoint:[self centroidOfFirstTwo]];
+                            }
+                            [self sendButton:MLTouchEmuButtonRight pressed:YES];
+                            [self sendButton:MLTouchEmuButtonRight pressed:NO];
+                        }
+                    }
+                } else if (_tracks.count == 1) {
+                    if (direct) {
+                        if (_leftDown) {
+                            [self sendAbsoluteAtViewPoint:sample.point];
+                            [self releaseLeftIfDown];
+                        }
+                    } else if (_leftDown) {
+                        [self releaseLeftIfDown];
+                    } else if (!_longPressFired && track.maxDisplacement < self.slop &&
+                               (sample.timestamp - track.startTime) <= self.tapMaxDuration) {
+                        [self sendButton:MLTouchEmuButtonLeft pressed:YES];
+                        [self sendButton:MLTouchEmuButtonLeft pressed:NO];
+                    }
+                }
+                [_tracks removeObjectForKey:identity];
+                [self resetSessionIfIdle];
+                break;
+            }
+            case MLTouchPhaseCancelled: {
+                if (track == nil) break;
+                [_tracks removeObjectForKey:identity];
+                if (_tracks.count == 0) [self releaseLeftIfDown];
+                [self resetSessionIfIdle];
+                break;
+            }
+        }
+    }
+}
+
+- (void)pollAtTime:(NSTimeInterval)now {
+    if (self.mode != MLTouchInputModeTrackpad || _multi || _leftDown || _longPressFired || _tracks.count != 1) return;
+    MLTouchTrack *track = _tracks.allValues.firstObject;
+    if (track.maxDisplacement < self.slop && (now - track.startTime) >= self.longPressDuration) {
+        _longPressFired = YES;
+        _leftDown = YES;
+        [self sendButton:MLTouchEmuButtonLeft pressed:YES];
+    }
+}
+
+- (void)cancelAll {
+    [self releaseLeftIfDown];
+    [_tracks removeAllObjects];
+    _multi = NO; _twoHandled = NO; _twoScrolled = NO; _longPressFired = NO;
+}
+@end
+
+#pragma mark - Mouse emulation gate
+
+@implementation MLTouchMouseGate {
+    BOOL _anyActive;
+    CGPoint _lastPoint;
+    NSTimeInterval _lastTime;
+    BOOL _hasTouch;
+    NSUInteger _droppedDownMask;
+    NSUInteger _droppedCount;
+    NSUInteger _passedNear;
+    NSUInteger _passedClicks, _droppedSubtype, _droppedCorrelated, _droppedSequence;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _window = 0.35;
+        _nearRadius = 48.0;
+        _subtypeWindow = 0.5;
+        _activeTimeout = 1.5;
+    }
+    return self;
+}
+
+- (NSUInteger)droppedCount { return _droppedCount; }
+- (NSUInteger)passedNearTouchCount { return _passedNear; }
+- (NSUInteger)passedClickCount { return _passedClicks; }
+- (NSUInteger)droppedSubtypeCount { return _droppedSubtype; }
+- (NSUInteger)droppedCorrelatedCount { return _droppedCorrelated; }
+- (NSUInteger)droppedSequenceCount { return _droppedSequence; }
+
+- (void)noteTouchPoint:(CGPoint)viewPoint active:(BOOL)active time:(NSTimeInterval)time {
+    _lastPoint = viewPoint;
+    _lastTime = time;
+    _hasTouch = YES;
+    _anyActive = active;
+}
+
+- (void)noteAllTouchesUpAtTime:(NSTimeInterval)time {
+    _anyActive = NO;
+    if (_hasTouch) _lastTime = time;
+}
+
+- (void)reset {
+    _anyActive = NO;
+    _hasTouch = NO;
+    _droppedDownMask = 0;
+}
+
+- (MLTouchGateVerdict)verdictForMouseKind:(MLTouchGateMouseKind)kind
+                                   button:(NSInteger)button
+                                    point:(CGPoint)viewPoint
+                                     time:(NSTimeInterval)time
+                             touchSubtype:(BOOL)touchSubtype
+                            ageSinceTouch:(NSTimeInterval *)ageSinceTouch {
+    NSTimeInterval age = _hasTouch ? MAX(time - _lastTime, 0) : -1;
+    if (ageSinceTouch != NULL) *ageSinceTouch = age;
+    if (!self.enabled) return MLTouchGateVerdictPass;
+
+    NSUInteger bit = (NSUInteger)1 << MIN((NSUInteger)MAX(button, 0), (NSUInteger)31);
+    if (kind != MLTouchGateMouseDown && (_droppedDownMask & bit) != 0) {
+        if (kind == MLTouchGateMouseUp) _droppedDownMask &= ~bit;
+        _droppedCount += 1;
+        _droppedSequence += 1;
+        return MLTouchGateVerdictDropSequence;
+    }
+
+    // A touch note that nothing ever closed (the recognizer lost the end of it) stops counting as down.
+    BOOL down = _anyActive && _hasTouch && (time - _lastTime) <= self.activeTimeout;
+    MLTouchGateVerdict verdict = MLTouchGateVerdictPass;
+    if (touchSubtype && (self.subtypeAlwaysDrops || (_hasTouch && (down || age <= self.subtypeWindow)))) {
+        // The subtype alone is not trusted: a Mac with no touch in play has trackpad and mouse events too.
+        verdict = MLTouchGateVerdictDropSubtype;
+    } else if (down) {
+        verdict = MLTouchGateVerdictDropCorrelated;
+    } else if (_hasTouch && age <= self.window &&
+               hypot(viewPoint.x - _lastPoint.x, viewPoint.y - _lastPoint.y) <= self.nearRadius) {
+        verdict = MLTouchGateVerdictDropCorrelated;
+    }
+
+    if (verdict == MLTouchGateVerdictPass) {
+        if (_hasTouch && age >= 0 && age <= 1.0) _passedNear += 1;
+        if (kind == MLTouchGateMouseDown) _passedClicks += 1;
+        return verdict;
+    }
+    if (kind == MLTouchGateMouseDown) _droppedDownMask |= bit;
+    _droppedCount += 1;
+    if (verdict == MLTouchGateVerdictDropSubtype) _droppedSubtype += 1;
+    else _droppedCorrelated += 1;
+    return verdict;
+}
+@end
