@@ -707,6 +707,8 @@ extension SettingsModel {
   static var coreHIDMaxMouseReportRates: [Int] = [1000, 2000, 4000, 8000, 500, 250, 125, 0]
   static var mouseModes: [String] = ["game", "remote"]
   static var touchscreenModes: [String] = ["Trackpad", "Touchscreen"]
+  /// Indexed by `MLTouchInputMode`: the order is what is stored.
+  static var touchInputModes: [String] = ["Native Multi-Touch", "Touchpad Mode", "Direct Tap"]
   /// Indexed by `StreamDisplayMode` raw value: the order is what is stored.
   static var displayModes: [String] = ["Windowed", "Fullscreen", "Borderless Windowed", "Free Window"]
   /// The order the window modes are offered in.
@@ -1515,6 +1517,7 @@ extension SettingsModel {
   static let defaultRewrittenScrollMode = RewrittenScrollMode.defaultMode.displayKey
   static let defaultFreeMouseMotionMode = FreeMouseMotionMode.defaultMode.displayKey
   static let defaultTouchscreenMode = 0
+  static let defaultTouchInputMode = 0
   static let defaultGamepadMouseMode = false
   static let defaultGamepadMouseModeLongPressMenu = true
   static let defaultHostPrecisionTouchpadMode = 0

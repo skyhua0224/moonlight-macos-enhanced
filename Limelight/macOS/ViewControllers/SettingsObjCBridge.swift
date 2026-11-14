@@ -218,6 +218,7 @@ class SettingsClass: NSObject {
         "imeTextInput": settings.imeTextInput,
         "mouseMode": settings.mouseMode,
         "touchscreenMode": settings.touchscreenMode,
+        "touchInputMode": settings.touchInputMode,
         "pointerSensitivity": settings.pointerSensitivity ?? SettingsModel.defaultPointerSensitivity,
         "wheelScrollSpeed": settings.wheelScrollSpeed ?? SettingsModel.defaultWheelScrollSpeed,
         "rewrittenScrollSpeed":
@@ -1132,6 +1133,14 @@ class SettingsClass: NSObject {
       return settings.touchscreenMode ?? SettingsModel.defaultTouchscreenMode
     }
     return SettingsModel.defaultTouchscreenMode
+  }
+
+  /// `MLTouchInputMode` raw value: 0 native multi-touch, 1 touchpad, 2 direct tap.
+  @objc static func touchInputMode(for key: String) -> Int {
+    if let settings = Settings.getSettings(for: key) {
+      return settings.touchInputMode ?? SettingsModel.defaultTouchInputMode
+    }
+    return SettingsModel.defaultTouchInputMode
   }
 
   @objc static func gamepadMouseMode(for key: String) -> Bool {

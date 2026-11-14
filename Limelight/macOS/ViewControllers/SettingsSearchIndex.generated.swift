@@ -175,6 +175,8 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "keyboard/Mouse Tuning/Trackpad Speed", pane: .keyboard, kind: .row, sectionKey: "Mouse Tuning", titleKey: "Trackpad Speed", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Mouse Tuning/CoreHID Max Mouse Report Rate", pane: .keyboard, kind: .row, sectionKey: "Mouse Tuning", titleKey: "CoreHID Max Mouse Report Rate", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Mouse Tuning/Touchscreen Mode", pane: .keyboard, kind: .row, sectionKey: "Mouse Tuning", titleKey: "Touchscreen Mode", detailKey: nil, keywords: ["Trackpad", "Touchscreen"]),
+    SettingsSearchEntry(id: "keyboard/Mouse Tuning/Touch Input Method", pane: .keyboard, kind: .row, sectionKey: "Mouse Tuning", titleKey: "Touch Input Method", detailKey: nil, keywords: ["Native Multi-Touch", "Touchpad Mode", "Direct Tap"]),
+    SettingsSearchEntry(id: "keyboard/Mouse Tuning/Open Control Center", pane: .keyboard, kind: .row, sectionKey: "Mouse Tuning", titleKey: "Open Control Center", detailKey: nil, keywords: ["Hold five fingers"]),
     SettingsSearchEntry(id: "keyboard/Shortcut Translation Rules/Shortcut Translation Rules", pane: .keyboard, kind: .section, sectionKey: "Shortcut Translation Rules", titleKey: "Shortcut Translation Rules", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "keyboard/Stream Shortcuts/Stream Shortcuts", pane: .keyboard, kind: .section, sectionKey: "Stream Shortcuts", titleKey: "Stream Shortcuts", detailKey: nil, keywords: []),
   ]

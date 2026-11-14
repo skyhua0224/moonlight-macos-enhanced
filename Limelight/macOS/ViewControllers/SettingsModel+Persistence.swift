@@ -357,6 +357,8 @@ extension SettingsModel {
     streamShortcuts = StreamShortcutProfile.defaultShortcuts()
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
+    selectedTouchInputMode = Self.getString(
+      from: Self.defaultTouchInputMode, in: Self.touchInputModes)
     controllerDeadzone = Self.defaultControllerDeadzone
     dualSense = .default
     selectedControllerHapticsMode = Self.defaultControllerHapticsMode
@@ -604,6 +606,8 @@ extension SettingsModel {
       shouldPersistMigratedShortcutSettings = migratedShortcuts.1
       selectedTouchscreenMode = Self.getString(
         from: settings.touchscreenMode ?? Self.defaultTouchscreenMode, in: Self.touchscreenModes)
+      selectedTouchInputMode = Self.getString(
+        from: settings.touchInputMode ?? Self.defaultTouchInputMode, in: Self.touchInputModes)
       gamepadMouseMode = settings.gamepadMouseMode ?? Self.defaultGamepadMouseMode
       gamepadMouseModeLongPressMenu = settings.gamepadMouseModeLongPressMenu ?? Self.defaultGamepadMouseModeLongPressMenu
       hostPrecisionTouchpadMode = Self.precisionTouchpadMode(
@@ -783,6 +787,7 @@ extension SettingsModel {
     }
 
     let touchscreenMode = Self.getInt(from: selectedTouchscreenMode, in: Self.touchscreenModes)
+    let touchInputMode = Self.getInt(from: selectedTouchInputMode, in: Self.touchInputModes)
     let mouseModeVal = Self.getInt(from: mouseMode, in: Self.mouseModes)
 
     let upscalingMode = Self.upscalingModeRawValue(for: selectedUpscalingMode)
@@ -995,6 +1000,7 @@ extension SettingsModel {
       swapMouseButtons: swapMouseButtons,
       reverseScrollDirection: reverseScrollDirection,
       touchscreenMode: touchscreenMode,
+      touchInputMode: touchInputMode,
       gamepadMouseMode: gamepadMouseMode,
       gamepadMouseModeLongPressMenu: gamepadMouseModeLongPressMenu,
       hostPrecisionTouchpad: hostPrecisionTouchpadMode != 0,

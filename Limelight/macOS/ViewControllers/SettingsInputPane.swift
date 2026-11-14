@@ -674,6 +674,10 @@ private struct MouseTuningSettingsSection: View {
         .disabled(!coreHID)
       }
       SettingsChoiceRow(title: "Touchscreen Mode", selection: $settingsModel.selectedTouchscreenMode, options: SettingsModel.touchscreenModes)
+      SettingsChoiceRow(title: "Touch Input Method", selection: $settingsModel.selectedTouchInputMode, options: SettingsModel.touchInputModes)
+      SettingsRow(title: "Open Control Center") {
+        Text(LanguageManager.shared.localize("Hold five fingers")).foregroundStyle(.secondary)
+      }
     }
   }
 }

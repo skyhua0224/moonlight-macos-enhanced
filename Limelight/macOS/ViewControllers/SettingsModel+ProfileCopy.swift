@@ -80,7 +80,7 @@ extension Settings {
     "swapABXYButtons", "optimize", "autoFullscreen", "displayMode", "rumble", "controllerDriver",
     "mouseDriver", "coreHIDAutoEnabled", "coreHIDMaxMouseReportRate", "freeMouseMotionMode",
     "emulateGuide", "appArtworkDimensions", "dimNonHoveredArtwork", "quitAppAfterStream",
-    "swapMouseButtons", "reverseScrollDirection", "touchscreenMode", "gamepadMouseMode",
+    "swapMouseButtons", "reverseScrollDirection", "touchscreenMode", "touchInputMode", "gamepadMouseMode",
     "gamepadMouseModeLongPressMenu", "hostPrecisionTouchpad", "hostPrecisionTouchpadMode",
     "imeTextInput", "mouseMode", "pointerSensitivity", "wheelScrollSpeed",
     "rewrittenScrollSpeed", "gestureScrollSpeed", "physicalWheelHighPrecisionScale",

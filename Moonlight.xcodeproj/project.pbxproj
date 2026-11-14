@@ -119,6 +119,12 @@
 			membershipExceptions = (
 				/Localized/macOS/Main.storyboard,
 				"build-number.sh",
+				Input/MLTouchCore.m,
+				"Input/HIDSupport+Touch.m",
+				macOS/Views/MLDirectTouchRecognizer.m,
+				macOS/Views/MLTouchRuntime.m,
+				macOS/Views/MLTouchMenuSupport.m,
+				"macOS/ViewControllers/StreamViewController+Touch.m",
 				macOS/ViewControllers/SettingsLineCheck.swift,
 				macOS/ViewControllers/BluetoothFullHapticsSwitch.swift,
 				macOS/ViewControllers/BluetoothFullHapticsWarning.swift,
