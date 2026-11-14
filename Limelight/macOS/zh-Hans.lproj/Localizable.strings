@@ -1257,6 +1257,11 @@
 "Controller Hint Space" = "空格";
 "Controller Hint Keyboard Layout" = "符号 / 大写";
 "Controller Hint Done" = "完成";
+"Controller Hint Computers" = "切换电脑";
+"Controller Hint Sections" = "分区";
+"Controller Hint Page" = "翻页";
+"Controller Hint More" = "更多";
+"Controller Hint Customize" = "自定义主页";
 "Keyboard Space" = "空格";
 "Controller Shortcut Conflict" = "此触发方式与其他快捷键重合";
 "Replace Conflicting Shortcuts" = "替换重合的快捷键";

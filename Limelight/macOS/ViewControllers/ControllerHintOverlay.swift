@@ -6,6 +6,8 @@ import SwiftUI
   case none
   case library
   case settings
+  /// The Deck interface: sidebar, hero, shelves, sheets.
+  case deck
   case menu
   case keyboard
 }
@@ -128,6 +130,8 @@ private struct ControllerHintView: View {
       ControllerHintItem(symbols: button.symbolName(family).map { [$0] } ?? [],
                          fallback: button.displayName(family), labelKey: key)
     }
+    let triggers = [ControllerTouchpadShortcut.Button.leftTrigger, .rightTrigger].compactMap { $0.symbolName(family) }
+    let triggerSymbols = triggers.count == 2 ? triggers : []
     let move = ControllerHintItem(symbols: symbol("dpad"), fallback: "✥", labelKey: "Controller Hint Move")
     let adjust = ControllerHintItem(
       symbols: symbol("dpad.left.filled") + symbol("dpad.right.filled"), fallback: "◀▶",
@@ -141,8 +145,22 @@ private struct ControllerHintView: View {
       let column = ControllerHintItem(
         symbols: shoulders.count == 2 ? shoulders : [],
         fallback: family == .playStation ? "L1 R1" : "LB RB", labelKey: "Controller Hint Column")
-      return [move, adjust, button(.a, "Controller Hint Select"), button(.b, "Controller Hint Back"), column,
+      let pageHint = ControllerHintItem(
+        symbols: triggerSymbols,
+        fallback: family == .playStation ? "L2 R2" : "LT RT", labelKey: "Controller Hint Page")
+      return [move, adjust, button(.a, "Controller Hint Select"), button(.b, "Controller Hint Back"), column, pageHint,
               button(.view, "Controller Hint Search")]
+    case .deck:
+      let shoulders = [ControllerTouchpadShortcut.Button.leftShoulder, .rightShoulder].compactMap { $0.symbolName(family) }
+      let computers = ControllerHintItem(
+        symbols: shoulders.count == 2 ? shoulders : [],
+        fallback: family == .playStation ? "L1 R1" : "LB RB", labelKey: "Controller Hint Computers")
+      let sections = ControllerHintItem(
+        symbols: triggerSymbols,
+        fallback: family == .playStation ? "L2 R2" : "LT RT", labelKey: "Controller Hint Sections")
+      return [move, button(.a, "Controller Hint Open"), button(.b, "Controller Hint Back"),
+              button(.menu, "Controller Hint More"), computers, sections, button(.y, "Controller Hint Settings"),
+              button(.x, "Controller Hint Customize"), button(.view, "Controller Hint Search")]
     case .menu:
       return [move, adjust, button(.a, "Controller Hint Confirm"), button(.b, "Controller Hint Back")]
     case .keyboard:
