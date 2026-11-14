@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root status_code="200"><App><IsHdrSupported>1</IsHdrSupported><AppTitle>Desktop</AppTitle><ID>1</ID><FsKind>desktop</FsKind><FsLaunchMode>direct</FsLaunchMode></App><App><IsHdrSupported>0</IsHdrSupported><AppTitle>Slay the Spire 2</AppTitle><ID>2</ID><FsKind>game</FsKind><FsSource>steam</FsSource><FsLaunchMode>launcher</FsLaunchMode><FsLastPlayed>1794390000</FsLastPlayed><FsPlaySeconds>7200</FsPlaySeconds><FsSession>1794400000</FsSession></App></root>
