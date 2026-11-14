@@ -661,3 +661,349 @@ struct DeckOfflineInfo: View {
 
 // MARK: - Preset cards in the 自定义主页 popover
 
+/// A tiny drawing of what each 主页样式 looks like, so the difference is visible before choosing.
+@available(macOS 14.0, *)
+struct DeckPresetCard: View {
+  let style: DeckHomeStyle
+  let selected: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      VStack(spacing: 5) {
+        thumbnail
+          .frame(width: 62, height: 46)
+          .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+          .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.15), lineWidth: selected ? 2 : 0.5))
+        Text(style.title).font(.system(size: 11, weight: selected ? .semibold : .regular)).foregroundStyle(selected ? Color.accentColor : Color.primary)
+      }
+    }
+    .controllerButtonStyle(.plain)
+  }
+
+  private func block(_ w: CGFloat, _ h: CGFloat, _ color: Color = Color.secondary.opacity(0.45), radius: CGFloat = 1.5) -> some View {
+    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(color).frame(width: w, height: h)
+  }
+
+  @ViewBuilder
+  private var thumbnail: some View {
+    let accent = Color.accentColor
+    switch style {
+    case .simple:
+      // small computer card, then a dense grid of small portrait tiles
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 3) { block(10, 10, accent.opacity(0.7), radius: 2.5); block(18, 4); Spacer(minLength: 0); block(16, 10, accent.opacity(0.35), radius: 2) }
+        HStack(spacing: 2.5) { ForEach(0..<6, id: \.self) { _ in block(6.5, 9) } }
+        HStack(spacing: 2.5) { ForEach(0..<6, id: \.self) { _ in block(6.5, 9) } }
+      }
+      .padding(6)
+    case .games:
+      // a hero over the top, a shelf of landscape cards, large tiles
+      VStack(alignment: .leading, spacing: 3) {
+        RoundedRectangle(cornerRadius: 2, style: .continuous).fill(LinearGradient(colors: [accent.opacity(0.75), accent.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
+          .frame(height: 17)
+        HStack(spacing: 2.5) { block(17, 9, accent.opacity(0.45)); block(17, 9, accent.opacity(0.45)); block(17, 9, accent.opacity(0.45)) }
+        HStack(spacing: 3) { block(12, 11); block(12, 11); block(12, 11); block(12, 11) }
+      }
+      .padding(.horizontal, 5).padding(.vertical, 4)
+    case .auto:
+      ZStack {
+        HStack(spacing: 0) {
+          VStack(alignment: .leading, spacing: 3) { block(18, 8, accent.opacity(0.5)); block(18, 8); block(18, 8) }.padding(.leading, 6)
+          Spacer(minLength: 0)
+          VStack(alignment: .leading, spacing: 3) { block(26, 12, accent.opacity(0.3)); HStack(spacing: 2) { block(8, 10); block(8, 10); block(8, 10) } }.padding(.trailing, 6)
+        }
+        Image(systemName: "sparkles").font(.system(size: 13, weight: .semibold)).foregroundStyle(accent)
+      }
+    case .custom:
+      VStack(alignment: .leading, spacing: 4) {
+        ForEach(0..<3, id: \.self) { index in
+          HStack(spacing: 4) {
+            block(5, 5, index == 1 ? Color.secondary.opacity(0.25) : accent.opacity(0.6), radius: 1)
+            block(index == 0 ? 30 : 22, 5)
+            Spacer(minLength: 0)
+            Image(systemName: "line.3.horizontal").font(.system(size: 6, weight: .bold)).foregroundStyle(.tertiary)
+          }
+        }
+      }
+      .padding(7)
+    }
+  }
+}
+
+// MARK: - Arrangements of the offline page
+
+enum DeckOfflineLayout: String {
+  case today, a, b, c, d
+  static var current: DeckOfflineLayout {
+    conceptEnv("MLC_OFFLINE").flatMap { DeckOfflineLayout(rawValue: $0.lowercased()) } ?? .b
+  }
+}
+
+/// The info form(s) of an offline page for the arrangement in use (today and A: one column; B: two columns,
+/// 地址 | 状态 + 设备, one column when narrow; D: three columns 地址 | 状态 | 设备 on wide windows, two on
+/// medium, one on narrow; C is drawn by the card itself).
+@available(macOS 14.0, *)
+struct DeckOfflineBlock: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckAppsModel
+  let contentWidth: CGFloat
+  var maxWidth: CGFloat = 640
+
+  var body: some View {
+    switch DeckOfflineLayout.current {
+    case .b where contentWidth >= 860:
+      HStack(alignment: .top, spacing: 8) {
+        DeckOfflineInfo(host: host, model: model, parts: .addresses, maxWidth: .infinity)
+        DeckOfflineInfo(host: host, model: model, parts: .rest, maxWidth: .infinity)
+      }
+    case .d where contentWidth >= 1400:
+      HStack(alignment: .top, spacing: 8) {
+        DeckOfflineInfo(host: host, model: model, parts: .addresses, maxWidth: .infinity)
+        DeckOfflineInfo(host: host, model: model, parts: .status, maxWidth: .infinity)
+        DeckOfflineInfo(host: host, model: model, parts: .device, maxWidth: .infinity)
+      }
+    case .d where contentWidth >= 860:
+      HStack(alignment: .top, spacing: 8) {
+        DeckOfflineInfo(host: host, model: model, parts: .addresses, maxWidth: .infinity)
+        DeckOfflineInfo(host: host, model: model, parts: .rest, maxWidth: .infinity)
+      }
+    default:
+      DeckOfflineInfo(host: host, model: model, parts: .all, maxWidth: maxWidth)
+    }
+  }
+}
+
+/// LabeledContent in a plain stack puts the value next to the label; in a form it sits at the trailing edge.
+/// This style gives the form look: label on the left, value on the right in secondary colour.
+struct DeckTrailingValueStyle: LabeledContentStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(alignment: .firstTextBaseline) {
+      configuration.label
+      Spacer(minLength: 24)
+      configuration.content.foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+    }
+  }
+}
+
+// MARK: - Addresses: test and default
+
+extension Notification.Name { static let deckAddressChanged = Notification.Name("MLDeckAddressChanged") }
+
+/// 自动: no address is pinned; the client ranks them (latency, reachability).
+@available(macOS 14.0, *)
+struct DeckAutoAddressRow: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckAppsModel
+  @SwiftUI.State private var tick = 0
+
+  var body: some View {
+    let _ = tick
+    let chosen = model.actions.defaultAddress?(host.id) ?? ""
+    let isAuto = chosen.isEmpty || chosen == "Auto"
+    HStack(spacing: 8) {
+      Label(DL("deck.auto"), systemImage: "arrow.triangle.branch")
+      Spacer(minLength: 12)
+      Text(DL("deck.addr.autoHint")).foregroundStyle(.secondary).font(.system(size: 12))
+      Button {
+        model.actions.setDefaultAddress?(host.id, "")
+        NotificationCenter.default.post(name: .deckAddressChanged, object: nil)
+      } label: {
+        Image(systemName: isAuto ? "checkmark.circle.fill" : "circle").foregroundStyle(isAuto ? Color.accentColor : Color.secondary)
+      }
+      .controllerButtonStyle(.borderless)
+      .deckTouchTarget()
+      .deckHelp(DL("deck.addr.useAuto"))
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .deckAddressChanged)) { _ in tick += 1 }
+  }
+}
+
+/// One address: what it is (a path class when evidence has settled it, otherwise what the address itself is: IP, 域名, 内网),
+/// the full host:port (the port is always written), 测试, 设为默认, and, in a menu, 编辑 in place (host:port and type; the
+/// computer's own fields only change type), 上移 / 下移 (the order automatic connection prefers) and 删除 (only for an address the
+/// user added). The tooltip carries the evidence.
+@available(macOS 14.0, *)
+struct DeckAddressRow: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckAppsModel
+  let row: DeckAddressModel.Row
+  let canMoveUp: Bool
+  let canMoveDown: Bool
+  @SwiftUI.State private var state: ProbeState = .idle
+  @SwiftUI.State private var tick = 0
+  @SwiftUI.State private var editing = false
+  @SwiftUI.State private var draft = ""
+  @SwiftUI.State private var draftKind = ""
+  @SwiftUI.State private var draftError = false
+
+  enum ProbeState: Equatable { case idle, testing, ok(Int), failed }
+
+  private var address: String { row.entry.endpoint.display }
+
+  private var isDefault: Bool {
+    let chosen = model.actions.defaultAddress?(host.id) ?? ""
+    return DeckEndpoint.parse(chosen) == row.entry.endpoint && !chosen.isEmpty && chosen != "Auto"
+  }
+
+  var body: some View {
+    let _ = tick
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 8) {
+        Label(row.isDomain ? DL("deck.label.domain") : DeckAddressModel.title(row.word),
+              systemImage: row.isDomain ? "network" : DeckAddressModel.symbol(row.word))
+          .deckHelp(evidenceHelp)
+        Spacer(minLength: 12)
+        Text(address).font(.system(.body, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+        if row.isDomain && row.verdict.isConfirmed {
+          Text(DeckAddressModel.title(row.word)).font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+        if isDefault {
+          Text(DL("deck.addr.default")).font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 6).padding(.vertical, 2).background(Color.accentColor.opacity(0.14), in: Capsule())
+        }
+        result
+        Button { test() } label: { Text(DL("deck.addr.test")).font(.system(size: 12)) }
+          .controllerButtonStyle(.borderless).foregroundStyle(Color.accentColor).disabled(state == .testing)
+        Button {
+          model.actions.setDefaultAddress?(host.id, isDefault ? "" : address)
+          NotificationCenter.default.post(name: .deckAddressChanged, object: nil)
+        } label: {
+          Image(systemName: isDefault ? "checkmark.circle.fill" : "circle").foregroundStyle(isDefault ? Color.accentColor : Color.secondary)
+        }
+        .controllerButtonStyle(.borderless)
+        .deckTouchTarget()
+        .deckHelp(isDefault ? DL("deck.addr.useAuto") : DL("deck.addr.setDefault"))
+        Menu {
+          Button(DL("deck.addr.edit")) { beginEdit() }
+          Button(DL("deck.addr.moveUp")) { DeckAddressModel.move(host, key: row.entry.endpoint.key, by: -1) }.disabled(!canMoveUp)
+          Button(DL("deck.addr.moveDown")) { DeckAddressModel.move(host, key: row.entry.endpoint.key, by: 1) }.disabled(!canMoveDown)
+          Divider()
+          Button(DL("deck.copy")) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(address, forType: .string) }
+          if row.entry.deletable { Button(DL("deck.addr.remove"), role: .destructive) { remove() } }
+        } label: { Image(systemName: "ellipsis.circle") }
+          .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().deckTouchTarget().deckHelp(DL("deck.more"))
+          .controllerFocusMenu(key: "addr.more") { (title: address, menu: padMenu) }
+      }
+      if editing { editor }
+    }
+    .contextMenu {
+      Button(DL("deck.addr.edit")) { beginEdit() }
+      Button(DL("deck.addr.test")) { test() }
+      Button(DL("deck.addr.setDefault")) { model.actions.setDefaultAddress?(host.id, address); NotificationCenter.default.post(name: .deckAddressChanged, object: nil) }
+      Button(DL("deck.addr.moveUp")) { DeckAddressModel.move(host, key: row.entry.endpoint.key, by: -1) }.disabled(!canMoveUp)
+      Button(DL("deck.addr.moveDown")) { DeckAddressModel.move(host, key: row.entry.endpoint.key, by: 1) }.disabled(!canMoveDown)
+      Button(DL("deck.copy")) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(address, forType: .string) }
+      if row.entry.deletable { Button(DL("deck.addr.remove"), role: .destructive) { remove() } }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .deckAddressChanged)) { _ in tick += 1 }
+    .onReceive(NotificationCenter.default.publisher(for: .init("ConnectionEndpointsUpdated"))) { _ in tick += 1 }
+    .onReceive(NotificationCenter.default.publisher(for: .init("HostLatencyUpdated"))) { _ in tick += 1 }
+    .onAppear {
+      if conceptEnv("MLC_ADDR_TEST") == address { state = .testing }
+      if let v = conceptEnv("MLC_ADDR_RESULT"), conceptEnv("MLC_ADDR_TEST") == address {
+        state = v == "fail" ? .failed : .ok(Int(v) ?? 12)
+      }
+      if conceptEnv("MLC_ADDR_EDIT") == address { beginEdit() }
+    }
+  }
+
+  /// The row's menu for the pad (the same items as the ⋯ menu and the context menu).
+  private var padMenu: NSMenu {
+    let menu = NSMenu()
+    menu.autoenablesItems = false
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.addr.edit")) { beginEdit() })
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.addr.test")) { test() })
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.addr.setDefault")) {
+      model.actions.setDefaultAddress?(host.id, address); NotificationCenter.default.post(name: .deckAddressChanged, object: nil)
+    })
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.addr.moveUp"), enabled: canMoveUp) { DeckAddressModel.move(host, key: row.entry.endpoint.key, by: -1) })
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.addr.moveDown"), enabled: canMoveDown) { DeckAddressModel.move(host, key: row.entry.endpoint.key, by: 1) })
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.copy")) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(address, forType: .string) })
+    if row.entry.deletable { menu.addItem(ControllerMenuBuilder.item(title: DL("deck.addr.remove")) { remove() }) }
+    return menu
+  }
+
+  // MARK: edit in place
+
+  private static let kinds: [(String, String)] = [("", "Path: automatic"), ("host", "Path: the computer itself"), ("forward", "Path: port forward"),
+                                                   ("relay", "Path: relay server"), ("overlay", "Path: VPN / mesh")]
+
+  private func beginEdit() {
+    draft = address
+    draftKind = ConnectionEndpointStore.declaredPath(forEndpoint: address, forHost: host.id) ?? ""
+    draftError = false
+    editing = true
+  }
+
+  private var editor: some View {
+    HStack(spacing: 8) {
+      TextField("host:port", text: $draft)
+        .textFieldStyle(.roundedBorder).font(.system(.body, design: .monospaced))
+        .disabled(!row.entry.deletable)   // the computer's own fields keep their address; only their type can be declared
+        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.red, lineWidth: draftError ? 1 : 0))
+      Picker("", selection: $draftKind) {
+        ForEach(Self.kinds, id: \.0) { Text(DL($0.1)).tag($0.0) }
+      }
+      .labelsHidden().fixedSize()
+      .controllerPicker(selection: $draftKind, choices: Self.kinds.map { (value: $0.0, title: DL($0.1)) })
+      Button(DL("deck.done")) { commitEdit() }.keyboardShortcut(.defaultAction).controllerButtonStyle(.automatic)
+      Button(DL("deck.cancel")) { editing = false }.keyboardShortcut(.cancelAction).controllerButtonStyle(.automatic)
+    }
+  }
+
+  private func commitEdit() {
+    guard let parsed = DeckEndpoint.parse(draft) else { draftError = true; return }
+    var target = address
+    if row.entry.deletable, parsed != row.entry.endpoint, let raw = DeckAddressModel.manualRaw(host, row.entry) {
+      guard ConnectionEndpointStore.replaceManualEndpoint(raw, with: parsed.display, forHost: host.id) else { draftError = true; return }
+      target = parsed.display
+    }
+    ConnectionEndpointStore.setDeclaredPath(draftKind.isEmpty ? nil : draftKind, forEndpoint: target, forHost: host.id)
+    editing = false
+    NotificationCenter.default.post(name: .deckAddressChanged, object: nil)
+    NotificationCenter.default.post(name: DeckConnectMenuRegistry.didChange, object: nil)
+    DeckAddressModel.probeMissing(host, actions: model.actions)
+  }
+
+  /// "端口转发 · 解析到 203.0.113.79,与主机公网地址一致 (可信度 中)": the confidence is said only here, in the tooltip.
+  private var evidenceHelp: String {
+    var text = DeckAddressModel.title(row.word)
+    if !row.verdict.resolvedIPs.isEmpty && row.isDomain { text += "\n" + row.verdict.resolvedIPs.joined(separator: ", ") }
+    text += "\n" + DeckAddressModel.evidence(row.verdict)
+    if row.verdict.isConfirmed { text += " · " + DeckAddressModel.confidenceText(row.verdict.confidence) }
+    return text
+  }
+
+  @ViewBuilder
+  private var result: some View {
+    switch state {
+    case .idle:
+      if let ms = DeckLatencyRules.valid(row.latency) { Text(DLf("deck.addr.reachable", ms)).font(.system(size: 12, weight: .medium)).foregroundStyle(.green) }
+      else if row.answered { Text(DL("deck.addr.reachableNoMs")).font(.system(size: 12, weight: .medium)).foregroundStyle(.green) }
+      else if row.failed { Text(DL("deck.addr.noAnswer")).font(.system(size: 12, weight: .medium)).foregroundStyle(.red) }
+    case .testing: HStack(spacing: 4) { ProgressView().controlSize(.mini); Text(DL("deck.addr.testing")).font(.system(size: 12)).foregroundStyle(.secondary) }
+    case .ok(let measured):
+      if let ms = DeckLatencyRules.valid(measured) { Text(DLf("deck.addr.reachable", ms)).font(.system(size: 12, weight: .medium)).foregroundStyle(.green) }
+      else { Text(DL("deck.addr.reachableNoMs")).font(.system(size: 12, weight: .medium)).foregroundStyle(.green) }
+    case .failed: Text(DL("deck.addr.noAnswer")).font(.system(size: 12, weight: .medium)).foregroundStyle(.red)
+    }
+  }
+
+  private func test() {
+    guard let probe = model.actions.probeAddress else { state = .failed; return }
+    state = .testing
+    probe(address, 4.0) { ms in
+      DispatchQueue.main.async { state = ms.map { .ok($0.intValue) } ?? .failed }
+    }
+  }
+
+  /// Gone from the store, so gone from this list and from the 线路 chips at once.
+  private func remove() {
+    if let raw = DeckAddressModel.manualRaw(host, row.entry) { ConnectionEndpointStore.removeManualEndpoint(raw, forHost: host.id) }
+    if isDefault { model.actions.setDefaultAddress?(host.id, "") }
+    NotificationCenter.default.post(name: .deckAddressChanged, object: nil)
+    NotificationCenter.default.post(name: DeckConnectMenuRegistry.didChange, object: nil)
+  }
+}
+
