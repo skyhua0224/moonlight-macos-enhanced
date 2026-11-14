@@ -673,3 +673,133 @@ static void DS5RawHIDOutputReport(void *context, IOReturn result, void *sender,
     });
 }
 
+- (void)writeOutputReport:(const uint8_t *)report length:(size_t)length identity:(NSString *)identity
+               generation:(uint32_t)generation {
+    IOHIDDeviceRef device = NULL;
+    [_stateLock lock];
+    NSValue *value = _devices[identity];
+    if (!_stopping && value != nil) device = (IOHIDDeviceRef)CFRetain([value pointerValue]);
+    NSString *transport = [_deviceTransports[identity] copy];
+    [_stateLock unlock];
+    NSData *data = [NSData dataWithBytes:report length:length];
+    BOOL usable = device != NULL;
+    // Source ds5-gcsman-bt-audio-20261107 §§2-3: Bluetooth output uses the
+    // 0xA2 CRC seed and the complete audio report is already framed here.
+    if (usable && [transport caseInsensitiveCompare:@"Bluetooth"] == NSOrderedSame && (length >= 334u || (length == 142u && report[0] == 0x32u))) {
+        uint8_t bluetoothAudioReport[DS5_OUTC_CAPACITY] = {0};
+        if (length > sizeof(bluetoothAudioReport)) {
+            usable = NO;
+        } else {
+            memcpy(bluetoothAudioReport, report, length);
+            bluetoothAudioReport[1] = (uint8_t)((atomic_fetch_add_explicit(&_outputSequence, 1u, memory_order_relaxed) & 0x0fu) << 4u);
+            const uint32_t crc = alk_ds5_crc32_seed(0xa2u, bluetoothAudioReport, length - 4u);
+            for (size_t index = 0; index < 4u; index++) {
+                bluetoothAudioReport[length - 4u + index] = (uint8_t)(crc >> (8u * index));
+            }
+            data = [NSData dataWithBytes:bluetoothAudioReport length:length];
+        }
+    } else if (usable && [transport caseInsensitiveCompare:@"Bluetooth"] == NSOrderedSame) {
+        uint8_t bluetoothReport[ALK_DS5_BT_OUTPUT_REPORT_BYTES] = {0};
+        size_t bluetoothLength = 0;
+        if (alk_ds5_wrap_bluetooth_output_report(report, length, bluetoothReport,
+                                                  sizeof(bluetoothReport), &bluetoothLength) != ALK_DS5_OK) {
+            usable = NO;
+        } else {
+            // The firmware tracks the sequence nibble and the CRC covers it, so both are stamped per report.
+            bluetoothReport[1] = (uint8_t)((atomic_fetch_add_explicit(&_outputSequence, 1u, memory_order_relaxed) & 0x0fu) << 4u);
+            const uint32_t crc = alk_ds5_crc32_seed(0xa2u, bluetoothReport, bluetoothLength - 4u);
+            for (size_t index = 0; index < 4u; index++) {
+                bluetoothReport[bluetoothLength - 4u + index] = (uint8_t)(crc >> (8u * index));
+            }
+            data = [NSData dataWithBytes:bluetoothReport length:bluetoothLength];
+        }
+    }
+    if (!usable) {
+        if (device != NULL) CFRelease(device);
+        [_outputLock lock];
+        if (generation == _outputGeneration) ds5_outc_abort(&_coalescer);
+        [_outputLock unlock];
+        [self drainOutput];
+        return;
+    }
+    DS5OutputWrite *write = [DS5OutputWrite new];
+    write.bridge = self;
+    write.device = device;
+    write.data = data;
+    write.generation = generation;
+    write.enqueuedAt = CFAbsoluteTimeGetCurrent();
+    write.startedAt = write.enqueuedAt;
+    void *context = (__bridge_retained void *)write;
+    __weak DS5RawHIDBridge *weakSelf = self;
+    dispatch_block_t issue = ^{
+        DS5RawHIDBridge *strongSelf = weakSelf;
+        if (strongSelf == nil) {
+            CFBridgingRelease(context);
+            return;
+        }
+        [strongSelf->_outputLock lock];
+        const BOOL live = write.generation == strongSelf->_outputGeneration;
+        [strongSelf->_outputLock unlock];
+        if (!live) {
+            CFBridgingRelease(context);
+            return;
+        }
+        const uint8_t reportId = ((const uint8_t *)write.data.bytes)[0];
+        write.startedAt = CFAbsoluteTimeGetCurrent();
+        const IOReturn result = IOHIDDeviceSetReportWithCallback(
+            write.device, kIOHIDReportTypeOutput, reportId, write.data.bytes, (CFIndex)write.data.length,
+            kDS5HIDReportTimeoutMilliseconds, DS5RawHIDOutputReport, context);
+        const double callMs = (CFAbsoluteTimeGetCurrent() - write.startedAt) * 1000.0;
+        DS5LogSlowHIDCall([NSString stringWithFormat:@"SetReportWithCallback(0x%02x)", reportId], callMs / 1000.0);
+        if (strongSelf->_timingLogs) {
+            Log(LOG_I, @"[ds5-hid] timing id=0x%02x len=%ld queue_ms=%.2f call_ms=%.2f",
+                reportId, (long)write.data.length, (write.startedAt - write.enqueuedAt) * 1000.0, callMs);
+        }
+        if (result != kIOReturnSuccess) {
+            DS5OutputWrite *ownedWrite = CFBridgingRelease(context);
+            [strongSelf finishOutputWrite:ownedWrite result:result];
+        }
+    };
+    CFRunLoopRef loop = _outputRunLoop;
+    if (loop != NULL && atomic_load_explicit(&_outputThreadStop, memory_order_acquire) == 0) {
+        CFRunLoopPerformBlock(loop, kCFRunLoopDefaultMode, issue);
+        CFRunLoopWakeUp(loop);
+    } else {
+        issue();
+    }
+}
+
+// Called from the HID callback on _ioQueue, or inline when the write could not be started. It only
+// hands the completion to the output queue, so the input callbacks never run the next write.
+- (void)finishOutputWrite:(DS5OutputWrite *)write result:(IOReturn)result {
+    if (write == nil) return;
+    CFAbsoluteTime elapsed = CFAbsoluteTimeGetCurrent() - write.startedAt;
+    DS5LogSlowHIDCall(@"SetReport", elapsed);
+    if (_timingLogs) {
+        const uint8_t reportId = write.data.length > 0 ? ((const uint8_t *)write.data.bytes)[0] : 0;
+        Log(LOG_I, @"[ds5-hid] timing id=0x%02x len=%ld complete_ms=%.2f result=0x%x",
+            reportId, (long)write.data.length, elapsed * 1000.0, result);
+    }
+    if (result != kIOReturnSuccess) {
+        Log(LOG_W, @"[ds5-hid] output report failed result=0x%x after %.1f ms", result, elapsed * 1000.0);
+    }
+    const double nowMs = DS5NowMilliseconds();
+    const uint32_t generation = write.generation;
+    const BOOL success = result == kIOReturnSuccess;
+    [_outputLock lock];
+    dispatch_queue_t queue = generation == _outputGeneration ? _outputQueue : nil;
+    [_outputLock unlock];
+    if (queue == nil) return;
+    dispatch_async(queue, ^{
+        [self->_outputLock lock];
+        if (generation == self->_outputGeneration) ds5_outc_complete(&self->_coalescer, nowMs, success);
+        [self->_outputLock unlock];
+        [self drainOutput];
+    });
+}
+
+- (void)dealloc {
+    [self stop];
+}
+
+@end
