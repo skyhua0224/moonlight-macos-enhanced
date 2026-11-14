@@ -8,8 +8,11 @@
 
 #import "HttpResponse.h"
 
-@interface AppAssetResponse : NSObject <Response>
+@interface AppAssetResponse : NSObject <Response, HttpHeaderReceiver>
 
-
+/// The HTTP status of the answer (200, 304, 404 ...), 0 when none arrived.
+@property (nonatomic) NSInteger httpStatus;
+@property (nonatomic, copy) NSDictionary *httpHeaders;
+- (NSString *) headerValue:(NSString *)name;
 
 @end
