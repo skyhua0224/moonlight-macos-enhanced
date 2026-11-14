@@ -1789,15 +1789,106 @@ static void NoteHapticsFrame(Ds5FrameKind kind, BOOL accepted) {
         (frame->pcmDataLength != 0 && frame->pcmData == NULL)) {
         return;
     }
+    // Four channels (the "pad-audio" extension) carry the pad's speaker first: speaker left, speaker right,
+    // haptic left, haptic right. The core keeps all four; the rest of this method works on the haptic pair.
+    if (frame->channelCount == 4 && frame->controllerNumber < 16 && !_padAudioSeen[frame->controllerNumber]) {
+        NSString *seenIdentity = [self rawHIDIdentityForPlayer:frame->controllerNumber];
+        NSString *seenTransport = [self->_rawHID transportNameForIdentity:seenIdentity];
+        _padAudioSeen[frame->controllerNumber] = YES;
+        if ([seenTransport isEqualToString:@"bluetooth"]) {
+            // The speaker pair is not played over Bluetooth. Leave the speaker off.
+            Log(LOG_I, @"[ds5-audio] four-channel frames for player %u on Bluetooth: speaker PCM ignored, haptics only", (unsigned)frame->controllerNumber);
+        } else {
+            Log(LOG_I, @"[ds5-audio] four-channel frames (speaker and haptics) arrive for player %u", (unsigned)frame->controllerNumber);
+            const NSUInteger seenPlayer = frame->controllerNumber;
+            __weak typeof(self) weakSelf = self;
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf configurePadAudioForPlayer:seenPlayer]; });
+        }
+    }
+    // Bluetooth has no Core Audio endpoint on macOS. Channels 3-4 are the haptic
+    // pair. They go out as one 0x32 report. Speaker samples are ignored here so
+    // the pad speaker stays off; USB is the only speaker path.
+    if (frame->controllerNumber < 16 && frame->frameCount > 0 && frame->pcmData != NULL) {
+        NSString *identity = [self rawHIDIdentityForPlayer:frame->controllerNumber];
+        NSString *transport = [self->_rawHID transportNameForIdentity:identity];
+        if ([transport isEqualToString:@"bluetooth"]) {
+            const int16_t *pcm = (const int16_t *)frame->pcmData;
+            int16_t haptics[480u * 2u] = {0};
+            if ((frame->flags & LI_DS5_HAPTICS_PCM_FLAG_DISCONTINUITY) != 0) {
+                [_ds5BluetoothAudioRenderer resetPlayer:frame->controllerNumber];
+            }
+            for (uint16_t index = 0; index < frame->frameCount; index++) {
+                if (frame->channelCount == 4) {
+                    haptics[index * 2u] = pcm[index * 4u + 2u];
+                    haptics[index * 2u + 1u] = pcm[index * 4u + 3u];
+                } else {
+                    haptics[index * 2u] = pcm[index * 2u];
+                    haptics[index * 2u + 1u] = pcm[index * 2u + 1u];
+                }
+            }
+            if (![_ds5BluetoothAudioRenderer enqueueSpeaker:NULL haptics:haptics frames:frame->frameCount
+                                              playerIdentity:identity headsetRoute:NO
+                                                    player:frame->controllerNumber]) {
+                Log(LOG_W, @"[ds5-audio] Bluetooth audio frame was not queued for player %u", (unsigned)frame->controllerNumber);
+            }
+            if ((frame->flags & LI_DS5_HAPTICS_PCM_FLAG_STREAM_END) != 0) {
+                [_ds5BluetoothAudioRenderer resetPlayer:frame->controllerNumber];
+            }
+        } else if (frame->controllerNumber < 16) {
+            static uint16_t skipLogged;
+            const uint16_t bit = (uint16_t)(1u << frame->controllerNumber);
+            if ((skipLogged & bit) == 0) {
+                skipLogged = (uint16_t)(skipLogged | bit);
+                Log(LOG_W, @"[ds5-audio] PCM frame not sent as Bluetooth audio: player=%u transport=%@ identity=%@",
+                    (unsigned)frame->controllerNumber, transport, identity);
+            }
+        }
+    }
+    int16_t coreSamples[480u * 4u] = {0};
+    int16_t hapticsStereo[480u * 2u] = {0};
+    const int16_t *pcmSamples = (const int16_t *)frame->pcmData;
+    for (uint16_t index = 0; index < frame->frameCount; index++) {
+        if (frame->channelCount == 4) {
+            coreSamples[index * 4u] = pcmSamples[index * 4u];
+            coreSamples[index * 4u + 1u] = pcmSamples[index * 4u + 1u];
+            coreSamples[index * 4u + 2u] = pcmSamples[index * 4u + 2u];
+            coreSamples[index * 4u + 3u] = pcmSamples[index * 4u + 3u];
+        } else {
+            coreSamples[index * 4u + 2u] = pcmSamples[index * 2u];
+            coreSamples[index * 4u + 3u] = pcmSamples[index * 2u + 1u];
+        }
+        hapticsStereo[index * 2u] = coreSamples[index * 4u + 2u];
+        hapticsStereo[index * 2u + 1u] = coreSamples[index * 4u + 3u];
+    }
+    LI_DS5_HAPTICS_PCM_FRAME stereoFrame = *frame;
+    stereoFrame.channelCount = 2;
+    stereoFrame.pcmData = (const uint8_t *)hapticsStereo;
+    stereoFrame.pcmDataLength = (uint32_t)frame->frameCount * 4u;
+    frame = &stereoFrame;
+    AlkDs5AudioFrame coreFrame = {
+        .struct_size = sizeof(coreFrame), .abi = ALK_DS5_CORE_ABI_VERSION,
+        .device_index = 0, .sample_rate_hz = frame->sampleRate,
+        .bits_per_sample = frame->bitsPerSample, .channel_count = 4u,
+        .frame_count = frame->frameCount, .pts_ns = frame->presentationTimeUs * 1000ull,
+        .samples = coreSamples};
+    if ((frame->flags & LI_DS5_HAPTICS_PCM_FLAG_STREAM_END) != 0) {
+        (void)[self withDS5CoreForPlayer:frame->controllerNumber call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_audio_flush(core); }];
+    } else if ([self withDS5CoreForPlayer:frame->controllerNumber call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_audio_write(core, &coreFrame); }] != ALK_DS5_OK) {
+        return;
+    }
 
     Controller *controller = [_controllers objectForKey:@(frame->controllerNumber)];
     if (controller != nil) {
+        BOOL dualSense = [controller.gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]];
         if (@available(macOS 11.0, *)) {
-            if ([controller.gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]] &&
-                [_ds5HapticsAudioRenderer submitPCMFrame:frame]) {
+            if (dualSense &&
+                [self withDS5CoreForPlayer:frame->controllerNumber call:^AlkDs5Error(AlkDs5Core *core) {
+                    return [self->_ds5HapticsAudioRenderer drainCoreAudio:core] ? ALK_DS5_OK : ALK_DS5_ERROR_NOT_FOUND;
+                }] == ALK_DS5_OK) {
                 return;
             }
         }
+        if (dualSense) return;
     }
 
     // Apple Game Controller does not expose authored PCM. When macOS does not
@@ -1805,7 +1896,7 @@ static void NoteHapticsFrame(Ds5FrameKind kind, BOOL accepted) {
     // feedback with an RMS reduction into the public haptics localities.
     if ((frame->flags & LI_DS5_HAPTICS_PCM_FLAG_STREAM_END) != 0 ||
         frame->frameCount == 0) {
-        [self rumble:frame->controllerNumber lowFreqMotor:0 highFreqMotor:0];
+        [self queueRumble:frame->controllerNumber low:0 high:0 direct:YES];
         return;
     }
 
@@ -1822,9 +1913,10 @@ static void NoteHapticsFrame(Ds5FrameKind kind, BOOL accepted) {
     const double divisor = (double)MAX(frame->frameCount, 1);
     const double leftAmplitude = MIN(1.0, sqrt(leftEnergy / divisor) * 1.5);
     const double rightAmplitude = MIN(1.0, sqrt(rightEnergy / divisor) * 1.5);
-    [self rumble:frame->controllerNumber
-      lowFreqMotor:(unsigned short)lrint(leftAmplitude * 65535.0)
-     highFreqMotor:(unsigned short)lrint(rightAmplitude * 65535.0)];
+    [self queueRumble:frame->controllerNumber
+                  low:(unsigned short)lrint(leftAmplitude * 65535.0)
+                 high:(unsigned short)lrint(rightAmplitude * 65535.0)
+               direct:YES];
 }
 
 -(void) rumbleTriggers:(unsigned short)controllerNumber
@@ -1860,12 +1952,30 @@ static void NoteHapticsFrame(Ds5FrameKind kind, BOOL accepted) {
         return;
     }
     if (!ControllerIsFeedbackTarget(self, controllerNumber)) return;
+    AlkDs5Feedback coreFeedback = _hasDS5Feedback[controllerNumber] ? _lastDS5Feedback[controllerNumber] :
+        (AlkDs5Feedback){.struct_size = sizeof(coreFeedback), .abi = ALK_DS5_CORE_ABI_VERSION, .device_index = 0};
+    coreFeedback.valid_flag0 = 0;
+    coreFeedback.valid_flag1 = 0x04u;
+    coreFeedback.valid_flag2 = 0;
+    coreFeedback.lightbar_rgb[0] = red; coreFeedback.lightbar_rgb[1] = green; coreFeedback.lightbar_rgb[2] = blue;
+    uint8_t coreReport[ALK_DS5_USB_OUTPUT_REPORT_BYTES] = {0};
+    size_t coreReportLength = 0;
+    (void)alk_ds5_build_output_report(&coreFeedback, coreReport, sizeof(coreReport), &coreReportLength);
+    (void)[self withDS5CoreForPlayer:controllerNumber call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_feedback(core, &coreFeedback); }];
+    _lastDS5Feedback[controllerNumber] = coreFeedback; _hasDS5Feedback[controllerNumber] = YES;
     Controller *controller = [_controllers objectForKey:@(controllerNumber)];
     GCController *gamepad = controller.gamepad;
     if (gamepad == nil) {
         return;
     }
-
+    NSString *identity = [self rawHIDIdentityForPlayer:controllerNumber];
+    // Bluetooth output uses the paced raw HID path so the report reaches the pad even when
+    // GameController exposes a light object without being the active output writer.
+    if (identity.length > 0 && ![_rawHID isUSBDeviceForIdentity:identity] &&
+        [_rawHID sendOutputReport:coreReport length:coreReportLength playerIdentity:identity]) {
+        Log(LOG_I, @"[controller-led] Output player=%hu rgb=%u,%u,%u path=RawHID-Bluetooth", controllerNumber, red, green, blue);
+        return;
+    }
     if (@available(macOS 11.0, *)) {
         if (gamepad.light != nil) {
             Log(LOG_I, @"[controller-led] Output player=%hu rgb=%u,%u,%u path=GameController", controllerNumber, red, green, blue);
@@ -1879,21 +1989,232 @@ static void NoteHapticsFrame(Ds5FrameKind kind, BOOL accepted) {
     Log(LOG_I, @"Controller %hu does not expose a public RGB LED API on this macOS driver", controllerNumber);
 }
 
--(void) setAdaptiveTriggers:(unsigned short)controllerNumber
-                 eventFlags:(unsigned char)eventFlags
-                   typeLeft:(unsigned char)typeLeft
-                  typeRight:(unsigned char)typeRight
-                       left:(const unsigned char *)left
-                      right:(const unsigned char *)right
-{
-    if (!ControllerIsFeedbackTarget(self, controllerNumber)) {
+// One output report write for the host controls. The report starts from the last feedback this
+// player sent, so the fields the host did not touch keep their values, and carries fresh enable
+// flags, so only the fields of this call are applied by the pad. The raw writer coalesces pending
+// reports and keeps the union of their flags (DS5RawHIDBridge).
+- (void)writeDualSenseFeedback:(unsigned short)controllerNumber
+                         flag0:(uint8_t)flag0 flag1:(uint8_t)flag1 flag2:(uint8_t)flag2
+                        update:(void (^)(AlkDs5Feedback *feedback))update {
+    AlkDs5Feedback feedback = _hasDS5Feedback[controllerNumber] ? _lastDS5Feedback[controllerNumber] :
+        (AlkDs5Feedback){.struct_size = sizeof(feedback), .abi = ALK_DS5_CORE_ABI_VERSION, .device_index = 0};
+    feedback.valid_flag0 = flag0;
+    feedback.valid_flag1 = flag1;
+    feedback.valid_flag2 = flag2;
+    update(&feedback);
+    uint8_t report[ALK_DS5_USB_OUTPUT_REPORT_BYTES] = {0};
+    size_t length = 0;
+    if ([self withDS5CoreForPlayer:controllerNumber call:^AlkDs5Error(AlkDs5Core *core) { return alk_ds5_core_submit_feedback(core, &feedback); }] != ALK_DS5_OK ||
+        alk_ds5_build_output_report(&feedback, report, sizeof(report), &length) != ALK_DS5_OK) {
         return;
     }
+    _lastDS5Feedback[controllerNumber] = feedback;
+    _hasDS5Feedback[controllerNumber] = YES;
+    if (![_rawHID sendOutputReport:report length:length playerIdentity:[self rawHIDIdentityForPlayer:controllerNumber]] &&
+        !_loggedMissingRawIdentity) {
+        _loggedMissingRawIdentity = YES;
+        Log(LOG_W, @"[ds5-ext] no raw HID device for player %hu; the host's light and audio settings cannot be written", controllerNumber);
+    }
+}
+
+// Player LEDs have two possible writers: GameController draws them from GCController.playerIndex, and
+// the raw output report can set any pattern. Writing both makes them fight, so exactly one writes at
+// a time: a pattern GameController can draw (players 1 to 4, or off) goes through playerIndex; any
+// other pattern is written raw after GameController has let go of the LEDs. The original playerIndex is
+// restored when the session ends.
+- (void)applyPlayerLEDMask:(uint8_t)mask forPlayer:(unsigned short)controllerNumber {
     Controller *controller = [_controllers objectForKey:@(controllerNumber)];
     GCController *gamepad = controller.gamepad;
-    if (gamepad == nil || ![gamepad.extendedGamepad isKindOfClass:[GCDualSenseGamepad class]]) {
+    const NSInteger wanted = ds5_player_index_for_led_mask(mask);
+    if (gamepad != nil && !_hasOriginalGCPlayerIndex[controllerNumber]) {
+        _originalGCPlayerIndex[controllerNumber] = gamepad.playerIndex;
+        _hasOriginalGCPlayerIndex[controllerNumber] = YES;
+    }
+    if (gamepad != nil && wanted >= -1) {
+        gamepad.playerIndex = (GCControllerPlayerIndex)wanted;
+        _playerLEDWriter[controllerNumber] = 1;
+        Log(LOG_I, @"[ds5-ext] player LEDs mask=0x%02x writer=GameController playerIndex=%ld", mask, (long)wanted);
         return;
     }
+    const BOOL handOver = gamepad != nil && _playerLEDWriter[controllerNumber] != 2;
+    _playerLEDWriter[controllerNumber] = 2;
+    void (^write)(void) = ^{
+        [self writeDualSenseFeedback:controllerNumber flag0:0 flag1:DS5_FLAG1_PLAYER_LEDS flag2:0
+                              update:^(AlkDs5Feedback *feedback) { feedback->player_led_mask = mask; }];
+    };
+    if (handOver) {
+        // GameController writes the LEDs once when it lets go; the raw write has to come after that.
+        gamepad.playerIndex = GCControllerPlayerIndexUnset;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self->_playerLEDWriter[controllerNumber] == 2) write();
+        });
+    } else {
+        write();
+    }
+    Log(LOG_I, @"[ds5-ext] player LEDs mask=0x%02x writer=raw", mask);
+}
+
+// assignController gave a (re)connected pad its player number, which GameController draws on the LEDs
+// (players 1 to 4; a fifth pad gets none). A pattern the game asked for earlier in the session wins over
+// it again, and the writer state of the previous connection is forgotten.
+- (void)restoreGamePlayerLEDsForController:(GCController *)gamepad {
+    const NSInteger index = gamepad.playerIndex;
+    if (index < 0 || index >= 16) return;
+    _hasOriginalGCPlayerIndex[index] = NO;
+    _playerLEDWriter[index] = 0;
+    if (_gameLEDSet[index]) [self applyPlayerLEDMask:_gameLEDMask[index] forPlayer:(unsigned short)index];
+}
+
+- (void)restoreGameControllerPlayerLEDs {
+    for (NSNumber *key in _controllers.allKeys) {
+        const NSUInteger index = key.unsignedIntegerValue;
+        if (index >= 16 || !_hasOriginalGCPlayerIndex[index]) continue;
+        Controller *controller = [_controllers objectForKey:key];
+        controller.gamepad.playerIndex = (GCControllerPlayerIndex)_originalGCPlayerIndex[index];
+        _hasOriginalGCPlayerIndex[index] = NO;
+        _playerLEDWriter[index] = 0;
+        _gameLEDSet[index] = NO;
+    }
+}
+
+- (void)assertMuteLEDForPlayer:(unsigned short)controllerNumber {
+    if (controllerNumber >= 16) return;
+    const uint8_t value = _gameMuteLED[controllerNumber];
+    [self writeDualSenseFeedback:controllerNumber flag0:0 flag1:DS5_FLAG1_MUTE_LED flag2:0
+                          update:^(AlkDs5Feedback *feedback) { feedback->mute_led = value; }];
+}
+
+// The host session is over (or the pad is going away): every output the stream wrote goes back to a
+// neutral state. The mute LED, rumble and both adaptive trigger effects are written to the pad, the
+// lightbar goes back to the colour it had when the stream took it over, and the player LEDs are handed
+// back to GameController by restoreGameControllerPlayerLEDs.
+- (void)restoreDualSenseOutputsForPlayer:(unsigned short)controllerNumber {
+    if (controllerNumber >= 16) return;
+    Controller *controller = [_controllers objectForKey:@(controllerNumber)];
+    GCController *gamepad = controller.gamepad;
+    if (gamepad == nil) return;
+    _gameMuteLED[controllerNumber] = 0;
+    const uint8_t flag0 = 0x01u | 0x04u | 0x08u;  // compatible vibration, right and left trigger effect
+    [self writeDualSenseFeedback:controllerNumber flag0:flag0 flag1:DS5_FLAG1_MUTE_LED flag2:0
+                          update:^(AlkDs5Feedback *feedback) {
+        feedback->mute_led = 0;
+        feedback->motor_left = 0;
+        feedback->motor_right = 0;
+        feedback->low_frequency = 0;
+        feedback->high_frequency = 0;
+        memset(&feedback->left_trigger, 0, sizeof(feedback->left_trigger));
+        memset(&feedback->right_trigger, 0, sizeof(feedback->right_trigger));
+        feedback->left_trigger.mode = ALK_DS5_TRIGGER_RAW;   // type byte 0: no effect
+        feedback->right_trigger.mode = ALK_DS5_TRIGGER_RAW;
+    }];
+    if (@available(macOS 11.0, *)) {
+        GCColor *original = (GCColor *)_originalLightColor[controllerNumber];
+        if (original != nil && gamepad.light != nil) gamepad.light.color = original;
+    }
+    Log(LOG_I, @"[controller] Outputs restored for player %hu (mute LED, rumble, triggers, lightbar)", controllerNumber);
+}
+
+// ---- Pad audio over USB -------------------------------------------------------------------------------------------
+// What the pad needs to play a speaker pair: output path 3 (the right channel to the internal speaker, the headphone
+// muted) or path 0 (left and right to the headset, the speaker muted) in bits 5:4 of byte 8, the speaker volume in
+// byte 6 (the pad accepts 0x3d to 0x64; the Linux driver sets 0x64), the headset volume in byte 5 (0 to 0x7f) and the
+// speaker pre-amp in the low bits of byte 38 (the Linux driver sets +6 dB, value 2, with the speaker). The Linux
+// driver chooses the path from the headset bit of the input report; so does this.
+
+static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger low, NSInteger high) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:key] == nil) return fallback;
+    return MIN(high, MAX(low, [defaults integerForKey:key]));
+}
+
+// Read once per stream: this is asked for every raw report (up to 380 a second), under the core lock.
+- (BOOL)padAudioSelfTestWanted {
+    if (!_padAudioSelfTestFlagRead) {
+        _padAudioSelfTestFlag = [[NSUserDefaults standardUserDefaults] boolForKey:@"ds5PadAudioSelfTest"];
+        _padAudioSelfTestFlagRead = YES;
+    }
+    return _padAudioSelfTestFlag;
+}
+
+// Main queue.
+- (void)writePadAudioBytesForPlayer:(NSUInteger)player headset:(BOOL)headset speakerVolume:(uint8_t)speakerVolume headsetVolume:(uint8_t)headsetVolume {
+    const DS5PadAudioBytes bytes = ds5_pad_audio_bytes(headset, speakerVolume, headsetVolume);
+    [self writeDualSenseFeedback:(unsigned short)player flag0:bytes.flag0 flag1:bytes.flag1 flag2:0
+                          update:^(AlkDs5Feedback *feedback) {
+        feedback->headphone_volume = bytes.headphoneVolume;
+        feedback->speaker_volume = bytes.speakerVolume;
+        feedback->audio_control = bytes.audioControl;
+        feedback->audio_control2 = bytes.audioControl2;
+    }];
+}
+
+- (void)configurePadAudioForPlayer:(NSUInteger)player {
+    if (player >= 16 || !ControllerIsFeedbackTarget(self, (unsigned short)player)) return;
+    NSString *identity = [self rawHIDIdentityForPlayer:(unsigned short)player];
+    NSString *transport = [_rawHID transportNameForIdentity:identity];
+    const BOOL usb = [transport isEqualToString:@"usb"];
+    const BOOL bluetooth = [transport isEqualToString:@"bluetooth"];
+    if (identity.length == 0 || (!usb && !bluetooth)) {
+        if (!_padAudioConfigured[player]) Log(LOG_I, @"[ds5-audio] player %lu: no supported raw HID transport for pad audio", (unsigned long)player);
+        return;
+    }
+    const BOOL headset = _padHeadset[player] == 1;
+    const uint8_t speakerVolume = (uint8_t)PadAudioDefault(@"ds5PadSpeakerVolume", 0x64, 0, 0xff);
+    const uint8_t headsetVolume = (uint8_t)PadAudioDefault(@"ds5PadHeadsetVolume", 0x58, 0, 0x7f);
+    [self writePadAudioBytesForPlayer:player headset:headset speakerVolume:speakerVolume headsetVolume:headsetVolume];
+    _ds5HapticsAudioRenderer.headsetRoute = headset;
+    const BOOL endpoint = usb && [_ds5HapticsAudioRenderer prepareDeviceForPadAudio];
+    _padAudioConfigured[player] = YES;
+    Log(LOG_I, @"[ds5-audio] pad audio configured player=%lu transport=%@ headset %@ (from the input report) -> output path %u (%@), speaker volume 0x%02x, headset volume 0x%02x, speaker pre-amp %@, speaker channels %@, pad endpoint open=%d",
+        (unsigned long)player, transport, headset ? @"present" : @"absent", headset ? 0u : 3u, headset ? @"headset left/right, speaker muted" : @"speaker, right channel, headset muted",
+        speakerVolume, headsetVolume, headset ? @"0 dB" : @"+6 dB", headset ? @"headset mix (DS5PadMix.h)" : @"speaker mix (DS5PadMix.h)", endpoint ? 1 : 0);
+    if ([self padAudioSelfTestWanted] && !_padAudioSelfTestRan && endpoint) [self runPadAudioSelfTestForPlayer:player headset:headset];
+}
+
+// ds5PadAudioSelfTest: three beeps at three volume bytes on whichever output is active, each followed by a short buzz on the
+// haptics channels, so a tester can say which volume is right and whether the haptics keep working next to the speaker.
+- (void)runPadAudioSelfTestForPlayer:(NSUInteger)player headset:(BOOL)headset {
+    _padAudioSelfTestRan = YES;
+    Ds5HapticsAudioRenderer *renderer = _ds5HapticsAudioRenderer;
+    NSArray<NSNumber *> *levels = headset ? @[@0x20, @0x40, @0x58] : @[@0x3d, @0x50, @0x64];
+    const uint8_t speakerVolume = (uint8_t)PadAudioDefault(@"ds5PadSpeakerVolume", 0x64, 0, 0xff);
+    const uint8_t headsetVolume = (uint8_t)PadAudioDefault(@"ds5PadHeadsetVolume", 0x58, 0, 0x7f);
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        ControllerSupport *strongSelf = weakSelf;
+        if (strongSelf == nil) return;
+        Log(LOG_I, @"[ds5-audio] SELF TEST start: 3 beeps on the %@, then a restore", headset ? @"headset" : @"pad speaker");
+        double phase = 0.0;
+        for (int step = 0; step < 3; step++) {
+            const uint8_t level = levels[step].unsignedCharValue;
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                [strongSelf writePadAudioBytesForPlayer:player headset:headset
+                                          speakerVolume:headset ? speakerVolume : level
+                                          headsetVolume:headset ? level : headsetVolume];
+            });
+            usleep(300000);
+            Log(LOG_I, @"[ds5-audio] SELF TEST beep %d of 3 on the %@ at volume byte 0x%02x, then a 0.3 s buzz on the haptics",
+                step + 1, headset ? @"headset" : @"speaker", level);
+            // 0.6 s of 880 Hz on the speaker pair, then 0.3 s of 170 Hz on the haptics pair, then 0.6 s of silence.
+            for (int chunk = 0; chunk < 150; chunk++) {
+                int16_t speaker[480 * 2] = {0}, haptics[480 * 2] = {0};
+                const BOOL beep = chunk < 60, buzz = chunk >= 60 && chunk < 90;
+                for (int frame = 0; frame < 480; frame++) {
+                    const double time = (double)(chunk * 480 + frame) / 48000.0;
+                    if (beep) { const int16_t v = (int16_t)lrint(sin(2.0 * M_PI * 880.0 * time) * 0.5 * 32767.0); speaker[frame * 2] = v; speaker[frame * 2 + 1] = v; }
+                    if (buzz) { const int16_t v = (int16_t)lrint(sin(2.0 * M_PI * 170.0 * time) * 0.7 * 32767.0); haptics[frame * 2] = v; haptics[frame * 2 + 1] = v; }
+                }
+                for (int attempt = 0; attempt < 40 && ![renderer playSpeaker:speaker haptics:haptics frames:480]; attempt++) usleep(5000);
+                usleep(9500);
+            }
+            (void)phase;
+        }
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            [strongSelf writePadAudioBytesForPlayer:player headset:headset speakerVolume:speakerVolume headsetVolume:headsetVolume];
+        });
+        Log(LOG_I, @"[ds5-audio] SELF TEST done; pad audio bytes restored to speaker 0x%02x headset 0x%02x", speakerVolume, headsetVolume);
+    });
+}
 
     if (@available(macOS 11.3, *)) {
         GCDualSenseGamepad *dualSense = (GCDualSenseGamepad *)gamepad.extendedGamepad;
