@@ -14,6 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, strong) TemporaryHost *initialHost;
 @property (nonatomic, readonly, nullable) NSString *currentHostUUID;
+/// Live host list of the page that opened this one (the sidebar variant reads it).
+@property (nonatomic, copy, nullable) NSArray<TemporaryHost *> *(^hostsProvider)(void);
+@property (nonatomic, copy, nullable) NSString *pendingLaunchAppId;
 
 - (instancetype)initWithHost:(TemporaryHost *)host;
 - (instancetype)initWithHost:(TemporaryHost *)host hostsSnapshot:(NSArray<TemporaryHost *> *)hostsSnapshot;
