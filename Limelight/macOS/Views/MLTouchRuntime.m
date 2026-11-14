@@ -371,3 +371,378 @@ typedef NS_ENUM(NSInteger, MLTouchDotState) {
            [self screenCapabilitySummary]);
 }
 
+- (void)refresh {
+    if (_tornDown) return;
+    StreamViewMac *view = _streamView;
+    HIDSupport *hid = _hid;
+    if (view == nil || hid == nil) return;
+
+    if (@available(macOS 27.0, *)) {
+        MLTouchInputMode preferred = MLTouchModeFromStoredValue([SettingsClass touchInputModeFor:_hostUUID]);
+        uint32_t flags = [hid touchHostFeatureFlags];
+        MLTouchInputMode effective = MLTouchEffectiveMode(preferred, flags);
+        if (effective != _effective && (_forwarder.activeCount > 0 || _emulator.activeCount > 0)) {
+            [self cancelLiveTouches];
+        }
+        BOOL changed = !_installed || preferred != _preferred || effective != _effective || flags != _hostFlags;
+        _preferred = preferred;
+        _effective = effective;
+        _hostFlags = flags;
+        _emulator.mode = effective == MLTouchInputModeDirect ? MLTouchInputModeDirect : MLTouchInputModeTrackpad;
+        _gate.enabled = YES;
+        // The "touch" subtype is NOT trusted on its own: every Mac trackpad press and tap-to-click carries it (a MacBook
+        // trackpad lost every click to it). It is believed only with a touch in play, or for the click that
+        // activates an inactive window on a Mac with a touch screen (shouldDropMouseEvent sets that per event).
+        _gate.subtypeAlwaysDrops = NO;
+        [self installRecognizerIfNeeded];
+        [self applyWindowTouchPolicy];
+        [self applyDebugPreference];
+        if (changed) {
+            Log(LOG_I, @"[touch] preference=%@ effective=%@ hostFlags=0x%x hostNativeTouch=%d touchScreen=%d clickPath=mouse(trackpad and mouse presses always reach the host; touch-made clicks are dropped only while a real touch is in play) debugOverlay=%d(display only)",
+                MLTouchModeLogName(preferred), MLTouchModeLogName(effective), flags, MLTouchHostSupportsNative(flags) ? 1 : 0,
+                [MLTouchRuntime anyScreenHasTouch] ? 1 : 0,
+                [NSUserDefaults.standardUserDefaults boolForKey:MLTouchDebugDefaultsKey] ? 1 : 0);
+            os_log(MLTouchLog(), "config preference=%{public}@ effective=%{public}@ hostFlags=0x%x LI_FF_PEN_TOUCH_EVENTS=%d fallback=%d",
+                   MLTouchModeLogName(preferred), MLTouchModeLogName(effective), flags,
+                   MLTouchHostSupportsNative(flags) ? 1 : 0,
+                   (preferred == MLTouchInputModeNative && effective != MLTouchInputModeNative) ? 1 : 0);
+            [self logScreens:@"config"];
+        }
+        [self updateHud];
+    } else {
+        if (!_installed) {
+            os_log(MLTouchLog(), "direct touch unavailable: macOS < 27, no gesture-recognizer touches");
+            _installed = YES; // log once
+        }
+    }
+}
+
+- (void)installRecognizerIfNeeded {
+    if (_recognizer != nil) return;
+    StreamViewMac *view = _streamView;
+    if (view == nil) return;
+    __weak typeof(self) weakSelf = self;
+    MLDirectTouchRecognizer *recognizer = [[MLDirectTouchRecognizer alloc] initWithTarget:nil action:nil];
+    recognizer.acceptsTouchAtPoint = ^BOOL(NSPoint point) {
+        return [weakSelf pointBelongsToPicture:point];
+    };
+    recognizer.allSamplesHandler = ^(NSArray<MLTouchSample *> *samples, NSUInteger downCount) {
+        [weakSelf handleAllSamples:samples downCount:downCount];
+    };
+    recognizer.samplesHandler = ^(NSArray<MLTouchSample *> *samples) {
+        [weakSelf handleAcceptedSamples:samples];
+    };
+    [view addGestureRecognizer:recognizer];
+    _recognizer = recognizer;
+    _installed = YES;
+    if (@available(macOS 27.0, *)) {
+        // A second finger on a control (edge menu) must still be able to press it while a finger is on the picture.
+        view.exclusiveGestureBehavior = NSViewExclusiveGestureBehaviorNotExclusive;
+    }
+}
+
+- (BOOL)pointBelongsToPicture:(NSPoint)point {
+    StreamViewMac *view = _streamView;
+    if (view == nil || view.superview == nil) return YES;
+    NSPoint inSuper = [view convertPoint:point toView:view.superview];
+    NSView *hit = [view hitTest:inSuper];
+    return [MLTouchRuntime isHostContentView:hit streamView:view];
+}
+
+// NSWindow.disablesDirectTouchSystemGestures is documented for macOS 27.3 (beta) and is not in the 27.0 SDK
+// headers: set it only where the window answers to it. Three-finger swipes and the pinch are then the stream's.
+- (void)applyWindowTouchPolicy {
+    NSWindow *window = _streamView.window;
+    if (window == nil) return;
+    SEL setter = NSSelectorFromString(@"setDisablesDirectTouchSystemGestures:");
+    if (![window respondsToSelector:setter]) return;
+    BOOL wanted = _effective == MLTouchInputModeNative && _installed;
+    if (wanted == _systemGesturesDisabledByUs) return;
+    [window setValue:@(wanted) forKey:@"disablesDirectTouchSystemGestures"];
+    _systemGesturesDisabledByUs = wanted;
+    os_log(MLTouchLog(), "window disablesDirectTouchSystemGestures=%d", wanted ? 1 : 0);
+}
+
+- (void)cancelLiveTouches {
+    BOOL hadAny = _forwarder.activeCount > 0 || _emulator.activeCount > 0;
+    [_forwarder cancelAll];
+    [_emulator cancelAll];
+    [_recognizer forgetAllTouches];
+    [_blocked removeAllObjects];
+    [_hold reset];
+    [_overlay removeAllDots];
+    [_gate noteAllTouchesUpAtTime:NSProcessInfo.processInfo.systemUptime];
+    _downCount = 0;
+    [self stopPollTimer];
+    if (hadAny) os_log(MLTouchLog(), "live touches cancelled (input paused, mode change or stream end)");
+}
+
+- (void)tearDown {
+    if (_tornDown) return;
+    [self cancelLiveTouches];
+    _tornDown = YES;
+    if (_systemGesturesDisabledByUs) {
+        NSWindow *window = _streamView.window;
+        SEL setter = NSSelectorFromString(@"setDisablesDirectTouchSystemGestures:");
+        if (window != nil && [window respondsToSelector:setter]) {
+            [window setValue:@NO forKey:@"disablesDirectTouchSystemGestures"];
+        }
+        _systemGesturesDisabledByUs = NO;
+    }
+    if (_recognizer != nil) [_streamView removeGestureRecognizer:_recognizer];
+    _recognizer = nil;
+    [_overlay removeFromSuperview];
+    _overlay = nil;
+    [self stopHoldTimer];
+    [_ringView removeFromSuperview];
+    _ringView = nil;
+    [_hintView removeFromSuperview];
+    _hintView = nil;
+    [self removeObservers];
+    [_summaryTimer invalidate];
+    _summaryTimer = nil;
+    _gate.enabled = NO;
+    Log(LOG_I, @"[touch] stream summary touchPath=%@ clicks reached host=%lu dropped=%lu (subtype=%lu correlated-with-touch=%lu rest-of-dropped-click=%lu) touch wire events=%lu",
+        MLTouchModeLogName(_effective), (unsigned long)_gate.passedClickCount, (unsigned long)_gate.droppedCount,
+        (unsigned long)_gate.droppedSubtypeCount, (unsigned long)_gate.droppedCorrelatedCount,
+        (unsigned long)_gate.droppedSequenceCount, (unsigned long)_totalWire);
+    os_log(MLTouchLog(), "runtime torn down wire-events=%lu", (unsigned long)_totalWire);
+}
+
+- (void)removeObservers {
+    if (_defaultsObserver != nil) [NSNotificationCenter.defaultCenter removeObserver:_defaultsObserver];
+    if (_screenObserver != nil) [NSNotificationCenter.defaultCenter removeObserver:_screenObserver];
+    _defaultsObserver = nil;
+    _screenObserver = nil;
+    if (_windowScreenObserver != nil) [NSNotificationCenter.defaultCenter removeObserver:_windowScreenObserver];
+    _windowScreenObserver = nil;
+}
+
+- (void)setVideoWidth:(int)width height:(int)height stretch:(BOOL)stretch {
+    _videoSize = CGSizeMake(MAX(width, 0), MAX(height, 0));
+    _stretch = stretch;
+}
+
+- (void)setVideoWidth:(int)width height:(int)height {
+    [self setVideoWidth:width height:height stretch:_stretch];
+}
+
+- (void)setStretch:(BOOL)stretch {
+    _stretch = stretch;
+}
+
+#pragma mark Debug overlay
+
+- (void)applyDebugPreference {
+    if (_defaultsObserver == nil) {
+        __weak typeof(self) weakSelf = self;
+        _defaultsObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification
+                                                                            object:nil queue:NSOperationQueue.mainQueue
+                                                                        usingBlock:^(NSNotification *note) {
+            [weakSelf applyDebugPreference];
+        }];
+        _screenObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidChangeScreenParametersNotification
+                                                                          object:nil queue:NSOperationQueue.mainQueue
+                                                                      usingBlock:^(NSNotification *note) {
+            [weakSelf logScreens:@"screen-change"];
+            if (weakSelf.screenChangedHandler != nil) weakSelf.screenChangedHandler();
+        }];
+        // the window moving to another screen (Sidecar) re-lays-out the stream menu ball
+        _windowScreenObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidChangeScreenNotification
+                                                                                object:nil queue:NSOperationQueue.mainQueue
+                                                                            usingBlock:^(NSNotification *note) {
+            if (note.object != weakSelf.streamWindow) return;
+            [weakSelf logScreens:@"window-screen-change"];
+            if (weakSelf.screenChangedHandler != nil) weakSelf.screenChangedHandler();
+        }];
+    }
+    BOOL wanted = [NSUserDefaults.standardUserDefaults boolForKey:MLTouchDebugDefaultsKey];
+    StreamViewMac *view = _streamView;
+    if (view == nil) return;
+    if (wanted && _overlay == nil) {
+        _overlay = [[MLTouchDebugOverlayView alloc] initWithFrame:view.bounds];
+        [view raiseSubviewAboveContent:_overlay];
+        os_log(MLTouchLog(), "debug overlay on (defaults MLTouchDebug)");
+    } else if (!wanted && _overlay != nil) {
+        [_overlay removeFromSuperview];
+        _overlay = nil;
+        os_log(MLTouchLog(), "debug overlay off");
+    }
+    [self updateHud];
+}
+
+- (void)updateHud {
+    if (_overlay == nil) return;
+    if (_overlay.superview == nil && _streamView != nil) [_streamView raiseSubviewAboveContent:_overlay];
+    NSString *prefName = MLTouchModeLogName(_preferred);
+    NSString *effName = MLTouchModeLogName(_effective);
+    BOOL hostNative = MLTouchHostSupportsNative(_hostFlags);
+    BOOL forwarding = _effective == MLTouchInputModeNative;
+    BOOL api = NO;
+    if (@available(macOS 27.0, *)) api = YES;
+    _overlay.hudLines = @[
+        @"MLTouchDebug",
+        [NSString stringWithFormat:@"touches down: %lu   (max %lu)", (unsigned long)_downCount, (unsigned long)_maxDown],
+        [NSString stringWithFormat:@"forwarded to host as touch: %@   wire events: %lu", forwarding ? @"YES" : @"NO", (unsigned long)_totalWire],
+        [NSString stringWithFormat:@"host LI_FF_PEN_TOUCH_EVENTS: %@ (flags 0x%x)", hostNative ? @"YES" : @"NO", _hostFlags],
+        [NSString stringWithFormat:@"mode: %@  (setting: %@)", effName, prefName],
+        [NSString stringWithFormat:@"screen touch: %@  api: %@", [MLTouchRuntime anyScreenHasTouch] ? @"multi-touch" : @"none", api ? @"macOS 27" : @"missing"],
+        [NSString stringWithFormat:@"mouse emulation dropped: %lu  leaked near a touch: %lu",
+            (unsigned long)_gate.droppedCount, (unsigned long)_gate.passedNearTouchCount],
+        [NSString stringWithFormat:@"send failures: %lu (last %d)  refused touches: %lu",
+            (unsigned long)_hid.touchSendFailures, _hid.touchLastSendError, (unsigned long)_blockedCount],
+    ];
+}
+
+#pragma mark Touch events
+
+- (NSString *)idList:(NSArray<NSNumber *> *)ids {
+    return ids.count == 0 ? @"-" : [[ids valueForKey:@"stringValue"] componentsJoinedByString:@","];
+}
+
+- (void)handleAllSamples:(NSArray<MLTouchSample *> *)samples downCount:(NSUInteger)downCount {
+    if (_tornDown) return;
+    MLTouchSample *last = samples.lastObject;
+    [_gate noteTouchPoint:last.point active:downCount > 0 time:last.timestamp];
+    if (downCount == 0) [_gate noteAllTouchesUpAtTime:last.timestamp];
+
+    NSUInteger began = 0, ended = 0;
+    for (MLTouchSample *s in samples) {
+        if (s.phase == MLTouchPhaseBegan) began++;
+        else if (s.phase == MLTouchPhaseEnded || s.phase == MLTouchPhaseCancelled) ended++;
+        else if (s.phase == MLTouchPhaseMoved) _sumMoves++;
+    }
+    if (began > 0 && _hintView != nil) [self dismissHint];   // a touch anywhere closes it, and is still the stream's
+    _sumBegan += began;
+    _sumEnded += ended;
+    _downCount = downCount;
+    _maxDown = MAX(_maxDown, downCount);
+    _sumMaxDown = MAX(_sumMaxDown, downCount);
+    [self startSummaryTimerIfNeeded];
+
+    if (began > 0 || ended > 0) {
+        BOOL native = _effective == MLTouchInputModeNative;
+        NSString *kind = ended > 0 && began == 0 ? @"ended" : (began > 0 && ended == 0 ? @"began" : @"began+ended");
+        os_log(MLTouchLog(), "touches %{public}@ down=%lu began=%lu ended=%lu mode=%{public}@ forwarded-ids=[%{public}@] wire-total=%lu",
+               kind, (unsigned long)downCount, (unsigned long)began, (unsigned long)ended,
+               MLTouchModeLogName(_effective), native ? [self idList:_forwarder.activePointerIds] : @"-", (unsigned long)_totalWire);
+        Log(LOG_I, @"[touch] %@ down=%lu mode=%@", kind, (unsigned long)downCount, MLTouchModeLogName(_effective));
+    }
+
+    if (_overlay != nil) {
+        for (MLTouchSample *s in samples) {
+            if (s.phase == MLTouchPhaseEnded || s.phase == MLTouchPhaseCancelled) {
+                [_overlay removeDotForKey:s.identity];
+                continue;
+            }
+            NSInteger pid = [_forwarder pointerIdForIdentity:s.identity];
+            BOOL accepted = pid >= 0 || (_effective != MLTouchInputModeNative && [self pointBelongsToPicture:s.point]);
+            if (_effective == MLTouchInputModeNative) {
+                if (accepted) [_overlay setDotAtPoint:s.point label:[NSString stringWithFormat:@"id %ld  → host", (long)pid] state:MLTouchDotForwarded forKey:s.identity];
+                else [_overlay setDotAtPoint:s.point label:@"not forwarded" state:MLTouchDotNotForwarded forKey:s.identity];
+            } else {
+                if (accepted) [_overlay setDotAtPoint:s.point label:[NSString stringWithFormat:@"%@ emu", MLTouchModeLogName(_effective)] state:MLTouchDotEmulated forKey:s.identity];
+                else [_overlay setDotAtPoint:s.point label:@"not forwarded" state:MLTouchDotNotForwarded forKey:s.identity];
+            }
+        }
+        [self updateHud];
+    }
+}
+
+- (void)handleAcceptedSamples:(NSArray<MLTouchSample *> *)samples {
+    if (_tornDown) return;
+    StreamViewMac *view = _streamView;
+    if (view == nil) return;
+
+    // The host's feature flags may have arrived since the last touch: re-resolve while nothing is down.
+    if (_forwarder.activeCount == 0 && _emulator.activeCount == 0) {
+        [self refresh];
+    }
+
+    // The hold watches every touch on the picture, taken or not.
+    [_hold processSamples:samples];
+    samples = [self samplesTheStreamTakes:samples view:view];
+    if (samples.count == 0) return;
+
+    CGSize viewSize = view.bounds.size;
+    _forwarder.viewSize = viewSize;  _forwarder.videoSize = _videoSize;  _forwarder.stretch = _stretch;
+    _emulator.viewSize = viewSize;   _emulator.videoSize = _videoSize;   _emulator.stretch = _stretch;
+
+    if (_effective == MLTouchInputModeNative) {
+        [_forwarder processSamples:samples];
+    } else {
+        [_emulator processSamples:samples];
+        if (_emulator.activeCount > 0) [self startPollTimer]; else [self stopPollTimer];
+    }
+}
+
+// A touch is taken or refused as a whole, when it begins: if the stream is not accepting input at that moment the
+// touch is never sent (its moves and its end are dropped with it), so the host cannot see an end without a beginning.
+- (NSArray<MLTouchSample *> *)samplesTheStreamTakes:(NSArray<MLTouchSample *> *)samples view:(StreamViewMac *)view {
+    NSMutableArray<MLTouchSample *> *taken = nil;
+    BOOL allowed = YES;
+    BOOL checked = NO;
+    for (MLTouchSample *s in samples) {
+        BOOL drop = NO;
+        if (s.phase == MLTouchPhaseBegan) {
+            if (!checked) {
+                checked = YES;
+                allowed = self.touchAllowedHandler == nil || self.touchAllowedHandler();
+                NSWindow *window = view.window;
+                if (allowed && window != nil && !window.isKeyWindow && self.touchEngageHandler != nil) {
+                    // Touching the picture is a click on it: the window becomes key, as for a mouse click.
+                    self.touchEngageHandler();
+                }
+            }
+            if (!allowed) {
+                [_blocked addObject:s.identity];
+                _blockedCount++;
+                os_log(MLTouchLog(), "touch refused at its start: the stream is not taking input now (menu, stopping, reconnecting or no window); total=%lu", (unsigned long)_blockedCount);
+                drop = YES;
+            }
+        } else if ([_blocked containsObject:s.identity]) {
+            if (s.phase == MLTouchPhaseEnded || s.phase == MLTouchPhaseCancelled) [_blocked removeObject:s.identity];
+            drop = YES;
+        }
+        if (drop && taken == nil) {
+            taken = [NSMutableArray arrayWithCapacity:samples.count];
+            for (MLTouchSample *earlier in samples) {
+                if (earlier == s) break;
+                [taken addObject:earlier];
+            }
+        }
+        if (!drop && taken != nil) [taken addObject:s];
+    }
+    return taken != nil ? taken : samples;
+}
+
+#pragma mark Five-finger hold
+
+- (void)fiveFingerHoldStateChanged:(MLTouchHoldState)state {
+    static const char *names[] = { "idle", "arming", "fired", "failed" };
+    if (state != MLTouchHoldStateIdle) {
+        os_log(MLTouchLog(), "five-finger hold %{public}s (touches down=%lu)", names[state], (unsigned long)_hold.downCount);
+    }
+    if (state == MLTouchHoldStateArming) {
+        [self startHoldTimer];
+    } else {
+        [self stopHoldTimer];
+        [_ringView hideRing];
+    }
+}
+
+- (void)fiveFingerHoldFired {
+    // The five touches were being sent from their first contact. They are void now: the host is told to cancel all of
+    // them, and the five are not sent again, whatever they do, until they are lifted.
+    [_forwarder cancelAllAndIgnoreCurrentTouches];
+    [_emulator cancelAll];
+    [_ringView hideRing];
+    os_log(MLTouchLog(), "five-finger hold opened the Control Center; host told CANCEL_ALL, wire-total=%lu", (unsigned long)_totalWire);
+    Log(LOG_I, @"[touch] five-finger hold opened the Control Center");
+    if (_hintView != nil) [self dismissHint];
+    if (self.openControlCenterHandler != nil) {
+        void (^handler)(void) = self.openControlCenterHandler;
+        dispatch_async(dispatch_get_main_queue(), handler);
+    }
+}
+
