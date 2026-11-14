@@ -24,6 +24,7 @@
 #import "TemporaryHost.h"
 #import "MoonlightEnhanced-Swift.h"
 #import "Utils.h"
+#import "MLLaunchTrace.h"
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -37,6 +38,11 @@
 
 #undef NSLocalizedString
 #define NSLocalizedString(key, comment) [[LanguageManager shared] localize:key]
+
+@interface HostsViewController ()
+/// The window this controller works for: its own view's, or its container's while its view is off-screen.
+@property (nonatomic, readonly) NSWindow *hostWindow;
+@end
 
 @interface HostsViewController () <NSCollectionViewDataSource, NSCollectionViewDelegate, NSSearchFieldDelegate, NSControlTextEditingDelegate, HostsViewControllerDelegate, DiscoveryCallback, PairCallback, NSMenuItemValidation>
 @property (nonatomic, strong) NSArray<TemporaryHost *> *hosts;
@@ -54,6 +60,13 @@
 @property (nonatomic, copy) NSString *pairingFallbackAddress;
 @property (nonatomic, assign) BOOL pairingFallbackAttempted;
 @property (nonatomic, assign) BOOL pairingInProgress;
+@property (nonatomic, strong) id deckController;
+@property (nonatomic, copy) NSString *pendingLaunchAppId;
+@property (nonatomic) BOOL deckDidAutoOpen;
+@property (nonatomic, weak) AppsWorkspaceViewController *deckWorkspace;
+@property (nonatomic, strong) NSViewController *deckFirstRun;
+@property (nonatomic, strong) id deckFirstRunObserver;
+@property (nonatomic) BOOL logicStarted;
 
 @end
 
@@ -61,17 +74,33 @@
 
 #pragma mark - Lifecycle
 
+- (NSWindow *)hostWindow {
+    return self.isViewLoaded && self.view.window != nil ? self.view.window : self.parentViewController.view.window;
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
+    MLLaunchTrace(@"HostsViewController viewDidLoad (classic page: its view is shown)");
 
     [self installContentSearchField];
-    
+
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     [self.collectionView registerNib:[[NSNib alloc] initWithNibNamed:@"HostCell" bundle:nil] forItemWithIdentifier:@"HostCell"];
 
+    [self deckStartLogic];
+}
+
+/// The logic of the old controller (saved hosts, discovery, pairing, wake, the commands the sidebar
+/// forwards). In the sidebar home this is all that runs: the controller is created without its view, so
+/// the old page's views are never loaded, let alone shown.
+- (void)deckStartLogic {
+    if (self.logicStarted) {
+        return;
+    }
+    self.logicStarted = YES;
     self.hosts = [NSArray array];
-    
+
     [self prepareDiscovery];
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(languageChanged:) name:@"LanguageChanged" object:nil];
@@ -79,6 +108,8 @@
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refreshHostDiscovery:) name:@"MoonlightRequestHostDiscovery" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleDiscoveryPreferencesChanged:) name:@"MoonlightDiscoveryPreferencesChanged" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleHostAutoAddressSwitched:) name:@"HostAutoAddressSwitched" object:nil];
+
+    [self deckInstallIfNeeded];
 }
 
 - (void)installContentSearchField {
@@ -87,6 +118,9 @@
 
 - (void)mainSearchTextChanged:(NSNotification *)note {
     NSString *text = note.userInfo[@"text"] ?: @"";
+    if (@available(macOS 14.0, *)) {
+        [(MLDeckHostsController *)self.deckController setFilter:text];
+    }
     [self filterHostsByString:text];
     [self.collectionView reloadData];
 }
@@ -136,7 +170,7 @@
             self.discMan = [[DiscoveryManager alloc] initWithHosts:self.hosts andCallback:self];
             [self updateHosts];
 
-            if (self.view.window != nil && self.view.window.isVisible) {
+            if (self.hostWindow != nil && self.hostWindow.isVisible) {
                 [self.discMan startDiscovery];
             }
         });
@@ -144,54 +178,14 @@
 }
 
 - (void)handleHostAutoAddressSwitched:(NSNotification *)note {
-    if (!self.view.window || !self.view.window.isVisible) {
-        return;
-    }
-
-    NSString *uuid = note.userInfo[@"uuid"];
-    if (uuid.length == 0) {
-        return;
-    }
-
-    TemporaryHost *targetHost = nil;
-    @synchronized(self.hosts) {
-        for (TemporaryHost *host in self.hosts) {
-            if ([host.uuid isEqualToString:uuid]) {
-                targetHost = host;
-                break;
-            }
-        }
-    }
-
-    if (!targetHost) {
-        return;
-    }
-
-    NSDictionary *settings = [SettingsClass getSettingsFor:uuid];
-    NSString *connectionMethod = settings[@"connectionMethod"];
-    if (connectionMethod.length > 0 && ![connectionMethod isEqualToString:@"Auto"]) {
-        return;
-    }
-
-    NSString *oldAddress = note.userInfo[@"oldAddress"] ?: @"";
-    NSString *newAddress = note.userInfo[@"newAddress"] ?: @"";
-    NSNumber *oldLatency = note.userInfo[@"oldLatency"] ?: @(-1);
-    NSNumber *newLatency = note.userInfo[@"newLatency"] ?: @(-1);
-
-    NSString *title = NSLocalizedString(@"Auto Address Switched Title", @"Auto address switched alert title");
-    NSString *format = NSLocalizedString(@"Auto Address Switched Message", @"Auto address switched alert message");
-    NSString *message = [NSString stringWithFormat:format,
-                         targetHost.displayName ?: @"",
-                         oldAddress,
-                         newAddress,
-                         oldLatency.doubleValue,
-                         newLatency.doubleValue];
-
-    [AlertPresenter displayAlert:NSAlertStyleInformational title:title message:message window:self.view.window completionHandler:nil];
+    // No alert, no toast: an automatic switch of address shows only on the host page, where the 线路 chip's
+    // 使用中 mark moves and the status line follows (DeckPathChips listens to this notification too).
+    MLLaunchTrace(@"address switched automatically: %@ -> %@", note.userInfo[@"oldAddress"] ?: @"?", note.userInfo[@"newAddress"] ?: @"?");
 }
 
 - (void)viewWillAppear {
     [super viewWillAppear];
+    MLLaunchTrace(@"OLD HOST PAGE viewWillAppear");
 
     [SettingsWindowObjCBridge syncSelectedProfileWithHostId:nil];
     
@@ -215,27 +209,53 @@
 
 - (void)viewDidAppear {
     [super viewDidAppear];
+    MLLaunchTrace(@"OLD HOST PAGE viewDidAppear");
     
     [self.discMan startDiscovery];
+    [self deckOpenPreferredHostIfNeeded];
 }
 
 - (void)viewDidDisappear {
     [super viewDidDisappear];
     
-    [self.discMan stopDiscovery];
+    if (![MLDeckVariant isSidebarVariant]) {
+        [self.discMan stopDiscovery];
+    }
 }
 
 - (BOOL)becomeFirstResponder {
-    [self.view.window makeFirstResponder:self.collectionView];
+    if (!self.isViewLoaded) {
+        return [super becomeFirstResponder];
+    }
+    [self.hostWindow makeFirstResponder:self.collectionView];
     return [super becomeFirstResponder];
 }
 
-- (void)transitionToAppsVCWithHost:(TemporaryHost *)host {
+- (AppsWorkspaceViewController *)deckMakeWorkspaceForHost:(TemporaryHost *)host {
     [SettingsWindowObjCBridge syncSelectedProfileWithHostId:host.uuid];
 
-    // Create AppsWorkspaceViewController instead of direct AppsViewController
     NSArray<TemporaryHost *> *hostsSnapshot = self.hosts ?: @[];
     AppsWorkspaceViewController *workspaceVC = [[AppsWorkspaceViewController alloc] initWithHost:host hostsSnapshot:hostsSnapshot];
+    workspaceVC.pendingLaunchAppId = self.pendingLaunchAppId;
+    self.pendingLaunchAppId = nil;
+    __weak typeof(self) weakSelf = self;
+    workspaceVC.hostsProvider = ^NSArray<TemporaryHost *> * {
+        return weakSelf.hostList.count > 0 ? weakSelf.hostList : weakSelf.hosts;
+    };
+    self.deckWorkspace = workspaceVC;
+    [SettingsClass loadMoonlightSettingsFor:host.uuid];
+    return workspaceVC;
+}
+
+- (void)transitionToAppsVCWithHost:(TemporaryHost *)host {
+    if ([MLDeckVariant isSidebarVariant]) {
+        // the home is already on screen: selecting a host is a change of selection, never an animated hop
+        MLLaunchTrace(@"transitionToAppsVCWithHost ignored in the sidebar home; selecting %@", host.displayName);
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckSelectHost" object:nil userInfo:@{@"uuid": host.uuid ?: @""}];
+        return;
+    }
+    MLLaunchTrace(@"transitionToAppsVCWithHost (animated, old list -> workspace)");
+    AppsWorkspaceViewController *workspaceVC = [self deckMakeWorkspaceForHost:host];
 
     [self.parentViewController addChildViewController:workspaceVC];
     [self.parentViewController.view addSubview:workspaceVC.view];
@@ -243,13 +263,90 @@
     workspaceVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     workspaceVC.view.frame = self.view.bounds;
 
-    [SettingsClass loadMoonlightSettingsFor:host.uuid];
-
     [self.parentViewController.view.window makeFirstResponder:nil];
 
     [self.parentViewController transitionFromViewController:self toViewController:workspaceVC options:NSViewControllerTransitionSlideLeft completionHandler:^{
         [self.parentViewController.view.window makeFirstResponder:workspaceVC];
     }];
+}
+
+#pragma mark - Sidebar home without the old page
+
+- (void)deckInstallHomeIntoContainer:(NSViewController *)container {
+    [self deckStartLogic];   // saved hosts and discovery; this controller has no view loaded
+    self.deckDidAutoOpen = YES;
+    [self.discMan startDiscovery];
+    if (@available(macOS 14.0, *)) {
+        TemporaryHost *host = [MLDeckHostPicker preferredFrom:self.hosts];
+        if (host != nil) {
+            [self deckEmbedWorkspaceForHost:host intoContainer:container];
+            return;
+        }
+        [self deckEmbedFirstRunIntoContainer:container];
+    }
+}
+
+- (void)deckEmbedWorkspaceForHost:(TemporaryHost *)host intoContainer:(NSViewController *)container {
+    AppsWorkspaceViewController *workspaceVC = [self deckMakeWorkspaceForHost:host];
+    MLLaunchTrace(@"install AppsWorkspaceViewController (home) host=%@ firstRunReplaced=%d", host.displayName, self.deckFirstRun != nil);
+    [container addChildViewController:workspaceVC];
+    workspaceVC.view.frame = container.view.bounds;
+    workspaceVC.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    NSViewController *firstRun = self.deckFirstRun;
+    if (self.deckFirstRunObserver != nil) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.deckFirstRunObserver];
+        self.deckFirstRunObserver = nil;
+    }
+    if (firstRun != nil) {
+        // the first-run page gives way to the home of the chosen host
+        [container.view addSubview:workspaceVC.view positioned:NSWindowBelow relativeTo:firstRun.view];
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+            context.duration = 0.2;
+            firstRun.view.animator.alphaValue = 0;
+        } completionHandler:^{
+            [firstRun.view removeFromSuperview];
+            [firstRun removeFromParentViewController];
+        }];
+        self.deckFirstRun = nil;
+    } else {
+        [container.view addSubview:workspaceVC.view];
+    }
+    [container.view.window makeFirstResponder:workspaceVC];
+}
+
+- (void)deckEmbedFirstRunIntoContainer:(NSViewController *)container {
+    if (@available(macOS 14.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        __weak NSViewController *weakContainer = container;
+        NSViewController *firstRun = [MLDeckFirstRun makeWithProvider:^NSArray<TemporaryHost *> * {
+            return weakSelf.hostList.count > 0 ? weakSelf.hostList : weakSelf.hosts;
+        } onAdd:^{
+            [weakSelf addHostButtonClicked:nil];
+        } onSelect:^(TemporaryHost *host) {
+            weakSelf.selectedHost = host;
+            if (weakContainer != nil) {
+                [weakSelf deckEmbedWorkspaceForHost:host intoContainer:weakContainer];
+            }
+        }];
+        // a computer added by address is opened at once (its home, with 配对 in the card)
+        self.deckFirstRunObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"MLDeckSelectHost" object:nil
+                                                                                     queue:NSOperationQueue.mainQueue
+                                                                                usingBlock:^(NSNotification *note) {
+            NSString *uuid = note.userInfo[@"uuid"];
+            for (TemporaryHost *candidate in weakSelf.hosts) {
+                if ([candidate.uuid isEqualToString:uuid] && weakContainer != nil) {
+                    [weakSelf deckEmbedWorkspaceForHost:candidate intoContainer:weakContainer];
+                    break;
+                }
+            }
+        }];
+        MLLaunchTrace(@"install first-run page (no saved host)");
+        [container addChildViewController:firstRun];
+        firstRun.view.frame = container.view.bounds;
+        firstRun.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        [container.view addSubview:firstRun.view];
+        self.deckFirstRun = firstRun;
+    }
 }
 
 
@@ -310,6 +407,10 @@
 }
 
 - (IBAction)addHostButtonClicked:(id)sender {
+    if ([MLDeckVariant isSidebarVariant]) {
+        [self deckPresentAddHost];
+        return;
+    }
     NSAlert *alert = [[NSAlert alloc] init];
     
     alert.alertStyle = NSAlertStyleInformational;
@@ -327,12 +428,12 @@
     
     alert.buttons.firstObject.enabled = NO;
     
-    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+    [alert beginSheetModalForWindow:self.hostWindow completionHandler:^(NSModalResponse returnCode) {
         if (returnCode == NSAlertFirstButtonReturn) {
             [self addHostManuallyHandlerWithInputValue:inputField.stringValue];
         }
         self.addHostManuallyAlert = nil;
-        [self.view.window endSheet:alert.window];
+        [self.hostWindow endSheet:alert.window];
     }];
     [alert.accessoryView becomeFirstResponder];
     
@@ -340,23 +441,69 @@
 }
 
 - (void)addHostManuallyHandlerWithInputValue:(NSString *)inputValue {
-    NSString* hostAddress = inputValue;
+    __weak typeof(self) weakSelf = self;
+    [self addHostWithAddress:inputValue completion:^(NSString *error, TemporaryHost *host) {
+        if (host != nil) {
+            [weakSelf deckAddedHost:host];
+        } else {
+            [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Add Host Manually", @"Add Host Manually") message:error window:weakSelf.hostWindow completionHandler:nil];
+        }
+    }];
+}
+
+/// Asks the address for its serverinfo and, if it answers, saves it as a computer. The completion runs on
+/// the main thread with an error message, or the host (an already known one comes back as it is).
+- (void)addHostWithAddress:(NSString *)address completion:(void (^)(NSString *_Nullable error, TemporaryHost *_Nullable host))completion {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        [self.discMan discoverHost:hostAddress withCallback:^(TemporaryHost* host, NSString* error){
-            if (host != nil) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    DataManager* dataMan = [[DataManager alloc] init];
-                    [dataMan updateHost:host];
-                    self.hosts = [self.hosts arrayByAddingObject:host];
-                    [self updateHosts];
-                });
-            } else {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Add Host Manually", @"Add Host Manually") message:error window:self.view.window completionHandler:nil];
-                });
-            }
+        [self.discMan discoverHost:address withCallback:^(TemporaryHost *host, NSString *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (host == nil) {
+                    completion(error ?: @"", nil);
+                    return;
+                }
+                for (TemporaryHost *known in self.hosts) {
+                    if ([known.uuid isEqualToString:host.uuid]) {
+                        completion(nil, known);
+                        return;
+                    }
+                }
+                DataManager *dataMan = [[DataManager alloc] init];
+                [dataMan updateHost:host];
+                self.hosts = [self.hosts arrayByAddingObject:host];
+                [self updateHosts];
+                completion(nil, host);
+            });
         }];
     });
+}
+
+- (void)deckPresentAddHost {
+    if (@available(macOS 14.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        MLLaunchTrace(@"add computer: sheet");
+        [MLDeckAddHost presentIn:self.hostWindow provider:^NSArray<TemporaryHost *> * {
+            return weakSelf.hostList.count > 0 ? weakSelf.hostList : (weakSelf.hosts ?: @[]);
+        } onSubmit:^(NSString *address, void (^done)(NSString *_Nullable, TemporaryHost *_Nullable)) {
+            [weakSelf addHostWithAddress:address completion:done];
+        } onChosen:^(TemporaryHost *host) {
+            [weakSelf deckAddedHost:host];
+        }];
+    }
+}
+
+/// A computer was added or picked: show it, and for one that is not paired go straight into pairing (the
+/// PIN appears in its card).
+- (void)deckAddedHost:(TemporaryHost *)host {
+    if (host.uuid.length == 0) {
+        return;
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckSelectHost" object:nil userInfo:@{@"uuid": host.uuid}];
+    if (host.pairState != PairStatePaired) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            self.selectedHost = host;
+            [self setupPairing:host];
+        });
+    }
 }
 
 
@@ -477,7 +624,7 @@
 
 - (void)sleepHostMenuItemClicked:(NSMenuItem *)sender {
     TemporaryHost *host = [self getHostFromMenuItem:sender];
-    if (host == nil || self.view.window == nil) {
+    if (host == nil || self.hostWindow == nil) {
         return;
     }
 
@@ -488,12 +635,15 @@
     [alert addButtonWithTitle:NSLocalizedString(@"Sleep Host", @"Sleep Host")];
     [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
 
-    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+    [alert beginSheetModalForWindow:self.hostWindow completionHandler:^(NSModalResponse returnCode) {
         if (returnCode != NSAlertFirstButtonReturn) {
             return;
         }
 
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            if (!host.canUseHttps) {
+                return;
+            }
             HttpManager *hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:[IdManager getUniqueId] serverCert:host.serverCert];
             if ([hMan requestHostSleep]) {
                 return;
@@ -503,7 +653,7 @@
                 [AlertPresenter displayAlert:NSAlertStyleWarning
                                        title:NSLocalizedString(@"Sleep Host Failed", @"Sleep Host Failed")
                                      message:NSLocalizedString(@"Sleep Host Failed Info", @"Sleep Host Failed Info")
-                                      window:self.view.window
+                                      window:self.hostWindow
                            completionHandler:nil];
             });
         });
@@ -528,7 +678,7 @@
     [alert addButtonWithTitle:NSLocalizedString(@"Save", @"Save")];
     [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Cancel")];
 
-    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+    [alert beginSheetModalForWindow:self.hostWindow completionHandler:^(NSModalResponse returnCode) {
         if (returnCode == NSAlertFirstButtonReturn) {
             NSString *trimmedName = [inputField.stringValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             host.customName = trimmedName.length > 0 ? trimmedName : nil;
@@ -560,7 +710,35 @@
     }
 
     ConnectionDetailsViewController *detailsVC = [[ConnectionDetailsViewController alloc] initWithHost:host];
-    [self presentViewControllerAsSheet:detailsVC];
+    [self deckPresentSheet:detailsVC];
+}
+
+/// A sheet from the window that is on screen. The sidebar variant's commands land here while this page is NOT the one on
+/// screen (the apps page is); a sheet presented by a view controller that is not in the visible hierarchy is dropped without
+/// a word, which is why 编辑连接 did nothing from the apps page. The window's own content controller presents it, one run
+/// loop later so a menu that is still closing does not swallow it.
+- (void)deckPresentSheet:(NSViewController *)sheet {
+    NSWindow *window = NSApp.keyWindow ?: NSApp.mainWindow ?: self.view.window;
+    if (window == nil) {
+        // an app with no key window (it was started in the background, or another app has the focus) still has its window on screen
+        for (NSWindow *candidate in NSApp.windows) {
+            if (candidate.isVisible && candidate.contentViewController != nil && candidate.canBecomeMainWindow) { window = candidate; break; }
+        }
+    }
+    NSViewController *presenter = window.contentViewController ?: self;
+    if (presenter.view.window == nil) {
+        // presenting from a view controller that is not in a window throws (NSViewControllerSheetTransition)
+        Log(LOG_W, @"[ui] no window to present %@ from", NSStringFromClass([sheet class]));
+        return;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (window.attachedSheet != nil) {
+            Log(LOG_W, @"[ui] a sheet is already open on this window; %@ not presented", NSStringFromClass([sheet class]));
+            return;
+        }
+        [presenter presentViewControllerAsSheet:sheet];
+        Log(LOG_I, @"[ui] presented %@ from %@ (window %@)", NSStringFromClass([sheet class]), NSStringFromClass([presenter class]), window.title ?: @"");
+    });
 }
 
 - (void)showConnectionEditor:(NSMenuItem *)sender {
@@ -570,7 +748,7 @@
     }
 
     ConnectionEditorViewController *editorVC = [[ConnectionEditorViewController alloc] initWithHost:host];
-    [self presentViewControllerAsSheet:editorVC];
+    [self deckPresentSheet:editorVC];
 }
 
 
@@ -581,6 +759,9 @@
 }
 
 - (TemporaryHost *)getHostFromMenuItem:(NSMenuItem *)item {
+    if ([item.representedObject isKindOfClass:[TemporaryHost class]]) {
+        return item.representedObject;
+    }
     HostCellView *hostCellView = (HostCellView *)(item.menu.delegate);
     HostCell *hostCell = (HostCell *)(hostCellView.delegate);
     
@@ -612,6 +793,7 @@
 
 - (void)retrieveSavedHosts {
     DataManager* dataMan = [[DataManager alloc] init];
+    [dataMan removeHostsWithEmptyUuid];
     NSArray* hosts = [dataMan getHosts];
     @synchronized(self.hosts) {
         // Sort the host list in alphabetical order
@@ -639,6 +821,10 @@
         self.hosts = [self.hosts sortedArrayUsingSelector:@selector(compareName:)];
         self.hostList = self.hosts;
         [self.collectionView moonlight_reloadDataKeepingSelection];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostsChanged" object:nil];
+        if (@available(macOS 14.0, *)) {
+            [(MLDeckHostsController *)self.deckController reload];
+        }
     }
 }
 
@@ -862,21 +1048,21 @@
     NavigatableAlertView *alertView = [[NavigatableAlertView alloc] init];
     alertView.responder = alert.window;
     [self.view addSubview:alertView];
-    [self.view.window makeFirstResponder:alertView];
+    [self.hostWindow makeFirstResponder:alertView];
     
-    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+    [alert beginSheetModalForWindow:self.hostWindow completionHandler:^(NSModalResponse returnCode) {
         switch (returnCode) {
             case NSAlertFirstButtonReturn:
                 [WakeOnLanManager wakeHost:host];
     
                 [alertView removeFromSuperview];
-                [self.view.window makeFirstResponder:self];
+                [self.hostWindow makeFirstResponder:self];
                 break;
             case NSAlertSecondButtonReturn:
-                [self.view.window endSheet:alert.window];
+                [self.hostWindow endSheet:alert.window];
 
                 [alertView removeFromSuperview];
-                [self.view.window makeFirstResponder:self];
+                [self.hostWindow makeFirstResponder:self];
                 break;
         }
     }];
@@ -904,7 +1090,12 @@
 
 - (void)startPairing:(NSString *)PIN {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational title:[NSString stringWithFormat:NSLocalizedString(@"Enter PIN", @"Enter PIN"), self.selectedHost.displayName, PIN] message:nil window:self.view.window completionHandler:nil];
+        if ([MLDeckVariant isDeck]) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckPairingPIN" object:nil
+                                                              userInfo:@{@"uuid": self.selectedHost.uuid ?: @"", @"pin": PIN ?: @""}];
+            return;
+        }
+        self.pairAlert = [AlertPresenter displayAlert:NSAlertStyleInformational title:[NSString stringWithFormat:NSLocalizedString(@"Enter PIN", @"Enter PIN"), self.selectedHost.displayName, PIN] message:nil window:self.hostWindow completionHandler:nil];
     });
 }
 
@@ -947,8 +1138,11 @@
             self.selectedHost.pairState,
             (unsigned long)serverCert.length);
         
-        [self.view.window endSheet:self.pairAlert.window];
+        if (self.pairAlert != nil) {
+            [self.hostWindow endSheet:self.pairAlert.window];
+        }
         self.pairAlert = nil;
+        [self deckPostPIN:nil forHost:self.selectedHost];
         [self.discMan startDiscovery];
         [self updateHosts];
         [self alreadyPaired];
@@ -968,7 +1162,7 @@
                 retryAddress);
 
             if (self.pairAlert != nil) {
-                [self.view.window endSheet:self.pairAlert.window];
+                [self.hostWindow endSheet:self.pairAlert.window];
                 self.pairAlert = nil;
             }
 
@@ -987,10 +1181,18 @@
         self.pairingFallbackAttempted = NO;
 
         if (self.pairAlert != nil) {
-            [self.view.window endSheet:self.pairAlert.window];
+            [self.hostWindow endSheet:self.pairAlert.window];
             self.pairAlert = nil;
         }
-        [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Pairing Failed", @"Pairing Failed") message:message window:self.view.window completionHandler:nil];
+        [self deckPostPIN:nil forHost:self.selectedHost];
+        if ([MLDeckVariant isComputerPage]) {
+            // shown inline in the host's card, not as an alert
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckPairingFailed" object:nil
+                                                              userInfo:@{@"uuid": self.selectedHost.uuid ?: @"", @"message": message ?: @""}];
+            [self->_discMan startDiscovery];
+            return;
+        }
+        [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Pairing Failed", @"Pairing Failed") message:message window:self.hostWindow completionHandler:nil];
         [self->_discMan startDiscovery];
     });
 }
@@ -1000,6 +1202,11 @@
     self.pairingAddressInFlight = nil;
     self.pairingFallbackAddress = nil;
     self.pairingFallbackAttempted = NO;
+    if ([MLDeckVariant isSidebarVariant] && self.deckWorkspace != nil) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckSelectHost" object:nil
+                                                          userInfo:@{@"uuid": self.selectedHost.uuid ?: @""}];
+        return;
+    }
     [self transitionToAppsVCWithHost:self.selectedHost];
 }
 
