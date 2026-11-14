@@ -739,3 +739,139 @@ enum DeckAppListRules {
 
 // MARK: - Cold start: what is drawn before discovery has answered
 
+/// A cold launch knows nothing of the network yet. The first frame shows what was true when the app was last open
+/// (the computer was on, its 线路 chips read like this), and discovery's answers then update it in place.
+enum DeckPresenceRules {
+  /// `state` is TemporaryHost.state: 0 unknown (no answer since launch), 1 offline (every address failed), 2 online.
+  /// An unknown computer is drawn as it was last seen; a computer found off is drawn off.
+  static func shownOnline(state: Int, lastOnline: Bool) -> Bool { state == 2 || (state == 0 && lastOnline) }
+  /// The hero's picture goes grey only for a computer that was found off. Never while the answer is still out.
+  static func greyHero(state: Int) -> Bool { state == 1 }
+}
+
+/// One 线路 chip as it is drawn (what a chip shows, without its action): the thing the next launch draws first.
+struct DeckChipSnap: Equatable {
+  var id: String
+  var title: String
+  var symbol: String?
+  var trailing: String?
+  var badge: String?
+  var unreachable = false
+  var inUse = false
+  /// What pinning the chip sets ("" = 自动).
+  var target = ""
+  /// The addresses behind the chip (endpoint keys): the chip is selected when the pinned address is one of them.
+  var members: [String] = []
+  var tooltip = ""
+
+  init(id: String, title: String, symbol: String? = nil, trailing: String? = nil, badge: String? = nil, unreachable: Bool = false,
+       inUse: Bool = false, target: String = "", members: [String] = [], tooltip: String = "") {
+    self.id = id; self.title = title; self.symbol = symbol; self.trailing = trailing; self.badge = badge
+    self.unreachable = unreachable; self.inUse = inUse; self.target = target; self.members = members; self.tooltip = tooltip
+  }
+
+  var dictionary: [String: Any] {
+    var d: [String: Any] = ["id": id, "title": title, "unreachable": unreachable, "inUse": inUse, "target": target, "members": members, "tooltip": tooltip]
+    if let symbol { d["symbol"] = symbol }
+    if let trailing { d["trailing"] = trailing }
+    if let badge { d["badge"] = badge }
+    return d
+  }
+
+  init?(dictionary d: [String: Any]) {
+    guard let id = d["id"] as? String, let title = d["title"] as? String else { return nil }
+    self.init(id: id, title: title, symbol: d["symbol"] as? String, trailing: d["trailing"] as? String, badge: d["badge"] as? String,
+              unreachable: d["unreachable"] as? Bool ?? false, inUse: d["inUse"] as? Bool ?? false, target: d["target"] as? String ?? "",
+              members: d["members"] as? [String] ?? [], tooltip: d["tooltip"] as? String ?? "")
+  }
+}
+
+/// The chips of one computer as last drawn with every result in, and the addresses they were made from.
+struct DeckChipMemoryEntry: Equatable {
+  var keys: [String]
+  var chips: [DeckChipSnap]
+
+  var dictionary: [String: Any] { ["keys": keys, "chips": chips.map { $0.dictionary }] }
+  init(keys: [String], chips: [DeckChipSnap]) { self.keys = keys.sorted(); self.chips = chips }
+  init?(dictionary d: [String: Any]) {
+    guard let keys = d["keys"] as? [String], let list = d["chips"] as? [[String: Any]] else { return nil }
+    self.init(keys: keys, chips: list.compactMap { DeckChipSnap(dictionary: $0) })
+  }
+}
+
+/// The 线路 chips must not flicker at launch. Until every address has answered (and every name resolved), the evidence is
+/// partial and the paths are classified from less than they will be: the first answer would draw 局域网, the last 组网; the
+/// slow address arrives as 超时 seconds later. So while the answers are out the chips are the remembered ones (same
+/// addresses), in the remembered order, with a small mark that they are being checked; when everything is in the live ones
+/// replace them. A chip with the same value is not touched.
+enum DeckChipStability {
+  /// The longest a remembered row is held while an address still has not answered.
+  static let holdSeconds: TimeInterval = 8
+  /// The most often a changed row is written to disk.
+  static let saveEvery: TimeInterval = 5
+
+  struct Choice: Equatable {
+    var chips: [DeckChipSnap]
+    var pending: Bool
+    var fromMemory: Bool
+  }
+
+  static func choose(live: [DeckChipSnap], liveKeys: [String], remembered: DeckChipMemoryEntry?, complete: Bool, waited: TimeInterval) -> Choice {
+    if !complete, waited < holdSeconds, let remembered, !remembered.chips.isEmpty, remembered.keys == liveKeys.sorted() {
+      return Choice(chips: remembered.chips, pending: true, fromMemory: true)
+    }
+    // the mark is for the first moments: an address that never answers does not keep it on for ever
+    return Choice(chips: live, pending: !complete && waited < holdSeconds, fromMemory: false)
+  }
+
+  /// Worth writing: every result is in and it differs from what is stored (the last-used mark alone is not).
+  static func shouldSave(live: [DeckChipSnap], liveKeys: [String], remembered: DeckChipMemoryEntry?, complete: Bool, sinceLastSave: TimeInterval) -> Bool {
+    guard complete, !live.isEmpty else { return false }
+    guard let remembered else { return true }
+    if sinceLastSave < saveEvery { return false }
+    return remembered != DeckChipMemoryEntry(keys: liveKeys, chips: live)
+  }
+
+  /// Every address has a result WITH its round trip (the path class uses it: a fast private address is 局域网 only with a number) or has
+  /// failed, and every name has been resolved. `measured` is false for an answered address whose round trip is still out; the caller
+  /// counts it as measured after a short grace (an answer without a number: the host did not give one). A computer found off will not
+  /// answer: nothing is awaited.
+  static func evidenceComplete(offline: Bool, rows: [(answered: Bool, failed: Bool, measured: Bool, isDomain: Bool, resolved: Bool)]) -> Bool {
+    if offline { return true }
+    return rows.allSatisfy { ($0.failed || ($0.answered && $0.measured)) && (!$0.isDomain || $0.resolved) }
+  }
+}
+
+// MARK: - Art that a host update fixes
+
+enum DeckArtRecheckRules {
+  /// A picture is asked for again when the host's software changed since the answer on disk was recorded: a fixed host
+  /// (the placeholder cover of Sparxie apps) serves the right picture under the same path and the same art version.
+  static func hostSoftwareChanged(recorded: String?, current: String) -> Bool {
+    guard !current.isEmpty else { return false }
+    // a picture recorded before the host's software was noted (older builds) is asked for once: a conditional request, a 304 when it is right
+    guard let recorded, !recorded.isEmpty else { return true }
+    return recorded != current
+  }
+}
+
+// MARK: - The running app's mark: a green play glyph left of the title
+
+/// The green of the glyph, by the surface the title sits on. On a card's dark scrim (the band, the hero) a bright system green;
+/// under a poster, on the page, light mode takes a deeper green. Both are checked to hold 3:1 (the bar for a graphic) on the
+/// surfaces they are drawn on, 4.5:1 where it sits next to text.
+enum DeckRunGreenRules {
+  typealias RGB = (r: Double, g: Double, b: Double)
+  static let onDarkScrim: RGB = (0.19, 0.82, 0.35)
+  static let onLightPage: RGB = (0.09, 0.52, 0.22)
+  static let onDarkPage: RGB = (0.19, 0.82, 0.35)
+
+  static func luminance(_ c: RGB) -> Double {
+    func lin(_ v: Double) -> Double { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+    return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+  }
+  static func contrast(_ a: RGB, _ b: RGB) -> Double {
+    let la = luminance(a), lb = luminance(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+  }
+}
