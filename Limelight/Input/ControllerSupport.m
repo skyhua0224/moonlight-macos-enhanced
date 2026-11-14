@@ -3435,9 +3435,12 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
         }
     }
     else {
-        // Some games don't deal with having controller reconnected
-        // properly so always report controller 1 if not in MC mode
-        mask = 0x1;
+        // Some games don't deal with having controller reconnected properly, so a connected pad is
+        // always controller 1 in this mode. With no pad there is nothing to report: a virtual pad on
+        // the host must follow a real one.
+        for (GCController *controller in [GCController controllers]) {
+            if ([ControllerSupport isSupportedGamepad:controller]) { mask = 0x1; break; }
+        }
     }
 
 #if TARGET_OS_IPHONE
@@ -3466,10 +3469,23 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
     self = [super init];
 
     _controllerStreamLock = [[NSLock alloc] init];
+    for (NSUInteger index = 0; index < 16; index++) ds5_rs_init(&_rumbleSched[index]);
     _hapticsMailboxLock = [[NSObject alloc] init];
-    _pendingHaptics = [[NSMutableDictionary alloc] init];
+    for (unsigned player = 0; player < 16; player++) ds5_irp_reset(&_irPlayback[player]);
+    for (unsigned player = 0; player < 16; player++) _padHeadset[player] = -1;
 
     _ds5HapticsAudioRenderer = [[Ds5HapticsAudioRenderer alloc] init];
+    _rawHID = [[DS5RawHIDBridge alloc] init];
+    _ds5BluetoothAudioRenderer = [[Ds5BluetoothAudioRenderer alloc] initWithBridge:_rawHID];
+    _padSpeakerStream = streamConfig.controllerHapticsMode == 0 && ![Ds5HapticsAudioRenderer usbPcmRequested] &&
+        [Ds5HapticsAudioRenderer padSpeakerEnabled];
+    __weak typeof(self) weakRawSelf = self;
+    [_rawHID startWithInputHandler:^(NSString *identity, const AlkDs5ExtendedInput *input, BOOL bluetooth) {
+        (void)bluetooth;
+        [weakRawSelf handleRawHIDInput:identity input:input];
+    } featureHandler:^(NSString *identity, uint8_t reportID, const uint8_t *report, size_t length) {
+        [weakRawSelf handleRawHIDFeature:identity reportID:reportID report:report length:length];
+    }];
     _controllers = [[NSMutableDictionary alloc] init];
     _controllerNumbers = 0;
     _multiController = streamConfig.multiController;
@@ -3486,6 +3502,17 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
     _controllerMotionMode = streamConfig.controllerMotionMode;
     _controllerFeedbackTarget = streamConfig.controllerFeedbackTarget;
     _controllerVirtualType = streamConfig.controllerVirtualType;
+    _dualSenseOnly = streamConfig.controllerSupportDualSenseOnly;
+    _controllerMotionSource = streamConfig.controllerMotionSource;
+    _ds5ApplyHostLights = streamConfig.ds5ApplyHostLights;
+    _ds5ApplyHostAudio = streamConfig.ds5ApplyHostAudio;
+    _ds5ReportHeadset = streamConfig.ds5ReportHeadset;
+    _ds5VolumeLimitPercent = streamConfig.ds5VolumeLimitPercent;
+    _ds5BtHapticsFallback = streamConfig.ds5BtHapticsFallback;
+    _ds5BtOutput = streamConfig.ds5BtOutput;
+    _reportRateCapHz = streamConfig.reportRateCapHz > 0 ? streamConfig.reportRateCapHz : DS5_REPORT_RATE_CAP_DEFAULT;
+    _gyroSensitivity = streamConfig.gyroSensitivity > 0.0 ? streamConfig.gyroSensitivity : 1.0;
+    _rumbleStrength = streamConfig.rumbleStrength > 0.0 ? streamConfig.rumbleStrength : 1.0;
     _clientGamepad = [streamConfig.clientGamepad copy];
     _controllerLeftCenterX = MIN(1.0, MAX(-1.0, streamConfig.controllerLeftCenterX));
     _controllerLeftCenterY = MIN(1.0, MAX(-1.0, streamConfig.controllerLeftCenterY));
@@ -3584,10 +3611,10 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
     Log(LOG_I, @"Multi-controller: %d", _multiController);
 
     for (GCController* controller in [GCController controllers]) {
-        if ([ControllerSupport isSupportedGamepad:controller]) {
+        if ([self acceptsGCController:controller]) {
             [self assignController:controller];
             [self registerControllerCallbacks:controller];
-            [self setupDebouncersForController:[_controllers objectForKey:@(controller.playerIndex)]];
+            [self setupDebouncersForController:[self limeControllerForGC:controller]];
         }
     }
 
@@ -3601,27 +3628,12 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
 
     _controllerConnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidConnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         Log(LOG_I, @"Controller connected!");
-
-        GCController* controller = note.object;
-
-        if (![ControllerSupport isSupportedGamepad:controller]) {
-            // Ignore micro gamepads and motion controllers
-            return;
-        }
-
-        [self assignController:controller];
-
-        // Register callbacks on the new controller
-        [self registerControllerCallbacks:controller];
-
-        [self setupDebouncersForController:[self->_controllers objectForKey:@(controller.playerIndex)]];
-
-        // Re-evaluate the on-screen control mode
-        [self updateAutoOnScreenControlMode];
-
-        // Notify the delegate
-        [self->_presenceDelegate gamepadPresenceChanged];
+        [self attachGCController:note.object via:@"connect-notification"];
     }];
+    // Safety net: a pad that macOS connected without telling us is found within a second or two.
+    _controllerScanTimer = [NSTimer timerWithTimeInterval:1.0 target:self selector:@selector(scanForControllers:) userInfo:nil repeats:YES];
+    [[NSRunLoop mainRunLoop] addTimer:_controllerScanTimer forMode:NSRunLoopCommonModes];
+
     _controllerDisconnectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         Log(LOG_I, @"Controller disconnected!");
 
@@ -3633,23 +3645,43 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
         }
 
         [self unregisterControllerCallbacks:controller];
-        self->_controllerNumbers &= ~(1 << controller.playerIndex);
-        Log(LOG_I, @"Unassigning controller index: %ld", (long)controller.playerIndex);
-
-        // Unset the GCController on this object (in case it is the OSC, which will persist)
-        Controller* limeController = [self->_controllers objectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+        // The number this pad was given at assignController, not GameController's player number: that one
+        // is rewritten for LED patterns and reset by a reconnect.
+        Controller* limeController = [self limeControllerForGC:controller];
+        if (limeController == nil) {
+            Log(LOG_W, @"[controller] Disconnected pad has no controller object; nothing to remove");
+            return;
+        }
+        const NSInteger gonePlayer = limeController.playerIndex;
+        self->_controllerNumbers &= ~(1 << gonePlayer);
+        Log(LOG_I, @"Unassigning controller index: %ld", (long)gonePlayer);
 
         // Lift the pad's fingers on the host before the controller goes away
-        [self->_dualSenseTouchpad releasePlayer:controller.playerIndex];
+        [self->_dualSenseTouchpad releasePlayer:gonePlayer];
 
         // Stop haptics on this controller
         [self cleanupControllerHaptics:limeController];
 
+        // A pad that was dropped may still be reachable for a moment: hand its outputs back.
+        if (self.ds5ApplyHostLights) [self restoreDualSenseOutputsForPlayer:(unsigned short)gonePlayer];
+
         limeController.gamepad = nil;
 
-        // Inform the server of the updated active gamepads before removing this controller
-        [self updateFinished:limeController];
-        [self->_controllers removeObjectForKey:[NSNumber numberWithInteger:controller.playerIndex]];
+        // Tell the host the pad is gone: the multi-controller packet with the pad's bit cleared frees its
+        // virtual pad. updateFinished sends nothing for a pad whose state did not change.
+        if (limeController.controllerAnnounced) {
+            PML_INPUT_STREAM_CONTEXT inputCtx = ControllerInputContext(self);
+            if (inputCtx != NULL && LiInputContextIsInitialized(inputCtx)) {
+                [self->_controllerStreamLock lock];
+                LiSendMultiControllerEventCtx(inputCtx, (unsigned short)(gonePlayer >= 0 ? gonePlayer : 0),
+                    ds5_pad_active_mask((unsigned)self->_controllerNumbers), 0, 0, 0, 0, 0, 0, 0);
+                [self->_controllerStreamLock unlock];
+            }
+            limeController.controllerAnnounced = NO;
+            limeController.hasSentGamepadState = NO;
+            Log(LOG_I, @"[controller] Removal sent to the host: player=%ld mask=0x%x", (long)gonePlayer, (unsigned)ds5_pad_active_mask((unsigned)self->_controllerNumbers));
+        }
+        [self->_controllers removeObjectForKey:[NSNumber numberWithInteger:gonePlayer]];
 
         // Re-evaluate the on-screen control mode
         [self updateAutoOnScreenControlMode];
@@ -3730,8 +3762,10 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
     _touchpadSettingsObserver = nil;
     [_controllerMaintenanceTimer invalidate];
     _controllerMaintenanceTimer = nil;
-    @synchronized(_hapticsMailboxLock) { [_pendingHaptics removeAllObjects]; }
+    @synchronized(_hapticsMailboxLock) { for (unsigned player = 0; player < 16; player++) ds5_irp_reset(&_irPlayback[player]); }
 
+    [_controllerScanTimer invalidate];
+    _controllerScanTimer = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:_controllerConnectObserver];
     [[NSNotificationCenter defaultCenter] removeObserver:_controllerDisconnectObserver];
 #if TARGET_OS_IPHONE
@@ -3755,8 +3789,40 @@ static NSInteger PadAudioDefault(NSString *key, NSInteger fallback, NSInteger lo
     for (Controller* controller in [_controllers allValues]) {
         [self cleanupControllerHaptics:controller];
     }
+    if (self.ds5ApplyHostLights) {
+        for (NSNumber *key in _controllers.allKeys) [self restoreDualSenseOutputsForPlayer:(unsigned short)key.unsignedIntegerValue];
+        [_rawHID flushOutputWithTimeout:0.5];
+    }
+    [self restoreGameControllerPlayerLEDs];
+    // The pad's output path goes back to the headset path (what macOS leaves it on) and the macOS volume of its device back to what it was.
+    for (NSUInteger player = 0; player < 16; player++) {
+        if (!_padAudioConfigured[player]) continue;
+        NSString *identity = [self rawHIDIdentityForPlayer:player];
+        if (identity.length == 0 || ![_rawHID hasDeviceForIdentity:identity]) continue;
+        [self writeDualSenseFeedback:(unsigned short)player flag0:DS5_FLAG0_AUDIO_CONTROL flag1:DS5_FLAG1_AUDIO_CONTROL2 flag2:0
+                              update:^(AlkDs5Feedback *feedback) { feedback->audio_control = 0; feedback->audio_control2 = 0; }];
+        Log(LOG_I, @"[ds5-audio] pad audio route written back for player %lu (headset path, pre-amp 0 dB)", (unsigned long)player);
+    }
+    [_rawHID flushOutputWithTimeout:0.5];
+    [_ds5HapticsAudioRenderer restoreDeviceState];
     [_ds5HapticsAudioRenderer reset];
     _ds5HapticsAudioRenderer = nil;
+    [_ds5BluetoothAudioRenderer reset];
+    _ds5BluetoothAudioRenderer = nil;
+    [_rawHID stop];
+    _rawHID = nil;
+    os_unfair_lock_lock(&_ds5CoreLock);
+    for (NSUInteger index = 0; index < 16; index++) {
+        if (_ds5Core[index] != NULL) {
+            AlkDs5Event event = {.struct_size = sizeof(event), .abi = ALK_DS5_CORE_ABI_VERSION};
+            (void)alk_ds5_core_remove(_ds5Core[index], 0, &event);
+        }
+        alk_ds5_core_destroy(_ds5Core[index]);
+        _ds5Core[index] = NULL;
+        _ds5Sequence[index] = 0;
+        _rawHIDIdentity[index] = nil;
+    }
+    os_unfair_lock_unlock(&_ds5CoreLock);
     [_controllers removeAllObjects];
 
     for (GCController* controller in [GCController controllers]) {
