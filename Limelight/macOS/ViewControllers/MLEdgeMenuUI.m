@@ -22,6 +22,12 @@
     CALayer *_plateShadowLayer;
     CALayer *_plateLayer;
     CALayer *_plateInnerLayer;
+    // Direct touch (macOS 27): a tap opens the menu and a pan moves the ball, through gesture recognizers
+    // that claim the touch. The mouse emulation that may still arrive for the same touch is ignored.
+    BOOL _touchPanActive;
+    CFTimeInterval _touchGestureTime;
+    CFTimeInterval _lastActivationTime;       // the menu was opened by anything
+    CFTimeInterval _lastTouchActivationTime;  // ... by the tap recognizer
 }
 
 - (instancetype)initWithFrame:(NSRect)frameRect {
@@ -61,8 +67,81 @@
         [self addSubview:_iconView];
 
         [self updateVisualStyle];
+        if (@available(macOS 27.0, *)) {
+            [self installTouchGestures];
+        }
     }
     return self;
+}
+
+#pragma mark - Direct touch
+
+- (void)installTouchGestures API_AVAILABLE(macos(27.0)) {
+    NSClickGestureRecognizer *tap = [[NSClickGestureRecognizer alloc] initWithTarget:self action:@selector(touchTapped:)];
+    tap.buttonMask = 0;                                // touches only: the mouse keeps its own path
+    tap.allowedTouchTypes = NSTouchTypeMaskDirect;
+    [self addGestureRecognizer:tap];
+
+    NSPanGestureRecognizer *pan = [[NSPanGestureRecognizer alloc] initWithTarget:self action:@selector(touchPanned:)];
+    pan.buttonMask = 0;
+    pan.allowedTouchTypes = NSTouchTypeMaskDirect;
+    [self addGestureRecognizer:pan];
+}
+
+- (void)fireActivationFromTouch {
+    CFTimeInterval now = CACurrentMediaTime();
+    // The emulated click of the same tap may reach mouseUp too: one activation only.
+    if (now - _lastActivationTime < 0.5) {
+        return;
+    }
+    _lastActivationTime = now;
+    _lastTouchActivationTime = now;
+    _touchGestureTime = now;
+    _interactionCancelled = YES;
+    _dragStarted = NO;
+    if (self.activationHandler) {
+        self.activationHandler(nil);
+    }
+}
+
+- (void)touchTapped:(NSClickGestureRecognizer *)recognizer {
+    if (recognizer.state == NSGestureRecognizerStateEnded) {
+        [self fireActivationFromTouch];
+    }
+}
+
+- (void)touchPanned:(NSPanGestureRecognizer *)recognizer {
+    NSView *reference = self.superview ?: self;
+    NSPoint translation = [recognizer translationInView:reference];
+    switch (recognizer.state) {
+        case NSGestureRecognizerStateBegan:
+            _touchPanActive = YES;
+            _touchGestureTime = CACurrentMediaTime();
+            _interactionCancelled = YES;   // the emulated mouse drag of this touch is not the ball's business
+            _dragStarted = YES;
+            if (self.dragHandler) self.dragHandler(NSGestureRecognizerStateBegan, NSZeroPoint);
+            if (self.dragHandler) self.dragHandler(NSGestureRecognizerStateChanged, translation);
+            break;
+        case NSGestureRecognizerStateChanged:
+            if (_touchPanActive && self.dragHandler) self.dragHandler(NSGestureRecognizerStateChanged, translation);
+            break;
+        case NSGestureRecognizerStateEnded:
+        case NSGestureRecognizerStateCancelled:
+            if (_touchPanActive) {
+                _touchPanActive = NO;
+                _dragStarted = NO;
+                _touchGestureTime = CACurrentMediaTime();
+                if (self.dragHandler) self.dragHandler(NSGestureRecognizerStateEnded, translation);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+- (BOOL)isEmulatedTouchMouseEvent:(NSEvent *)event {
+    // The same touch is already being handled by the recognizers (a pan, or a tap in the last moment).
+    return _touchPanActive || (CACurrentMediaTime() - _touchGestureTime) < 0.6;
 }
 
 - (NSImageView *)iconView {
@@ -202,8 +281,10 @@
     _plateShadowLayer.shadowOffset = CGSizeMake(0.0, 3.0);
 
     _plateLayer.backgroundColor = [NSColor colorWithRed:0.96 green:0.97 blue:0.99 alpha:0.98].CGColor;
-    _plateLayer.borderWidth = 1.0;
-    _plateLayer.borderColor = [NSColor colorWithWhite:1.0 alpha:0.78].CGColor;
+    // A near-white plate on a bright picture was invisible at the edge ("no ball"): a dark hairline keeps its
+    // outline on any frame, the shadow below it stays.
+    _plateLayer.borderWidth = 1.5;
+    _plateLayer.borderColor = [NSColor colorWithWhite:0.0 alpha:0.42].CGColor;
 
     _plateInnerLayer.backgroundColor = [NSColor colorWithRed:0.89 green:0.91 blue:0.95 alpha:0.92].CGColor;
     _plateInnerLayer.borderWidth = 1.0;
@@ -213,6 +294,10 @@
 }
 
 - (void)mouseDown:(NSEvent *)event {
+    if (event.subtype == NSEventSubtypeTouch && [self isEmulatedTouchMouseEvent:event]) {
+        _interactionCancelled = YES;
+        return;
+    }
     _dragTranslation = NSZeroPoint;
     _dragStarted = NO;
     _interactionCancelled = NO;
@@ -267,7 +352,12 @@
             self.dragHandler(NSGestureRecognizerStateEnded, _dragTranslation);
         }
     } else if (self.activationHandler && event.type == NSEventTypeLeftMouseUp) {
-        self.activationHandler(event);
+        CFTimeInterval now = CACurrentMediaTime();
+        // A tap also reaches the tap recognizer: whichever comes first opens the menu, the other is dropped.
+        if (now - _lastTouchActivationTime >= 0.5) {
+            _lastActivationTime = now;
+            self.activationHandler(event);
+        }
     }
 }
 

@@ -7,8 +7,14 @@
 //
 
 #import "HostCellView.h"
+#import "MLTouchMenuSupport.h"
 
 @implementation HostCellView
+
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    if (self.window != nil) [MLTouchMenuSupport installLongPressMenuOnView:self];
+}
 
 - (void)menuWillOpen:(NSMenu *)menu {
     [self.delegate menuWillOpen:menu];
