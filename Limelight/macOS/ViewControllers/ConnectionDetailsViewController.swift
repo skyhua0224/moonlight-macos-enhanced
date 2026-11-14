@@ -31,6 +31,7 @@ import Cocoa
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.autohidesScrollers = true
+        scrollView.contentView = FlippedClipView()   // the page starts at its top, not scrolled to its bottom
         view.addSubview(scrollView)
 
         let documentView = NSView()
@@ -166,7 +167,7 @@ import Cocoa
         content.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             content.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: card.contentInsets.left),
-            content.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -card.contentInsets.right),
+            content.trailingAnchor.constraint(lessThanOrEqualTo: card.trailingAnchor, constant: -card.contentInsets.right),   // the rows keep their own width, left-aligned in the box
             content.topAnchor.constraint(equalTo: card.topAnchor, constant: card.contentInsets.top),
             content.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -card.contentInsets.bottom)
         ])
@@ -203,6 +204,9 @@ import Cocoa
         valueField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         
         gridView.addRow(with: [labelField, valueField])
+        // labels flush right, values flush left, whatever the width the box ends up with (the grid stretched them apart in one run, not in the next)
+        gridView.column(at: 0).xPlacement = .trailing
+        gridView.column(at: 1).xPlacement = .leading
     }
     
     @objc func dismissController() {
@@ -214,6 +218,9 @@ final class FlippedClipView: NSClipView {
     override var isFlipped: Bool { true }
 }
 
+/// The grouped card of a section. Its fill is a label colour at 6 % (the same fill the Foundation banner uses), no stroke,
+/// resolved against the view's own effective appearance every time that changes: a CGColor taken once at init is fixed to whatever
+/// appearance happened to be current then (invisible white on the white light sheet, a light slab on the dark one).
 final class CardView: NSView {
     var contentInsets: NSEdgeInsets = .init(top: 12, left: 12, bottom: 12, right: 12)
 
@@ -222,10 +229,23 @@ final class CardView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 10
         layer?.masksToBounds = true
-        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.55).cgColor
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+            layer?.borderWidth = 0   // a stroke on a masked layer drew a dark line down the left and right edges of the boxes
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }

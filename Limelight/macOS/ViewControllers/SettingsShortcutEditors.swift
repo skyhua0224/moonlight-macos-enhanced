@@ -997,16 +997,27 @@ private struct ShortcutTokenRowView: View {
         ShortcutKeycapView(key: key)
       }
     }
+    // a chord of four keycaps took the width left over by the title and the two buttons: the cap of a squeezed row was clipped
+    // to a sliver (⌃ drawn as ´) while the row above it, with one cap less, was whole. The caps keep their size; the title gives way.
+    .fixedSize(horizontal: true, vertical: false)
+    .layoutPriority(1)
   }
 }
 
 private struct ShortcutKeycapView: View {
   let key: String
 
+  /// ⌃ ⌥ ⇧ ⌘ and the arrows are symbols the monospaced design (SF Mono) draws small and off the baseline, or not at all; the
+  /// system text face has them as the menus show them. Letters, digits and F-keys stay monospaced.
+  private var isSymbol: Bool { key.unicodeScalars.contains { $0.value >= 0x2190 } }
+
   var body: some View {
     Text(key)
-      .font(.system(size: 13, weight: .semibold, design: .monospaced))
+      .font(.system(size: 13, weight: .semibold, design: isSymbol ? .default : .monospaced))
       .foregroundColor(.primary)
+      .lineLimit(1)
+      .fixedSize()
+      .frame(minWidth: 16)
       .padding(.horizontal, 10)
       .padding(.vertical, 6)
       .background(

@@ -112,6 +112,8 @@ enum ControllerGlyphFamily {
 
   static var current: ControllerGlyphFamily {
     let pad = connectedPad
+    if conceptEnv("MLC_PAD_GLYPHS") == "ps" { return .playStation }   // harness: the legend as a DualSense shows it
+    if pad == nil && ControllerPresence.shared.rawPadOnly { return .playStation }
     return pad is GCDualSenseGamepad || pad is GCDualShockGamepad ? .playStation : .xbox
   }
 }

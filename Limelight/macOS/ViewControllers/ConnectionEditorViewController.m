@@ -27,6 +27,7 @@
 @property (nonatomic, strong) NSPopUpButton *currentPopup;
 @property (nonatomic, strong) NSTableView *tableView;
 @property (nonatomic, strong) NSTextField *addField;
+@property (nonatomic, strong) NSPopUpButton *pathKindPopup;
 @property (nonatomic, strong) NSButton *removeButton;
 @property (nonatomic, strong) NSButton *testAllButton;
 @property (nonatomic, strong) NSArray<NSString *> *endpoints;
@@ -148,6 +149,13 @@
     self.addField = [[NSTextField alloc] initWithFrame:NSZeroRect];
     self.addField.placeholderString = MLString(@"Add address (IP, hostname, or IPv6; port optional)");
     [addStack addArrangedSubview:self.addField];
+
+    // what this address is: automatic (decided from evidence), the computer itself, a port forward, a relay server, a VPN / mesh.
+    // A choice is the user's word and wins over the automatic verdict (DeckPathClassifier).
+    self.pathKindPopup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+    [self.pathKindPopup addItemsWithTitles:@[MLString(@"Path: automatic"), MLString(@"Path: the computer itself"), MLString(@"Path: port forward"),
+                                             MLString(@"Path: relay server"), MLString(@"Path: VPN / mesh")]];
+    [addStack addArrangedSubview:self.pathKindPopup];
 
     NSButton *addButton = [NSButton buttonWithTitle:MLString(@"Add") target:self action:@selector(addEndpoint)];
     [addStack addArrangedSubview:addButton];
@@ -367,6 +375,11 @@
 - (void)addEndpoint {
     NSString *input = self.addField.stringValue ?: @"";
     if ([ConnectionEndpointStore addManualEndpoint:input forHost:self.host.uuid]) {
+        NSArray<NSString *> *kinds = @[@"", @"host", @"forward", @"relay", @"overlay"];
+        NSInteger choice = self.pathKindPopup.indexOfSelectedItem;
+        if (choice > 0 && choice < (NSInteger)kinds.count) {
+            [ConnectionEndpointStore setDeclaredPath:kinds[choice] forEndpoint:input forHost:self.host.uuid];
+        }
         self.addField.stringValue = @"";
         [self reloadEndpointsUI];
     }

@@ -6,6 +6,8 @@
 //  Copyright © 2017 Moonlight Stream. All rights reserved.
 //
 
+#import "LatencyProbe.h"
+#import "HostPathRank.h"
 #import "StreamViewController_Internal.h"
 #import "AppAssetManager.h"
 #import "RemoteUSBForwardingSession.h"
@@ -820,6 +822,10 @@ highFreqMotor:(unsigned short)highFreqMotor {
                 CGImageRelease(image);
             }
         });
+    }
+
+    if (backdropHost.length > 0 && backdropApp.length > 0) {
+        [MLDeckActivity recordEndedWithHostUUID:backdropHost appId:backdropApp];
     }
 
     [self stopStreamHealthDiagnostics];
@@ -2200,6 +2206,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
         BOOL wasReconnect = self.reconnectInProgress;
         [self publishSunshineDisplayRuntimeState:wasReconnect ? @"reconnected" : @"active"];
+        [self scheduleStreamPathSuccessCheck];
         // format: 0 none, 1 HDR10+, 2/3 Vivid, 4 DV 8.1, 5 DV 8.4 (host's choice).
         Connection *startedConnection = self.streamMan.connection;
         Log(LOG_I, @"[hdr] Foundation dynamic HDR result: format=%d fallback=%d",
@@ -2304,6 +2311,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)connectionTerminated:(int)errorCode {
     Log(LOG_I, @"Connection terminated: %ld (0x%08x)", (long)errorCode, (unsigned int)errorCode);
+    [self notePathVerdictForTerminationCode:errorCode];
     [self publishSunshineDisplayRuntimeState:@"idle"];
     LiSetThreadConnectionContext(NULL);
     self.clipboardRuntimeConnection = nil;
