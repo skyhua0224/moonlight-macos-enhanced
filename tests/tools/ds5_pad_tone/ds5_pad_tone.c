@@ -377,3 +377,228 @@ static bool gHaptics = false;
 static IOHIDDeviceRef gPad = NULL;
 static const char *gRoute = NULL;
 
+static bool padOpenUSB(void) {
+  IOHIDManagerRef manager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+  int vid = 0x054c, pid = 0x0ce6;
+  CFNumberRef v = CFNumberCreate(NULL, kCFNumberIntType, &vid), p = CFNumberCreate(NULL, kCFNumberIntType, &pid);
+  const void *keys[2] = {CFSTR(kIOHIDVendorIDKey), CFSTR(kIOHIDProductIDKey)}, *values[2] = {v, p};
+  CFDictionaryRef match = CFDictionaryCreate(NULL, keys, values, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+  IOHIDManagerSetDeviceMatching(manager, match);
+  IOHIDManagerOpen(manager, kIOHIDOptionsTypeNone);
+  CFSetRef set = IOHIDManagerCopyDevices(manager);
+  bool sawBluetooth = false;
+  if (set != NULL) {
+    CFIndex n = CFSetGetCount(set);
+    const void **devs = calloc((size_t)n, sizeof(void *));
+    CFSetGetValues(set, devs);
+    for (CFIndex i = 0; i < n && gPad == NULL; i++) {
+      IOHIDDeviceRef d = (IOHIDDeviceRef)devs[i];
+      char transport[32] = "";
+      CFTypeRef t = IOHIDDeviceGetProperty(d, CFSTR(kIOHIDTransportKey));
+      if (t != NULL && CFGetTypeID(t) == CFStringGetTypeID()) CFStringGetCString(t, transport, sizeof transport, kCFStringEncodingUTF8);
+      int page = 0, usage = 0;
+      CFTypeRef up = IOHIDDeviceGetProperty(d, CFSTR(kIOHIDPrimaryUsagePageKey)), uu = IOHIDDeviceGetProperty(d, CFSTR(kIOHIDPrimaryUsageKey));
+      if (up != NULL) CFNumberGetValue(up, kCFNumberIntType, &page);
+      if (uu != NULL) CFNumberGetValue(uu, kCFNumberIntType, &usage);
+      printf("hid device: transport=%s usage page %d usage %d\n", transport, page, usage);
+      if (strcmp(transport, "USB") != 0) { sawBluetooth = true; continue; }
+      if (page == 1 && usage == 5) gPad = (IOHIDDeviceRef)CFRetain(d);
+    }
+    free(devs);
+    CFRelease(set);
+  }
+  if (gPad == NULL) {
+    fprintf(stderr, sawBluetooth ? "the pad is on Bluetooth only: refusing, this tool writes the path report over USB only\n" : "no DualSense HID device found\n");
+    return false;
+  }
+  IOReturn r = IOHIDDeviceOpen(gPad, kIOHIDOptionsTypeNone);
+  if (r != kIOReturnSuccess) { fprintf(stderr, "IOHIDDeviceOpen failed: 0x%x\n", r); return false; }
+  return true;
+}
+
+static bool writeRoute(const char *route, bool restore) {
+  uint8_t report[48] = {0};
+  report[0] = 0x02;   // the ordinary USB output report; the valid flags below say which fields count, the rest is ignored
+  if (restore) {
+    report[1] = 0x80;  report[2] = 0x80;  report[8] = 0x00;  report[38] = 0;
+  } else if (!strcmp(route, "speaker")) {
+    report[1] = 0x20 | 0x80;  report[2] = 0x80;  report[6] = 0x64;  report[8] = 0x30;  report[38] = 2;
+  } else {
+    report[1] = 0x10 | 0x20 | 0x80;  report[2] = 0x80;  report[5] = 0x58;  report[6] = 0x64;  report[8] = 0x00;  report[38] = 0;
+  }
+  IOReturn r = IOHIDDeviceSetReport(gPad, kIOHIDReportTypeOutput, report[0], report, sizeof(report));
+  if (r != kIOReturnSuccess) { fprintf(stderr, "route write failed: 0x%x\n", r); return false; }
+  return true;
+}
+
+static void *routeRepeater(void *unused) {
+  (void)unused;
+  unsigned writes = 0;
+  while (atomic_load(&g.frame) < g.totalFrames) {
+    for (int i = 0; i < 50 && atomic_load(&g.frame) < g.totalFrames; i++) usleep(20000);
+    if (atomic_load(&g.frame) < g.totalFrames && writeRoute(gRoute, false)) writes++;
+  }
+  printf("route %s rewritten %u times during playback\n", gRoute, writes);
+  return NULL;
+}
+
+static void *reporter(void *unused) {
+  (void)unused;
+  int last = -1;
+  while (atomic_load(&g.frame) < g.totalFrames) {
+    int within = 0;
+    const int step = stepAt(atomic_load(&g.frame), &within);
+    if (step != last && within && step <= (int)g.channels) {
+      last = step;
+      if (step < (int)g.channels) printf("[step %d] tone on channel %d only\n", step + 1, step + 1);
+      else printf("[step %d] tone on all %u channels\n", step + 1, (unsigned)g.channels);
+      fflush(stdout);
+      if (gHaptics) { ds5_haptics_set(0.8f); usleep(300000); ds5_haptics_set(0.0f); }
+    }
+    usleep(20000);
+  }
+  return NULL;
+}
+
+typedef struct { int channel; char answer; } MapAnswer;
+
+static OSStatus playOnce(const char *api) {
+  atomic_store(&g.frame, 0);
+  if (!strcmp(api, "queue")) return runQueue(false);
+  if (!strcmp(api, "queue-layout")) return runQueue(true);
+  if (!strcmp(api, "ioproc")) return runIOProc();
+  return runAUHAL();
+}
+
+static int readAnswer(const char *prompt, const char *allowed) {
+  for (;;) {
+    printf("%s", prompt);
+    fflush(stdout);
+    char line[64];
+    if (fgets(line, sizeof line, stdin) == NULL) return 0;
+    for (const char *c = line; *c; c++) if (*c != ' ' && *c != '\t' && *c != '\n' && strchr(allowed, *c) != NULL) return *c;
+    printf("  please answer with one of: %s\n", allowed);
+  }
+}
+
+static int runMapTest(const char *api, bool headsetRoute) {
+  MapAnswer answers[MAX_CH];
+  g.stepSeconds = 1.5;
+  g.gapSeconds = 0.3;
+  g.totalFrames = (uint64_t)((g.stepSeconds + g.gapSeconds) * g.rate);
+  printf("\nMAPPING TEST on the %s route, %u channels. Each channel is played alone for %.1f s.\n", headsetRoute ? "headset" : "speaker", gChannels, g.stepSeconds);
+  for (UInt32 ch = 0; ch < gChannels; ch++) {
+    printf("\n=== STEP %u of %u: the next tone is on channel %u ONLY (device element %u). ===\n", ch + 1, gChannels, ch + 1, ch + 1);
+    printf("Press Enter, then listen.");
+    fflush(stdout);
+    char line[16];
+    if (fgets(line, sizeof line, stdin) == NULL) return 1;
+    gOnly = (int)ch;
+    OSStatus st = playOnce(api);
+    printf("(tone on channel %u finished, status %d)\n", ch + 1, (int)st);
+    answers[ch].channel = (int)ch + 1;
+    char prompt[256];
+    snprintf(prompt, sizeof prompt, headsetRoute ?
+        "Where did you hear channel %u? l = left ear, r = right ear, b = both ears, a = actuators/vibration only, n = nothing, ? = not sure: " :
+        "Where did you hear channel %u? s = pad speaker, a = actuators/vibration only, n = nothing, ? = not sure: ", ch + 1);
+    answers[ch].answer = (char)readAnswer(prompt, headsetRoute ? "lrban?" : "san?");
+  }
+  gOnly = -1;
+  printf("\n=== RESULT (route %s) ===\n", headsetRoute ? "headset" : "speaker");
+  for (UInt32 ch = 0; ch < gChannels; ch++) printf("  channel %u -> %c\n", ch + 1, answers[ch].answer);
+  if (!headsetRoute) {
+    const bool c1 = answers[0].answer == 's', c2 = gChannels > 1 && answers[1].answer == 's';
+    if (c1 && c2) printf("  the speaker plays both channels: the default mix (ds5PadSpeakerMix both) is right, or ch1/ch2 would also do\n");
+    else if (c1) printf("  the speaker plays channel 1 only: defaults write std.skyhua.MoonlightMacEnhanced ds5PadSpeakerMix ch1 (the default 'both' also works)\n");
+    else if (c2) printf("  the speaker plays channel 2 only: defaults write std.skyhua.MoonlightMacEnhanced ds5PadSpeakerMix ch2 (the default 'both' also works)\n");
+    else printf("  the speaker played neither channel: the route report did not take effect, or the volume is down\n");
+  } else {
+    const char a = answers[0].answer, b = gChannels > 1 ? answers[1].answer : '?';
+    if (a == 'l' && b == 'r') printf("  stereo as is: ds5PadHeadsetMix stereo (the default)\n");
+    else if (a == 'r' && b == 'l') printf("  swapped: defaults write std.skyhua.MoonlightMacEnhanced ds5PadHeadsetMix swap\n");
+    else if ((a == 'b' || a == 'l' || a == 'r') && (b == 'n' || b == 'a')) printf("  only channel 1 reaches the headset: defaults write std.skyhua.MoonlightMacEnhanced ds5PadHeadsetMix mono\n");
+    else if (a == 'b' && b == 'b') printf("  both channels play in both ears: ds5PadHeadsetMix mono is the closest\n");
+    else printf("  no clear stereo mapping: keep the default and look at the answers above\n");
+  }
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  const char *needle = "DualSense", *api = "queue", *volume = "keep";
+  bool list = false, doDescribe = false, play = false, listener = false, force = false, mapTest = false;
+  g.hz = 440; g.amp = 0.25; g.stepSeconds = 1.2; g.gapSeconds = 0.5; g.rate = 48000;
+  for (int i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "--list")) list = true;
+    else if (!strcmp(argv[i], "--describe")) doDescribe = true;
+    else if (!strcmp(argv[i], "--play")) play = true;
+    else if (!strcmp(argv[i], "--listener-present")) listener = true;
+    else if (!strcmp(argv[i], "--force")) force = true;
+    else if (!strcmp(argv[i], "--route") && i + 1 < argc) gRoute = argv[++i];
+    else if (!strcmp(argv[i], "--haptics")) gHaptics = true;
+    else if (!strcmp(argv[i], "--map-test")) mapTest = true;
+    else if (!strcmp(argv[i], "--device") && i + 1 < argc) needle = argv[++i];
+    else if (!strcmp(argv[i], "--api") && i + 1 < argc) api = argv[++i];
+    else if (!strcmp(argv[i], "--volume") && i + 1 < argc) volume = argv[++i];
+    else if (!strcmp(argv[i], "--step") && i + 1 < argc) g.stepSeconds = atof(argv[++i]);
+    else if (!strcmp(argv[i], "--hz") && i + 1 < argc) g.hz = atof(argv[++i]);
+    else if (!strcmp(argv[i], "--amp") && i + 1 < argc) g.amp = atof(argv[++i]);
+    else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }
+  }
+  if (list) { listDevices(); return 0; }
+  gDevice = findDevice(needle);
+  if (gDevice == kAudioObjectUnknown) { fprintf(stderr, "no output device with \"%s\" in its name and 2+ output channels\n", needle); return 1; }
+  if (mapTest) play = true;
+  if (doDescribe || !play) { describe(gDevice); if (!play) return 0; }
+  if (!listener) { fprintf(stderr, "refusing to play without --listener-present (someone must be there to listen)\n"); return 3; }
+  if (!force && system("pgrep -q MoonlightEnhanced") == 0) { fprintf(stderr, "MoonlightEnhanced is running: refusing, so that no stream shares the device\n"); return 4; }
+  gChannels = outputChannels(gDevice);
+  if (gChannels > MAX_CH) gChannels = MAX_CH;
+  g.channels = gChannels;
+  g.stepCount = (int)gChannels + 1;
+  g.totalFrames = (uint64_t)((g.stepSeconds + g.gapSeconds) * g.rate * (g.stepCount + 1));
+  // The volume: keep what macOS has, or raise to unity for the run and restore afterwards.
+  Float32 saved = -1;
+  AudioObjectPropertyAddress va = {kAudioDevicePropertyVolumeScalar, kAudioObjectPropertyScopeOutput, 0};
+  if (!strcmp(volume, "unity") && AudioObjectHasProperty(gDevice, &va)) {
+    getData(gDevice, kAudioDevicePropertyVolumeScalar, kAudioObjectPropertyScopeOutput, 0, &saved, sizeof(saved));
+    Float32 one = 1.0f;
+    AudioObjectSetPropertyData(gDevice, &va, 0, NULL, sizeof(one), &one);
+    printf("device volume %.3f raised to 1.0 for the run\n", saved);
+  }
+  if (gRoute != NULL) {
+    if (strcmp(gRoute, "speaker") != 0 && strcmp(gRoute, "headset") != 0) { fprintf(stderr, "--route is speaker or headset\n"); return 2; }
+    if (!padOpenUSB()) return 1;
+    if (!writeRoute(gRoute, false)) return 1;
+    printf("output path report sent over USB: route %s\n", gRoute);
+    usleep(300000);
+  }
+  if (mapTest) {
+    if (gHaptics && ds5_haptics_start() == 0) gHaptics = false;
+    int rc = runMapTest(api, gRoute != NULL && !strcmp(gRoute, "headset"));
+    if (gRoute != NULL && writeRoute(gRoute, true)) printf("output path report written back (headset path, pre-amp 0 dB)\n");
+    if (gHaptics) ds5_haptics_stop();
+    if (saved >= 0) { AudioObjectSetPropertyData(gDevice, &va, 0, NULL, sizeof(saved), &saved); printf("device volume restored to %.3f\n", saved); }
+    return rc;
+  }
+  if (gHaptics && ds5_haptics_start() == 0) gHaptics = false;
+  printf("playing through the %s path to device %u, %u channels at %.0f Hz\n", api, gDevice, gChannels, g.rate);
+  pthread_t thread, repeater;
+  pthread_create(&thread, NULL, reporter, NULL);
+  if (gRoute != NULL) pthread_create(&repeater, NULL, routeRepeater, NULL);
+  OSStatus st = noErr;
+  if (!strcmp(api, "queue")) st = runQueue(false);
+  else if (!strcmp(api, "queue-layout")) st = runQueue(true);
+  else if (!strcmp(api, "ioproc")) st = runIOProc();
+  else if (!strcmp(api, "auhal")) st = runAUHAL();
+  else { fprintf(stderr, "unknown --api %s\n", api); st = -1; }
+  atomic_store(&g.frame, g.totalFrames);
+  pthread_join(thread, NULL);
+  if (gRoute != NULL) {
+    pthread_join(repeater, NULL);
+    if (writeRoute(gRoute, true)) printf("output path report written back (headset path, pre-amp 0 dB)\n");
+  }
+  if (gHaptics) ds5_haptics_stop();
+  if (saved >= 0) { AudioObjectSetPropertyData(gDevice, &va, 0, NULL, sizeof(saved), &saved); printf("device volume restored to %.3f\n", saved); }
+  printf("%s path finished, status %d\n", api, (int)st);
+  return st == noErr ? 0 : 1;
+}
