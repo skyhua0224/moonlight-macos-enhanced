@@ -687,3 +687,344 @@ enum DeckArtKind: String {
   case icon = "_icon.png"
 }
 
+enum DeckArt {
+  private static let cache = NSCache<NSString, NSImage>()
+
+  static func path(_ app: TemporaryApp, _ kind: DeckArtKind = .poster) -> String {
+    guard (app.host?.uuid ?? "").isEmpty == false, (app.id ?? "").isEmpty == false else { return "" }
+    let poster: String = AppAssetManager.boxArtPath(for: app) ?? ""
+    if kind == .poster { return poster }
+    return (poster as NSString).deletingPathExtension + kind.rawValue
+  }
+
+  static func exists(_ app: TemporaryApp, _ kind: DeckArtKind) -> Bool {
+    FileManager.default.fileExists(atPath: path(app, kind))
+  }
+
+  private static func key(_ app: TemporaryApp, _ kind: DeckArtKind = .poster) -> NSString {
+    "\(app.host?.uuid ?? "")/\(app.id ?? "")/\(kind.rawValue)" as NSString
+  }
+
+  static func cached(_ app: TemporaryApp, _ kind: DeckArtKind) -> NSImage? { cache.object(forKey: key(app, kind)) }
+
+  static func load(_ app: TemporaryApp, kind: DeckArtKind, maxPixel: Int = 1600) async -> NSImage? {
+    if let hit = cached(app, kind) { return hit }
+    let file = path(app, kind)
+    let cacheKey = key(app, kind)
+    let image: NSImage? = await Task.detached(priority: .userInitiated) {
+      guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: file) as CFURL, nil) else { return nil }
+      let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceShouldCacheImmediately: true,
+        kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+      ]
+      guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+      return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }.value
+    if let image { cache.setObject(image, forKey: cacheKey) }
+    return image
+  }
+
+  /// The art's average colour, lifted a little in saturation, for tinting a page background.
+  static func dominantColor(_ image: NSImage) -> Color? {
+    guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+    var pixel = [UInt8](repeating: 0, count: 4)
+    guard let ctx = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                              space: CGColorSpaceCreateDeviceRGB(),
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    ctx.interpolationQuality = .medium
+    ctx.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+    let color = NSColor(red: CGFloat(pixel[0]) / 255, green: CGFloat(pixel[1]) / 255, blue: CGFloat(pixel[2]) / 255, alpha: 1)
+    var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    color.usingColorSpace(.deviceRGB)?.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+    return Color(hue: Double(h), saturation: Double(min(1, s * 1.35)), brightness: Double(max(0.35, min(0.85, b))))
+  }
+
+  static func cached(_ app: TemporaryApp) -> NSImage? { cache.object(forKey: key(app)) }
+
+  static func invalidate(_ app: TemporaryApp, except kept: DeckArtKind? = nil) {
+    for kind in [DeckArtKind.poster, .hero, .logo, .icon] where kind != kept { cache.removeObject(forKey: key(app, kind)) }
+  }
+
+  /// What `refreshPoster` needs, read on the caller's thread.
+  static func posterRefreshTarget(_ app: TemporaryApp) -> (key: String, path: String) {
+    (key(app) as String, AppAssetManager.boxArtPath(for: app) ?? "")
+  }
+
+  /// Replaces the cached poster with the file that is on disk now (decoded off the main thread). A file that cannot be
+  /// read leaves the cache empty, as before.
+  static func refreshPoster(key: String, path: String, maxPixel: Int = 900) async {
+    let image: NSImage? = await Task.detached(priority: .userInitiated) {
+      guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
+      let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceShouldCacheImmediately: true,
+        kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+      ]
+      guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+      return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }.value
+    if let image { cache.setObject(image, forKey: key as NSString) } else { cache.removeObject(forKey: key as NSString) }
+  }
+
+  /// Decodes a downsampled copy off the main thread so scrolling never waits on a PNG.
+  static func load(_ app: TemporaryApp, maxPixel: Int = 560) async -> NSImage? {
+    if let hit = cached(app) { return hit }
+    let path: String = AppAssetManager.boxArtPath(for: app) ?? ""
+    let cacheKey = key(app)
+    let image: NSImage? = await Task.detached(priority: .userInitiated) {
+      let url = URL(fileURLWithPath: path)
+      guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+      let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceShouldCacheImmediately: true,
+        kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+      ]
+      guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+      return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }.value
+    if let image { cache.setObject(image, forKey: cacheKey) }
+    return image
+  }
+}
+
+/// Poster art at the box-art aspect ratio, with the app's initial as a stand-in while it loads.
+/// Art of any shape in a box of a fixed aspect. The box is laid out first (a clear shape of the
+/// aspect), the picture is drawn over it and cut off at its edge: the picture's own size and aspect
+/// never reach the layout, so a wide wallpaper or a square icon cannot widen its tile or its column.
+struct DeckFilledImage: View {
+  let image: NSImage
+  let aspect: CGFloat
+
+  var body: some View {
+    Color.clear
+      .aspectRatio(aspect, contentMode: .fit)
+      .overlay { Image(nsImage: image).resizable().scaledToFill() }
+      .clipped()
+  }
+}
+
+struct DeckPoster: View {
+  let app: TemporaryApp
+  var version = 0
+  var radius: CGFloat = 14
+  @SwiftUI.State private var image: NSImage?
+  @Environment(\.deckScale) private var s
+
+  var body: some View {
+    Group {
+      if let image {
+        DeckFilledImage(image: image, aspect: 0.75)
+      } else {
+        ZStack {
+          Rectangle().fill(Color.gray.opacity(0.18))
+          Text(String((app.name ?? "?").prefix(1)))
+            .font(.system(size: 34 * s, weight: .bold, design: .rounded))
+            .foregroundStyle(.secondary)
+        }
+        .aspectRatio(0.75, contentMode: .fit)
+      }
+    }
+    .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    .task(id: "\(app.deckKey)/\(version)") {
+      // the picture on screen stays until the next one is decoded (a poster is replaced by its lossless picture)
+      if let hit = DeckArt.cached(app) { image = hit }
+      // decoded for the largest tile on a 2x screen with the adaptive factor (240 pt * 1.35 * 2 = 650 px) and more
+      image = await DeckArt.load(app, maxPixel: 900)
+    }
+  }
+}
+
+extension TemporaryApp {
+  /// App ids repeat across hosts, so identity needs the host as well.
+  var deckKey: String { "\(host?.uuid ?? "")/\(id ?? "")" }
+}
+
+/// The blurred, darkened poster behind a hero card; falls back to the platform tint.
+struct DeckHeroBackdrop: View {
+  let app: TemporaryApp?
+  let tint: Color
+  var version = 0
+  @SwiftUI.State private var image: NSImage?
+
+  var body: some View {
+    Color.clear
+      .overlay {
+        GeometryReader { geo in
+          ZStack {
+            LinearGradient(colors: [tint.opacity(0.55), tint.opacity(0.18)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            if let image {
+              Image(nsImage: image)
+                .resizable().scaledToFill()
+                .frame(width: geo.size.width * 1.3, height: geo.size.height * 1.3)   // a bigger frame, not a transform
+                .blur(radius: 38)
+                .saturation(1.3)
+                .frame(width: geo.size.width, height: geo.size.height).clipped()
+            }
+            LinearGradient(colors: [.black.opacity(0.62), .black.opacity(0.28), .black.opacity(0.38)],
+                           startPoint: .leading, endPoint: .trailing)
+          }
+        }
+      }
+      .clipped()
+    .task(id: "\(app?.deckKey ?? "")/\(version)") {
+      image = nil
+      if let app { image = await DeckArt.load(app, maxPixel: 320) }
+    }
+  }
+}
+
+/// Which host the sidebar variant opens on.
+@objc(MLDeckHostPicker)
+public final class DeckHostPicker: NSObject {
+  @objc public static func preferred(from hosts: [TemporaryHost]) -> TemporaryHost? {
+    DeckHostList.preferred(DeckHostList.build(hosts).filter { !$0.stale })?.raw
+  }
+}
+
+/// The computers as discovery has them right now (set by the sidebar's controller).
+enum DeckLive {
+  static var provider: (() -> [TemporaryHost])?
+  static func host(_ uuid: String) -> TemporaryHost? { provider?().first { $0.uuid == uuid } }
+}
+
+// MARK: - Paths and addresses
+
+/// What kind of way to a computer an address is, as far as the address alone says. A private address over a
+/// tunnel cannot be told from a real LAN by its number, so the page only calls it 局域网 when it also answers fast.
+enum DeckPathKind {
+  case lan, direct, overlay, relay, tunnel, ipv6, ipv6lan, mdns, hostname, privateUnknown
+
+  var symbol: String {
+    switch self {
+    case .lan, .ipv6lan, .privateUnknown: return "wifi"
+    case .direct, .ipv6: return "globe"
+    case .overlay: return "point.3.connected.trianglepath.dotted"
+    case .relay: return "arrow.left.arrow.right"
+    case .tunnel: return "lock.shield"
+    case .mdns: return "dot.radiowaves.left.and.right"
+    case .hostname: return "network"
+    }
+  }
+
+  var title: String {
+    switch self {
+    case .lan: return DL("deck.path.lan")
+    case .direct: return DL("deck.path.direct")
+    case .overlay: return DL("deck.path.overlay")
+    case .relay: return DL("deck.path.relay")
+    case .tunnel: return DL("deck.path.tunnel")
+    case .ipv6: return DL("deck.addr.ipv6")
+    case .ipv6lan: return DL("deck.addr.ipv6lan")
+    case .mdns: return DL("deck.addr.mdns")
+    case .hostname: return DL("deck.addr.hostname")
+    case .privateUnknown: return DL("deck.path.private")
+    }
+  }
+}
+
+enum DeckAddress {
+  /// The address as shown: surrounding spaces and the trailing dot of a DNS name removed
+  /// ("Gaming-PC.local.:57989" -> "Gaming-PC.local:57989").
+  static func normalized(_ raw: String) -> String {
+    var text = raw.trimmingCharacters(in: .whitespaces)
+    if text.hasPrefix("["), let close = text.firstIndex(of: "]") {
+      let inner = String(text[text.index(after: text.startIndex)..<close])
+      let rest = String(text[text.index(after: close)...])
+      return "[" + inner.trimmingCharacters(in: CharacterSet(charactersIn: ".")) + "]" + rest
+    }
+    if text.filter({ $0 == ":" }).count == 1, let colon = text.firstIndex(of: ":") {
+      let host = String(text[..<colon]).trimmingCharacters(in: CharacterSet(charactersIn: "."))
+      return host + String(text[colon...])
+    }
+    if text.filter({ $0 == ":" }).isEmpty { text = text.trimmingCharacters(in: CharacterSet(charactersIn: ".")) }
+    return text
+  }
+
+  /// The host part, without port or brackets.
+  static func hostPart(_ raw: String) -> String {
+    let text = normalized(raw)
+    if text.hasPrefix("["), let close = text.firstIndex(of: "]") { return String(text[text.index(after: text.startIndex)..<close]) }
+    if text.filter({ $0 == ":" }).count == 1, let colon = text.firstIndex(of: ":") { return String(text[..<colon]) }
+    return text
+  }
+
+  /// The host part, lowercased: the key that ties an address to discovery's results, whatever port or trailing
+  /// dot either side carries ("192.0.2.133:57989" and "192.0.2.133" are the same address).
+  static func key(_ raw: String) -> String { hostPart(raw).lowercased() }
+
+  /// A value from discovery's dictionaries (keyed by its own endpoint strings) for an address, by host part.
+  static func lookup<T>(_ dict: [AnyHashable: Any]?, _ raw: String) -> T? {
+    guard let dict else { return nil }
+    if let hit = dict[raw] as? T { return hit }
+    let wanted = key(raw)
+    for (k, v) in dict { if let name = k as? String, key(name) == wanted, let hit = v as? T { return hit } }
+    return nil
+  }
+
+  static func kind(_ raw: String, rtt: Int? = nil) -> DeckPathKind {
+    let host = hostPart(raw).lowercased()
+    if host.contains(":") {
+      // IPv6: fd00::/8 unique local is a LAN, fe80 link local too
+      if host.hasPrefix("fd") || host.hasPrefix("fc") || host.hasPrefix("fe80") { return .ipv6lan }
+      return .ipv6
+    }
+    if host.hasSuffix(".local") { return .mdns }
+    if host.contains(where: { $0.isLetter }) {
+      // a DNS name: what it resolves to says what path it is (a DDNS name for the public address is a direct path)
+      if let ip = DeckResolver.addresses(host)?.first { return kind(ip, rtt: rtt) }
+      return .hostname
+    }
+    let parts = host.split(separator: ".").compactMap { Int($0) }
+    guard parts.count == 4 else { return .hostname }
+    if parts[0] == 100, (64...127).contains(parts[1]) { return .overlay }
+    if DeckHost.isPrivate(host) {
+      if let rtt, rtt > 40 { return .privateUnknown }
+      return .lan
+    }
+    return .direct
+  }
+}
+
+/// The latency as shown: an exponentially smoothed value that changes the text only when it has moved by
+/// 3 ms or 10 %, and survives a probe round that returned nothing for 20 s.
+enum DeckLatency {
+  private static let lock = NSLock()
+  private static var smoothed: [String: Double] = [:]
+  private static var shown: [String: (value: Int, when: Date)] = [:]
+
+  static func display(key: String, raw rawValue: Int?) -> Int? {
+    lock.lock(); defer { lock.unlock() }
+    let raw = DeckLatencyRules.valid(rawValue)   // -1 (reachable, no number) is nothing to show: the last valid figure stays
+    let now = Date()
+    guard let raw else {
+      if let last = shown[key], now.timeIntervalSince(last.when) < 20 { return last.value }
+      return nil
+    }
+    let value = smoothed[key].map { 0.7 * $0 + 0.3 * Double(raw) } ?? Double(raw)
+    smoothed[key] = value
+    let target = Int(value.rounded())
+    if let last = shown[key] {
+      let delta = abs(target - last.value)
+      let moved = delta >= 3 || Double(delta) >= Double(last.value) * 0.10
+      shown[key] = (moved ? target : last.value, now)
+      return shown[key]?.value
+    }
+    shown[key] = (target, now)
+    return target
+  }
+}
+
+/// "H.264 / H.265 / AV1 · HDR": what the computer can do (H.264 is always there). Shown in 主机信息, not in the status line.
+func deckCapabilityText(_ host: DeckHost) -> String {
+  var names = ["H.264"]
+  if host.codecs.contains("HEVC") { names.append("H.265") }
+  if host.codecs.contains("AV1") { names.append("AV1") }
+  var text = names.joined(separator: " / ")
+  if host.hdr { text += " · HDR" }
+  return text
+}
+
