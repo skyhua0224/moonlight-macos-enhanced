@@ -23,13 +23,12 @@ This repository is an enhanced macOS distribution in the Moonlight ecosystem. Th
 
 ## Third-Party Libraries / 第三方库
 
-- **[`SDL2`](https://www.libsdl.org/)** — Input and platform integration / 输入与平台集成
-- **[`OpenSSL`](https://www.openssl.org/)** — Cryptography / 加密能力
-- **[`MASPreferences`](https://github.com/shpakovski/MASPreferences)** — Preferences window infrastructure / 设置窗口基础设施
-- **[`dav1d`](https://code.videolan.org/videolan/dav1d)** (BSD 2-Clause, © VideoLAN and dav1d authors) — AV1 decoding on Macs without an AV1 hardware decoder; the license text is in the app as `ThirdPartyLicenses.txt` / 在没有 AV1 硬件解码的 Mac 上解码 AV1；许可证全文随应用附带（`ThirdPartyLicenses.txt`）
-- **[`usbipdcpp`](https://github.com/yunsmall/usbipdcpp)** (LGPLv3, Copyright © Yunjie Ye) — Remote USB forwarding / 远程 USB 转发（USB 映射）. This product uses usbipdcpp (https://github.com/yunsmall/usbipdcpp), licensed under LGPLv3. It is statically linked, unmodified, into the `moonlight-usbd` helper; its source is the submodule `RemoteUSB/third_party/usbipdcpp`, and the LGPLv3 and GPL-3.0 texts are in the app as `ThirdPartyLicenses.txt` / 以未修改形式静态链接进 `moonlight-usbd`，源码见子模块 `RemoteUSB/third_party/usbipdcpp`，LGPLv3 与 GPL-3.0 全文随应用附带（`ThirdPartyLicenses.txt`）
-- **[`libusb`](https://libusb.info)** (LGPL-2.1) — USB device access for Remote USB forwarding, statically linked into `moonlight-usbd`; source in the submodule `RemoteUSB/third_party/libusb` / 远程 USB 转发的 USB 设备访问，静态链接进 `moonlight-usbd`，源码见子模块 `RemoteUSB/third_party/libusb`
-- **[`asio`](https://think-async.com/Asio/)** (Boost Software License 1.0, © Christopher M. Kohlhoff) and **[`spdlog`](https://github.com/gabime/spdlog)** (MIT, © Gabi Melman) — Networking and logging in `moonlight-usbd` / `moonlight-usbd` 的网络与日志
+- **[`FFmpeg`](https://ffmpeg.org/)** (LGPL-2.1-or-later) — AV1 bitstream handling, statically linked / 静态链接
+- **[`Opus`](https://opus-codec.org/)** (BSD-3-Clause) — Audio codec / 音频编解码
+- **[`OpenSSL`](https://www.openssl.org/)** (Apache-2.0) — Cryptography / 加密能力
+- **[`Sparkle`](https://sparkle-project.org/)** (MIT) — Updates / 应用更新
+- **[`ENet`](https://github.com/cgutman/enet)** (MIT) and the Reed-Solomon FEC code inside `moonlight-common-c` / 位于 moonlight-common-c 内的 ENet 与前向纠错代码
+- **[`dav1d`](https://code.videolan.org/videolan/dav1d)** (BSD 2-Clause, © VideoLAN and dav1d authors) — AV1 decoding on Macs without an AV1 hardware decoder; the full license texts are in the app under About > Third-Party Licenses / 在没有 AV1 硬件解码的 Mac 上解码 AV1；全部许可证全文在应用的“关于 > 第三方许可证”中
 
 ## Bundled Data / 随应用附带的数据
 
