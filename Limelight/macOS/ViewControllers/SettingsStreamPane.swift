@@ -126,7 +126,7 @@ struct StreamView: View {
     }
     .sheet(isPresented: $isAddressEditorPresented) {
       if let host = selectedTemporaryHost {
-        ConnectionEditorSheet(host: host)
+        ConnectionEditorSheet(host: host, isPresented: $isAddressEditorPresented)
           .frame(minWidth: 620, minHeight: 520)
       }
     }
@@ -143,9 +143,26 @@ struct StreamView: View {
 
 private struct ConnectionEditorSheet: NSViewControllerRepresentable {
   let host: TemporaryHost
+  @Binding var isPresented: Bool
+
+  final class Coordinator {
+    var isPresented: Binding<Bool>
+
+    init(isPresented: Binding<Bool>) {
+      self.isPresented = isPresented
+    }
+  }
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(isPresented: $isPresented)
+  }
 
   func makeNSViewController(context: Context) -> ConnectionEditorViewController {
-    ConnectionEditorViewController(host: host)
+    let viewController = ConnectionEditorViewController(host: host)
+    viewController.closeHandler = {
+      context.coordinator.isPresented.wrappedValue = false
+    }
+    return viewController
   }
 
   func updateNSViewController(_ nsViewController: ConnectionEditorViewController, context: Context) {}

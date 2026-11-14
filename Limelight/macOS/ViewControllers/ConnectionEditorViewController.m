@@ -6,6 +6,7 @@
 //
 
 #import "ConnectionEditorViewController.h"
+#import "SheetCloseRules.h"
 #import "TemporaryHost.h"
 #import "ConnectionEndpointStore.h"
 #import "HttpManager.h"
@@ -172,6 +173,7 @@
     [actions addArrangedSubview:self.testAllButton];
 
     NSButton *closeButton = [NSButton buttonWithTitle:MLString(@"Close") target:self action:@selector(closeSheet)];
+    closeButton.keyEquivalent = @"\e";
     [actions addArrangedSubview:closeButton];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -538,7 +540,31 @@
 }
 
 - (void)closeSheet {
-    [self dismissController:nil];
+    NSWindow *window = self.view.window;
+    NSWindow *sheetParent = window.sheetParent;
+    NSViewController *presenter = self.presentingViewController;
+    MLSheetClosePlan plan = MLSheetClose(presenter != nil, sheetParent != nil, self.closeHandler != nil);
+    switch (plan.route) {
+        case MLSheetCloseViaPresenter:
+            // AppKit's view-controller dismissal path also removes this controller
+            // from the presenter's presentedViewControllers collection.
+            [presenter dismissViewController:self];
+            break;
+        case MLSheetCloseViaSheetParent:
+            // SwiftUI's sheet host may expose only the window-level presentation.
+            [sheetParent endSheet:window returnCode:NSModalResponseCancel];
+            break;
+        case MLSheetCloseNoWindowRoute:
+            break;
+    }
+
+    if (plan.notifyCloseHandler) {
+        self.closeHandler();
+    }
+}
+
+- (void)cancelOperation:(id)sender {
+    [self closeSheet];
 }
 
 @end
