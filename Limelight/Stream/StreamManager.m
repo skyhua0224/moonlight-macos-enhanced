@@ -6,6 +6,7 @@
 //  Copyright (c) 2014 Moonlight Stream. All rights reserved.
 //
 
+#import "MoonlightEnhanced-Swift.h"
 #import "StreamManager.h"
 #import "CryptoManager.h"
 #import "HttpManager.h"
@@ -164,6 +165,18 @@
         }
         connectionPreparedMs = LiGetMillis() - prepareStartMs;
     });
+
+    // The host being busy is "resume" only when the app that runs is this one; another app running is not ours to
+    // resume (and not ours to quit without asking): MLHostSessionPolicy.launchDecision.
+    NSInteger decision = [MLHostSessionPolicy launchDecisionWithState:serverState
+                                                          currentGame:[[serverInfoResp getStringTag:@"currentgame"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]
+                                                                appId:_config.appID];
+    if (decision == 3) {
+        Log(LOG_W, @"[session] another app is running on the host (%@), not %@; not resuming it", [serverInfoResp getStringTag:@"currentgame"], _config.appName ?: @"?");
+        [self discardPreparedConnection];
+        [_callbacks launchFailed:NSLocalizedString(@"Another App Is Running", @"Another app is running on the host")];
+        return;
+    }
 
     // resumeApp and launchApp handle calling launchFailed
     const uint64_t hostLaunchStartMs = LiGetMillis();
