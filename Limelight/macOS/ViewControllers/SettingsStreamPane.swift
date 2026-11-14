@@ -64,7 +64,7 @@ struct StreamView: View {
 
         SettingsChoiceRow(title: "Video FEC", selection: $settingsModel.selectedVideoFecPercentage,
           options: SettingsModel.videoFecPercentages)
-        Text("Video FEC hint").font(.footnote).foregroundStyle(.secondary)
+        Text("Video FEC hint").font(.footnote).settingsLineCheck("SettingsStreamPane:67").foregroundStyle(.secondary)
       }
 
       FormSection(title: "Clipboard") {

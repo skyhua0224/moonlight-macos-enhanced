@@ -439,7 +439,6 @@ private struct USBMappingView: View {
           enabled: mappingEnabled && hostAvailable
         )
 
-        USBOpenSourceNotice()
       }
       .frame(maxWidth: 760, alignment: .leading)
       .padding(.horizontal, 28)
@@ -560,7 +559,7 @@ private struct USBSettingsSection: View {
             Text(localizedUSBStatus(remoteUSB.status))
               .font(.body)
             Text(languageManager.localize("Foundation USB forwarding detail"))
-              .font(.footnote)
+              .font(.footnote).settingsLineCheck("SettingsInputPane:532")
               .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
@@ -578,7 +577,6 @@ private struct USBSettingsSection: View {
         }
       }
 
-      USBOpenSourceNotice()
     }
   }
 
@@ -639,7 +637,7 @@ private struct USBMappingHeader: View {
           .font(.callout)
           .foregroundStyle(.secondary)
         Text(localizedStatus)
-          .font(.footnote)
+          .font(.footnote).settingsLineCheck("SettingsInputPane:580")
           .foregroundStyle(.secondary)
       }
 

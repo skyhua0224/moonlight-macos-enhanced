@@ -333,30 +333,31 @@ struct SettingsRow<Content: View>: View {
   @ViewBuilder
   var body: some View {
     Group {
-      HStack(alignment: .center, spacing: 20) {
-        rowLabel
-        Spacer(minLength: 18)
-        content.frame(maxWidth: .infinity, alignment: .trailing)
+      VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .center, spacing: 20) {
+          Text(LocalizedStringKey(title))
+            .fixedSize(horizontal: false, vertical: true)
+          Spacer(minLength: 18)
+          content.frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .frame(minHeight: 36)
+        // The explanation sits under the whole row, not in the narrow label column beside the control: one line.
+        if let detail, !detail.isEmpty {
+          Text(LocalizedStringKey(detail))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .settingsLineCheck("row:\(title)|\(detail)", text: languageManager.localize(detail))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 8)
+            .offset(y: -4)
+        }
       }
-      .frame(minHeight: 36)
       .overlay(alignment: .bottom) {
         Divider().opacity(0.45)
       }
     }
     .settingsSearchRow(title: title)
-  }
-
-  private var rowLabel: some View {
-    VStack(alignment: .leading, spacing: 3) {
-      Text(LocalizedStringKey(title))
-        .fixedSize(horizontal: false, vertical: true)
-      if let detail, !detail.isEmpty {
-        Text(LocalizedStringKey(detail))
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-    }
   }
 }
 
@@ -431,6 +432,7 @@ struct SettingDescriptionRow: View {
       .foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading)
+      .settingsLineCheck("description:\(textKey)", text: languageManager.localize(textKey))
       .padding(.vertical, 7)
   }
 }

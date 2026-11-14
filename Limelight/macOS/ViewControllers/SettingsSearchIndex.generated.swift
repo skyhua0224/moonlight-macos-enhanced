@@ -171,7 +171,6 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "usb/pane", pane: .usb, kind: .pane, sectionKey: "Input & Devices", titleKey: "USB Mapping", detailKey: "USB settings subtitle", keywords: []),
     SettingsSearchEntry(id: "usb/My Devices/My Devices", pane: .usb, kind: .section, sectionKey: "My Devices", titleKey: "My Devices", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "usb/Nearby Devices/Nearby Devices", pane: .usb, kind: .section, sectionKey: "Nearby Devices", titleKey: "Nearby Devices", detailKey: nil, keywords: []),
-    SettingsSearchEntry(id: "usb/Open Source/Open Source", pane: .usb, kind: .section, sectionKey: "Open Source", titleKey: "Open Source", detailKey: nil, keywords: []),
   ]
 
   static let generatedFileMappingEntries: [SettingsSearchEntry] = [

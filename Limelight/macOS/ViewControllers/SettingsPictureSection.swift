@@ -403,7 +403,7 @@ struct ScreenResolutionsSheet: View {
               VStack(alignment: .leading, spacing: 2) {
                 Text(screen.name)
                 Text(summary(screen))
-                  .font(.footnote)
+                  .font(.footnote).settingsLineCheck("SettingsPictureSection:406")
                   .foregroundStyle(.secondary)
               }
               Spacer(minLength: 12)

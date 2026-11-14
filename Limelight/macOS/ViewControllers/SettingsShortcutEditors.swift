@@ -122,7 +122,7 @@ private struct ShortcutCaptureSheet: View {
       ShortcutTokenRowView(tokens: StreamShortcutProfile.displayTokens(for: settingsModel.shortcut(for: item.action)))
 
       Text(languageManager.localize("Shortcut capture note"))
-        .font(.footnote)
+        .font(.footnote).settingsLineCheck("SettingsShortcutEditors:125")
         .foregroundColor(.secondary)
 
       if let errorKey {
@@ -367,7 +367,7 @@ private struct ControllerShortcutCaptureSheet: View {
         trigger: recording.isEmpty ? draft : ControllerTouchpadShortcut(buttons: Array(recording)).normalized)
 
       Text(languageManager.localize("Controller shortcut capture note"))
-        .font(.footnote)
+        .font(.footnote).settingsLineCheck("SettingsShortcutEditors:370")
         .foregroundColor(.secondary)
 
       Picker(languageManager.localize("Shortcut Activation"), selection: Binding(
@@ -388,7 +388,7 @@ private struct ControllerShortcutCaptureSheet: View {
       VStack(alignment: .leading, spacing: 4) {
         Toggle(languageManager.localize("Shortcut Preserve Original"), isOn: $draft.preserveOriginal)
         Text(languageManager.localize("Shortcut Preserve Original hint"))
-          .font(.footnote)
+          .font(.footnote).settingsLineCheck("SettingsShortcutEditors:391")
           .foregroundColor(.secondary)
       }
 
@@ -396,7 +396,7 @@ private struct ControllerShortcutCaptureSheet: View {
         Text(String(format: languageManager.localize("Controller shortcut conflict format"),
                     conflicts.map { languageManager.localize(ControllerShortcutProfile.titleKey(for: $0)) }
                       .formatted(.list(type: .and))))
-          .font(.footnote)
+          .font(.footnote).settingsLineCheck("SettingsShortcutEditors:399")
           .foregroundColor(.orange)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
@@ -584,7 +584,7 @@ struct KeyboardTranslationRulesView: View {
         Image(systemName: "exclamationmark.triangle.fill")
           .foregroundColor(.orange)
         Text(languageManager.localize("Translation Rules Capture Warning"))
-          .font(.footnote)
+          .font(.footnote).settingsLineCheck("SettingsShortcutEditors:587")
           .foregroundColor(.primary)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -605,7 +605,7 @@ struct KeyboardTranslationRulesView: View {
                 .foregroundColor(.primary)
 
               Text(languageManager.localize("No Shortcut Translation Rules detail"))
-                .font(.footnote)
+                .font(.footnote).settingsLineCheck("SettingsShortcutEditors:608")
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -768,7 +768,7 @@ private struct KeyboardTranslationRuleEditorSheet: View {
               ? "Translation Rule System Shortcut Warning" : "Shortcut needs system shortcut capture"),
           systemImage: "exclamationmark.triangle.fill"
         )
-        .font(.footnote)
+        .font(.footnote).settingsLineCheck("SettingsShortcutEditors:771")
         .foregroundColor(.orange)
         .fixedSize(horizontal: false, vertical: true)
       }
@@ -817,7 +817,7 @@ private struct KeyboardTranslationRuleEditorSheet: View {
 
       if let errorKey {
         Text(languageManager.localize(errorKey))
-          .font(.footnote)
+          .font(.footnote).settingsLineCheck("SettingsShortcutEditors:820")
           .foregroundColor(.red)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
@@ -878,7 +878,7 @@ private struct KeyboardTranslationRuleEditorSheet: View {
           languageManager.localize(
             isCapturing ? "Recording Shortcut" : "Click to Record Shortcut")
         )
-        .font(.footnote)
+        .font(.footnote).settingsLineCheck("SettingsShortcutEditors:881")
         .foregroundColor(.secondary)
       }
 

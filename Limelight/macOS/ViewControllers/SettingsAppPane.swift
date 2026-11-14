@@ -106,7 +106,7 @@ struct AppView: View {
 
         HStack {
           Text(languageManager.localize("Diagnostics are written to the application log."))
-            .font(.footnote)
+            .font(.footnote).settingsLineCheck("SettingsAppPane:113")
             .foregroundStyle(.secondary)
           Spacer()
         }
@@ -432,8 +432,7 @@ enum ThirdPartyNotices {
   static let sourceURL = URL(string: "https://github.com/skyhua0224/moonlight-macos-enhanced")!
 
   static func openLicenses() {
-    guard let url = Bundle.main.url(forResource: "ThirdPartyLicenses", withExtension: "txt") else { return }
-    NSWorkspace.shared.open(url)
+    ThirdPartyLicensesWindow.show()
   }
 }
 
@@ -560,7 +559,7 @@ private struct AboutUpdateCard: View {
       // settings-search: entry "Check for Updates" detail="Update Sources detail"
       HStack {
         Text(languageManager.localize("Update Sources detail"))
-          .font(.footnote)
+          .font(.footnote).settingsLineCheck("SettingsAppPane:557")
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
         Spacer()
