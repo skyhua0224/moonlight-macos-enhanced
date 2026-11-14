@@ -7,6 +7,7 @@
 //
 
 #import "AppsViewController.h"
+#import "ConceptHarness.h"
 #import "MLMenuItemImage.h"
 #import "AppsViewControllerDelegate.h" // Restore this import
 #import "AppCell.h"
@@ -20,11 +21,13 @@
 #import "NSView+Moonlight.h"
 
 #import "MoonlightEnhanced-Swift.h"
+#import "LatencyProbe.h"
 #import "StreamingSessionManager.h"
 
-#import "F.h"
 
 #import "HttpManager.h"
+#import "HttpRequest.h"
+#import "MLLaunchTrace.h"
 #import "IdManager.h"
 #import "CryptoManager.h"
 #import "AppListResponse.h"
@@ -34,6 +37,7 @@
 #import "DiscoveryWorker.h"
 #import "ConnectionHelper.h"
 #import "ConnectionEndpointStore.h"
+#import "ConnectionEditorViewController.h"
 #import "WakeOnLanManager.h"
 
 #undef NSLocalizedString
@@ -42,7 +46,16 @@
 @interface AppsViewController () <NSCollectionViewDataSource, AppsViewControllerDelegate, AppAssetCallback, NSSearchFieldDelegate, NSMenuItemValidation>
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *cmsIdToId;
 @property (nonatomic, strong) NSArray<TemporaryApp *> *apps;
+/// Re-fetching the app list while the page is visible (DeckAppListRules): a tick every 3 s decides.
+@property (nonatomic, strong) NSTimer *appListTimer;
+/// Bumped when a launch is cancelled: the answer of a check that was asked before is dropped.
+@property (nonatomic) NSUInteger launchToken;
+@property (atomic, strong) NSDate *lastAppListFetch;
+/// One fetch at a time: a host whose list cannot be fetched is not asked again before the first attempt is over.
+@property (nonatomic) BOOL appListFetchInFlight;
+@property (nonatomic) BOOL appListWasOnline;
 @property (nonatomic, strong) TemporaryApp *runningApp;
+@property (nonatomic, assign) BOOL runningProbeInFlight;
 
 @property (nonatomic, strong) NSString *filterText;
 @property (nonatomic) NSSearchField *getSearchField;
@@ -50,7 +63,8 @@
 
 @property (nonatomic, strong) NSDictionary<NSString *, NSString *> *appNameToId;
 
-@property (nonatomic, strong) AppAssetManager *appManager;
+// atomic: loadApps replaces it on the main thread while the app-list task reads it on a background queue
+@property (atomic, strong) AppAssetManager *appManager;
 @property (nonatomic, strong) NSCache *boxArtCache;
 @property (nonatomic) CGFloat itemScale;
 
@@ -72,6 +86,7 @@
 @property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *cachedSunshineDisplays;
 @property (nonatomic, copy) NSString *cachedSunshineDisplaysHostUUID;
 @property (nonatomic) BOOL refreshingSunshineDisplays;
+@property (nonatomic, strong) id deckApps;
 
 @end
 
@@ -171,6 +186,8 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
                 usingBlock:^(NSNotification *note) {
         [weakSelf handleStreamingStateChange:note];
     }];
+
+    [self deckInstallIfNeeded];
 }
 
 - (void)installContentSearchField {
@@ -184,6 +201,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (void)dealloc {
+    [self.appListTimer invalidate];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     if (self.streamingStateObserver) {
         [[NSNotificationCenter defaultCenter] removeObserver:self.streamingStateObserver];
@@ -206,11 +224,17 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = YES;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
-    [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(addHostButtonClicked:)].enabled = NO;
+    // the host list is the sidebar of this window, so adding a computer stays available on every page
+    [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(addHostButtonClicked:)].enabled = [MLDeckVariant isSidebarVariant];
 #pragma clang diagnostic pop
-    [self.parentViewController.view.window moonlight_toolbarItemForIdentifier:@"SidebarToggleToolbarItem"].enabled = YES;
+    [self.parentViewController.view.window moonlight_toolbarItemForIdentifier:@"SidebarToggleToolbarItem"].enabled = ![MLDeckVariant isCardsVariant];
+    if ([MLDeckVariant isSidebarVariant]) {
+        // The host list is the sidebar of this window, there is no page to go back to.
+        [self.parentViewController.view.window moonlight_toolbarItemForAction:@selector(backButtonClicked:)].enabled = NO;
+    }
 
 
+    [self deckInstallToolbarItemIfNeeded];
     [self installContentSearchField];
     self.contentSearchField.delegate = self;
     self.contentSearchField.placeholderString = NSLocalizedString(@"Search Apps", @"Search Apps");
@@ -219,14 +243,53 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     toolbarSearchField.placeholderString = self.contentSearchField.placeholderString;
 }
 
+- (void)viewWillDisappear {
+    [super viewWillDisappear];
+    [self deckRemoveToolbarItem];
+    [self.appListTimer invalidate];
+    self.appListTimer = nil;
+}
+
+/// While the page is visible: fetch the list again when the computer comes online, when its serverinfo says the list changed, and
+/// every 60 s for a host that sends no etag. Each fetch logs `[applist] fetch reason=... count=N`.
+- (void)startAppListTimer {
+    [self.appListTimer invalidate];
+    self.appListWasOnline = self.host.state == StateOnline;
+    __weak typeof(self) weakSelf = self;
+    self.appListTimer = [NSTimer scheduledTimerWithTimeInterval:3.0 repeats:YES block:^(NSTimer *timer) {
+        AppsViewController *strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf.host == nil) { [timer invalidate]; return; }
+        // a launch is pending or a stream is open: the list and the running mark are asked for after it (MLNetworkQuiet)
+        if ([MLNetworkQuiet isQuiet]) return;
+        TemporaryHost *host = strongSelf.host;
+        BOOL online = host.state == StateOnline && host.canUseHttps;
+        NSString *reason = [MLDeckAppListTick reasonWithOnline:online
+                                                     wasOnline:strongSelf.appListWasOnline
+                                                      seenEtag:[MLDeckActivity appListEtagSeenWithHostUUID:host.uuid ?: @""]
+                                                   fetchedEtag:[MLDeckActivity appListEtagFetchedWithHostUUID:host.uuid ?: @""]
+                                                     lastFetch:strongSelf.lastAppListFetch];
+        strongSelf.appListWasOnline = online;
+        if (online) {
+            [strongSelf refreshRunningAppFromServerInfo];
+        }
+        if (reason.length > 0 && ![[StreamingSessionManager shared] isStreamingHost:host.uuid]) {
+            [strongSelf discoverAppsForHost:host reason:reason];
+        }
+    }];
+}
+
 - (void)viewDidAppear {
     [super viewDidAppear];
     
+    [[MLHostPathSignals shared] noteAttention];
     [self syncHostStateFromDatabase];
     self.currentHostUUID = self.host.uuid;
+    [self startAppListTimer];
+    [self refreshRunningAppFromServerInfo];
 
     __weak typeof(self) weakSelf = self;
     self.windowDidBecomeKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:self.view.window queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [[MLHostPathSignals shared] noteAttention];
         [weakSelf updateRunningAppState];
         
         [SettingsClass loadMoonlightSettingsFor:self.host.uuid];
@@ -243,6 +306,19 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     [self updateOfflineOverlayForCurrentHost];
     [self refreshSunshineDisplaysIfNeededForce:NO];
     [self.collectionView selectFirstItemForControllerIfNeeded];
+
+    NSString *launchId = self.pendingLaunchAppId;
+    self.pendingLaunchAppId = nil;
+    if (launchId.length > 0) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            for (TemporaryApp *candidate in self.apps) {
+                if ([candidate.id isEqualToString:launchId]) {
+                    [self openApp:candidate];
+                    break;
+                }
+            }
+        });
+    }
 }
 
 - (void)updateOfflineOverlayForCurrentHost {
@@ -307,36 +383,24 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (void)handleHostAutoAddressSwitched:(NSNotification *)note {
-    NSString *uuid = note.userInfo[@"uuid"];
-    if (uuid == nil || ![uuid isEqualToString:self.host.uuid]) {
-        return;
-    }
-
-    if (!self.view.window || !self.view.window.isVisible) {
-        return;
-    }
-
-    NSString *oldAddress = note.userInfo[@"oldAddress"] ?: @"";
-    NSString *newAddress = note.userInfo[@"newAddress"] ?: @"";
-    NSNumber *oldLatency = note.userInfo[@"oldLatency"] ?: @(-1);
-    NSNumber *newLatency = note.userInfo[@"newLatency"] ?: @(-1);
-
-    NSString *title = NSLocalizedString(@"Auto Address Switched Title", @"Auto address switched alert title");
-    NSString *format = NSLocalizedString(@"Auto Address Switched Message", @"Auto address switched alert message");
-    NSString *message = [NSString stringWithFormat:format,
-                         self.host.displayName ?: @"",
-                         oldAddress,
-                         newAddress,
-                         oldLatency.doubleValue,
-                         newLatency.doubleValue];
-
-    [AlertPresenter displayAlert:NSAlertStyleInformational title:title message:message window:self.view.window completionHandler:nil];
+    // No alert, no toast: an automatic switch of address shows only on the host page, where the 线路 chip's
+    // 使用中 mark moves and the status line follows (DeckPathChips listens to this notification too).
+    MLLaunchTrace(@"address switched automatically: %@ -> %@", note.userInfo[@"oldAddress"] ?: @"?", note.userInfo[@"newAddress"] ?: @"?");
 }
 
 - (void)requestHostRefresh {
     if (!self.host.uuid) {
         return;
     }
+    // A failed request must not become a loop of discovery workers (each probes every address).
+    static NSMutableDictionary<NSString *, NSDate *> *lastRefresh;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ lastRefresh = [NSMutableDictionary dictionary]; });
+    NSDate *previous = lastRefresh[self.host.uuid];
+    if (previous != nil && [[NSDate date] timeIntervalSinceDate:previous] < 5.0) {
+        return;
+    }
+    lastRefresh[self.host.uuid] = [NSDate date];
 
     [[NSNotificationCenter defaultCenter] postNotificationName:@"MoonlightRequestHostDiscovery"
                                                         object:nil
@@ -477,6 +541,10 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (void)showOfflineOverlayIfCurrentHost {
+    if ([MLDeckVariant isDeck]) {
+        // The host pages show a host's state themselves.
+        return;
+    }
     if (self.offlineOverlayHostingController && self.offlineOverlayHostUUID && ![self.offlineOverlayHostUUID isEqualToString:self.host.uuid]) {
         [self hideOfflineOverlay];
     }
@@ -534,7 +602,11 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 
     // Reload apps
     [self loadApps];
+    // Clearing the running app above also cleared the host's current game; in the concept
+    // there is no discovery to bring it back, so the mock state is applied again.
+    [ConceptHarness applyMockRuntimeStateToHost:newHost];
     self.runningApp = [self findRunningApp:newHost];
+    [self refreshDeckApps];
     [self clearPendingSunshineStreamOverrides];
     self.cachedSunshineDisplays = @[];
     self.cachedSunshineDisplaysHostUUID = nil;
@@ -547,6 +619,24 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (void)updateWindowSubtitle {
+    if ([MLDeckVariant isPolished] && self.host != nil) {
+        // Like Music and TV: the title is the host, the subtitle says where it is. The page
+        // does not repeat either.
+        NSString *text = [MLDeckWindowText subtitleForHost:self.host];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSWindow *window = self.parentViewController.view.window;
+            NSString *subtitle = [MLDeckVariant titleHidden] ? @"" : text;
+            NSWindowTitleVisibility wanted = [MLDeckVariant titleHidden] ? NSWindowTitleHidden : NSWindowTitleVisible;
+            // only when it differs: setting the same value still redraws the titlebar
+            if (![window.subtitle isEqualToString:subtitle]) {
+                window.subtitle = subtitle;
+            }
+            if (window.titleVisibility != wanted) {
+                window.titleVisibility = wanted;
+            }
+        });
+        return;
+    }
     NSDictionary *settings = [SettingsClass getSettingsFor:self.host.uuid];
     NSString *method = settings[@"connectionMethod"];
 
@@ -616,6 +706,12 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (BOOL)becomeFirstResponder {
+    if (self.deckApps != nil) {
+        if (@available(macOS 14.0, *)) {
+            [self.view.window makeFirstResponder:((MLDeckAppsController *)self.deckApps).viewController.view];
+            return YES;
+        }
+    }
     [self.view.window makeFirstResponder:self.collectionView];
     return [super becomeFirstResponder];
 }
@@ -629,6 +725,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 
 - (void)prepareForSegue:(NSStoryboardSegue *)segue sender:(id)sender {
     StreamViewController *streamVC = segue.destinationController;
+    [[StreamingSessionManager shared] noteStreamViewController:streamVC forHost:self.host.uuid ?: @""];
     // Cached apps can retain a database snapshot without the current route.
     if ([self.runningApp.host.uuid isEqualToString:self.host.uuid]) {
         self.runningApp.host = self.host;
@@ -691,6 +788,10 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (IBAction)quitAppMenuItemClicked:(id)sender {
+    if (![self hostCanStreamNow]) {
+        NSBeep();
+        return;
+    }
     TemporaryApp *app = [sender representedObject];
     if (![app isKindOfClass:[TemporaryApp class]]) {
         app = self.runningApp;
@@ -734,6 +835,10 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (IBAction)increaseItemSize:(id)sender {
+    if ([MLDeckVariant isComputerPage]) {
+        [MLDeckZoom stepTiles:1];
+        return;
+    }
     if (self.itemScale > pow(scaleBase, 7)) {
         return;
     }
@@ -742,6 +847,10 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (IBAction)decreaseItemSize:(id)sender {
+    if ([MLDeckVariant isComputerPage]) {
+        [MLDeckZoom stepTiles:-1];
+        return;
+    }
     if (self.itemScale < pow(scaleBase, 0)) {
         return;
     }
@@ -823,15 +932,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (NSArray<TemporaryApp *> *)filteredItems:(NSArray<TemporaryApp *> *)rawItems forSection:(NSInteger)section {
-    if (section == 0) {
-        return [F filterArray:rawItems withBlock:^BOOL(TemporaryApp *obj) {
-            return obj.pinned;
-        }];
-    } else {
-        return [F filterArray:rawItems withBlock:^BOOL(TemporaryApp *obj) {
-            return !obj.pinned;
-        }];
-    }
+    return [rawItems filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:section == 0 ? @"pinned == YES" : @"pinned == NO"]];
 }
 
 
@@ -846,7 +947,25 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 
 #pragma mark - AppsViewControllerDelegate
 
+/// A stream starts only on a computer that is on and paired: whatever asked (a tile, a card, a menu, the
+/// keyboard, the sidebar), an off computer is not connected to.
+- (BOOL)hostCanStreamNow {
+    return self.host.state == StateOnline && self.host.pairState == PairStatePaired && self.host.canUseHttps;
+}
+
 - (void)openApp:(TemporaryApp *)app {
+    if (![self hostCanStreamNow]) {
+        Log(LOG_W, @"[apps] Not starting %@: %@ is %@", app.name ?: @"?", self.host.displayName ?: @"?",
+            self.host.state != StateOnline ? @"off" : @"not paired");
+        MLLaunchTrace(@"blocked start of %@ on %@ (not on or not paired)", app.name ?: @"?", self.host.displayName ?: @"?");
+        NSBeep();
+        return;
+    }
+    if (!self.host.canUseHttps) {
+        // launching needs the paired HTTPS channel; an unpaired host shows 配对 instead
+        Log(LOG_W, @"[apps] Not starting %@: host is not paired", app.name ?: @"?");
+        return;
+    }
     if (![self confirmConnectionRouteForStreaming]) {
         return;
     }
@@ -861,17 +980,75 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
         return;
     }
 
+    // One launch per computer and one window per computer (seven clicks while the first check hung opened
+    // seven windows). A click while a launch is pending is part of it; a stream window that is open is shown.
+    NSString *hostUUID = self.host.uuid ?: @"";
+    NSWindow *existing = [[StreamingSessionManager shared] liveStreamWindowForHost:hostUUID];
+    if (existing != nil) {
+        Log(LOG_I, @"[connect] %@ has a stream window already; showing it instead of a second one", self.host.displayName ?: @"?");
+        [existing makeKeyAndOrderFront:nil];
+        return;
+    }
+    if (![MLLaunchGate claim:hostUUID]) {
+        Log(LOG_I, @"[connect] a launch of %@ is pending already; this click is part of it", self.host.displayName ?: @"?");
+        MLLaunchTrace(@"click absorbed by the pending launch of %@", self.host.displayName ?: @"?");
+        return;
+    }
+    // From the click on, nothing else uses the link (art, probes, events), and the page shows the progress now.
+    [MLNetworkQuiet begin:[@"launch:" stringByAppendingString:hostUUID]];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLLaunchStateChanged" object:nil userInfo:@{@"hostUUID": hostUUID}];
+    NSUInteger token = ++self.launchToken;
+    __weak typeof(self) weakSelf = self;
+    // What runs on the host is asked first: an app another client started (or quit) is not in runningApp yet, and
+    // starting 大屏模式 over it would have been taken for resuming it. The question is bounded (2.5 s) and its answer
+    // is dropped when the launch was cancelled meanwhile.
+    [self refreshRunningAppFromServerInfoThen:^{
+        AppsViewController *strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf.launchToken != token) return;
+        [strongSelf openAppAfterRunningCheck:app];
+    }];
+}
+
+/// 取消 on the connect button, and the end of a launch that did not get to a window.
+- (void)cancelPendingLaunch {
+    NSString *hostUUID = self.host.uuid ?: @"";
+    if (![MLLaunchGate isPending:hostUUID]) return;
+    self.launchToken++;
+    NSWindow *window = [[StreamingSessionManager shared] liveStreamWindowForHost:hostUUID];
+    Log(LOG_I, @"[connect] launch of %@ cancelled by the user (window %@)", self.host.displayName ?: @"?", window != nil ? @"closed" : @"not opened yet");
+    if (window != nil) {
+        [window performClose:nil];   // the stream stops through windowWillClose, which ends the launch
+    } else {
+        [self abandonLaunch];
+    }
+}
+
+- (void)abandonLaunch {
+    NSString *hostUUID = self.host.uuid ?: @"";
+    [MLNetworkQuiet end:[@"launch:" stringByAppendingString:hostUUID]];
+    [MLLaunchGate release:hostUUID];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLLaunchStateChanged" object:nil userInfo:@{@"hostUUID": hostUUID}];
+}
+
+- (void)openAppAfterRunningCheck:(TemporaryApp *)app {
     if (self.runningApp != nil && ![self isSameApp:app asApp:self.runningApp]) {
         if ([self askWhetherToStopRunningApp:self.runningApp andStartNewApp:app]) {
+            NSUInteger token = self.launchToken;
             [self quitApp:self.runningApp completion:^(BOOL success) {
-                if (success) {
+                if (success && self.launchToken == token) {
                     self.runningApp = app;
+                    [MLDeckActivity recordConnectedWithHostUUID:self.host.uuid ?: @"" appId:app.id ?: @"" appName:app.name ?: @""];
                     [self performSegueWithIdentifier:@"streamSegue" sender:nil];
+                } else {
+                    [self abandonLaunch];
                 }
             }];
+        } else {
+            [self abandonLaunch];
         }
     } else {
         self.runningApp = app;
+        [MLDeckActivity recordConnectedWithHostUUID:self.host.uuid ?: @"" appId:app.id ?: @"" appName:app.name ?: @""];
         [self performSegueWithIdentifier:@"streamSegue" sender:nil];
     }
 }
@@ -923,6 +1100,12 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 }
 
 - (void)quitApp:(TemporaryApp *)app completion:(void (^)(BOOL success))completion {
+    if (!app.host.canUseHttps) {
+        if (completion != nil) {
+            completion(NO);
+        }
+        return;
+    }
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *uniqueId = [IdManager getUniqueId];
 
@@ -931,21 +1114,46 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
         HttpRequest *quitRequest = [HttpRequest requestForResponse:quitResponse withUrlRequest:[hMan newQuitAppRequest]];
         
         [hMan executeRequestSynchronously:quitRequest];
+        __block BOOL stillRunning = NO;
         if (quitResponse.statusCode == 200) {
-            ServerInfoResponse *serverInfoResp = [[ServerInfoResponse alloc] init];
-            [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest:NO] fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
-            if (![serverInfoResp isStatusOk] || [[serverInfoResp getStringTag:@"state"] hasSuffix:@"_SERVER_BUSY"]) {
-                // On newer GFE versions, the quit request succeeds even though the app doesn't
-                // really quit if another client tries to kill your app. We'll patch the response
-                // to look like the old error in that case, so the UI behaves.
+            // /cancel answered 200. GFE then keeps the app when another client started it, so a busy host right
+            // after is read as 「quit it from that client」 (599). Sunshine and Foundation Sunshine accept /cancel
+            // from any paired client and cancel asynchronously (the encoder and the app can take seconds to go), so
+            // a busy host right after means "not yet": serverinfo is asked every 0.3 s for up to 10 s (MLHostSessionPolicy).
+            NSString * (^readState)(void) = ^NSString *{
+                ServerInfoResponse *serverInfoResp = [[ServerInfoResponse alloc] init];
+                [hMan executeRequestSynchronously:[HttpRequest requestForResponse:serverInfoResp withUrlRequest:[hMan newServerInfoRequest:NO] fallbackError:401 fallbackRequest:[hMan newHttpServerInfoRequest]]];
+                return [serverInfoResp isStatusOk] ? [[serverInfoResp getStringTag:TAG_STATE] trim] : nil;
+            };
+            NSString *firstState = readState();
+            BOOL waiting = firstState == nil || [MLHostSessionPolicy isBusyWithState:firstState];
+            if (waiting) {
+                dispatch_async(dispatch_get_main_queue(), ^{ [self showQuittingState:app]; });
+            }
+            NSInteger outcome = [MLHostSessionPolicy quitOutcomeWithIsFoundation:[MLDeckActivity isFoundationWithHostUUID:app.host.uuid ?: @""]
+                                                                      firstState:firstState
+                                                                            poll:readState
+                                                                            wait:^(double seconds) { [NSThread sleepForTimeInterval:seconds]; }];
+            if (outcome == 2) {
+                stillRunning = YES;
+                quitResponse.statusCode = 598;
+            } else if (outcome == 3) {
                 quitResponse.statusCode = 599;
+            }
+            if (waiting) {
+                dispatch_async(dispatch_get_main_queue(), ^{ [self updateWindowSubtitle]; });
             }
         }
         
         dispatch_async(dispatch_get_main_queue(), ^{
             // If it fails, display an error and stop the current operation
             if (quitResponse.statusCode != 200) {
-                [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Failed to quit app", @"Failed to quit app") message:NSLocalizedString(@"Quit App Error Message", @"Quit App Error Message") window:self.view.window completionHandler:nil];
+                NSString *message = stillRunning ? NSLocalizedString(@"Quit App Still Running Message", @"Quit App Still Running Message")
+                                                 : NSLocalizedString(@"Quit App Error Message", @"Quit App Error Message");
+                [AlertPresenter displayAlert:NSAlertStyleWarning title:NSLocalizedString(@"Failed to quit app", @"Failed to quit app") message:message window:self.view.window completionHandler:nil];
+                if (stillRunning) {
+                    [self refreshRunningAppFromServerInfo];
+                }
                 if (completion != nil) {
                     completion(NO);
                 }
@@ -958,6 +1166,14 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
             }
         });
     });
+}
+
+/// While a quit is being waited for on a Sunshine-family host: the window says so (the subtitle goes back to the
+/// host's address when it ends).
+- (void)showQuittingState:(TemporaryApp *)app {
+    NSWindow *window = self.view.window;
+    if (window == nil || ![window respondsToSelector:@selector(setSubtitle:)]) return;
+    window.subtitle = [NSString stringWithFormat:NSLocalizedString(@"Quitting %@…", @"Quit in progress"), app.name ?: @""];
 }
 
 - (void)appDidQuit:(TemporaryApp *)app {
@@ -1048,6 +1264,9 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     }
 
     TemporaryHost *host = self.host;
+    if (!host.canUseHttps) {
+        return;
+    }
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         HttpManager *hMan = [[HttpManager alloc] initWithHost:host.activeAddress uniqueId:[IdManager getUniqueId] serverCert:host.serverCert];
         BOOL ok = [hMan executeSuperCommandWithId:command.commandId];
@@ -1176,8 +1395,60 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     self.sunshineOverrideApp = nil;
 }
 
+/// 连接 on a Foundation Sunshine host with a chosen mode: the Desktop app or the big screen entry, with the
+/// display choice carried by the same per-app override the context menu uses (saved, then read when the
+/// stream starts). 桌面 asks for the host's own screen, 虚拟显示器 for the virtual display, 指定显示器 for one
+/// listed display; 大屏模式 clears the overrides of its own entry.
+- (void)deckConnectWithMode:(NSString *)mode displayId:(NSString *)displayId {
+    // a launch is pending: this click changes nothing (not the saved display choice either)
+    if ([MLLaunchGate isPending:self.host.uuid ?: @""]) {
+        Log(LOG_I, @"[connect] a launch of %@ is pending already; this click is part of it", self.host.displayName ?: @"?");
+        return;
+    }
+    TemporaryApp *target = nil;
+    for (TemporaryApp *candidate in self.host.appList.allObjects ?: @[]) {
+        // FsKind when the host sends it; else the default entries by name (Foundation Sunshine before FsKind)
+        NSString *kind = candidate.fsExtras[@"FsKind"];
+        if (kind.length == 0) {
+            kind = [MLDeckActivity kindForName:candidate.name ?: @""];
+        }
+        if ([mode isEqualToString:@"bigscreen"]) {
+            if ([kind isEqualToString:@"bigscreen"]) { target = candidate; break; }
+        } else if ([kind isEqualToString:@"desktop"]) {
+            target = candidate; break;
+        }
+    }
+    if (target == nil) {
+        Log(LOG_W, @"[connect] No app for mode %@ on %@", mode, self.host.displayName);
+        NSBeep();
+        return;
+    }
+    self.sunshineOverrideApp = target;
+    [self loadPersistedSunshineTopologyForCurrentApp];
+    if ([mode isEqualToString:@"bigscreen"]) {
+        self.hasPendingSessionSunshineTargetDisplayOverride = NO;
+        self.pendingSessionSunshineTargetDisplayNameOverride = nil;
+        self.pendingSessionSunshineUseVirtualDisplayOverride = nil;
+    } else if ([mode isEqualToString:@"vdd"]) {
+        self.hasPendingSessionSunshineTargetDisplayOverride = NO;
+        self.pendingSessionSunshineTargetDisplayNameOverride = nil;
+        self.pendingSessionSunshineUseVirtualDisplayOverride = @YES;
+    } else if ([mode isEqualToString:@"display"] && displayId.length > 0) {
+        self.hasPendingSessionSunshineTargetDisplayOverride = YES;
+        self.pendingSessionSunshineTargetDisplayNameOverride = displayId;
+        self.pendingSessionSunshineUseVirtualDisplayOverride = @NO;
+    } else {
+        // 桌面: the host's own screen (explicit host default, no virtual display)
+        self.hasPendingSessionSunshineTargetDisplayOverride = YES;
+        self.pendingSessionSunshineTargetDisplayNameOverride = @"";
+        self.pendingSessionSunshineUseVirtualDisplayOverride = @NO;
+    }
+    [self persistPendingSunshineTopologyForCurrentApp];
+    [self openApp:target];
+}
+
 - (void)refreshSunshineDisplaysIfNeededForce:(BOOL)force {
-    if (self.host.uuid.length == 0 || self.host.serverCert == nil) {
+    if (self.host.uuid.length == 0 || !self.host.canUseHttps || [MLNetworkQuiet isQuiet]) {
         return;
     }
     if (self.refreshingSunshineDisplays) {
@@ -1222,6 +1493,9 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 
             self.cachedSunshineDisplaysHostUUID = hostUUID;
             self.cachedSunshineDisplays = displays ?: @[];
+            if (@available(macOS 14.0, *)) {
+                [(MLDeckAppsController *)self.deckApps displaysChanged];
+            }
         });
     });
 }
@@ -1552,6 +1826,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 - (void)setRunningApp:(TemporaryApp *)runningApp {
     TemporaryApp *oldApp = self.runningApp;
     _runningApp = runningApp;
+    [self refreshDeckApps];
     
     if (runningApp == nil) {
         self.host.currentGame = @"0";
