@@ -2,6 +2,11 @@
 
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/header-dark.png">
+  <img src="readme-assets/images/header-light.png" width="1000" alt="Moonlight macOS Enhanced">
+</picture>
+
 [![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
 **Moonlight macOS / Moonlight for macOS 原生增强版客户端**
@@ -10,9 +15,8 @@
 
 简体中文 | [English](README.en.md)
 
-[下载](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [更新说明](.github/release-notes/v1.3.9-rc.7.md) · [问题反馈](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
+[下载](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [更新说明](.github/release-notes/v1.3.9-rc.8.md) · [问题反馈](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
-<img src="readme-assets/images/app-list.png" width="760" alt="应用列表">
 
 </div>
 
@@ -20,7 +24,7 @@
 
 ## 当前版本
 
-最新版本是 **1.3.9 RC7**，变更见 [1.3.9 RC7 更新说明](.github/release-notes/v1.3.9-rc.7.md)。1.3.9 是原生架构重建前最后一个版本。
+**1.3.9 RC8** 的变更见 [1.3.9 RC8 更新说明](.github/release-notes/v1.3.9-rc.8.md)。主页重新设计，以你的电脑为中心；新增性能浮窗；手柄可以操作主页和设置。已发布的安装包仍以 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 为准。1.3.9 是原生架构重建前最后一个版本。
 
 - 从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载。安装包有 `universal`、`arm64`、`x86_64` 三种，不确定时选 `universal`。
 - 已安装 1.3.9 的用户可以在 `设置 → 关于与更新` 检查更新。
@@ -28,12 +32,14 @@
 
 1.3.9 相比 1.3.8 的主要变化：
 
-- 设置界面重新设计，可以搜索具体选项，也可以用手柄操作整个应用；新增配置方案，可对照各主机与默认配置的差异，复制设置、保存预设、导入与导出。
-- 音频新增无损 PCM、AC3、E-AC3 与杜比直通，串流中可切换输出设备；音效增强新增参数均衡器、耳机校正预设和耳机上的双耳环绕声。
-- 输入新增精确式触控板、macOS 输入法输入文字、按字符的按键映射、捕获系统快捷键、Windows 键位顺序与键入剪贴板文本；DualSense 支持触控板、灯光、电量与触觉反馈。
-- 视频新增独立的 10-bit SDR、动态 HDR 偏好，以及 Dolby Vision 与 HDR10+ 的协商和回退；没有 AV1 硬件解码的 Mac 可以用软件解码 AV1。
-- 配合 Foundation Sunshine：显示器与虚拟显示器配置，串流中不重连调整码率、帧率和分辨率，自由窗口（主机分辨率跟随串流窗口），自适应码率，主机显示缩放与主机命令。
-- 新增应用内更新、性能报告导出和中英文日志查看器。
+- **所有页面全面焕新**：主页以你的电脑为中心，设置可以搜索到具体选项，整个应用都能用手柄操作。
+- **配置方案**：对照每台主机与默认配置的差异，复制设置、保存预设、导入与导出。
+- **音频**：新增无损 PCM、AC3、E-AC3 与杜比直通，串流中可切换输出设备；音效增强新增参数均衡器、耳机校正预设和耳机上的双耳环绕声。
+- **输入**：新增精确式触控板、macOS 输入法输入文字、按字符的按键映射、捕获系统快捷键、Windows 键位顺序和键入剪贴板文本；带触摸屏的 Mac 可以直接触控。DualSense 支持触控板、灯光、电量与触觉反馈。
+- **视频**：新增独立的 10-bit SDR、动态 HDR 偏好，以及 Dolby Vision 与 HDR10+ 的协商和回退；没有 AV1 硬件解码的 Mac 也能用软件解码 AV1。
+- **连接**：支持多线路连接，可手动选择线路、查看实测延迟并指定网卡。
+- **配合 Foundation Sunshine**：显示器与虚拟显示器配置，串流中不重连调整码率、帧率和分辨率，自由窗口（主机分辨率跟随串流窗口），自适应码率，主机显示缩放与主机命令。
+- **其他**：性能浮窗、性能报告导出、应用内更新和中英文日志查看器。
 
 ## 快速开始
 
@@ -60,19 +66,61 @@
 
 ## 截图
 
-串流中的性能浮窗：
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/home-dark.png">
+  <img src="readme-assets/images/home.png" width="760" alt="主界面">
+</picture>
 
-<img src="readme-assets/images/performance-overlay.png" alt="性能浮窗">
+<table>
+<tr>
+<td width="50%" valign="top">
 
-| 主机列表 | 音频与麦克风设置 |
-|:--------:|:----------------:|
-| <img src="readme-assets/images/host-list.png" width="420" alt="主机列表"> | <img src="readme-assets/images/settings-audio.png" width="420" alt="音频与麦克风设置"> |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/hud-chartHUD-dark.png">
+  <img src="readme-assets/images/hud-chartHUD.png" width="370" alt="性能浮窗">
+</picture>
 
-| 键盘与鼠标设置 | 串流中的控制中心 |
-|:--------------:|:----------------:|
-| <img src="readme-assets/images/settings-keyboard-mouse.png" width="440" alt="键盘与鼠标设置"> | <img src="readme-assets/images/control-center.png" width="360" alt="串流中的控制中心"> |
+<b>性能浮窗</b>
 
-截图中的主机名称和地址已做模糊处理。
+</td>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-video-dark.png">
+  <img src="readme-assets/images/settings-video.png" width="370" alt="视频与 HDR">
+</picture>
+
+<b>视频与 HDR</b>
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-audio-dark.png">
+  <img src="readme-assets/images/settings-audio.png" width="370" alt="音频与麦克风">
+</picture>
+
+<b>音频与麦克风</b>
+
+</td>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-keyboard-mouse-dark.png">
+  <img src="readme-assets/images/settings-keyboard-mouse.png" width="370" alt="键盘与鼠标">
+</picture>
+
+<b>键盘与鼠标</b>
+
+</td>
+</tr>
+</table>
+
+[更多截图 →](SCREENSHOT.md)
+
+截图里的电脑名、地址和封面都是示例。
 
 ## 主机端兼容性
 

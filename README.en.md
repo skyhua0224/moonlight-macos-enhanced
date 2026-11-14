@@ -2,6 +2,11 @@
 
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/header-dark.png">
+  <img src="readme-assets/images/en/header-light.png" width="1000" alt="Moonlight macOS Enhanced">
+</picture>
+
 [![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
 **Native Moonlight macOS / Moonlight for macOS Client**
@@ -10,9 +15,8 @@
 
 [简体中文](README.md) | English
 
-[Download](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [Release notes](.github/release-notes/v1.3.9-rc.7.md) · [Report an issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
+[Download](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [Release notes](.github/release-notes/v1.3.9-rc.8.md) · [Report an issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
-<img src="readme-assets/images/en/app-list.png" width="760" alt="App list">
 
 </div>
 
@@ -20,7 +24,7 @@
 
 ## Current Release
 
-The latest release is **1.3.9 RC7**; see the [1.3.9 RC7 release notes](.github/release-notes/v1.3.9-rc.7.md) for what changed. 1.3.9 is the final release before the native architecture rebuild.
+**1.3.9 RC8** is described in the [1.3.9 RC8 release notes](.github/release-notes/v1.3.9-rc.8.md). The home page has been redesigned around your computers, there is a new performance HUD, and a controller can operate the home page and Settings. Published packages remain the ones on [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). 1.3.9 is the final release before the native architecture rebuild.
 
 - Download it from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). Packages come as `universal`, `arm64`, and `x86_64`; choose `universal` if unsure.
 - If 1.3.9 is already installed, check for updates in `Settings → About & Updates`.
@@ -28,12 +32,14 @@ The latest release is **1.3.9 RC7**; see the [1.3.9 RC7 release notes](.github/r
 
 What changed in 1.3.9 compared with 1.3.8:
 
-- Settings were redesigned and can be searched down to individual options; the whole app can be driven with a controller. Setting Profiles compare each host with the Default Profile and copy settings, keep presets, and import and export them.
-- Audio gained lossless PCM, AC3, E-AC3, and Dolby passthrough, and the output device can be switched during a stream; Audio Enhancement gained a parametric equalizer, headphone correction presets, and binaural surround on headphones.
-- Input gained Precision Touchpad, text entry through macOS input methods, key mapping by typed character, system shortcut capture, Windows key order, and Type Clipboard Text; DualSense supports its touchpad, lighting, battery, and haptics.
-- Video gained a separate 10-bit SDR option, a Dynamic HDR Preference, and Dolby Vision and HDR10+ negotiation with fallback; Macs without an AV1 hardware decoder can decode AV1 in software.
-- With Foundation Sunshine: display and virtual display configuration, bitrate, frame rate, and resolution changes without reconnecting, Free Window (the host resolution follows the stream window), adaptive bitrate, host display scale, and Host Commands.
-- Added in-app updates, performance report export, and a bilingual log viewer.
+- **Every page redesigned**: the home page is built around your computers, Settings can be searched down to individual options, and the whole app works with a controller.
+- **Setting Profiles**: compare each host with the Default Profile, copy settings, keep presets, import and export.
+- **Audio**: lossless PCM, AC3, E-AC3 and Dolby passthrough, and an output device you can switch during a stream. Audio Enhancement adds a parametric equalizer, headphone correction presets and binaural surround on headphones.
+- **Input**: Precision Touchpad, text entry through macOS input methods, key mapping by typed character, system shortcut capture, Windows key order and Type Clipboard Text. Touchscreen Macs can stream with direct touch. DualSense supports its touchpad, lighting, battery and haptics.
+- **Video**: a separate 10-bit SDR option, a Dynamic HDR Preference, and Dolby Vision and HDR10+ with fallback. Macs without an AV1 hardware decoder can still decode AV1 in software.
+- **Connection**: multi-path connections with manual path choice, measured latency and per-computer network interface pinning.
+- **With Foundation Sunshine**: display and virtual display configuration, bitrate, frame rate and resolution changes without reconnecting, Free Window (the host resolution follows the stream window), adaptive bitrate, host display scale and Host Commands.
+- **Also**: a performance HUD, performance report export, in-app updates and a bilingual log viewer.
 
 ## Quick Start
 
@@ -60,19 +66,61 @@ Some of these require Foundation Sunshine; see the next section.
 
 ## Screenshots
 
-The performance overlay during a stream:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/home-dark.png">
+  <img src="readme-assets/images/en/home.png" width="760" alt="Main window">
+</picture>
 
-<img src="readme-assets/images/en/performance-overlay.png" alt="Performance overlay">
+<table>
+<tr>
+<td width="50%" valign="top">
 
-| Host List | Audio & Microphone Settings |
-|:---------:|:---------------------------:|
-| <img src="readme-assets/images/en/host-list.png" width="420" alt="Host list"> | <img src="readme-assets/images/en/settings-audio.png" width="420" alt="Audio and microphone settings"> |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/hud-chartHUD-dark.png">
+  <img src="readme-assets/images/en/hud-chartHUD.png" width="370" alt="Performance HUD">
+</picture>
 
-| Keyboard & Mouse Settings | Video Settings |
-|:-------------------------:|:--------------:|
-| <img src="readme-assets/images/en/settings-keyboard-mouse.png" width="420" alt="Keyboard and mouse settings"> | <img src="readme-assets/images/en/settings-video.png" width="420" alt="Video settings"> |
+<b>Performance HUD</b>
 
-Host names and addresses in the screenshots are blurred.
+</td>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-video-dark.png">
+  <img src="readme-assets/images/en/settings-video.png" width="370" alt="Video & HDR">
+</picture>
+
+<b>Video & HDR</b>
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-audio-dark.png">
+  <img src="readme-assets/images/en/settings-audio.png" width="370" alt="Audio & Microphone">
+</picture>
+
+<b>Audio & Microphone</b>
+
+</td>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-keyboard-mouse-dark.png">
+  <img src="readme-assets/images/en/settings-keyboard-mouse.png" width="370" alt="Keyboard & Mouse">
+</picture>
+
+<b>Keyboard & Mouse</b>
+
+</td>
+</tr>
+</table>
+
+[More screenshots →](SCREENSHOT.en.md)
+
+Computer names, addresses, and artwork in the screenshots are examples.
 
 ## Host Compatibility
 
