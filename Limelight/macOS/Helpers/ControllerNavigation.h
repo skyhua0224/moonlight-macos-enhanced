@@ -11,7 +11,12 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface ControllerNavigation : NSObject
-
+#ifdef MLC_CONCEPT_HARNESS
+/// Where the scripted pad's focus is (harness logs).
++ (NSString *)harnessState;
++ (NSString *)harnessFocusedKey;
++ (NSString *)harnessTargets;
+#endif
 @end
 
 NS_ASSUME_NONNULL_END
