@@ -108,6 +108,7 @@ static NSArray<MLAppSuperCommand *> *ParseSuperCommands(NSString *json) {
             NSString* hdrSupported = @"0";
             NSString* appInstallPath = nil;
             NSString* superCmds = nil;
+            NSMutableDictionary<NSString *, NSString *> *fsExtras = [NSMutableDictionary dictionary];
             while (appInfoNode != NULL) {
                 if (!xmlStrcmp(appInfoNode->name, (xmlChar*)TAG_APP_TITLE)) {
                     xmlChar* nodeVal = xmlNodeListGetString(docPtr, appInfoNode->xmlChildrenNode, 1);
@@ -139,6 +140,16 @@ static NSArray<MLAppSuperCommand *> *ParseSuperCommands(NSString *json) {
                         superCmds = [[NSString alloc] initWithCString:(const char*)nodeVal encoding:NSUTF8StringEncoding];
                         xmlFree(nodeVal);
                     }
+                } else if (appInfoNode->name != NULL && strncmp((const char*)appInfoNode->name, "Fs", 2) == 0) {
+                    // Foundation Sunshine additions; a host that does not send them leaves this empty.
+                    xmlChar* nodeVal = xmlNodeListGetString(docPtr, appInfoNode->xmlChildrenNode, 1);
+                    if (nodeVal != NULL) {
+                        NSString *value = [[NSString alloc] initWithCString:(const char*)nodeVal encoding:NSUTF8StringEncoding];
+                        if (value != nil) {
+                            fsExtras[[NSString stringWithUTF8String:(const char*)appInfoNode->name]] = value;
+                        }
+                        xmlFree(nodeVal);
+                    }
                 }
 
                 appInfoNode = appInfoNode->next;
@@ -150,6 +161,7 @@ static NSArray<MLAppSuperCommand *> *ParseSuperCommands(NSString *json) {
                 app.hdrSupported = [hdrSupported intValue] != 0;
                 app.installPath = appInstallPath;
                 app.superCommands = ParseSuperCommands(superCmds);
+                app.fsExtras = fsExtras;
                 [_appList addObject:app];
             }
         }

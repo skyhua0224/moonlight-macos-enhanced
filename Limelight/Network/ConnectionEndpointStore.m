@@ -5,6 +5,8 @@
 //  Created by GitHub SkyHua on 2026/01/16.
 //
 
+#import "LatencyProbe.h"
+#import "Logger.h"
 #import "ConnectionEndpointStore.h"
 #import "TemporaryHost.h"
 #import "Utils.h"
@@ -35,6 +37,82 @@ static const NSString* HTTPS_PORT = @"47984";
     } else {
         [[NSUserDefaults standardUserDefaults] setObject:name forKey:key];
     }
+}
+
++ (NSString *)endpointOrderKeyForHost:(NSString *)hostId {
+    return [NSString stringWithFormat:@"endpointOrder.%@", hostId ?: @""];
+}
+
+/// host:port with the default port written out, lowercased, no trailing dot: the key an order entry and an endpoint share.
++ (NSString *)canonicalKey:(NSString *)address {
+    NSString *host = nil, *port = nil;
+    [Utils parseAddress:address intoHost:&host andPort:&port];
+    if (host.length == 0) return @"";
+    while ([host hasSuffix:@"."]) host = [host substringToIndex:host.length - 1];
+    NSString *shown = [host containsString:@":"] ? [NSString stringWithFormat:@"[%@]", host.lowercaseString] : host.lowercaseString;
+    return [NSString stringWithFormat:@"%@:%@", shown, port.length > 0 ? port : @"47989"];
+}
+
++ (NSArray<NSString *> *)endpointOrderForHost:(NSString *)hostId {
+    if (hostId.length == 0) return @[];
+    NSArray *stored = [[NSUserDefaults standardUserDefaults] arrayForKey:[self endpointOrderKeyForHost:hostId]];
+    return [stored isKindOfClass:[NSArray class]] ? stored : @[];
+}
+
++ (void)setEndpointOrder:(NSArray<NSString *> *)order forHost:(NSString *)hostId {
+    if (hostId.length == 0) return;
+    NSMutableArray *keys = [NSMutableArray array];
+    for (NSString *entry in order) {
+        NSString *key = [self canonicalKey:entry];
+        if (key.length > 0 && ![keys containsObject:key]) [keys addObject:key];
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:keys forKey:[self endpointOrderKeyForHost:hostId]];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ConnectionEndpointsUpdated" object:nil userInfo:@{ @"uuid": hostId ?: @"" }];
+}
+
++ (BOOL)replaceManualEndpoint:(NSString *)oldAddress with:(NSString *)newAddress forHost:(NSString *)hostId {
+    NSString *oldNormalized = [self normalizedAddress:oldAddress];
+    NSString *newNormalized = [self normalizedAddress:newAddress];
+    if (hostId.length == 0 || oldNormalized.length == 0 || newNormalized.length == 0) return NO;
+    NSMutableArray *manual = [[self manualEndpointsForHost:hostId] mutableCopy] ?: [NSMutableArray array];
+    NSUInteger index = [manual indexOfObject:oldNormalized];
+    if (index == NSNotFound) return NO;
+    if (![oldNormalized isEqualToString:newNormalized] && [manual containsObject:newNormalized]) return NO;
+    manual[index] = newNormalized;
+    [[NSUserDefaults standardUserDefaults] setObject:manual forKey:[self manualEndpointsKeyForHost:hostId]];
+    // the declaration and the place in the order follow the address
+    NSString *kind = [self declaredPathForEndpoint:oldNormalized forHost:hostId];
+    NSMutableDictionary *declared = [[[NSUserDefaults standardUserDefaults] dictionaryForKey:[self declaredPathKeyForHost:hostId]] mutableCopy] ?: [NSMutableDictionary dictionary];
+    [declared removeObjectForKey:oldNormalized];
+    if (kind.length > 0) declared[newNormalized] = kind;
+    [[NSUserDefaults standardUserDefaults] setObject:declared forKey:[self declaredPathKeyForHost:hostId]];
+    NSString *oldKey = [self canonicalKey:oldNormalized], *newKey = [self canonicalKey:newNormalized];
+    NSMutableArray *order = [[self endpointOrderForHost:hostId] mutableCopy];
+    NSUInteger at = [order indexOfObject:oldKey];
+    if (at != NSNotFound) { order[at] = newKey; [[NSUserDefaults standardUserDefaults] setObject:order forKey:[self endpointOrderKeyForHost:hostId]]; }
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ConnectionEndpointsUpdated" object:nil userInfo:@{ @"uuid": hostId ?: @"" }];
+    return YES;
+}
+
++ (NSString *)declaredPathKeyForHost:(NSString *)hostId {
+    return [NSString stringWithFormat:@"declaredPaths.%@", hostId ?: @""];
+}
+
++ (NSString *)declaredPathForEndpoint:(NSString *)address forHost:(NSString *)hostId {
+    NSString *normalized = [self normalizedAddress:address];
+    if (hostId.length == 0 || normalized.length == 0) return nil;
+    NSDictionary *stored = [[NSUserDefaults standardUserDefaults] dictionaryForKey:[self declaredPathKeyForHost:hostId]];
+    NSString *kind = stored[normalized];
+    return [kind isKindOfClass:[NSString class]] && kind.length > 0 ? kind : nil;
+}
+
++ (void)setDeclaredPath:(NSString *)kind forEndpoint:(NSString *)address forHost:(NSString *)hostId {
+    NSString *normalized = [self normalizedAddress:address];
+    if (hostId.length == 0 || normalized.length == 0) return;
+    NSMutableDictionary *stored = [[[NSUserDefaults standardUserDefaults] dictionaryForKey:[self declaredPathKeyForHost:hostId]] mutableCopy] ?: [NSMutableDictionary dictionary];
+    if (kind.length == 0) { [stored removeObjectForKey:normalized]; } else { stored[normalized] = kind; }
+    [[NSUserDefaults standardUserDefaults] setObject:stored forKey:[self declaredPathKeyForHost:hostId]];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ConnectionEndpointsUpdated" object:nil userInfo:@{ @"uuid": hostId ?: @"" }];
 }
 
 + (NSString *)defaultConnectionMethodKeyForHost:(NSString *)hostId {
@@ -146,6 +224,12 @@ static const NSString* HTTPS_PORT = @"47984";
 
     [existing removeObject:normalized];
     [[NSUserDefaults standardUserDefaults] setObject:existing forKey:[self manualEndpointsKeyForHost:hostId]];
+    // an address that is gone has no declaration either
+    NSMutableDictionary *declared = [[[NSUserDefaults standardUserDefaults] dictionaryForKey:[self declaredPathKeyForHost:hostId]] mutableCopy];
+    if (declared[normalized] != nil) {
+        [declared removeObjectForKey:normalized];
+        [[NSUserDefaults standardUserDefaults] setObject:declared forKey:[self declaredPathKeyForHost:hostId]];
+    }
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ConnectionEndpointsUpdated"
                                                                                                                 object:nil
                                                                                                             userInfo:@{ @"uuid": hostId ?: @"" }];
@@ -259,7 +343,23 @@ static const NSString* HTTPS_PORT = @"47984";
         }
     }
 
-    return [ordered array];
+    // the order the user gave (主机信息 > 地址): listed first, in that order; the rest keep their place after them
+    NSArray<NSString *> *userOrder = [self endpointOrderForHost:host.uuid];
+    if (userOrder.count == 0) {
+        return [ordered array];
+    }
+    NSMutableArray<NSString *> *result = [NSMutableArray array];
+    NSMutableArray<NSString *> *rest = [[ordered array] mutableCopy];
+    for (NSString *key in userOrder) {
+        for (NSString *endpoint in [rest copy]) {
+            if ([[self canonicalKey:endpoint] isEqualToString:key]) {
+                [result addObject:endpoint];
+                [rest removeObject:endpoint];
+            }
+        }
+    }
+    [result addObjectsFromArray:rest];
+    return result;
 }
 
 + (NSString *)streamEndpointForHost:(TemporaryHost *)host connectionMethod:(NSString *)method {
@@ -272,6 +372,18 @@ static const NSString* HTTPS_PORT = @"47984";
     NSString *active = [self normalizedAddress:host.activeAddress];
     if ([endpoints containsObject:active] &&
         (host.addressStates[active] == nil || host.addressStates[active].boolValue)) {
+        // a stream on this path failed in the last 30 minutes (high loss, control stream gone): Auto takes another answering path
+        // when there is one. A path the user pinned never reaches this branch.
+        if ([StreamPathHealth shouldAvoidHost:host.uuid address:active]) {
+            for (NSString *endpoint in endpoints) {
+                if (![endpoint isEqualToString:active] && host.addressStates[endpoint].boolValue &&
+                    ![StreamPathHealth shouldAvoidHost:host.uuid address:endpoint]) {
+                    NSDictionary *why = [StreamPathHealth recentFailureForHost:host.uuid address:active];
+                    Log(LOG_W, @"[route] Auto avoids %@ (last stream failed: %@ %@), uses %@", active, why[@"reason"], why[@"detail"], endpoint);
+                    return endpoint;
+                }
+            }
+        }
         return active;
     }
     // Persisted app snapshots do not contain activeAddress. Prefer an endpoint

@@ -8,6 +8,7 @@
 
 #import "DataManager.h"
 #import "TemporaryHost.h"
+#import "ConceptHarness.h"
 #import "TemporaryApp.h"
 
 @implementation TemporaryHost
@@ -48,6 +49,7 @@
     }
     
     self.appList = appList;
+    [ConceptHarness applyMockRuntimeStateToHost:self];
     
     return self;
 }

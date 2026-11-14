@@ -19,7 +19,17 @@ static NSString* TAG_STATUS_MESSAGE = @"status_message";
 
 @end
 
+/// A response that wants the HTTP status and headers of the answer (the app-asset cache validators: ETag, Last-Modified, 304).
+@protocol HttpHeaderReceiver <NSObject>
+- (void) receivedHTTPStatus:(NSInteger)status headers:(NSDictionary *)headers;
+@end
+
 @interface HttpResponse : NSObject <Response>
+
+/// YES when this answer came over HTTPS with our client certificate. A plain-HTTP answer (the fallback after a failed
+/// or too slow HTTPS request) cannot say whether we are paired: Sunshine answers PairStatus=0 to anyone without a
+/// client certificate. Only a TLS answer may change the pair state.
+@property (nonatomic) BOOL receivedOverClientTLS;
 
 - (void) populateWithData:(NSData*)data;
 - (void) parseData;

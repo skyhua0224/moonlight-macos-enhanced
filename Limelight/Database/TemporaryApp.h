@@ -28,6 +28,9 @@
 @property (nullable, nonatomic, retain) TemporaryHost *host;
 // Session-only: refreshed from every /applist response, never persisted.
 @property (nonatomic, copy, nonnull) NSArray<MLAppSuperCommand *> *superCommands;
+// Foundation Sunshine only: extra per-app fields from /applist (FsSource, FsLaunchMode,
+// FsLastPlayed, FsPlaySeconds, FsSession, FsArt, FsArtVersion). Empty on other hosts.
+@property (nonatomic, copy, nonnull) NSDictionary<NSString *, NSString *> *fsExtras;
 
 NS_ASSUME_NONNULL_BEGIN
 
