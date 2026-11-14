@@ -2399,6 +2399,303 @@ static const CGFloat runningAnimationDuration = 1.0;
     // Update the box art cache now so we don't have to do it
     // on the main thread
     [self updateBoxArtCacheForApp:app];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (@available(macOS 14.0, *)) {
+            [(MLDeckAppsController *)self.deckApps artArrivedFor:app];
+        }
+    });
+}
+
+#pragma mark - Redesigned apps page (concept)
+
+- (void)deckInstallIfNeeded {
+    if (![MLDeckVariant isDeck]) {
+        return;
+    }
+    if (@available(macOS 14.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        MLDeckAppsActions *actions = [[MLDeckAppsActions alloc] init];
+        actions.open = ^(TemporaryApp *app) { [weakSelf openApp:app]; };
+        actions.quit = ^(TemporaryApp *app) { [weakSelf quitApp:app completion:nil]; };
+        actions.pin = ^(TemporaryApp *app) { [weakSelf deckTogglePin:app]; };
+        actions.hide = ^(TemporaryApp *app) { [weakSelf deckToggleHidden:app]; };
+        actions.wake = ^{
+            TemporaryHost *host = weakSelf.host;
+            if (host != nil) {
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
+            }
+        };
+        actions.pair = ^{
+            if (weakSelf.host != nil) {
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
+                                                                  userInfo:@{@"command": @"pair", @"host": weakSelf.host}];
+            }
+        };
+        actions.cancelPair = ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"cancelPair"}];
+        };
+        actions.defaultAddress = ^NSString *(NSString *uuid) {
+            NSString *method = [SettingsClass getSettingsFor:uuid][@"connectionMethod"];
+            return ([method isKindOfClass:[NSString class]] && ![method isEqualToString:@"Auto"]) ? method : @"";
+        };
+        actions.setDefaultAddress = ^(NSString *uuid, NSString *address) {
+            // the client's per-host connection method: the stream uses a pinned address (discovery keeps probing the others)
+            [SettingsClass setConnectionMethod:address.length > 0 ? address : @"Auto" for:uuid];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MoonlightRequestHostDiscovery" object:nil userInfo:@{@"uuid": uuid}];
+        };
+        actions.probeAddress = ^(NSString *address, double timeout, void (^done)(NSNumber *)) {
+            if (address.length == 0) { done(nil); return; }
+            // the endpoint the computer is actually reached at: its custom port included (the page's address fields do not carry it)
+            NSString *target = address;
+            NSString *wantedHost = nil;
+            [Utils parseAddress:address intoHost:&wantedHost andPort:nil];
+            TemporaryHost *probeHost = weakSelf.host;
+            for (NSString *endpoint in [ConnectionEndpointStore allEndpointsForHost:probeHost]) {
+                NSString *endpointHost = nil;
+                [Utils parseAddress:endpoint intoHost:&endpointHost andPort:nil];
+                if (endpointHost.length > 0 && [endpointHost caseInsensitiveCompare:wantedHost ?: @""] == NSOrderedSame) { target = endpoint; break; }
+            }
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                __block BOOL answered = NO;
+                NSDate *start = [NSDate date];
+                dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    // HTTP serverinfo (no pairing needed), through the same HttpManager the discovery uses; nothing of
+                    // discovery's own state is touched
+                    HttpManager *manager = [[HttpManager alloc] initWithHost:target uniqueId:[IdManager getUniqueId] serverCert:nil];
+                    ServerInfoResponse *response = [[ServerInfoResponse alloc] init];
+                    NSURLRequest *request = [manager newHttpServerInfoRequest:true];
+                    if (request != nil) {
+                        [manager executeRequestSynchronously:[HttpRequest requestForResponse:response withUrlRequest:request]];
+                        answered = response.statusCode == 200;
+                    }
+                    dispatch_semaphore_signal(sem);
+                });
+                BOOL finished = dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC))) == 0;
+                NSInteger total = (NSInteger)([[NSDate date] timeIntervalSinceDate:start] * 1000.0);
+                // reachable = serverinfo answered; the latency is the application round trip, not the time of that request
+                NSNumber *appRtt = (finished && answered) ? [LatencyProbe appRttMsForAddress:target probeTotalMs:(int)total] : nil;
+                done(finished && answered ? (appRtt ?: @(-1)) : nil);
+            });
+        };
+        actions.hostBecameOnline = ^(NSString *uuid) {
+            // discovery (the sidebar's truth) says online: the page follows, and loads the apps if it has none
+            if ([weakSelf.host.uuid isEqualToString:uuid]) {
+                MLLaunchTrace(@"page: host %@ came online", weakSelf.host.displayName);
+                weakSelf.host.state = StateOnline;
+                [weakSelf updateOfflineOverlayForCurrentHost];
+                if (weakSelf.apps.count == 0 && weakSelf.host.canUseHttps) {
+                    [weakSelf discoverAppsForHost:weakSelf.host];
+                }
+            }
+        };
+        actions.appMenu = ^NSMenu *(TemporaryApp *app) { return [weakSelf deckMenuForApp:app]; };
+        actions.hostMenu = ^NSMenu *(TemporaryApp *app) { return [weakSelf deckHostMenuForApp:app]; };
+        actions.displays = ^NSArray<NSDictionary<NSString *, id> *> * {
+            return weakSelf.cachedSunshineDisplays ?: @[];
+        };
+        actions.connect = ^(NSString *mode, NSString *displayId) {
+            [weakSelf deckConnectWithMode:mode displayId:displayId];
+        };
+        actions.cancelLaunch = ^{ [weakSelf cancelPendingLaunch]; };
+        actions.addConnection = ^{ [weakSelf deckAddConnection]; };
+        actions.settings = ^{
+            if (weakSelf.host != nil) {
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
+                                                                  userInfo:@{@"command": @"menu", @"host": weakSelf.host, @"action": @"settings"}];
+            }
+        };
+        MLDeckAppsController *deck = [[MLDeckAppsController alloc] initWithStyle:[self deckStyleName] actions:actions];
+        self.deckApps = deck;
+        NSView *deckView = deck.viewController.view;
+        deckView.frame = self.view.bounds;
+        deckView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        if (@available(macOS 14.0, *)) {
+            // A hero's art runs past the page, under the floating sidebar and the toolbar.
+            deckView.clipsToBounds = NO;
+            self.view.clipsToBounds = NO;
+        }
+        [self.view addSubview:deckView];
+        [self addChildViewController:deck.viewController];
+        self.collectionView.enclosingScrollView.hidden = YES;
+        [self refreshDeckApps];
+    }
+}
+
+- (NSString *)deckStyleName {
+    NSString *variant = [MLDeckVariant current];
+    if ([variant isEqualToString:@"B"]) return @"standalone";
+    if ([variant isEqualToString:@"A1"]) return @"games";
+    if ([variant isEqualToString:@"A0"]) return @"computer";
+    if ([variant isEqualToString:@"A3"]) return @"quiet";
+    return @"embedded";
+}
+
+- (void)refreshDeckApps {
+    if (self.deckApps == nil || self.host == nil) {
+        return;
+    }
+    if (@available(macOS 14.0, *)) {
+        [(MLDeckAppsController *)self.deckApps updateWithHost:self.host apps:self.apps ?: @[] running:self.runningApp];
+    }
+}
+
+#pragma mark - The old context menus on the new page
+
+/// The menu the old app cell showed on right-click, rebuilt for the new page: 启动/继续 (new), 固定 / 取消固定,
+/// 隐藏 / 显示, 退出应用 (only while it runs), then, through the old code, the Sunshine overrides for this stream
+/// (display, screen mode, virtual display, refresh host displays) and the host's SuperCmds.
+- (NSMenu *)deckMenuForApp:(TemporaryApp *)app {
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
+    menu.autoenablesItems = NO;
+
+    NSMenuItem *open = [[NSMenuItem alloc] initWithTitle:[self isAppRunning:app] ? NSLocalizedString(@"Resume App", @"Resume App") : NSLocalizedString(@"Start App", @"Start App")
+                                                  action:@selector(deckMenuOpen:) keyEquivalent:@""];
+    open.target = self;
+    open.representedObject = app;
+    MLSetMenuItemImage(open, [NSImage imageWithSystemSymbolName:@"play.fill" accessibilityDescription:nil]);
+    [menu addItem:open];
+    [menu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *pin = [[NSMenuItem alloc] initWithTitle:@"Pin App" action:@selector(deckMenuPin:) keyEquivalent:@""];
+    pin.identifier = @"pinAppMenuItem";
+    NSMenuItem *hide = [[NSMenuItem alloc] initWithTitle:@"Hide App" action:@selector(deckMenuHide:) keyEquivalent:@""];
+    hide.identifier = @"hideAppMenuItem";
+    NSMenuItem *quit = [[NSMenuItem alloc] initWithTitle:@"Quit App" action:@selector(quitAppMenuItemClicked:) keyEquivalent:@""];
+    quit.identifier = @"quitAppMenuItem";
+    for (NSMenuItem *item in @[pin, hide]) {
+        item.target = self;
+        item.representedObject = app;
+        [menu addItem:item];
+    }
+    [menu addItem:[NSMenuItem separatorItem]];
+    quit.target = self;
+    [menu addItem:quit];
+
+    // titles, images, quit visibility, Sunshine overrides and SuperCmds: the old code, unchanged
+    [self didOpenContextMenu:menu forApp:app];
+    for (NSMenuItem *item in menu.itemArray) {
+        item.enabled = item.enabled || item.submenu != nil;
+    }
+    if (![self hostCanStreamNow]) {
+        // off or not paired: nothing that starts, quits or sends to the host; pinning and hiding are local and stay
+        for (NSMenuItem *item in menu.itemArray) {
+            if (item.action == @selector(deckMenuOpen:) || item.action == @selector(quitAppMenuItemClicked:) || item.submenu != nil ||
+                [item.identifier hasPrefix:@"appSuperCmd"] || [item.identifier hasPrefix:@"sunshine"]) {
+                item.enabled = NO;
+            }
+        }
+    }
+    return menu;
+}
+
+- (void)deckMenuOpen:(NSMenuItem *)item { [self openApp:item.representedObject]; }
+- (void)deckMenuPin:(NSMenuItem *)item { [self deckTogglePin:item.representedObject]; }
+- (void)deckMenuHide:(NSMenuItem *)item { [self deckToggleHidden:item.representedObject]; }
+
+/// The menu behind the ⋯ button of a computer: everything the old host right-click menu had (唤醒, 休眠,
+/// 显示隐藏应用, 重命名…, 移除主机, 设置, 连接详情, 编辑连接), the Sunshine overrides and SuperCmds of the
+/// computer's default app. Swift adds 线路 and the connection modes on top.
+- (NSMenu *)deckHostMenuForApp:(TemporaryApp *)app {
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
+    menu.autoenablesItems = NO;
+    TemporaryHost *host = self.host;
+
+    void (^add)(NSString *, NSString *, NSString *, BOOL) = ^(NSString *title, NSString *symbol, NSString *action, BOOL enabled) {
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(deckHostMenuAction:) keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = action;
+        item.enabled = enabled;
+        if (symbol.length > 0) {
+            MLSetMenuItemImage(item, [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil]);
+        }
+        [menu addItem:item];
+    };
+    // 唤醒 only with a real MAC (not empty, not all zeros)
+    NSString *macDigits = [[host.mac componentsSeparatedByCharactersInSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdefABCDEF"] invertedSet]] componentsJoinedByString:@""];
+    BOOL macKnown = macDigits.length == 12 && [macDigits stringByReplacingOccurrencesOfString:@"0" withString:@""].length > 0;
+    add(NSLocalizedString(@"Wake PC", @"Wake PC"), @"power", @"wake", host.state != StateOnline && macKnown);
+    add(NSLocalizedString(@"Sleep Host", @"Sleep Host"), @"moon.zzz", @"sleep", host.state == StateOnline && host.pairState == PairStatePaired);
+    add(NSLocalizedString(@"Show Hidden Apps", @"Show Hidden Apps"), @"eye", @"showHidden", YES);
+    menu.itemArray.lastObject.state = host.showHiddenApps ? NSControlStateValueOn : NSControlStateValueOff;
+    add(NSLocalizedString(@"Rename Host…", @"Rename Host…"), @"pencil", @"rename", YES);
+    add(NSLocalizedString(@"Change Icon…", @"Change Icon…"), @"photo.on.rectangle", @"icon", YES);
+    add(NSLocalizedString(@"Remove Host", @"Remove Host"), @"trash", @"remove", YES);
+    [menu addItem:[NSMenuItem separatorItem]];
+    add(NSLocalizedString(@"Settings", @"Settings"), @"slider.horizontal.3", @"settings", YES);
+    add(NSLocalizedString(@"Connection Details", @"Connection Details"), @"info.circle", @"details", YES);
+    add(NSLocalizedString(@"Edit Connections", @"Edit Connections"), @"point.3.connected.trianglepath.dotted", @"editor", YES);
+
+    if (app != nil && host.canUseHttps) {
+        // the per-stream overrides and SuperCmds of the old menu, for the default app
+        self.sunshineOverrideApp = app;
+        [self loadPersistedSunshineTopologyForCurrentApp];
+        [self rebuildSunshineOverrideItemsInMenu:menu];
+        [self rebuildSuperCommandItemsInMenu:menu forApp:app];
+        [self refreshSunshineDisplaysIfNeededForce:NO];
+    }
+    return menu;
+}
+
+/// 添加连接方式…: the same command as ⋯ > 编辑连接, so there is one path to the sheet.
+- (void)deckAddConnection {
+    if (self.host == nil) return;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
+                                                      userInfo:@{@"command": @"menu", @"host": self.host, @"action": @"editor"}];
+}
+
+- (void)deckHostMenuAction:(NSMenuItem *)item {
+    NSString *action = item.representedObject;
+    if ([action isEqualToString:@"icon"]) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckPageIcon" object:nil userInfo:@{@"uuid": self.host.uuid ?: @""}];
+        return;
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
+                                                      userInfo:@{@"command": @"menu", @"host": self.host, @"action": action}];
+}
+
+- (void)deckTogglePin:(TemporaryApp *)app {
+    app.pinned = !app.pinned;
+    [[[DataManager alloc] init] updateAppsForExistingHost:self.host];
+    [self displayApps];
+}
+
+- (void)deckToggleHidden:(TemporaryApp *)app {
+    app.hidden = !app.hidden;
+    [[[DataManager alloc] init] updateAppsForExistingHost:self.host];
+    [self displayApps];
+}
+
+#pragma mark - 自定义主页 toolbar item (concept)
+
+- (void)deckInstallToolbarItemIfNeeded {
+    if (![MLDeckVariant isComputerPage]) {
+        return;
+    }
+    NSToolbar *toolbar = self.parentViewController.view.window.toolbar;
+    if (toolbar == nil) {
+        return;
+    }
+    NSUInteger insertAt = toolbar.items.count;
+    for (NSUInteger i = 0; i < toolbar.items.count; i++) {
+        NSString *identifier = toolbar.items[i].itemIdentifier;
+        if ([identifier isEqualToString:@"CustomizeHomeToolbarItem"]) {
+            return;
+        }
+        if ([identifier isEqualToString:@"PreferencesToolbarItem"]) {
+            insertAt = i;
+        }
+    }
+    [toolbar insertItemWithItemIdentifier:@"CustomizeHomeToolbarItem" atIndex:insertAt];
+}
+
+- (void)deckRemoveToolbarItem {
+    NSToolbar *toolbar = self.parentViewController.view.window.toolbar;
+    for (NSInteger i = (NSInteger)toolbar.items.count - 1; i >= 0; i--) {
+        if ([toolbar.items[i].itemIdentifier isEqualToString:@"CustomizeHomeToolbarItem"]) {
+            [toolbar removeItemAtIndex:i];
+        }
+    }
 }
 
 @end
