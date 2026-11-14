@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(ds5-client-source-drop LANGUAGES C)
+include(CTest)
+add_subdirectory(interaction/ds5-core ds5-core)
+add_subdirectory(network/usbip-core usbip-core)
