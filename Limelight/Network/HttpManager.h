@@ -28,6 +28,7 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
 - (NSURLRequest*) newServerInfoRequest:(bool)fastFail;
 - (NSURLRequest*) newHttpServerInfoRequest:(bool)fastFail;
 - (NSURLRequest*) newHttpServerInfoRequest;
+- (NSURLRequest*) newServerInfoWaitRequestAfterSeq:(NSInteger)seq timeoutSec:(NSInteger)timeoutSec;
 - (NSURLRequest*) newLaunchRequest:(StreamConfiguration*)config;
 - (NSURLRequest*) newResumeRequest:(StreamConfiguration*)config;
 - (NSURLRequest*) newDisplaysRequest;
@@ -43,6 +44,8 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
 - (NSDictionary<NSString*, id>*) fetchSunshineUSBForwardingCapability;
 - (NSDictionary<NSString*, id>*) fetchSunshineFileMappingCapability;
 - (void) executeRequestSynchronously:(HttpRequest*)request;
+- (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack;
+- (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack deadline:(NSDate *)deadline;
 - (NSURLRequest *)newClipboardRequestWithPath:(NSString *)path;
 // Foundation Sunshine JSON API (/api/abr/*) over a persistent mTLS session so a 1 Hz
 // feedback loop does not repeat the handshake. Synchronous; do not call on the main
