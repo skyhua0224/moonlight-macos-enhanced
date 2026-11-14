@@ -1648,12 +1648,23 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
             return;
         }
         
+        // Without a pinned certificate there is nothing to compare with (the host is not paired, or the
+        // record has no certificate): refuse the connection instead of comparing against NULL.
+        if (_serverCert == nil) {
+            Log(LOG_W, @"TLS challenge for %@ with no pinned server certificate: cancelling (host not paired?)", challenge.protectionSpace.host ?: @"?");
+            completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, NULL);
+            return;
+        }
+
         SecCertificateRef actualCert = NULL;
+        BOOL actualCertOwned = NO;
         if (@available(macOS 12.0, *)) {
             CFArrayRef certs = SecTrustCopyCertificateChain(challenge.protectionSpace.serverTrust);
             if (certs) {
                 if (CFArrayGetCount(certs) > 0) {
-                    actualCert = (SecCertificateRef)CFArrayGetValueAtIndex(certs, 0);
+                    // The array owns this certificate and is released below: take our own reference first.
+                    actualCert = (SecCertificateRef)CFRetain(CFArrayGetValueAtIndex(certs, 0));
+                    actualCertOwned = YES;
                 }
                 CFRelease(certs);
             }
@@ -1671,6 +1682,9 @@ static NSString* ProbeErrorReason(NSInteger status, NSDictionary* json) {
         }
         
         CFDataRef actualCertData = SecCertificateCopyData(actualCert);
+        if (actualCertOwned) {
+            CFRelease(actualCert);
+        }
         if (actualCertData == nil) {
             Log(LOG_E, @"Server certificate data parsing error");
             completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, NULL);
