@@ -3,8 +3,14 @@
 //  Moonlight for macOS
 //
 
+#import "HostPathRank.h"
+#import "LatencyProbe.h"
+#ifndef ML_PATH_GRACEFUL_TERMINATION
+#define ML_PATH_GRACEFUL_TERMINATION 0x80030023   /* ML_ERROR_GRACEFUL_TERMINATION of moonlight-common-c */
+#endif
 #import "StreamViewController_Internal.h"
 #include "DynamicHdr.h"
+#import "StreamOverlayLegacy.h"
 
 // Host-selected dynamic HDR format (X-SS-Dynamic-HDR) as overlay text.
 static NSString *MLDynamicHdrFormatDisplayName(int format) {
@@ -893,6 +899,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
         currentBitrate,
         newBitrate);
 
+    // lowering the bitrate is the remedy for loss, not a failure of the path: the verdict is made when the stream ends
     [self attemptReconnectWithReason:@"adaptive-drop-mitigation"];
 }
 
@@ -938,6 +945,13 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
         return (float)((double)frameCount / MAX(0.001, (double)elapsedMs / 1000.0));
     };
 
+    {
+        // what the control stream really measures on this path: kept per computer and address for the 线路 chips
+        uint32_t streamRtt = 0;
+        if (MLGetUsableRttInfo(self.streamMan.connection, &streamRtt, NULL) && streamRtt > 0) {
+            [LatencyProbe noteStreamRttMs:streamRtt forHost:self.app.host.uuid address:self.app.host.activeAddress];
+        }
+    }
     if (self.adaptiveBitrateController != nil) {
         uint32_t abrRtt = 0;
         MLGetUsableRttInfo(self.streamMan.connection, &abrRtt, NULL);
@@ -994,14 +1008,14 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
             }
             self.lastPerfNetStats = net;
         }
-        Log(LOG_I, @"[perf] fps rx=%.1f de=%.1f rd=%.1f low1=%.1f pace=%.2f p99=%.1f max=%.1f stalls=%u srcGaps=%u "
+        Log(LOG_I, @"[perf] fps rx=%.1f de=%.1f rd=%.1f low1=%.1f pace=%.2f p99=%.1f max=%.1f stalls=%u srcGaps=%u clientStalls=%u "
             "decode=%.2f queue=%.2f host=%.1f netDrop=%u pacerDrop=%u jit=%.1f br=%.1f audioUnderruns=%llu%@",
             displayedFps(stats.receivedFps, stats.receivedFrames),
             displayedFps(stats.decodedFps, stats.decodedFrames),
             displayedFps(stats.renderedFps, stats.renderedFrames),
             stats.renderedFpsOnePercentLow, stats.renderFramePacingJitterMs,
             stats.renderIntervalP99Ms, stats.renderIntervalMaxMs,
-            stats.renderStallCount, stats.renderSourceGapCount,
+            stats.renderStallCount, stats.renderSourceGapCount, stats.renderClientStallTotal,
             stats.decodedFrames > 0 ? (float)stats.totalDecodeTime / stats.decodedFrames : 0.0f,
             stats.renderedFrames > 0 ? (float)stats.totalRenderTime / stats.renderedFrames : 0.0f,
             stats.framesWithHostProcessingLatency > 0
@@ -1517,11 +1531,25 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     [self hideReconnectOverlay];
 }
 
+- (void)cycleOverlayStyle {
+    if (self.overlayContainer == nil) {
+        [self setupOverlay];
+        return;
+    }
+    [MLOverlayPrefs cycleStyle];
+    // A change between the SwiftUI overlay and the original one needs a rebuild; styles of the new overlay
+    // switch by themselves (it listens to the saved settings).
+    if ((self.overlayPresenter != nil) == [MLOverlayPrefs isLegacy]) {
+        [self setupOverlay];
+    }
+}
+
 - (void)toggleOverlay {
     if (self.overlayContainer) {
         [self.overlayContainer removeFromSuperview];
         self.overlayContainer = nil;
         self.overlayLabel = nil;
+        self.overlayPresenter = nil;
         [self.statsTimer invalidate];
         self.statsTimer = nil;
     } else {
@@ -1699,6 +1727,20 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     if (!self.shouldAttemptReconnect) {
         return;
     }
+    // Automatic reasons only: after 3 failed streams in a row on this computer, stop and say why (menu / user reasons go on)
+    NSSet<NSString *> *automatic = [NSSet setWithObjects:@"adaptive-drop-mitigation", @"startup-no-payload-reconnect",
+                                    @"payload-stall-reconnect", @"connect-timeout-auto", nil];
+    NSSet<NSString *> *manual = [NSSet setWithObjects:@"manual-address-change", @"connection-method-changed", @"menu", @"route-retry", nil];
+    if ([manual containsObject:reason ?: @""]) {
+        [StreamPathHealth resetConsecutiveForHost:self.app.host.uuid];
+    }
+    if ([automatic containsObject:reason ?: @""] &&
+        host_path_health_should_stop((int)[StreamPathHealth consecutiveFailuresForHost:self.app.host.uuid])) {
+        Log(LOG_W, @"[route] %ld failed streams in a row on %@: automatic reconnecting stops (reason=%@)",
+            (long)[StreamPathHealth consecutiveFailuresForHost:self.app.host.uuid], self.app.host.activeAddress ?: @"?", reason);
+        [self presentRouteFailureStop];
+        return;
+    }
     if (self.reconnectInProgress) {
         Log(LOG_W, @"[diag] Reconnect request ignored: already reconnecting (reason=%@)", reason ?: @"unknown");
         return;
@@ -1784,29 +1826,32 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     if (self.overlayContainer) {
         [self.overlayContainer removeFromSuperview];
     }
-    
-    self.overlayContainer = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
-    self.overlayContainer.material = NSVisualEffectMaterialHUDWindow;
-    self.overlayContainer.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-    self.overlayContainer.state = NSVisualEffectStateActive;
-    self.overlayContainer.wantsLayer = YES;
-    self.overlayContainer.layer.cornerRadius = 10.0;
-    self.overlayContainer.layer.masksToBounds = YES;
-    
-    self.overlayLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
-    self.overlayLabel.bezeled = NO;
-    self.overlayLabel.drawsBackground = NO;
-    self.overlayLabel.editable = NO;
-    self.overlayLabel.selectable = NO;
-    self.overlayLabel.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
-    
-    [self.overlayContainer addSubview:self.overlayLabel];
+    self.overlayPresenter = nil;
+    self.overlayLabel = nil;
+
+    BOOL usePresenter = NO;
+    if (@available(macOS 14.0, *)) {
+        usePresenter = ![MLOverlayPrefs isLegacy];
+    }
+    if (usePresenter) {
+        if (@available(macOS 14.0, *)) {
+            MLOverlayPresenter *presenter = [[MLOverlayPresenter alloc] init];
+            self.overlayPresenter = presenter;
+            self.overlayContainer = presenter.view;
+        }
+    } else {
+        NSTextField *label = nil;
+        self.overlayContainer = [MLLegacyOverlay makeContainerWithLabel:&label];
+        self.overlayLabel = label;
+    }
 
     // Ensure overlay is always above the video render view.
     [self.view addSubview:self.overlayContainer positioned:NSWindowAbove relativeTo:nil];
 
     // Hide until we have at least one received frame (avoid showing a black HUD during RTSP handshake).
     self.overlayContainer.hidden = YES;
+    // The warning shown by the old 「网络不佳」 container now lives in the overlay.
+    [self hideConnectionWarning];
 
     if (self.statsTimer) {
         [self.statsTimer invalidate];
@@ -1924,148 +1969,97 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     float streamLatencyMs = pipelineTime + transportOneWayMs;
     BOOL streamLatencyAvailable = (pipelineTime > 0.0f) || hasTransportEstimate;
     
-    NSMutableAttributedString *attrString = [[NSMutableAttributedString alloc] init];
-    
-    NSDictionary *labelAttrs = @{
-        NSForegroundColorAttributeName: [NSColor whiteColor],
-        NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightRegular]
-    };
-    
-    NSDictionary *valueAttrs = @{
-        NSForegroundColorAttributeName: [NSColor colorWithRed:1.0 green:1.0 blue:0.5 alpha:1.0], // Light Yellow
-        NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightBold]
-    };
-    void (^append)(NSString *, NSDictionary *) = ^(NSString *str, NSDictionary *attrs) {
-        [attrString appendAttributedString:[[NSAttributedString alloc] initWithString:str attributes:attrs]];
-    };
-    
-    // Resolution & FPS (use configured FPS for the left-side value)
-    append([NSString stringWithFormat:@"%dx%d@%d", res.width, res.height, configuredFps], valueAttrs);
-    append(@"  ", labelAttrs);
-    append(codecString, valueAttrs);
-    append(@"  ", labelAttrs);
-    append(chromaString, valueAttrs);
-    if ((videoFormat & VIDEO_FORMAT_MASK_10BIT) && LiGetCurrentHostDisplayHdrMode()) {
-        append(@"  HDR ", labelAttrs);
-        append(MLDynamicHdrFormatDisplayName(LiGetNegotiatedDynamicHdrFormat()), valueAttrs);
-        NSString *hdrFallback = MLDynamicHdrFallbackDisplayName(LiGetNegotiatedDynamicHdrFallback());
-        if (hdrFallback.length > 0) {
-            append([NSString stringWithFormat:@" (%@)", hdrFallback], labelAttrs);
+    // One snapshot of what this method computed; both overlays are drawn from it.
+    MLOverlayMetrics *om = [[MLOverlayMetrics alloc] init];
+    om.width = res.width;
+    om.height = res.height;
+    om.configuredFps = configuredFps;
+    om.codec = codecString;
+    om.chroma = chromaString;
+    Connection *hdrConnection = self.streamMan.connection;
+    if ((videoFormat & VIDEO_FORMAT_MASK_10BIT) && [hdrConnection hostDisplayHdrEnabled]) {
+        om.hdrName = MLDynamicHdrFormatDisplayName([hdrConnection negotiatedDynamicHdrFormat]);
+        om.hdrFallback = MLDynamicHdrFallbackDisplayName([hdrConnection negotiatedDynamicHdrFallback]) ?: @"";
+    }
+    om.receivedFps = receivedFps;
+    om.decodedFps = decodedFps;
+    om.renderedFps = renderedFps;
+    om.onePercentLow = onePercentLowFps;
+    om.streamLatencyMs = streamLatencyMs;
+    om.streamLatencyAvailable = streamLatencyAvailable;
+    om.streamLatencyApproximate = streamLatencyApproximate;
+    om.rttAvailable = rttAvailable;
+    om.rttMs = rtt;
+    om.lossPercent = loss;
+    om.jitterMs = jitter;
+    om.bitrateMbps = bitrateMbps;
+    om.pacingJitterMs = framePacingJitter;
+    om.renderP99Ms = stats.renderIntervalP99Ms;
+    om.stallCount = stats.renderStallCount;
+    om.clientStallTotal = stats.renderClientStallTotal;
+    om.pipelineMs = pipelineTime;
+    om.hostMs = encodeTime;
+    om.decodeMs = decodeTime;
+    om.queueMs = renderTime;
+    om.transportMs = transportOneWayMs;
+    om.transportAvailable = hasTransportEstimate;
+    om.noPayloadStreakSeconds = (NSInteger)self.streamHealthNoPayloadStreak;
+    om.frozenStatsStreakSeconds = (NSInteger)self.streamHealthFrozenStatsStreak;
+    om.elapsedSeconds = self.streamStartDate ? [[NSDate date] timeIntervalSinceDate:self.streamStartDate] : -1;
+    NSString *routeAddress = [self currentPreferredAddressForStatus];
+    if (routeAddress.length > 0) {
+        NSString *bare = [[routeAddress componentsSeparatedByString:@":"] firstObject] ?: routeAddress;
+        BOOL isPrivate = [bare hasPrefix:@"192.168."] || [bare hasPrefix:@"10."] || [bare hasPrefix:@"169.254."] || [bare hasSuffix:@".local"];
+        if (!isPrivate && [bare hasPrefix:@"172."]) {
+            NSInteger second = [[[bare componentsSeparatedByString:@"."] objectAtIndex:1] integerValue];
+            isPrivate = second >= 16 && second <= 31;
         }
+        NSString *live = [[MLHostPathSignals shared] overlayLineForHost:self.app.host.uuid ?: @"" active:routeAddress];
+        om.route = live.length > 0 ? live : (isPrivate ? @"lan" : @"remote");
     }
-    append(@"  FPS ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", receivedFps], valueAttrs);
-    append(@" Rx · ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", decodedFps], valueAttrs);
-    append(@" De · ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", renderedFps], valueAttrs);
-    append(@" Rd", labelAttrs);
-    append(@"  ", labelAttrs);
-    append(MLString(@"1% Low", nil), labelAttrs);
-    append(@" ", labelAttrs);
-    if (onePercentLowFps > 0.0f) {
-        append([NSString stringWithFormat:@"%.1f", onePercentLowFps], valueAttrs);
-    } else {
-        append(@"--", valueAttrs);
+    NSDictionary *overlayPrefs = [SettingsClass getSettingsFor:self.app.host.uuid];
+    if (overlayPrefs[@"autoAdjustBitrate"] != nil) {
+        om.autoBitrateKnown = YES;
+        om.autoBitrate = [overlayPrefs[@"autoAdjustBitrate"] boolValue];
     }
-    
-    // Network
-    append(@"  ", labelAttrs);
-    append(MLString(@"Stream Latency", nil), labelAttrs);
-    append(@" ", labelAttrs);
-    if (streamLatencyAvailable) {
-        if (streamLatencyApproximate) {
-            append(@"~", labelAttrs);
-        }
-        append([NSString stringWithFormat:@"%.1f", streamLatencyMs], valueAttrs);
-        append(@" ms", labelAttrs);
-    } else {
-        append(MLString(@"Not Available", nil), valueAttrs);
-    }
-    append(@"  Loss ", labelAttrs);
-    append([NSString stringWithFormat:@"%.2f%%", loss], valueAttrs);
 
-    // Network-side loss from common-c (3 s window, excludes decoder drops) and
-    // cumulative RS FEC outcomes. The feedback pair is what this client last
-    // reported to the host; it only exists when the host accepted FEC control.
+    // Network-side loss from common-c (3 s window, excludes decoder drops) and cumulative RS FEC outcomes.
+    // The feedback pair is what this client last reported to the host; it only exists when the host
+    // accepted FEC control.
     MLNetworkStatsSnapshot net = {0};
     if ([self.streamMan.connection getNetworkStatsSnapshot:&net]) {
-        append(@"  Net ", labelAttrs);
-        append([NSString stringWithFormat:@"%.2f%%", net.networkFrameLossPercent], valueAttrs);
-        if (net.fecRecovered > 0 || net.fecFailed > 0) {
-            append(@"  FEC ", labelAttrs);
-            append([NSString stringWithFormat:@"+%u", net.fecRecovered], valueAttrs);
-            append(@"/", labelAttrs);
-            append([NSString stringWithFormat:@"-%u", net.fecFailed], valueAttrs);
+        om.netAvailable = YES;
+        om.netLossPercent = net.networkFrameLossPercent;
+        om.fecRecovered = net.fecRecovered;
+        om.fecFailed = net.fecFailed;
+        om.fecFeedbackActive = net.fecFeedbackActive;
+        om.blockParityPercent = net.blockParityPercent;
+        om.fecFeedbackMissing = net.fecFeedbackMissingPackets;
+        om.fecFeedbackData = net.fecFeedbackDataPackets;
+    }
+
+    if (self.overlayPresenter != nil) {
+        if (@available(macOS 14.0, *)) {
+            [(MLOverlayPresenter *)self.overlayPresenter update:om];
         }
-        if (net.fecFeedbackActive) {
-            append(@"  Par ", labelAttrs);
-            append([NSString stringWithFormat:@"%u%%", net.blockParityPercent], valueAttrs);
-            append(@" Fb ", labelAttrs);
-            append([NSString stringWithFormat:@"%u/%u", net.fecFeedbackMissingPackets, net.fecFeedbackDataPackets], valueAttrs);
-        }
+        return;
     }
 
-    append(@"  Jit ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", jitter], valueAttrs);
-    append(@" ms  Br ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", bitrateMbps], valueAttrs);
-    append(@" Mbps", labelAttrs);
-    append(@"  Pace ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", framePacingJitter], valueAttrs);
-    append(@" ms · p99 ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", stats.renderIntervalP99Ms], valueAttrs);
-    append(@" ms", labelAttrs);
-    if (stats.renderStallCount > 0) {
-        append(@" · Stall ", labelAttrs);
-        append([NSString stringWithFormat:@"%u", stats.renderStallCount], valueAttrs);
-    }
-    
-    // Latency
-    append(@"  |  ", labelAttrs);
-    append(MLString(@"Pipeline", nil), labelAttrs);
-    append(@" ", labelAttrs);
-    append([NSString stringWithFormat:@"%.2f", pipelineTime], valueAttrs);
-    append(@" ms · ", labelAttrs);
-    append(MLString(@"Host", nil), labelAttrs);
-    append(@" ", labelAttrs);
-    append([NSString stringWithFormat:@"%.1f", encodeTime], valueAttrs);
-    append(@" ms · Decode ", labelAttrs);
-    append([NSString stringWithFormat:@"%.2f", decodeTime], valueAttrs);
-    append(@" ms · Queue ", labelAttrs);
-    append([NSString stringWithFormat:@"%.2f", renderTime], valueAttrs);
-    append(@" ms", labelAttrs);
-
-    if (self.streamHealthNoPayloadStreak > 0) {
-        append(@"  |  Stall ", labelAttrs);
-        append([NSString stringWithFormat:@"%lus", (unsigned long)self.streamHealthNoPayloadStreak], valueAttrs);
-    } else if (self.streamHealthFrozenStatsStreak > 0) {
-        append(@"  |  Stale ", labelAttrs);
-        append([NSString stringWithFormat:@"%lus", (unsigned long)self.streamHealthFrozenStatsStreak], valueAttrs);
-    }
-
-    self.overlayLabel.attributedStringValue = attrString;
-    [self.overlayLabel sizeToFit];
-    
-    // Layout
-    CGFloat padding = 10.0;
-    NSRect labelFrame = self.overlayLabel.frame;
-    NSRect containerFrame = NSMakeRect(0, 0, labelFrame.size.width + padding * 2, labelFrame.size.height + padding * 2);
-    
-    // Center top
-    CGFloat x = (self.view.bounds.size.width - containerFrame.size.width) / 2;
-    CGFloat y = self.view.bounds.size.height - containerFrame.size.height - 20; // 20px from top
-    
-    containerFrame.origin = NSMakePoint(x, y);
-    self.overlayContainer.frame = containerFrame;
-    
-    self.overlayLabel.frame = NSMakeRect(padding, padding, labelFrame.size.width, labelFrame.size.height);
+    self.overlayLabel.attributedStringValue = [MLLegacyOverlay attributedStringForMetrics:om];
+    [MLLegacyOverlay layoutContainer:self.overlayContainer label:self.overlayLabel inParent:self.view];
 }
 
 
 #pragma mark - Resolution
 
 - (void)showConnectionWarning {
+    if (self.overlayPresenter != nil) {
+        // The SwiftUI overlay carries 「网络不佳」 itself (a status line and a red dot).
+        if (@available(macOS 14.0, *)) {
+            [(MLOverlayPresenter *)self.overlayPresenter setPoorConnection:YES];
+        }
+        return;
+    }
     if (self.connectionWarningContainer) {
         return;
     }
@@ -2107,6 +2101,11 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 - (void)viewDidLayout {
     self.streamViewLayoutInProgress = YES;
     [super viewDidLayout];
+    if (self.overlayPresenter != nil) {
+        if (@available(macOS 14.0, *)) {
+            [(MLOverlayPresenter *)self.overlayPresenter relayout];
+        }
+    }
     [self layoutConnectionWarning];
     [self layoutMouseModeIndicator];
     [self layoutStreamMenuEntrypointsIfNeeded];
@@ -2298,6 +2297,11 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 }
 
 - (void)hideConnectionWarning {
+    if (self.overlayPresenter != nil) {
+        if (@available(macOS 14.0, *)) {
+            [(MLOverlayPresenter *)self.overlayPresenter setPoorConnection:NO];
+        }
+    }
     if (!self.connectionWarningContainer) {
         return;
     }
@@ -2516,6 +2520,98 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     }
     
     return path;
+}
+
+@end
+
+
+#pragma mark - Path health
+
+@implementation StreamViewController (PathHealth)
+
+/// The stream just ended: if it died in its first minute, or its frames were mostly lost, the path it ran over is noted.
+- (void)notePathVerdictForTerminationCode:(int)errorCode {
+    NSString *uuid = self.app.host.uuid;
+    NSString *address = self.app.host.activeAddress;
+    if (uuid.length == 0 || address.length == 0 || self.streamPathFailureNoted || self.disconnectWasUserInitiated) {
+        return;
+    }
+    uint64_t startedMs = self.streamHealthConnectionStartedMs;
+    uint64_t nowMs = [self nowMs];   // the same clock streamHealthConnectionStartedMs was written with
+    int age = startedMs > 0 && nowMs >= startedMs ? (int)((nowMs - startedMs) / 1000) : 0;
+    VideoStats stats = self.streamMan.connection.renderer.videoStats;
+    double loss = stats.totalFrames > 0 ? (double)stats.networkDroppedFrames * 100.0 / stats.totalFrames : 0.0;
+    // a graceful end (the host closed the session, the app quit) is not a failure of the path
+    int controlFailed = errorCode != 0 && (unsigned int)errorCode != (unsigned int)ML_PATH_GRACEFUL_TERMINATION;
+    int verdict = host_path_health_classify(loss, controlFailed, age);
+    if (verdict == HOST_STREAM_VERDICT_OK) {
+        return;
+    }
+    self.streamPathFailureNoted = YES;
+    [StreamPathHealth recordFailureForHost:uuid address:address
+                                    reason:verdict == HOST_STREAM_VERDICT_HIGH_LOSS ? @"loss" : @"control"
+                                    detail:verdict == HOST_STREAM_VERDICT_HIGH_LOSS ? [NSString stringWithFormat:@"%.0f%%", loss]
+                                                                                    : [NSString stringWithFormat:@"%ds", age]];
+}
+
+/// 60 s after a stream started and nothing went wrong: the path is good, its past failures are forgiven.
+- (void)scheduleStreamPathSuccessCheck {
+    NSUInteger generation = self.activeStreamGeneration;
+    NSString *uuid = self.app.host.uuid;
+    NSString *address = self.app.host.activeAddress;
+    self.streamPathFailureNoted = NO;
+    [LatencyProbe resetStreamRttWindowForHost:uuid address:address];
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(HOST_PATH_HEALTH_EARLY_SEC * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        StreamViewController *strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf.streamPathFailureNoted || strongSelf.activeStreamGeneration != generation ||
+            strongSelf.streamHealthConnectionStartedMs == 0) {
+            return;
+        }
+        [StreamPathHealth recordSuccessForHost:uuid address:address];
+    });
+}
+
+/// Three failed streams in a row: stop reconnecting, say which path and why, and offer another path.
+- (void)presentRouteFailureStop {
+    // timers that fire again while the sheet is open must not stack another one
+    @synchronized (self) {
+        if (self.routeStopPresented) { return; }
+        self.routeStopPresented = YES;
+    }
+    NSString *uuid = self.app.host.uuid;
+    NSString *address = self.app.host.activeAddress ?: @"";
+    NSDictionary *why = [StreamPathHealth recentFailureForHost:uuid address:address];
+    NSString *reason = [why[@"reason"] isEqualToString:@"loss"]
+        ? [NSString stringWithFormat:MLString(@"packet loss was too high (%@)", nil), why[@"detail"] ?: @""]
+        : MLString(@"the connection broke right after it started", nil);
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = MLString(@"The stream keeps failing", nil);
+    alert.informativeText = [NSString stringWithFormat:MLString(@"Automatic reconnecting stopped after %d failed attempts on %@: %@.", nil),
+                             HOST_PATH_HEALTH_STOP_AFTER, address, reason];
+    [alert addButtonWithTitle:MLString(@"Try another route", nil)];
+    [alert addButtonWithTitle:MLString(@"Close", nil)];
+    __weak typeof(self) weakSelf = self;
+    void (^handler)(NSModalResponse) = ^(NSModalResponse response) {
+        StreamViewController *strongSelf = weakSelf;
+        if (strongSelf == nil) { return; }
+        strongSelf.routeStopPresented = NO;
+        if (response == NSAlertFirstButtonReturn) {
+            // Auto takes another path (the failed one is avoided for 30 minutes); a pinned route is released for this retry
+            [SettingsClass setConnectionMethod:@"Auto" for:uuid];
+            [StreamPathHealth resetConsecutiveForHost:uuid];
+            [strongSelf attemptReconnectWithReason:@"route-retry"];
+        } else {
+            // Close: the stream stays as it is and is not restarted by itself again
+            [StreamPathHealth resetConsecutiveForHost:uuid];
+            strongSelf.shouldAttemptReconnect = NO;
+        }
+    };
+    if (self.view.window != nil) {
+        [alert beginSheetModalForWindow:self.view.window completionHandler:handler];
+    } else {
+        handler([alert runModal]);
+    }
 }
 
 @end

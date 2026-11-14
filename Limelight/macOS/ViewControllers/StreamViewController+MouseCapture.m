@@ -1982,6 +1982,9 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
             return nil;
         }];
     }
+    // Which other processes sit in the key path with an active tap: they can take a shortcut away before this app sees it
+    // (a user's Control-Option-S), so a shortcut that never arrives can be explained from the log.
+    Log(LOG_I, @"%@", [MLOverlayShortcutDiagnostics keyPathLine]);
     self.localKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent * _Nullable(NSEvent * _Nonnull event) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
@@ -1999,6 +2002,12 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         }
 
         [strongSelf resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"keyboard-chord" event:event];
+
+        // The overlay shortcuts (default ⌃⌥S and ⌃⌥⇧S) are answered here, before the key goes down the responder
+        // chain, so they do not depend on who is first responder at that moment.
+        if ([strongSelf handleOverlayShortcutForEvent:event route:@"local-monitor"]) {
+            return nil;
+        }
 
         if ([strongSelf handleKeyboardTranslationRuleForEvent:event]) {
             return nil;
@@ -2760,6 +2769,36 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         || [action isEqualToString:KeyboardTranslationProfile.localActionTypeClipboardText];
 }
 
+// The two overlay shortcuts. A held key (auto repeat) is swallowed without acting, so holding S does not
+// switch the overlay on and off again. Every Control+Option chord is traced at debug level with what it
+// resolved to, so a shortcut that "does nothing" can be told apart from one that never arrived.
+- (BOOL)handleOverlayShortcutForEvent:(NSEvent *)event route:(NSString *)route {
+    NSEventModifierFlags mods = MLRelevantShortcutModifiers(event.modifierFlags);
+    BOOL isRepeat = (event.type == NSEventTypeKeyDown) && event.isARepeat;
+    NSString *action = [StreamShortcutProfile overlayActionForKeyCode:event.keyCode
+                                                        modifierFlags:event.modifierFlags
+                                                            shortcuts:[SettingsClass streamShortcutsFor:self.app.host.uuid]];
+    if ((mods & (NSEventModifierFlagControl | NSEventModifierFlagOption)) == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
+        !isRepeat) {
+        Log(LOG_D, @"[shortcut] chord via %@: keyCode=%hu mods=0x%lx overlay-action=%@",
+            route, event.keyCode, (unsigned long)mods, action ?: @"-");
+    }
+    if (action == nil) {
+        return NO;
+    }
+    if (isRepeat) {
+        return YES;
+    }
+    self.pendingOptionUncaptureToken += 1;
+    if ([action isEqualToString:MLShortcutActionCyclePerformanceOverlayStyle]) {
+        [self cycleOverlayStyle];
+    } else {
+        [self toggleOverlay];
+    }
+    Log(LOG_I, @"[shortcut] overlay %@ via %@", action, route);
+    return YES;
+}
+
 - (BOOL)handleKeyboardTranslationRuleForEvent:(NSEvent *)event {
     KeyboardTranslationRule *rule = [self keyboardTranslationRuleMatchingEvent:event];
     if (rule == nil) {
@@ -2862,9 +2901,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return YES;
     }
 
-    if ([self event:event matchesShortcut:[self streamShortcutForAction:MLShortcutActionTogglePerformanceOverlay]]) {
-        self.pendingOptionUncaptureToken += 1;
-        [self toggleOverlay];
+    if ([self handleOverlayShortcutForEvent:event route:@"key-equivalent"]) {
         return YES;
     }
 

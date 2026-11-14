@@ -112,6 +112,13 @@
     Log(LOG_I, @"[diag] performClose invoked: sender=%@ event=%@",
         sender ? NSStringFromClass([sender class]) : @"(null)",
         MLDisconnectEventSummary(NSApp.currentEvent));
+    NSWindow *sheetHost = self.view.window;
+    if (sheetHost.attachedSheet != nil) {
+        // Command-W again while the disconnect options are up: the first button, Disconnect from Stream.
+        Log(LOG_I, @"[diag] performClose while the disconnect options are up: disconnecting");
+        [sheetHost endSheet:sheetHost.attachedSheet returnCode:NSAlertFirstButtonReturn];
+        return;
+    }
     [self uncaptureMouseWithCode:@"MUC301" reason:@"perform-close"];
     if (self.reconnectInProgress || self.stopStreamInProgress) {
         self.pendingDisconnectSource = self.reconnectInProgress ? @"disconnect-while-reconnecting" : @"disconnect-while-stopping";

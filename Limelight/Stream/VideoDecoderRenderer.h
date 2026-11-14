@@ -56,6 +56,10 @@ typedef struct {
   float renderIntervalMaxMs;
   uint32_t renderStallCount;      // intervals over 100 ms
   uint32_t renderSourceGapCount;  // frames that arrived late (host idle / network)
+  // Render intervals over 100 ms that the client added (the interval is over 50 ms longer than the arrival
+  // interval of the same frame), counted since the stream started. A host that sends nothing on a quiet screen
+  // makes long intervals too; those are not the client's and are not counted here.
+  uint32_t renderClientStallTotal;
 } VideoStats;
 
 // Client SDR reference white as seen by the HDR presenter, plus the display
