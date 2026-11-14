@@ -337,3 +337,353 @@ public final class DeckActivity: NSObject {
 
 // MARK: - Display model
 
+struct DeckHost: Identifiable {
+  enum Route { case lan, remote, unknown }
+
+  let id: String
+  let name: String
+  /// TemporaryHost.state as discovery has it: 0 no answer since launch, 1 offline, 2 online.
+  let state: Int
+  /// What is drawn: online, or (no answer yet) as it was when last seen. The thing that may start a stream is `verified`.
+  let online: Bool
+  let paired: Bool
+  let platform: String
+  let route: Route
+  let rtt: Int?
+  let address: String?
+  let codecs: [String]
+  let hdr: Bool
+  let canWake: Bool
+  let facts: DeckFacts
+  let runningAppId: String?
+  let appCount: Int
+  var stale = false
+  let raw: TemporaryHost
+  var icon: DeckIconSpec
+  /// Discovery has really answered that the computer is on.
+  var verified: Bool { state == 2 }
+  /// Discovery has really answered that the computer is off.
+  var settledOffline: Bool { state == 1 }
+  /// Foundation Sunshine: the Fs* fields, or (a build before them) the virtual display capability that
+  /// only Foundation Sunshine announces.
+  var isFoundation: Bool { DeckHostSoftware.isFoundation(fsCapability: facts.fsVersion, vddCapability: facts.vddVersion) }
+  /// What /serverinfo says the other side runs (DeckHostSoftware: nothing is guessed, no version is invented).
+  var software: DeckHostSoftware.Info {
+    DeckHostSoftware.classify(isFoundation: isFoundation, sunshineVersion: facts.sunshineVersion, gfeVersion: facts.gfeVersion,
+                              state: facts.serverState, platform: facts.platform)
+  }
+  /// Foundation Sunshine behind what this client knows (capability, not date); nil = up to date or not Foundation.
+  func fsUpdateReason(kindSeen: Bool?) -> DeckFsUpdateRules.Reason? {
+    DeckFsUpdateRules.reason(isFoundation: isFoundation, fsCapability: facts.fsVersion, kindSeen: kindSeen)
+  }
+  func fsUpdateToken() -> String {
+    DeckFsUpdateRules.token(version: DeckHostSoftware.versionNumber(facts.sunshineVersion), fsCapability: facts.fsVersion)
+  }
+  /// The serverinfo of this computer has been read (a state tag is in every GameStream answer): the software is known.
+  var softwareKnown: Bool { isFoundation || !facts.serverState.isEmpty }
+
+  var lastActivity: Date? { facts.lastConnected ?? facts.lastSeen }
+  var isNearbyUnpaired: Bool { online && !paired }
+
+  /// `live` is the computer as the sidebar and discovery see it right now: the page snapshot takes its state
+  /// (online, pairing, address, latency, running app) from it, so page and sidebar always agree.
+  init(_ host: TemporaryHost, live: TemporaryHost? = nil) {
+    let state = live ?? host
+    raw = host
+    id = host.uuid
+    name = host.displayName
+    self.state = Int(state.state.rawValue)
+    paired = Int(state.pairState.rawValue) == 2
+    let facts = DeckFactsStore.facts(for: host.uuid)
+    online = DeckPresenceRules.shownOnline(state: Int(state.state.rawValue), lastOnline: facts.lastOnline)
+    self.facts = facts
+    icon = DeckIconSpec.resolve(uuid: host.uuid, facts: facts)
+    platform = facts.platform
+    let active = state.activeAddress
+    address = active ?? host.localAddress ?? host.address ?? host.externalAddress
+    // the shown latency is smoothed and steady: it moves only by a few ms or 10 %, and a probe round that
+    // brings nothing keeps the last value for a while instead of blanking it
+    let rawLatency = active.flatMap { (DeckAddress.lookup(state.addressLatencies, $0) as NSNumber?)?.intValue }
+    // the round trip of the last real stream on this address first, the application-layer probe where there is none
+    let streamMs = active.flatMap { DeckAddressModel.streamMeasured(host.uuid, $0)?.ms }
+    rtt = DeckLatency.display(key: host.uuid + "|" + (active ?? ""), raw: DeckLatencyRules.valid(streamMs) ?? DeckLatencyRules.valid(rawLatency))
+    if let active, !active.isEmpty {
+      if let external = host.externalAddress, !external.isEmpty, external == active, host.localAddress != active {
+        route = .remote
+      } else if DeckHost.isPrivate(active) {
+        route = .lan
+      } else {
+        route = .remote
+      }
+    } else {
+      route = .unknown
+    }
+    let flags = Int(state.serverCodecModeSupport)
+    var list: [String] = []
+    if flags & 0x100 != 0 { list.append("HEVC") }
+    if flags & 0x30000 != 0 { list.append("AV1") }
+    codecs = list
+    hdr = flags & (0x200 | 0x20000) != 0
+    canWake = DeckHost.isValidMAC(host.mac) || DeckHost.isValidMAC(state.mac)
+    let current = state.currentGame ?? "0"
+    runningAppId = current == "0" || current.isEmpty ? nil : current
+    appCount = host.appList.count
+  }
+
+  /// A MAC is six hex pairs and not all zeros (00:00:00:00:00:00 is what an unknown MAC looks like).
+  static func isValidMAC(_ mac: String?) -> Bool {
+    let digits = (mac ?? "").filter { $0.isHexDigit }
+    return digits.count == 12 && digits.contains { $0 != "0" } && digits.lowercased() != "ffffffffffff"
+  }
+
+  /// The kind of way the stream would take now, from the address in use (nil when none is known).
+  var activeKind: DeckPathKind? {
+    guard let address, !address.isEmpty else { return nil }
+    return DeckAddress.kind(address, rtt: rtt)
+  }
+
+  /// What changes what the page shows, to redraw only when something did.
+  var signature: String {
+    let plan = online && paired ? DeckStreamPlan.plan(for: self) : DeckStreamPlan()
+    return "\(online)|\(state)|\(paired)|\(rtt ?? -1)|\(address ?? "")|\(runningAppId ?? "")|\(canWake)|\(codecs.joined())|\(hdr)|\(name)|\(plan.summary)"
+  }
+
+  static func isPrivate(_ address: String) -> Bool {
+    let bare = address.split(separator: ":").first.map(String.init) ?? address
+    if bare.hasPrefix("192.168.") || bare.hasPrefix("10.") || bare.hasPrefix("169.254.") { return true }
+    if bare.hasPrefix("172.") {
+      let parts = bare.split(separator: ".")
+      if parts.count > 1, let second = Int(parts[1]), (16...31).contains(second) { return true }
+    }
+    return bare.hasSuffix(".local")
+  }
+
+  func app(id appId: String?) -> TemporaryApp? {
+    guard let appId else { return nil }
+    return raw.appList.compactMap { $0 as? TemporaryApp }.first { $0.id == appId }
+  }
+}
+
+enum DeckHostList {
+  /// Hosts are keyed by uuid, so a reinstalled host shows up again under a new uuid with the
+  /// same name and MAC. Within a group of the same name (or MAC) the live, paired, most recently
+  /// used record is kept and any other record that is offline is flagged as stale.
+  static func build(_ hosts: [TemporaryHost]) -> [DeckHost] {
+    var list = hosts.filter { !$0.uuid.isEmpty }.map { DeckHost($0) }
+    var groups: [String: [Int]] = [:]
+    for (index, host) in list.enumerated() {
+      groups["name:" + host.name.trimmingCharacters(in: .whitespaces).lowercased(), default: []].append(index)
+      if let mac = host.raw.mac, !mac.isEmpty { groups["mac:" + mac.lowercased(), default: []].append(index) }
+    }
+    for (_, members) in groups where members.count > 1 {
+      func rank(_ i: Int) -> (Int, Int, TimeInterval) {
+        (list[i].online ? 1 : 0, list[i].paired ? 1 : 0, list[i].lastActivity?.timeIntervalSince1970 ?? 0)
+      }
+      guard let keep = members.max(by: { rank($0) < rank($1) }) else { continue }
+      for i in members where i != keep && !list[i].online { list[i].stale = true }
+    }
+    return list
+  }
+
+  static func sorted(_ hosts: [DeckHost]) -> [DeckHost] {
+    hosts.sorted { a, b in
+      let ar = (a.online ? 0 : 1, a.name.localizedLowercase)
+      let br = (b.online ? 0 : 1, b.name.localizedLowercase)
+      return ar < br
+    }
+  }
+
+  static func preferred(_ hosts: [DeckHost]) -> DeckHost? {
+    let live = hosts.filter { $0.online && $0.paired && !$0.stale }
+    if let last = live.max(by: { ($0.facts.lastConnected ?? .distantPast) < ($1.facts.lastConnected ?? .distantPast) }) {
+      return last
+    }
+    // nothing online yet (a cold launch, discovery has not answered): the computer used last, not just the first one
+    let known = hosts.filter { !$0.stale }
+    if let last = known.filter({ $0.facts.lastConnected != nil }).max(by: { ($0.facts.lastConnected ?? .distantPast) < ($1.facts.lastConnected ?? .distantPast) }) {
+      return last
+    }
+    return live.first ?? known.first ?? hosts.first
+  }
+}
+
+// MARK: - Time
+
+enum DeckTime {
+  static var locale: Locale {
+    switch LanguageManager.shared.currentLanguage {
+    case .chinese: return Locale(identifier: "zh-Hans")
+    case .english: return Locale(identifier: "en")
+    case .system: return Locale.current
+    }
+  }
+
+  /// nil when the time is unknown (missing, 0 = 1970, or from the future): "上次玩 56 年前" is never shown.
+  static func relative(_ date: Date?) -> String? {
+    guard let date = DeckTimeRules.valid(date) else { return nil }
+    let formatter = RelativeDateTimeFormatter()
+    formatter.locale = locale
+    formatter.unitsStyle = .short
+    return formatter.localizedString(for: date, relativeTo: Date())
+  }
+}
+
+// MARK: - Look
+
+enum DeckLook {
+  static func tint(_ platform: String) -> Color {
+    switch platform {
+    case "windows": return .blue
+    case "macos": return .purple
+    case "linux": return .orange
+    default: return .gray
+    }
+  }
+
+  static func symbol(_ platform: String) -> String {
+    switch platform {
+    case "windows": return "pc"
+    case "macos": return "macmini.fill"
+    case "linux": return "server.rack"
+    default: return "display"
+    }
+  }
+
+  static func platformName(_ platform: String) -> String {
+    switch platform {
+    case "windows": return "Windows"
+    case "macos": return "macOS"
+    case "linux": return "Linux"
+    default: return ""
+    }
+  }
+}
+
+extension View {
+  /// A glass capsule or card on macOS 26, a material elsewhere.
+  @ViewBuilder
+  func deckGlass<S: Shape>(_ shape: S, tint: Color? = nil) -> some View {
+    if #available(macOS 26.0, *) {
+      if let tint {
+        self.glassEffect(.regular.tint(tint.opacity(0.35)), in: shape)
+      } else {
+        self.glassEffect(.regular, in: shape)
+      }
+    } else {
+      self.background(.ultraThinMaterial, in: shape)
+    }
+  }
+
+  /// The grouped-card surface used by the Settings window.
+  /// A grouped box like the ones in System Settings: the quaternary fill (visible on the page colour in light
+  /// and dark, over a wallpaper too) and a hairline.
+  func deckCard(radius: CGFloat = 14, stroke: Color = Color(nsColor: .separatorColor).opacity(0.7)) -> some View {
+    self
+      .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+      .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(stroke, lineWidth: 0.5))
+  }
+}
+
+/// Tinted symbol tile, the same shape as the page icons in Settings.
+struct DeckGlyph: View {
+  let platform: String
+  var size: CGFloat = 44
+  var muted = false
+
+  var body: some View {
+    let tint = muted ? Color.gray : DeckLook.tint(platform)
+    Image(systemName: DeckLook.symbol(platform))
+      .font(.system(size: size * 0.5, weight: .medium))
+      .foregroundStyle(tint)
+      .frame(width: size, height: size)
+      .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+  }
+}
+
+private struct DeckChipsOnDarkKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+  /// Chips drawn over a hero backdrop: white text on a tinted translucent capsule.
+  var deckChipsOnDark: Bool {
+    get { self[DeckChipsOnDarkKey.self] }
+    set { self[DeckChipsOnDarkKey.self] = newValue }
+  }
+}
+
+struct DeckChip: View {
+  let text: String
+  var symbol: String?
+  var tint: Color = .secondary
+  var strong = false
+  @Environment(\.colorScheme) private var scheme
+  @Environment(\.deckChipsOnDark) private var onDark
+
+  var body: some View {
+    HStack(spacing: 4) {
+      if let symbol {
+        Image(systemName: symbol).font(.system(size: 9.5, weight: .bold))
+      }
+      Text(text).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+    }
+    .foregroundStyle(strong || onDark ? Color.white : tint)
+    .padding(.horizontal, 8)
+    .padding(.vertical, 3)
+    .background(Capsule().fill(strong ? tint : tint.opacity(onDark ? 0.42 : (scheme == .dark ? 0.3 : 0.14))))
+    .fixedSize()
+  }
+}
+
+struct DeckStatusChip: View {
+  let host: DeckHost
+
+  var body: some View {
+    if host.runningAppId != nil && host.online {
+      DeckChip(text: DL("deck.running"), symbol: "play.fill", tint: .green)
+    } else if host.online && host.paired {
+      DeckChip(text: DL("deck.online"), symbol: "circle.fill", tint: .green)
+    } else if host.online {
+      DeckChip(text: DL("deck.unpaired"), symbol: "link.badge.plus", tint: .orange)
+    } else {
+      DeckChip(text: DL("deck.offline"), symbol: "moon.zzz.fill", tint: .gray)
+    }
+  }
+}
+
+/// Route, latency, codecs, HDR and platform as chips, in a fixed order.
+struct DeckHostChips: View {
+  let host: DeckHost
+  var showStatus = true
+  var showPlatform = true
+
+  var body: some View {
+    HStack(spacing: 6) {
+      if showStatus { DeckStatusChip(host: host) }
+      if host.online {
+        switch host.route {
+        case .lan:
+          DeckChip(text: host.rtt.map { "\(DL("deck.lan")) · \($0) ms" } ?? DL("deck.lan"), symbol: "wifi", tint: .secondary)
+        case .remote:
+          DeckChip(text: host.rtt.map { "\(DL("deck.remote")) · \($0) ms" } ?? DL("deck.remote"), symbol: "globe", tint: .secondary)
+        case .unknown:
+          EmptyView()
+        }
+        EmptyView()
+        if host.hdr { DeckChip(text: "HDR", tint: .pink) }
+      }
+      if showPlatform, !DeckLook.platformName(host.platform).isEmpty {
+        DeckChip(text: DeckLook.platformName(host.platform), tint: DeckLook.tint(host.platform))
+      }
+    }
+  }
+}
+
+// MARK: - Posters
+
+/// Art a host can provide per app. The poster is what every host has; the others come from
+/// Foundation Sunshine and are simply absent on other hosts.
+enum DeckArtKind: String {
+  case poster = ""
+  case hero = "_hero.jpg"
+  case logo = "_logo.png"
+  case icon = "_icon.png"
+}
+
