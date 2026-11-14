@@ -1351,3 +1351,173 @@ struct DeckConnectBar: View {
 
 // MARK: - 线路 chips
 
+/// A wrapping row layout.
+@available(macOS 13.0, *)
+struct DeckFlowLayout: Layout {
+  var spacing: CGFloat = 8
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    layout(in: proposal.width ?? 600, subviews: subviews).size
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    let result = layout(in: bounds.width, subviews: subviews)
+    for (index, point) in result.points.enumerated() {
+      // every item sits on the centre line of its row, so a taller and a shorter button never end up top-aligned
+      subviews[index].place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y + result.offsets[index]),
+                            proposal: .unspecified)
+    }
+  }
+
+  private func layout(in width: CGFloat, subviews: Subviews) -> (size: CGSize, points: [CGPoint], offsets: [CGFloat]) {
+    var points: [CGPoint] = []
+    var heights: [CGFloat] = []
+    var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+    var rowOfItem: [Int] = []
+    var rows: [CGFloat] = []
+    for subview in subviews {
+      let size = subview.sizeThatFits(.unspecified)
+      if x > 0, x + size.width > width { rows.append(rowHeight); x = 0; y += rowHeight + spacing; rowHeight = 0 }
+      points.append(CGPoint(x: x, y: y))
+      heights.append(size.height)
+      rowOfItem.append(rows.count)
+      x += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
+      widest = max(widest, x - spacing)
+    }
+    rows.append(rowHeight)
+    let offsets = heights.enumerated().map { (rows[rowOfItem[$0.offset]] - $0.element) / 2 }
+    return (CGSize(width: widest, height: y + rowHeight), points, offsets)
+  }
+}
+
+/// The 线路 row: one chip per distinct PATH the provider knows (自动 first; the .local name and the LAN address
+/// are one path), each with its result: 「· 12 ms」, 「· 超时」 or 「· 测试中…」. The pinned one is filled; while 自动
+/// is on, the one the stream takes carries 使用中. A path that timed out is greyed out and cannot be chosen
+/// (tooltip 无响应); when the computer is off every chip is disabled except the pinned one, which shows its
+/// last result. Clicking pins that path for this computer; 自动 unpins it (the same pin as 默认 in 地址).
+@available(macOS 14.0, *)
+struct DeckPathChips: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckAppsModel
+  var onDark = false
+  /// the section the chips show: 线路 ("route") or 网卡 ("nic", same look, its own label)
+  var sectionID = "route"
+  var labelKey = "deck.route"
+  @SwiftUI.State private var tick = 0
+
+  private var items: [DeckConnectMenuItem] {
+    let sections = DeckConnectMenuRegistry.sections(for: host)
+    // a provider's own 线路 section wins over the local fallback
+    let section = sections.first { $0.id == sectionID } ?? (sectionID == "route" ? sections.first { $0.id == "route.local" } : nil)
+    return section?.items ?? []
+  }
+
+  var body: some View {
+    let _ = tick
+    let list = items
+    if list.count > 1 {
+      // the label sits beside the first row; every row of chips starts at the left edge of the first chip
+      HStack(alignment: .top, spacing: 8) {
+        Text(DL(labelKey)).font(.system(size: 12, weight: .semibold)).foregroundStyle(onDark ? .white.opacity(0.8) : .secondary)
+          .frame(height: 26)
+        DeckFlowLayout(spacing: 6) {
+          ForEach(list) { item in chip(item) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      // while a row is the remembered one (or the answers are out) look again now and then: the hold ends by the clock, not by a notification
+      .task(id: list.contains { $0.pending }) {
+        guard list.contains(where: { $0.pending }) else { return }
+        while !Task.isCancelled {
+          try? await Task.sleep(nanoseconds: 700_000_000)
+          if !Task.isCancelled { tick += 1 }
+        }
+      }
+      // an automatic switch of address shows here and nowhere else: the 使用中 mark moves, softly. A new latency or a
+      // result is not animated (a chip changes only when its value really changes, and the rest stays still)
+      .animation(.easeInOut(duration: 0.3), value: list.map { "\($0.id)\($0.inUse)\($0.selected)" })
+      .onReceive(NotificationCenter.default.publisher(for: DeckConnectMenuRegistry.didChange)) { _ in tick += 1 }
+      .onReceive(NotificationCenter.default.publisher(for: .deckAddressChanged)) { _ in tick += 1 }
+      .onReceive(NotificationCenter.default.publisher(for: .init("HostLatencyUpdated"))) { _ in tick += 1 }
+      .onReceive(NotificationCenter.default.publisher(for: .init("HostAutoAddressSwitched"))) { _ in tick += 1 }
+      // an address added, removed or declared (添加连接方式): the chips follow at once, and the new address is probed now
+      .onReceive(NotificationCenter.default.publisher(for: .init("ConnectionEndpointsUpdated"))) { _ in
+        tick += 1
+        DeckAddressModel.probeMissing(host, actions: model.actions)
+      }
+    }
+  }
+
+  private func chip(_ item: DeckConnectMenuItem) -> some View {
+    let selected = item.selected
+    // a 网卡 is chosen for the next stream, so it can be changed while the computer is off
+    let blocked = !selected && (item.unreachable || (!host.online && sectionID == "route"))
+    let fill: Color = selected ? Color.accentColor : (onDark ? Color.white.opacity(0.16) : Color.primary.opacity(0.07))
+    let text: Color = selected ? .white : (onDark ? .white : .primary)
+    return Button { if !blocked { item.action() } } label: {
+      HStack(spacing: 5) {
+        if let symbol = item.symbol { Image(systemName: symbol).font(.system(size: 11, weight: .semibold)) }
+        Text(item.title).font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.middle)
+        if item.testing {
+          ProgressView().controlSize(.mini)
+          Text(DL("deck.path.testing")).font(.system(size: 11)).opacity(0.8)
+        } else if item.unreachable {
+          Text("· " + DL("deck.path.timeout")).font(.system(size: 11)).opacity(0.85)
+        } else if let trailing = item.trailing {
+          Text("· " + trailing).font(.system(size: 11)).opacity(0.85)
+        }
+        if let badge = item.badge {
+          Text(badge).font(.system(size: 10, weight: .semibold))
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(Color.orange.opacity(0.22), in: Capsule())
+            .foregroundStyle(onDark ? Color.orange.opacity(0.95) : Color.orange)
+        }
+        if item.inUse && !item.unreachable {
+          Text(DL("deck.path.inUse")).font(.system(size: 10, weight: .semibold))
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background((selected ? Color.white.opacity(0.25) : Color.green.opacity(0.18)), in: Capsule())
+            .foregroundStyle(selected ? Color.white : Color.green)
+        }
+      }
+      .foregroundStyle(text)
+      .padding(.horizontal, 10).padding(.vertical, 5)
+      .background(fill, in: Capsule())
+      .opacity(blocked ? 0.4 : 1)
+      // a row still being checked: one small mark in the corner, nothing in the layout moves
+      .overlay(alignment: .topTrailing) {
+        if item.pending { DeckPendingDot(onDark: onDark).offset(x: -2, y: 3) }
+      }
+    }
+    .controllerButtonStyle(.plain)
+    .disabled(blocked)
+    .deckTouchTarget()
+    .deckHelp(blocked ? (item.unreachable ? DL("deck.addr.noAnswer") : DL("deck.path.offlineChip")) : (item.tooltip ?? (selected ? DL("deck.path.pinned") : DL("deck.path.pin"))))
+  }
+}
+
+/// The 网卡 row: 自动 and one chip per interface of this Mac; the chosen one is where every stream socket of this computer is bound.
+@available(macOS 14.0, *)
+struct DeckNicChips: View {
+  let host: DeckHost
+  @ObservedObject var model: DeckAppsModel
+  var onDark = false
+
+  var body: some View {
+    DeckPathChips(host: host, model: model, onDark: onDark, sectionID: "nic", labelKey: "deck.nic")
+  }
+}
+
+/// The mark of a 线路 chip that is still being checked: a 4 pt dot that breathes. It sits in the chip's corner and takes no room.
+@available(macOS 14.0, *)
+struct DeckPendingDot: View {
+  var onDark = false
+  @SwiftUI.State private var dim = false
+
+  var body: some View {
+    Circle().fill(onDark ? Color.white : Color.secondary).frame(width: 4, height: 4)
+      .opacity(dim ? 0.25 : 0.8)
+      .onAppear { withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { dim = true } }
+      .allowsHitTesting(false)
+  }
+}
