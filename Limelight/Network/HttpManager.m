@@ -341,6 +341,12 @@ static const NSString* HTTPS_PORT = @"47984";
 
 - (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack deadline:(NSDate *)deadline {
     NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    if (self.backgroundTransfer) {
+        // A cover is not wanted now: the system may send everything else first, and no second connection is opened for it.
+        config.networkServiceType = NSURLNetworkServiceTypeBackground;
+        config.HTTPMaximumConnectionsPerHost = 1;
+        config.timeoutIntervalForResource = request.request.timeoutInterval + slack;
+    }
     NSURLSession* urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
 
     __block NSMutableData* respData = [[NSMutableData alloc] init];
@@ -387,9 +393,6 @@ static const NSString* HTTPS_PORT = @"47984";
     if (timeout <= 0) {
         timeout = NORMAL_TIMEOUT_SEC;
     }
-    dispatch_time_t waitTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 2.0) * NSEC_PER_SEC));
-    if (dispatch_semaphore_wait(requestLock, waitTime) != 0) {
-        Log(LOG_E, @"Request timed out waiting for completion handler: %@", request.request.URL);
     if (deadline != nil) {
         NSTimeInterval left = [deadline timeIntervalSinceNow];
         if (left < timeout) {
@@ -410,6 +413,26 @@ static const NSString* HTTPS_PORT = @"47984";
         request.request = bounded;
     }
     dispatch_time_t waitTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + slack) * NSEC_PER_SEC));
+    long waitResult;
+    BOOL quietEnded = NO;
+    if (self.backgroundTransfer) {
+        // waits in quarter seconds so that a launch or a stream starting ends this at once
+        _endedForQuiet = NO;
+        NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:timeout + slack];
+        while ((waitResult = dispatch_semaphore_wait(requestLock, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)))) != 0) {
+            if ([MLNetworkQuiet isQuiet]) { quietEnded = YES; break; }
+            if ([limit timeIntervalSinceNow] <= 0) break;
+        }
+    } else {
+        waitResult = dispatch_semaphore_wait(requestLock, waitTime);
+    }
+    if (waitResult != 0) {
+        if (quietEnded) {
+            _endedForQuiet = YES;
+            Log(LOG_D, @"Background transfer stopped, a connection is starting: %@", request.request.URL);
+        } else {
+            Log(LOG_E, @"Request timed out waiting for completion handler: %@", request.request.URL);
+        }
         [urlSession invalidateAndCancel];
         // Cancelling makes the completion handler run, on another thread, and it writes
         // requestError and the response there. From here on those are the handler's alone:

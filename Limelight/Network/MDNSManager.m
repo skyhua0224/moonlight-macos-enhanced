@@ -8,6 +8,7 @@
 
 #import "MDNSManager.h"
 #import "TemporaryHost.h"
+#import "MoonlightEnhanced-Swift.h"
 
 #include <arpa/inet.h>
 
@@ -312,9 +313,11 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
         return;
     }
     
-    Log(LOG_D, @"Restarting mDNS search");
-    [mDNSBrowser stop];
-    [mDNSBrowser searchForServicesOfType:NV_SERVICE_TYPE inDomain:@""];
+    if (![MLNetworkQuiet isQuiet]) {
+        Log(LOG_D, @"Restarting mDNS search");
+        [mDNSBrowser stop];
+        [mDNSBrowser searchForServicesOfType:NV_SERVICE_TYPE inDomain:@""];
+    }
     
     // Search again in 5 seconds. We need to do this because
     // we want more aggressive querying than Bonjour will normally

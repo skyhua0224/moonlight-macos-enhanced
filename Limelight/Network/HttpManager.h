@@ -46,6 +46,14 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
 - (void) executeRequestSynchronously:(HttpRequest*)request;
 - (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack;
 - (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack deadline:(NSDate *)deadline;
+
+/// YES for a transfer nobody is waiting for (a cover picture): it is sent as background traffic, and the wait ends
+/// the moment the app goes quiet (a launch is pending or a stream is open, MLNetworkQuiet), so it never competes with
+/// the connection the user asked for. `request.timeoutInterval` is then an idle timeout and `waitSlack` the room for
+/// the whole transfer on top of it.
+@property (nonatomic) BOOL backgroundTransfer;
+/// Set when the last wait ended because the app went quiet (not a failure of the host).
+@property (nonatomic, readonly) BOOL endedForQuiet;
 - (NSURLRequest *)newClipboardRequestWithPath:(NSString *)path;
 // Foundation Sunshine JSON API (/api/abr/*) over a persistent mTLS session so a 1 Hz
 // feedback loop does not repeat the handshake. Synchronous; do not call on the main
