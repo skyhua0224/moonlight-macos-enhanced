@@ -628,6 +628,70 @@ extension SettingsModel {
     }
   }
 
+  /// DualSense options that act on this Mac. Host-owned DualSense tuning (haptics, adaptive trigger
+  /// scales, lightbar mode and colour, audio levels) stays on the host; the keys here mirror the
+  /// client-owned ones of the host's tuning catalog where one exists: `gamepad.gyro.sensitivity`
+  /// and `ds5.rumble.strength`.
+  struct DualSenseClientSettings: Codable, Equatable {
+    /// 0 automatic (the faster measured source), 1 GameController, 2 raw sensor report.
+    var motionSource: Int = 0
+    var gyroSensitivity: CGFloat = 1.0
+    var rumbleStrength: CGFloat = 1.0
+    var applyHostLights: Bool = true
+    var applyHostAudio: Bool = true
+    var volumeLimitPercent: CGFloat = 100
+    /// Offer the DualSense control extensions to the host in the launch SDP.
+    var extensionsEnabled: Bool = true
+    var reportHeadset: Bool = true
+    /// Host tuning key 10, ds5.haptics.bt.fallback: 0 auto, 1 ir, 2 rumble, 3 off.
+    var btHapticsFallback: Int = 0
+    /// Host tuning key 100, ds5.compat.btOutput: 0 auto (IR v2), 1 legacy, 2 ir, 3 off,
+    /// 4 full Bluetooth haptics (experimental). Off unless selected. One report at a time; the speaker stays on USB. Wins over key 10.
+    var btOutput: Int = 0
+    /// Host tuning key 101, ds5.compat.reportRateCapHz: upper limit of the motion report rate.
+    var reportRateCapHz: CGFloat = 250
+
+    static let `default` = DualSenseClientSettings()
+    static let reportRateCapRange: ClosedRange<CGFloat> = 30...1000
+    static let btHapticsFallbackKeys = ["Bluetooth Haptics Auto", "Bluetooth Haptics IR", "Bluetooth Haptics Rumble", "Bluetooth Haptics Off"]
+    static let btOutputKeys = ["Bluetooth Output Auto", "Bluetooth Output Legacy", "Bluetooth Output IR", "Bluetooth Output Off", "Bluetooth Output PCM"]
+
+    init() {}
+
+    // Settings saved by earlier builds lack the newer keys; they keep their values and take the defaults.
+    init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      let d = Self.default
+      motionSource = try c.decodeIfPresent(Int.self, forKey: .motionSource) ?? d.motionSource
+      gyroSensitivity = try c.decodeIfPresent(CGFloat.self, forKey: .gyroSensitivity) ?? d.gyroSensitivity
+      rumbleStrength = try c.decodeIfPresent(CGFloat.self, forKey: .rumbleStrength) ?? d.rumbleStrength
+      applyHostLights = try c.decodeIfPresent(Bool.self, forKey: .applyHostLights) ?? d.applyHostLights
+      applyHostAudio = try c.decodeIfPresent(Bool.self, forKey: .applyHostAudio) ?? d.applyHostAudio
+      volumeLimitPercent = try c.decodeIfPresent(CGFloat.self, forKey: .volumeLimitPercent) ?? d.volumeLimitPercent
+      extensionsEnabled = try c.decodeIfPresent(Bool.self, forKey: .extensionsEnabled) ?? d.extensionsEnabled
+      reportHeadset = try c.decodeIfPresent(Bool.self, forKey: .reportHeadset) ?? d.reportHeadset
+      btHapticsFallback = try c.decodeIfPresent(Int.self, forKey: .btHapticsFallback) ?? d.btHapticsFallback
+      btOutput = try c.decodeIfPresent(Int.self, forKey: .btOutput) ?? d.btOutput
+      reportRateCapHz = try c.decodeIfPresent(CGFloat.self, forKey: .reportRateCapHz) ?? d.reportRateCapHz
+    }
+    static let gyroSensitivityRange: ClosedRange<CGFloat> = 0.25...4.0
+    static let rumbleStrengthRange: ClosedRange<CGFloat> = 0.1...2.0
+    static let volumeLimitRange: ClosedRange<CGFloat> = 10...100
+    static let motionSourceKeys = ["Motion Source Automatic", "Motion Source GameController", "Motion Source Raw Report"]
+
+    var normalized: DualSenseClientSettings {
+      var value = self
+      value.motionSource = min(2, max(0, value.motionSource))
+      value.btHapticsFallback = min(3, max(0, value.btHapticsFallback))
+      value.btOutput = min(4, max(0, value.btOutput))
+      value.reportRateCapHz = min(Self.reportRateCapRange.upperBound, max(Self.reportRateCapRange.lowerBound, value.reportRateCapHz.rounded()))
+      value.gyroSensitivity = min(Self.gyroSensitivityRange.upperBound, max(Self.gyroSensitivityRange.lowerBound, value.gyroSensitivity))
+      value.rumbleStrength = min(Self.rumbleStrengthRange.upperBound, max(Self.rumbleStrengthRange.lowerBound, value.rumbleStrength))
+      value.volumeLimitPercent = min(Self.volumeLimitRange.upperBound, max(Self.volumeLimitRange.lowerBound, value.volumeLimitPercent))
+      return value
+    }
+  }
+
   static var controllerHapticsModes: [String] = ControllerHapticsMode.allCases.map(\.displayKey)
   static var controllerMotionModes: [String] = ControllerMotionMode.allCases.map(\.displayKey)
   static var controllerFeedbackTargets: [String] = ControllerFeedbackTarget.allCases.map(\.displayKey)

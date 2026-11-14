@@ -426,9 +426,6 @@ struct AboutUpdatesSettingsPage: View {
 }
 
 enum ThirdPartyNotices {
-  static let usbipdcppAttribution =
-    "This product uses usbipdcpp (https://github.com/yunsmall/usbipdcpp), licensed under LGPLv3."
-  static let usbipdcppURL = URL(string: "https://github.com/yunsmall/usbipdcpp")!
   static let sourceURL = URL(string: "https://github.com/skyhua0224/moonlight-macos-enhanced")!
 
   static func openLicenses() {
@@ -455,12 +452,6 @@ private struct AboutOpenSourceCard: View {
         .controllerButtonStyle(.bordered)
         .controlSize(.small)
       }
-      Text(verbatim: ThirdPartyNotices.usbipdcppAttribution)
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .textSelection(.enabled)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.vertical, 10)
     }
   }
 }

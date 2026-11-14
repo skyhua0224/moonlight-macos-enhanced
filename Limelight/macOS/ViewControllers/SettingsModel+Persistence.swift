@@ -91,6 +91,9 @@ extension SettingsModel {
     if let data = try? PropertyListEncoder().encode(controllerCalibration.normalized) {
       defaults.set(data, forKey: Self.controllerCalibrationKeyPrefix + hostId)
     }
+    if let data = try? PropertyListEncoder().encode(dualSense.normalized) {
+      defaults.set(data, forKey: Self.controllerDualSenseKeyPrefix + hostId)
+    }
   }
 
   func loadControllerSettings(for hostId: String) {
@@ -123,6 +126,11 @@ extension SettingsModel {
       prefix: Self.controllerCalibrationKeyPrefix, hostId: hostId, as: Data.self)
     controllerCalibration = (data.flatMap {
       try? PropertyListDecoder().decode(ControllerCalibration.self, from: $0)
+    })?.normalized ?? .default
+
+    dualSense = (controllerSettingObject(
+      prefix: Self.controllerDualSenseKeyPrefix, hostId: hostId, as: Data.self).flatMap {
+      try? PropertyListDecoder().decode(DualSenseClientSettings.self, from: $0)
     })?.normalized ?? .default
   }
 
@@ -350,6 +358,7 @@ extension SettingsModel {
     selectedTouchscreenMode = Self.getString(
       from: Self.defaultTouchscreenMode, in: Self.touchscreenModes)
     controllerDeadzone = Self.defaultControllerDeadzone
+    dualSense = .default
     selectedControllerHapticsMode = Self.defaultControllerHapticsMode
     selectedControllerMotionMode = Self.defaultControllerMotionMode
     selectedControllerFeedbackTarget = Self.defaultControllerFeedbackTarget
