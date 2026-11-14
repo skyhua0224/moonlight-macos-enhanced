@@ -910,3 +910,382 @@ private struct DeckContentHeightKey: PreferenceKey {
   static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
+@available(macOS 14.0, *)
+struct DeckComputerBody: View {
+  @ObservedObject var model: DeckAppsModel
+  /// The real width of the page area.
+  let windowWidth: CGFloat
+  @ObservedObject private var config = DeckHomeConfig.shared
+  @Environment(\.dynamicTypeSize) private var typeSize
+  @SwiftUI.State private var contentHeight: CGFloat = 1200
+  /// The page is laid out at windowWidth / scale and drawn scaled by `scale`: everything on it (text
+  /// included) grows together and a larger page uses more of a wide window (the column cap scales too).
+  /// The user's 页面大小 times the system text size where macOS exposes one.
+  /// Follows the live width, continuously: the scale is a piecewise-linear function of it (no steps), and a
+  /// scale change is a transform, so there is nothing to wait for or to ease.
+  /// There is no page scale: a scale transform around the page draws every card layer at its base size and
+  /// enlarges the picture of it. The page is laid out at the real window width; the card size alone follows the window
+  /// (DeckAdaptive tile factor), as real layout sizes.
+  private var pageScaleValue: Double { 1.0 }
+  private var scale: CGFloat { 1 }
+  /// The live width of the content area. A layout pass that offers a sliver (zero or partial width, as the
+  /// toolbar or a popover can briefly cause) is ignored: the last sane width stands.
+  @SwiftUI.State private var goodWidth: CGFloat = 0
+  private var stableWidth: CGFloat { windowWidth >= DeckLayoutProbe.minimumWidth ? windowWidth : max(goodWidth, DeckLayoutProbe.minimumWidth) }
+  /// The width the page is laid out at (what the rest of this view calls the width).
+  private var width: CGFloat { stableWidth / max(scale, 0.1) }
+
+  /// What the style comes to is asked for many times per layout pass (every tile rule, every section): worked
+  /// out once per change of its inputs.
+  @SwiftUI.State private var homeMemo = DeckHomeMemo()
+  private var resolved: DeckResolvedHome {
+    let key = "\(config.style.rawValue)|\(config.layoutMode.rawValue)|\(config.tiles.rawValue)|\(model.apps.count)|\(model.host?.signature ?? "")|\(config.custom.map { "\($0.id.rawValue)\($0.visible)" }.joined())"
+    if homeMemo.key == key, let value = homeMemo.value { return value }
+    let value = model.resolveHome(config)
+    homeMemo.key = key; homeMemo.value = value
+    return value
+  }
+  private var entries: [DeckSectionEntry] { resolved.entries }
+  private var computerVisible: Bool { entries.first(where: { $0.id == .computer })?.visible ?? true }
+  private var continueVisible: Bool { entries.first(where: { $0.id == .continuePlaying })?.visible ?? false }
+  /// The running app is ringed and first when R3 is the style, or when there is no computer card to say it is running.
+  private var ringRunning: Bool { DeckRunningStyle.current == .first || !computerVisible }
+  private var heroMode: Bool { resolved.layout == .hero && computerVisible && model.host != nil }
+  private var heroHeight: CGFloat { min(500, max(340, width * 0.36)) }
+  private var landscapeTiles: Bool { resolved.tiles == .landscape }
+
+  /// One tile size for every host and state. Manual: the slider's width. Automatic: the manual default times a
+  /// factor that is a LINEAR function of the content width, 1.0 at 800 pt and 1.35 at 1160 pt (the column's
+  /// cap), clamped outside: the tile only ever grows with the window and shrinks with it, with no step
+  /// anywhere. The columns are then however many fit (floor); what is left stays on the right, left aligned.
+  /// Landscape cards are 1.9 times as wide and use the same factor, as does the 最近使用 row.
+  private func tileLayout(landscape: Bool) -> (size: CGFloat, count: Int) {
+    let home = resolved
+    let mult: CGFloat = home.compact ? 0.92 : (home.large ? 1.15 : 1)
+    let content = max(300, colWidth - DeckInset.page * 2)
+    let gap: CGFloat = 24
+    #if MLC_CONCEPT_HARNESS
+    if conceptEnv("MLC_OLDTILES") != nil, config.adaptiveTiles { return tileLayoutOld(landscape: landscape, mult: mult, content: content, gap: gap) }
+    #endif
+    let m = tileMetrics(landscape: landscape)
+    return (m.base * m.factor, m.count)
+  }
+
+  /// A tile is laid out at its base width and drawn scaled by `factor` (a transform), so while the window is
+  /// dragged only the transform changes: the tiles' own view trees are not laid out again on every frame.
+  private func tileMetrics(landscape: Bool) -> (base: CGFloat, factor: CGFloat, count: Int) {
+    let home = resolved
+    let mult: CGFloat = home.compact ? 0.92 : (home.large ? 1.15 : 1)
+    let content = max(300, colWidth - DeckInset.page * 2)
+    let gap: CGFloat = 24
+    var base: CGFloat
+    var factor: CGFloat = 1
+    if config.adaptiveTiles {
+      factor = 1 + 0.35 * min(1, max(0, (content - 800) / (1160 - 800)))
+      base = 132 * mult
+    } else {
+      base = CGFloat(config.tileSize) * mult
+    }
+    base = floor(landscape ? base * 1.9 : base)
+    let count = max(1, Int(((content + gap) / (base * factor + gap)).rounded(.down)))
+    return (base, factor, count)
+  }
+
+  #if MLC_CONCEPT_HARNESS
+  /// The whole-column rule, kept only to draw the "before" curve: whole columns fitted to the width.
+  private func tileLayoutOld(landscape: Bool, mult: CGFloat, content: CGFloat, gap: CGFloat) -> (size: CGFloat, count: Int) {
+    let low: CGFloat = (landscape ? 132 * 1.9 : 132) * mult
+    let high = low * 1.35
+    let target = low * 1.12
+    let mostColumns = max(1, Int((content + gap) / (low + gap)))
+    let fewestColumns = max(1, Int(ceil((content + gap) / (high + gap))))
+    var count = Int(((content + gap) / (target + gap)).rounded())
+    count = min(max(count, fewestColumns), max(fewestColumns, mostColumns))
+    count = max(1, min(count, mostColumns))
+    let fitted = (content + gap) / CGFloat(count) - gap
+    return (floor(min(max(fitted, low), high)), count)
+  }
+  #endif
+  private func tileSize(landscape: Bool) -> CGFloat { tileLayout(landscape: landscape).size }
+  private func tileBase(landscape: Bool) -> CGFloat { tileMetrics(landscape: landscape).base }
+  private func tileFactor(landscape: Bool) -> CGFloat { tileMetrics(landscape: landscape).factor }
+  private func tileCount(landscape: Bool) -> Int { tileLayout(landscape: landscape).count }
+  /// The portrait tile width the automatic mode comes to, on the slider's scale (presets taken out).
+  private var autoTileValue: Double {
+    let home = resolved
+    let mult: Double = home.compact ? 0.92 : (home.large ? 1.15 : 1)
+    return min(240, max(100, Double(tileLayout(landscape: false).size) / mult))
+  }
+  private var tileSize: CGFloat { tileSize(landscape: false) }
+  private func tileColumns(landscape: Bool) -> [GridItem] {
+    Array(repeating: GridItem(.fixed(tileSize(landscape: landscape)), spacing: 24, alignment: .top), count: tileCount(landscape: landscape))
+  }
+
+  /// 主机信息 and 最近串流 side by side when they are next to each other.
+  private enum Row: Identifiable {
+    case single(DeckSectionID)
+    case pair
+    var id: String { switch self { case .single(let s): return s.rawValue; case .pair: return "pair" } }
+  }
+
+  private var rows: [Row] {
+    // A computer that is off or not paired has one set of host information: the grouped form (DeckOfflineInfo).
+    // The 主机信息 section is for the live page; it is not drawn next to the form, whatever the user switched on.
+    let offlinePage = model.host.map { !$0.online || !$0.paired } ?? false
+    let visible = entries.filter { $0.visible && !($0.id == .computer && heroMode) && !($0.id == .hostInfo && offlinePage) }.map { $0.id }
+    var rows: [Row] = []
+    var index = 0
+    while index < visible.count {
+      let id = visible[index]
+      if id == .hostInfo, index + 1 < visible.count, visible[index + 1] == .recentSessions, colWidth >= 900 {
+        rows.append(.pair); index += 2
+      } else {
+        rows.append(.single(id)); index += 1
+      }
+    }
+    return rows
+  }
+
+  /// All page content lives in one column, at most DeckColumn.maxContent wide plus the margins, centred in
+  /// the window: a 2560 pt window shows the page of a 1280 pt one, with the side margins grown evenly.
+  private var colWidth: CGFloat { min(max(width, 320), DeckColumn.maxContent + DeckInset.page * 2) }
+  private var sideMargin: CGFloat { max(0, (width - colWidth) / 2) }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 34) {
+        // the 大图 picture may run edge to edge; its text and buttons line up with the column's leading edge
+        if heroMode, let host = model.host {
+          DeckHeroHeader(host: host, model: model, height: heroHeight, width: width, leadingInset: sideMargin + DeckInset.page,
+                         topInset: DeckToolbar.clearance / max(scale, 0.1))
+            .controllerSection(DeckSectionID.computer.rawValue)
+        }
+        VStack(alignment: .leading, spacing: 34) {
+          if let host = model.host { DeckFsBanner(snapshot: host, model: model).padding(.horizontal, DeckInset.page).controllerSection(DeckSectionID.computer.rawValue) }
+          if heroMode, let host = model.host { offlineInfo(host).controllerSection(DeckSectionID.computer.rawValue) }
+          ForEach(rows) { row in
+            switch row {
+            case .single(let id): sectionContent(id)
+            case .pair: pair
+            }
+          }
+        }
+        .frame(width: colWidth, alignment: .leading)
+        .frame(width: max(width, 320))
+      }
+      // the content starts below the toolbar (about 52 pt of the window, whatever the page scale) plus a margin
+      .padding(.top, heroMode ? 0 : max(40, DeckToolbar.clearance / max(scale, 0.1)))
+      .padding(.bottom, 60)
+      // never wider than the window, whatever the shelves hold (a wide shelf once pushed the page sideways)
+      .frame(width: max(width, 320), alignment: .leading)
+      .background(GeometryReader { proxy in Color.clear.preference(key: DeckContentHeightKey.self, value: proxy.size.height) })
+      .modifier(DeckPageScaleModifier(scale: scale, windowWidth: stableWidth, contentHeight: contentHeight))
+      .background(GeometryReader { proxy in
+        Color.clear
+          .onAppear { DeckLayoutProbe.record(proxy.frame(in: .global)) }
+          .onChange(of: proxy.frame(in: .global)) { _, frame in DeckLayoutProbe.record(frame) }
+      })
+    }
+    .onPreferenceChange(DeckContentHeightKey.self) { if $0 > 0 { contentHeight = $0 } }
+    .onAppear {
+      if conceptEnv("MLC_DUMPMENUS") != nil {
+        // harness: the real menus' items, so a test can read them
+        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
+          func dump(_ title: String, _ menu: NSMenu?, _ depth: Int = 0) {
+            guard let menu else { fputs("MENUDUMP \(title): nil\n", stderr); return }
+            if depth == 0 { fputs("MENUDUMP == \(title)\n", stderr) }
+            for item in menu.items {
+              fputs("MENUDUMP \(String(repeating: "  ", count: depth))\(item.isSeparatorItem ? "-----" : item.title)\(item.isEnabled ? "" : " (disabled)")\(item.state == .on ? " ✓" : "")\n", stderr)
+              if let sub = item.submenu { dump(title, sub, depth + 1) }
+            }
+          }
+          if let app = model.libraryApps.first { dump("app menu: \(app.name ?? "")", model.actions.appMenu?(app)) }
+          if let host = model.host { dump("more menu", DeckMoreMenu.menu(host, model)) }
+        }
+      }
+    }
+    .onAppear { goodWidth = windowWidth >= DeckLayoutProbe.minimumWidth ? windowWidth : goodWidth; config.autoPageScale = pageScaleValue; config.autoTileSize = autoTileValue }
+    .onChange(of: windowWidth) { _, new in
+      guard new >= DeckLayoutProbe.minimumWidth else { return }   // a transient sliver is not a resize
+      goodWidth = new
+      #if MLC_CONCEPT_HARNESS
+      if conceptEnv("MLC_TILELOG") != nil {
+        let t = tileLayout(landscape: false), l = tileLayout(landscape: true)
+        fputs(String(format: "TILELOG w=%.0f scale=%.4f tile=%.0f count=%d screen=%.2f landscape=%.0f lcount=%d lscreen=%.2f\n", new, scale, t.size, t.count, t.size * scale, l.size, l.count, l.size * scale), stderr)
+      }
+      #endif
+    }
+    // the shown "automatic" values are only for the sliders; written when they really moved
+    .onChange(of: pageScaleValue) { _, value in if abs(config.autoPageScale - value) > 0.002 { config.autoPageScale = value } }
+    .onChange(of: autoTileValue) { _, value in if abs(config.autoTileSize - value) > 0.5 { config.autoTileSize = value } }
+    .scrollClipDisabled(heroMode)
+    .deckNoTopEdgeEffect(heroMode)
+    .background(Color(nsColor: .windowBackgroundColor))
+    .ignoresSafeArea(.container, edges: heroMode ? .top : [])
+    .onAppear { _ = DeckHomeEditState.shared; DeckHomeCustomizer.shared.resolvedProvider = { model.resolveHome(config) } }
+    .contextMenu {
+      Button(DL("deck.customize")) { DeckHomeCustomizer.shared.show() }
+    }
+  }
+
+  // MARK: sections
+
+  @ViewBuilder
+  private func sectionContent(_ id: DeckSectionID) -> some View {
+    let host = model.host
+    if id != .computer, let host, !host.paired {
+      EmptyView()   // an unpaired host has no app list to show
+    } else {
+      sectionBody(id).controllerSection(id.rawValue).opacity(id != .computer && host?.online == false ? 0.4 : 1)
+        .allowsHitTesting(id == .computer || host?.online != false)
+    }
+  }
+
+  @ViewBuilder
+  private func sectionBody(_ id: DeckSectionID) -> some View {
+    let host = model.host
+    switch id {
+    case .computer:
+      if let host { computerBlock(host) }
+    case .continuePlaying:
+      // 最近使用 is always a row of 16:9 cards, whatever 应用卡片 is; it follows the same adaptive size logic
+      shelf(DL("deck.section.continuePlaying"), model.continueApps(runningFirst: ringRunning), landscape: true,
+            ringRunning: ringRunning, controls: !computerVisible)
+    case .pinned:
+      shelf(DL("deck.section.pinned"), model.pinnedApps, landscape: landscapeTiles)
+    case .apps:
+      appsSection
+    case .hostInfo:
+      if let host, host.online, host.paired {
+        section(DL("deck.section.hostInfo")) {
+          VStack(alignment: .leading, spacing: 18) {
+            DeckOfflineInfo(host: host, model: model, parts: .addresses, maxWidth: 620)
+            DeckHostInfoCard(host: host, kindSeen: model.fsKindSeen).frame(maxWidth: 620)
+          }
+        }
+      }
+    case .recentSessions:
+      if let host, !host.facts.sessions.isEmpty {
+        section(DL("deck.section.recentSessions")) { DeckRecentSessions(host: host, model: model).frame(maxWidth: 620) }
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var pair: some View {
+    if let host = model.host {
+      HStack(alignment: .top, spacing: 28) {
+        section(DL("deck.section.hostInfo")) {
+          VStack(alignment: .leading, spacing: 18) {
+            DeckOfflineInfo(host: host, model: model, parts: .addresses, maxWidth: .infinity)
+            DeckHostInfoCard(host: host, kindSeen: model.fsKindSeen)
+          }
+        }
+        if !host.facts.sessions.isEmpty {
+          section(DL("deck.section.recentSessions")) { DeckRecentSessions(host: host, model: model) }
+        }
+      }
+      .padding(.horizontal, DeckInset.page)
+    }
+  }
+
+  private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text(title).font(.system(size: 20, weight: .bold))
+      content()
+    }
+    .padding(.horizontal, DeckInset.page)
+  }
+
+  @ViewBuilder
+  private func shelf(_ title: String, _ apps: [TemporaryApp], landscape: Bool, ringRunning: Bool = false, controls: Bool = false) -> some View {
+    if !apps.isEmpty {
+      DeckShelf(title: title, apps: apps, model: model, landscape: landscape,
+                tile: tileBase(landscape: landscape), factor: tileFactor(landscape: landscape), columns: tileColumns(landscape: landscape),
+                ringRunning: ringRunning, controls: controls)
+    }
+  }
+
+  /// 应用: a grid of the one tile size, for any number of apps.
+  @ViewBuilder
+  private var appsSection: some View {
+    var apps = model.libraryApps
+    let _ = {
+      if !computerVisible, let running = model.runningGame, let index = apps.firstIndex(where: { $0.id == running.id }) {
+        apps.insert(apps.remove(at: index), at: 0)
+      }
+    }()
+    let appControls = !computerVisible && !continueVisible
+    let repeated = continueVisible && model.runningGame.map { running in model.continueApps(runningFirst: ringRunning).contains { $0.id == running.id } } == true
+    if !apps.isEmpty {
+      VStack(alignment: .leading, spacing: 14) {
+        HStack(alignment: .center) {
+          DeckSectionTitle(title: DL("deck.section.apps"))
+          Spacer(minLength: 12)
+          DeckTileZoom()
+        }
+        // One flat list of tiles in a layout of ours (not a lazy grid: the page is drawn scaled; not rows of
+        // stacks: a tile keeps its identity when the column count changes, so it slides to its new place).
+        let columnCount = tileCount(landscape: landscapeTiles)
+        let tile = tileBase(landscape: landscapeTiles)
+        let factor = tileFactor(landscape: landscapeTiles)
+        // the cells are LAID OUT at tile * factor (real sizes, drawn by the system at that size), not scaled afterwards
+        DeckTileGrid(tile: tile * factor, factor: 1, columns: columnCount) {
+          ForEach(apps, id: \.deckKey) { app in
+            DeckAppCell(app: app, model: model,
+                        subtitle: resolved.large && !landscapeTiles ? deckFacts(for: app, model: model, running: false, includeSource: false) : [],
+                        highlightRunning: ringRunning, suppressRunning: repeated, runningControls: appControls,
+                        landscape: landscapeTiles)
+              .environment(\.deckScale, factor)
+              .frame(width: tile * factor)
+          }
+        }
+        // only a change of the column count is eased (short, interruptible spring); the size follows the window
+        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: columnCount)
+      }
+      .padding(.horizontal, DeckInset.page)
+      .animation(.spring(response: 0.35, dampingFraction: 0.82), value: config.tileSize)
+    }
+  }
+
+  private func isOffline(_ host: DeckHost) -> Bool { !host.online || !host.paired }
+
+  /// The computer's header and, when it is off or not paired, its info. Four arrangements are drawn for the
+  /// offline page (MLC_OFFLINE in the harness): today, A centred column, B two columns, C under the
+  /// preview, D columns by width.
+  @ViewBuilder
+  private func computerBlock(_ host: DeckHost) -> some View {
+    let layout = DeckOfflineLayout.current
+    let inner = colWidth - DeckInset.page * 2
+    if isOffline(host), layout == .a {
+      let column = min(inner, 800)
+      VStack(alignment: .leading, spacing: 34) {
+        DeckComputerCard(host: host, model: model, compact: resolved.compact, contentWidth: column)
+        DeckOfflineBlock(host: host, model: model, contentWidth: column, maxWidth: column)
+      }
+      .frame(width: column)
+      .frame(maxWidth: .infinity)
+    } else if isOffline(host), layout == .c {
+      DeckComputerCard(host: host, model: model, compact: resolved.compact, contentWidth: inner,
+                       leftExtra: AnyView(DeckOfflineInfo(host: host, model: model, parts: .addresses, maxWidth: 560)),
+                       rightExtra: AnyView(DeckOfflineInfo(host: host, model: model, parts: .rest, maxWidth: 680)))
+        .padding(.horizontal, DeckInset.page)
+    } else {
+      VStack(alignment: .leading, spacing: 34) {
+        DeckComputerCard(host: host, model: model, compact: resolved.compact, contentWidth: inner)
+        if isOffline(host) { DeckOfflineBlock(host: host, model: model, contentWidth: inner, maxWidth: 640) }
+      }
+      .padding(.horizontal, DeckInset.page)
+    }
+  }
+
+  @ViewBuilder
+  private func offlineInfo(_ host: DeckHost) -> some View {
+    if isOffline(host) {
+      DeckOfflineBlock(host: host, model: model, contentWidth: colWidth - DeckInset.page * 2, maxWidth: 640).padding(.horizontal, DeckInset.page)
+    }
+  }
+}
+
+// MARK: - 自定义主页 (Safari's start-page customise popover)
+
