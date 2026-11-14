@@ -38,6 +38,8 @@ FOUNDATION_EXPORT NSString * const _Nonnull deviceName;
 #endif
 + (BOOL)isActiveNetworkVPN;
 + (BOOL)isTunnelInterfaceName:(NSString * _Nonnull)ifname;
+/// The index of a named interface (if_nametoindex), or 0 when there is no such interface, it is down, or it is not running.
++ (unsigned int)usableInterfaceIndexForName:(NSString * _Nonnull)name;
 + (nullable NSString *)outboundInterfaceNameForAddress:(NSString * _Nonnull)address
                                          sourceAddress:(NSString * _Nullable * _Nullable)sourceAddress;
 
