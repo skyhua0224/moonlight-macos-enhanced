@@ -1289,3 +1289,459 @@ struct DeckComputerBody: View {
 
 // MARK: - 自定义主页 (Safari's start-page customise popover)
 
+/// Owns the popover. It hangs off a button in the window toolbar (top right), so it opens downward
+/// inside the window instead of sticking out of it.
+@available(macOS 14.0, *)
+@objc(MLDeckHomeCustomizer)
+public final class DeckHomeCustomizer: NSObject, NSPopoverDelegate {
+  @objc public static let shared = DeckHomeCustomizer()
+  /// The toolbar button, set when the toolbar item is made.
+  @objc public weak var anchor: NSView?
+  var resolvedProvider: (() -> DeckResolvedHome)?
+  private var popover: NSPopover?
+
+  @objc public func toggle(_ sender: Any?) {
+    if let popover, popover.isShown { popover.performClose(sender); return }
+    show()
+  }
+
+  /// B on the pad: false when the popover is not up.
+  func close() -> Bool {
+    guard let popover, popover.isShown else { return false }
+    popover.performClose(nil)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak popover] in
+      guard let popover, popover.isShown else { return }
+      // a popover that stays (an app that is not in front does not finish the close) is closed without its animation
+      popover.animates = false
+      popover.close()
+      popover.animates = true
+      LogMessage(LOG_I, "[controller-ui] 自定义主页 popover still up after performClose: closed directly, shown=\(popover.isShown)")
+    }
+    return true
+  }
+
+  @objc public func show() {
+    guard let anchor, anchor.window != nil else { return }
+    if popover?.isShown == true { return }
+    // the most height: the visible frame of the screen the window is on, less room for the toolbar and the arrow
+    let screenHeight = anchor.window?.screen?.visibleFrame.height ?? NSScreen.main?.visibleFrame.height ?? 800
+    let maxHeight = max(300, screenHeight - 120)
+    let pop = NSPopover()
+    let panel = DeckCustomizePanel(config: DeckHomeConfig.shared, edit: DeckHomeEditState.shared, resolvedProvider: { [weak self] in
+      self?.resolvedProvider?() ?? DeckResolvedHome(entries: DeckHomeConfig.defaultLayout, layout: .hero, tiles: .portrait, compact: false, large: false)
+    }, maxHeight: maxHeight, onContentHeight: { [weak pop] height in
+      // set from the measured content, never by the hosting controller on its own: nothing is resized half way through a layout
+      guard let pop, height > 1 else { return }
+      let target = min(height, maxHeight)
+      if abs(pop.contentSize.height - target) > 0.5 || pop.contentSize.width != DeckCustomizePanel.width {
+        pop.contentSize = NSSize(width: DeckCustomizePanel.width, height: target)
+      }
+    })
+    let controller = NSHostingController(rootView: panel)
+    controller.sizingOptions = []
+    let fit = controller.sizeThatFits(in: CGSize(width: DeckCustomizePanel.width, height: maxHeight))
+    pop.contentSize = NSSize(width: DeckCustomizePanel.width, height: min(max(fit.height, 200), maxHeight))
+    pop.behavior = .transient
+    pop.contentViewController = controller
+    pop.delegate = self
+    pop.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+    popover = pop
+  }
+}
+
+@available(macOS 14.0, *)
+struct DeckCustomizePanel: View {
+  @ObservedObject var config: DeckHomeConfig
+  @ObservedObject var edit: DeckHomeEditState
+  let resolvedProvider: () -> DeckResolvedHome
+
+  /// Fixed: the popover is its own window and neither the page scale nor the window under it changes it.
+  static let width: CGFloat = 380
+  /// The most height the popover may take (the screen it is on, less margins); beyond it the content scrolls.
+  var maxHeight: CGFloat = 640
+  var onContentHeight: (CGFloat) -> Void = { _ in }
+
+  private var resolved: DeckResolvedHome { resolvedProvider() }
+  private var entries: [DeckSectionEntry] { resolved.entries }
+
+  /// The content has one width and is measured for its height; when it does not fit the screen it scrolls inside the
+  /// popover. It is never squeezed, never moved: the size the popover takes is set from this measurement by its owner.
+  var body: some View {
+    ScrollView(.vertical, showsIndicators: false) {
+      content
+        .background(GeometryReader { proxy in Color.clear.preference(key: DeckCustomizeHeightKey.self, value: proxy.size.height) })
+    }
+    .scrollBounceBehavior(.basedOnSize)
+    .controllerBackHandler(active: true) { DeckHomeCustomizer.shared.close() }
+    .frame(width: Self.width)
+    .frame(maxHeight: maxHeight)
+    .onPreferenceChange(DeckCustomizeHeightKey.self) { onContentHeight($0) }
+  }
+
+  private var content: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      HStack(spacing: 8) {
+        ForEach(DeckHomeStyle.allCases, id: \.self) { style in
+          DeckPresetCard(style: style, selected: config.style == style) { config.style = style }
+        }
+      }
+
+      HStack(spacing: 8) {
+        Text(DL("deck.opt.size")).font(.system(size: 13))
+        Spacer(minLength: 8)
+        Image(systemName: "square.grid.3x3").font(.system(size: 10)).foregroundStyle(.secondary)
+        Slider(value: Binding(get: { config.adaptiveTiles ? config.autoTileSize : config.tileSize },
+                              set: { v in withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) { config.tileSize = v; config.adaptiveTiles = false } }), in: 100...240)
+          .frame(width: 130).controlSize(.small)
+        Image(systemName: "square.grid.2x2").font(.system(size: 12)).foregroundStyle(.secondary)
+      }
+
+      Toggle(isOn: Binding(get: { config.adaptive }, set: { on in
+        withAnimation(.smooth(duration: 0.25)) { config.adaptiveTiles = on }
+      })) {
+        Label(DL("deck.opt.adaptive"), systemImage: "arrow.up.left.and.arrow.down.right").font(.system(size: 13))
+      }
+      .toggleStyle(.switch)
+      .controlSize(.small)
+
+      VStack(alignment: .leading, spacing: 8) {
+        optionRow(DL("deck.opt.layout"), selection: Binding(get: { resolved.layout }, set: { makeCustom(layout: $0) }), DeckHomeLayout.allCases) { $0.title }
+        optionRow(DL("deck.opt.preview"), selection: $config.preview, DeckHostPreview.allCases) { $0.title }
+        optionRow(DL("deck.opt.tiles"), selection: Binding(get: { resolved.tiles }, set: { makeCustom(tiles: $0) }), DeckTileStyle.allCases) { $0.title }
+      }
+
+      VStack(spacing: 0) {
+        ForEach(entries) { entry in
+          VStack(spacing: 0) {
+            if edit.dropBefore == entry.id && edit.dragging != entry.id {
+              Capsule().fill(Color.accentColor).frame(height: 3).padding(.horizontal, 4).padding(.vertical, 1)
+            }
+            row(entry)
+          }
+        }
+      }
+
+      HStack {
+        Button(DL("deck.reset")) { config.reset() }.controllerButtonStyle(.borderless).foregroundStyle(.secondary)
+        Spacer()
+      }
+      .font(.system(size: 12))
+    }
+    .padding(16)
+    .frame(width: Self.width, alignment: .leading)
+  }
+
+  private func optionRow<T: Hashable>(_ title: String, selection: Binding<T>, _ all: [T], label: @escaping (T) -> String) -> some View {
+    // the label and the segments side by side when they fit the width, the segments under the label when they do not
+    // (a longer language, a wider system font): the row never grows past the popover and never loses its label
+    let picker = Picker("", selection: selection) {
+      ForEach(all, id: \.self) { Text(label($0)).tag($0) }
+    }
+    .pickerStyle(.segmented)
+    .labelsHidden()
+    return ViewThatFits(in: .horizontal) {
+      HStack(spacing: 10) {
+        Text(title).font(.system(size: 13)).lineLimit(1).fixedSize()
+        Spacer(minLength: 8)
+        picker.fixedSize()
+      }
+      VStack(alignment: .leading, spacing: 6) {
+        Text(title).font(.system(size: 13))
+        picker.frame(maxWidth: .infinity)
+      }
+    }
+  }
+
+  private func row(_ entry: DeckSectionEntry) -> some View {
+    let lifted = edit.dragging == entry.id
+    return HStack(spacing: 10) {
+      Toggle(isOn: Binding(get: { entry.visible }, set: { toggle(entry.id, $0) })) {
+        Label(entry.id.title, systemImage: entry.id.symbol).font(.system(size: 13))
+      }
+      .toggleStyle(.checkbox)
+      .disabled(entry.id.isRequired)
+      Spacer(minLength: 0)
+      Image(systemName: "line.3.horizontal").font(.system(size: 12, weight: .semibold)).foregroundStyle(.tertiary)
+        .frame(width: 24, height: 24).contentShape(Rectangle())
+        .deckTouchTarget()
+        .draggable(entry.id.rawValue) { DeckDragChip(title: entry.id.title, symbol: entry.id.symbol) }
+        .controllerFocusMenu(key: "section:\(entry.id.rawValue)", radius: 8) { (title: entry.id.title, menu: reorderMenu(entry)) }
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 5)
+    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(lifted ? Color(nsColor: .selectedContentBackgroundColor).opacity(0.18) : Color.clear))
+    .scaleEffect(lifted ? 1.03 : 1)
+    .shadow(color: .black.opacity(lifted ? 0.3 : 0), radius: 8, y: 4)
+    .dropDestination(for: String.self) { items, _ in
+      if let raw = items.first, let id = DeckSectionID(rawValue: raw) { move(id, before: entry.id) }
+      edit.dropBefore = nil
+      return true
+    } isTargeted: { targeted in
+      edit.dropBefore = targeted ? entry.id : (edit.dropBefore == entry.id ? nil : edit.dropBefore)
+    }
+  }
+
+  /// Any edit turns the style into 自定义, starting from what the page shows now.
+  private func makeCustom(entries list: [DeckSectionEntry]? = nil, layout: DeckHomeLayout? = nil, tiles: DeckTileStyle? = nil) {
+    let shown = resolved
+    config.custom = list ?? shown.entries
+    config.layoutMode = layout ?? shown.layout
+    config.tiles = tiles ?? shown.tiles
+    config.style = .custom
+  }
+
+  private func commit(_ list: [DeckSectionEntry]) { makeCustom(entries: list) }
+
+  private func toggle(_ id: DeckSectionID, _ visible: Bool) {
+    var list = entries
+    if let index = list.firstIndex(where: { $0.id == id }) { list[index].visible = visible }
+    commit(list)
+  }
+
+  /// The pad's way to drag a section: 上移 / 下移 (the pointer drags the handle).
+  private func reorderMenu(_ entry: DeckSectionEntry) -> NSMenu {
+    let menu = NSMenu()
+    menu.autoenablesItems = false
+    let list = entries
+    let index = list.firstIndex { $0.id == entry.id } ?? 0
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.addr.moveUp"), enabled: index > 0) { move(entry.id, before: list[index - 1].id) })
+    menu.addItem(ControllerMenuBuilder.item(title: DL("deck.addr.moveDown"), enabled: index + 1 < list.count) {
+      if index + 2 < list.count { move(entry.id, before: list[index + 2].id) } else { moveToEnd(entry.id) }
+    })
+    return menu
+  }
+
+  private func moveToEnd(_ id: DeckSectionID) {
+    var list = entries
+    guard let from = list.firstIndex(where: { $0.id == id }) else { return }
+    list.append(list.remove(at: from))
+    commit(list)
+  }
+
+  private func move(_ id: DeckSectionID, before target: DeckSectionID) {
+    guard id != target else { return }
+    var list = entries
+    guard let from = list.firstIndex(where: { $0.id == id }) else { return }
+    let item = list.remove(at: from)
+    let to = list.firstIndex(where: { $0.id == target }) ?? list.endIndex
+    list.insert(item, at: to)
+    commit(list)
+  }
+}
+
+private struct DeckCustomizeHeightKey: PreferenceKey {
+  static var defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+struct DeckDragChip: View {
+  let title: String
+  let symbol: String
+
+  var body: some View {
+    Label(title, systemImage: symbol).font(.system(size: 13, weight: .semibold))
+      .padding(.horizontal, 12).padding(.vertical, 7)
+      .background(Capsule().fill(.regularMaterial))
+  }
+}
+
+// MARK: - Size controls
+
+/// The small zoom control at the right end of the 应用 header (Finder / Photos): two grid glyphs and a
+/// slider. It is the same setting as 卡片大小 in 自定义主页, so the two always agree.
+@available(macOS 14.0, *)
+struct DeckTileZoom: View {
+  @ObservedObject private var config = DeckHomeConfig.shared
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: "square.grid.3x3").font(.system(size: 10)).foregroundStyle(.secondary)
+      Slider(value: Binding(get: { config.adaptiveTiles ? config.autoTileSize : config.tileSize },
+                            set: { v in withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) { config.tileSize = v; config.adaptiveTiles = false } }), in: 100...240)
+        .frame(width: 96).controlSize(.mini)
+      Image(systemName: "square.grid.2x2").font(.system(size: 12)).foregroundStyle(.secondary)
+      if !config.adaptiveTiles {
+        Button(DL("deck.auto")) { withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) { config.adaptiveTiles = true } }
+          .controllerButtonStyle(.borderless).font(.system(size: 11)).foregroundStyle(Color.accentColor)
+      }
+    }
+    .deckHelp(DL("deck.opt.size"))
+  }
+}
+
+/// Steps for the View menu: 放大卡片 / 缩小卡片 (⌘= / ⌘−), 实际大小 / 放大页面 / 缩小页面 (⌘0 / ⌘⌥= / ⌘⌥−).
+@objc(MLDeckZoom)
+public final class DeckZoom: NSObject {
+  @objc public static func stepTiles(_ direction: Int) {
+    guard #available(macOS 14.0, *) else { return }
+    let config = DeckHomeConfig.shared
+    let base = config.adaptiveTiles ? config.autoTileSize : config.tileSize
+    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+      config.tileSize = min(240, max(100, base + Double(direction) * 14))
+      config.adaptiveTiles = false
+    }
+  }
+
+  /// The page has no scale any more (it was a transform that blurred every card); these stay for the menu's selectors.
+  @objc public static func stepPage(_ direction: Int) {}
+  @objc public static func resetPage() {}
+
+  /// The system text size, where macOS reports one through Dynamic Type (normally .large = 1).
+  static func typeFactor(_ size: DynamicTypeSize) -> CGFloat {
+    switch size {
+    case .xSmall: return 0.88
+    case .small: return 0.94
+    case .medium: return 0.97
+    case .large: return 1.0
+    case .xLarge: return 1.06
+    case .xxLarge: return 1.12
+    case .xxxLarge: return 1.18
+    default: return 1.3
+    }
+  }
+
+  @objc public static func title(forAction name: String) -> String {
+    switch name {
+    case "tiles+": return DL("deck.menu.tilesIncrease")
+    case "tiles-": return DL("deck.menu.tilesDecrease")
+    case "page0": return DL("deck.menu.pageActual")
+    case "page+": return DL("deck.menu.pageIncrease")
+    default: return DL("deck.menu.pageDecrease")
+    }
+  }
+}
+
+/// 自适应大小: the page scale as a smooth function of the width of the page area (the window less the
+/// sidebar). Piecewise linear through the points below, so there is no step anywhere; clamped to 0.9...1.3.
+/// 1032 pt is a 1280 window (1.00), 1480 a 1728 window (1.10), 1672 a 1920 window (1.18), 2312 a 2560 window
+/// (1.30). The slope is steeper at the start because the first 450 pt of extra width are what a laptop
+/// screen has, and the type should grow there before the margins do.
+enum DeckAdaptive {
+  private static let curve: [(CGFloat, Double)] = [(800, 0.90), (1032, 1.00), (1480, 1.10), (1672, 1.18), (2312, 1.30)]
+
+  /// The scale in steps of 0.01: a step is 1 % of the page (invisible as a jump, and monotone), and the page
+  /// is not transformed afresh on every frame of a window drag, which cost most of a frame.
+  static func pageScale(forWidth width: CGFloat) -> Double {
+    (continuousPageScale(forWidth: width) * 100).rounded() / 100
+  }
+
+  static func continuousPageScale(forWidth width: CGFloat) -> Double {
+    guard let first = curve.first, let last = curve.last else { return 1 }
+    if width <= first.0 { return first.1 }
+    if width >= last.0 { return last.1 }
+    for index in 1..<curve.count where width <= curve[index].0 {
+      let (x0, y0) = curve[index - 1], (x1, y1) = curve[index]
+      return y0 + (y1 - y0) * Double((width - x0) / (x1 - x0))
+    }
+    return last.1
+  }
+}
+
+/// Draws the page scaled. At exactly 1 it does nothing at all (no transform layer), since a scale transform
+/// around the page makes the system render group effects (the greyed offline sections) through an offscreen
+/// layer that can come out at the wrong size.
+private struct DeckPageScaleModifier: ViewModifier {
+  let scale: CGFloat
+  let windowWidth: CGFloat
+  let contentHeight: CGFloat
+
+  func body(content: Content) -> some View {
+    // The page takes its natural height whatever it is offered: a height-limited offer inside the frame made aspect-fit
+    // pictures (tiles, preview) shrink to fit it. No transform of any kind: everything is drawn at its real size.
+    content.fixedSize(horizontal: false, vertical: true).frame(width: windowWidth, alignment: .topLeading)
+  }
+}
+
+/// The page's content frame, for the popover test (open and close it 50 times; the frame must not move) and
+/// the guard for transient widths.
+@objc(MLDeckLayoutProbe)
+public final class DeckLayoutProbe: NSObject {
+  static let minimumWidth: CGFloat = 420
+  @objc public static var frameString = ""
+  private static var frame = CGRect.zero
+  static func record(_ rect: CGRect) {
+    frame = rect
+    frameString = String(format: "%.1f,%.1f,%.1f,%.1f", rect.minX, rect.minY, rect.width, rect.height)
+  }
+}
+
+/// A grid of tiles of one width: item i goes to column i % columns, row i / columns, left aligned, standard
+/// gaps. Row height is the tallest tile of the row. Being a Layout it moves tiles by position, so a change of
+/// the column count (animated by the caller) slides every tile to its new place instead of rebuilding rows.
+@available(macOS 13.0, *)
+struct DeckTileGrid: Layout {
+  /// The tiles' own (unscaled) width; each is drawn scaled by `factor` by the caller (scaleEffect, top leading),
+  /// and the grid places them on the scaled pitch.
+  var tile: CGFloat
+  var factor: CGFloat = 1
+  var columns: Int
+  var spacing: CGFloat = 24
+  var rowSpacing: CGFloat = 28
+  /// Items past `rows` rows are not placed (callers pass only what is shown).
+  var rows: Int = 100_000
+
+  /// The tiles' heights at this width, measured once per layout pass (every ancestor asks for the size several
+  /// times, and each ask would otherwise walk every tile's view tree again).
+  struct Cache { var heights: [CGFloat]? }
+
+  func makeCache(subviews: Subviews) -> Cache { Cache(heights: nil) }
+
+  private func heights(_ subviews: Subviews, _ cache: inout Cache) -> [CGFloat] {
+    if let known = cache.heights, known.count == subviews.count { return known }
+    let proposal = ProposedViewSize(width: tile, height: nil)
+    let measured = subviews.map { $0.sizeThatFits(proposal).height }
+    cache.heights = measured
+    return measured
+  }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+    let h = heights(subviews, &cache)
+    let cols = max(1, columns)
+    let shown = min(h.count, cols * rows)
+    guard shown > 0 else { return .zero }
+    var total: CGFloat = 0
+    var index = 0
+    var rowCount = 0
+    while index < shown {
+      total += h[index..<min(index + cols, shown)].max() ?? 0
+      index += cols; rowCount += 1
+    }
+    let width = CGFloat(min(cols, shown)) * tile * factor + CGFloat(min(cols, shown) - 1) * spacing
+    return CGSize(width: width, height: total * factor + CGFloat(rowCount - 1) * rowSpacing)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+    let h = heights(subviews, &cache)
+    let cols = max(1, columns)
+    var y = bounds.minY
+    var index = 0
+    var log = ""
+    while index < subviews.count {
+      let row = index / cols
+      let end = min(index + cols, subviews.count)
+      let rowHeight = h[index..<end].max() ?? 0
+      for i in index..<end {
+        let x = bounds.minX + CGFloat(i - index) * (tile * factor + spacing)
+        if row < rows {
+          subviews[i].place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(width: tile, height: nil))
+          #if MLC_CONCEPT_HARNESS
+          log += String(format: "%.0f,%.0f;", x, y)
+          #endif
+        } else {
+          // beyond the visible rows: kept in the tree at the last row's place, invisible, so no tile pops in or out
+          subviews[i].place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(width: 0, height: 0))
+        }
+      }
+      if row < rows { y += rowHeight * factor + rowSpacing }
+      index = end
+    }
+    #if MLC_CONCEPT_HARNESS
+    if conceptEnv("MLC_GRIDLOG") != nil && subviews.count >= 20 { fputs("GRIDLOG tile=\(Int(tile)) cols=\(cols) pos=\(log)\n", stderr) }
+    #endif
+  }
+}
+
+final class DeckHomeMemo {
+  var key = ""
+  var value: DeckResolvedHome?
+}
