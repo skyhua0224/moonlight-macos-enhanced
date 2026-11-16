@@ -50,8 +50,10 @@ final class RemoteUSBForwardingViewModel: ObservableObject {
           } else {
             self.status = "Foundation Sunshine USB forwarding service is unavailable"
           }
-        } else if let error {
-          self.status = error.localizedDescription
+        } else if error != nil {
+          // Keep framework JSON/parser details out of the settings page. The
+          // session retains the underlying error for diagnostics.
+          self.status = "Unable to read the USB device list. Check the USB exporter and try again."
         } else if devices.isEmpty {
           self.status = "No claimable USB devices"
         } else {

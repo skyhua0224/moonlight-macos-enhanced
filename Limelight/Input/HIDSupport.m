@@ -1573,7 +1573,9 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
     }
 
     self.coreHIDMouseRuntimeFailed = NO;
-    self.coreHIDMouseDidDeliverMovement = NO;
+    @synchronized (self) {
+        self.coreHIDMouseDidDeliverMovement = NO;
+    }
     self.coreHIDMouseDriver = [[CoreHIDMouseDriver alloc] init];
     self.coreHIDMouseDriver.delegate = self;
     self.coreHIDMouseDriver.maximumReportRate = [SettingsClass coreHIDMaxMouseReportRateFor:self.host.uuid];
@@ -1596,8 +1598,16 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
     [self.coreHIDMouseDriver stop];
     self.coreHIDMouseDriver.delegate = nil;
     self.coreHIDMouseDriver = nil;
-    self.coreHIDMouseDidDeliverMovement = NO;
+    @synchronized (self) {
+        self.coreHIDMouseDidDeliverMovement = NO;
+    }
     HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
+}
+
+- (BOOL)hasCoreHIDMouseDeliveredMovement {
+    @synchronized (self) {
+        return self.coreHIDMouseDidDeliverMovement;
+    }
 }
 
 - (void)dispatchRelativeMouseDeltaX:(CGFloat)deltaX
@@ -1665,8 +1675,14 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
         return;
     }
 
-    if (!self.coreHIDMouseDidDeliverMovement) {
-        self.coreHIDMouseDidDeliverMovement = YES;
+    BOOL firstMovement = NO;
+    @synchronized (self) {
+        if (!self.coreHIDMouseDidDeliverMovement) {
+            self.coreHIDMouseDidDeliverMovement = YES;
+            firstMovement = YES;
+        }
+    }
+    if (firstMovement) {
         Log(LOG_I, @"CoreHID mouse active: first movement received");
         [[InputMonitoringPermissionManager sharedManager] noteCoreHIDDidBecomeActive];
         [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
