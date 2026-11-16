@@ -323,8 +323,9 @@ int list_devices() {
         std::cout << "{\"busId\":\"" << json_escape(info.bus_id)
                   << "\",\"vid\":" << info.vendor_id
                   << ",\"pid\":" << info.product_id << ",\"vidPid\":\"";
-        std::printf("%04x:%04x", info.vendor_id, info.product_id);
-        std::cout << "\",\"serial\":\"" << json_escape(info.serial)
+        char vid_pid[10] = {};
+        std::snprintf(vid_pid, sizeof(vid_pid), "%04x:%04x", info.vendor_id, info.product_id);
+        std::cout << vid_pid << "\",\"serial\":\"" << json_escape(info.serial)
                   << "\",\"manufacturer\":\"" << json_escape(info.manufacturer)
                   << "\",\"product\":\"" << json_escape(info.product)
                   << "\",\"claimable\":" << (info.claimable ? "true" : "false")
@@ -336,7 +337,8 @@ int list_devices() {
     }
   }
   IOObjectRelease(iterator);
-  std::cout << "\n";
+  std::cout << "]\n";  // close the array: the app parses this with JSONDecoder (issue #86)
+  std::cout.flush();
   return 0;
 }
 
