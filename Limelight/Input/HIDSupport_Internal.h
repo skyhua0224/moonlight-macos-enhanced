@@ -193,7 +193,6 @@
                           sourceTag:(NSString *)sourceTag;
 - (void)setupCoreHIDMouseDriverIfNeeded;
 - (void)tearDownCoreHIDMouseDriver;
-- (BOOL)hasCoreHIDMouseDeliveredMovement;
 - (void)refreshMouseInputConfiguration;
 - (void)recordMouseButtonDiagnosticsAction:(NSString *)action
                                     button:(int)button

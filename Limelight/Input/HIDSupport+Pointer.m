@@ -820,11 +820,12 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 
     if (useAbsolutePointerPath) {
         if (HIDShouldUseCoreHIDFreeMouseAbsoluteSync(self) &&
-            self.coreHIDMouseDriver != nil &&
-            [self hasCoreHIDMouseDeliveredMovement]) {
+            [self hasRecentCoreHIDMouseMovement]) {
             // Apple documents mouseMoved as an AppKit event stream and CoreHID as
-            // the raw device stream. Once CoreHID has delivered movement, AppKit's
-            // copy is only a second representation of the same physical motion.
+            // the raw device stream. While CoreHID is delivering movement (the same
+            // quarter-second window the relative path uses), AppKit's copy is only
+            // a second representation of the same physical motion; a pointer that
+            // CoreHID does not carry (a trackpad) still moves through AppKit.
             // Sending both can pull the host cursor back and forth. (Sources:
             // macos-apple-corehid-20261116, macos-apple-nsevent-mousemoved-20261116,
             // macos-apple-nsresponder-mousemoved-20261116.)
@@ -856,7 +857,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     } else {
         if (self.useCoreHIDMouse &&
             self.coreHIDMouseDriver != nil &&
-            [self hasCoreHIDMouseDeliveredMovement]) {
+            self.coreHIDMouseDriver.secondsSinceLastMovementEvent < 0.25) {
             return;
         }
         [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
