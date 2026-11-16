@@ -57,6 +57,7 @@ int main(void) {
 
         // Direct touches only, and nothing may stop it.
         CHECK(r.allowedTouchTypes == NSTouchTypeMaskDirect);
+        CHECK(r.buttonMask == 0);
         CHECK(![r canBePreventedByGestureRecognizer:[[NSPressGestureRecognizer alloc] init]]);
         CHECK([r canPreventGestureRecognizer:[[NSPressGestureRecognizer alloc] init]]);
 

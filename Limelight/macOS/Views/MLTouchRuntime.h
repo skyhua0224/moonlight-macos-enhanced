@@ -65,6 +65,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// For StreamViewMac's mouse overrides: should this mouse event be kept from the host because it is the
 /// system's emulation of a touch? Also writes the line into the touch log. Main thread.
 - (BOOL)shouldDropMouseEvent:(NSEvent *)event kind:(MLTouchGateMouseKind)kind;
+/// Suppresses a GCMouse button pair only after a direct-touch begin was observed in the same frame window.
+- (BOOL)shouldDropGCMouseButton:(NSInteger)button pressed:(BOOL)pressed time:(NSTimeInterval)time;
 
 /// Whether a stream view subview is part of the picture (the video views), as opposed to a control on top of it.
 + (BOOL)isHostContentView:(nullable NSView *)view streamView:(NSView *)streamView;

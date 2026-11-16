@@ -240,6 +240,11 @@ static inline BOOL MLTouchSubtypeBelievedWithoutTouch(BOOL anyScreenHasTouch, BO
 /// (MLTouchSubtypeBelievedWithoutTouch). A trackpad press and a tap-to-click carry the same "touch" subtype (on a
 /// MacBook every trackpad press is subtype-touch=1), so the subtype by itself must never drop a click.
 @property (nonatomic) BOOL subtypeAlwaysDrops;
+/// Suppresses only the GCMouse press/release pair that follows observed direct-touch evidence in the same frame.
+/// A physical mouse or trackpad event without that evidence always passes.
+- (BOOL)shouldDropGCMouseButton:(NSInteger)button pressed:(BOOL)pressed time:(NSTimeInterval)time;
+/// Records the evidence used by -shouldDropGCMouseButton:pressed:time:.
+- (void)noteDirectTouchBeganAtTime:(NSTimeInterval)time;
 @property (nonatomic) NSTimeInterval activeTimeout;  // default 1.5 s: a touch that never closed stops counting
 @property (nonatomic, readonly) NSUInteger droppedCount;
 @property (nonatomic, readonly) NSUInteger passedNearTouchCount;

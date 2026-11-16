@@ -598,6 +598,8 @@ static CGFloat MLDistance(CGPoint a, CGPoint b) {
 
 #pragma mark - Mouse emulation gate
 
+static NSTimeInterval const MLTouchGCMouseEvidenceWindow = 1.0 / 60.0;
+
 @implementation MLTouchMouseGate {
     BOOL _anyActive;
     CGPoint _lastPoint;
@@ -607,6 +609,9 @@ static CGFloat MLDistance(CGPoint a, CGPoint b) {
     NSUInteger _droppedCount;
     NSUInteger _passedNear;
     NSUInteger _passedClicks, _droppedSubtype, _droppedCorrelated, _droppedSequence;
+    NSTimeInterval _lastDirectTouchBeganTime;
+    BOOL _hasDirectTouchBegin;
+    NSUInteger _droppedGCMouseButtons;
 }
 
 - (instancetype)init {
@@ -639,10 +644,32 @@ static CGFloat MLDistance(CGPoint a, CGPoint b) {
     if (_hasTouch) _lastTime = time;
 }
 
+- (void)noteDirectTouchBeganAtTime:(NSTimeInterval)time {
+    _lastDirectTouchBeganTime = time;
+    _hasDirectTouchBegin = YES;
+}
+
+- (BOOL)shouldDropGCMouseButton:(NSInteger)button pressed:(BOOL)pressed time:(NSTimeInterval)time {
+    NSUInteger bit = (NSUInteger)1 << MIN((NSUInteger)MAX(button, 0), (NSUInteger)31);
+    if (!self.enabled) return NO;
+    if (!pressed && (_droppedGCMouseButtons & bit) != 0) {
+        _droppedGCMouseButtons &= ~bit;
+        return YES;
+    }
+    if (!pressed || !_hasDirectTouchBegin || time < _lastDirectTouchBeganTime ||
+        time - _lastDirectTouchBeganTime > MLTouchGCMouseEvidenceWindow) {
+        return NO;
+    }
+    _droppedGCMouseButtons |= bit;
+    return YES;
+}
+
 - (void)reset {
     _anyActive = NO;
     _hasTouch = NO;
     _droppedDownMask = 0;
+    _hasDirectTouchBegin = NO;
+    _droppedGCMouseButtons = 0;
 }
 
 - (MLTouchGateVerdict)verdictForMouseKind:(MLTouchGateMouseKind)kind

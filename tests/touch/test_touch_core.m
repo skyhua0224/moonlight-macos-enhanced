@@ -679,6 +679,17 @@ static void testMouseGate(void) {
     CHECK([g verdictForMouseKind:MLTouchGateMouseDown button:0 point:CGPointMake(900, 900) time:20.1 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictPass);
     CHECK([g verdictForMouseKind:MLTouchGateMouseUp button:1 point:CGPointMake(1, 1) time:20.2 touchSubtype:NO ageSinceTouch:&age] == MLTouchGateVerdictDropSequence);
     CHECK(g.droppedCount > 0);
+
+    // GCMouse is gated only after direct-touch evidence arrives first and only inside one display frame.
+    [g reset];
+    CHECK(![g shouldDropGCMouseButton:0 pressed:YES time:50.0]);
+    [g noteDirectTouchBeganAtTime:60.0];
+    CHECK(![g shouldDropGCMouseButton:0 pressed:YES time:59.999]);  // evidence cannot arrive after the event
+    CHECK([g shouldDropGCMouseButton:0 pressed:YES time:60.010]);
+    CHECK([g shouldDropGCMouseButton:0 pressed:NO time:60.020]);
+    CHECK(![g shouldDropGCMouseButton:0 pressed:NO time:60.030]);
+    CHECK(![g shouldDropGCMouseButton:0 pressed:YES time:60.100]);  // outside the frame window: physical mouse passes
+    CHECK(![g shouldDropGCMouseButton:0 pressed:NO time:60.110]);
 }
 
 #pragma mark - Click routing
