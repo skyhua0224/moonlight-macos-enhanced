@@ -257,7 +257,10 @@ private struct DeckLegacyOnChange<V: Equatable>: ViewModifier {
 /// then the hidden defaults key `MLConceptVariant` ("A", "B" or "classic").
 @objc(MLDeckVariant)
 public final class DeckVariant: NSObject {
-  @objc public static var current: String {
+  /// Resolved once, at launch: the Classic Home setting (MLConceptVariant) applies after a restart, never to the window that is open.
+  @objc public static let current: String = resolveCurrent()
+
+  private static func resolveCurrent() -> String {
     let known = ["A", "A0", "A1", "A3", "B"]
     if let value = conceptEnv("MLC_VARIANT"), known.contains(value) {
       return value
