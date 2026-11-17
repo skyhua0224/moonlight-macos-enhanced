@@ -5,6 +5,7 @@
 
 #import "MLTouchCore.h"
 #import "Limelight.h"
+#import <os/lock.h>
 
 // The wire values above must stay equal to the library's.
 _Static_assert(MLTouchWireHover == LI_TOUCH_EVENT_HOVER, "touch event HOVER");
@@ -609,6 +610,9 @@ static NSTimeInterval const MLTouchGCMouseEvidenceWindow = 1.0 / 60.0;
     NSUInteger _droppedCount;
     NSUInteger _passedNear;
     NSUInteger _passedClicks, _droppedSubtype, _droppedCorrelated, _droppedSequence;
+    // The GCMouse state is written on the main thread (evidence, reset) and read on the GameController input
+    // path, so it has its own lock.
+    os_unfair_lock _gcLock;
     NSTimeInterval _lastDirectTouchBeganTime;
     BOOL _hasDirectTouchBegin;
     NSUInteger _droppedGCMouseButtons;
@@ -621,6 +625,7 @@ static NSTimeInterval const MLTouchGCMouseEvidenceWindow = 1.0 / 60.0;
         _nearRadius = 48.0;
         _subtypeWindow = 0.5;
         _activeTimeout = 1.5;
+        _gcLock = OS_UNFAIR_LOCK_INIT;
     }
     return self;
 }
@@ -645,31 +650,43 @@ static NSTimeInterval const MLTouchGCMouseEvidenceWindow = 1.0 / 60.0;
 }
 
 - (void)noteDirectTouchBeganAtTime:(NSTimeInterval)time {
+    os_unfair_lock_lock(&_gcLock);
     _lastDirectTouchBeganTime = time;
     _hasDirectTouchBegin = YES;
+    os_unfair_lock_unlock(&_gcLock);
 }
 
 - (BOOL)shouldDropGCMouseButton:(NSInteger)button pressed:(BOOL)pressed time:(NSTimeInterval)time {
-    NSUInteger bit = (NSUInteger)1 << MIN((NSUInteger)MAX(button, 0), (NSUInteger)31);
     if (!self.enabled) return NO;
-    if (!pressed && (_droppedGCMouseButtons & bit) != 0) {
+    NSUInteger bit = (NSUInteger)1 << MIN((NSUInteger)MAX(button, 0), (NSUInteger)31);
+    BOOL drop = NO;
+    os_unfair_lock_lock(&_gcLock);
+    if (!pressed) {
+        // Only the release of a press this gate itself swallowed is swallowed.
+        if ((_droppedGCMouseButtons & bit) != 0) {
+            _droppedGCMouseButtons &= ~bit;
+            drop = YES;
+        }
+    } else if (_hasDirectTouchBegin && time >= _lastDirectTouchBeganTime &&
+               time - _lastDirectTouchBeganTime <= MLTouchGCMouseEvidenceWindow) {
+        _droppedGCMouseButtons |= bit;
+        drop = YES;
+    } else {
+        // A press that goes through must never leave an older swallowed pair behind to eat its release.
         _droppedGCMouseButtons &= ~bit;
-        return YES;
     }
-    if (!pressed || !_hasDirectTouchBegin || time < _lastDirectTouchBeganTime ||
-        time - _lastDirectTouchBeganTime > MLTouchGCMouseEvidenceWindow) {
-        return NO;
-    }
-    _droppedGCMouseButtons |= bit;
-    return YES;
+    os_unfair_lock_unlock(&_gcLock);
+    return drop;
 }
 
 - (void)reset {
     _anyActive = NO;
     _hasTouch = NO;
     _droppedDownMask = 0;
+    os_unfair_lock_lock(&_gcLock);
     _hasDirectTouchBegin = NO;
     _droppedGCMouseButtons = 0;
+    os_unfair_lock_unlock(&_gcLock);
 }
 
 - (MLTouchGateVerdict)verdictForMouseKind:(MLTouchGateMouseKind)kind

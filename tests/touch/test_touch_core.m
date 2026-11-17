@@ -690,6 +690,33 @@ static void testMouseGate(void) {
     CHECK(![g shouldDropGCMouseButton:0 pressed:NO time:60.030]);
     CHECK(![g shouldDropGCMouseButton:0 pressed:YES time:60.100]);  // outside the frame window: physical mouse passes
     CHECK(![g shouldDropGCMouseButton:0 pressed:NO time:60.110]);
+
+    // No touch evidence at all (a Mac without a touchscreen, or a mouse/trackpad on its own): every press and
+    // release passes, for every button, however often it happens.
+    MLTouchMouseGate *plain = [[MLTouchMouseGate alloc] init];
+    plain.enabled = YES;
+    for (NSInteger b = 0; b < 5; b++) {
+        for (int i = 0; i < 20; i++) {
+            NSTimeInterval t = 100.0 + i * 0.005;
+            CHECK(![plain shouldDropGCMouseButton:b pressed:YES time:t]);
+            CHECK(![plain shouldDropGCMouseButton:b pressed:NO time:t + 0.002]);
+        }
+    }
+    // A trackpad press that carries the touch subtype is still a normal press (9048): the GCMouse gate has no say
+    // over it unless a direct touch began in the same frame. After the touch is long gone it passes again.
+    [plain noteDirectTouchBeganAtTime:200.0];
+    CHECK(![plain shouldDropGCMouseButton:0 pressed:YES time:200.5]);
+    CHECK(![plain shouldDropGCMouseButton:0 pressed:NO time:200.52]);
+    // A swallowed press whose release never arrives must not eat the next real click's release.
+    CHECK([plain shouldDropGCMouseButton:1 pressed:YES time:200.005]);
+    CHECK(![plain shouldDropGCMouseButton:1 pressed:YES time:300.0]);
+    CHECK(![plain shouldDropGCMouseButton:1 pressed:NO time:300.05]);
+    // Disabled gate: nothing is ever dropped.
+    MLTouchMouseGate *off = [[MLTouchMouseGate alloc] init];
+    off.enabled = NO;
+    [off noteDirectTouchBeganAtTime:10.0];
+    CHECK(![off shouldDropGCMouseButton:0 pressed:YES time:10.001]);
+    CHECK(![off shouldDropGCMouseButton:0 pressed:NO time:10.002]);
 }
 
 #pragma mark - Click routing
