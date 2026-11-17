@@ -2489,3 +2489,19 @@
 "ov.items.remove" = "Stop showing this item";
 "Probe bitrate ceiling" = "Probe bitrate ceiling";
 "Probe bitrate ceiling hint" = "The highest bitrate the start-up bandwidth test may allow. Raise it on a 10 GbE link. A host that states its own ceiling overrides this.";
+
+/* No-host page */
+"nohost.search.title" = "Searching for Computers";
+"nohost.search.line" = "A computer opens as soon as it is found.";
+"nohost.notfound.title" = "No Computers Found";
+"nohost.notfound.line" = "Still searching. You can also add one by address.";
+"nohost.tips.title" = "Troubleshooting";
+"nohost.tips.expanded" = "Expanded";
+"nohost.tips.collapsed" = "Collapsed";
+"nohost.tip.network" = "The computer and this Mac are on the same network";
+"nohost.tip.host" = "Foundation Sunshine or Sunshine is running on it";
+"nohost.tip.firewall" = "Its firewall allows local network access";
+"nohost.denied.title" = "Local Network Access Is Off";
+"nohost.denied.line" = "Finding computers needs the Local Network permission. Searching resumes once it is on.";
+"nohost.denied.button" = "Open System Settings";
+"nohost.fs.learn" = "Learn About Foundation Sunshine";

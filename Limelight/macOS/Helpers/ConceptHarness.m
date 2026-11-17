@@ -19,6 +19,7 @@
 #import "DS5UIButtons.h"
 #import <objc/runtime.h>
 #import <dlfcn.h>
+#import <ImageIO/ImageIO.h>
 
 static NSString *const kSandbox = @"/tmp/apps-concept/";
 static NSWindow *sOverlayWindow;
@@ -222,6 +223,9 @@ static NSDictionary *CatalogEntry(NSString *slug) {
         // alone it watches a normal launch (real database, no fixtures)
         [self startFrameWatch];
     }
+    if (getenv("MLC_REC60")) {
+        [self startRecording60];
+    }
     if (getenv("MLC_HARNESS") == NULL) {
         return;
     }
@@ -302,6 +306,55 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
         if (now - t0 > span + 10.0) [t invalidate];
     }];
     [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
+}
+
+/// A 60 Hz capture of the main window (MLC_REC60, with MLC_FRAMEDIR and MLC_FRAMESPAN seconds): a timer on its own queue takes the window's composited image
+/// at nominal resolution and hands it to a pool of writers; the file name carries the capture time, so the real rate and any dropped frame can be read back.
++ (void)startRecording60 {
+    NSString *dir = getenv("MLC_FRAMEDIR") ? [NSString stringWithUTF8String:getenv("MLC_FRAMEDIR")] : @"/tmp/apps-concept/out/rec60";
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    double span = getenv("MLC_FRAMESPAN") ? atof(getenv("MLC_FRAMESPAN")) : 6.0;
+    MLCWindowListCreateImage create = (MLCWindowListCreateImage)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+    if (create == NULL) return;
+    static volatile uint32_t windowNumber = 0;
+    CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent();
+    // the window number is read on the main thread; the capture itself does not wait for it
+    NSTimer *finder = [NSTimer timerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *t) {
+        NSWindow *w = nil;
+        for (NSWindow *candidate in NSApp.windows) {
+            if ([candidate.contentViewController isKindOfClass:NSClassFromString(@"ContainerViewController")]) w = candidate;
+        }
+        if (w != nil && w.isVisible) windowNumber = (uint32_t)w.windowNumber;
+        if (CFAbsoluteTimeGetCurrent() - t0 > span + 30) [t invalidate];
+    }];
+    [[NSRunLoop mainRunLoop] addTimer:finder forMode:NSRunLoopCommonModes];
+    dispatch_queue_attr_t interactive = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0);
+    dispatch_queue_t captureQueue = dispatch_queue_create("mlc.rec60.capture", interactive);
+    dispatch_queue_t writeQueue = dispatch_queue_create("mlc.rec60.write", DISPATCH_QUEUE_CONCURRENT);
+    __block CFAbsoluteTime first = 0;
+    __block int count = 0;
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, captureQueue);
+    dispatch_source_set_timer(timer, DISPATCH_TIME_NOW, NSEC_PER_SEC / 60, NSEC_PER_MSEC);
+    dispatch_source_set_event_handler(timer, ^{
+        uint32_t number = windowNumber;
+        if (number == 0) return;
+        CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+        CGImageRef image = create(CGRectNull, kCGWindowListOptionIncludingWindow, number, kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution);
+        if (image == NULL) return;
+        if (first == 0) first = now;
+        NSString *path = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"f-%04d-t%.4f.png", count++, now - t0]];
+        dispatch_async(writeQueue, ^{
+            CGImageDestinationRef destination = CGImageDestinationCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:path], CFSTR("public.png"), 1, NULL);
+            if (destination != NULL) {
+                CGImageDestinationAddImage(destination, image, NULL);
+                CGImageDestinationFinalize(destination);
+                CFRelease(destination);
+            }
+            CGImageRelease(image);
+        });
+        if (now - first > span) dispatch_source_cancel(timer);
+    });
+    dispatch_resume(timer);
 }
 
 + (BOOL)enabled {
@@ -710,10 +763,10 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
                     fprintf(stderr, "POPSTRESS done cycles=%d mismatches=%d\n", cycles, bad);
                     return;
                 }
-                [[MLDeckHomeCustomizer shared] show];
+                if (@available(macOS 14.0, *)) { [[MLDeckHomeCustomizer shared] show]; }
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSString *open = [MLDeckLayoutProbe frameString];
-                    [[MLDeckHomeCustomizer shared] toggle:nil];
+                    if (@available(macOS 14.0, *)) { [[MLDeckHomeCustomizer shared] toggle:nil]; }
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         NSString *closed = [MLDeckLayoutProbe frameString];
                         BOOL same = [open isEqualToString:baseline] && [closed isEqualToString:baseline];

@@ -25,6 +25,8 @@
 #import "MoonlightEnhanced-Swift.h"
 #import "Utils.h"
 #import "MLLaunchTrace.h"
+#import "ConceptHarness.h"
+#import <QuartzCore/QuartzCore.h>
 
 #import "CryptoManager.h"
 #import "IdManager.h"
@@ -278,6 +280,8 @@
     [self.discMan startDiscovery];
     if (@available(macOS 14.0, *)) {
         TemporaryHost *host = [MLDeckHostPicker preferredFrom:self.hosts];
+        // concept harness only: show the no-host page although mock hosts exist, so the real change to the host list can be recorded
+        if ([ConceptHarness enabled] && getenv("MLC_NOHOST_FORCE") != NULL) { host = nil; }
         if (host != nil) {
             [self deckEmbedWorkspaceForHost:host intoContainer:container];
             return;
@@ -300,10 +304,7 @@
     if (firstRun != nil) {
         // the first-run page gives way to the home of the chosen host
         [container.view addSubview:workspaceVC.view positioned:NSWindowBelow relativeTo:firstRun.view];
-        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-            context.duration = 0.2;
-            firstRun.view.animator.alphaValue = 0;
-        } completionHandler:^{
+        [self deckAnimateArrivalOf:workspaceVC.view replacing:firstRun.view hostUUID:host.uuid completion:^{
             [firstRun.view removeFromSuperview];
             [firstRun removeFromParentViewController];
         }];
@@ -312,6 +313,42 @@
         [container.view addSubview:workspaceVC.view];
     }
     [container.view.window makeFirstResponder:workspaceVC];
+}
+
+/// The change from the no-host page to the home of the first computer. The home is already in the window, under the page. It fades in quickly
+/// (so there is never a moment when neither is solid) and rises from 24 pt lower with a spring, which settles in about 0.45 s; the page fades out
+/// over it (it has already eased back and shown a check mark: NoHostEmpty). Once the home is nearly in place the sidebar pulses the computer's
+/// icon (DeckArrivalMark, on MLDeckHostArrived). Reduce Motion: a plain cross-fade and no pulse movement.
+- (void)deckAnimateArrivalOf:(NSView *)incoming replacing:(NSView *)outgoing hostUUID:(NSString *)uuid completion:(void (^)(void))completion {
+    BOOL reduce = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion;
+    if ([ConceptHarness enabled] && getenv("MLC_NOHOST_REDUCE") != NULL) { reduce = YES; }   // concept harness only
+    incoming.wantsLayer = YES;
+    CALayer *layer = incoming.layer;
+    CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    fade.fromValue = @0;
+    fade.toValue = @1;
+    fade.duration = reduce ? 0.25 : 0.18;
+    fade.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+    [layer addAnimation:fade forKey:@"arrivalFade"];
+    if (!reduce) {
+        CASpringAnimation *rise = [CASpringAnimation animationWithKeyPath:@"transform.translation.y"];
+        rise.mass = 1;
+        rise.stiffness = 260;
+        rise.damping = 25;
+        rise.fromValue = @(layer.isGeometryFlipped ? 24 : -24);
+        rise.toValue = @0;
+        rise.duration = MIN(rise.settlingDuration, 0.6);
+        [layer addAnimation:rise forKey:@"arrivalRise"];
+    }
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = reduce ? 0.25 : 0.26;
+        context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseIn];
+        outgoing.animator.alphaValue = 0;
+    } completionHandler:completion];
+    NSString *arrived = uuid ?: @"";
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((reduce ? 0.2 : 0.32) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostArrived" object:nil userInfo:@{@"uuid": arrived}];
+    });
 }
 
 - (void)deckEmbedFirstRunIntoContainer:(NSViewController *)container {
