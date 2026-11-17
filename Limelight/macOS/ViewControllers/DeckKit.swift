@@ -687,6 +687,7 @@ enum DeckArtKind: String {
   case icon = "_icon.png"
 }
 
+@available(macOS 14.0, *)
 enum DeckArt {
   private static let cache = NSCache<NSString, NSImage>()
 
@@ -807,6 +808,7 @@ struct DeckFilledImage: View {
   }
 }
 
+@available(macOS 14.0, *)
 struct DeckPoster: View {
   let app: TemporaryApp
   var version = 0
@@ -844,6 +846,7 @@ extension TemporaryApp {
 }
 
 /// The blurred, darkened poster behind a hero card; falls back to the platform tint.
+@available(macOS 14.0, *)
 struct DeckHeroBackdrop: View {
   let app: TemporaryApp?
   let tint: Color

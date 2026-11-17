@@ -27,14 +27,15 @@ enum DeckPalette {
 }
 
 enum DeckSymbols {
-  static let all = [
+  /// The picker lists only the symbols this system has (sofa.fill, for one, is newer than macOS 12).
+  static let all: [String] = [
     "desktopcomputer", "display", "laptopcomputer", "pc", "macmini.fill", "server.rack",
     "gamecontroller.fill", "tv.fill", "house.fill", "bed.double.fill", "sofa.fill", "briefcase.fill",
     "bolt.fill", "flame.fill", "moon.fill", "sun.max.fill", "star.fill", "heart.fill",
     "leaf.fill", "cloud.fill", "globe", "airplane", "car.fill", "graduationcap.fill",
     "paintbrush.fill", "film.fill", "music.note", "headphones", "cpu", "memorychip",
     "externaldrive.fill", "network", "wifi", "person.fill", "cube.fill", "sparkles",
-  ]
+  ].filter { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil }
 }
 
 struct DeckIconSpec {

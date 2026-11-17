@@ -707,6 +707,11 @@
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				WARNING_CFLAGS = (
+					"$(inherited)",
+					"-Werror=unguarded-availability",
+					"-Werror=unguarded-availability-new",
+				);
 				CODE_SIGN_ENTITLEMENTS = Moonlight.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -773,6 +778,11 @@
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				WARNING_CFLAGS = (
+					"$(inherited)",
+					"-Werror=unguarded-availability",
+					"-Werror=unguarded-availability-new",
+				);
 				CODE_SIGN_ENTITLEMENTS = Moonlight.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;

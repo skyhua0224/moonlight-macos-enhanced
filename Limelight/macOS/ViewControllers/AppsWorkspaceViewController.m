@@ -81,9 +81,15 @@
     }
 
     NSSplitViewItem *contentItem = [NSSplitViewItem splitViewItemWithViewController:self.appsViewController];
-    if ([MLDeckVariant isPolished]) {
-        // The floating sidebar overlaps the content; the hero extends under it.
-        contentItem.automaticallyAdjustsSafeAreaInsets = YES;
+    if (@available(macOS 26.0, *)) {
+        if ([MLDeckVariant isPolished]) {
+            // macOS 26 floats the sidebar over the content; the hero extends under it, so the
+            // content gets the sidebar as a safe-area inset. Earlier systems have no floating
+            // sidebar: the content sits beside it and needs no inset, so there is nothing to set.
+            // The property does not exist before macOS 26; setting it unguarded raised
+            // "unrecognized selector" while the main window was loading.
+            contentItem.automaticallyAdjustsSafeAreaInsets = YES;
+        }
     }
     [self addSplitViewItem:contentItem];
 

@@ -1,6 +1,13 @@
 import AppKit
 import SwiftUI
 
+/// A system symbol that exists on this system: `preferred` when it ships here, otherwise `fallback`.
+/// SF Symbols added after macOS 12 (for example the gauge and film.stack glyphs) are missing on older
+/// systems, where an image with that name is simply empty.
+func availableSymbol(_ preferred: String, fallback: String) -> String {
+  NSImage(systemSymbolName: preferred, accessibilityDescription: nil) != nil ? preferred : fallback
+}
+
 // MARK: - Search navigation
 
 /// The one place that defines how a settings row or section is identified for
