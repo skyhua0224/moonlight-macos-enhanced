@@ -6,7 +6,6 @@ import SwiftUI
 // by itself. The page behind is rebuilt for the new computer; this is the feedback that the press was taken
 // even where the list ends and the selection does not change.
 
-@available(macOS 14.0, *)
 private struct ControllerHostToastView: View {
   let name: String
   let index: Int
@@ -62,7 +61,7 @@ private struct ControllerHostToastView: View {
   }
 
   private func show(name: String, index: Int, count: Int) {
-    guard #available(macOS 14.0, *), let window = mainWindow(), let content = window.contentView else { return }
+    guard let window = mainWindow(), let content = window.contentView else { return }
     let hosting = NSHostingView(rootView: ControllerHostToastView(name: name, index: index, count: count))
     let size = hosting.fittingSize
     let panel = self.panel ?? makePanel()

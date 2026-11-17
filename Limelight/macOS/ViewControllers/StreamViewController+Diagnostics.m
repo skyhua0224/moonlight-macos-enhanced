@@ -1830,11 +1830,11 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     self.overlayLabel = nil;
 
     BOOL usePresenter = NO;
-    if (@available(macOS 14.0, *)) {
+    if (@available(macOS 13.0, *)) {
         usePresenter = ![MLOverlayPrefs isLegacy];
     }
     if (usePresenter) {
-        if (@available(macOS 14.0, *)) {
+        if (@available(macOS 13.0, *)) {
             MLOverlayPresenter *presenter = [[MLOverlayPresenter alloc] init];
             self.overlayPresenter = presenter;
             self.overlayContainer = presenter.view;
@@ -2039,7 +2039,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     }
 
     if (self.overlayPresenter != nil) {
-        if (@available(macOS 14.0, *)) {
+        if (@available(macOS 13.0, *)) {
             [(MLOverlayPresenter *)self.overlayPresenter update:om];
         }
         return;
@@ -2055,7 +2055,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 - (void)showConnectionWarning {
     if (self.overlayPresenter != nil) {
         // The SwiftUI overlay carries 「网络不佳」 itself (a status line and a red dot).
-        if (@available(macOS 14.0, *)) {
+        if (@available(macOS 13.0, *)) {
             [(MLOverlayPresenter *)self.overlayPresenter setPoorConnection:YES];
         }
         return;
@@ -2102,7 +2102,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     self.streamViewLayoutInProgress = YES;
     [super viewDidLayout];
     if (self.overlayPresenter != nil) {
-        if (@available(macOS 14.0, *)) {
+        if (@available(macOS 13.0, *)) {
             [(MLOverlayPresenter *)self.overlayPresenter relayout];
         }
     }
@@ -2298,7 +2298,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 
 - (void)hideConnectionWarning {
     if (self.overlayPresenter != nil) {
-        if (@available(macOS 14.0, *)) {
+        if (@available(macOS 13.0, *)) {
             [(MLOverlayPresenter *)self.overlayPresenter setPoorConnection:NO];
         }
     }

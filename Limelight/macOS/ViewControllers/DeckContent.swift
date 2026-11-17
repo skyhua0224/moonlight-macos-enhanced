@@ -82,7 +82,6 @@ extension DeckTime {
 
 // MARK: - Model views
 
-@available(macOS 14.0, *)
 extension DeckAppsModel {
   func lastPlayed(_ app: TemporaryApp) -> Date? { app.deckInfo.lastPlayed }
 
@@ -126,7 +125,7 @@ extension DeckAppsModel {
 extension View {
   /// Lets a hero image run under the floating sidebar and toolbar (macOS 26 background extension).
   @ViewBuilder func deckBackgroundExtension() -> some View {
-    if #available(macOS 26.0, *) { self.backgroundExtensionEffect() } else { self }
+    if #available(macOS 26.0, *), DeckOS.level >= 26 { self.backgroundExtensionEffect() } else { self }
   }
 }
 
@@ -160,7 +159,6 @@ struct DeckFactsRow: View {
   private var base: Color { onArt ? Color.white.opacity(0.82) : Color.secondary }
 }
 
-@available(macOS 14.0, *)
 func deckFacts(for app: TemporaryApp, model: DeckAppsModel, running: Bool, includeSource: Bool = true) -> [DeckFactItem] {
   let info = app.deckInfo
   var items: [DeckFactItem] = []
@@ -178,7 +176,6 @@ func deckFacts(for app: TemporaryApp, model: DeckAppsModel, running: Bool, inclu
 }
 
 /// A square app icon: the host's icon art when it has one, otherwise the poster, cropped.
-@available(macOS 14.0, *)
 struct DeckAppIcon: View {
   let app: TemporaryApp
   var size: CGFloat = 34
@@ -205,7 +202,6 @@ struct DeckAppIcon: View {
 
 /// Landscape art for an app: the host's hero when present, otherwise the poster blown up and
 /// blurred with the poster itself in front.
-@available(macOS 14.0, *)
 struct DeckLandscapeArt: View {
   let app: TemporaryApp
   var version = 0
@@ -247,7 +243,6 @@ struct DeckLandscapeArt: View {
 }
 
 /// Poster with at most one badge on it: a play mark while the app runs.
-@available(macOS 14.0, *)
 /// How a running app is marked on its tile.
 enum DeckRunBadge { case none, legacy, styled }
 
@@ -264,7 +259,6 @@ enum DeckRunIndicator: String {
 /// The mark of the running app: a small green play glyph immediately left of its title. It is always in the row; when the app is
 /// not running its width is 0 and it is invisible, and the width animates, so the title never jumps when the state changes.
 /// Replaces the blue frame and the capsule badges. `onDark`: the title sits on a card's dark scrim, not on the page.
-@available(macOS 14.0, *)
 struct DeckRunningGlyph: View {
   let running: Bool
   /// Font size in points (already scaled).
@@ -291,7 +285,6 @@ struct DeckRunningGlyph: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckPosterTile: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel
@@ -334,7 +327,6 @@ struct DeckPosterTile: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckAppMenu: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel
@@ -361,13 +353,11 @@ struct DeckSectionTitle: View {
 // MARK: - Featured hero (Landmarks pattern)
 
 /// Settings in the host header of the computer-first page.
-@available(macOS 14.0, *)
 struct DeckHeroIdentity {
   let host: DeckHost
   let onDesktop: () -> Void
 }
 
-@available(macOS 14.0, *)
 struct DeckFeaturedHero: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel
@@ -485,7 +475,6 @@ struct DeckFeaturedHero: View {
 
 // MARK: - A1 Games
 
-@available(macOS 14.0, *)
 struct DeckGamesView: View {
   @ObservedObject var model: DeckAppsModel
   @SwiftUI.State private var width: CGFloat = 1000
@@ -522,14 +511,13 @@ struct DeckGamesView: View {
         .padding(.bottom, 40)
       }
     }
-    .background(GeometryReader { proxy in Color.clear.onAppear { width = proxy.size.width }.onChange(of: proxy.size.width) { _, new in width = new } })
-    .scrollClipDisabled()
+    .background(GeometryReader { proxy in Color.clear.onAppear { width = proxy.size.width }.deckOnChange(of: proxy.size.width) { _, new in width = new } })
+    .deckScrollClipDisabled()
     .background(Color(nsColor: .windowBackgroundColor))
     .ignoresSafeArea(.container, edges: .top)
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckContinueCard: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel
@@ -571,7 +559,6 @@ struct DeckContinueCard: View {
 
 // MARK: - A3 Quiet
 
-@available(macOS 14.0, *)
 struct DeckQuietView: View {
   @ObservedObject var model: DeckAppsModel
   @SwiftUI.State private var width: CGFloat = 1000
@@ -589,7 +576,7 @@ struct DeckQuietView: View {
       .padding(.top, 8)
       .padding(.bottom, 44)
     }
-    .background(GeometryReader { proxy in Color.clear.onAppear { width = proxy.size.width }.onChange(of: proxy.size.width) { _, new in width = new } })
+    .background(GeometryReader { proxy in Color.clear.onAppear { width = proxy.size.width }.deckOnChange(of: proxy.size.width) { _, new in width = new } })
     .background(Color(nsColor: .windowBackgroundColor))
   }
 
@@ -655,7 +642,6 @@ public final class DeckWindowText: NSObject {
 }
 
 /// 大屏模式 (Foundation Sunshine hosts, windows): a tile of its own, not a poster.
-@available(macOS 14.0, *)
 struct DeckBigScreenTile: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel
@@ -689,7 +675,6 @@ struct DeckBigScreenTile: View {
 }
 
 /// A poster tile, or the 大屏模式 tile for the host's big screen entry.
-@available(macOS 14.0, *)
 struct DeckAppCell: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel

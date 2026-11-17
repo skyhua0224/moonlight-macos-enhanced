@@ -11,7 +11,7 @@ import SwiftUI
 // MARK: - Preview
 
 /// Feeds the preview's model with sample values twice a second, like the stats of a real stream.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 final class OverlayPreviewFeed: ObservableObject {
   let model = OverlayModel()
   var showWarning = false { didSet { applyWarning() } }
@@ -45,7 +45,7 @@ final class OverlayPreviewFeed: ObservableObject {
 }
 
 /// A made-up game frame, bright (daylight sky) or dark (night street), so the panel is judged over both.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlaySampleFrame: View {
   let bright: Bool
   var body: some View {
@@ -86,7 +86,7 @@ struct OverlaySampleFrame: View {
   }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayPreviewCard: View {
   /// The card is small and stays at the top of the page while the settings below scroll, so every change is seen at once.
   static let height: CGFloat = 200
@@ -120,7 +120,7 @@ struct OverlayPreviewCard: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
-        .onChange(of: canvas, initial: true) { _, size in
+        .deckOnChange(of: canvas, initial: true) { _, size in
           feed.model.geometry = OverlayGeometry(width: size.width, height: size.height, safeTop: 0, bottomInset: OverlayGeometry.topMargin)
         }
       }
@@ -138,14 +138,14 @@ struct OverlayPreviewCard: View {
     }
     .onAppear { feed.model.reportsSize = true; feed.start(); feed.showWarning = warning }
     .onDisappear { feed.stop() }
-    .onChange(of: warning) { _, value in feed.showWarning = value }
+    .deckOnChange(of: warning) { _, value in feed.showWarning = value }
   }
 }
 
 // MARK: - Position picker
 
 /// The six places, drawn on a small screen; a click picks one.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayPositionPicker: View {
   @ObservedObject var prefs: OverlayPrefs
 
@@ -175,7 +175,7 @@ struct OverlayPositionPicker: View {
 
 /// The items that are shown, in the order they have in the HUD: drag a row to move it, the minus takes it out. Items that
 /// are not shown are added from the menu below the list, by group.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayItemList: View {
   @ObservedObject var prefs: OverlayPrefs
   @ObservedObject private var languageManager = LanguageManager.shared
@@ -234,7 +234,7 @@ struct OverlayItemList: View {
 
 // MARK: - The page
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayView: View {
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
@@ -342,7 +342,7 @@ struct OverlayView: View {
 
 /// Listens for one shortcut for a few seconds and says whether it reached this app. A key another process took (an
 /// active event tap in the key path) never arrives; then the page names the processes that could have taken it.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 final class OverlayShortcutTester: ObservableObject {
   enum State: Equatable { case idle, listening, arrived, missing([String]) }
   @Published private(set) var state = State.idle
@@ -413,9 +413,25 @@ public final class OverlayShortcutDiagnostics: NSObject {
   }
 }
 
-/// The pane's root: the page needs macOS 14 (SwiftUI Layout, Grid); below it the pane is empty.
+/// What the pane says on macOS 12.
+struct OverlayLegacyNotice: View {
+  @ObservedObject private var languageManager = LanguageManager.shared
+  var body: some View {
+    VStack(spacing: 8) {
+      Image(systemName: "speedometer").font(.system(size: 28)).foregroundColor(.secondary)
+      Text(languageManager.localize("overlay.legacyNotice"))
+        .foregroundColor(.secondary)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: 360)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(32)
+  }
+}
+
+/// The pane's root: the page needs macOS 13 (SwiftUI Layout, Grid); on macOS 12 the stream keeps the one-line overlay.
 struct OverlayPaneRoot: View {
   var body: some View {
-    if #available(macOS 14.0, *) { OverlayView() } else { EmptyView() }
+    if #available(macOS 13.0, *), DeckOS.level >= 13 { OverlayView() } else { OverlayLegacyNotice() }
   }
 }

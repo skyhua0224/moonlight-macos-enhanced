@@ -8,7 +8,6 @@
 #if MLC_CONCEPT_HARNESS
 import AppKit
 
-@available(macOS 14.0, *)
 @objc(MLDeckSelfTest)
 public final class DeckSelfTest: NSObject {
   private static var failures = 0
@@ -104,7 +103,6 @@ public final class DeckSelfTest: NSObject {
 /// MLC_SELFTEST_CAP=<host-cap2-serverinfo.xml>,<host-cap1-serverinfo.xml>,<host-cap2-applist.xml>: the real parsers and the
 /// real facts store against a capability 2 host (events long-poll, FsEventSeq, FsSessionStarted, FsHostAvatarVersion, per-app
 /// FsSession and FsLaunchMode) and a capability 1 host (none of it). tests/host-events has the same fixtures for the pure rules.
-@available(macOS 14.0, *)
 extension DeckSelfTest {
   @objc public static func runCapability(spec: String) -> Bool {
     failures = 0
@@ -173,7 +171,6 @@ extension DeckSelfTest {
 /// host, which ingests the Fs* fields into DeckFactsStore) while the main thread does what the apps page does (setIcon,
 /// recordConnected, facts reads), with an NSUserDefaultsDidChangeNotification observer on the main queue like
 /// StreamViewController's. A watchdog asks the main queue every 100 ms; it answering later than 1 s is a failure.
-@available(macOS 14.0, *)
 extension DeckSelfTest {
   private final class Counter {
     private let lock = NSLock()

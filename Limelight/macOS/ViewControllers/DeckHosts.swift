@@ -25,7 +25,6 @@ public final class DeckHostsActions: NSObject {
   @objc public var quitApp: ((TemporaryHost, TemporaryApp) -> Void)?
 }
 
-@available(macOS 14.0, *)
 final class DeckHostsModel: ObservableObject {
   @Published var hosts: [DeckHost] = []
   @Published var filter = ""
@@ -123,7 +122,6 @@ final class DeckHostsModel: ObservableObject {
   }
 }
 
-@available(macOS 14.0, *)
 @objc(MLDeckHostsController)
 public final class DeckHostsController: NSObject {
   let model: DeckHostsModel
@@ -169,15 +167,14 @@ public final class DeckHostsController: NSObject {
 // MARK: - Shared bits
 
 extension View {
-  @available(macOS 14.0, *) @ViewBuilder func deckProminent() -> some View {
-    if #available(macOS 26.0, *) { controllerButtonStyle(.glassProminent).buttonBorderShape(.capsule) } else { controllerButtonStyle(.borderedProminent).buttonBorderShape(.capsule) }
+  @ViewBuilder func deckProminent() -> some View {
+    if #available(macOS 26.0, *), DeckOS.level >= 26 { controllerButtonStyle(.glassProminent).buttonBorderShape(.capsule) } else { controllerButtonStyle(.borderedProminent).deckCapsuleBorder() }
   }
-  @available(macOS 14.0, *) @ViewBuilder func deckSecondary() -> some View {
-    if #available(macOS 26.0, *) { controllerButtonStyle(.glass).buttonBorderShape(.capsule) } else { controllerButtonStyle(.bordered).buttonBorderShape(.capsule) }
+  @ViewBuilder func deckSecondary() -> some View {
+    if #available(macOS 26.0, *), DeckOS.level >= 26 { controllerButtonStyle(.glass).buttonBorderShape(.capsule) } else { controllerButtonStyle(.bordered).deckCapsuleBorder() }
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckPinView: View {
   let pin: String
   let hostName: String
@@ -199,7 +196,6 @@ struct DeckPinView: View {
   }
 }
 
-@available(macOS 14.0, *)
 func deckSubtitle(_ host: DeckHost, withRoute: Bool = true) -> String {
   if host.online {
     if !host.paired || !withRoute { return host.address ?? DL("deck.unpaired") }
@@ -218,7 +214,6 @@ func deckSubtitle(_ host: DeckHost, withRoute: Bool = true) -> String {
 
 // MARK: - Variant B: cards
 
-@available(macOS 14.0, *)
 struct DeckHostsView: View {
   @ObservedObject var model: DeckHostsModel
 
@@ -255,7 +250,6 @@ struct DeckHostsView: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckHostHero: View {
   let host: DeckHost
   @ObservedObject var model: DeckHostsModel
@@ -316,7 +310,6 @@ struct DeckHostHero: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckHostCard: View {
   let host: DeckHost
   @ObservedObject var model: DeckHostsModel
@@ -412,7 +405,6 @@ struct DeckHostCard: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckStaleSection: View {
   @ObservedObject var model: DeckHostsModel
 
@@ -441,7 +433,6 @@ struct DeckStaleSection: View {
 
 // MARK: - Variant A: sidebar and state pane
 
-@available(macOS 14.0, *)
 struct DeckSidebarView: View {
   @ObservedObject var model: DeckHostsModel
 
@@ -472,8 +463,8 @@ struct DeckSidebarView: View {
         }
       }
       .listStyle(.sidebar)
-      .scrollContentBackground(.hidden)
-      .onChange(of: model.selected) { _, uuid in
+      .deckListBackgroundHidden()
+      .deckOnChange(of: model.selected) { _, uuid in
         if let uuid, let host = model.hosts.first(where: { $0.id == uuid }) { model.actions.select?(host.raw) }
       }
 
@@ -519,7 +510,7 @@ struct DeckSidebarView: View {
     let selected = model.selected == host.id
     return HStack(spacing: 10) {
       DeckHostIcon(host: host, size: 32, muted: !host.online, selected: selected)
-        .modifier(DeckArrivalMark(token: model.arrivedID == host.id && host.paired ? model.arrivedToken : 0))
+        .deckArrivalMark(token: model.arrivedID == host.id && host.paired ? model.arrivedToken : 0)
       VStack(alignment: .leading, spacing: 1) {
         Text(host.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
         Text(deckSubtitle(host)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
@@ -553,7 +544,6 @@ struct DeckSidebarView: View {
 }
 
 /// Shown in the content area for a host that has no apps page yet: unpaired or offline.
-@available(macOS 14.0, *)
 struct DeckHostStatePane: View {
   let host: DeckHost
   let pin: String?
@@ -626,7 +616,6 @@ struct DeckHostStatePane: View {
   }
 }
 
-@available(macOS 14.0, *)
 @objc(MLDeckStatePaneFactory)
 public final class DeckStatePaneFactory: NSObject {
   @objc public static func make(host: TemporaryHost, pin: String?, onPair: @escaping () -> Void, onWake: @escaping () -> Void) -> NSViewController {
@@ -635,7 +624,6 @@ public final class DeckStatePaneFactory: NSObject {
 }
 
 /// The standard AppKit search field.
-@available(macOS 14.0, *)
 struct DeckSearchField: NSViewRepresentable {
   @Binding var text: String
   let placeholder: String

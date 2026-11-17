@@ -32,7 +32,6 @@ enum DeckAddressCheck {
   }
 }
 
-@available(macOS 14.0, *)
 @objc(MLDeckAddHost)
 public final class DeckAddHost: NSObject {
   /// `onSubmit` talks to the host (discovery) and calls back on the main thread with an error message, or
@@ -49,7 +48,8 @@ public final class DeckAddHost: NSObject {
     })
     let controller = NSHostingController(rootView: view)
     // the sheet is as tall as its content (width fixed), like a standard macOS sheet
-    controller.sizingOptions = [.preferredContentSize]
+    // macOS 12 sizes the sheet to its content by itself; sizingOptions is from macOS 13
+    if #available(macOS 13.0, *) { controller.sizingOptions = [.preferredContentSize] }
     box.controller = controller
     presenter.presentAsSheet(controller)
   }
@@ -57,7 +57,6 @@ public final class DeckAddHost: NSObject {
   final class ControllerBox { weak var controller: NSViewController? }
 }
 
-@available(macOS 14.0, *)
 struct DeckAddHostView: View {
   let provider: () -> [TemporaryHost]
   let onSubmit: (String, @escaping (String?, TemporaryHost?) -> Void) -> Void
@@ -91,7 +90,7 @@ struct DeckAddHostView: View {
           .focused($focused)
           .disabled(working)
           .onSubmit { add() }
-          .onChange(of: address) { _, _ in failure = nil }
+          .deckOnChange(of: address) { _, _ in failure = nil }
         if working {
           HStack(spacing: 8) { ProgressView().controlSize(.small); Text(DLf("deck.add.connecting", trimmed)).font(.system(size: 12)).foregroundStyle(.secondary) }
         } else if let message = failure ?? problem {
@@ -129,7 +128,7 @@ struct DeckAddHostView: View {
             .padding(.horizontal, 10)
           }
           .frame(height: CGFloat(min(nearby.count, 5)) * rowHeight)
-          .scrollDisabled(nearby.count <= 5)
+          .deckScrollDisabled(nearby.count <= 5)
           .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
           .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(nsColor: .separatorColor).opacity(0.6), lineWidth: 0.5))
         }

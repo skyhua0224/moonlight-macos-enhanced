@@ -272,15 +272,13 @@ static NSString * const MoonlightSearchToolbarItemIdentifier = @"NewSearchToolba
         NSString *tip = [[LanguageManager shared] localize:@"deck.customize"];
         item.toolTip = tip;
         NSImage *image = [NSImage imageWithSystemSymbolName:@"rectangle.3.group" accessibilityDescription:tip];
-        if (@available(macOS 14.0, *)) {
-            NSButton *button = [NSButton buttonWithImage:image target:[MLDeckHomeCustomizer shared] action:@selector(toggle:)];
-            button.title = item.label;
-            button.bezelStyle = NSBezelStyleTexturedRounded;
-            button.imagePosition = NSImageLeading;
-            button.toolTip = tip;
-            item.view = button;
-            [MLDeckHomeCustomizer shared].anchor = button;
-        }
+        NSButton *button = [NSButton buttonWithImage:image target:[MLDeckHomeCustomizer shared] action:@selector(toggle:)];
+        button.title = item.label;
+        button.bezelStyle = NSBezelStyleTexturedRounded;
+        button.imagePosition = NSImageLeading;
+        button.toolTip = tip;
+        item.view = button;
+        [MLDeckHomeCustomizer shared].anchor = button;
         return item;
     } else if ([itemIdentifier isEqualToString:MoonlightSearchToolbarItemIdentifier]) {
         NSSearchToolbarItem *newSearchItem = [[NSSearchToolbarItem alloc] initWithItemIdentifier:itemIdentifier];

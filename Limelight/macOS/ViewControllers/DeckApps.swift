@@ -40,7 +40,6 @@ public final class DeckAppsActions: NSObject {
   @objc public var probeAddress: ((String, Double, @escaping (NSNumber?) -> Void) -> Void)?
 }
 
-@available(macOS 14.0, *)
 final class DeckAppsModel: ObservableObject {
   enum Style { case embedded, standalone, games, computer, quiet }
   enum Sort: Hashable { case recent, name }
@@ -139,7 +138,6 @@ final class DeckAppsModel: ObservableObject {
   }
 }
 
-@available(macOS 14.0, *)
 @objc(MLDeckAppsController)
 public final class DeckAppsController: NSObject {
   let model: DeckAppsModel
@@ -188,7 +186,6 @@ public final class DeckAppsController: NSObject {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckAppsRoot: View {
   @ObservedObject var model: DeckAppsModel
 
@@ -202,7 +199,6 @@ struct DeckAppsRoot: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckAppsView: View {
   @ObservedObject var model: DeckAppsModel
   @SwiftUI.State private var width: CGFloat = 1000
@@ -231,13 +227,12 @@ struct DeckAppsView: View {
       .frame(maxWidth: 1400)
       .frame(maxWidth: .infinity)
     }
-    .background(GeometryReader { proxy in Color.clear.onAppear { width = proxy.size.width }.onChange(of: proxy.size.width) { _, new in width = new } })
+    .background(GeometryReader { proxy in Color.clear.onAppear { width = proxy.size.width }.deckOnChange(of: proxy.size.width) { _, new in width = new } })
     .background(Color(nsColor: .windowBackgroundColor))
     .focusable()
     .onMoveCommand { move($0) }
-    .onKeyPress(.return) {
+    .deckOnReturn {
       if let id = model.selectedId, let app = model.items.first(where: { $0.id == id }) { model.openApp(app) }
-      return .handled
     }
   }
 
@@ -283,7 +278,6 @@ struct DeckAppsView: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckAppHero: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel
@@ -331,7 +325,6 @@ struct DeckAppHero: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckAppTile: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel

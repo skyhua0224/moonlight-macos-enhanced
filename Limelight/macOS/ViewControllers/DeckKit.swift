@@ -7,6 +7,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Concept-build switches (MLC_* environment): honoured only in builds made with MLC_CONCEPT_HARNESS.
 func conceptEnv(_ key: String) -> String? {
@@ -25,13 +26,253 @@ enum DeckEnvCache {
 }
 #endif
 
+// MARK: - Systems before 26
+
+/// The system level the visual branches follow. It is the real one; a harness build can lower it
+/// (MLC_FAKE_OS=12 | 13 | 14 | 15) so a Mac on a newer system draws what an older one draws, for the shots.
+/// Only the branches written here follow it: the window's own chrome (floating sidebar, toolbar glass) is the system's.
+@objc(MLDeckOS)
+public final class DeckOS: NSObject {
+  @objc public static let level: Int = {
+    let real = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+    if let fake = conceptEnv("MLC_FAKE_OS"), let value = Int(fake) {
+      NSLog("DeckOS: drawing as macOS \(min(value, real)) (real \(real))")
+      return min(value, real)
+    }
+    return real
+  }()
+  @objc public static func atLeast(_ major: Int) -> Bool { level >= major }
+}
+
+extension View {
+  /// `onChange(of:initial:_:)` with the old and the new value. Before macOS 14 the old value is kept here.
+  @ViewBuilder
+  func deckOnChange<V: Equatable>(of value: V, initial: Bool = false, _ action: @escaping (V, V) -> Void) -> some View {
+    if #available(macOS 14.0, *), DeckOS.level >= 14 {
+      self.onChange(of: value, initial: initial, action)
+    } else {
+      self.modifier(DeckLegacyOnChange(value: value, initial: initial, action: action))
+    }
+  }
+
+  /// `scrollDisabled` from macOS 13; before it the list keeps scrolling, which a list that fits never does.
+  @ViewBuilder
+  func deckScrollDisabled(_ disabled: Bool) -> some View {
+    if #available(macOS 13.0, *), DeckOS.level >= 13 { self.scrollDisabled(disabled) } else { self }
+  }
+
+  /// The system's own list background is hidden from macOS 13. A sidebar list before it already draws the sidebar material.
+  @ViewBuilder
+  func deckListBackgroundHidden() -> some View {
+    if #available(macOS 13.0, *), DeckOS.level >= 13 { self.scrollContentBackground(.hidden) } else { self }
+  }
+
+  /// Content that may draw past the scroll view's edge (shadows, the hero) from macOS 14; before it, clipped to the scroll view.
+  @ViewBuilder
+  func deckScrollClipDisabled(_ disabled: Bool = true) -> some View {
+    if #available(macOS 14.0, *), DeckOS.level >= 14 { self.scrollClipDisabled(disabled) } else { self }
+  }
+
+  /// A scroll view that bounces only when its content is larger (macOS 13.3); before it, always elastic.
+  @ViewBuilder
+  func deckBounceBasedOnSize() -> some View {
+    if #available(macOS 13.3, *), DeckOS.level >= 13 { self.scrollBounceBehavior(.basedOnSize) } else { self }
+  }
+
+  /// Return on the focused view: `onKeyPress` from macOS 14, the insert-newline command before it.
+  @ViewBuilder
+  func deckOnReturn(_ action: @escaping () -> Void) -> some View {
+    if #available(macOS 14.0, *), DeckOS.level >= 14 {
+      self.onKeyPress(.return) { action(); return .handled }
+    } else {
+      self.onCommand(#selector(NSResponder.insertNewline(_:)), perform: action)
+    }
+  }
+
+  /// A drag source for a string: `draggable` from macOS 13, `onDrag` before it.
+  @ViewBuilder
+  func deckDraggable<Preview: View>(_ text: String, @ViewBuilder preview: () -> Preview) -> some View {
+    if #available(macOS 13.0, *), DeckOS.level >= 13 {
+      self.draggable(text, preview: preview)
+    } else {
+      self.onDrag({ NSItemProvider(object: text as NSString) }, preview: preview)
+    }
+  }
+
+  /// A drop target for a string: `dropDestination` from macOS 13, `onDrop` before it.
+  @ViewBuilder
+  func deckDropString(perform: @escaping (String) -> Void, isTargeted: @escaping (Bool) -> Void) -> some View {
+    if #available(macOS 13.0, *), DeckOS.level >= 13 {
+      self.dropDestination(for: String.self) { items, _ in
+        if let first = items.first { perform(first) }
+        return true
+      } isTargeted: { isTargeted($0) }
+    } else {
+      self.onDrop(of: [UTType.plainText], isTargeted: Binding(get: { false }, set: { isTargeted($0) })) { providers in
+        guard let provider = providers.first else { return false }
+        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+          if let text = object as? String { DispatchQueue.main.async { perform(text) } }
+        }
+        return true
+      }
+    }
+  }
+
+  /// The sidebar icon's arrival pulse (keyframe animation, macOS 14); none before it.
+  @ViewBuilder
+  func deckArrivalMark(token: Int) -> some View {
+    if #available(macOS 14.0, *), DeckOS.level >= 14 { self.modifier(DeckArrivalMark(token: token)) } else { self }
+  }
+
+  /// The 配对 button's nudge (keyframe animation, macOS 14); none before it.
+  @ViewBuilder
+  func deckPairNudge(hostID: String) -> some View {
+    if #available(macOS 14.0, *), DeckOS.level >= 14 { self.modifier(DeckPairNudge(hostID: hostID)) } else { self }
+  }
+
+  /// A capsule button border from macOS 14; the system's default shape before.
+  @ViewBuilder
+  func deckCapsuleBorder() -> some View {
+    if #available(macOS 14.0, *), DeckOS.level >= 14 {
+      self.buttonBorderShape(.capsule)
+    } else {
+      self
+    }
+  }
+}
+
+/// The content beside its label when it fits (ViewThatFits, macOS 13); on macOS 12 the caller says whether it is estimated to fit.
+@ViewBuilder
+func deckFitsBesideOrBelow<Beside: View, Below: View>(beside: Beside, below: Below, estimatedFit: Bool) -> some View {
+  if #available(macOS 13.0, *), DeckOS.level >= 13 {
+    ViewThatFits(in: .horizontal) { beside; below }
+  } else if estimatedFit {
+    beside
+  } else {
+    below
+  }
+}
+
+/// A value handed between tasks that is only read after it was made. NSImage is Sendable from macOS 14 only; this box lets macOS 12 and 13 hand it over too.
+struct DeckSendable<Value>: @unchecked Sendable {
+  let value: Value
+  init(_ value: Value) { self.value = value }
+}
+
+/// A section header of a menu: the system's own from macOS 14; before it a disabled item in the secondary colour.
+func deckMenuSectionHeader(title: String) -> NSMenuItem {
+  if #available(macOS 14.0, *), DeckOS.level >= 14 { return NSMenuItem.sectionHeader(title: title) }
+  let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+  item.isEnabled = false
+  item.attributedTitle = NSAttributedString(string: title, attributes: [
+    .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold),
+    .foregroundColor: NSColor.secondaryLabelColor,
+  ])
+  return item
+}
+
+/// A wrapping row of views: DeckFlowLayout (a Layout, macOS 13) and on macOS 12 the alignment-guide flow below.
+struct DeckFlow<Content: View>: View {
+  let spacing: CGFloat
+  let content: Content
+
+  init(spacing: CGFloat, @ViewBuilder content: () -> Content) {
+    self.spacing = spacing
+    self.content = content()
+  }
+
+  var body: some View {
+    if #available(macOS 13.0, *), DeckOS.level >= 13 {
+      DeckFlowLayout(spacing: spacing) { content }
+    } else {
+      _VariadicView.Tree(DeckFlowRoot(spacing: spacing)) { content }
+    }
+  }
+}
+
+private struct DeckFlowRoot: _VariadicView_MultiViewRoot {
+  let spacing: CGFloat
+
+  func body(children: _VariadicView.Children) -> some View {
+    DeckFlowRows(spacing: spacing, children: children)
+  }
+}
+
+private struct DeckFlowHeightKey: PreferenceKey {
+  static var defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// Rows of children, a child that does not fit the width starts the next row (the usual alignment-guide wrap).
+private struct DeckFlowRows: View {
+  let spacing: CGFloat
+  let children: _VariadicView.Children
+  @SwiftUI.State private var height: CGFloat = 0
+
+  var body: some View {
+    GeometryReader { geometry in rows(width: geometry.size.width) }
+      .frame(height: height)
+  }
+
+  private func rows(width: CGFloat) -> some View {
+    var x: CGFloat = 0
+    var y: CGFloat = 0
+    let last = children.last?.id
+    return ZStack(alignment: .topLeading) {
+      ForEach(children) { child in
+        child
+          .alignmentGuide(.leading) { dimension in
+            if abs(x - dimension.width) > width { x = 0; y -= dimension.height + spacing }
+            let result = x
+            if child.id == last { x = 0 } else { x -= dimension.width + spacing }
+            return result
+          }
+          .alignmentGuide(.top) { _ in
+            let result = y
+            if child.id == last { y = 0 }
+            return result
+          }
+      }
+    }
+    .background(GeometryReader { proxy in Color.clear.preference(key: DeckFlowHeightKey.self, value: proxy.size.height) })
+    .onPreferenceChange(DeckFlowHeightKey.self) { height = $0 }
+  }
+}
+
+private struct DeckLegacyOnChange<V: Equatable>: ViewModifier {
+  let value: V
+  let initial: Bool
+  let action: (V, V) -> Void
+  @SwiftUI.State private var last: V
+
+  init(value: V, initial: Bool, action: @escaping (V, V) -> Void) {
+    self.value = value
+    self.initial = initial
+    self.action = action
+    _last = SwiftUI.State(initialValue: value)
+  }
+
+  func body(content: Content) -> some View {
+    content
+      .onAppear { if initial { action(value, value) } }
+      .onChange(of: value) { new in
+        let old = last
+        last = new
+        action(old, new)
+      }
+  }
+}
+
 // MARK: - Variant
 
 /// Which design the build shows. Concept builds read `MLC_VARIANT` from the environment,
 /// then the hidden defaults key `MLConceptVariant` ("A", "B" or "classic").
 @objc(MLDeckVariant)
 public final class DeckVariant: NSObject {
-  @objc public static var current: String {
+  /// Resolved once, at launch: the Classic Home setting (MLConceptVariant) applies after a restart, never to the window that is open.
+  @objc public static let current: String = resolveCurrent()
+
+  private static func resolveCurrent() -> String {
     let known = ["A", "A0", "A1", "A3", "B"]
     if let value = conceptEnv("MLC_VARIANT"), known.contains(value) {
       return value
@@ -52,10 +293,7 @@ public final class DeckVariant: NSObject {
   @objc public static var isComputerPage: Bool { isDeck && current == "A0" }
   /// A0 and A3 carry the host's name in the page itself; A1 uses the window title.
   @objc public static var titleHidden: Bool { isDeck && ["A0", "A3"].contains(current) }
-  @objc public static var isDeck: Bool {
-    if #available(macOS 14.0, *) { return current != "classic" }
-    return false
-  }
+  @objc public static var isDeck: Bool { current != "classic" }
   @objc public static var isSidebarVariant: Bool { isDeck && current.hasPrefix("A") }
   @objc public static var isCardsVariant: Bool { isDeck && current == "B" }
 }
@@ -563,7 +801,7 @@ extension View {
   /// A glass capsule or card on macOS 26, a material elsewhere.
   @ViewBuilder
   func deckGlass<S: Shape>(_ shape: S, tint: Color? = nil) -> some View {
-    if #available(macOS 26.0, *) {
+    if #available(macOS 26.0, *), DeckOS.level >= 26 {
       if let tint {
         self.glassEffect(.regular.tint(tint.opacity(0.35)), in: shape)
       } else {
@@ -687,7 +925,6 @@ enum DeckArtKind: String {
   case icon = "_icon.png"
 }
 
-@available(macOS 14.0, *)
 enum DeckArt {
   private static let cache = NSCache<NSString, NSImage>()
 
@@ -712,7 +949,7 @@ enum DeckArt {
     if let hit = cached(app, kind) { return hit }
     let file = path(app, kind)
     let cacheKey = key(app, kind)
-    let image: NSImage? = await Task.detached(priority: .userInitiated) {
+    let loaded: DeckSendable<NSImage>? = await Task.detached(priority: .userInitiated) { () -> DeckSendable<NSImage>? in
       guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: file) as CFURL, nil) else { return nil }
       let options: [CFString: Any] = [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -721,8 +958,9 @@ enum DeckArt {
         kCGImageSourceThumbnailMaxPixelSize: maxPixel,
       ]
       guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
-      return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+      return DeckSendable(NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)))
     }.value
+    let image = loaded?.value
     if let image { cache.setObject(image, forKey: cacheKey) }
     return image
   }
@@ -756,7 +994,7 @@ enum DeckArt {
   /// Replaces the cached poster with the file that is on disk now (decoded off the main thread). A file that cannot be
   /// read leaves the cache empty, as before.
   static func refreshPoster(key: String, path: String, maxPixel: Int = 900) async {
-    let image: NSImage? = await Task.detached(priority: .userInitiated) {
+    let loaded: DeckSendable<NSImage>? = await Task.detached(priority: .userInitiated) { () -> DeckSendable<NSImage>? in
       guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
       let options: [CFString: Any] = [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -765,8 +1003,9 @@ enum DeckArt {
         kCGImageSourceThumbnailMaxPixelSize: maxPixel,
       ]
       guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
-      return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+      return DeckSendable(NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)))
     }.value
+    let image = loaded?.value
     if let image { cache.setObject(image, forKey: key as NSString) } else { cache.removeObject(forKey: key as NSString) }
   }
 
@@ -775,7 +1014,7 @@ enum DeckArt {
     if let hit = cached(app) { return hit }
     let path: String = AppAssetManager.boxArtPath(for: app) ?? ""
     let cacheKey = key(app)
-    let image: NSImage? = await Task.detached(priority: .userInitiated) {
+    let loaded: DeckSendable<NSImage>? = await Task.detached(priority: .userInitiated) { () -> DeckSendable<NSImage>? in
       let url = URL(fileURLWithPath: path)
       guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
       let options: [CFString: Any] = [
@@ -785,8 +1024,9 @@ enum DeckArt {
         kCGImageSourceThumbnailMaxPixelSize: maxPixel,
       ]
       guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
-      return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+      return DeckSendable(NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)))
     }.value
+    let image = loaded?.value
     if let image { cache.setObject(image, forKey: cacheKey) }
     return image
   }
@@ -808,7 +1048,6 @@ struct DeckFilledImage: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckPoster: View {
   let app: TemporaryApp
   var version = 0
@@ -846,7 +1085,6 @@ extension TemporaryApp {
 }
 
 /// The blurred, darkened poster behind a hero card; falls back to the platform tint.
-@available(macOS 14.0, *)
 struct DeckHeroBackdrop: View {
   let app: TemporaryApp?
   let tint: Color
@@ -1159,7 +1397,6 @@ let deckFoundationSunshineURL = URL(string: "https://github.com/AlkaidLab/founda
 /// Its releases, where the Foundation Sunshine panel itself looks for updates.
 let deckFoundationSunshineReleasesURL = URL(string: "https://github.com/AlkaidLab/foundation-sunshine/releases/latest")!
 
-@available(macOS 14.0, *)
 enum DeckFs {
   static func names() -> DeckHostSoftware.Names {
     DeckHostSoftware.Names(foundation: DL("deck.fs.name"), sunshine: DL("deck.software.sunshine"),
@@ -1193,7 +1430,6 @@ enum DeckFs {
 }
 
 /// The small sun in the sidebar: a Foundation Sunshine computer, monochrome, with its version as the tooltip.
-@available(macOS 14.0, *)
 struct DeckFsMark: View {
   let host: DeckHost
   /// `.secondary` inside a list row: the list turns it white on the accent fill of the selected row (measured 5.4:1 light, 6.3:1
@@ -1208,7 +1444,6 @@ struct DeckFsMark: View {
 }
 
 /// A low-key label ("Foundation Sunshine 2026.1110.165906") on the card and in the hero; opens 主机信息.
-@available(macOS 14.0, *)
 struct DeckFsLabel: View {
   let host: DeckHost
   var onDark = false
@@ -1232,7 +1467,6 @@ struct DeckFsLabel: View {
 }
 
 /// The recommendation under the hero of a computer that does not run Foundation Sunshine: once per computer, no modal.
-@available(macOS 14.0, *)
 struct DeckFsBanner: View {
   let snapshot: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -1321,7 +1555,6 @@ struct DeckFsBanner: View {
 }
 
 /// 主机信息 on a computer without Foundation Sunshine: what Foundation Sunshine adds, greyed, with the reason.
-@available(macOS 14.0, *)
 struct DeckFsFeatureGroup: View {
   let host: DeckHost
   var body: some View {
@@ -1349,7 +1582,6 @@ struct DeckFsFeatureGroup: View {
 }
 
 /// The 主机软件 value with its 了解 link (the link is only there when Foundation Sunshine is an option for this computer).
-@available(macOS 14.0, *)
 struct DeckSoftwareValue: View {
   let host: DeckHost
   var kindSeen: Bool?
@@ -1372,7 +1604,6 @@ struct DeckSoftwareValue: View {
 }
 
 
-@available(macOS 14.0, *)
 extension DeckAppsModel {
   /// Whether any app of this computer carries FsKind. nil until the app list has been read.
   var fsKindSeen: Bool? {
@@ -1383,7 +1614,6 @@ extension DeckAppsModel {
 
 /// A status mark at the trailing end of a sidebar row (running, nearby and unpaired ...). On the selected row's accent fill it
 /// sits on a white disc so orange and green stay legible on blue.
-@available(macOS 14.0, *)
 struct DeckRowBadge: View {
   let symbol: String
   let tint: Color

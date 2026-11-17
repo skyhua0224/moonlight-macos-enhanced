@@ -120,9 +120,7 @@
 
 - (void)mainSearchTextChanged:(NSNotification *)note {
     NSString *text = note.userInfo[@"text"] ?: @"";
-    if (@available(macOS 14.0, *)) {
-        [(MLDeckHostsController *)self.deckController setFilter:text];
-    }
+    [(MLDeckHostsController *)self.deckController setFilter:text];
     [self filterHostsByString:text];
     [self.collectionView reloadData];
 }
@@ -278,16 +276,14 @@
     [self deckStartLogic];   // saved hosts and discovery; this controller has no view loaded
     self.deckDidAutoOpen = YES;
     [self.discMan startDiscovery];
-    if (@available(macOS 14.0, *)) {
-        TemporaryHost *host = [MLDeckHostPicker preferredFrom:self.hosts];
-        // concept harness only: show the no-host page although mock hosts exist, so the real change to the host list can be recorded
-        if ([ConceptHarness enabled] && getenv("MLC_NOHOST_FORCE") != NULL) { host = nil; }
-        if (host != nil) {
-            [self deckEmbedWorkspaceForHost:host intoContainer:container];
-            return;
-        }
-        [self deckEmbedFirstRunIntoContainer:container];
+    TemporaryHost *host = [MLDeckHostPicker preferredFrom:self.hosts];
+    // concept harness only: show the no-host page although mock hosts exist, so the real change to the host list can be recorded
+    if ([ConceptHarness enabled] && getenv("MLC_NOHOST_FORCE") != NULL) { host = nil; }
+    if (host != nil) {
+        [self deckEmbedWorkspaceForHost:host intoContainer:container];
+        return;
     }
+    [self deckEmbedFirstRunIntoContainer:container];
 }
 
 - (void)deckEmbedWorkspaceForHost:(TemporaryHost *)host intoContainer:(NSViewController *)container {
@@ -352,39 +348,37 @@
 }
 
 - (void)deckEmbedFirstRunIntoContainer:(NSViewController *)container {
-    if (@available(macOS 14.0, *)) {
-        __weak typeof(self) weakSelf = self;
-        __weak NSViewController *weakContainer = container;
-        NSViewController *firstRun = [MLDeckFirstRun makeWithProvider:^NSArray<TemporaryHost *> * {
-            return weakSelf.hostList.count > 0 ? weakSelf.hostList : weakSelf.hosts;
-        } onAdd:^{
-            [weakSelf addHostButtonClicked:nil];
-        } onSelect:^(TemporaryHost *host) {
-            if (weakSelf.deckFirstRun == nil) { return; }   // the page has already handed over: never install the home twice
-            weakSelf.selectedHost = host;
-            if (weakContainer != nil) {
-                [weakSelf deckEmbedWorkspaceForHost:host intoContainer:weakContainer];
+    __weak typeof(self) weakSelf = self;
+    __weak NSViewController *weakContainer = container;
+    NSViewController *firstRun = [MLDeckFirstRun makeWithProvider:^NSArray<TemporaryHost *> * {
+        return weakSelf.hostList.count > 0 ? weakSelf.hostList : weakSelf.hosts;
+    } onAdd:^{
+        [weakSelf addHostButtonClicked:nil];
+    } onSelect:^(TemporaryHost *host) {
+        if (weakSelf.deckFirstRun == nil) { return; }   // the page has already handed over: never install the home twice
+        weakSelf.selectedHost = host;
+        if (weakContainer != nil) {
+            [weakSelf deckEmbedWorkspaceForHost:host intoContainer:weakContainer];
+        }
+    }];
+    // a computer added by address is opened at once (its home, with 配对 in the card)
+    self.deckFirstRunObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"MLDeckSelectHost" object:nil
+                                                                                 queue:NSOperationQueue.mainQueue
+                                                                            usingBlock:^(NSNotification *note) {
+        NSString *uuid = note.userInfo[@"uuid"];
+        for (TemporaryHost *candidate in weakSelf.hosts) {
+            if ([candidate.uuid isEqualToString:uuid] && weakContainer != nil) {
+                [weakSelf deckEmbedWorkspaceForHost:candidate intoContainer:weakContainer];
+                break;
             }
-        }];
-        // a computer added by address is opened at once (its home, with 配对 in the card)
-        self.deckFirstRunObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"MLDeckSelectHost" object:nil
-                                                                                     queue:NSOperationQueue.mainQueue
-                                                                                usingBlock:^(NSNotification *note) {
-            NSString *uuid = note.userInfo[@"uuid"];
-            for (TemporaryHost *candidate in weakSelf.hosts) {
-                if ([candidate.uuid isEqualToString:uuid] && weakContainer != nil) {
-                    [weakSelf deckEmbedWorkspaceForHost:candidate intoContainer:weakContainer];
-                    break;
-                }
-            }
-        }];
-        MLLaunchTrace(@"install first-run page (no saved host)");
-        [container addChildViewController:firstRun];
-        firstRun.view.frame = container.view.bounds;
-        firstRun.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-        [container.view addSubview:firstRun.view];
-        self.deckFirstRun = firstRun;
-    }
+        }
+    }];
+    MLLaunchTrace(@"install first-run page (no saved host)");
+    [container addChildViewController:firstRun];
+    firstRun.view.frame = container.view.bounds;
+    firstRun.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [container.view addSubview:firstRun.view];
+    self.deckFirstRun = firstRun;
 }
 
 
@@ -516,17 +510,15 @@
 }
 
 - (void)deckPresentAddHost {
-    if (@available(macOS 14.0, *)) {
-        __weak typeof(self) weakSelf = self;
-        MLLaunchTrace(@"add computer: sheet");
-        [MLDeckAddHost presentIn:self.hostWindow provider:^NSArray<TemporaryHost *> * {
-            return weakSelf.hostList.count > 0 ? weakSelf.hostList : (weakSelf.hosts ?: @[]);
-        } onSubmit:^(NSString *address, void (^done)(NSString *_Nullable, TemporaryHost *_Nullable)) {
-            [weakSelf addHostWithAddress:address completion:done];
-        } onChosen:^(TemporaryHost *host) {
-            [weakSelf deckAddedHost:host];
-        }];
-    }
+    __weak typeof(self) weakSelf = self;
+    MLLaunchTrace(@"add computer: sheet");
+    [MLDeckAddHost presentIn:self.hostWindow provider:^NSArray<TemporaryHost *> * {
+        return weakSelf.hostList.count > 0 ? weakSelf.hostList : (weakSelf.hosts ?: @[]);
+    } onSubmit:^(NSString *address, void (^done)(NSString *_Nullable, TemporaryHost *_Nullable)) {
+        [weakSelf addHostWithAddress:address completion:done];
+    } onChosen:^(TemporaryHost *host) {
+        [weakSelf deckAddedHost:host];
+    }];
 }
 
 /// A computer was added or picked: show it, and for one that is not paired go straight into pairing (the
@@ -860,9 +852,7 @@
         self.hostList = self.hosts;
         [self.collectionView moonlight_reloadDataKeepingSelection];
         [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostsChanged" object:nil];
-        if (@available(macOS 14.0, *)) {
-            [(MLDeckHostsController *)self.deckController reload];
-        }
+        [(MLDeckHostsController *)self.deckController reload];
     }
 }
 
@@ -1259,50 +1249,46 @@
     [center addObserver:self selector:@selector(deckHandleCommand:) name:@"MLDeckHostCommand" object:nil];
     [center addObserver:self selector:@selector(deckHandlePIN:) name:@"MLDeckPairingPIN" object:nil];
 
-    if (@available(macOS 14.0, *)) {
-        if (![MLDeckVariant isCardsVariant]) {
-            return;
-        }
-        MLDeckHostsActions *actions = [[MLDeckHostsActions alloc] init];
-        actions.open = ^(TemporaryHost *host) { [weakSelf openHost:host]; };
-        actions.resume = ^(TemporaryHost *host, TemporaryApp *app) {
-            weakSelf.pendingLaunchAppId = app.id;
-            [weakSelf openHost:host];
-        };
-        actions.wake = ^(TemporaryHost *host) {
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
-        };
-        actions.pair = ^(TemporaryHost *host) {
-            weakSelf.selectedHost = host;
-            [weakSelf setupPairing:host];
-        };
-        actions.menu = ^(TemporaryHost *host, NSString *action) { [weakSelf deckPerformMenuAction:action forHost:host]; };
-        actions.cleanup = ^(NSArray<TemporaryHost *> *hosts) { [weakSelf deckCleanupHosts:hosts]; };
-        actions.add = ^{ [weakSelf addHostButtonClicked:nil]; };
-        MLDeckHostsController *deck = [[MLDeckHostsController alloc] initWithStyle:@"cards" actions:actions provider:^NSArray<TemporaryHost *> * {
-            return weakSelf.hostList.count > 0 ? weakSelf.hostList : weakSelf.hosts;
-        }];
-        self.deckController = deck;
-        NSView *deckView = deck.viewController.view;
-        deckView.frame = self.view.bounds;
-        deckView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-        [self.view addSubview:deckView];
-        [self addChildViewController:deck.viewController];
-        self.collectionView.enclosingScrollView.hidden = YES;
+    if (![MLDeckVariant isCardsVariant]) {
+        return;
     }
+    MLDeckHostsActions *actions = [[MLDeckHostsActions alloc] init];
+    actions.open = ^(TemporaryHost *host) { [weakSelf openHost:host]; };
+    actions.resume = ^(TemporaryHost *host, TemporaryApp *app) {
+        weakSelf.pendingLaunchAppId = app.id;
+        [weakSelf openHost:host];
+    };
+    actions.wake = ^(TemporaryHost *host) {
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
+    };
+    actions.pair = ^(TemporaryHost *host) {
+        weakSelf.selectedHost = host;
+        [weakSelf setupPairing:host];
+    };
+    actions.menu = ^(TemporaryHost *host, NSString *action) { [weakSelf deckPerformMenuAction:action forHost:host]; };
+    actions.cleanup = ^(NSArray<TemporaryHost *> *hosts) { [weakSelf deckCleanupHosts:hosts]; };
+    actions.add = ^{ [weakSelf addHostButtonClicked:nil]; };
+    MLDeckHostsController *deck = [[MLDeckHostsController alloc] initWithStyle:@"cards" actions:actions provider:^NSArray<TemporaryHost *> * {
+        return weakSelf.hostList.count > 0 ? weakSelf.hostList : weakSelf.hosts;
+    }];
+    self.deckController = deck;
+    NSView *deckView = deck.viewController.view;
+    deckView.frame = self.view.bounds;
+    deckView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self.view addSubview:deckView];
+    [self addChildViewController:deck.viewController];
+    self.collectionView.enclosingScrollView.hidden = YES;
 }
 
 - (void)deckOpenPreferredHostIfNeeded {
     if (![MLDeckVariant isSidebarVariant] || self.deckDidAutoOpen || self.hosts.count == 0) {
         return;
     }
-    if (@available(macOS 14.0, *)) {
-        self.deckDidAutoOpen = YES;
-        TemporaryHost *host = [MLDeckHostPicker preferredFrom:self.hosts];
-        if (host != nil) {
-            self.selectedHost = host;
-            [self transitionToAppsVCWithHost:host];
-        }
+    self.deckDidAutoOpen = YES;
+    TemporaryHost *host = [MLDeckHostPicker preferredFrom:self.hosts];
+    if (host != nil) {
+        self.selectedHost = host;
+        [self transitionToAppsVCWithHost:host];
     }
 }
 
@@ -1315,10 +1301,8 @@
 }
 
 - (void)deckHandlePIN:(NSNotification *)note {
-    if (@available(macOS 14.0, *)) {
-        NSString *uuid = note.userInfo[@"uuid"];
-        [(MLDeckHostsController *)self.deckController setPairingPIN:note.userInfo[@"pin"] forHostUUID:uuid];
-    }
+    NSString *uuid = note.userInfo[@"uuid"];
+    [(MLDeckHostsController *)self.deckController setPairingPIN:note.userInfo[@"pin"] forHostUUID:uuid];
 }
 
 /// Commands from the sidebar variant, whose window no longer has this page on screen.

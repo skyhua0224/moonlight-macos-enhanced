@@ -497,7 +497,7 @@ struct OverlayRing {
   }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 final class OverlayModel: ObservableObject {
   @Published var m = OverlayMetrics()
   @Published var hasData = false
@@ -585,7 +585,7 @@ public final class OverlayHostView: NSView {
   public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 final class OverlayHostingView: NSHostingView<OverlayRoot> {
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
   override var acceptsFirstResponder: Bool { false }
@@ -594,7 +594,7 @@ final class OverlayHostingView: NSHostingView<OverlayRoot> {
 
 /// The presenter only keeps the hosting view the size of the stream view and tells the model about that size. It never
 /// measures the panel and never moves it: SwiftUI aligns the panel to its anchor inside the view (StreamOverlayViews.swift).
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 @objc(MLOverlayPresenter)
 public final class OverlayPresenter: NSObject {
   /// Add this to the stream view; it resizes itself.

@@ -220,6 +220,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "app/pane", pane: .app, kind: .pane, sectionKey: "Application", titleKey: "App & Diagnostics", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Application/Appearance", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Appearance", detailKey: nil, keywords: ["System Default", "Light", "Dark"]),
     SettingsSearchEntry(id: "app/Application/Language", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Language", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "app/Application/Classic Home Page", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Classic Home Page", detailKey: "Classic Home Page detail", keywords: []),
     SettingsSearchEntry(id: "app/Application/Optimize Game Settings", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Optimize Game Settings", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Application/Custom Artwork Dimensions", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Custom Artwork Dimensions", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Application/Quit App After Stream", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Quit App After Stream", detailKey: nil, keywords: []),

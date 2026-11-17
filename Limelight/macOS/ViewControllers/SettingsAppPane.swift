@@ -8,6 +8,7 @@ struct AppView: View {
   @SwiftUI.State private var showLiveLogViewer = false
   @AppStorage("theme") private var appearance = 0
   @AppStorage("autoDiscoverNewHosts") private var autoDiscoverNewHosts = true
+  @SwiftUI.State private var classicHome = UserDefaults.standard.string(forKey: "MLConceptVariant") == "classic"
 
   var body: some View {
     SettingsContent {
@@ -52,6 +53,18 @@ struct AppView: View {
           }
         }
 
+        ToggleCell(title: "Classic Home Page", hintKey: "Classic Home Page detail", boolBinding: Binding(
+          get: { classicHome },
+          set: { value in
+            classicHome = value
+            // The key the home reads at launch (DeckVariant.current); the new home is what it is without it.
+            if value {
+              UserDefaults.standard.set("classic", forKey: "MLConceptVariant")
+            } else {
+              UserDefaults.standard.removeObject(forKey: "MLConceptVariant")
+            }
+          }
+        ))
         ToggleCell(title: "Optimize Game Settings", boolBinding: $settingsModel.optimize)
         SettingsRow(title: "Custom Artwork Dimensions") {
           DimensionsInputView(widthBinding: $settingsModel.appArtworkWidth, heightBinding: $settingsModel.appArtworkHeight,
