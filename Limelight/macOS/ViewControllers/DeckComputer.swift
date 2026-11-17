@@ -746,6 +746,7 @@ struct DeckComputerCard: View {
           }
           .controllerButtonStyle(DeckCardButtonStyle(prominent: true))
           .controllerKey("primary")
+          .modifier(DeckPairNudge(hostID: host.id))
           DeckHeroRound(symbol: "slider.horizontal.3", help: DL("deck.settings"), onDark: false, size: 44) { model.actions.settings?() }
           DeckHeroRound(symbol: "ellipsis", help: DL("deck.more"), onDark: false, size: 44, padMenu: { DeckMoreMenu.menu(host, model) }) { DeckMenuPresenter.pop(DeckMoreMenu.menu(host, model)) }
         }

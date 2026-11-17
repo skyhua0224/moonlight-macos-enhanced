@@ -360,6 +360,7 @@
         } onAdd:^{
             [weakSelf addHostButtonClicked:nil];
         } onSelect:^(TemporaryHost *host) {
+            if (weakSelf.deckFirstRun == nil) { return; }   // the page has already handed over: never install the home twice
             weakSelf.selectedHost = host;
             if (weakContainer != nil) {
                 [weakSelf deckEmbedWorkspaceForHost:host intoContainer:weakContainer];
@@ -1324,6 +1325,13 @@
 - (void)deckHandleCommand:(NSNotification *)note {
     NSString *command = note.userInfo[@"command"];
     TemporaryHost *host = note.userInfo[@"host"];
+    NSString *named = note.userInfo[@"uuid"];
+    if (host == nil && named.length > 0) {
+        // the concept harness names a computer by its uuid (one found by discovery that is not stored yet)
+        for (TemporaryHost *candidate in self.hosts) {
+            if ([candidate.uuid isEqualToString:named]) { host = candidate; break; }
+        }
+    }
     if ([command isEqualToString:@"pair"] && host != nil) {
         self.selectedHost = host;
         [self setupPairing:host];

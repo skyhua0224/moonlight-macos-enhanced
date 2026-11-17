@@ -15,7 +15,8 @@ struct NoHostFound: Identifiable {
 struct NoHostActions {
   var add: () -> Void
   var learn: () -> Void
-  var select: (String) -> Void
+  /// Opens the computer with this id; false when it is no longer there (the page then stays).
+  var select: (String) -> Bool
 }
 
 // MARK: - What this system can draw

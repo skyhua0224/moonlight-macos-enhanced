@@ -336,9 +336,11 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
     dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, captureQueue);
     dispatch_source_set_timer(timer, DISPATCH_TIME_NOW, NSEC_PER_SEC / 60, NSEC_PER_MSEC);
     dispatch_source_set_event_handler(timer, ^{
+        CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+        // never run on: no window within 30 s, or the span used up (also when every capture fails)
+        if ((first == 0 && now - t0 > 30) || (first != 0 && now - first > span)) { dispatch_source_cancel(timer); return; }
         uint32_t number = windowNumber;
         if (number == 0) return;
-        CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
         CGImageRef image = create(CGRectNull, kCGWindowListOptionIncludingWindow, number, kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution);
         if (image == NULL) return;
         if (first == 0) first = now;
@@ -352,7 +354,6 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
             }
             CGImageRelease(image);
         });
-        if (now - first > span) dispatch_source_cancel(timer);
     });
     dispatch_resume(timer);
 }
@@ -967,15 +968,34 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
     }
     if (getenv("MLC_PAIRUUID")) {
         NSString *pairUUID = [NSString stringWithUTF8String:getenv("MLC_PAIRUUID")];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(7.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        double pairDelay = getenv("MLC_PAIR_DELAY") ? atof(getenv("MLC_PAIR_DELAY")) : 7.0;   // seconds; the 配对 button is pressed this long after the window
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(pairDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NSMutableDictionary *info = [NSMutableDictionary dictionaryWithObjectsAndKeys:@"pair", @"command", pairUUID, @"uuid", nil];
             for (TemporaryHost *h in [[[DataManager alloc] init] getHosts]) {
-                if ([h.uuid isEqualToString:pairUUID]) {
-                    [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"pair", @"host": h}];
-                }
+                if ([h.uuid isEqualToString:pairUUID]) info[@"host"] = h;
             }
+            // a computer found by discovery is not necessarily stored yet: the command can name it by uuid
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil userInfo:info];
         });
     }
+    if (getenv("MLC_PAIR_AFTER_ARRIVAL")) {
+        // MLC_PAIR_AFTER_ARRIVAL=<seconds>: press 配对 that long after a computer has arrived from the no-host page (the nudge on the button has played)
+        double after = atof(getenv("MLC_PAIR_AFTER_ARRIVAL"));
+        __block id arrivedObserver = nil;
+        arrivedObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"MLDeckHostArrived" object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+            [[NSNotificationCenter defaultCenter] removeObserver:arrivedObserver];
+            NSString *uuid = note.userInfo[@"uuid"] ?: @"";
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(after * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"pair", @"uuid": uuid}];
+            });
+        }];
+    }
     double settle = getenv("MLC_SETTLE") ? atof(getenv("MLC_SETTLE")) : 2.5;
+    if (getenv("MLC_REC60")) {
+        // the scene must not end the process before the recording has its span (and its files are written)
+        double span = getenv("MLC_FRAMESPAN") ? atof(getenv("MLC_FRAMESPAN")) : 6.0;
+        settle = MAX(settle, span + 3.0);
+    }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self prepareWindow];
         [self openScene];

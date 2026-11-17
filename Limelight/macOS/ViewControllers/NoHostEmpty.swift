@@ -75,8 +75,9 @@ struct NoHostEmpty: View {
     withAnimation(.easeIn(duration: still ? 0.2 : 0.24)) { leaving = true }
     if NoHostPreview.active {
       NotificationCenter.default.post(name: NSNotification.Name("MLDeckSelectHost"), object: nil, userInfo: ["uuid": NoHostPreview.mockHostUUID])
-    } else {
-      actions.select(id)
+    } else if !actions.select(id) {
+      // the computer went away during the check mark: the page stays, and a computer that turns up later starts the hand-over again
+      withAnimation(.easeOut(duration: 0.2)) { leaving = false; found = false }
     }
   }
 
@@ -156,7 +157,8 @@ struct NoHostEmpty: View {
       } label: {
         HStack(spacing: 5) {
           Text(DL("nohost.tips.title")).font(.callout)
-          Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).rotationEffect(.degrees(tipsOpen ? 90 : 0))
+          Image(systemName: still && tipsOpen ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .bold))
+            .rotationEffect(.degrees(tipsOpen && !still ? 90 : 0))
         }
         .foregroundColor(.secondary)
         .contentShape(Rectangle())
@@ -172,7 +174,7 @@ struct NoHostEmpty: View {
         .font(.callout).foregroundColor(.secondary)
         .padding(.horizontal, 18).padding(.vertical, 14)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.06)))
-        .transition(.opacity.combined(with: .move(edge: .top)))
+        .transition(still ? .opacity : .opacity.combined(with: .move(edge: .top)))
       }
     }
   }

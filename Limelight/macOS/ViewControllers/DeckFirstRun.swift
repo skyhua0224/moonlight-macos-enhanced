@@ -19,7 +19,11 @@ public final class DeckFirstRun: NSObject {
       actions: NoHostActions(
         add: onAdd,
         learn: { DeckFs.learn() },
-        select: { id in if let host = discovered().first(where: { $0.id == id }) { onSelect(host.raw) } }))
+        select: { id in
+          guard let host = discovered().first(where: { $0.id == id }) else { return false }
+          onSelect(host.raw)
+          return true
+        }))
     let controller = NSHostingController(rootView: page)
     controller.sizingOptions = []
     return controller

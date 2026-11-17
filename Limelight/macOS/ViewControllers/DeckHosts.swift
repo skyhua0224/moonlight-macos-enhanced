@@ -37,6 +37,7 @@ final class DeckHostsModel: ObservableObject {
   @Published var arrivedToken = 0
   private var pickerObserver: NSObjectProtocol?
   private var arrivedObserver: NSObjectProtocol?
+  private var arrivalRecorder: NSObjectProtocol?
   var provider: () -> [TemporaryHost] = { [] }
   let actions: DeckHostsActions
 
@@ -49,6 +50,9 @@ final class DeckHostsModel: ObservableObject {
       guard let self else { return }
       self.arrivedID = note.userInfo?["uuid"] as? String
       self.arrivedToken += 1
+    }
+    arrivalRecorder = NotificationCenter.default.addObserver(forName: .init("MLDeckHostArrived"), object: nil, queue: .main) { note in
+      DeckArrival.latest = ((note.userInfo?["uuid"] as? String) ?? "", Date())
     }
     // LB / RB: the previous / next computer in the order the sidebar shows them
     padObserver = NotificationCenter.default.addObserver(forName: .init("MLDeckPadSwitchHost"), object: nil, queue: .main) { [weak self] note in
@@ -515,7 +519,7 @@ struct DeckSidebarView: View {
     let selected = model.selected == host.id
     return HStack(spacing: 10) {
       DeckHostIcon(host: host, size: 32, muted: !host.online, selected: selected)
-        .modifier(DeckArrivalMark(token: model.arrivedID == host.id ? model.arrivedToken : 0))
+        .modifier(DeckArrivalMark(token: model.arrivedID == host.id && host.paired ? model.arrivedToken : 0))
       VStack(alignment: .leading, spacing: 1) {
         Text(host.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
         Text(deckSubtitle(host)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
@@ -709,4 +713,59 @@ struct DeckArrivalMark: ViewModifier {
       }
     }
   }
+}
+
+/// One nudge on the 配对 button when an unpaired computer has just arrived from the no-host page (HostsViewController posts MLDeckHostArrived
+/// once its home is up): the button grows a little and settles with a spring, and a ring leaves it and fades, so the eye goes to the one thing
+/// to do. Increase Contrast: a thicker, solid ring. Reduce Motion: only the ring's fade, the button does not move.
+@available(macOS 14.0, *)
+struct DeckPairNudge: ViewModifier {
+  let hostID: String
+  @SwiftUI.State private var token = 0
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.colorSchemeContrast) private var contrast
+
+  struct Pulse {
+    var scale = 1.0
+    var ring = 0.0
+  }
+
+  func body(content: Content) -> some View {
+    let still = reduceMotion || NoHostCaps.forceReduceMotion
+    let strong = contrast == .increased
+    return content
+      .keyframeAnimator(initialValue: Pulse(), trigger: token) { view, pulse in
+        view
+          .scaleEffect(pulse.scale)
+          .overlay(
+            Capsule()
+              .strokeBorder(Color.white.opacity(strong ? 1 : 0.9), lineWidth: strong ? 4 : 3)
+              .scaleEffect(x: 1 + (1 - pulse.ring) * (still ? 0 : 0.26), y: 1 + (1 - pulse.ring) * (still ? 0 : 0.7))
+              .opacity(pulse.ring)
+              .allowsHitTesting(false)
+          )
+      } keyframes: { _ in
+        KeyframeTrack(\.scale) {
+          CubicKeyframe(still ? 1 : 1.1, duration: 0.16)
+          SpringKeyframe(1, duration: 0.6, spring: .bouncy)
+        }
+        KeyframeTrack(\.ring) {
+          LinearKeyframe(1, duration: 0.05)
+          CubicKeyframe(0.6, duration: 0.3)
+          LinearKeyframe(0, duration: 0.7)
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("MLDeckHostArrived"))) { note in
+        if (note.userInfo?["uuid"] as? String) == hostID { token += 1 }
+      }
+      // the button may appear after the notification was posted: then the record of the arrival says it is still fresh
+      .onAppear {
+        if let arrival = DeckArrival.latest, arrival.id == hostID, Date().timeIntervalSince(arrival.at) < 1.2 { token += 1 }
+      }
+  }
+}
+
+/// The computer that arrived from the no-host page last, and when (set on MLDeckHostArrived).
+enum DeckArrival {
+  nonisolated(unsafe) static var latest: (id: String, at: Date)?
 }
