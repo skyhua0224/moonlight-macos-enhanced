@@ -78,7 +78,7 @@ extension OverlayField {
     case .route: return "wifi"
     case .quality: return "sparkles.tv"
     case .clock: return "clock"
-    case .battery: return "battery.75percent"
+    case .battery: return availableSymbol("battery.75percent", fallback: "battery.100")
     case .resolution: return "rectangle.on.rectangle"
     case .codec: return "film"
     case .chroma: return "paintpalette"
@@ -100,7 +100,7 @@ extension OverlayField {
     case .stalls: return "pause.circle"
     case .pipeline: return "point.3.connected.trianglepath.dotted"
     case .hostEncode: return "desktopcomputer"
-    case .decode: return "film.stack"
+    case .decode: return availableSymbol("film.stack", fallback: "film")
     case .queue: return "tray.full"
     }
   }

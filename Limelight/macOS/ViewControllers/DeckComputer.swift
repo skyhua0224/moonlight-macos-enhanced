@@ -342,6 +342,7 @@ final class DeckPairingState: ObservableObject {
 
 // MARK: - Desktop thumbnail and running art
 
+@available(macOS 14.0, *)
 extension DeckArt {
   /// The host's own thumbnail (Foundation Sunshine, later): the second fallback.
   static func thumbURL(_ uuid: String) -> URL {

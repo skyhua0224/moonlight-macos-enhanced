@@ -1581,7 +1581,11 @@ static MLEdgeMenuDock MLEdgeMenuDockFromExitEdge(MLFreeMouseExitEdge edge) {
     [self applyShortcut:[self streamShortcutForAction:MLShortcutActionTogglePerformanceOverlay] toMenuItem:detailsItem];
     detailsItem.target = self;
     detailsItem.state = self.overlayContainer ? NSControlStateValueOn : NSControlStateValueOff;
-    setSymbol(detailsItem, @"gauge.with.dots.needle.33percent");
+    if (@available(macOS 14.0, *)) {
+        setSymbol(detailsItem, @"gauge.with.dots.needle.33percent");
+    } else {
+        setSymbol(detailsItem, @"speedometer");
+    }
     [windowMenu addItem:detailsItem];
 
     windowItem.submenu = windowMenu;

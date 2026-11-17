@@ -66,7 +66,7 @@ enum SettingsPaneType: Int, CaseIterable, Hashable {
     case .updates: return "arrow.down.circle.fill"
     case .legacy: return "archivebox.fill"
     case .profiles: return "person.2.fill"
-    case .overlay: return "gauge.with.dots.needle.67percent"
+    case .overlay: return availableSymbol("gauge.with.dots.needle.67percent", fallback: "speedometer")
     }
   }
 
