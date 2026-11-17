@@ -229,6 +229,9 @@
     
     NSError* _error;
     NSURLSession* _apiSession;
+    NSObject* _requestLock;          // guards _activeSession and _abandoned; nothing is called while it is held
+    NSURLSession* _activeSession;
+    BOOL _abandoned;
 }
 
 static uint64_t gLastServerInfoErrorLogMs = 0;
@@ -339,6 +342,31 @@ static const NSString* HTTPS_PORT = @"47984";
     return self;
 }
 
+- (NSObject *)requestLockObject {
+    @synchronized (self) {
+        if (_requestLock == nil) {
+            _requestLock = [[NSObject alloc] init];
+        }
+        return _requestLock;
+    }
+}
+
+- (BOOL)abandoned {
+    @synchronized ([self requestLockObject]) {
+        return _abandoned;
+    }
+}
+
+- (void)abandonRequests {
+    NSURLSession *session = nil;
+    @synchronized ([self requestLockObject]) {
+        _abandoned = YES;
+        session = _activeSession;
+    }
+    // the cancel makes the waiting thread's completion handler run: it returns at once, not at the end of the wait
+    [session invalidateAndCancel];
+}
+
 - (void) executeRequestSynchronously:(HttpRequest*)request {
     [self executeRequestSynchronously:request waitSlack:2.0 deadline:nil];
 }
@@ -356,6 +384,22 @@ static const NSString* HTTPS_PORT = @"47984";
         config.timeoutIntervalForResource = request.request.timeoutInterval + slack;
     }
     NSURLSession* urlSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+    BOOL alreadyAbandoned = NO;
+    @synchronized ([self requestLockObject]) {
+        alreadyAbandoned = _abandoned;
+        if (!alreadyAbandoned) {
+            _activeSession = urlSession;
+        }
+    }
+    if (alreadyAbandoned) {
+        [urlSession invalidateAndCancel];
+        _error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil];
+        if (request.response) {
+            request.response.statusCode = [_error code];
+            request.response.statusMessage = [_error localizedDescription];
+        }
+        return;
+    }
 
     __block NSMutableData* respData = [[NSMutableData alloc] init];
     __block NSError* requestError = nil;
@@ -412,6 +456,11 @@ static const NSString* HTTPS_PORT = @"47984";
         }
     }
     if (timeout < 0.05) {
+        @synchronized ([self requestLockObject]) {
+            if (_activeSession == urlSession) {
+                _activeSession = nil;
+            }
+        }
         _error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil];
         if (request.response) {
             request.response.statusCode = [_error code];
@@ -437,6 +486,21 @@ static const NSString* HTTPS_PORT = @"47984";
         }
     } else {
         waitResult = dispatch_semaphore_wait(requestLock, waitTime);
+    }
+    @synchronized ([self requestLockObject]) {
+        if (_activeSession == urlSession) {
+            _activeSession = nil;
+        }
+    }
+    if ([self abandoned]) {
+        // stopped on purpose (abandonRequests): not a failure of the host, and no fallback request after it
+        [urlSession invalidateAndCancel];
+        _error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil];
+        if (request.response) {
+            request.response.statusCode = [_error code];
+            request.response.statusMessage = [_error localizedDescription];
+        }
+        return;
     }
     if (waitResult != 0) {
         if (quietEnded) {

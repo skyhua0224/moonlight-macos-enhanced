@@ -1946,6 +1946,7 @@ static const CGFloat runningAnimationDuration = 1.0;
     __weak typeof(self) weakSelf = self;
     NSOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
         DiscoveryWorker *worker = [[DiscoveryWorker alloc] initWithHost:weakSelf.host uniqueId:[IdManager getUniqueId]];
+        worker.waitsForCommit = YES;   // the running app is read from the record right after
         [worker discoverHost];
         dispatch_async(dispatch_get_main_queue(), ^{
             TemporaryApp *runningApp = [weakSelf findRunningApp:weakSelf.host];

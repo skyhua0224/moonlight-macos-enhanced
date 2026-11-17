@@ -286,74 +286,78 @@ static BOOL MoonlightShouldAutoDiscoverNewHosts(void) {
         return NO;
     }
     
-    TemporaryHost *existingHost = [self getHostInDiscovery:host.uuid];
-    if (existingHost != nil) {
-        // NB: Our logic here depends on the fact that we never propagate
-        // the entire TemporaryHost to existingHost. In particular, when mDNS
-        // discovers a PC and we poll it, we will do so over HTTP which will
-        // not have accurate pair state. The fields explicitly copied below
-        // are accurate though.
+    // The look-up and the insert are one step: two mDNS answers for the same computer (a service resolves more than once, and
+    // each answer is handled on its own thread) must not both find it missing and add it twice.
+    @synchronized (_hostQueue) {
+        TemporaryHost *existingHost = [self getHostInDiscovery:host.uuid];
+        if (existingHost != nil) {
+            // NB: Our logic here depends on the fact that we never propagate
+            // the entire TemporaryHost to existingHost. In particular, when mDNS
+            // discovers a PC and we poll it, we will do so over HTTP which will
+            // not have accurate pair state. The fields explicitly copied below
+            // are accurate though.
         
-        // Update address of existing host
-        if (host.address != nil) {
-            // If this is a new address, try to add it to an empty slot
-            // instead of overwriting the existing address immediately.
-            if (![existingHost.address isEqualToString:host.address] &&
-                ![existingHost.localAddress isEqualToString:host.address] &&
-                ![existingHost.externalAddress isEqualToString:host.address] &&
-                ![existingHost.ipv6Address isEqualToString:host.address]) {
+            // Update address of existing host
+            if (host.address != nil) {
+                // If this is a new address, try to add it to an empty slot
+                // instead of overwriting the existing address immediately.
+                if (![existingHost.address isEqualToString:host.address] &&
+                    ![existingHost.localAddress isEqualToString:host.address] &&
+                    ![existingHost.externalAddress isEqualToString:host.address] &&
+                    ![existingHost.ipv6Address isEqualToString:host.address]) {
 
-                if (existingHost.address == nil) {
-                    existingHost.address = host.address;
-                }
-                else if (existingHost.localAddress == nil) {
-                    existingHost.localAddress = host.address;
-                }
-                else if (existingHost.externalAddress == nil) {
-                    existingHost.externalAddress = host.address;
-                }
-                else if (existingHost.ipv6Address == nil) {
-                    existingHost.ipv6Address = host.address;
-                }
-                else {
-                    // No empty slots, overwrite the main address
-                    existingHost.address = host.address;
+                    if (existingHost.address == nil) {
+                        existingHost.address = host.address;
+                    }
+                    else if (existingHost.localAddress == nil) {
+                        existingHost.localAddress = host.address;
+                    }
+                    else if (existingHost.externalAddress == nil) {
+                        existingHost.externalAddress = host.address;
+                    }
+                    else if (existingHost.ipv6Address == nil) {
+                        existingHost.ipv6Address = host.address;
+                    }
+                    else {
+                        // No empty slots, overwrite the main address
+                        existingHost.address = host.address;
+                    }
                 }
             }
-        }
-        if (host.localAddress != nil && ![host.localAddress isEqualToString:host.address]) {
-             if (existingHost.localAddress == nil) {
-                 existingHost.localAddress = host.localAddress;
-             }
-        }
-        if (host.ipv6Address != nil && ![host.ipv6Address isEqualToString:host.address]) {
-             if (existingHost.ipv6Address == nil) {
-                 existingHost.ipv6Address = host.ipv6Address;
-             }
-        }
-        if (host.externalAddress != nil && ![host.externalAddress isEqualToString:host.address]) {
-             if (existingHost.externalAddress == nil) {
-                 existingHost.externalAddress = host.externalAddress;
-             }
-        }
-
-        // DiscoveryWorker owns the active route and online state. mDNS can
-        // report a stale local address after a WireGuard/DNS route has already
-        // been selected, so it must not overwrite a working activeAddress or
-        // downgrade the worker's state.
-        if (existingHost.activeAddress.length == 0 && host.activeAddress.length > 0) {
-            existingHost.activeAddress = host.activeAddress;
-        }
-        return NO;
-    }
-    else {
-        @synchronized (_hostQueue) {
-            [_hostQueue addObject:host];
-            if (shouldDiscover) {
-                [_opQueue addOperation:[self createWorkerForHost:host]];
+            if (host.localAddress != nil && ![host.localAddress isEqualToString:host.address]) {
+                 if (existingHost.localAddress == nil) {
+                     existingHost.localAddress = host.localAddress;
+                 }
             }
+            if (host.ipv6Address != nil && ![host.ipv6Address isEqualToString:host.address]) {
+                 if (existingHost.ipv6Address == nil) {
+                     existingHost.ipv6Address = host.ipv6Address;
+                 }
+            }
+            if (host.externalAddress != nil && ![host.externalAddress isEqualToString:host.address]) {
+                 if (existingHost.externalAddress == nil) {
+                     existingHost.externalAddress = host.externalAddress;
+                 }
+            }
+
+            // DiscoveryWorker owns the active route and online state. mDNS can
+            // report a stale local address after a WireGuard/DNS route has already
+            // been selected, so it must not overwrite a working activeAddress or
+            // downgrade the worker's state.
+            if (existingHost.activeAddress.length == 0 && host.activeAddress.length > 0) {
+                existingHost.activeAddress = host.activeAddress;
+            }
+            return NO;
         }
-        return YES;
+        else {
+            @synchronized (_hostQueue) {
+                [_hostQueue addObject:host];
+                if (shouldDiscover) {
+                    [_opQueue addOperation:[self createWorkerForHost:host]];
+                }
+            }
+            return YES;
+        }
     }
 }
 
@@ -403,7 +407,14 @@ static BOOL MoonlightShouldAutoDiscoverNewHosts(void) {
     // Since this is on a background thread, we do not need to use the opQueue
     DiscoveryWorker* worker = (DiscoveryWorker*)[self createWorkerForHost:host];
     worker.probeOnly = YES;   // this record is built from a plain-HTTP answer: it must not overwrite the stored one
+    // The record has no uuid until the round has been committed: discoverHost returns at the first answer otherwise, and
+    // the new computer would be dropped below for having no uuid (it never reached the list).
+    worker.waitsForCommit = YES;
     [worker discoverHost];
+    if (host.uuid.length == 0) {
+        Log(LOG_I, @"Host found through MDNS did not identify itself, not added: %@", host.name ?: @"");
+        return;
+    }
     TemporaryHost *knownHost = [self getHostInDiscovery:host.uuid];
     if (knownHost == nil && !MoonlightShouldAutoDiscoverNewHosts()) {
         Log(LOG_I, @"Ignoring newly discovered host because automatic discovery is disabled: %@", host.name ?: @"");
