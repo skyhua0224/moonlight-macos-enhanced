@@ -52,6 +52,13 @@ typedef void (^MLHttpDataCompletion)(NSData * _Nullable data,
 - (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack;
 - (void) executeRequestSynchronously:(HttpRequest*)request waitSlack:(NSTimeInterval)slack deadline:(NSDate *)deadline;
 
+/// Ends the request this manager has in flight, and every later one, at once (a long wait must not hold up whoever stops it).
+/// The waiting thread returns with NSURLErrorCancelled in the response's status code, and the fallback request is not tried.
+/// Safe from any thread.
+- (void) abandonRequests;
+/// YES when abandonRequests ended the last request.
+@property (nonatomic, readonly) BOOL abandoned;
+
 /// YES for a transfer nobody is waiting for (a cover picture): it is sent as background traffic, and the wait ends
 /// the moment the app goes quiet (a launch is pending or a stream is open, MLNetworkQuiet), so it never competes with
 /// the connection the user asked for. `request.timeoutInterval` is then an idle timeout and `waitSlack` the room for

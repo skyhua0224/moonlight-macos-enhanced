@@ -17,6 +17,12 @@
 /// showed 未配对 from 08:57:29 until the real worker's next round at 08:57:54.
 @property(nonatomic) BOOL probeOnly;
 
+/// YES for a caller that reads the answer right after -discoverHost (an mDNS result that has no uuid yet, the running-app
+/// state of an open host): -discoverHost then returns only once the round has been committed into the host record
+/// (uuid, name, pair state, current game), not as soon as the first address answered. The worker loop leaves it NO:
+/// it wants the early online publication, and nothing reads the record straight after.
+@property(nonatomic) BOOL waitsForCommit;
+
 - (id) initWithHost:(TemporaryHost*)host uniqueId:(NSString*)uniqueId;
 - (void) discoverHost;
 - (TemporaryHost*) getHost;

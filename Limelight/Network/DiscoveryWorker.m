@@ -35,6 +35,8 @@ static const int kProbeSlots = 8;
     BOOL _fsEvents;
     NSInteger _fsSeq;
     NSInteger _raceEpoch;
+    NSObject *_pollLock;              // guards _pollManager only
+    HttpManager *_pollManager;        // the events long poll in flight, so that -cancel can end it
 }
 
 static const NSTimeInterval ADDRESS_FAILURE_COOLDOWN_SEC = 30.0;
@@ -51,11 +53,23 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     self = [super init];
     _host = host;
     _uniqueId = uniqueId;
+    _pollLock = [[NSObject alloc] init];
     return self;
 }
 
 - (TemporaryHost*) getHost {
     return _host;
+}
+
+/// The events long poll holds a request open for up to 25 s: cancelling the worker ends that request at once, otherwise
+/// whoever waits for the worker (stopDiscoveryBlocking before a pairing) waits for the end of the poll.
+- (void)cancel {
+    [super cancel];
+    HttpManager *polling = nil;
+    @synchronized (_pollLock) {
+        polling = _pollManager;
+    }
+    [polling abandonRequests];
 }
 
 - (void)main {
@@ -159,10 +173,25 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     HttpManager *manager = [[HttpManager alloc] initWithHost:address uniqueId:_uniqueId serverCert:cert];
     ServerInfoResponse *response = [[ServerInfoResponse alloc] init];
     NSURLRequest *request = [manager newServerInfoWaitRequestAfterSeq:seqSnapshot timeoutSec:25];
+    @synchronized (_pollLock) {
+        _pollManager = manager;
+    }
+    if (self.cancelled) {
+        // -cancel came before the manager was published: it had nothing to end
+        @synchronized (_pollLock) { _pollManager = nil; }
+        return NO;
+    }
     [manager executeRequestSynchronously:[HttpRequest requestForResponse:response
                                                           withUrlRequest:request
                                            fallbackError:401
                                            fallbackRequest:[manager newHttpServerInfoRequest:YES]]];
+    @synchronized (_pollLock) {
+        _pollManager = nil;
+    }
+    if (self.cancelled || manager.abandoned) {
+        // stopped on purpose: the answer (an error) says nothing about the host or its events feature
+        return NO;
+    }
     NSTimeInterval elapsed = -[started timeIntervalSinceNow];
     @synchronized (self) {
         BOOL valid = [self checkResponse:response];
@@ -504,12 +533,9 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     
     __block BOOL committed = NO;
     NSLock *commitLock = [[NSLock alloc] init];
-    void (^commit)(void) = ^{
-        [commitLock lock];
-        BOOL run = !committed;
-        committed = YES;
-        [commitLock unlock];
-        if (!run || _raceEpoch != epoch) {
+    dispatch_semaphore_t commitDone = dispatch_semaphore_create(0);
+    void (^commitRound)(void) = ^{
+        if (_raceEpoch != epoch) {
             return;
         }
         [lock lock];
@@ -656,6 +682,19 @@ static dispatch_once_t gUnpairedObservationOnceToken;
             }
         });
     };
+    void (^commit)(void) = ^{
+        // the round is claimed here: only the winning call commits and signals, and a caller that waits for the commit
+        // (waitsForCommit) waits for that signal whichever of the two calls won
+        [commitLock lock];
+        BOOL run = !committed;
+        committed = YES;
+        [commitLock unlock];
+        if (!run) {
+            return;
+        }
+        commitRound();
+        dispatch_semaphore_signal(commitDone);
+    };
     dispatch_group_notify(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), commit);
 
     BOOL groupDone = NO;
@@ -687,6 +726,16 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     }
     if (groupDone) {
         commit();
+    }
+    if (self.waitsForCommit) {
+        // the first answer is in and the rest of the addresses are still out: the caller reads the record next, so wait for
+        // the round's commit (it runs when the last probe ends, each one is bounded by its own budget)
+        while (dispatch_semaphore_wait(commitDone, dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC)) != 0) {
+            if (self.cancelled) {
+                _raceEpoch += 1;
+                return;
+            }
+        }
     }
 }
 
