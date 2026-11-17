@@ -118,6 +118,18 @@ extension View {
     }
   }
 
+  /// The sidebar icon's arrival pulse (keyframe animation, macOS 14); none before it.
+  @ViewBuilder
+  func deckArrivalMark(token: Int) -> some View {
+    if #available(macOS 14.0, *), DeckOS.level >= 14 { self.modifier(DeckArrivalMark(token: token)) } else { self }
+  }
+
+  /// The 配对 button's nudge (keyframe animation, macOS 14); none before it.
+  @ViewBuilder
+  func deckPairNudge(hostID: String) -> some View {
+    if #available(macOS 14.0, *), DeckOS.level >= 14 { self.modifier(DeckPairNudge(hostID: hostID)) } else { self }
+  }
+
   /// A capsule button border from macOS 14; the system's default shape before.
   @ViewBuilder
   func deckCapsuleBorder() -> some View {

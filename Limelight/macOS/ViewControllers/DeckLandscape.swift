@@ -490,7 +490,7 @@ struct DeckHeroHeader: View {
           }
           .controllerButtonStyle(DeckHeroPrimaryStyle())
           .controllerKey("primary")
-          .modifier(DeckPairNudge(hostID: host.id))
+          .deckPairNudge(hostID: host.id)
           DeckHeroRound(symbol: "slider.horizontal.3", help: DL("deck.settings")) { model.actions.settings?() }
           DeckHeroRound(symbol: "ellipsis", help: DL("deck.more"), padMenu: { DeckMoreMenu.menu(host, model) }) { DeckMenuPresenter.pop(DeckMoreMenu.menu(host, model)) }
         }

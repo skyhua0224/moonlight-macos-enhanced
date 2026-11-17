@@ -510,7 +510,7 @@ struct DeckSidebarView: View {
     let selected = model.selected == host.id
     return HStack(spacing: 10) {
       DeckHostIcon(host: host, size: 32, muted: !host.online, selected: selected)
-        .modifier(DeckArrivalMark(token: model.arrivedID == host.id && host.paired ? model.arrivedToken : 0))
+        .deckArrivalMark(token: model.arrivedID == host.id && host.paired ? model.arrivedToken : 0)
       VStack(alignment: .leading, spacing: 1) {
         Text(host.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
         Text(deckSubtitle(host)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
