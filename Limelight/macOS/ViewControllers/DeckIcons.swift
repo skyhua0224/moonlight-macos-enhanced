@@ -134,7 +134,6 @@ struct DeckHostIcon: View {
 
 /// Small popover in the style of the Reminders / Shortcuts list icon picker: a preview, a row of
 /// colours, a grid of symbols, and a way to use a picture or go back to the default.
-@available(macOS 14.0, *)
 struct DeckIconPicker: View {
   let host: DeckHost
   let onChange: () -> Void
@@ -229,7 +228,6 @@ struct DeckIconPicker: View {
 /// picker (SF Symbol and colour, or a picture), and the choice is the one the sidebar tile uses too. A
 /// pencil badge shows on hover. The small icons in the info rows are plain system symbols and are not
 /// editable.
-@available(macOS 14.0, *)
 struct DeckEditableHostIcon: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel

@@ -92,7 +92,6 @@ struct DeckSectionEntry: Codable, Equatable, Identifiable {
   var visible: Bool
 }
 
-@available(macOS 14.0, *)
 final class DeckHomeConfig: ObservableObject {
   static let shared = DeckHomeConfig()
   private static let styleKey = "MLHomeStyle"
@@ -236,7 +235,6 @@ struct DeckResolvedHome {
   var large: Bool
 }
 
-@available(macOS 14.0, *)
 extension DeckAppsModel {
   /// 自动 is the default page, and 大图 is the default layout: it resolves to 游戏库 (the 大图 hero) for every computer, off,
   /// unpaired or with few apps too. 简洁 (the compact card layout) stays one tap away in 自定义主页.
@@ -312,7 +310,6 @@ extension DeckAppsModel {
 
 // MARK: - Pairing state (inline in the card, no alert)
 
-@available(macOS 14.0, *)
 final class DeckPairingState: ObservableObject {
   static let shared = DeckPairingState()
   /// Pairing was started for these hosts (waiting for the PIN).
@@ -342,7 +339,6 @@ final class DeckPairingState: ObservableObject {
 
 // MARK: - Desktop thumbnail and running art
 
-@available(macOS 14.0, *)
 extension DeckArt {
   /// The host's own thumbnail (Foundation Sunshine, later): the second fallback.
   static func thumbURL(_ uuid: String) -> URL {
@@ -394,7 +390,7 @@ extension DeckArt {
     let apps = host.raw.appList.compactMap { $0 as? TemporaryApp }
     let uuid = host.id
     let candidates: [(String, Bool)] = apps.map { ($0.id ?? "", deckIsDesktopLike($0)) }
-    return await Task.detached(priority: .userInitiated) {
+    let loaded: DeckSendable<NSImage>? = await Task.detached(priority: .userInitiated) { () -> DeckSendable<NSImage>? in
       var best: (URL, Date, Bool)?
       for (appId, desktop) in candidates {
         guard let url = StreamBackdropStore.frameURL(host: uuid, app: appId),
@@ -404,11 +400,12 @@ extension DeckArt {
       let url = best?.0 ?? thumbURL(uuid)
       guard FileManager.default.fileExists(atPath: url.path) else { return nil }
       let key = "frame/\(url.path)/\(modified(url))/\(Int(displayWidth / 100))" as NSString
-      if let hit = previews.object(forKey: key) { return hit }
+      if let hit = previews.object(forKey: key) { return DeckSendable(hit) }
       guard let cg = decode(url, maxPixel: 1280), let image = frosted(cg, radius: 25, displayWidth: displayWidth, saturation: 1.15) else { return nil }
       previews.setObject(image, forKey: key)
-      return image
+      return DeckSendable(image)
     }.value
+    return loaded?.value
   }
 
   /// The host's wallpaper: the poster of its Desktop app. A Foundation Sunshine host on Windows serves
@@ -425,7 +422,7 @@ extension DeckArt {
     let scale = await MainActor.run { NSScreen.main?.backingScaleFactor ?? 2 }
     let key = "wall/\(file)/\(modified(url))/\(Int(displayWidth / 100))" as NSString
     if let hit = previews.object(forKey: key) { return hit }
-    let image: NSImage? = await Task.detached(priority: .userInitiated) {
+    let loaded: DeckSendable<NSImage>? = await Task.detached(priority: .userInitiated) { () -> DeckSendable<NSImage>? in
       guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
             let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
             let width = props[kCGImagePropertyPixelWidth] as? Double,
@@ -433,10 +430,11 @@ extension DeckArt {
             width >= height * 1.2,
             let cg = decode(url, maxPixel: displayWidth < 800 ? 1280 : 2400) else { return nil }
       if Double(cg.width) * 1.5 < Double(displayWidth * scale) {
-        return frosted(cg, radius: 8, displayWidth: displayWidth, saturation: 1.05)
+        return frosted(cg, radius: 8, displayWidth: displayWidth, saturation: 1.05).map { DeckSendable($0) }
       }
-      return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+      return DeckSendable(NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)))
     }.value
+    let image = loaded?.value
     if let image { previews.setObject(image, forKey: key) }
     return image
   }
@@ -479,7 +477,8 @@ extension DeckArt {
     // A computer that is off shows its picture in grey. Done to the picture itself, once: a live saturation
     // filter on a page that is drawn scaled came out at the wrong size.
     guard desaturate, let found else { return found }
-    return await Task.detached(priority: .userInitiated) { grayscale(found) }.value
+    let source = DeckSendable(found)
+    return await Task.detached(priority: .userInitiated) { DeckSendable(grayscale(source.value)) }.value.value
   }
 
   private static func grayscale(_ image: NSImage) -> NSImage {
@@ -501,7 +500,6 @@ extension DeckArt {
 }
 
 /// What you will see when you connect. Without a thumbnail a small card with the platform glyph.
-@available(macOS 14.0, *)
 struct DeckDesktopThumb: View {
   let host: DeckHost
   var version = 0
@@ -554,7 +552,6 @@ struct DeckDesktopThumb: View {
 
 /// Pairing in progress, in the place of the thumbnail: a clear title, the PIN in large digit boxes
 /// (the way Apple shows a verification code), and where to enter it.
-@available(macOS 14.0, *)
 struct DeckPairingPanel: View {
   let host: DeckHost
   let pin: String?
@@ -591,7 +588,6 @@ struct DeckPairingPanel: View {
 }
 
 /// R2: the running game in the thumbnail's place: the host's landscape art, or the poster enlarged.
-@available(macOS 14.0, *)
 struct DeckRunningArt: View {
   let app: TemporaryApp
   var version = 0
@@ -617,7 +613,6 @@ struct DeckRunningArt: View {
 // MARK: - The computer card
 
 /// The one quiet line under a computer's name, in every state and both layouts.
-@available(macOS 14.0, *)
 func deckCardStatus(_ host: DeckHost, pairing: DeckPairingState) -> String {
   if !host.online {
     // 离线 · 上次在线 3 小时前, or 从未连接
@@ -631,7 +626,6 @@ func deckCardStatus(_ host: DeckHost, pairing: DeckPairingState) -> String {
   return deckStatusLine(host)
 }
 
-@available(macOS 14.0, *)
 struct DeckComputerCard: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -780,7 +774,6 @@ struct DeckComputerCard: View {
 
 // MARK: - Host info and recent sessions
 
-@available(macOS 14.0, *)
 struct DeckHostInfoCard: View {
   let host: DeckHost
   var kindSeen: Bool?
@@ -838,7 +831,6 @@ struct DeckHostInfoCard: View {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckRecentSessions: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -879,7 +871,6 @@ struct DeckRecentSessions: View {
 
 // MARK: - The page
 
-@available(macOS 14.0, *)
 final class DeckHomeEditState: ObservableObject {
   static let shared = DeckHomeEditState()
   /// While a row is being dragged: which one, and the row it would be dropped before.
@@ -898,7 +889,6 @@ final class DeckHomeEditState: ObservableObject {
 
 /// The page. The width comes straight from the live layout, not from a copy kept in state: a copy
 /// that missed a window resize left the content wider than the window and pushed it under the sidebar.
-@available(macOS 14.0, *)
 struct DeckComputerView: View {
   @ObservedObject var model: DeckAppsModel
 
@@ -912,7 +902,6 @@ private struct DeckContentHeightKey: PreferenceKey {
   static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-@available(macOS 14.0, *)
 struct DeckComputerBody: View {
   @ObservedObject var model: DeckAppsModel
   /// The real width of the page area.
@@ -1085,7 +1074,7 @@ struct DeckComputerBody: View {
       .background(GeometryReader { proxy in
         Color.clear
           .onAppear { DeckLayoutProbe.record(proxy.frame(in: .global)) }
-          .onChange(of: proxy.frame(in: .global)) { _, frame in DeckLayoutProbe.record(frame) }
+          .deckOnChange(of: proxy.frame(in: .global)) { _, frame in DeckLayoutProbe.record(frame) }
       })
     }
     .onPreferenceChange(DeckContentHeightKey.self) { if $0 > 0 { contentHeight = $0 } }
@@ -1107,7 +1096,7 @@ struct DeckComputerBody: View {
       }
     }
     .onAppear { goodWidth = windowWidth >= DeckLayoutProbe.minimumWidth ? windowWidth : goodWidth; config.autoPageScale = pageScaleValue; config.autoTileSize = autoTileValue }
-    .onChange(of: windowWidth) { _, new in
+    .deckOnChange(of: windowWidth) { _, new in
       guard new >= DeckLayoutProbe.minimumWidth else { return }   // a transient sliver is not a resize
       goodWidth = new
       #if MLC_CONCEPT_HARNESS
@@ -1118,9 +1107,9 @@ struct DeckComputerBody: View {
       #endif
     }
     // the shown "automatic" values are only for the sliders; written when they really moved
-    .onChange(of: pageScaleValue) { _, value in if abs(config.autoPageScale - value) > 0.002 { config.autoPageScale = value } }
-    .onChange(of: autoTileValue) { _, value in if abs(config.autoTileSize - value) > 0.5 { config.autoTileSize = value } }
-    .scrollClipDisabled(heroMode)
+    .deckOnChange(of: pageScaleValue) { _, value in if abs(config.autoPageScale - value) > 0.002 { config.autoPageScale = value } }
+    .deckOnChange(of: autoTileValue) { _, value in if abs(config.autoTileSize - value) > 0.5 { config.autoTileSize = value } }
+    .deckScrollClipDisabled(heroMode)
     .deckNoTopEdgeEffect(heroMode)
     .background(Color(nsColor: .windowBackgroundColor))
     .ignoresSafeArea(.container, edges: heroMode ? .top : [])
@@ -1232,15 +1221,13 @@ struct DeckComputerBody: View {
         let tile = tileBase(landscape: landscapeTiles)
         let factor = tileFactor(landscape: landscapeTiles)
         // the cells are LAID OUT at tile * factor (real sizes, drawn by the system at that size), not scaled afterwards
-        DeckTileGrid(tile: tile * factor, factor: 1, columns: columnCount) {
-          ForEach(apps, id: \.deckKey) { app in
-            DeckAppCell(app: app, model: model,
-                        subtitle: resolved.large && !landscapeTiles ? deckFacts(for: app, model: model, running: false, includeSource: false) : [],
-                        highlightRunning: ringRunning, suppressRunning: repeated, runningControls: appControls,
-                        landscape: landscapeTiles)
-              .environment(\.deckScale, factor)
-              .frame(width: tile * factor)
-          }
+        DeckTiles(items: apps, id: \.deckKey, tile: tile * factor, columns: columnCount) { app in
+          DeckAppCell(app: app, model: model,
+                      subtitle: resolved.large && !landscapeTiles ? deckFacts(for: app, model: model, running: false, includeSource: false) : [],
+                      highlightRunning: ringRunning, suppressRunning: repeated, runningControls: appControls,
+                      landscape: landscapeTiles)
+            .environment(\.deckScale, factor)
+            .frame(width: tile * factor)
         }
         // only a change of the column count is eased (short, interruptible spring); the size follows the window
         .animation(.spring(response: 0.28, dampingFraction: 0.9), value: columnCount)
@@ -1293,7 +1280,6 @@ struct DeckComputerBody: View {
 
 /// Owns the popover. It hangs off a button in the window toolbar (top right), so it opens downward
 /// inside the window instead of sticking out of it.
-@available(macOS 14.0, *)
 @objc(MLDeckHomeCustomizer)
 public final class DeckHomeCustomizer: NSObject, NSPopoverDelegate {
   @objc public static let shared = DeckHomeCustomizer()
@@ -1340,9 +1326,15 @@ public final class DeckHomeCustomizer: NSObject, NSPopoverDelegate {
       }
     })
     let controller = NSHostingController(rootView: panel)
-    controller.sizingOptions = []
-    let fit = controller.sizeThatFits(in: CGSize(width: DeckCustomizePanel.width, height: maxHeight))
-    pop.contentSize = NSSize(width: DeckCustomizePanel.width, height: min(max(fit.height, 200), maxHeight))
+    let fitHeight: CGFloat
+    if #available(macOS 13.0, *) {
+      controller.sizingOptions = []
+      fitHeight = controller.sizeThatFits(in: CGSize(width: DeckCustomizePanel.width, height: maxHeight)).height
+    } else {
+      // before macOS 13 the hosting view reports its size itself
+      fitHeight = controller.view.fittingSize.height
+    }
+    pop.contentSize = NSSize(width: DeckCustomizePanel.width, height: min(max(fitHeight, 200), maxHeight))
     pop.behavior = .transient
     pop.contentViewController = controller
     pop.delegate = self
@@ -1351,7 +1343,6 @@ public final class DeckHomeCustomizer: NSObject, NSPopoverDelegate {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckCustomizePanel: View {
   @ObservedObject var config: DeckHomeConfig
   @ObservedObject var edit: DeckHomeEditState
@@ -1373,7 +1364,7 @@ struct DeckCustomizePanel: View {
       content
         .background(GeometryReader { proxy in Color.clear.preference(key: DeckCustomizeHeightKey.self, value: proxy.size.height) })
     }
-    .scrollBounceBehavior(.basedOnSize)
+    .deckBounceBasedOnSize()
     .controllerBackHandler(active: true) { DeckHomeCustomizer.shared.close() }
     .frame(width: Self.width)
     .frame(maxHeight: maxHeight)
@@ -1441,17 +1432,20 @@ struct DeckCustomizePanel: View {
     }
     .pickerStyle(.segmented)
     .labelsHidden()
-    return ViewThatFits(in: .horizontal) {
-      HStack(spacing: 10) {
-        Text(title).font(.system(size: 13)).lineLimit(1).fixedSize()
-        Spacer(minLength: 8)
-        picker.fixedSize()
-      }
-      VStack(alignment: .leading, spacing: 6) {
-        Text(title).font(.system(size: 13))
-        picker.frame(maxWidth: .infinity)
-      }
+    let beside = HStack(spacing: 10) {
+      Text(title).font(.system(size: 13)).lineLimit(1).fixedSize()
+      Spacer(minLength: 8)
+      picker.fixedSize()
     }
+    let below = VStack(alignment: .leading, spacing: 6) {
+      Text(title).font(.system(size: 13))
+      picker.frame(maxWidth: .infinity)
+    }
+    // ViewThatFits (macOS 13) measures; before it the width is estimated from the texts: the label, and every segment with its padding
+    let font = NSFont.systemFont(ofSize: 13)
+    func width(_ text: String) -> CGFloat { (text as NSString).size(withAttributes: [.font: font]).width }
+    let needed = width(title) + 18 + all.reduce(CGFloat(0)) { $0 + width(label($1)) + 24 }
+    return deckFitsBesideOrBelow(beside: beside, below: below, estimatedFit: needed <= Self.width - 32)
   }
 
   private func row(_ entry: DeckSectionEntry) -> some View {
@@ -1466,7 +1460,7 @@ struct DeckCustomizePanel: View {
       Image(systemName: "line.3.horizontal").font(.system(size: 12, weight: .semibold)).foregroundStyle(.tertiary)
         .frame(width: 24, height: 24).contentShape(Rectangle())
         .deckTouchTarget()
-        .draggable(entry.id.rawValue) { DeckDragChip(title: entry.id.title, symbol: entry.id.symbol) }
+        .deckDraggable(entry.id.rawValue) { DeckDragChip(title: entry.id.title, symbol: entry.id.symbol) }
         .controllerFocusMenu(key: "section:\(entry.id.rawValue)", radius: 8) { (title: entry.id.title, menu: reorderMenu(entry)) }
     }
     .padding(.horizontal, 8)
@@ -1474,10 +1468,9 @@ struct DeckCustomizePanel: View {
     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(lifted ? Color(nsColor: .selectedContentBackgroundColor).opacity(0.18) : Color.clear))
     .scaleEffect(lifted ? 1.03 : 1)
     .shadow(color: .black.opacity(lifted ? 0.3 : 0), radius: 8, y: 4)
-    .dropDestination(for: String.self) { items, _ in
-      if let raw = items.first, let id = DeckSectionID(rawValue: raw) { move(id, before: entry.id) }
+    .deckDropString { raw in
+      if let id = DeckSectionID(rawValue: raw) { move(id, before: entry.id) }
       edit.dropBefore = nil
-      return true
     } isTargeted: { targeted in
       edit.dropBefore = targeted ? entry.id : (edit.dropBefore == entry.id ? nil : edit.dropBefore)
     }
@@ -1551,7 +1544,6 @@ struct DeckDragChip: View {
 
 /// The small zoom control at the right end of the 应用 header (Finder / Photos): two grid glyphs and a
 /// slider. It is the same setting as 卡片大小 in 自定义主页, so the two always agree.
-@available(macOS 14.0, *)
 struct DeckTileZoom: View {
   @ObservedObject private var config = DeckHomeConfig.shared
 
@@ -1575,7 +1567,6 @@ struct DeckTileZoom: View {
 @objc(MLDeckZoom)
 public final class DeckZoom: NSObject {
   @objc public static func stepTiles(_ direction: Int) {
-    guard #available(macOS 14.0, *) else { return }
     let config = DeckHomeConfig.shared
     let base = config.adaptiveTiles ? config.autoTileSize : config.tileSize
     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -1664,6 +1655,42 @@ public final class DeckLayoutProbe: NSObject {
   static func record(_ rect: CGRect) {
     frame = rect
     frameString = String(format: "%.1f,%.1f,%.1f,%.1f", rect.minX, rect.minY, rect.width, rect.height)
+  }
+}
+
+/// The tile grid of the home: DeckTileGrid (a Layout, macOS 13), and on macOS 12 rows of stacks with the same pitch.
+/// The tiles line up the same way; before macOS 13 they do not slide when the column count changes.
+struct DeckTiles<Item, ID: Hashable, Cell: View>: View {
+  let items: [Item]
+  let id: KeyPath<Item, ID>
+  let tile: CGFloat
+  let columns: Int
+  let cell: (Item) -> Cell
+
+  init(items: [Item], id: KeyPath<Item, ID>, tile: CGFloat, columns: Int, @ViewBuilder cell: @escaping (Item) -> Cell) {
+    self.items = items
+    self.id = id
+    self.tile = tile
+    self.columns = columns
+    self.cell = cell
+  }
+
+  var body: some View {
+    if #available(macOS 13.0, *), DeckOS.level >= 13 {
+      DeckTileGrid(tile: tile, factor: 1, columns: columns) {
+        ForEach(items, id: id) { cell($0) }
+      }
+    } else {
+      let cols = max(1, columns)
+      let rows = stride(from: 0, to: items.count, by: cols).map { Array(items[$0..<min($0 + cols, items.count)]) }
+      VStack(alignment: .leading, spacing: 28) {
+        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+          HStack(alignment: .top, spacing: 24) {
+            ForEach(row, id: id) { cell($0) }
+          }
+        }
+      }
+    }
   }
 }
 

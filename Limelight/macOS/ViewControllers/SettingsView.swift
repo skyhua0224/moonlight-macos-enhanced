@@ -251,15 +251,16 @@ struct SettingsView: View {
 
   @ViewBuilder
   private var settingsRoot: some View {
-    if #available(macOS 13.0, *) {
+    if #available(macOS 13.0, *), DeckOS.level >= 13 {
       ModernSettingsRoot(selectedPane: $selectedPane, settingsModel: settingsModel)
     } else {
+      // macOS 12: no NavigationSplitView; the same sidebar and the same page host (pages kept between clicks) beside it
       HSplitView {
         SettingsSidebar(selection: $selectedPane, settingsModel: settingsModel)
           .frame(minWidth: 188, idealWidth: 208, maxWidth: 228)
-        SettingsDetail(pane: selectedPane)
-          .environmentObject(settingsModel)
+        SettingsPaneHost(pane: selectedPane, settingsModel: settingsModel)
           .frame(minWidth: 650, maxWidth: .infinity, maxHeight: .infinity)
+          .background(Color(nsColor: .windowBackgroundColor))
       }
     }
   }
@@ -554,7 +555,6 @@ final class SettingsPaneContainerView: NSView {
   }
 }
 
-@available(macOS 13.0, *)
 private struct SettingsPaneHost: NSViewRepresentable {
   let pane: SettingsPaneType
   let settingsModel: SettingsModel
@@ -576,7 +576,7 @@ private struct SettingsPaneHost: NSViewRepresentable {
     view.makePage = { pane in
       let host = NSHostingView(rootView: SettingsPaneRoot(pane: pane, settingsModel: model))
       // The page fills the column; it has no say in the size of the window.
-      host.sizingOptions = []
+      if #available(macOS 13.0, *) { host.sizingOptions = [] }
       return host
     }
     SettingsPaneContainerView.current = view

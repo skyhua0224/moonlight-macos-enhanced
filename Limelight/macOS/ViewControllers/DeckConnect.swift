@@ -44,7 +44,6 @@ enum DeckConnectStore {
   }
 }
 
-@available(macOS 14.0, *)
 enum DeckConnect {
   struct DisplayChoice: Identifiable { let id: String; let name: String }
 

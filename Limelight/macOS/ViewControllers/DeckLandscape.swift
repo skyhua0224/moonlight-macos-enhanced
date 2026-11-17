@@ -16,7 +16,6 @@ import SwiftUI
 
 /// Landscape art for an app, tuned for a card whose bottom band is dark: the host's hero when it has
 /// one, otherwise the poster enlarged and blurred with the poster itself above the band.
-@available(macOS 14.0, *)
 struct DeckCardArt: View {
   let app: TemporaryApp
   var version = 0
@@ -62,7 +61,6 @@ struct DeckCardArt: View {
 }
 
 /// One line under the title of a card: while it runs, how long; otherwise when it was last played and for how long.
-@available(macOS 14.0, *)
 func deckCardLine(_ app: TemporaryApp, running: Bool, sessions: [DeckSession] = []) -> String {
   let info = app.deckInfo
   // a host that does not send last-played times (plain Sunshine): what this client recorded
@@ -78,7 +76,6 @@ func deckCardLine(_ app: TemporaryApp, running: Bool, sessions: [DeckSession] = 
   return parts.joined(separator: " · ")
 }
 
-@available(macOS 14.0, *)
 struct DeckLandscapeTile: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel
@@ -154,7 +151,6 @@ struct DeckLandscapeTile: View {
 }
 
 /// The 大屏模式 entry as a 16:9 card, with its name inside the bottom like the others.
-@available(macOS 14.0, *)
 struct DeckBigScreenCard: View {
   let app: TemporaryApp
   @ObservedObject var model: DeckAppsModel
@@ -190,7 +186,6 @@ struct DeckBigScreenCard: View {
   }
 }
 
-@available(macOS 14.0, *)
 extension View {
   /// A tile of the app wall for the pad: A opens the app, Menu lists the old app menu.
   func deckPadTarget(_ app: TemporaryApp, _ model: DeckAppsModel, radius: CGFloat) -> some View {
@@ -205,7 +200,6 @@ extension View {
 
 /// A bold title with a chevron, and one row of tiles that scrolls sideways (the last one cut off at the
 /// edge). The chevron opens the whole shelf as a grid.
-@available(macOS 14.0, *)
 struct DeckShelf: View {
   let title: String
   let apps: [TemporaryApp]
@@ -235,8 +229,8 @@ struct DeckShelf: View {
       // the same grid as 应用 (one row, or all rows when the › is open): one list of cards in one layout, so a
       // change of the column count slides the cards instead of rebuilding rows
       // real sizes: the cards are laid out at tile * factor and draw their own metrics at that size (no scale transform)
-      DeckTileGrid(tile: tile * factor, factor: 1, columns: count) {
-        ForEach(expanded ? apps : Array(apps.prefix(count)), id: \.deckKey) { app in cell(app).environment(\.deckScale, factor).frame(width: tile * factor) }
+      DeckTiles(items: expanded ? apps : Array(apps.prefix(count)), id: \.deckKey, tile: tile * factor, columns: count) { app in
+        cell(app).environment(\.deckScale, factor).frame(width: tile * factor)
       }
       .padding(.horizontal, DeckInset.page)
       .animation(.spring(response: 0.28, dampingFraction: 0.9), value: count)
@@ -316,7 +310,6 @@ struct DeckHeroPrimaryStyle: ButtonStyle {
 
 /// A round glass button next to the primary one (串流设置, 更多): the same height as the connect button, a
 /// tooltip, and an accessibility label.
-@available(macOS 14.0, *)
 struct DeckHeroRound: View {
   let symbol: String
   let help: String
@@ -344,7 +337,6 @@ struct DeckHeroRound: View {
 
 /// 大图: the host's wallpaper runs across the top and fades into the page; the computer's icon, name, one
 /// line and 连接 sit on it, bottom left. Offline or unpaired the picture is dimmed and 唤醒 / 配对 leads.
-@available(macOS 14.0, *)
 struct DeckHeroHeader: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -525,14 +517,13 @@ extension View {
   /// macOS 26 draws a soft scroll-edge effect under the toolbar where content scrolls beneath it; over a
   /// full-bleed hero that reads as a dark band across the top of the picture, so it is turned off there.
   @ViewBuilder func deckNoTopEdgeEffect(_ off: Bool) -> some View {
-    if #available(macOS 26.0, *), off { self.scrollEdgeEffectHidden(true, for: .top) } else { self }
+    if #available(macOS 26.0, *), DeckOS.level >= 26, off { self.scrollEdgeEffectHidden(true, for: .top) } else { self }
   }
 }
 
 /// A computer that is off or not paired, in a native grouped form (the System Settings look): 地址, 状态,
 /// 设备, each a section of labelled rows with SF Symbols. Values are selectable and can be copied with the
 /// small button or the context menu.
-@available(macOS 14.0, *)
 struct DeckOfflineInfo: View {
   enum Parts { case all, addresses, rest, status, device }
   let host: DeckHost
@@ -555,7 +546,7 @@ struct DeckOfflineInfo: View {
   private var showStatus: Bool { parts == .all || parts == .rest || parts == .status }
   private var showDevice: Bool { parts == .all || parts == .rest || parts == .device }
 
-  /// The grouped-form look (section header, rounded group of LabeledContent rows with hairlines), built from
+  /// The grouped-form look (section header, rounded group of value rows with hairlines), built from
   /// plain SwiftUI so it scales with the page: the system Form is backed by an AppKit table, which does not
   /// survive being drawn inside a scaled page.
   var body: some View {
@@ -577,35 +568,35 @@ struct DeckOfflineInfo: View {
       }
       if showStatus {
         group(DL("deck.info.status")) {
-          row { LabeledContent { Text(DeckTime.relative(host.facts.lastSeen ?? host.facts.lastConnected) ?? DL("deck.neverConnected")) } label: { Label(DL("deck.fact.lastOnline"), systemImage: "clock") } }
-          row { LabeledContent { Text(lastStream) } label: { Label(DL("deck.fact.lastStream"), systemImage: "play.circle") } }
-          row { LabeledContent { Text(host.paired ? DL("deck.paired") : DL("deck.unpaired")) } label: { Label(DL("deck.info.pairing"), systemImage: host.paired ? "link" : "link.badge.plus") } }
-          row { LabeledContent { Text(model.apps.isEmpty ? DL("deck.none") : DLf("deck.appCount", model.apps.count)) } label: { Label(DL("deck.info.cachedApps"), systemImage: "square.grid.2x2") } }
+          row { DeckValueRow { Text(DeckTime.relative(host.facts.lastSeen ?? host.facts.lastConnected) ?? DL("deck.neverConnected")) } label: { Label(DL("deck.fact.lastOnline"), systemImage: "clock") } }
+          row { DeckValueRow { Text(lastStream) } label: { Label(DL("deck.fact.lastStream"), systemImage: "play.circle") } }
+          row { DeckValueRow { Text(host.paired ? DL("deck.paired") : DL("deck.unpaired")) } label: { Label(DL("deck.info.pairing"), systemImage: host.paired ? "link" : "link.badge.plus") } }
+          row { DeckValueRow { Text(model.apps.isEmpty ? DL("deck.none") : DLf("deck.appCount", model.apps.count)) } label: { Label(DL("deck.info.cachedApps"), systemImage: "square.grid.2x2") } }
         }
       }
       if showDevice {
         group(DL("deck.info.device")) {
           row {
-            LabeledContent {
+            DeckValueRow {
               if host.canWake { copyable((host.raw.mac ?? "").uppercased(), monospaced: true) } else { Text(DL("deck.unknown")) }
             } label: { Label(DL("deck.fact.mac"), systemImage: "network") }
           }
           if !platform.isEmpty {
-            row { LabeledContent { Text(platform) } label: { Label(DL("deck.fact.platform"), systemImage: "desktopcomputer") } }
+            row { DeckValueRow { Text(platform) } label: { Label(DL("deck.fact.platform"), systemImage: "desktopcomputer") } }
           }
           // what the 主机信息 section would have said, here, once
           if !host.facts.gpu.isEmpty {
-            row { LabeledContent { Text(host.facts.gpu) } label: { Label(DL("deck.fact.gpu"), systemImage: "cpu") } }
+            row { DeckValueRow { Text(host.facts.gpu) } label: { Label(DL("deck.fact.gpu"), systemImage: "cpu") } }
           }
           if host.raw.serverCodecModeSupport != 0 {
-            row { LabeledContent { Text(deckCapabilityText(host)) } label: { Label(DL("deck.fact.codecs"), systemImage: "film") } }
+            row { DeckValueRow { Text(deckCapabilityText(host)) } label: { Label(DL("deck.fact.codecs"), systemImage: "film") } }
           }
           let modes = DeckHostInfoCard.modes(host.facts.displayModes)
           if !modes.isEmpty {
-            row { LabeledContent { Text(modes) } label: { Label(DL("deck.fact.modes"), systemImage: "display") } }
+            row { DeckValueRow { Text(modes) } label: { Label(DL("deck.fact.modes"), systemImage: "display") } }
           }
           if host.softwareKnown {
-            row { LabeledContent { DeckSoftwareValue(host: host, kindSeen: model.fsKindSeen) } label: { Label(DL("deck.fact.software"), systemImage: "shippingbox") } }
+            row { DeckValueRow { DeckSoftwareValue(host: host, kindSeen: model.fsKindSeen) } label: { Label(DL("deck.fact.software"), systemImage: "shippingbox") } }
           }
         }
       }
@@ -630,7 +621,6 @@ struct DeckOfflineInfo: View {
 
   private func row<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
     content()
-      .labeledContentStyle(DeckTrailingValueStyle())
       .font(.system(size: 13))
       .padding(.horizontal, 12).padding(.vertical, 9)
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -663,7 +653,6 @@ struct DeckOfflineInfo: View {
 // MARK: - Preset cards in the 自定义主页 popover
 
 /// A tiny drawing of what each 主页样式 looks like, so the difference is visible before choosing.
-@available(macOS 14.0, *)
 struct DeckPresetCard: View {
   let style: DeckHomeStyle
   let selected: Bool
@@ -744,7 +733,6 @@ enum DeckOfflineLayout: String {
 /// The info form(s) of an offline page for the arrangement in use (today and A: one column; B: two columns,
 /// 地址 | 状态 + 设备, one column when narrow; D: three columns 地址 | 状态 | 设备 on wide windows, two on
 /// medium, one on narrow; C is drawn by the card itself).
-@available(macOS 14.0, *)
 struct DeckOfflineBlock: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -775,14 +763,22 @@ struct DeckOfflineBlock: View {
   }
 }
 
-/// LabeledContent in a plain stack puts the value next to the label; in a form it sits at the trailing edge.
-/// This style gives the form look: label on the left, value on the right in secondary colour.
-struct DeckTrailingValueStyle: LabeledContentStyle {
-  func makeBody(configuration: Configuration) -> some View {
+/// A row of the grouped-form look: the label on the left, the value on the right in the secondary colour.
+/// It is LabeledContent with that style on macOS 13 and later; its own stack makes it the same on macOS 12, which has no LabeledContent.
+struct DeckValueRow<Value: View, Label: View>: View {
+  let value: Value
+  let label: Label
+
+  init(@ViewBuilder content: () -> Value, @ViewBuilder label: () -> Label) {
+    self.value = content()
+    self.label = label()
+  }
+
+  var body: some View {
     HStack(alignment: .firstTextBaseline) {
-      configuration.label
+      label
       Spacer(minLength: 24)
-      configuration.content.foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+      value.foregroundStyle(.secondary).multilineTextAlignment(.trailing)
     }
   }
 }
@@ -792,7 +788,6 @@ struct DeckTrailingValueStyle: LabeledContentStyle {
 extension Notification.Name { static let deckAddressChanged = Notification.Name("MLDeckAddressChanged") }
 
 /// 自动: no address is pinned; the client ranks them (latency, reachability).
-@available(macOS 14.0, *)
 struct DeckAutoAddressRow: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -824,7 +819,6 @@ struct DeckAutoAddressRow: View {
 /// the full host:port (the port is always written), 测试, 设为默认, and, in a menu, 编辑 in place (host:port and type; the
 /// computer's own fields only change type), 上移 / 下移 (the order automatic connection prefers) and 删除 (only for an address the
 /// user added). The tooltip carries the evidence.
-@available(macOS 14.0, *)
 struct DeckAddressRow: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -1013,7 +1007,6 @@ struct DeckAddressRow: View {
 /// tooltip, the evidence for the class under them, and a port hint on the chip when they use a non-standard port.
 /// Results come from discovery's per-address probes (matched by host AND port); an address discovery has not reported
 /// on gets an independent 1.5 s probe. A path is never called direct, forwarded or relayed without evidence.
-@available(macOS 14.0, *)
 final class DeckAddressRouteProvider: DeckConnectMenuSectionProvider {
   static let shared = DeckAddressRouteProvider()
   weak var actions: DeckAppsActions?
@@ -1174,7 +1167,6 @@ struct DeckContextMenuLayer: NSViewRepresentable {
     // A long press with a finger opens the same menu (macOS 27 touch): see DeckTouchLongPress.
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
-      guard #available(macOS 14.0, *) else { return }
       if window != nil {
         DeckTouchLongPress.shared.register(self) { [weak self] in self?.provider?() }
       } else {
@@ -1191,7 +1183,6 @@ struct DeckContextMenuLayer: NSViewRepresentable {
   }
 }
 
-@available(macOS 14.0, *)
 extension View {
   /// The full old app menu on right-click.
   func deckAppContextMenu(_ app: TemporaryApp, _ model: DeckAppsModel) -> some View {
@@ -1200,7 +1191,6 @@ extension View {
 }
 
 /// The ⋯ menu of a computer: 线路 and the connection modes first, then the old host menu with all its items.
-@available(macOS 14.0, *)
 enum DeckMoreMenu {
   static func menu(_ snapshot: DeckHost, _ model: DeckAppsModel) -> NSMenu {
     // the computer as it is now: its software (and so what is greyed here) is known only after a serverinfo answer was read
@@ -1209,7 +1199,7 @@ enum DeckMoreMenu {
     var head: [NSMenuItem] = []
 
     for section in DeckConnectMenuRegistry.sections(for: host) {
-      head.append(NSMenuItem.sectionHeader(title: section.title))
+      head.append(deckMenuSectionHeader(title: section.title))
       for item in section.items {
         let text = item.title + (item.trailing.map { "   " + $0 } ?? "") + (item.unreachable ? "   " + DL("deck.path.timeout") : (item.testing ? "   " + DL("deck.path.testing") : ""))
         head.append(DeckBlockMenuItem(text, checked: item.selected, enabled: item.enabled && !(item.unreachable && !item.selected)) { item.action() })
@@ -1244,7 +1234,7 @@ enum DeckMoreMenu {
       }
     }
     if !modes.isEmpty {
-      head.append(NSMenuItem.sectionHeader(title: DL("deck.connectMode")))
+      head.append(deckMenuSectionHeader(title: DL("deck.connectMode")))
       head.append(contentsOf: modes)
     }
     if !head.isEmpty { head.append(.separator()) }
@@ -1259,7 +1249,6 @@ enum DeckConnectLook { case card, hero }
 
 /// 连接桌面 (filled), 大屏模式 (Foundation Sunshine hosts), the round 串流设置 and 更多 buttons; while a game
 /// runs the filled one is 继续 <app> with 退出应用 beside it. No split button, no dropdown.
-@available(macOS 14.0, *)
 struct DeckConnectBar: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -1276,7 +1265,7 @@ struct DeckConnectBar: View {
     let nothingToStart = game == nil && model.connectPlan.target == .none
     VStack(alignment: .leading, spacing: 8) {
     // the buttons wrap onto a second row when the column is narrow (a large page scale), never truncate
-    DeckFlowLayout(spacing: 10) {
+    DeckFlow(spacing: 10) {
       primary(title: model.launching ? DL("deck.connecting") : title, choice: shown)
       if model.launching {
         secondary(DL("deck.cancelConnect"), symbol: "xmark") { model.actions.cancelLaunch?() }
@@ -1397,7 +1386,6 @@ struct DeckFlowLayout: Layout {
 /// is on, the one the stream takes carries 使用中. A path that timed out is greyed out and cannot be chosen
 /// (tooltip 无响应); when the computer is off every chip is disabled except the pinned one, which shows its
 /// last result. Clicking pins that path for this computer; 自动 unpins it (the same pin as 默认 in 地址).
-@available(macOS 14.0, *)
 struct DeckPathChips: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -1422,7 +1410,7 @@ struct DeckPathChips: View {
       HStack(alignment: .top, spacing: 8) {
         Text(DL(labelKey)).font(.system(size: 12, weight: .semibold)).foregroundStyle(onDark ? .white.opacity(0.8) : .secondary)
           .frame(height: 26)
-        DeckFlowLayout(spacing: 6) {
+        DeckFlow(spacing: 6) {
           ForEach(list) { item in chip(item) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1498,7 +1486,6 @@ struct DeckPathChips: View {
 }
 
 /// The 网卡 row: 自动 and one chip per interface of this Mac; the chosen one is where every stream socket of this computer is bound.
-@available(macOS 14.0, *)
 struct DeckNicChips: View {
   let host: DeckHost
   @ObservedObject var model: DeckAppsModel
@@ -1510,7 +1497,6 @@ struct DeckNicChips: View {
 }
 
 /// The mark of a 线路 chip that is still being checked: a 4 pt dot that breathes. It sits in the chip's corner and takes no room.
-@available(macOS 14.0, *)
 struct DeckPendingDot: View {
   var onDark = false
   @SwiftUI.State private var dim = false

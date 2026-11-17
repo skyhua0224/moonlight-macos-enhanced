@@ -67,7 +67,7 @@ class SettingsHostingController<RootView: View>: NSWindowController {
     window.minSize = NSSize(width: 820, height: 560)
     window.center()
     window.title = LanguageManager.shared.localize("Settings")
-    if #available(macOS 26.0, *) {
+    if #available(macOS 26.0, *), DeckOS.level >= 26 {
       window.titlebarAppearsTransparent = true
       window.toolbarStyle = .unified
     }

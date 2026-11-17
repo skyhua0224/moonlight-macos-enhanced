@@ -14,7 +14,6 @@
 import AppKit
 import SwiftUI
 
-@available(macOS 14.0, *)
 @MainActor
 final class DeckTouchState: ObservableObject {
   static let shared = DeckTouchState()
@@ -41,7 +40,6 @@ final class DeckTouchState: ObservableObject {
   }
 }
 
-@available(macOS 14.0, *)
 struct DeckTouchTarget: ViewModifier {
   let minimum: CGFloat
   @ObservedObject private var touch = DeckTouchState.shared
@@ -56,7 +54,7 @@ struct DeckTouchTarget: ViewModifier {
           GeometryReader { proxy in
             Color.clear
               .onAppear { size = proxy.size }
-              .onChange(of: proxy.size) { _, new in size = new }
+              .deckOnChange(of: proxy.size) { _, new in size = new }
           }
         )
         // Widen, give the widened rectangle the hit shape, then take the layout back: the picture does not move.
@@ -74,7 +72,6 @@ struct DeckTouchTarget: ViewModifier {
   }
 }
 
-@available(macOS 14.0, *)
 private struct DeckHelp: ViewModifier {
   let text: String
   @ObservedObject private var touch = DeckTouchState.shared
@@ -95,7 +92,6 @@ private struct DeckHelp: ViewModifier {
   }
 }
 
-@available(macOS 14.0, *)
 extension View {
   /// At least `minimum` points to hit, on touch screens only.
   func deckTouchTarget(_ minimum: CGFloat = 36) -> some View {
@@ -113,7 +109,6 @@ extension View {
 /// One long-press recognizer per window; the tiles that have a right-click menu register themselves and the
 /// press is given to the innermost one under the finger. Touches only: a mouse press is never affected, and the
 /// recognizer is not asked about a spot where no tile is registered, so taps and drags elsewhere are untouched.
-@available(macOS 14.0, *)
 @MainActor
 final class DeckTouchLongPress: NSObject, NSGestureRecognizerDelegate {
   static let shared = DeckTouchLongPress()

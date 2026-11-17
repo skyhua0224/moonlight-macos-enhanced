@@ -719,24 +719,18 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
     if (getenv("MLC_FACTSSTRESS")) {
         // regression test of the DeckFactsStore lock deadlock: discovery-style ingests against main-thread writes, watchdog on the main queue
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (@available(macOS 14.0, *)) {
-                [MLDeckSelfTest stressWithSpec:[NSString stringWithUTF8String:getenv("MLC_FACTSSTRESS")]];
-            }
+            [MLDeckSelfTest stressWithSpec:[NSString stringWithUTF8String:getenv("MLC_FACTSSTRESS")]];
         });
     }
     if (getenv("MLC_SELFTEST")) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (@available(macOS 14.0, *)) {
-                [MLDeckSelfTest runWithXmlPath:[NSString stringWithUTF8String:getenv("MLC_SELFTEST")]];
-            }
+            [MLDeckSelfTest runWithXmlPath:[NSString stringWithUTF8String:getenv("MLC_SELFTEST")]];
         });
     }
     if (getenv("MLC_SELFTEST_CAP")) {
         // host capability 2 / capability 1 fixtures through the real parsers: "cap2.xml,cap1.xml,cap2-applist.xml"
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (@available(macOS 14.0, *)) {
-                [MLDeckSelfTest runCapabilityWithSpec:[NSString stringWithUTF8String:getenv("MLC_SELFTEST_CAP")]];
-            }
+            [MLDeckSelfTest runCapabilityWithSpec:[NSString stringWithUTF8String:getenv("MLC_SELFTEST_CAP")]];
         });
     }
     if (getenv("MLC_ADDADDR")) {

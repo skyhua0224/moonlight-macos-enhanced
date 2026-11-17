@@ -707,10 +707,8 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 
 - (BOOL)becomeFirstResponder {
     if (self.deckApps != nil) {
-        if (@available(macOS 14.0, *)) {
-            [self.view.window makeFirstResponder:((MLDeckAppsController *)self.deckApps).viewController.view];
-            return YES;
-        }
+        [self.view.window makeFirstResponder:((MLDeckAppsController *)self.deckApps).viewController.view];
+        return YES;
     }
     [self.view.window makeFirstResponder:self.collectionView];
     return [super becomeFirstResponder];
@@ -1493,9 +1491,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 
             self.cachedSunshineDisplaysHostUUID = hostUUID;
             self.cachedSunshineDisplays = displays ?: @[];
-            if (@available(macOS 14.0, *)) {
-                [(MLDeckAppsController *)self.deckApps displaysChanged];
-            }
+            [(MLDeckAppsController *)self.deckApps displaysChanged];
         });
     });
 }
@@ -2400,9 +2396,7 @@ static const CGFloat runningAnimationDuration = 1.0;
     // on the main thread
     [self updateBoxArtCacheForApp:app];
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (@available(macOS 14.0, *)) {
-            [(MLDeckAppsController *)self.deckApps artArrivedFor:app];
-        }
+        [(MLDeckAppsController *)self.deckApps artArrivedFor:app];
     });
 }
 
@@ -2412,114 +2406,110 @@ static const CGFloat runningAnimationDuration = 1.0;
     if (![MLDeckVariant isDeck]) {
         return;
     }
-    if (@available(macOS 14.0, *)) {
-        __weak typeof(self) weakSelf = self;
-        MLDeckAppsActions *actions = [[MLDeckAppsActions alloc] init];
-        actions.open = ^(TemporaryApp *app) { [weakSelf openApp:app]; };
-        actions.quit = ^(TemporaryApp *app) { [weakSelf quitApp:app completion:nil]; };
-        actions.pin = ^(TemporaryApp *app) { [weakSelf deckTogglePin:app]; };
-        actions.hide = ^(TemporaryApp *app) { [weakSelf deckToggleHidden:app]; };
-        actions.wake = ^{
-            TemporaryHost *host = weakSelf.host;
-            if (host != nil) {
-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
-            }
-        };
-        actions.pair = ^{
-            if (weakSelf.host != nil) {
-                [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
-                                                                  userInfo:@{@"command": @"pair", @"host": weakSelf.host}];
-            }
-        };
-        actions.cancelPair = ^{
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"cancelPair"}];
-        };
-        actions.defaultAddress = ^NSString *(NSString *uuid) {
-            NSString *method = [SettingsClass getSettingsFor:uuid][@"connectionMethod"];
-            return ([method isKindOfClass:[NSString class]] && ![method isEqualToString:@"Auto"]) ? method : @"";
-        };
-        actions.setDefaultAddress = ^(NSString *uuid, NSString *address) {
-            // the client's per-host connection method: the stream uses a pinned address (discovery keeps probing the others)
-            [SettingsClass setConnectionMethod:address.length > 0 ? address : @"Auto" for:uuid];
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"MoonlightRequestHostDiscovery" object:nil userInfo:@{@"uuid": uuid}];
-        };
-        actions.probeAddress = ^(NSString *address, double timeout, void (^done)(NSNumber *)) {
-            if (address.length == 0) { done(nil); return; }
-            // the endpoint the computer is actually reached at: its custom port included (the page's address fields do not carry it)
-            NSString *target = address;
-            NSString *wantedHost = nil;
-            [Utils parseAddress:address intoHost:&wantedHost andPort:nil];
-            TemporaryHost *probeHost = weakSelf.host;
-            for (NSString *endpoint in [ConnectionEndpointStore allEndpointsForHost:probeHost]) {
-                NSString *endpointHost = nil;
-                [Utils parseAddress:endpoint intoHost:&endpointHost andPort:nil];
-                if (endpointHost.length > 0 && [endpointHost caseInsensitiveCompare:wantedHost ?: @""] == NSOrderedSame) { target = endpoint; break; }
-            }
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                __block BOOL answered = NO;
-                NSDate *start = [NSDate date];
-                dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                    // HTTP serverinfo (no pairing needed), through the same HttpManager the discovery uses; nothing of
-                    // discovery's own state is touched
-                    HttpManager *manager = [[HttpManager alloc] initWithHost:target uniqueId:[IdManager getUniqueId] serverCert:nil];
-                    ServerInfoResponse *response = [[ServerInfoResponse alloc] init];
-                    NSURLRequest *request = [manager newHttpServerInfoRequest:true];
-                    if (request != nil) {
-                        [manager executeRequestSynchronously:[HttpRequest requestForResponse:response withUrlRequest:request]];
-                        answered = response.statusCode == 200;
-                    }
-                    dispatch_semaphore_signal(sem);
-                });
-                BOOL finished = dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC))) == 0;
-                NSInteger total = (NSInteger)([[NSDate date] timeIntervalSinceDate:start] * 1000.0);
-                // reachable = serverinfo answered; the latency is the application round trip, not the time of that request
-                NSNumber *appRtt = (finished && answered) ? [LatencyProbe appRttMsForAddress:target probeTotalMs:(int)total] : nil;
-                done(finished && answered ? (appRtt ?: @(-1)) : nil);
-            });
-        };
-        actions.hostBecameOnline = ^(NSString *uuid) {
-            // discovery (the sidebar's truth) says online: the page follows, and loads the apps if it has none
-            if ([weakSelf.host.uuid isEqualToString:uuid]) {
-                MLLaunchTrace(@"page: host %@ came online", weakSelf.host.displayName);
-                weakSelf.host.state = StateOnline;
-                [weakSelf updateOfflineOverlayForCurrentHost];
-                if (weakSelf.apps.count == 0 && weakSelf.host.canUseHttps) {
-                    [weakSelf discoverAppsForHost:weakSelf.host];
-                }
-            }
-        };
-        actions.appMenu = ^NSMenu *(TemporaryApp *app) { return [weakSelf deckMenuForApp:app]; };
-        actions.hostMenu = ^NSMenu *(TemporaryApp *app) { return [weakSelf deckHostMenuForApp:app]; };
-        actions.displays = ^NSArray<NSDictionary<NSString *, id> *> * {
-            return weakSelf.cachedSunshineDisplays ?: @[];
-        };
-        actions.connect = ^(NSString *mode, NSString *displayId) {
-            [weakSelf deckConnectWithMode:mode displayId:displayId];
-        };
-        actions.cancelLaunch = ^{ [weakSelf cancelPendingLaunch]; };
-        actions.addConnection = ^{ [weakSelf deckAddConnection]; };
-        actions.settings = ^{
-            if (weakSelf.host != nil) {
-                [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
-                                                                  userInfo:@{@"command": @"menu", @"host": weakSelf.host, @"action": @"settings"}];
-            }
-        };
-        MLDeckAppsController *deck = [[MLDeckAppsController alloc] initWithStyle:[self deckStyleName] actions:actions];
-        self.deckApps = deck;
-        NSView *deckView = deck.viewController.view;
-        deckView.frame = self.view.bounds;
-        deckView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-        if (@available(macOS 14.0, *)) {
-            // A hero's art runs past the page, under the floating sidebar and the toolbar.
-            deckView.clipsToBounds = NO;
-            self.view.clipsToBounds = NO;
+    __weak typeof(self) weakSelf = self;
+    MLDeckAppsActions *actions = [[MLDeckAppsActions alloc] init];
+    actions.open = ^(TemporaryApp *app) { [weakSelf openApp:app]; };
+    actions.quit = ^(TemporaryApp *app) { [weakSelf quitApp:app completion:nil]; };
+    actions.pin = ^(TemporaryApp *app) { [weakSelf deckTogglePin:app]; };
+    actions.hide = ^(TemporaryApp *app) { [weakSelf deckToggleHidden:app]; };
+    actions.wake = ^{
+        TemporaryHost *host = weakSelf.host;
+        if (host != nil) {
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
         }
-        [self.view addSubview:deckView];
-        [self addChildViewController:deck.viewController];
-        self.collectionView.enclosingScrollView.hidden = YES;
-        [self refreshDeckApps];
-    }
+    };
+    actions.pair = ^{
+        if (weakSelf.host != nil) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
+                                                              userInfo:@{@"command": @"pair", @"host": weakSelf.host}];
+        }
+    };
+    actions.cancelPair = ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"cancelPair"}];
+    };
+    actions.defaultAddress = ^NSString *(NSString *uuid) {
+        NSString *method = [SettingsClass getSettingsFor:uuid][@"connectionMethod"];
+        return ([method isKindOfClass:[NSString class]] && ![method isEqualToString:@"Auto"]) ? method : @"";
+    };
+    actions.setDefaultAddress = ^(NSString *uuid, NSString *address) {
+        // the client's per-host connection method: the stream uses a pinned address (discovery keeps probing the others)
+        [SettingsClass setConnectionMethod:address.length > 0 ? address : @"Auto" for:uuid];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"MoonlightRequestHostDiscovery" object:nil userInfo:@{@"uuid": uuid}];
+    };
+    actions.probeAddress = ^(NSString *address, double timeout, void (^done)(NSNumber *)) {
+        if (address.length == 0) { done(nil); return; }
+        // the endpoint the computer is actually reached at: its custom port included (the page's address fields do not carry it)
+        NSString *target = address;
+        NSString *wantedHost = nil;
+        [Utils parseAddress:address intoHost:&wantedHost andPort:nil];
+        TemporaryHost *probeHost = weakSelf.host;
+        for (NSString *endpoint in [ConnectionEndpointStore allEndpointsForHost:probeHost]) {
+            NSString *endpointHost = nil;
+            [Utils parseAddress:endpoint intoHost:&endpointHost andPort:nil];
+            if (endpointHost.length > 0 && [endpointHost caseInsensitiveCompare:wantedHost ?: @""] == NSOrderedSame) { target = endpoint; break; }
+        }
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            __block BOOL answered = NO;
+            NSDate *start = [NSDate date];
+            dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                // HTTP serverinfo (no pairing needed), through the same HttpManager the discovery uses; nothing of
+                // discovery's own state is touched
+                HttpManager *manager = [[HttpManager alloc] initWithHost:target uniqueId:[IdManager getUniqueId] serverCert:nil];
+                ServerInfoResponse *response = [[ServerInfoResponse alloc] init];
+                NSURLRequest *request = [manager newHttpServerInfoRequest:true];
+                if (request != nil) {
+                    [manager executeRequestSynchronously:[HttpRequest requestForResponse:response withUrlRequest:request]];
+                    answered = response.statusCode == 200;
+                }
+                dispatch_semaphore_signal(sem);
+            });
+            BOOL finished = dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC))) == 0;
+            NSInteger total = (NSInteger)([[NSDate date] timeIntervalSinceDate:start] * 1000.0);
+            // reachable = serverinfo answered; the latency is the application round trip, not the time of that request
+            NSNumber *appRtt = (finished && answered) ? [LatencyProbe appRttMsForAddress:target probeTotalMs:(int)total] : nil;
+            done(finished && answered ? (appRtt ?: @(-1)) : nil);
+        });
+    };
+    actions.hostBecameOnline = ^(NSString *uuid) {
+        // discovery (the sidebar's truth) says online: the page follows, and loads the apps if it has none
+        if ([weakSelf.host.uuid isEqualToString:uuid]) {
+            MLLaunchTrace(@"page: host %@ came online", weakSelf.host.displayName);
+            weakSelf.host.state = StateOnline;
+            [weakSelf updateOfflineOverlayForCurrentHost];
+            if (weakSelf.apps.count == 0 && weakSelf.host.canUseHttps) {
+                [weakSelf discoverAppsForHost:weakSelf.host];
+            }
+        }
+    };
+    actions.appMenu = ^NSMenu *(TemporaryApp *app) { return [weakSelf deckMenuForApp:app]; };
+    actions.hostMenu = ^NSMenu *(TemporaryApp *app) { return [weakSelf deckHostMenuForApp:app]; };
+    actions.displays = ^NSArray<NSDictionary<NSString *, id> *> * {
+        return weakSelf.cachedSunshineDisplays ?: @[];
+    };
+    actions.connect = ^(NSString *mode, NSString *displayId) {
+        [weakSelf deckConnectWithMode:mode displayId:displayId];
+    };
+    actions.cancelLaunch = ^{ [weakSelf cancelPendingLaunch]; };
+    actions.addConnection = ^{ [weakSelf deckAddConnection]; };
+    actions.settings = ^{
+        if (weakSelf.host != nil) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLDeckHostCommand" object:nil
+                                                              userInfo:@{@"command": @"menu", @"host": weakSelf.host, @"action": @"settings"}];
+        }
+    };
+    MLDeckAppsController *deck = [[MLDeckAppsController alloc] initWithStyle:[self deckStyleName] actions:actions];
+    self.deckApps = deck;
+    NSView *deckView = deck.viewController.view;
+    deckView.frame = self.view.bounds;
+    deckView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    // A hero's art runs past the page, under the floating sidebar and the toolbar.
+    deckView.clipsToBounds = NO;
+    self.view.clipsToBounds = NO;
+    [self.view addSubview:deckView];
+    [self addChildViewController:deck.viewController];
+    self.collectionView.enclosingScrollView.hidden = YES;
+    [self refreshDeckApps];
 }
 
 - (NSString *)deckStyleName {
@@ -2535,9 +2525,7 @@ static const CGFloat runningAnimationDuration = 1.0;
     if (self.deckApps == nil || self.host == nil) {
         return;
     }
-    if (@available(macOS 14.0, *)) {
-        [(MLDeckAppsController *)self.deckApps updateWithHost:self.host apps:self.apps ?: @[] running:self.runningApp];
-    }
+    [(MLDeckAppsController *)self.deckApps updateWithHost:self.host apps:self.apps ?: @[] running:self.runningApp];
 }
 
 #pragma mark - The old context menus on the new page

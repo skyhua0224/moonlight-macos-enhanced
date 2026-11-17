@@ -1031,6 +1031,8 @@
 "Diagnostics" = "Diagnostics";
 "Show Performance Overlay" = "Show Performance Overlay";
 "Dim Unfocused Artwork" = "Dim Unfocused Artwork";
+"Classic Home Page" = "Classic Home Page";
+"Classic Home Page detail" = "Use the older home page. Takes effect after Moonlight restarts.";
 "AWDL Stability Helper detail" = "AWDL Stability Helper detail";
 "VSync" = "VSync";
 "File Mapping" = "File Mapping";
@@ -2278,6 +2280,7 @@
 "deck.firstRun.searching" = "Searching the network for computers";
 "deck.recent.empty" = "Apps you stream appear here";
 "deck.homeShort" = "Home";
+"overlay.legacyNotice" = "The stream overlay styles need macOS 13 or later. This system shows the one-line overlay, which has no styles to set.";
 "deck.connectMode" = "Connection Mode";
 "deck.connectDesktop" = "Connect to Desktop";
 "deck.connecting" = "Connecting…";

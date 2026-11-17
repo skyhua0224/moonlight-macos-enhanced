@@ -615,9 +615,7 @@ static __weak ControllerNavigation *sHarnessInstance;
                 [NSApp sendAction:@selector(showPreferences:) to:nil from:window];
             }
             if ((pressed & UIX) && isMain) {
-                if (@available(macOS 14.0, *)) {
-                    [[MLDeckHomeCustomizer shared] show];
-                }
+                [[MLDeckHomeCustomizer shared] show];
             }
             if ((pressed & UIB) && ![navigator handleInput:ControllerFocusInputBack window:window]) {
                 if (window.sheetParent || !isMain) {

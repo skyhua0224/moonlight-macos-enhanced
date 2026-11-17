@@ -1086,6 +1086,8 @@
 "Diagnostics" = "诊断";
 "Show Performance Overlay" = "显示性能浮层";
 "Dim Unfocused Artwork" = "降低未选中应用封面亮度";
+"Classic Home Page" = "经典主页";
+"Classic Home Page detail" = "改用旧版主页。重启 Moonlight 后生效。";
 "AWDL Stability Helper detail" = "改善部分 Wi‑Fi 网络下的主机发现和连接稳定性。";
 "VSync" = "垂直同步";
 "File Mapping" = "文件映射";
@@ -2326,6 +2328,7 @@
 "deck.firstRun.searching" = "正在搜索局域网中的电脑";
 "deck.recent.empty" = "串流过的应用会出现在这里";
 "deck.homeShort" = "主页";
+"overlay.legacyNotice" = "串流中的性能叠层需要 macOS 13 或更高版本；当前系统使用单行叠层，没有可调样式。";
 "deck.connectMode" = "连接方式";
 "deck.connectDesktop" = "连接桌面";
 "deck.connecting" = "正在连接…";

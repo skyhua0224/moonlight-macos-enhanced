@@ -27,7 +27,7 @@ extension EnvironmentValues {
   }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 private struct OverlayFontModifier: ViewModifier {
   @Environment(\.overlayScale) private var s
   let size: CGFloat
@@ -35,7 +35,7 @@ private struct OverlayFontModifier: ViewModifier {
   func body(content: Content) -> some View { content.font(.system(size: size * s, weight: weight, design: .monospaced)) }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 extension View {
   /// SF Mono at the HUD's size setting.
   func ovFont(_ size: CGFloat, _ weight: Font.Weight = .medium) -> some View { modifier(OverlayFontModifier(size: size, weight: weight)) }
@@ -45,7 +45,7 @@ extension View {
 
 /// The panel: the thin dark material under a black tint, a hairline edge, no shadow. Apple's HUD is a translucent dark
 /// rounded rectangle; legibility comes from the panel, not from glows around the glyphs. `opacity` is the tint.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 extension View {
   func overlayPanel<S: InsettableShape>(_ shape: S, opacity: Double) -> some View {
     self
@@ -109,7 +109,7 @@ extension OverlayField {
 // MARK: - Pieces
 
 /// A tiny line chart (or bars) over a ring buffer. Drawn at the stats rate, not per frame.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlaySparkline: View {
   let values: [Double]
   var tint: Color = OverlayInk.graph
@@ -161,7 +161,7 @@ struct OverlaySparkline: View {
 }
 
 /// A small upper-case caption (Latin text; Chinese is unaffected by the case).
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayCaption: View {
   let text: String
   var body: some View {
@@ -170,7 +170,7 @@ struct OverlayCaption: View {
 }
 
 /// value with a smaller secondary unit: "26" + "ms". The slot reserves the width of the digits.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayValueText: View {
   let value: OverlayValue
   var size: CGFloat = 12.5
@@ -188,7 +188,7 @@ struct OverlayValueText: View {
   }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayDot: View {
   let level: OverlayLevel
   var size: CGFloat = 6
@@ -197,7 +197,7 @@ struct OverlayDot: View {
 }
 
 /// A warning as one item in a row: a triangle and the text in amber.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayWarningItem: View {
   let text: String
   var body: some View {
@@ -219,7 +219,7 @@ struct OverlayFlowRoleKey: LayoutValueKey {
 /// Lays groups out on one row and wraps only when the row would be wider than `maxWidth`, with the measured
 /// width of every group (no estimate). The divider between two groups is dropped where a row starts.
 /// The breaking itself is OverlayFlowPlanner (tested on its own).
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayFlowLayout: Layout {
   var maxWidth: CGFloat
   var rowSpacing: CGFloat = 5
@@ -259,7 +259,7 @@ struct OverlayFlowLayout: Layout {
 
 // MARK: - Root
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 extension OverlayPosition {
   var alignment: Alignment {
     switch self {
@@ -288,7 +288,7 @@ struct OverlayGeometry: Equatable {
   var maxWidth: CGFloat { min(1500, max(200, width - Self.sideInset * 2)) }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayRoot: View {
   @ObservedObject var model: OverlayModel
   @ObservedObject var prefs: OverlayPrefs
@@ -349,11 +349,11 @@ struct OverlayPanelSizeKey: PreferenceKey {
 
 #if MLC_CONCEPT_HARNESS
 /// Harness only: records where the panel really is (window coordinates), to prove it never moves.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 extension View {
   func overlayProbe(_ model: OverlayModel) -> some View {
     background(GeometryReader { geo in
-      Color.clear.onChange(of: geo.frame(in: .global), initial: true) { _, frame in OverlayStability.shared.record(frame) }
+      Color.clear.deckOnChange(of: geo.frame(in: .global), initial: true) { _, frame in OverlayStability.shared.record(frame) }
     })
   }
 }
@@ -367,7 +367,7 @@ final class OverlayStability: NSObject {
   func reset() { frames = last.map { [$0] } ?? [] }
 }
 #else
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 extension View {
   func overlayProbe(_ model: OverlayModel) -> some View { self }
 }
@@ -376,7 +376,7 @@ extension View {
 // MARK: - Items
 
 /// The shown items in the user's order, cut into runs of one group each (a divider sits between two runs).
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 func overlayGrouped(_ prefs: OverlayPrefs, _ m: OverlayMetrics) -> [(OverlayGroup, [(OverlayField, OverlayValue)])] {
   var result: [(OverlayGroup, [(OverlayField, OverlayValue)])] = []
   for field in prefs.style.shown(prefs.fields) {
@@ -388,7 +388,7 @@ func overlayGrouped(_ prefs: OverlayPrefs, _ m: OverlayMetrics) -> [(OverlayGrou
 }
 
 /// One "caption value" pair in running text.
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayPair: View {
   let field: OverlayField
   let value: OverlayValue
@@ -404,7 +404,7 @@ struct OverlayPair: View {
 
 // MARK: - 1. Compact: one row, as wide as its items
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayCompact: View {
   @ObservedObject var model: OverlayModel
   @ObservedObject var prefs: OverlayPrefs
@@ -440,7 +440,7 @@ struct OverlayCompact: View {
 
 // MARK: - 2. Corner: icons and values in a column
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayCorner: View {
   @ObservedObject var model: OverlayModel
   @ObservedObject var prefs: OverlayPrefs
@@ -500,7 +500,7 @@ struct OverlayCorner: View {
 
 // MARK: - 3. Chart: big frame rate, interval bars, mini graphs
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayChart: View {
   @ObservedObject var model: OverlayModel
   @ObservedObject var prefs: OverlayPrefs
@@ -570,7 +570,7 @@ struct OverlayChart: View {
 
 // MARK: - Notch split: left group | camera housing | right group
 
-@available(macOS 14.0, *)
+@available(macOS 13.0, *)
 struct OverlayNotchSplit: View {
   @ObservedObject var model: OverlayModel
   @ObservedObject var prefs: OverlayPrefs

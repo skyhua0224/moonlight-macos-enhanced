@@ -82,7 +82,7 @@
 
     NSSplitViewItem *contentItem = [NSSplitViewItem splitViewItemWithViewController:self.appsViewController];
     if (@available(macOS 26.0, *)) {
-        if ([MLDeckVariant isPolished]) {
+        if ([MLDeckOS atLeast:26] && [MLDeckVariant isPolished]) {
             // macOS 26 floats the sidebar over the content; the hero extends under it, so the
             // content gets the sidebar as a safe-area inset. Earlier systems have no floating
             // sidebar: the content sits beside it and needs no inset, so there is nothing to set.
@@ -226,50 +226,46 @@
     if (![MLDeckVariant isSidebarVariant]) {
         return nil;
     }
-    if (@available(macOS 14.0, *)) {
-        __weak typeof(self) weakSelf = self;
-        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
-        void (^post)(NSDictionary *) = ^(NSDictionary *info) {
-            [center postNotificationName:@"MLDeckHostCommand" object:nil userInfo:info];
-        };
-        MLDeckHostsActions *actions = [[MLDeckHostsActions alloc] init];
-        actions.select = ^(TemporaryHost *host) { [weakSelf deckSelectHost:host]; };
-        actions.wake = ^(TemporaryHost *host) {
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
-        };
-        actions.pair = ^(TemporaryHost *host) { post(@{@"command": @"pair", @"host": host}); };
-        actions.menu = ^(TemporaryHost *host, NSString *action) { post(@{@"command": @"menu", @"host": host, @"action": action}); };
-        actions.cleanup = ^(NSArray<TemporaryHost *> *hosts) { post(@{@"command": @"cleanup", @"hosts": hosts}); };
-        actions.add = ^{ post(@{@"command": @"add"}); };
-        actions.resumeApp = ^(TemporaryHost *host, TemporaryApp *app) {
-            [weakSelf deckSelectHost:host];
-            [(id<AppsViewControllerDelegate>)weakSelf.appsViewController openApp:app];
-        };
-        actions.quitApp = ^(TemporaryHost *host, TemporaryApp *app) {
-            [weakSelf deckSelectHost:host];
-            [(id<AppsViewControllerDelegate>)weakSelf.appsViewController quitApp:app completion:nil];
-        };
-        MLDeckHostsController *deck = [[MLDeckHostsController alloc] initWithStyle:@"sidebar" actions:actions provider:^NSArray<TemporaryHost *> * {
-            NSArray<TemporaryHost *> *live = weakSelf.hostsProvider ? weakSelf.hostsProvider() : nil;
-            return live.count > 0 ? live : weakSelf.initialHostsSnapshot;
-        }];
-        self.deckSidebar = deck;
-        self.deckPins = [NSMutableDictionary dictionary];
-        [deck selectWithHostUUID:self.initialHost.uuid];
-        [center addObserver:self selector:@selector(deckHandlePIN:) name:@"MLDeckPairingPIN" object:nil];
-        [center addObserver:self selector:@selector(deckHandleSelect:) name:@"MLDeckSelectHost" object:nil];
-        [center addObserver:self selector:@selector(deckReload) name:@"HostLatencyUpdated" object:nil];
-        [center addObserver:self selector:@selector(deckReload) name:@"MLDeckHostsChanged" object:nil];
-        self.deckTimer = [NSTimer scheduledTimerWithTimeInterval:3.0 target:self selector:@selector(deckReload) userInfo:nil repeats:YES];
-        return deck.viewController;
-    }
+    __weak typeof(self) weakSelf = self;
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    void (^post)(NSDictionary *) = ^(NSDictionary *info) {
+        [center postNotificationName:@"MLDeckHostCommand" object:nil userInfo:info];
+    };
+    MLDeckHostsActions *actions = [[MLDeckHostsActions alloc] init];
+    actions.select = ^(TemporaryHost *host) { [weakSelf deckSelectHost:host]; };
+    actions.wake = ^(TemporaryHost *host) {
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
+    };
+    actions.pair = ^(TemporaryHost *host) { post(@{@"command": @"pair", @"host": host}); };
+    actions.menu = ^(TemporaryHost *host, NSString *action) { post(@{@"command": @"menu", @"host": host, @"action": action}); };
+    actions.cleanup = ^(NSArray<TemporaryHost *> *hosts) { post(@{@"command": @"cleanup", @"hosts": hosts}); };
+    actions.add = ^{ post(@{@"command": @"add"}); };
+    actions.resumeApp = ^(TemporaryHost *host, TemporaryApp *app) {
+        [weakSelf deckSelectHost:host];
+        [(id<AppsViewControllerDelegate>)weakSelf.appsViewController openApp:app];
+    };
+    actions.quitApp = ^(TemporaryHost *host, TemporaryApp *app) {
+        [weakSelf deckSelectHost:host];
+        [(id<AppsViewControllerDelegate>)weakSelf.appsViewController quitApp:app completion:nil];
+    };
+    MLDeckHostsController *deck = [[MLDeckHostsController alloc] initWithStyle:@"sidebar" actions:actions provider:^NSArray<TemporaryHost *> * {
+        NSArray<TemporaryHost *> *live = weakSelf.hostsProvider ? weakSelf.hostsProvider() : nil;
+        return live.count > 0 ? live : weakSelf.initialHostsSnapshot;
+    }];
+    self.deckSidebar = deck;
+    self.deckPins = [NSMutableDictionary dictionary];
+    [deck selectWithHostUUID:self.initialHost.uuid];
+    [center addObserver:self selector:@selector(deckHandlePIN:) name:@"MLDeckPairingPIN" object:nil];
+    [center addObserver:self selector:@selector(deckHandleSelect:) name:@"MLDeckSelectHost" object:nil];
+    [center addObserver:self selector:@selector(deckReload) name:@"HostLatencyUpdated" object:nil];
+    [center addObserver:self selector:@selector(deckReload) name:@"MLDeckHostsChanged" object:nil];
+    self.deckTimer = [NSTimer scheduledTimerWithTimeInterval:3.0 target:self selector:@selector(deckReload) userInfo:nil repeats:YES];
+    return deck.viewController;
     return nil;
 }
 
 - (void)deckReload {
-    if (@available(macOS 14.0, *)) {
-        [(MLDeckHostsController *)self.deckSidebar reload];
-    }
+    [(MLDeckHostsController *)self.deckSidebar reload];
 }
 
 - (TemporaryHost *)deckHostForUUID:(NSString *)uuid {
@@ -283,69 +279,61 @@
 }
 
 - (void)deckSelectHost:(TemporaryHost *)host {
-    if (@available(macOS 14.0, *)) {
-        NSInteger state = [(MLDeckHostsController *)self.deckSidebar hostStateForUUID:host.uuid];
-        [self deckHideStatePane];
-        if (state == 2 || [MLDeckVariant isComputerPage]) {
-            // the computer-first page draws offline and unpaired hosts itself, in the card
-            [self.appsViewController switchToHost:host];
-        } else {
+    NSInteger state = [(MLDeckHostsController *)self.deckSidebar hostStateForUUID:host.uuid];
+    [self deckHideStatePane];
+    if (state == 2 || [MLDeckVariant isComputerPage]) {
+        // the computer-first page draws offline and unpaired hosts itself, in the card
+        [self.appsViewController switchToHost:host];
+    } else {
+        [self deckShowStatePaneForHost:host];
+    }
+}
+
+- (void)deckHandleSelect:(NSNotification *)note {
+    NSString *uuid = note.userInfo[@"uuid"];
+    [self deckReload];
+    [(MLDeckHostsController *)self.deckSidebar selectWithHostUUID:uuid];
+    TemporaryHost *host = [self deckHostForUUID:uuid];
+    if (host != nil) {
+        [self deckSelectHost:host];
+    }
+}
+
+- (void)deckHandlePIN:(NSNotification *)note {
+    NSString *uuid = note.userInfo[@"uuid"];
+    NSString *pin = note.userInfo[@"pin"];
+    if (pin.length > 0) {
+        self.deckPins[uuid] = pin;
+    } else {
+        [self.deckPins removeObjectForKey:uuid];
+    }
+    [(MLDeckHostsController *)self.deckSidebar setPairingPIN:pin forHostUUID:uuid];
+    if (![MLDeckVariant isComputerPage] && [self.deckStatePaneUUID isEqualToString:uuid]) {
+        TemporaryHost *host = [self deckHostForUUID:uuid];
+        if (host != nil) {
             [self deckShowStatePaneForHost:host];
         }
     }
 }
 
-- (void)deckHandleSelect:(NSNotification *)note {
-    if (@available(macOS 14.0, *)) {
-        NSString *uuid = note.userInfo[@"uuid"];
-        [self deckReload];
-        [(MLDeckHostsController *)self.deckSidebar selectWithHostUUID:uuid];
-        TemporaryHost *host = [self deckHostForUUID:uuid];
-        if (host != nil) {
-            [self deckSelectHost:host];
-        }
-    }
-}
-
-- (void)deckHandlePIN:(NSNotification *)note {
-    if (@available(macOS 14.0, *)) {
-        NSString *uuid = note.userInfo[@"uuid"];
-        NSString *pin = note.userInfo[@"pin"];
-        if (pin.length > 0) {
-            self.deckPins[uuid] = pin;
-        } else {
-            [self.deckPins removeObjectForKey:uuid];
-        }
-        [(MLDeckHostsController *)self.deckSidebar setPairingPIN:pin forHostUUID:uuid];
-        if (![MLDeckVariant isComputerPage] && [self.deckStatePaneUUID isEqualToString:uuid]) {
-            TemporaryHost *host = [self deckHostForUUID:uuid];
-            if (host != nil) {
-                [self deckShowStatePaneForHost:host];
-            }
-        }
-    }
-}
-
 - (void)deckShowStatePaneForHost:(TemporaryHost *)host {
-    if (@available(macOS 14.0, *)) {
-        [self deckHideStatePane];
-        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
-        NSViewController *pane = [MLDeckStatePaneFactory makeWithHost:host pin:self.deckPins[host.uuid] onPair:^{
-            [center postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"pair", @"host": host}];
-        } onWake:^{
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
-        }];
-        NSView *content = self.appsViewController.view;
-        pane.view.frame = content.bounds;
-        pane.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-        [content addSubview:pane.view];
-        [self.appsViewController addChildViewController:pane];
-        self.deckStatePane = pane;
-        self.deckStatePaneUUID = host.uuid;
-        // The window title follows the host shown, also while the apps page sits underneath.
-        self.title = host.displayName;
-        self.view.window.subtitle = @"";
-    }
+    [self deckHideStatePane];
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    NSViewController *pane = [MLDeckStatePaneFactory makeWithHost:host pin:self.deckPins[host.uuid] onPair:^{
+        [center postNotificationName:@"MLDeckHostCommand" object:nil userInfo:@{@"command": @"pair", @"host": host}];
+    } onWake:^{
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [WakeOnLanManager wakeHost:host]; });
+    }];
+    NSView *content = self.appsViewController.view;
+    pane.view.frame = content.bounds;
+    pane.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [content addSubview:pane.view];
+    [self.appsViewController addChildViewController:pane];
+    self.deckStatePane = pane;
+    self.deckStatePaneUUID = host.uuid;
+    // The window title follows the host shown, also while the apps page sits underneath.
+    self.title = host.displayName;
+    self.view.window.subtitle = @"";
 }
 
 - (void)deckHideStatePane {

@@ -8,7 +8,6 @@
 import AppKit
 import SwiftUI
 
-@available(macOS 14.0, *)
 @objc(MLDeckFirstRun)
 public final class DeckFirstRun: NSObject {
   @objc public static func make(provider: @escaping () -> [TemporaryHost], onAdd: @escaping () -> Void,
@@ -25,7 +24,7 @@ public final class DeckFirstRun: NSObject {
           return true
         }))
     let controller = NSHostingController(rootView: page)
-    controller.sizingOptions = []
+    if #available(macOS 13.0, *) { controller.sizingOptions = [] }
     return controller
   }
 }
