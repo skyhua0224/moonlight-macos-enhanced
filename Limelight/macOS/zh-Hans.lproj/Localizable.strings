@@ -2545,3 +2545,19 @@
 "ov.items.remove" = "不再显示这一项";
 "Probe bitrate ceiling" = "测速码率上限";
 "Probe bitrate ceiling hint" = "开始前测速最多允许的码率。万兆有线网可调高。主机自己给出上限时以主机为准。";
+
+/* No-host page */
+"nohost.search.title" = "正在搜索电脑";
+"nohost.search.line" = "找到电脑后会自动打开。";
+"nohost.notfound.title" = "没有找到电脑";
+"nohost.notfound.line" = "仍在继续搜索，也可以按地址添加。";
+"nohost.tips.title" = "排查提示";
+"nohost.tips.expanded" = "已展开";
+"nohost.tips.collapsed" = "已收起";
+"nohost.tip.network" = "电脑和这台 Mac 在同一个网络";
+"nohost.tip.host" = "电脑上已运行 Foundation Sunshine 或 Sunshine";
+"nohost.tip.firewall" = "电脑的防火墙允许局域网访问";
+"nohost.denied.title" = "无法访问本地网络";
+"nohost.denied.line" = "发现电脑需要「本地网络」权限，授权后会自动继续搜索。";
+"nohost.denied.button" = "打开系统设置";
+"nohost.fs.learn" = "了解 Foundation Sunshine";
