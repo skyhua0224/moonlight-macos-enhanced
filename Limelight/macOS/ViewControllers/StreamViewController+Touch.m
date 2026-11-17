@@ -47,6 +47,9 @@
             [strongSelf ensureStreamWindowKeyIfPossible];
             [strongSelf.view.window makeFirstResponder:strongSelf];
         };
+        hid.directTouchGCMouseButtonGate = ^BOOL(int button, BOOL pressed, NSTimeInterval time) {
+            return [weakRuntime shouldDropGCMouseButton:button pressed:pressed time:time];
+        };
         // Input pauses when the menu opens or the pointer is released: touches the stream may no longer take are let go.
         hid.touchSuspendHandler = ^{
             StreamViewController *strongSelf = weakSelf;
@@ -78,6 +81,7 @@
 - (void)tearDownDirectTouchInput {
     StreamViewMac *streamView = self.streamView;
     self.hidSupport.touchSuspendHandler = nil;
+    self.hidSupport.directTouchGCMouseButtonGate = nil;
     [streamView.touchRuntime tearDown];
     streamView.touchRuntime = nil;
 }

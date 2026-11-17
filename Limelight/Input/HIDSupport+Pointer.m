@@ -454,6 +454,10 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
                 if ([self.precisionTouchpad consumeMouseButton:BUTTON_LEFT pressed:pressed]) {
                     return;
                 }
+                if (self.directTouchGCMouseButtonGate != nil &&
+                    self.directTouchGCMouseButtonGate(BUTTON_LEFT, pressed, NSProcessInfo.processInfo.systemUptime)) {
+                    return;
+                }
                 if (self.shouldSendInputEvents) {
                     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                     if (!inputCtx) {
@@ -463,6 +467,10 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
                 }
             };
             mouse.mouseInput.middleButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+                if (self.directTouchGCMouseButtonGate != nil &&
+                    self.directTouchGCMouseButtonGate(BUTTON_MIDDLE, pressed, NSProcessInfo.processInfo.systemUptime)) {
+                    return;
+                }
                 if (self.shouldSendInputEvents) {
                     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                     if (!inputCtx) {
@@ -475,6 +483,10 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
                 if ([self.precisionTouchpad consumeMouseButton:BUTTON_RIGHT pressed:pressed]) {
                     return;
                 }
+                if (self.directTouchGCMouseButtonGate != nil &&
+                    self.directTouchGCMouseButtonGate(BUTTON_RIGHT, pressed, NSProcessInfo.processInfo.systemUptime)) {
+                    return;
+                }
                 if (self.shouldSendInputEvents) {
                     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                     if (!inputCtx) {
@@ -485,6 +497,10 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
             };
         
             mouse.mouseInput.auxiliaryButtons[0].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+                if (self.directTouchGCMouseButtonGate != nil &&
+                    self.directTouchGCMouseButtonGate(BUTTON_X1, pressed, NSProcessInfo.processInfo.systemUptime)) {
+                    return;
+                }
                 if (self.shouldSendInputEvents) {
                     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                     if (!inputCtx) {
@@ -494,6 +510,10 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
                 }
             };
             mouse.mouseInput.auxiliaryButtons[1].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
+                if (self.directTouchGCMouseButtonGate != nil &&
+                    self.directTouchGCMouseButtonGate(BUTTON_X2, pressed, NSProcessInfo.processInfo.systemUptime)) {
+                    return;
+                }
                 if (self.shouldSendInputEvents) {
                     PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
                     if (!inputCtx) {

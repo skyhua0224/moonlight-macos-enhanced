@@ -13,7 +13,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface MLDirectTouchRecognizer : NSGestureRecognizer
+@interface MLDirectTouchRecognizer : NSPanGestureRecognizer
 
 /// Called with the samples of each touch event, in the stream view's coordinates. Main thread.
 @property (nonatomic, copy, nullable) void (^samplesHandler)(NSArray<MLTouchSample *> *samples);

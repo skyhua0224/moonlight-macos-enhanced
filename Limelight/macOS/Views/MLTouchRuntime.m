@@ -664,6 +664,14 @@ typedef NS_ENUM(NSInteger, MLTouchDotState) {
     samples = [self samplesTheStreamTakes:samples view:view];
     if (samples.count == 0) return;
 
+    // Source: apple-appkit-gesture-recognizers-20261117, "Set up gesture recognizers". Only a touch the stream
+    // accepted is evidence for gating the separate GameController path.
+    for (MLTouchSample *sample in samples) {
+        if (sample.phase == MLTouchPhaseBegan) {
+            [_gate noteDirectTouchBeganAtTime:sample.timestamp];
+        }
+    }
+
     CGSize viewSize = view.bounds.size;
     _forwarder.viewSize = viewSize;  _forwarder.videoSize = _videoSize;  _forwarder.stretch = _stretch;
     _emulator.viewSize = viewSize;   _emulator.videoSize = _videoSize;   _emulator.stretch = _stretch;
@@ -674,6 +682,16 @@ typedef NS_ENUM(NSInteger, MLTouchDotState) {
         [_emulator processSamples:samples];
         if (_emulator.activeCount > 0) [self startPollTimer]; else [self stopPollTimer];
     }
+}
+
+- (BOOL)shouldDropGCMouseButton:(NSInteger)button pressed:(BOOL)pressed time:(NSTimeInterval)time {
+    if (_tornDown || !_gate.enabled) return NO;
+    BOOL drop = [_gate shouldDropGCMouseButton:button pressed:pressed time:time];
+    if (drop) {
+        os_log(MLTouchLog(), "GCMouse button %{public}@ gated after direct-touch evidence button=%ld time=%.6f",
+               pressed ? @"press" : @"release", (long)button, time);
+    }
+    return drop;
 }
 
 // A touch is taken or refused as a whole, when it begins: if the stream is not accepting input at that moment the

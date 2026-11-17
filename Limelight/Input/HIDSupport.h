@@ -33,6 +33,9 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 @property(atomic) BOOL shouldSendInputEvents;
 /// Runs on the main queue when input is switched off (focus lost, menu opened): live touches must be let go.
 @property(nonatomic, copy) void (^touchSuspendHandler)(void);
+/// Returns YES only when a direct-touch begin was observed immediately before this GameController button event.
+/// The callback runs on the GameController input path; it must not block.
+@property(nonatomic, copy, nullable) BOOL (^directTouchGCMouseButtonGate)(int button, BOOL pressed, NSTimeInterval time);
 /// LiSendTouchEvent calls that did not go out (input queue full, not initialised, host without the feature), and the
 /// last error code. Read for the debug overlay and the touch log.
 @property(atomic) NSUInteger touchSendFailures;

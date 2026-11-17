@@ -36,6 +36,10 @@
     // NSTouchTypeMaskIndirect (a trackpad) is not supported by gesture recognizers. The trackpad
     // keeps its own path (MLPrecisionTouchpad).
     self.allowedTouchTypes = NSTouchTypeMaskDirect;
+    // Source: apple-appkit-gesture-recognizers-20261117, "Set up gesture recognizers". Apple documents this exact
+    // combination for direct-touch tracking. A zero mask keeps physical
+    // mouse and trackpad button events out of this recognizer.
+    self.buttonMask = 0;
     self.delaysPrimaryMouseButtonEvents = NO;
 }
 
