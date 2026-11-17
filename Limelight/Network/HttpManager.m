@@ -409,35 +409,59 @@ static const NSString* HTTPS_PORT = @"47984";
     
     Log(LOG_D, @"Making Request: %@", request);
     __weak typeof(self) weakSelf = self;
-    NSURLSessionDataTask* task = [urlSession dataTaskWithRequest:request.request completionHandler:^(NSData * __nullable data, NSURLResponse * __nullable response, NSError * __nullable error) {
+    NSURLSessionDataTask* task = nil;
+    // The task is made under the same lock abandonRequests takes before it invalidates the session: a task made on an
+    // invalidated session raises, so either the flag is seen here or the invalidation comes after the task exists.
+    @synchronized ([self requestLockObject]) {
+        if (_abandoned) {
+            task = nil;
+        } else {
+            task = [urlSession dataTaskWithRequest:request.request completionHandler:^(NSData * __nullable data, NSURLResponse * __nullable response, NSError * __nullable error) {
         
-        assert(weakSelf != nil);
-        typeof(self) strongSelf = weakSelf;
+                assert(weakSelf != nil);
+                typeof(self) strongSelf = weakSelf;
         
-        if (error != NULL) {
-            Log(LOG_D, @"Connection error: %@", error);
-            requestError = error;
-        }
-        else {
-            Log(LOG_D, @"Received response: %@", response);
-            if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
-                httpAnswer = (NSHTTPURLResponse *)response;
-            }
-
-            if (data != NULL) {
-                Log(LOG_D, @"\n\nReceived data: %@\n\n", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
-                [respData appendData:data];
-                if ([[NSString alloc] initWithData:respData encoding:NSUTF8StringEncoding] != nil) {
-                    requestResp = [HttpManager fixXmlVersion:respData];
-                } else {
-                    requestResp = respData;
+                if (error != NULL) {
+                    Log(LOG_D, @"Connection error: %@", error);
+                    requestError = error;
                 }
+                else {
+                    Log(LOG_D, @"Received response: %@", response);
+                    if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+                        httpAnswer = (NSHTTPURLResponse *)response;
+                    }
+
+                    if (data != NULL) {
+                        Log(LOG_D, @"\n\nReceived data: %@\n\n", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
+                        [respData appendData:data];
+                        if ([[NSString alloc] initWithData:respData encoding:NSUTF8StringEncoding] != nil) {
+                            requestResp = [HttpManager fixXmlVersion:respData];
+                        } else {
+                            requestResp = respData;
+                        }
+                    }
+                }
+        
+                (void)strongSelf; // Keep strongSelf alive during callback
+                dispatch_semaphore_signal(requestLock);
+            }];
+        }
+    }
+    if (task == nil) {
+        // abandonRequests came between the first check and here
+        @synchronized ([self requestLockObject]) {
+            if (_activeSession == urlSession) {
+                _activeSession = nil;
             }
         }
-        
-        (void)strongSelf; // Keep strongSelf alive during callback
-        dispatch_semaphore_signal(requestLock);
-    }];
+        [urlSession invalidateAndCancel];
+        _error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil];
+        if (request.response) {
+            request.response.statusCode = [_error code];
+            request.response.statusMessage = [_error localizedDescription];
+        }
+        return;
+    }
     [task resume];
 
     // Bound the synchronous wait. NSURLRequest.timeoutInterval is an idle

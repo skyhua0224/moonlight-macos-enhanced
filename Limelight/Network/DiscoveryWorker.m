@@ -535,11 +535,7 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     NSLock *commitLock = [[NSLock alloc] init];
     dispatch_semaphore_t commitDone = dispatch_semaphore_create(0);
     void (^commitRound)(void) = ^{
-        [commitLock lock];
-        BOOL run = !committed;
-        committed = YES;
-        [commitLock unlock];
-        if (!run || _raceEpoch != epoch) {
+        if (_raceEpoch != epoch) {
             return;
         }
         [lock lock];
@@ -687,6 +683,15 @@ static dispatch_once_t gUnpairedObservationOnceToken;
         });
     };
     void (^commit)(void) = ^{
+        // the round is claimed here: only the winning call commits and signals, and a caller that waits for the commit
+        // (waitsForCommit) waits for that signal whichever of the two calls won
+        [commitLock lock];
+        BOOL run = !committed;
+        committed = YES;
+        [commitLock unlock];
+        if (!run) {
+            return;
+        }
         commitRound();
         dispatch_semaphore_signal(commitDone);
     };
@@ -721,7 +726,8 @@ static dispatch_once_t gUnpairedObservationOnceToken;
     }
     if (groupDone) {
         commit();
-    } else if (self.waitsForCommit) {
+    }
+    if (self.waitsForCommit) {
         // the first answer is in and the rest of the addresses are still out: the caller reads the record next, so wait for
         // the round's commit (it runs when the last probe ends, each one is bounded by its own budget)
         while (dispatch_semaphore_wait(commitDone, dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC)) != 0) {
