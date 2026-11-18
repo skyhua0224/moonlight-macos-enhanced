@@ -321,6 +321,9 @@ unzip -o xcframeworks.zip -d xcframeworks/
 # dav1d, for AV1 software decoding (needs meson, ninja, nasm)
 brew install meson ninja nasm
 scripts/build_dav1d.sh
+
+# Static libcrypto, built from pinned OpenSSL 3.5 LTS source with a trimmed feature set (needs perl and make)
+scripts/build_openssl.sh
 ```
 
 Then:

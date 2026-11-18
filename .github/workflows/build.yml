@@ -66,6 +66,14 @@ jobs:
         brew install meson ninja nasm
         bash scripts/build_dav1d.sh
 
+    # Trimmed static libcrypto built from pinned, checksummed OpenSSL source for the
+    # architecture of this job. There is no OpenSSL.framework; see docs/openssl-static-libcrypto.md.
+    - name: Build OpenSSL libcrypto
+      run: ARCHS="${{ matrix.archs }}" bash scripts/build_openssl.sh
+
+    - name: Check libcrypto (certificates, PKCS#12, signatures, AES, HMAC, SHA, RAND)
+      run: bash tests/openssl-static/run.sh
+
     - name: Configure version and update channel
       shell: bash
       run: |
@@ -108,6 +116,15 @@ jobs:
 
     - name: Verify ${{ matrix.variant }} binary slices
       run: |
+        # OpenSSL is linked statically: no framework in the bundle and no dylib dependency.
+        if [ -e "build/Build/Products/Release/MoonlightEnhanced.app/Contents/Frameworks/OpenSSL.framework" ]; then
+          echo "OpenSSL.framework must not be bundled"
+          exit 1
+        fi
+        if otool -L "build/Build/Products/Release/MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced" | grep -qi -E "openssl|libcrypto|libssl"; then
+          echo "The main binary must not depend on a dynamic OpenSSL"
+          exit 1
+        fi
         main_binary="build/Build/Products/Release/MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced"
         helper_binary="build/Build/Products/Release/MoonlightEnhanced.app/Contents/Library/LaunchServices/std.skyhua.MoonlightMacEnhanced.AwdlPrivilegedHelper"
 

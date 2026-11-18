@@ -321,6 +321,9 @@ unzip -o xcframeworks.zip -d xcframeworks/
 # AV1 软件解码用的 dav1d（需要 meson、ninja、nasm）
 brew install meson ninja nasm
 scripts/build_dav1d.sh
+
+# 静态链接的 libcrypto（OpenSSL 3.5 LTS 源码按裁剪配置构建，只需要 perl 与 make）
+scripts/build_openssl.sh
 ```
 
 然后：

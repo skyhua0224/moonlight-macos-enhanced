@@ -102,15 +102,16 @@
   {
    "id": "openssl",
    "name": "OpenSSL",
-   "version": "3.6.1",
+   "version": "3.5.9",
    "spdx": "Apache-2.0",
    "url": "https://www.openssl.org",
-   "kind": "framework (OpenSSL.framework)",
-   "evidence": "Package.resolved pins OpenSSL-Package 3.6.1; OpenSSL.framework is in Contents/Frameworks and in otool -L; 31 EVP_* imports",
+   "kind": "static library",
+   "evidence": "xcframeworks/openssl/lib/libcrypto.a in OTHER_LDFLAGS of the app target (VERSION file: 3.5.9, built by scripts/build_openssl.sh); no OpenSSL.framework in the bundle and no OpenSSL, libcrypto or libssl in otool -L",
    "license": "Apache-2.0",
    "copyright": [
     "The OpenSSL Project Authors"
-   ]
+   ],
+   "note": "Only libcrypto is built, with a trimmed feature set (see docs/openssl-static-libcrypto.md); libssl is not part of the app."
   },
   {
    "id": "opus",
