@@ -7,7 +7,7 @@
 - 当前版本 **OpenSSL 3.5.9**，源码包 sha256 写在 `scripts/build_openssl.sh` 里，与 GitHub 发布页的 `.sha256` 文件和 API 返回的摘要三处一致。
 - 选 3.5 的原因：它是当前受支持的长期支持（LTS）线，OpenSSL 官方发布策略写明 3.5 支持到 2030-04-08；非 LTS 版本只保证 13 个月，4.0 到 2027-05-14，4.1 到 2027-11-23。裁剪后的库只用到成熟的 RSA、X.509、PKCS#12、AES、SHA、HMAC 接口，用 LTS 线换来最长的安全修复期，升级时也不需要追新接口。
 - 以前的预编译包固定在 3.6.1。3.6 线不在官方受支持名单里，换成 3.5.9 同时去掉了这个停滞的固定版本。
-- 汇编优化保持开启（ARMv8 Crypto Extensions、AES-NI、PCLMULQDQ），**不要加 `no-asm`**。以前的预编译包没有这些汇编，AES-GCM 每包解密 8.8 µs，现在 0.24 µs，见下面的测量。
+- 汇编优化保持开启（ARMv8 Crypto Extensions、AES-NI、PCLMULQDQ），**不要加 `no-asm`**，构建脚本会检查汇编符号。以前的预编译包没有这些汇编，arm64 上每包解密约 35 倍慢，见“性能”一节。
 
 ## 保留与去掉
 
@@ -56,18 +56,22 @@
   - 配对签名在 OpenSSL 与 Security 框架之间双向验证，改数据或签名必须验证失败；
   - EC 主机证书的验签失败而不崩溃。
 - `BENCH=1 tests/openssl-static/run.sh` 另外运行 `bench_gcm.c`，用串流路径同一个入口 `PltDecryptMessage` 测每包 AES-GCM 解密。
-- CI（`build.yml`）每个架构任务依次：构建 libcrypto、运行这些检查、构建应用，然后断言包里没有 `OpenSSL.framework`、`otool -L` 里没有 OpenSSL、libcrypto 或 libssl。
+- CI（`build.yml`）每个架构任务依次：构建 libcrypto（含汇编符号检查）、运行这些检查、构建应用，然后断言包里没有 `OpenSSL.framework`、`otool -L` 里没有 OpenSSL、libcrypto 或 libssl。
 
 ## 性能
 
-在 Apple Silicon 上，同一份 `bench_gcm.c` 分别链接原先的 `OpenSSL.framework`（3.6.1）和现在的静态库，每包 1400 字节，各跑 3 轮交替取中位数：
+以前的 `OpenSSL.framework` 来自上游预编译包，构建命令里带 `no-asm`，符号表里没有 `aes_v8`、`aesni`、`gcm_ghash` 一类汇编，AES-GCM 是纯 C 实现。现在的库保留汇编，`scripts/build_openssl.sh` 在每个架构构建后用 `nm` 检查：arm64 必须有 `aes_v8_encrypt`、`aes_v8_cbc_encrypt`、`gcm_ghash_v8`，x86_64 必须有 `aesni_encrypt`、`aesni_cbc_encrypt`、`gcm_ghash_clmul`，缺任何一个构建直接失败（CI 的每个架构任务都会跑这一步）。
 
-| | 每包耗时 | 吞吐 | 对 150 Mbit/s 的余量 |
-| --- | --- | --- | --- |
-| 原 OpenSSL.framework 3.6.1 | 8.8 µs | 159 MB/s | 8 倍 |
-| 静态 libcrypto 3.5.9 | 0.24 µs | 5.9 GB/s | 315 倍 |
+`tests/openssl-static/bench_gcm.c` 通过串流路径同一个入口 `PltDecryptMessage` 测每包 AES-128-GCM 解密（复用上下文，每包新 IV 和标签）。同一份源码分别链接原 framework（3.6.1）与现在的静态库，交替运行取中位数；单核占用按 500 Mbit/s 折算（1216 字节包约 51400 包/秒）：
 
-原来的预编译包里没有 `aes_v8` / `aesni` 一类的汇编符号，也就是纯 C 的 AES-GCM；现在的库保留了汇编，不会退步。
+| 包长 1216 B | 每包解密 | 500 Mbit/s 的单核占用 |
+| --- | --- | --- |
+| arm64（Apple Silicon 实机），原 framework | 7.71 µs | 39.6% |
+| arm64（Apple Silicon 实机），静态 libcrypto | 0.21 µs | 1.1% |
+| x86_64（Rosetta 下运行），原 framework | 8.69 µs | 44.6% |
+| x86_64（Rosetta 下运行），静态 libcrypto | 0.52 µs | 2.7% |
+
+1400 字节包：arm64 8.8 µs → 0.24 µs。x86_64 的数字是在 Apple Silicon 上经 Rosetta 翻译运行得到的，只能说明汇编路径生效、不退步，不等于原生 Intel Mac 的实测。
 
 ## 升级 OpenSSL 与安全更新
 

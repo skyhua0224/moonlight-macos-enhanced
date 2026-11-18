@@ -7,6 +7,7 @@
 # The app and moonlight-common-c link this archive directly; there is no OpenSSL.framework.
 # Keep the algorithm list in sync with docs/openssl-static-libcrypto.md. Assembly
 # (ARMv8 crypto extensions, AES-NI, PCLMULQDQ) stays on: never add no-asm.
+# The build fails when the archive has no aes_v8 / aesni / GHASH symbols.
 # Needs perl and make (both ship with the Xcode command line tools). Does nothing when the
 # version and option set below are already built.
 set -euo pipefail
@@ -75,6 +76,19 @@ for arch in $ARCHS; do
     make -j"$JOBS" build_generated >/dev/null
     make -j"$JOBS" libcrypto.a >/dev/null
   )
+  # The hardware AES and GHASH code must be in the archive. The OpenSSL.framework this
+  # replaced was built with no-asm and decrypted a stream packet about 35 times slower.
+  case "$arch" in
+    arm64)  required="_aes_v8_encrypt _aes_v8_cbc_encrypt _gcm_ghash_v8" ;;
+    x86_64) required="_aesni_encrypt _aesni_cbc_encrypt _gcm_ghash_clmul" ;;
+  esac
+  nm -g "$WORK/build-$arch/libcrypto.a" > "$WORK/symbols-$arch.txt" 2>/dev/null
+  for sym in $required; do
+    if ! grep -q " T $sym\$" "$WORK/symbols-$arch.txt"; then
+      echo "libcrypto ($arch) lacks the assembly symbol $sym: was no-asm set?" >&2
+      exit 1
+    fi
+  done
   libs+=("$WORK/build-$arch/libcrypto.a")
 done
 
