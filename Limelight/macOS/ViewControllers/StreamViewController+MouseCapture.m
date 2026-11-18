@@ -1232,6 +1232,10 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 }
 
 - (void)reconcileHybridFreeMouseAnchorToCurrentPointer {
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:nil];
+}
+
+- (void)reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:(NSEvent *)event {
     if (![self supportsRemoteDesktopCursorSync] || ![self hasReadyInputContext] || !self.view.window) {
         return;
     }
@@ -1251,7 +1255,8 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     // while the pointer goes on, so every event would be "far" from it and get a correction on top of what HIDSupport
     // sends for the event itself. HIDSupport sends that event's position as the only thing for it and moves the anchor
     // to the pointer, so there is nothing to reconcile here.
-    if (![self.hidSupport hasRecentCoreHIDMouseMovement]) {
+    // Read once for the event: HIDSupport mouseMoved: uses the same answer for it (hasRecentCoreHIDMouseMovementForAppKitEvent:).
+    if (![self.hidSupport hasRecentCoreHIDMouseMovementForAppKitEvent:event]) {
         return;
     }
 
@@ -2478,7 +2483,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)mouseMoved:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
-    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:event];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2509,7 +2514,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)mouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
-    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:event];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2539,7 +2544,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)rightMouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
-    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:event];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2569,7 +2574,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)otherMouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
-    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:event];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }

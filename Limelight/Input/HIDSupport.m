@@ -1526,6 +1526,19 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
            self.coreHIDMouseDriver.secondsSinceLastMovementEvent < 0.25;
 }
 
+- (BOOL)hasRecentCoreHIDMouseMovementForAppKitEvent:(NSEvent *)event {
+    if (event == nil) {
+        return [self hasRecentCoreHIDMouseMovement];
+    }
+    if (self.coreHIDRecencyEvent == event) {
+        return self.coreHIDRecencyEventAnswer;
+    }
+    BOOL recent = [self hasRecentCoreHIDMouseMovement];
+    self.coreHIDRecencyEvent = event;
+    self.coreHIDRecencyEventAnswer = recent;
+    return recent;
+}
+
 - (NSString *)coreHIDDiagnosticSummary {
     CoreHIDMouseDriver *driver = self.coreHIDMouseDriver;
     if (driver == nil) {

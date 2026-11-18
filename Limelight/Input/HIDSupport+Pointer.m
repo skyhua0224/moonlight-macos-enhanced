@@ -768,7 +768,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         MLCoreHIDAppKitMoveAction action;
         @synchronized (self.freeMouseVirtualCursorLock) {
             action = MLCoreHIDDecideAppKitMove([self coreHIDSilenceState],
-                                               [self hasRecentCoreHIDMouseMovement],
+                                               [self hasRecentCoreHIDMouseMovementForAppKitEvent:event],
                                                LiGetMillis());
         }
         if (action.markSilent) {
@@ -799,10 +799,21 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                                                y:hostY
                                            width:referenceWidth
                                           height:referenceHeight];
-        [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
-                                            summaryKey:@"Mouse Runtime Path Absolute Active"
-                                             detailKey:@"Mouse Runtime Detail Absolute Active"];
-        if (hybridAppKitMove) {
+        if (!self.coreHIDMouseRuntimeFailed) {
+            // While CoreHID is marked failed the status keeps the reason it was recorded with.
+            [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
+                                                summaryKey:@"Mouse Runtime Path Absolute Active"
+                                                 detailKey:@"Mouse Runtime Detail Absolute Active"];
+        }
+        // Hybrid free mouse configured, CoreHID found silent: the absolute path is used, and the anchor keeps following
+        // the pointer on every event, so CoreHID motion that resumes later starts from where the pointer is.
+        BOOL hybridConfiguredCoreHIDSilent = self.coreHIDMouseRuntimeFailed &&
+                                             touchscreenMode != 1 &&
+                                             self.useCoreHIDMouse &&
+                                             !self.useGCMouse &&
+                                             HIDShouldUseHybridFreeMouseMotion(self) &&
+                                             [[SettingsClass mouseModeFor:self.host.uuid] isEqualToString:@"remote"];
+        if (hybridAppKitMove || hybridConfiguredCoreHIDSilent) {
             // The virtual cursor follows the pointer, so that CoreHID motion that starts later continues from here.
             NSPoint eventPoint = NSZeroPoint;
             NSSize eventReference = NSZeroSize;

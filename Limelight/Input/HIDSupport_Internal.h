@@ -90,6 +90,9 @@
 /// after the driver is gone.
 @property (nonatomic, copy) NSString *lastCoreHIDDiagnosticSummary;
 @property (nonatomic) BOOL coreHIDMouseRuntimeFailed;
+/// The event hasRecentCoreHIDMouseMovementForAppKitEvent: last answered for, and its answer (main thread only).
+@property (nonatomic, weak) NSEvent *coreHIDRecencyEvent;
+@property (nonatomic) BOOL coreHIDRecencyEventAnswer;
 @property (nonatomic) NSUInteger keyboardPhysicalModifierSourceMask;
 @property (nonatomic) NSUInteger keyboardRemoteModifierMask;
 @property (nonatomic) NSUInteger keyboardDeferredShortcutTranslationCommandMask;
