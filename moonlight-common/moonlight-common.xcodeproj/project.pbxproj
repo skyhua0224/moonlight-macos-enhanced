@@ -536,6 +536,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"moonlight-common-c/enet/include",
+					"$(SRCROOT)/../xcframeworks/openssl/include",
 					"../libs/**",
 				);
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
@@ -559,6 +560,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"moonlight-common-c/enet/include",
+					"$(SRCROOT)/../xcframeworks/openssl/include",
 					"../libs/**",
 				);
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;

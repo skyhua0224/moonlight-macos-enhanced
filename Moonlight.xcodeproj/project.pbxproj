@@ -12,7 +12,6 @@
 		4C38E8011FEE08AA000425CD /* (null) in Sources */ = {isa = PBXBuildFile; };
 		D10000020000000000000002 /* FoundationDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000010000000000000001 /* FoundationDisplayView.swift */; };
 		4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
-		A42858422D5065B800E39078 /* OpenSSL in Frameworks */ = {isa = PBXBuildFile; productRef = A42858412D5065B800E39078 /* OpenSSL */; };
 		B10000012F00000000E39078 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B10000022F00000000E39078 /* Sparkle */; };
 		A42858472D5066A000E39078 /* FFmpeg.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858432D5066A000E39078 /* FFmpeg.xcframework */; };
 		A42858482D5066A000E39078 /* Opus.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A42858442D5066A000E39078 /* Opus.xcframework */; };
@@ -329,7 +328,6 @@
 			files = (
 				A42858472D5066A000E39078 /* FFmpeg.xcframework in Frameworks */,
 				A42858482D5066A000E39078 /* Opus.xcframework in Frameworks */,
-				A42858422D5065B800E39078 /* OpenSSL in Frameworks */,
 				B10000012F00000000E39078 /* Sparkle in Frameworks */,
 				4C38E82E1FF0C71D000425CD /* libmoonlight-common.a in Frameworks */,
 				E50000030000000000000003 /* libDS5Core.a in Frameworks */,
@@ -505,7 +503,6 @@
 			);
 			mainGroup = FB290CE519B2C406004C83CF;
 			packageReferences = (
-				A42858402D5065B800E39078 /* XCRemoteSwiftPackageReference "OpenSSL-Package" */,
 				B10000032F00000000E39078 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 48;
@@ -736,6 +733,7 @@
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/enet/include",
 					"$(PROJECT_DIR)/xcframeworks/dav1d/include",
+					"$(PROJECT_DIR)/xcframeworks/openssl/include",
 				);
 				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -752,6 +750,7 @@
 					"-weak_framework",
 					MetalFX,
 					"$(PROJECT_DIR)/xcframeworks/dav1d/lib/libdav1d.a",
+					"$(PROJECT_DIR)/xcframeworks/openssl/lib/libcrypto.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMacEnhanced;
 				PRODUCT_NAME = MoonlightEnhanced;
@@ -812,6 +811,7 @@
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/src",
 					"$(PROJECT_DIR)/moonlight-common/moonlight-common-c/enet/include",
 					"$(PROJECT_DIR)/xcframeworks/dav1d/include",
+					"$(PROJECT_DIR)/xcframeworks/openssl/include",
 				);
 				INFOPLIST_FILE = "Limelight/macOS/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -828,6 +828,7 @@
 					"-weak_framework",
 					MetalFX,
 					"$(PROJECT_DIR)/xcframeworks/dav1d/lib/libdav1d.a",
+					"$(PROJECT_DIR)/xcframeworks/openssl/lib/libcrypto.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = std.skyhua.MoonlightMacEnhanced;
 				PRODUCT_NAME = MoonlightEnhanced;
@@ -1024,14 +1025,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		A42858402D5065B800E39078 /* XCRemoteSwiftPackageReference "OpenSSL-Package" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/krzyzanowskim/OpenSSL-Package.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 3.3.2000;
-			};
-		};
 		B10000032F00000000E39078 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
@@ -1043,11 +1036,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A42858412D5065B800E39078 /* OpenSSL */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A42858402D5065B800E39078 /* XCRemoteSwiftPackageReference "OpenSSL-Package" */;
-			productName = OpenSSL;
-		};
 		B10000022F00000000E39078 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B10000032F00000000E39078 /* XCRemoteSwiftPackageReference "Sparkle" */;
