@@ -122,6 +122,11 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (BOOL)reconcileFreeMouseVirtualCursorToViewPoint:(NSPoint)viewPoint
                                      referenceSize:(NSSize)referenceSize
                                correctionThreshold:(CGFloat)correctionThreshold;
+/// Same, and reports how far (view points, larger axis) the virtual cursor was from `viewPoint` before it was re-anchored.
+- (BOOL)reconcileFreeMouseVirtualCursorToViewPoint:(NSPoint)viewPoint
+                                     referenceSize:(NSSize)referenceSize
+                               correctionThreshold:(CGFloat)correctionThreshold
+                                          driftOut:(nullable double *)driftOut;
 - (BOOL)getFreeMouseVirtualCursorPoint:(NSPoint *)viewPoint
                          referenceSize:(NSSize *)referenceSize;
 - (void)sendAbsoluteMousePositionForViewPoint:(NSPoint)viewPoint

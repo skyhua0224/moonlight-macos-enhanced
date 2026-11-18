@@ -592,6 +592,12 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     self.inputDiagnosticsAbsoluteDuplicateSkips = 0;
     self.inputDiagnosticsCoreHIDRawEvents = 0;
     self.inputDiagnosticsCoreHIDDispatches = 0;
+    self.inputDiagnosticsFreeMouseEventAgeCount = 0;
+    self.inputDiagnosticsFreeMouseEventAgeSumMs = 0;
+    self.inputDiagnosticsFreeMouseEventAgeMaxMs = 0;
+    self.inputDiagnosticsFreeMouseEventAgeOver8Ms = 0;
+    self.inputDiagnosticsFreeMouseCorrections = 0;
+    self.inputDiagnosticsFreeMouseCorrectionMaxDrift = 0;
     self.inputDiagnosticsSuppressedRelativeEvents = 0;
     self.inputDiagnosticsRawRelativeDeltaX = 0;
     self.inputDiagnosticsRawRelativeDeltaY = 0;
@@ -780,6 +786,17 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     [parts addObject:[NSString stringWithFormat:@"rearm=%lu", (unsigned long)self.inputDiagnosticsRearmCount]];
     [parts addObject:[NSString stringWithFormat:@"rearmSkip=%lu", (unsigned long)self.inputDiagnosticsRearmSkippedCount]];
     [parts addObject:[NSString stringWithFormat:@"rearmDeferred=%lu", (unsigned long)self.inputDiagnosticsRearmDeferredCount]];
+    if (self.inputDiagnosticsFreeMouseEventAgeCount > 0) {
+        // free mouse: age of the mouse events when the main thread took them (avg/max ms, how many waited over 8 ms),
+        // and the corrections sent to the host (count, largest drift in view points)
+        [parts addObject:[NSString stringWithFormat:@"freeMouseEventAge=%.1f/%.1fms over8=%lu/%lu corrections=%lu maxDrift=%.1f",
+            self.inputDiagnosticsFreeMouseEventAgeSumMs / (double)self.inputDiagnosticsFreeMouseEventAgeCount,
+            self.inputDiagnosticsFreeMouseEventAgeMaxMs,
+            (unsigned long)self.inputDiagnosticsFreeMouseEventAgeOver8Ms,
+            (unsigned long)self.inputDiagnosticsFreeMouseEventAgeCount,
+            (unsigned long)self.inputDiagnosticsFreeMouseCorrections,
+            self.inputDiagnosticsFreeMouseCorrectionMaxDrift]];
+    }
     if (captureSkipTop.length > 0) {
         [parts addObject:[NSString stringWithFormat:@"captureSkipTop=%@", captureSkipTop]];
     }

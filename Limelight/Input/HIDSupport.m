@@ -415,6 +415,8 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     // releaseAllModifierKeys.
     NSMutableDictionary<NSNumber *, NSNumber *> *_pressedKeyPairs;
     NSLock *_pressedKeyPairsLock;
+    // The CoreHID free-mouse virtual cursor; guarded by freeMouseVirtualCursorLock.
+    MLFreeMouseVirtualCursor _freeMouseVirtualCursor;
     // Typed-character cache. Main thread only (Text Input Services is not
     // thread safe); key events arrive on the main thread.
     NSMutableDictionary<NSNumber *, NSNumber *> *_typedVirtualKeyCache;
@@ -816,8 +818,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         _loggedKeyMappingMode = -1;
         [self setUpPrecisionTouchpad];
         self.freeMouseVirtualCursorLock = [[NSObject alloc] init];
-        self.freeMouseVirtualCursorGainX = 1.0;
-        self.freeMouseVirtualCursorGainY = 1.0;
+        MLFreeMouseVirtualCursorReset(&_freeMouseVirtualCursor);
         self.inputDiagnosticsLock = [[NSObject alloc] init];
         self.pressedMouseButtonsMask = 0;
         [self resetInputDiagnostics];
@@ -1642,6 +1643,10 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
     HIDDispatchInput(self, inputCtx, ^{
         LiSendMouseMoveEventCtx(inputCtx, moveX, moveY);
     });
+}
+
+- (MLFreeMouseVirtualCursor *)freeMouseVirtualCursorState {
+    return &_freeMouseVirtualCursor;
 }
 
 - (void)coreHIDMouseDriver:(CoreHIDMouseDriver *)driver
