@@ -137,6 +137,46 @@ jobs:
           exit 1
         fi
 
+    # The project strips local symbols from the shipped binaries (Release: STRIP_STYLE
+    # non-global), which takes about 15 MB out of each architecture. The names and source
+    # lines stay in the dSYM of the same build. Keep it: scripts/symbolicate_crash.py needs
+    # it to read a crash report of this release. The release job attaches these archives.
+    - name: Check stripped symbols and archive ${{ matrix.variant }} dSYMs
+      run: |
+        products="build/Build/Products/Release"
+        main_binary="$products/MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced"
+        main_dsym="$products/MoonlightEnhanced.app.dSYM"
+
+        # An unstripped main binary has about 220000 symbol table entries, a stripped one under 2000.
+        symbols="$(otool -l "$main_binary" | awk '/LC_SYMTAB/ {found=1} found && $1 == "nsyms" {print $2; exit}')"
+        echo "Main binary symbol table entries: $symbols"
+        if [ -z "$symbols" ] || [ "$symbols" -gt 20000 ]; then
+          echo "Local symbols were not stripped from the main binary"
+          exit 1
+        fi
+
+        if [ ! -d "$main_dsym" ]; then
+          echo "Expected dSYM at $main_dsym"
+          exit 1
+        fi
+        binary_uuid="$(dwarfdump --uuid "$main_binary" | awk '{print $2}')"
+        dsym_uuid="$(dwarfdump --uuid "$main_dsym" | awk '{print $2}')"
+        echo "Binary UUID: $binary_uuid"
+        echo "dSYM UUID:   $dsym_uuid"
+        if [ -z "$binary_uuid" ] || [ "$binary_uuid" != "$dsym_uuid" ]; then
+          echo "The dSYM does not match the binary"
+          exit 1
+        fi
+
+        stage="dist/dsym/MoonlightEnhanced-dSYM-${{ matrix.variant }}"
+        mkdir -p "$stage"
+        cp -R "$main_dsym" "$stage/"
+        if [ -d "$products/RemoteFileProvider.appex.dSYM" ]; then
+          cp -R "$products/RemoteFileProvider.appex.dSYM" "$stage/"
+        fi
+        ditto -c -k --keepParent "$stage" "dist/MoonlightEnhanced-dSYM-${{ matrix.variant }}.zip"
+        ls -l "dist/MoonlightEnhanced-dSYM-${{ matrix.variant }}.zip"
+
     - name: Sign ${{ matrix.variant }} app bundle
       run: |
         python3 scripts/sign_app_bundle.py build/Build/Products/Release/MoonlightEnhanced.app \
@@ -166,11 +206,29 @@ jobs:
           "dist/app/MoonlightEnhanced.app" || \
         hdiutil create -volname "Moonlight-${{ matrix.variant }}" -srcfolder "dist/app/MoonlightEnhanced.app" -ov -format UDZO "dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg"
 
+    - name: Report ${{ matrix.variant }} package sizes
+      run: |
+        main_binary="dist/app/MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced"
+        {
+          echo "### ${{ matrix.variant }} sizes"
+          echo '```'
+          ls -l "dist/Moonlight-macOS-Enhanced-${{ matrix.variant }}.dmg" "$main_binary" | awk '{print $5, $9}'
+          du -sk "dist/app/MoonlightEnhanced.app" | awk '{print $1 " KiB installed"}'
+          echo '```'
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+
     - name: Upload ${{ matrix.variant }} app artifact
       uses: actions/upload-artifact@v7
       with:
         name: Moonlight-macOS-app-${{ matrix.variant }}
         path: dist/Moonlight-macOS-${{ matrix.variant }}.app.tar.gz
+        if-no-files-found: error
+
+    - name: Upload ${{ matrix.variant }} dSYM artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: Moonlight-macOS-dsym-${{ matrix.variant }}
+        path: dist/MoonlightEnhanced-dSYM-${{ matrix.variant }}.zip
         if-no-files-found: error
 
     - name: Upload ${{ matrix.variant }} DMG artifact
@@ -391,6 +449,20 @@ jobs:
         name: Moonlight-macOS-dmg-universal
         path: dist
 
+    # The universal package carries the slices of these two builds, so each
+    # architecture's dSYM covers the matching slice of every package.
+    - name: Download x86_64 dSYM artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: Moonlight-macOS-dsym-x86_64
+        path: dist
+
+    - name: Download arm64 dSYM artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: Moonlight-macOS-dsym-arm64
+        path: dist
+
     - name: Get Version
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -429,4 +501,6 @@ jobs:
           dist/Moonlight-macOS-Enhanced-x86_64.dmg
           dist/Moonlight-macOS-Enhanced-arm64.dmg
           dist/Moonlight-macOS-Enhanced-universal.dmg
+          dist/MoonlightEnhanced-dSYM-arm64.zip
+          dist/MoonlightEnhanced-dSYM-x86_64.zip
         body_path: release_body.md
