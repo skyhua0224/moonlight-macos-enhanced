@@ -315,6 +315,21 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
     self.coreHIDFreeMouseLastTruthPoint = point;
     self.hasCoreHIDFreeMouseLastTruthPoint = YES;
+
+    // How long the event waited before the main thread took it. The virtual cursor is reconciled against the live
+    // pointer (reconcileHybridFreeMouseAnchorToCurrentPointer), so this does not steer anything: it is the figure
+    // that explains a log in which the free mouse drifts.
+    NSTimeInterval ageMs = (NSProcessInfo.processInfo.systemUptime - event.timestamp) * 1000.0;
+    if (ageMs >= 0.0 && ageMs < 60000.0) {
+        self.inputDiagnosticsFreeMouseEventAgeCount += 1;
+        self.inputDiagnosticsFreeMouseEventAgeSumMs += ageMs;
+        if (ageMs > self.inputDiagnosticsFreeMouseEventAgeMaxMs) {
+            self.inputDiagnosticsFreeMouseEventAgeMaxMs = ageMs;
+        }
+        if (ageMs > 8.0) {
+            self.inputDiagnosticsFreeMouseEventAgeOver8Ms += 1;
+        }
+    }
 }
 
 - (NSPoint)appKitSemanticViewPointForMouseEvent:(NSEvent *)event {
@@ -1227,19 +1242,39 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return;
     }
 
+    // Only once this capture has had a mouse event, as before.
     if (!self.hasCoreHIDFreeMouseLastTruthPoint) {
         return;
     }
 
-    NSPoint currentPoint = self.coreHIDFreeMouseLastTruthPoint;
+    // The virtual cursor is checked against the pointer as it is now. The location stored in an AppKit mouse event was
+    // taken when the event was created; by the time the main thread runs this the raw CoreHID motion has gone on, and
+    // a pointer that old makes the cursor jump back by (speed x queue time) and teaches it too small a gain.
+    // NSEvent.mouseLocation is the current position and does not depend on the event queue.
+    // (Sources: macos-apple-nsevent-mouselocation-20261118 "returns the location regardless of the current event or
+    // pending events", macos-apple-nsevent-locationinwindow-20261118.)
+    NSPoint currentPoint = [self currentMouseLocationInViewCoordinates];
     NSRect toleranceBounds = NSInsetRect(self.view.bounds, -2.0, -2.0);
     if (!NSPointInRect(currentPoint, toleranceBounds)) {
         return;
     }
 
-    [self.hidSupport reconcileFreeMouseVirtualCursorToViewPoint:currentPoint
-                                                  referenceSize:self.view.bounds.size
-                                            correctionThreshold:MLCoreHIDFreeMouseCorrectionThreshold];
+    double drift = 0.0;
+    BOOL corrected = [self.hidSupport reconcileFreeMouseVirtualCursorToViewPoint:currentPoint
+                                                                   referenceSize:self.view.bounds.size
+                                                             correctionThreshold:MLCoreHIDFreeMouseCorrectionThreshold
+                                                                        driftOut:&drift];
+    if (corrected) {
+        self.inputDiagnosticsFreeMouseCorrections += 1;
+        if (drift > self.inputDiagnosticsFreeMouseCorrectionMaxDrift) {
+            self.inputDiagnosticsFreeMouseCorrectionMaxDrift = drift;
+        }
+        if (self.inputDiagnosticsDetailActiveForStream && drift >= 12.0) {
+            NSPoint eventPoint = self.coreHIDFreeMouseLastTruthPoint;
+            Log(LOG_D, @"[inputdiag] free-mouse correction drift=%.1f current=(%.1f,%.1f) lastEvent=(%.1f,%.1f)",
+                drift, currentPoint.x, currentPoint.y, eventPoint.x, eventPoint.y);
+        }
+    }
 }
 
 - (NSPoint)resolvedAbsoluteSyncViewPointForMouseEvent:(NSEvent *)event

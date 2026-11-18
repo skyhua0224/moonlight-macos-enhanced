@@ -42,60 +42,10 @@ static inline BOOL HIDAbsoluteMousePayloadForEvent(NSEvent *event,
                                                 referenceHeight);
 }
 
-static inline CGFloat HIDClampFreeMouseCoordinate(CGFloat value, CGFloat upperBound) {
-    if (!isfinite(value)) {
-        return 0.0;
-    }
-    if (!isfinite(upperBound) || upperBound <= 0.0) {
-        return 0.0;
-    }
-    if (value < 0.0) {
-        return 0.0;
-    }
-    if (value > upperBound) {
-        return upperBound;
-    }
-    return value;
-}
-
 static inline NSPoint HIDClampFreeMousePoint(NSPoint point, NSSize referenceSize) {
-    CGFloat maxX = MAX(0.0, referenceSize.width);
-    CGFloat maxY = MAX(0.0, referenceSize.height);
-    return NSMakePoint(HIDClampFreeMouseCoordinate(point.x, maxX),
-                       HIDClampFreeMouseCoordinate(point.y, maxY));
-}
-
-static inline double HIDClampFreeMouseGain(double value) {
-    if (!isfinite(value)) {
-        return 1.0;
-    }
-    if (value < 0.25) {
-        return 0.25;
-    }
-    if (value > 4.0) {
-        return 4.0;
-    }
-    return value;
-}
-
-static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, double observedDelta) {
-    if (!isfinite(rawDelta) || !isfinite(observedDelta)) {
-        return currentGain;
-    }
-    if (fabs(rawDelta) < 0.5 || fabs(observedDelta) < 0.25) {
-        return currentGain;
-    }
-    if ((rawDelta > 0.0 && observedDelta < 0.0) || (rawDelta < 0.0 && observedDelta > 0.0)) {
-        return currentGain;
-    }
-
-    double sample = fabs(observedDelta / rawDelta);
-    sample = HIDClampFreeMouseGain(sample);
-    if (!isfinite(currentGain) || currentGain <= 0.0) {
-        return sample;
-    }
-
-    return HIDClampFreeMouseGain((currentGain * 0.82) + (sample * 0.18));
+    MLFreeMousePoint clamped = MLFreeMouseClampPoint((MLFreeMousePoint){point.x, point.y},
+                                                     referenceSize.width, referenceSize.height);
+    return NSMakePoint(clamped.x, clamped.y);
 }
 
 @implementation HIDSupport (Pointer)
@@ -120,14 +70,8 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
 
 - (void)resetFreeMouseVirtualCursorState {
     @synchronized (self.freeMouseVirtualCursorLock) {
-        self.freeMouseVirtualCursorHasAnchor = NO;
-        self.freeMouseVirtualCursorPoint = NSZeroPoint;
-        self.freeMouseVirtualCursorLastAnchorPoint = NSZeroPoint;
+        MLFreeMouseVirtualCursorReset([self freeMouseVirtualCursorState]);
         self.freeMouseVirtualCursorReferenceSize = NSZeroSize;
-        self.freeMouseVirtualCursorGainX = 1.0;
-        self.freeMouseVirtualCursorGainY = 1.0;
-        self.freeMouseVirtualCursorRawSinceAnchorX = 0.0;
-        self.freeMouseVirtualCursorRawSinceAnchorY = 0.0;
     }
 }
 
@@ -143,33 +87,29 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
         return;
     }
 
-    NSPoint clampedPoint = HIDClampFreeMousePoint(viewPoint, referenceSize);
     BOOL shouldBlendGain = ![self hasPressedMouseButtons];
 
     @synchronized (self.freeMouseVirtualCursorLock) {
-        if (self.freeMouseVirtualCursorHasAnchor && shouldBlendGain) {
-            double observedDeltaX = clampedPoint.x - self.freeMouseVirtualCursorLastAnchorPoint.x;
-            double observedDeltaY = clampedPoint.y - self.freeMouseVirtualCursorLastAnchorPoint.y;
-            self.freeMouseVirtualCursorGainX = HIDBlendFreeMouseGain(self.freeMouseVirtualCursorGainX,
-                                                                     self.freeMouseVirtualCursorRawSinceAnchorX,
-                                                                     observedDeltaX);
-            self.freeMouseVirtualCursorGainY = HIDBlendFreeMouseGain(self.freeMouseVirtualCursorGainY,
-                                                                     self.freeMouseVirtualCursorRawSinceAnchorY,
-                                                                     observedDeltaY);
-        }
-
-        self.freeMouseVirtualCursorPoint = clampedPoint;
-        self.freeMouseVirtualCursorLastAnchorPoint = clampedPoint;
+        MLFreeMouseVirtualCursorAnchor([self freeMouseVirtualCursorState],
+                                       (MLFreeMousePoint){viewPoint.x, viewPoint.y},
+                                       referenceSize.width, referenceSize.height, shouldBlendGain);
         self.freeMouseVirtualCursorReferenceSize = referenceSize;
-        self.freeMouseVirtualCursorRawSinceAnchorX = 0.0;
-        self.freeMouseVirtualCursorRawSinceAnchorY = 0.0;
-        self.freeMouseVirtualCursorHasAnchor = YES;
     }
 }
 
 - (BOOL)reconcileFreeMouseVirtualCursorToViewPoint:(NSPoint)viewPoint
                                      referenceSize:(NSSize)referenceSize
                                correctionThreshold:(CGFloat)correctionThreshold {
+    return [self reconcileFreeMouseVirtualCursorToViewPoint:viewPoint
+                                              referenceSize:referenceSize
+                                        correctionThreshold:correctionThreshold
+                                                  driftOut:NULL];
+}
+
+- (BOOL)reconcileFreeMouseVirtualCursorToViewPoint:(NSPoint)viewPoint
+                                     referenceSize:(NSSize)referenceSize
+                               correctionThreshold:(CGFloat)correctionThreshold
+                                          driftOut:(double *)driftOut {
     if (!self.freeMouseVirtualCursorRequestedActive) {
         return NO;
     }
@@ -182,35 +122,15 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
 
     NSPoint clampedPoint = HIDClampFreeMousePoint(viewPoint, referenceSize);
     BOOL shouldBlendGain = ![self hasPressedMouseButtons];
-    CGFloat threshold = MAX(0.0, correctionThreshold);
     BOOL shouldSendCorrection = NO;
 
     @synchronized (self.freeMouseVirtualCursorLock) {
-        if (self.freeMouseVirtualCursorHasAnchor) {
-            if (shouldBlendGain) {
-                double observedDeltaX = clampedPoint.x - self.freeMouseVirtualCursorLastAnchorPoint.x;
-                double observedDeltaY = clampedPoint.y - self.freeMouseVirtualCursorLastAnchorPoint.y;
-                self.freeMouseVirtualCursorGainX = HIDBlendFreeMouseGain(self.freeMouseVirtualCursorGainX,
-                                                                         self.freeMouseVirtualCursorRawSinceAnchorX,
-                                                                         observedDeltaX);
-                self.freeMouseVirtualCursorGainY = HIDBlendFreeMouseGain(self.freeMouseVirtualCursorGainY,
-                                                                         self.freeMouseVirtualCursorRawSinceAnchorY,
-                                                                         observedDeltaY);
-            }
-
-            CGFloat driftX = fabs(clampedPoint.x - self.freeMouseVirtualCursorPoint.x);
-            CGFloat driftY = fabs(clampedPoint.y - self.freeMouseVirtualCursorPoint.y);
-            shouldSendCorrection = driftX > threshold || driftY > threshold;
-        } else {
-            shouldSendCorrection = YES;
-        }
-
-        self.freeMouseVirtualCursorPoint = clampedPoint;
-        self.freeMouseVirtualCursorLastAnchorPoint = clampedPoint;
+        shouldSendCorrection = MLFreeMouseVirtualCursorReconcile([self freeMouseVirtualCursorState],
+                                                                 (MLFreeMousePoint){viewPoint.x, viewPoint.y},
+                                                                 referenceSize.width, referenceSize.height,
+                                                                 shouldBlendGain, (double)MAX(0.0, correctionThreshold),
+                                                                 driftOut);
         self.freeMouseVirtualCursorReferenceSize = referenceSize;
-        self.freeMouseVirtualCursorRawSinceAnchorX = 0.0;
-        self.freeMouseVirtualCursorRawSinceAnchorY = 0.0;
-        self.freeMouseVirtualCursorHasAnchor = YES;
     }
 
     if (shouldSendCorrection) {
@@ -229,11 +149,12 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
     NSSize currentReferenceSize = NSZeroSize;
 
     @synchronized (self.freeMouseVirtualCursorLock) {
-        hasAnchor = self.freeMouseVirtualCursorHasAnchor &&
+        MLFreeMouseVirtualCursor *cursor = [self freeMouseVirtualCursorState];
+        hasAnchor = cursor->hasAnchor &&
                     self.freeMouseVirtualCursorReferenceSize.width > 0.0 &&
                     self.freeMouseVirtualCursorReferenceSize.height > 0.0;
         if (hasAnchor) {
-            currentPoint = self.freeMouseVirtualCursorPoint;
+            currentPoint = NSMakePoint(cursor->point.x, cursor->point.y);
             currentReferenceSize = self.freeMouseVirtualCursorReferenceSize;
         }
     }
@@ -414,23 +335,17 @@ static inline double HIDBlendFreeMouseGain(double currentGain, double rawDelta, 
     NSSize referenceSize = NSZeroSize;
 
     @synchronized (self.freeMouseVirtualCursorLock) {
-        if (!self.freeMouseVirtualCursorHasAnchor ||
+        MLFreeMouseVirtualCursor *cursor = [self freeMouseVirtualCursorState];
+        if (!cursor->hasAnchor ||
             self.freeMouseVirtualCursorReferenceSize.width <= 0.0 ||
             self.freeMouseVirtualCursorReferenceSize.height <= 0.0) {
             return NO;
         }
 
-        double gainX = HIDClampFreeMouseGain(self.freeMouseVirtualCursorGainX);
-        double gainY = HIDClampFreeMouseGain(self.freeMouseVirtualCursorGainY);
-        predictedPoint = self.freeMouseVirtualCursorPoint;
-        predictedPoint.x += viewDeltaX * gainX;
-        predictedPoint.y += viewDeltaY * gainY;
-        predictedPoint = HIDClampFreeMousePoint(predictedPoint, self.freeMouseVirtualCursorReferenceSize);
-
-        self.freeMouseVirtualCursorRawSinceAnchorX += viewDeltaX;
-        self.freeMouseVirtualCursorRawSinceAnchorY += viewDeltaY;
-        self.freeMouseVirtualCursorPoint = predictedPoint;
         referenceSize = self.freeMouseVirtualCursorReferenceSize;
+        MLFreeMousePoint predicted = MLFreeMouseVirtualCursorAdvance(cursor, viewDeltaX, viewDeltaY,
+                                                                     referenceSize.width, referenceSize.height);
+        predictedPoint = NSMakePoint(predicted.x, predicted.y);
     }
 
     [self sendCoalescedAbsoluteMousePositionForViewPoint:predictedPoint

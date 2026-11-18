@@ -10,6 +10,7 @@
 #import "Ticks.h"
 #import "HIDSupportRumbleTypes.h"
 #import "MLPrecisionTouchpad.h"
+#import "FreeMouseVirtualCursor.h"
 
 #import "MoonlightEnhanced-Swift.h"
 #include <limits.h>
@@ -95,14 +96,9 @@
 @property (atomic) uint64_t suppressRelativeMouseUntilMs;
 @property (nonatomic, strong) NSObject *freeMouseVirtualCursorLock;
 @property (atomic) BOOL freeMouseVirtualCursorRequestedActive;
-@property (nonatomic) BOOL freeMouseVirtualCursorHasAnchor;
-@property (nonatomic) NSPoint freeMouseVirtualCursorPoint;
-@property (nonatomic) NSPoint freeMouseVirtualCursorLastAnchorPoint;
 @property (nonatomic) NSSize freeMouseVirtualCursorReferenceSize;
-@property (nonatomic) double freeMouseVirtualCursorGainX;
-@property (nonatomic) double freeMouseVirtualCursorGainY;
-@property (nonatomic) double freeMouseVirtualCursorRawSinceAnchorX;
-@property (nonatomic) double freeMouseVirtualCursorRawSinceAnchorY;
+/// The virtual cursor itself (FreeMouseVirtualCursor.h). Read and written only under freeMouseVirtualCursorLock.
+- (MLFreeMouseVirtualCursor *)freeMouseVirtualCursorState;
 @property (nonatomic, strong) NSObject *inputDiagnosticsLock;
 @property (atomic) BOOL inputDiagnosticsEnabled;
 @property (nonatomic) NSUInteger inputDiagnosticsDetailedLogSequence;
