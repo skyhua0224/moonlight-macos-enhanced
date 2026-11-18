@@ -306,6 +306,14 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) NSUInteger inputDiagnosticsAbsoluteDuplicateSkips;
 @property (nonatomic) NSUInteger inputDiagnosticsCoreHIDRawEvents;
 @property (nonatomic) NSUInteger inputDiagnosticsCoreHIDDispatches;
+// The free mouse (CoreHID virtual cursor): how long mouse events waited for the main thread, and the position
+// corrections that went to the host. Main thread only.
+@property (nonatomic) NSUInteger inputDiagnosticsFreeMouseEventAgeCount;
+@property (nonatomic) double inputDiagnosticsFreeMouseEventAgeSumMs;
+@property (nonatomic) double inputDiagnosticsFreeMouseEventAgeMaxMs;
+@property (nonatomic) NSUInteger inputDiagnosticsFreeMouseEventAgeOver8Ms;
+@property (nonatomic) NSUInteger inputDiagnosticsFreeMouseCorrections;
+@property (nonatomic) double inputDiagnosticsFreeMouseCorrectionMaxDrift;
 @property (nonatomic) NSUInteger inputDiagnosticsSuppressedRelativeEvents;
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaX;
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaY;
