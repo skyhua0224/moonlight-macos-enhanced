@@ -304,6 +304,12 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     private var hasRuntimeVerifiedGrantThisSession = false
     private var didAttemptAuthorizationThisSession = false
     private var shouldSuggestSettingsRepair = false
+    // CoreHID delivered nothing while the system pointer moved, and the system does not report Input Monitoring as
+    // allowed for this build. An earlier grant (everGranted) must not hide that behind "granted, re-enter the stream":
+    // the shipped builds are ad-hoc signed, so the grant belongs to one build and is gone after an update (an ad hoc
+    // signed code has a designated requirement tied to that specific version of the code;
+    // sources: macos-apple-tn3127-requirements-20261119).
+    private var runtimeSilentWithoutPermission = false
     private var expectedSystemRefreshUntilUptime: TimeInterval = 0
 
     override init() {
@@ -489,20 +495,27 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         scheduleAuthorizationRefreshes()
     }
 
-    @objc(noteCoreHIDPermissionFailureWithMessage:)
-    func noteCoreHIDPermissionFailure(withMessage message: String) {
+    /// CoreHID cannot be used because the system does not report Input Monitoring as allowed (the check said so when
+    /// the driver started, or the stream found CoreHID silent while the pointer moved): show it as not allowed, with
+    /// the repair hint. The user is told in an alert, once per launch, when they can expect CoreHID to work: they
+    /// chose the CoreHID driver, tried to allow it in this session, or allowed Input Monitoring before (the grant
+    /// went stale). Automatic mode with no history falls back quietly, as it always did.
+    @objc(noteCoreHIDSilentWithoutPermissionWithMessage:userChoseCoreHID:)
+    func noteCoreHIDSilentWithoutPermission(withMessage message: String, userChoseCoreHID: Bool) {
         DispatchQueue.main.async {
             let state = Self.currentSystemAuthorizationState()
-            self.applySystemAuthorizationState(state)
-            if state == .granted {
-                self.lastFailureMessage = ""
-            } else {
-                self.lastFailureMessage = message
-                self.shouldSuggestSettingsRepair =
-                    self.hasPersistedGrantHistory || self.didAttemptAuthorizationThisSession
-                if self.didAttemptAuthorizationThisSession {
-                    self.presentRuntimeAlertIfNeeded()
-                }
+            guard state != .granted, state != .unsupported, !self.hasRuntimeVerifiedGrantThisSession else {
+                return
+            }
+            self.runtimeSilentWithoutPermission = true
+            self.observedSystemState = state
+            self.endWaitingForSystemRefresh()
+            self.authorizationState = state
+            self.lastFailureMessage = message
+            // "Remove and add it again" is for a grant that went stale; a user who never allowed it needs "allow it".
+            self.shouldSuggestSettingsRepair = self.hasPersistedGrantHistory || self.didAttemptAuthorizationThisSession
+            if userChoseCoreHID || self.didAttemptAuthorizationThisSession || self.hasPersistedGrantHistory {
+                self.presentRuntimeAlertIfNeeded()
             }
         }
     }
@@ -511,6 +524,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     func noteCoreHIDDidBecomeActive() {
         DispatchQueue.main.async {
             self.needsStreamReentry = false
+            self.runtimeSilentWithoutPermission = false
             self.hasRuntimeVerifiedGrantThisSession = true
             self.markGrantObserved()
             self.observedSystemState = .granted
@@ -629,10 +643,11 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = localized("CoreHID Permission Required", fallback: "CoreHID Permission Required")
+        alert.messageText = localized(
+            "CoreHID Permission Required", fallback: "Input Monitoring access needed")
         alert.informativeText = localized(
             "CoreHID Permission Alert Message",
-            fallback: "CoreHID needs Input Monitoring to deliver high-polling mouse input. Moonlight is currently using the compatibility path. Grant access in System Settings, then re-enter the stream."
+            fallback: "Moonlight is not receiving mouse input from CoreHID, so the mouse uses the compatibility path for now. Open System Settings → Privacy & Security → Input Monitoring and turn Moonlight on. If it is already listed, turn it off and on again, or remove it and add it back: the permission may no longer match after an update. Then reopen Moonlight."
         )
         alert.addButton(withTitle: localized("Open Input Monitoring", fallback: "Open Input Monitoring"))
         alert.addButton(withTitle: localized("Later", fallback: "Later"))
@@ -659,7 +674,9 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
                 return
             }
 
-            if hasPersistedGrantHistory || UserDefaults.standard.bool(forKey: Self.everGrantedKey) {
+            if !runtimeSilentWithoutPermission
+                && (hasPersistedGrantHistory || UserDefaults.standard.bool(forKey: Self.everGrantedKey))
+            {
                 hasPersistedGrantHistory = true
                 observedSystemState = state
                 endWaitingForSystemRefresh()
@@ -675,6 +692,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         observedSystemState = state
 
         if state == .granted {
+            runtimeSilentWithoutPermission = false
             if transitionedToGranted {
                 needsStreamReentry = true
             }

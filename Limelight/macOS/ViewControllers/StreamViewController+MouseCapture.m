@@ -1232,6 +1232,10 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 }
 
 - (void)reconcileHybridFreeMouseAnchorToCurrentPointer {
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:nil];
+}
+
+- (void)reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:(NSEvent *)event {
     if (![self supportsRemoteDesktopCursorSync] || ![self hasReadyInputContext] || !self.view.window) {
         return;
     }
@@ -1244,6 +1248,15 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
     // Only once this capture has had a mouse event, as before.
     if (!self.hasCoreHIDFreeMouseLastTruthPoint) {
+        return;
+    }
+
+    // The virtual cursor is only moved by CoreHID. With no CoreHID motion in the last quarter second it stands still
+    // while the pointer goes on, so every event would be "far" from it and get a correction on top of what HIDSupport
+    // sends for the event itself. HIDSupport sends that event's position as the only thing for it and moves the anchor
+    // to the pointer, so there is nothing to reconcile here.
+    // Read once for the event: HIDSupport mouseMoved: uses the same answer for it (hasRecentCoreHIDMouseMovementForAppKitEvent:).
+    if (![self.hidSupport hasRecentCoreHIDMouseMovementForAppKitEvent:event]) {
         return;
     }
 
@@ -1269,7 +1282,12 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         if (drift > self.inputDiagnosticsFreeMouseCorrectionMaxDrift) {
             self.inputDiagnosticsFreeMouseCorrectionMaxDrift = drift;
         }
-        if (self.inputDiagnosticsDetailActiveForStream && drift >= 12.0) {
+        // At most four lines a second: the largest corrections are what the log is for, and the count and the largest
+        // drift of all of them are in the statistics line.
+        NSTimeInterval logNow = NSProcessInfo.processInfo.systemUptime;
+        if (self.inputDiagnosticsDetailActiveForStream && drift >= 12.0 &&
+            logNow - self.inputDiagnosticsFreeMouseCorrectionLastLogUptime >= 0.25) {
+            self.inputDiagnosticsFreeMouseCorrectionLastLogUptime = logNow;
             NSPoint eventPoint = self.coreHIDFreeMouseLastTruthPoint;
             Log(LOG_D, @"[inputdiag] free-mouse correction drift=%.1f current=(%.1f,%.1f) lastEvent=(%.1f,%.1f)",
                 drift, currentPoint.x, currentPoint.y, eventPoint.x, eventPoint.y);
@@ -2465,7 +2483,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)mouseMoved:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
-    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:event];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2496,7 +2514,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)mouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
-    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:event];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2526,7 +2544,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)rightMouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
-    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:event];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }
@@ -2556,7 +2574,7 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
 - (void)otherMouseDragged:(NSEvent *)event {
     [self updateCoreHIDFreeMouseTruthPointFromEvent:event];
-    [self reconcileHybridFreeMouseAnchorToCurrentPointer];
+    [self reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:event];
     if ([self handleEdgeMenuTemporaryReleaseForEvent:event]) {
         return;
     }

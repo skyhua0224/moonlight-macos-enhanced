@@ -753,19 +753,35 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
         return;
     }
 
-    if (useAbsolutePointerPath) {
-        if (HIDShouldUseCoreHIDFreeMouseAbsoluteSync(self) &&
-            [self hasRecentCoreHIDMouseMovement]) {
-            // Apple documents mouseMoved as an AppKit event stream and CoreHID as
-            // the raw device stream. While CoreHID is delivering movement (the same
-            // quarter-second window the relative path uses), AppKit's copy is only
-            // a second representation of the same physical motion; a pointer that
-            // CoreHID does not carry (a trackpad) still moves through AppKit.
-            // Sending both can pull the host cursor back and forth. (Sources:
-            // macos-apple-corehid-20261116, macos-apple-nsevent-mousemoved-20261116,
-            // macos-apple-nsresponder-mousemoved-20261116.)
+    BOOL hybridAppKitMove = NO;
+    if (!useAbsolutePointerPath && HIDShouldUseCoreHIDFreeMouseAbsoluteSync(self)) {
+        // Hybrid free mouse. Apple documents mouseMoved as an AppKit event stream and CoreHID as the raw device
+        // stream. While CoreHID is delivering movement (the same quarter-second window the relative path uses),
+        // AppKit's copy is only a second representation of the same physical motion, and sending both can pull the
+        // host cursor back and forth. When CoreHID is not delivering (a pointer it does not carry, a trackpad;
+        // Input Monitoring not allowed; no device matched), AppKit is the only source, and the one thing sent for the
+        // event is its position: not also a relative move, and no correction of the virtual cursor for it (the
+        // anchor follows the pointer instead). After about a quarter second of this with no CoreHID motion at all,
+        // CoreHID is taken as unavailable and the absolute path is used for good.
+        // (Sources: macos-apple-corehid-20261116, macos-apple-nsevent-mousemoved-20261116,
+        // macos-apple-nsresponder-mousemoved-20261116.)
+        MLCoreHIDAppKitMoveAction action;
+        @synchronized (self.freeMouseVirtualCursorLock) {
+            action = MLCoreHIDDecideAppKitMove([self coreHIDSilenceState],
+                                               [self hasRecentCoreHIDMouseMovementForAppKitEvent:event],
+                                               LiGetMillis());
+        }
+        if (action.markSilent) {
+            [self markCoreHIDMouseSilent];
+        }
+        if (!action.sendAbsolute) {
             return;
         }
+        hybridAppKitMove = YES;
+        useAbsolutePointerPath = YES;
+    }
+
+    if (useAbsolutePointerPath) {
         short hostX = 0;
         short hostY = 0;
         short referenceWidth = 0;
@@ -783,9 +799,28 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
                                                y:hostY
                                            width:referenceWidth
                                           height:referenceHeight];
-        [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
-                                            summaryKey:@"Mouse Runtime Path Absolute Active"
-                                             detailKey:@"Mouse Runtime Detail Absolute Active"];
+        if (!self.coreHIDMouseRuntimeFailed) {
+            // While CoreHID is marked failed the status keeps the reason it was recorded with.
+            [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
+                                                summaryKey:@"Mouse Runtime Path Absolute Active"
+                                                 detailKey:@"Mouse Runtime Detail Absolute Active"];
+        }
+        // Hybrid free mouse configured, CoreHID found silent: the absolute path is used, and the anchor keeps following
+        // the pointer on every event, so CoreHID motion that resumes later starts from where the pointer is.
+        BOOL hybridConfiguredCoreHIDSilent = self.coreHIDMouseRuntimeFailed &&
+                                             touchscreenMode != 1 &&
+                                             self.useCoreHIDMouse &&
+                                             !self.useGCMouse &&
+                                             HIDShouldUseHybridFreeMouseMotion(self) &&
+                                             [[SettingsClass mouseModeFor:self.host.uuid] isEqualToString:@"remote"];
+        if (hybridAppKitMove || hybridConfiguredCoreHIDSilent) {
+            // The virtual cursor follows the pointer, so that CoreHID motion that starts later continues from here.
+            NSPoint eventPoint = NSZeroPoint;
+            NSSize eventReference = NSZeroSize;
+            if (HIDAbsoluteMouseReferenceForEvent(event, &eventPoint, &eventReference)) {
+                [self updateFreeMouseVirtualCursorAnchorWithViewPoint:eventPoint referenceSize:eventReference];
+            }
+        }
         HIDDispatchInput(self, inputCtx, ^{
             LiSendMousePositionEventCtx(inputCtx, hostX, hostY, referenceWidth, referenceHeight);
         });

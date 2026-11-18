@@ -3,6 +3,7 @@
 //  Moonlight for macOS
 //
 
+import CoreGraphics
 import CoreHID
 import Foundation
 import IOKit.hidsystem
@@ -21,6 +22,10 @@ final class CoreHIDMouseDriver: NSObject {
   private enum Failure {
     static let unsupportedOSReason = "unsupported-os"
     static let permissionDeniedReason = "permission-denied"
+    // Input Monitoring is not reported as allowed and a mouse matched without any movement element: without the
+    // permission CoreHID lists the device but gives no elements and no events. The system answers "unknown", not
+    // "denied", for a build that was never asked (seen on macOS 26 with an ad-hoc signed app), so it is not "denied".
+    static let permissionUnverifiedReason = "permission-unverified"
     static let managerErrorReason = "manager-error"
     static let clientErrorReason = "client-error"
 
@@ -48,6 +53,54 @@ final class CoreHIDMouseDriver: NSObject {
   private var hasPostedFailure = false
   private var lastMovementEventTimestamp: TimeInterval = 0
   private var flushTask: Task<Void, Never>?
+  private var listenAccess = ListenAccess.unchecked
+  private var devicesMatched = 0
+  private var devicesMonitored = 0
+  private var devicesRejectedBuiltIn = 0
+  private var devicesRejectedTrackpad = 0
+  private var devicesWithoutMovement = 0
+
+  /// What the system said about Input Monitoring when the driver started. CoreHID delivers nothing, and reports no
+  /// error, when it is not allowed, so this is the first thing to read when the driver is silent.
+  enum ListenAccess: String {
+    case unchecked
+    case granted
+    case denied
+    case unknown
+  }
+
+  var listenAccessState: String {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    return listenAccess.rawValue
+  }
+
+  /// Input Monitoring is allowed now (read again, not the answer from when the driver started).
+  var isListenAccessGranted: Bool {
+    Self.currentListenAccess() == .granted
+  }
+
+  /// One line for the log: the permission and what became of the devices CoreHID matched.
+  var diagnosticSummary: String {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    return "access=\(listenAccess.rawValue) matched=\(devicesMatched) monitored=\(devicesMonitored) "
+      + "builtIn=\(devicesRejectedBuiltIn) trackpad=\(devicesRejectedTrackpad) "
+      + "noMovementElements=\(devicesWithoutMovement)"
+  }
+
+  /// Reads the Input Monitoring state without asking: the same two checks InputMonitoringPermissionManager makes.
+  /// (Sources: macos-apple-iohidaccesstype-20261119, macos-apple-cgpreflightlisteneventaccess-20261119.)
+  static func currentListenAccess() -> ListenAccess {
+    let ioState = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+    if ioState == kIOHIDAccessTypeGranted || CGPreflightListenEventAccess() {
+      return .granted
+    }
+    if ioState == kIOHIDAccessTypeUnknown {
+      return .unknown
+    }
+    return .denied
+  }
 
   var secondsSinceLastMovementEvent: TimeInterval {
     stateLock.lock()
@@ -72,6 +125,12 @@ final class CoreHIDMouseDriver: NSObject {
       return
     }
 
+    let access = Self.currentListenAccess()
+    stateLock.lock()
+    listenAccess = access
+    stateLock.unlock()
+    LogMessage(LOG_I, "[diag] CoreHID listen access: \(access.rawValue)")
+
     let permissionManager = InputMonitoringPermissionManager.sharedManager
     if requestsListenAccessIfNeeded {
       let granted = permissionManager.requestAuthorizationIfNeeded(
@@ -86,6 +145,14 @@ final class CoreHIDMouseDriver: NSObject {
       }
     } else {
       permissionManager.requestAuthorizationIfNeeded(interactive: false)
+      // Without the permission CoreHID delivers nothing and says nothing. Say so now, and keep listening: if
+      // motion does arrive the check was wrong and the delegate takes the free mouse back from the fallback.
+      if access == .denied {
+        postFailureIfNeeded(
+          reason: Failure.permissionDeniedReason,
+          messageKey: Failure.permissionDeniedMessageKey
+        )
+      }
     }
 
     managerTask = Task { [weak self] in
@@ -105,6 +172,12 @@ final class CoreHIDMouseDriver: NSObject {
     lastDispatchTimestamp = 0
     hasPostedFailure = false
     lastMovementEventTimestamp = 0
+    listenAccess = .unchecked
+    devicesMatched = 0
+    devicesMonitored = 0
+    devicesRejectedBuiltIn = 0
+    devicesRejectedTrackpad = 0
+    devicesWithoutMovement = 0
     stateLock.unlock()
   }
 
@@ -140,9 +213,11 @@ final class CoreHIDMouseDriver: NSObject {
             continue
           }
 
+          noteDeviceCounter { $0.devicesMatched += 1 }
           guard await shouldMonitorDevice(client) else {
             continue
           }
+          noteDeviceCounter { $0.devicesMonitored += 1 }
 
           clientTasks[deviceReference] = Task { [weak self] in
             guard let self else { return }
@@ -174,6 +249,15 @@ final class CoreHIDMouseDriver: NSObject {
       isMovementUsage(element.usage)
     }
     guard !movementElements.isEmpty else {
+      let productName = await client.product ?? "?"
+      noteDeviceCounter { $0.devicesWithoutMovement += 1 }
+      LogMessage(LOG_I, "[diag] CoreHID device skipped: no X/Y movement element product=\(productName)")
+      if !isListenAccessGranted {
+        postFailureIfNeeded(
+          reason: Failure.permissionUnverifiedReason,
+          messageKey: Failure.permissionDeniedMessageKey
+        )
+      }
       return
     }
 
@@ -232,17 +316,27 @@ final class CoreHIDMouseDriver: NSObject {
 
   @available(macOS 15.0, *)
   private func shouldMonitorDevice(_ client: HIDDeviceClient) async -> Bool {
+    let rawProduct = await client.product?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "?"
     if await client.isBuiltIn {
+      noteDeviceCounter { $0.devicesRejectedBuiltIn += 1 }
+      LogMessage(LOG_I, "[diag] CoreHID device skipped: built-in product=\(rawProduct)")
       return false
     }
 
-    let product =
-      await client.product?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-    if product.contains("trackpad") {
+    if rawProduct.lowercased().contains("trackpad") {
+      noteDeviceCounter { $0.devicesRejectedTrackpad += 1 }
+      LogMessage(LOG_I, "[diag] CoreHID device skipped: trackpad product=\(rawProduct)")
       return false
     }
 
+    LogMessage(LOG_I, "[diag] CoreHID device monitored: product=\(rawProduct)")
     return true
+  }
+
+  private func noteDeviceCounter(_ update: (CoreHIDMouseDriver) -> Void) {
+    stateLock.lock()
+    update(self)
+    stateLock.unlock()
   }
 
   @available(macOS 15.0, *)

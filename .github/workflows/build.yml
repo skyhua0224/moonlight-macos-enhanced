@@ -74,6 +74,13 @@ jobs:
     - name: Check libcrypto (certificates, PKCS#12, signatures, AES, HMAC, SHA, RAND)
       run: bash tests/openssl-static/run.sh
 
+    # Plain C tests of the input logic (no hardware, no host): the free mouse virtual cursor, and when the
+    # CoreHID mouse counts as silent.
+    - name: Input logic tests (free mouse, CoreHID silence)
+      run: |
+        sh tests/free-mouse-truth/run.sh
+        sh tests/corehid-silence/run.sh
+
     - name: Configure version and update channel
       shell: bash
       run: |

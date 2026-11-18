@@ -156,9 +156,14 @@
 "Mouse Runtime Path Absolute Active" = "Absolute pointer sync active";
 "Mouse Runtime Detail Absolute Active" = "Remote desktop pointer sync is currently using the absolute pointer path.";
 "Mouse Runtime Path AppKit Fallback" = "AppKit fallback active";
-"Mouse Runtime Detail AppKit Fallback Permission" = "CoreHID could not start because Input Monitoring access was denied, so Moonlight fell back to the AppKit compatibility path.";
+"Mouse Runtime Detail AppKit Fallback Permission" = "CoreHID is not receiving mouse input because Input Monitoring is not allowed, so Moonlight uses the AppKit compatibility path. Allow Moonlight in System Settings → Privacy & Security → Input Monitoring.";
 "Mouse Runtime Detail AppKit Fallback UnsupportedOS" = "CoreHID requires macOS 15 or later, so Moonlight fell back to the AppKit compatibility path.";
 "Mouse Runtime Detail AppKit Fallback Runtime" = "CoreHID failed at runtime, so Moonlight fell back to the AppKit compatibility path.";
+"Mouse Runtime Detail AppKit Fallback Silent" = "CoreHID has not delivered any mouse movement while the pointer moved, so Moonlight uses the AppKit compatibility path. If a mouse should be handled by CoreHID, check System Settings → Privacy & Security → Input Monitoring.";
+"CoreHID Permission Required" = "Input Monitoring access needed";
+"CoreHID Permission Alert Message" = "Moonlight is not receiving mouse input from CoreHID, so the mouse uses the compatibility path for now. Open System Settings → Privacy & Security → Input Monitoring and turn Moonlight on. If it is already listed, turn it off and on again, or remove it and add it back: the permission may no longer match after an update. Then reopen Moonlight.";
+"Open Input Monitoring" = "Open Input Monitoring";
+"Later" = "Later";
 "Scroll Runtime Path Idle" = "No recent scroll path";
 "Scroll Runtime Detail Idle" = "Scroll during a stream to see which path handles it.";
 "Scroll Runtime Path Wheel" = "Discrete wheel active";
@@ -1745,6 +1750,9 @@
 "Rebuilt HEVC decode format" = "Rebuilt HEVC decode format";
 "Rebuilt AV1 decode format" = "Rebuilt AV1 decode format";
 "CoreHID mouse set up" = "CoreHID mouse set up";
+"CoreHID mouse not in use" = "CoreHID mouse not in use";
+"CoreHID Input Monitoring state" = "CoreHID Input Monitoring state";
+"CoreHID device checked" = "CoreHID device checked";
 "Could not enable per-frame HDR metadata" = "Could not enable per-frame HDR metadata";
 "Microphone start skipped" = "Microphone start skipped";
 "Asked the host to refresh the picture" = "Asked the host to refresh the picture";

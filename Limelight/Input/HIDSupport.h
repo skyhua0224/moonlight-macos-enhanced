@@ -85,6 +85,11 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (BOOL)shouldUseAbsolutePointerPathForCurrentConfiguration;
 - (BOOL)shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration;
 - (BOOL)hasRecentCoreHIDMouseMovement;
+/// hasRecentCoreHIDMouseMovement read once for an AppKit mouse event: the first caller for the event reads it and
+/// later callers for the same event get that answer, so the reconciliation and the event dispatch cannot disagree.
+- (BOOL)hasRecentCoreHIDMouseMovementForAppKitEvent:(NSEvent *)event;
+/// The CoreHID mouse state for the log: Input Monitoring, the devices it matched, and whether it was found silent.
+- (NSString *)coreHIDDiagnosticSummary;
 
 @end
 

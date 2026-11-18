@@ -453,9 +453,24 @@ final class MLLogCategoryClassifier: NSObject {
         "rawδ=",
         "sentδ=",
         "remotetarget=(",
+        "free-mouse correction",
       ]) {
         return "input.mouse"
       }
+    }
+
+    // The input statistics line is written when the stream ends, so its text names "disconnect-from-stream" and the
+    // stream rules below would take it; it belongs with the mouse lines it summarises. The CoreHID lines say why the
+    // mouse moved the way it did.
+    if containsAny(normalized, [
+      "input summary",
+      "corehid mouse setup",
+      "corehid mouse fallback",
+      "corehid mouse active",
+      "corehid listen access",
+      "corehid device ",
+    ]) {
+      return "input.mouse"
     }
 
     if containsAny(normalized, [
@@ -1485,6 +1500,9 @@ enum DebugLogParser {
       return .init(title: cleaned, detail: nil)
 
     case "input.mouse":
+      if normalized.contains("input summary") {
+        return .init(title: tr("Input statistics summary"), detail: suffixAfterFirstColon(in: cleaned) ?? cleaned)
+      }
       if normalized.contains("absolute pos=") {
         return .init(title: tr("Sent absolute mouse position"), detail: cleaned)
       }
@@ -2202,6 +2220,9 @@ enum DebugLogParser {
       R("", "Constructing new HEVC", "Rebuilt HEVC decode format", .none),
       R("", "Constructing new AV1", "Rebuilt AV1 decode format", .none),
       R("", "CoreHID mouse setup:", "CoreHID mouse set up", .afterColon),
+      R("", "CoreHID mouse fallback:", "CoreHID mouse not in use", .afterColon),
+      R("diag", "CoreHID listen access:", "CoreHID Input Monitoring state", .afterColon),
+      R("diag", "CoreHID device ", "CoreHID device checked", .afterColon),
       R("", "Failed to enable per-frame HDR", "Could not enable per-frame HDR metadata", .afterColon),
       R("", "Microphone start skipped", "Microphone start skipped", .none),
       // Video health

@@ -417,6 +417,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     NSLock *_pressedKeyPairsLock;
     // The CoreHID free-mouse virtual cursor; guarded by freeMouseVirtualCursorLock.
     MLFreeMouseVirtualCursor _freeMouseVirtualCursor;
+    MLCoreHIDSilence _coreHIDSilence;
     // Typed-character cache. Main thread only (Text Input Services is not
     // thread safe); key events arrive on the main thread.
     NSMutableDictionary<NSNumber *, NSNumber *> *_typedVirtualKeyCache;
@@ -819,6 +820,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         [self setUpPrecisionTouchpad];
         self.freeMouseVirtualCursorLock = [[NSObject alloc] init];
         MLFreeMouseVirtualCursorReset(&_freeMouseVirtualCursor);
+        MLCoreHIDSilenceReset(&_coreHIDSilence);
         self.inputDiagnosticsLock = [[NSObject alloc] init];
         self.pressedMouseButtonsMask = 0;
         [self resetInputDiagnostics];
@@ -1524,6 +1526,35 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
            self.coreHIDMouseDriver.secondsSinceLastMovementEvent < 0.25;
 }
 
+- (BOOL)hasRecentCoreHIDMouseMovementForAppKitEvent:(NSEvent *)event {
+    if (event == nil) {
+        return [self hasRecentCoreHIDMouseMovement];
+    }
+    if (self.coreHIDRecencyEvent == event) {
+        return self.coreHIDRecencyEventAnswer;
+    }
+    BOOL recent = [self hasRecentCoreHIDMouseMovement];
+    self.coreHIDRecencyEvent = event;
+    self.coreHIDRecencyEventAnswer = recent;
+    return recent;
+}
+
+- (NSString *)coreHIDDiagnosticSummary {
+    CoreHIDMouseDriver *driver = self.coreHIDMouseDriver;
+    if (driver == nil) {
+        return self.lastCoreHIDDiagnosticSummary ?: @"driver=none";
+    }
+    BOOL silent = NO;
+    @synchronized (self.freeMouseVirtualCursorLock) {
+        silent = [self coreHIDSilenceState]->silent;
+    }
+    return [NSString stringWithFormat:@"%@ delivered=%d silent=%d failed=%d",
+            driver.diagnosticSummary,
+            self.coreHIDMouseDidDeliverMovement ? 1 : 0,
+            silent ? 1 : 0,
+            self.coreHIDMouseRuntimeFailed ? 1 : 0];
+}
+
 - (NSInteger)controllerDriver {
     NSInteger configured = [SettingsClass controllerDriverFor:self.host.uuid];
     // The HID driver has no DualSense parser: DualSense input comes from GameController and the raw HID bridge.
@@ -1575,6 +1606,9 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
 
     self.coreHIDMouseRuntimeFailed = NO;
     self.coreHIDMouseDidDeliverMovement = NO;
+    @synchronized (self.freeMouseVirtualCursorLock) {
+        MLCoreHIDSilenceReset([self coreHIDSilenceState]);
+    }
     self.coreHIDMouseDriver = [[CoreHIDMouseDriver alloc] init];
     self.coreHIDMouseDriver.delegate = self;
     self.coreHIDMouseDriver.maximumReportRate = [SettingsClass coreHIDMaxMouseReportRateFor:self.host.uuid];
@@ -1594,10 +1628,14 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
         return;
     }
 
+    self.lastCoreHIDDiagnosticSummary = [self coreHIDDiagnosticSummary];
     [self.coreHIDMouseDriver stop];
     self.coreHIDMouseDriver.delegate = nil;
     self.coreHIDMouseDriver = nil;
     self.coreHIDMouseDidDeliverMovement = NO;
+    @synchronized (self.freeMouseVirtualCursorLock) {
+        MLCoreHIDSilenceReset([self coreHIDSilenceState]);
+    }
     HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
 }
 
@@ -1649,6 +1687,10 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
     return &_freeMouseVirtualCursor;
 }
 
+- (MLCoreHIDSilence *)coreHIDSilenceState {
+    return &_coreHIDSilence;
+}
+
 - (void)coreHIDMouseDriver:(CoreHIDMouseDriver *)driver
             didObserveRawDeltaX:(double)deltaX
                       deltaY:(double)deltaY {
@@ -1670,6 +1712,9 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
         return;
     }
 
+    @synchronized (self.freeMouseVirtualCursorLock) {
+        MLCoreHIDSilenceNoteDelivery([self coreHIDSilenceState]);
+    }
     if (!self.coreHIDMouseDidDeliverMovement) {
         self.coreHIDMouseDidDeliverMovement = YES;
         Log(LOG_I, @"CoreHID mouse active: first movement received");
@@ -1719,21 +1764,62 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
 - (void)coreHIDMouseDriver:(CoreHIDMouseDriver *)driver
          didFailWithReason:(NSString *)reason
                 messageKey:(NSString *)messageKey {
-    (void)driver;
     NSString *safeReason = reason.length > 0 ? reason : @"unknown";
     NSString *safeMessage = messageKey.length > 0 ? messageKey : @"CoreHID Mouse input failed.";
     NSInteger configuredStrategy = [SettingsClass mouseDriverFor:self.host.uuid];
     self.coreHIDMouseRuntimeFailed = YES;
-    if ([safeReason isEqualToString:@"permission-denied"]) {
-        [[InputMonitoringPermissionManager sharedManager] noteCoreHIDPermissionFailureWithMessage:safeMessage];
+    HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
+    BOOL permissionDenied = [safeReason isEqualToString:@"permission-denied"];
+    BOOL permissionUnverified = [safeReason isEqualToString:@"permission-unverified"];
+    if (permissionDenied || permissionUnverified) {
+        [[InputMonitoringPermissionManager sharedManager] noteCoreHIDSilentWithoutPermissionWithMessage:safeMessage
+                                                                                        userChoseCoreHID:configuredStrategy == 2];
     }
-    LogLevel level = (configuredStrategy == 3 && [safeReason isEqualToString:@"permission-denied"]) ? LOG_I : LOG_W;
-    Log(level, @"CoreHID mouse fallback: reason=%@ message=%@", safeReason, safeMessage);
+    LogLevel level = (configuredStrategy == 3 && (permissionDenied || permissionUnverified)) ? LOG_I : LOG_W;
+    Log(level, @"CoreHID mouse fallback: reason=%@ message=%@ (%@)", safeReason, safeMessage, driver.diagnosticSummary ?: @"driver=none");
     NSString *detailKey = @"Mouse Runtime Detail AppKit Fallback Runtime";
-    if ([safeReason isEqualToString:@"permission-denied"]) {
+    if (permissionDenied || permissionUnverified) {
         detailKey = @"Mouse Runtime Detail AppKit Fallback Permission";
     } else if ([safeReason isEqualToString:@"unsupported-os"]) {
         detailKey = @"Mouse Runtime Detail AppKit Fallback UnsupportedOS";
+    }
+    [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
+                                        summaryKey:@"Mouse Runtime Path AppKit Fallback"
+                                         detailKey:detailKey];
+}
+
+// AppKit has reported pointer motion for a while and CoreHID none: the hybrid free mouse would only be correcting a
+// virtual cursor that never moves. Use the absolute pointer path, as when CoreHID cannot start, and say why: without
+// Input Monitoring CoreHID delivers nothing and reports no error.
+- (void)markCoreHIDMouseSilent {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self markCoreHIDMouseSilent];
+        });
+        return;
+    }
+
+    CoreHIDMouseDriver *driver = self.coreHIDMouseDriver;
+    if (driver == nil || self.coreHIDMouseRuntimeFailed || self.coreHIDMouseDidDeliverMovement) {
+        return;
+    }
+
+    BOOL accessGranted = driver.isListenAccessGranted;
+    NSString *summary = driver.diagnosticSummary;
+    self.coreHIDMouseRuntimeFailed = YES;
+    HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
+
+    NSString *detailKey = @"Mouse Runtime Detail AppKit Fallback Silent";
+    if (accessGranted) {
+        Log(LOG_W, @"CoreHID mouse fallback: reason=silent message=CoreHID delivered no motion while AppKit saw the pointer move (%@)",
+            summary);
+    } else {
+        detailKey = @"Mouse Runtime Detail AppKit Fallback Permission";
+        Log(LOG_W, @"CoreHID mouse fallback: reason=silent-permission message=Input Monitoring is not allowed for this build; allow it in System Settings > Privacy & Security > Input Monitoring (%@)",
+            summary);
+        [[InputMonitoringPermissionManager sharedManager]
+            noteCoreHIDSilentWithoutPermissionWithMessage:@"CoreHID Mouse access denied. Allow Input Monitoring in System Settings."
+                                         userChoseCoreHID:[SettingsClass mouseDriverFor:self.host.uuid] == 2];
     }
     [SettingsClass updateMouseInputRuntimeStatusFor:self.host.uuid
                                         summaryKey:@"Mouse Runtime Path AppKit Fallback"
