@@ -147,9 +147,10 @@ jobs:
         main_binary="$products/MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced"
         main_dsym="$products/MoonlightEnhanced.app.dSYM"
 
-        symbols="$(nm -a "$main_binary" | wc -l | tr -d ' ')"
-        echo "Main binary symbol entries: $symbols"
-        if [ "$symbols" -gt 20000 ]; then
+        # An unstripped main binary has about 220000 symbol table entries, a stripped one under 2000.
+        symbols="$(otool -l "$main_binary" | awk '/LC_SYMTAB/ {found=1} found && $1 == "nsyms" {print $2; exit}')"
+        echo "Main binary symbol table entries: $symbols"
+        if [ -z "$symbols" ] || [ "$symbols" -gt 20000 ]; then
           echo "Local symbols were not stripped from the main binary"
           exit 1
         fi
