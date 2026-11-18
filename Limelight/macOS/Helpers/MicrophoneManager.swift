@@ -495,28 +495,11 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         scheduleAuthorizationRefreshes()
     }
 
-    @objc(noteCoreHIDPermissionFailureWithMessage:)
-    func noteCoreHIDPermissionFailure(withMessage message: String) {
-        DispatchQueue.main.async {
-            let state = Self.currentSystemAuthorizationState()
-            self.applySystemAuthorizationState(state)
-            if state == .granted {
-                self.lastFailureMessage = ""
-            } else {
-                self.lastFailureMessage = message
-                self.shouldSuggestSettingsRepair =
-                    self.hasPersistedGrantHistory || self.didAttemptAuthorizationThisSession
-                if self.didAttemptAuthorizationThisSession {
-                    self.presentRuntimeAlertIfNeeded()
-                }
-            }
-        }
-    }
-
-    /// The stream found CoreHID silent (no motion while the pointer moved) and the system does not report Input
-    /// Monitoring as allowed: show it as not allowed, with the repair hint. The user is told in an alert, once per
-    /// launch, when they can expect CoreHID to work: they chose the CoreHID driver, or allowed Input Monitoring before
-    /// (the grant went stale). Automatic mode with no history falls back quietly, as it always did.
+    /// CoreHID cannot be used because the system does not report Input Monitoring as allowed (the check said so when
+    /// the driver started, or the stream found CoreHID silent while the pointer moved): show it as not allowed, with
+    /// the repair hint. The user is told in an alert, once per launch, when they can expect CoreHID to work: they
+    /// chose the CoreHID driver, tried to allow it in this session, or allowed Input Monitoring before (the grant
+    /// went stale). Automatic mode with no history falls back quietly, as it always did.
     @objc(noteCoreHIDSilentWithoutPermissionWithMessage:userChoseCoreHID:)
     func noteCoreHIDSilentWithoutPermission(withMessage message: String, userChoseCoreHID: Bool) {
         DispatchQueue.main.async {
@@ -529,8 +512,9 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
             self.endWaitingForSystemRefresh()
             self.authorizationState = state
             self.lastFailureMessage = message
-            self.shouldSuggestSettingsRepair = true
-            if userChoseCoreHID || self.hasPersistedGrantHistory {
+            // "Remove and add it again" is for a grant that went stale; a user who never allowed it needs "allow it".
+            self.shouldSuggestSettingsRepair = self.hasPersistedGrantHistory || self.didAttemptAuthorizationThisSession
+            if userChoseCoreHID || self.didAttemptAuthorizationThisSession || self.hasPersistedGrantHistory {
                 self.presentRuntimeAlertIfNeeded()
             }
         }

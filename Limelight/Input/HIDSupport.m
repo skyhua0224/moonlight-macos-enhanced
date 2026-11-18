@@ -1758,9 +1758,7 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
     HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
     BOOL permissionDenied = [safeReason isEqualToString:@"permission-denied"];
     BOOL permissionUnverified = [safeReason isEqualToString:@"permission-unverified"];
-    if (permissionDenied) {
-        [[InputMonitoringPermissionManager sharedManager] noteCoreHIDPermissionFailureWithMessage:safeMessage];
-    } else if (permissionUnverified) {
+    if (permissionDenied || permissionUnverified) {
         [[InputMonitoringPermissionManager sharedManager] noteCoreHIDSilentWithoutPermissionWithMessage:safeMessage
                                                                                         userChoseCoreHID:configuredStrategy == 2];
     }
