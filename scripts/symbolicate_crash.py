@@ -15,9 +15,10 @@ lines such as those written by Thread.callStackSymbols:
     3   MoonlightEnhanced   0x0000000100a3c1f0 MoonlightEnhanced + 4571632
 
 --dsym takes the .dSYM bundle of the release the report came from (the dSYM zip of
-that release, unzipped) or a DWARF file inside it. A dSYM of another build is
-refused: the UUIDs must match. Needs macOS (atos, dwarfdump). Python standard
-library only.
+that release, unzipped) or a DWARF file inside it. For a crash report, a dSYM of
+another build is refused: the UUIDs must match. A text log carries no UUID, so take
+the dSYM of the release the log came from (check it with dwarfdump --uuid).
+Needs macOS (atos, dwarfdump). Python standard library only.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ import sys
 from pathlib import Path
 
 IMAGE_NAME = "MoonlightEnhanced"
-LINE_RE = re.compile(r"(\d+)\s+(\S+)\s+(0x[0-9a-fA-F]+)\s+(\S+)\s\+\s(\d+)")
+LINE_RE = re.compile(r"(\d+)\s+(\S+)\s+(0x[0-9a-fA-F]+)\s+(.+?)\s\+\s(\d+)")
 
 
 def dwarf_file(dsym: Path, image: str) -> Path:
@@ -93,10 +94,10 @@ def symbolicate_ips(report: dict, dwarf: Path, image: str) -> int:
         wanted = [(k, f) for k, f in enumerate(frames) if f.get("imageIndex") == index]
         if not wanted:
             continue
-        # Every frame but the first of the crashing thread holds a return address: the
-        # call is the instruction before it, so that is the one to look up.
+        # Frame 0 of a thread is the instruction it is executing; every later frame holds a
+        # return address, so the call is the instruction before it.
         crashed = number == report.get("faultingThread")
-        addresses = [base + f["imageOffset"] - (0 if crashed and k == 0 else 1) for k, f in wanted]
+        addresses = [base + f["imageOffset"] - (0 if k == 0 else 1) for k, f in wanted]
         names = atos(dwarf, arch, base, addresses)
         lookup = {k: n for (k, _), n in zip(wanted, names)}
         tag = " (crashed)" if crashed else ""
