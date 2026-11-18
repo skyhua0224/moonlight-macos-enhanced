@@ -85,6 +85,8 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 - (BOOL)shouldUseAbsolutePointerPathForCurrentConfiguration;
 - (BOOL)shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration;
 - (BOOL)hasRecentCoreHIDMouseMovement;
+/// The CoreHID mouse state for the log: Input Monitoring, the devices it matched, and whether it was found silent.
+- (NSString *)coreHIDDiagnosticSummary;
 
 @end
 

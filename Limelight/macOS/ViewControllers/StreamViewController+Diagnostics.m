@@ -598,6 +598,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     self.inputDiagnosticsFreeMouseEventAgeOver8Ms = 0;
     self.inputDiagnosticsFreeMouseCorrections = 0;
     self.inputDiagnosticsFreeMouseCorrectionMaxDrift = 0;
+    self.inputDiagnosticsFreeMouseCorrectionLastLogUptime = 0;
     self.inputDiagnosticsSuppressedRelativeEvents = 0;
     self.inputDiagnosticsRawRelativeDeltaX = 0;
     self.inputDiagnosticsRawRelativeDeltaY = 0;
@@ -771,6 +772,8 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
     [parts addObject:[NSString stringWithFormat:@"detail=%@", self.inputDiagnosticsDetailActiveForStream ? @"on" : @"off"]];
+    // CoreHID: Input Monitoring, the devices it matched, and whether it ever delivered or was found silent
+    [parts addObject:[NSString stringWithFormat:@"coreHID=(%@)", [self.hidSupport coreHIDDiagnosticSummary]]];
     [parts addObject:[NSString stringWithFormat:@"moves=%lu", (unsigned long)self.inputDiagnosticsMouseMoveEvents]];
     [parts addObject:[NSString stringWithFormat:@"rel=%lu", (unsigned long)self.inputDiagnosticsRelativeDispatches]];
     [parts addObject:[NSString stringWithFormat:@"abs=%lu", (unsigned long)self.inputDiagnosticsAbsoluteDispatches]];

@@ -1247,6 +1247,14 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         return;
     }
 
+    // The virtual cursor is only moved by CoreHID. With no CoreHID motion in the last quarter second it stands still
+    // while the pointer goes on, so every event would be "far" from it and get a correction on top of what HIDSupport
+    // sends for the event itself. HIDSupport sends that event's position as the only thing for it and moves the anchor
+    // to the pointer, so there is nothing to reconcile here.
+    if (![self.hidSupport hasRecentCoreHIDMouseMovement]) {
+        return;
+    }
+
     // The virtual cursor is checked against the pointer as it is now. The location stored in an AppKit mouse event was
     // taken when the event was created; by the time the main thread runs this the raw CoreHID motion has gone on, and
     // a pointer that old makes the cursor jump back by (speed x queue time) and teaches it too small a gain.
@@ -1269,7 +1277,12 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         if (drift > self.inputDiagnosticsFreeMouseCorrectionMaxDrift) {
             self.inputDiagnosticsFreeMouseCorrectionMaxDrift = drift;
         }
-        if (self.inputDiagnosticsDetailActiveForStream && drift >= 12.0) {
+        // At most four lines a second: the largest corrections are what the log is for, and the count and the largest
+        // drift of all of them are in the statistics line.
+        NSTimeInterval logNow = NSProcessInfo.processInfo.systemUptime;
+        if (self.inputDiagnosticsDetailActiveForStream && drift >= 12.0 &&
+            logNow - self.inputDiagnosticsFreeMouseCorrectionLastLogUptime >= 0.25) {
+            self.inputDiagnosticsFreeMouseCorrectionLastLogUptime = logNow;
             NSPoint eventPoint = self.coreHIDFreeMouseLastTruthPoint;
             Log(LOG_D, @"[inputdiag] free-mouse correction drift=%.1f current=(%.1f,%.1f) lastEvent=(%.1f,%.1f)",
                 drift, currentPoint.x, currentPoint.y, eventPoint.x, eventPoint.y);

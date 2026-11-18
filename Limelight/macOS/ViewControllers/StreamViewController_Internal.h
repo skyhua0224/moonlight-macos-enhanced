@@ -314,6 +314,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) NSUInteger inputDiagnosticsFreeMouseEventAgeOver8Ms;
 @property (nonatomic) NSUInteger inputDiagnosticsFreeMouseCorrections;
 @property (nonatomic) double inputDiagnosticsFreeMouseCorrectionMaxDrift;
+@property (nonatomic) NSTimeInterval inputDiagnosticsFreeMouseCorrectionLastLogUptime;
 @property (nonatomic) NSUInteger inputDiagnosticsSuppressedRelativeEvents;
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaX;
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaY;

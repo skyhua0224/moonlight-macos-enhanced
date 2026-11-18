@@ -11,6 +11,7 @@
 #import "HIDSupportRumbleTypes.h"
 #import "MLPrecisionTouchpad.h"
 #import "FreeMouseVirtualCursor.h"
+#import "CoreHIDSilence.h"
 
 #import "MoonlightEnhanced-Swift.h"
 #include <limits.h>
@@ -85,6 +86,9 @@
 @property (nonatomic) BOOL useCoreHIDMouse;
 @property (nonatomic, strong) CoreHIDMouseDriver *coreHIDMouseDriver;
 @property (nonatomic) BOOL coreHIDMouseDidDeliverMovement;
+/// The CoreHID state as it was when the driver was torn down: the stream ends, and the statistics line is written,
+/// after the driver is gone.
+@property (nonatomic, copy) NSString *lastCoreHIDDiagnosticSummary;
 @property (nonatomic) BOOL coreHIDMouseRuntimeFailed;
 @property (nonatomic) NSUInteger keyboardPhysicalModifierSourceMask;
 @property (nonatomic) NSUInteger keyboardRemoteModifierMask;
@@ -99,6 +103,10 @@
 @property (nonatomic) NSSize freeMouseVirtualCursorReferenceSize;
 /// The virtual cursor itself (FreeMouseVirtualCursor.h). Read and written only under freeMouseVirtualCursorLock.
 - (MLFreeMouseVirtualCursor *)freeMouseVirtualCursorState;
+/// Whether the CoreHID mouse is silent (CoreHIDSilence.h). Read and written only under freeMouseVirtualCursorLock.
+- (MLCoreHIDSilence *)coreHIDSilenceState;
+/// Stops using CoreHID for the free mouse after the silence verdict: the absolute pointer path, with the reason logged.
+- (void)markCoreHIDMouseSilent;
 @property (nonatomic, strong) NSObject *inputDiagnosticsLock;
 @property (atomic) BOOL inputDiagnosticsEnabled;
 @property (nonatomic) NSUInteger inputDiagnosticsDetailedLogSequence;

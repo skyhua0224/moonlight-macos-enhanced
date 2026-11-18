@@ -229,8 +229,14 @@ static BOOL IsPersistableInputDiagnosticLine(NSString *line) {
         return NO;
     }
 
+    // Kept with input diagnostics on: scroll and button traces, the once-a-second mouse sample, and the free mouse
+    // corrections (rate limited by the writer). Without the sample and corrections a log of a stream with drifting
+    // mouse input had no motion data at all, though the statistics line said detail=on. The per-event relative and
+    // absolute lines stay out: they are the high frequency ones.
     return [line rangeOfString:@"scroll" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-           [line rangeOfString:@"mouse-button" options:NSCaseInsensitiveSearch].location != NSNotFound;
+           [line rangeOfString:@"mouse-button" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [line rangeOfString:@"1s sample:" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [line rangeOfString:@"free-mouse correction" options:NSCaseInsensitiveSearch].location != NSNotFound;
 }
 
 static BOOL LoggerInputDiagnosticsEnabledFlag(void) {

@@ -154,9 +154,14 @@
 "Mouse Runtime Path Absolute Active" = "绝对指针同步已生效";
 "Mouse Runtime Detail Absolute Active" = "远程桌面指针同步当前正在使用绝对指针路径。";
 "Mouse Runtime Path AppKit Fallback" = "AppKit 回退路径已生效";
-"Mouse Runtime Detail AppKit Fallback Permission" = "由于未授予输入监控权限，CoreHID 无法启动，Moonlight 已回退到 AppKit 兼容路径。";
+"Mouse Runtime Detail AppKit Fallback Permission" = "未授予输入监控权限，CoreHID 收不到鼠标输入，Moonlight 使用 AppKit 兼容路径。请在「系统设置 → 隐私与安全性 → 输入监控」里允许 Moonlight。";
 "Mouse Runtime Detail AppKit Fallback UnsupportedOS" = "CoreHID 需要 macOS 15 或更高版本，Moonlight 已回退到 AppKit 兼容路径。";
 "Mouse Runtime Detail AppKit Fallback Runtime" = "CoreHID 运行时失败，Moonlight 已回退到 AppKit 兼容路径。";
+"Mouse Runtime Detail AppKit Fallback Silent" = "指针在移动，但 CoreHID 没有送来任何鼠标移动，Moonlight 使用 AppKit 兼容路径。如果鼠标应由 CoreHID 处理，请检查「系统设置 → 隐私与安全性 → 输入监控」。";
+"CoreHID Permission Required" = "需要输入监控权限";
+"CoreHID Permission Alert Message" = "Moonlight 没有从 CoreHID 收到鼠标输入，鼠标暂时使用兼容路径。请打开「系统设置 → 隐私与安全性 → 输入监控」，把 Moonlight 打开。如果列表里已有 Moonlight，请先关掉再打开，或移除后重新添加：更新后这里的授权可能不再匹配。完成后重新打开 Moonlight。";
+"Open Input Monitoring" = "打开输入监控";
+"Later" = "稍后";
 "Scroll Runtime Path Idle" = "暂无近期滚动路径";
 "Scroll Runtime Detail Idle" = "串流中滚动后显示当前使用的滚动路径。";
 "Scroll Runtime Path Wheel" = "离散滚轮路径已生效";
@@ -1800,6 +1805,9 @@
 "Rebuilt HEVC decode format" = "已重建 HEVC 解码格式";
 "Rebuilt AV1 decode format" = "已重建 AV1 解码格式";
 "CoreHID mouse set up" = "CoreHID 鼠标已设置";
+"CoreHID mouse not in use" = "CoreHID 鼠标未启用";
+"CoreHID Input Monitoring state" = "CoreHID 输入监控状态";
+"CoreHID device checked" = "CoreHID 设备检查";
 "Could not enable per-frame HDR metadata" = "无法启用逐帧 HDR 元数据";
 "Microphone start skipped" = "已跳过启动麦克风";
 "Asked the host to refresh the picture" = "已请求主机刷新画面";
