@@ -27,6 +27,13 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 @property(nonatomic) NSInteger rawRelativeDeltaY;
 @property(nonatomic) NSInteger sentRelativeDeltaX;
 @property(nonatomic) NSInteger sentRelativeDeltaY;
+/// Free mouse: reconciles of the virtual cursor against the live pointer made on the CoreHID thread, how many of them
+/// sent a correction, the largest drift (view points) found by one, and the largest disagreement between the live
+/// pointer map and the pointer the main thread read (view points).
+@property(nonatomic) NSUInteger freeMouseLiveReconciles;
+@property(nonatomic) NSUInteger freeMouseLiveCorrections;
+@property(nonatomic) double freeMouseLiveMaxDrift;
+@property(nonatomic) double freeMouseLiveMapMaxError;
 @end
 
 @interface HIDSupport : NSObject
@@ -53,6 +60,14 @@ typedef void (^HIDFreeMouseAbsoluteSyncHandler)(void);
 @property(atomic) TemporaryHost *host;
 @property(nonatomic, assign) void *inputContext;
 @property(nonatomic, copy) HIDFreeMouseAbsoluteSyncHandler freeMouseAbsoluteSyncHandler;
+
+/// Main thread: the pointer is at `viewPoint` in the stream view now. Calibrates the map that lets the CoreHID thread
+/// read the pointer in view coordinates without the main thread (FreeMouseLivePointer.h).
+- (void)updateFreeMouseLivePointerMapWithViewPoint:(NSPoint)viewPoint
+                                     referenceSize:(NSSize)referenceSize
+                                       viewFlipped:(BOOL)viewFlipped;
+/// Main thread: the map is no longer valid (the pointer is not the stream's: capture released, menu, outside the view).
+- (void)invalidateFreeMouseLivePointerMap;
 
 - (instancetype)init:(TemporaryHost *)host;
 
