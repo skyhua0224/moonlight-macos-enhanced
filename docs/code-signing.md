@@ -30,6 +30,12 @@ throw-away keychain and checks its SHA-1 against `SIGNING_CERT_SHA1` in
 Hardened Runtime is not enabled, as before. The signing step stays the same for
 the application, the File Provider extension, Sparkle and the AWDL helper.
 
+## Updates
+
+Sparkle authenticates update archives with the EdDSA key in `SUPublicEDKey`,
+which is independent of the code-signing certificate. Builds signed with the
+fixed certificate keep using the same key and appcast.
+
 ## AWDL privileged helper
 
 Installing the helper with `SMJobBless` needs a TeamIdentifier, which neither
