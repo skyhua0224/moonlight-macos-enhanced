@@ -161,6 +161,7 @@
 "CoreHID Permission Required" = "需要输入监控权限";
 "CoreHID Permission Alert Message" = "Moonlight 没有从 CoreHID 收到鼠标输入，鼠标暂时使用兼容路径。请打开「系统设置 → 隐私与安全性 → 输入监控」，把 Moonlight 打开。如果列表里已有 Moonlight，请先关掉再打开，或移除后重新添加：更新后这里的授权可能不再匹配。完成后重新打开 Moonlight。";
 "Open Input Monitoring" = "打开输入监控";
+"Input Monitoring Launch Alert Message" = "鼠标输入需要输入监控权限，现在没有。请在「系统设置 → 隐私与安全性 → 输入监控」里打开 Moonlight，列表里没有就点 + 添加。已经打开的话，先关掉再打开，或删除后重新添加：更新后原有授权可能失效。";
 "Later" = "稍后";
 "Scroll Runtime Path Idle" = "暂无近期滚动路径";
 "Scroll Runtime Detail Idle" = "串流中滚动后显示当前使用的滚动路径。";

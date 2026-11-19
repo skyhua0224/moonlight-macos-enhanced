@@ -167,6 +167,7 @@
 				macOS/ViewControllers/DeckHosts.swift,
 				macOS/ViewControllers/DeckKit.swift,
 				macOS/Helpers/ConceptHarness.m,
+				macOS/Helpers/InputMonitoringLaunchPrompt.swift,
 				Crypto/CryptoManager.m,
 				Crypto/IdManager.m,
 				Crypto/mkcert.c,

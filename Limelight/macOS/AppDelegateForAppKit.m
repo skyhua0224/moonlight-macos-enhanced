@@ -110,6 +110,7 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     self.controllerNavigation = [[ControllerNavigation alloc] init];
     [self refreshLocalizedChrome];
     [self showWelcomePermissionsIfNeeded];
+    [self checkInputMonitoringAtLaunch];
     [ConceptHarness startScripted];
 }
 
@@ -170,6 +171,17 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     [mainWC showWindow:self];
     [mainWC.window makeKeyAndOrderFront:nil];
     [self localizeToolbarForWindow:mainWC.window];
+}
+
+// The welcome sheet asks for Input Monitoring on the first launch. On every later launch, a profile that takes
+// mouse input from CoreHID needs the permission to be there; if it is not, say so now, not on the first stream.
+- (void)checkInputMonitoringAtLaunch {
+    if ([ConceptHarness enabled] || [WelcomePermissionsWindowObjCBridge shouldShowWelcomeWindow]) {
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [[InputMonitoringPermissionManager sharedManager] checkAtLaunch];
+    });
 }
 
 - (void)showWelcomePermissionsIfNeeded {
