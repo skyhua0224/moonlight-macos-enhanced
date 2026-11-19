@@ -1592,8 +1592,9 @@ extension InputMonitoringPermissionManager {
         }
         let everGranted = hasPersistedGrantHistory || UserDefaults.standard.bool(forKey: Self.everGrantedKey)
         let version = Self.launchBuildIdentity
+        let usesCoreHID = Self.settingsUseCoreHID()
         let action = InputMonitoringLaunchRules.action(
-            usesCoreHID: Self.settingsUseCoreHID(),
+            usesCoreHID: usesCoreHID,
             coreHIDSupported: true,
             access: access,
             everGranted: everGranted,
@@ -1602,6 +1603,15 @@ extension InputMonitoringPermissionManager {
         LogMessage(LOG_I, "[diag] Input Monitoring at launch: system=\(state.rawValue) everGranted=\(everGranted) action=\(action) "
             + "iohid=\(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent).rawValue) cgPreflight=\(CGPreflightListenEventAccess())")
 
+        // The system says no, so the settings page must not read "granted, re-enter the stream" from an old grant: also
+        // when the alert is not shown again (answered for this build).
+        if usesCoreHID && access != .granted && action != .requestAccess {
+            runtimeSilentWithoutPermission = true
+            observedSystemState = state
+            authorizationState = state
+            shouldSuggestSettingsRepair = everGranted
+        }
+
         switch action {
         case .nothing:
             break
@@ -1609,11 +1619,6 @@ extension InputMonitoringPermissionManager {
             UserDefaults.standard.set(version, forKey: Self.launchPromptVersionKey)
             requestAuthorization(nil)
         case .showAlert:
-            // The system says no, so the settings page must not read "granted, re-enter the stream" from an old grant.
-            runtimeSilentWithoutPermission = true
-            observedSystemState = state
-            authorizationState = state
-            shouldSuggestSettingsRepair = everGranted
             presentLaunchAlert(version: version)
         }
     }
