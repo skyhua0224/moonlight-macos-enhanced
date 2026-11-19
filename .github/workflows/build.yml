@@ -9,6 +9,13 @@ on:
     branches: [master, main]
   workflow_dispatch:
 
+env:
+  # SHA-1 of the fixed code-signing certificate (public value). Builds that can
+  # read the SIGNING_P12_* secrets sign with it, so the designated requirement
+  # does not change between releases and the Input Monitoring grant survives
+  # updates. Builds without secrets (fork pull requests) sign ad-hoc.
+  SIGNING_CERT_SHA1: 39:61:36:AB:87:15:2D:3A:07:6F:09:C7:5F:28:5C:69:F2:7A:1B:50
+
 jobs:
   build_arch:
     name: Build ${{ matrix.variant }}
@@ -201,11 +208,26 @@ jobs:
         ditto -c -k --keepParent "$stage" "dist/MoonlightEnhanced-dSYM-${{ matrix.variant }}.zip"
         ls -l "dist/MoonlightEnhanced-dSYM-${{ matrix.variant }}.zip"
 
+    - name: Prepare signing identity
+      id: signing
+      env:
+        SIGNING_P12_BASE64: ${{ secrets.SIGNING_P12_BASE64 }}
+        SIGNING_P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
+      run: scripts/ci_signing_keychain.sh setup
+
     - name: Sign ${{ matrix.variant }} app bundle
+      env:
+        SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
+        SIGNING_KEYCHAIN: ${{ steps.signing.outputs.keychain }}
       run: |
         python3 scripts/sign_app_bundle.py build/Build/Products/Release/MoonlightEnhanced.app \
+          --identity "$SIGNING_IDENTITY" ${SIGNING_KEYCHAIN:+--keychain "$SIGNING_KEYCHAIN"} \
           --entitlements Moonlight.entitlements \
           --extension-entitlements FileProviderExtension/FileProvider.entitlements
+
+    - name: Remove signing keychain
+      if: always()
+      run: scripts/ci_signing_keychain.sh cleanup
 
     - name: Package ${{ matrix.variant }} app bundle
       run: |
@@ -387,11 +409,26 @@ jobs:
           exit 1
         fi
 
+    - name: Prepare signing identity
+      id: signing
+      env:
+        SIGNING_P12_BASE64: ${{ secrets.SIGNING_P12_BASE64 }}
+        SIGNING_P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
+      run: scripts/ci_signing_keychain.sh setup
+
     - name: Sign universal app bundle
+      env:
+        SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
+        SIGNING_KEYCHAIN: ${{ steps.signing.outputs.keychain }}
       run: |
         python3 scripts/sign_app_bundle.py dist/universal/MoonlightEnhanced.app \
+          --identity "$SIGNING_IDENTITY" ${SIGNING_KEYCHAIN:+--keychain "$SIGNING_KEYCHAIN"} \
           --entitlements Moonlight.entitlements \
           --extension-entitlements FileProviderExtension/FileProvider.entitlements
+
+    - name: Remove signing keychain
+      if: always()
+      run: scripts/ci_signing_keychain.sh cleanup
 
     - name: Create universal DMG
       run: |
