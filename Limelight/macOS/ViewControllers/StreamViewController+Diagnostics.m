@@ -168,7 +168,10 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     [self uncaptureMouseWithCode:@"MUC401" reason:@"show-error-overlay"];
 
     // The loading overlay raises itself above every view added to the stream view; with it still up the error below
-    // is never seen.
+    // is never seen. Its text is kept for "Keep Waiting".
+    if (self.streamView.statusText != nil) {
+        self.statusTextBeforeErrorOverlay = self.streamView.statusText;
+    }
     self.streamView.statusText = nil;
 
     if (!self.timeoutOverlayContainer) {
@@ -421,6 +424,12 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 
 - (void)handleTimeoutWait:(id)sender {
     [self hideConnectionTimeoutOverlay];
+    // Still waiting for the first picture: the loading overlay goes back, as it was.
+    NSString *status = self.statusTextBeforeErrorOverlay;
+    self.statusTextBeforeErrorOverlay = nil;
+    if (status != nil && self.waitingForFirstRenderedFrame && self.streamView.statusText == nil) {
+        self.streamView.statusText = status;
+    }
 }
 
 - (void)handleTimeoutExitStream:(id)sender {
