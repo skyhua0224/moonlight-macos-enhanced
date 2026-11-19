@@ -457,6 +457,8 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic, strong) NSTextField *reconnectLabel;
 
 @property (nonatomic, strong) NSVisualEffectView *timeoutOverlayContainer;
+/// The loading overlay's text when an error overlay took its place: "Keep Waiting" puts it back.
+@property (nonatomic, copy) NSString *statusTextBeforeErrorOverlay;
 @property (nonatomic, strong) NSTextField *timeoutIconLabel;
 @property (nonatomic, strong) NSTextField *timeoutTitleLabel;
 @property (nonatomic, strong) NSTextField *timeoutLabel;

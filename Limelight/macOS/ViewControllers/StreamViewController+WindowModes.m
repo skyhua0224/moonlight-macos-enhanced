@@ -679,8 +679,14 @@ static const NSTimeInterval MLStreamDisconnectCloseDeadlineSeconds = 0.8;
         if (message != nil) {
             self.reconnectInProgress = NO;
             [self hideReconnectOverlay];
-            // Show the error overlay and keep window open for retry/options
-            [self showErrorOverlayWithTitle:MLString(@"Connection Failed", nil) message:message canWait:NO];
+            // The stream did not start. Back to the host list at once, with the reason there: the window used to stay
+            // open with an error overlay that the loading overlay covered, and the user watched "handshake in
+            // progress" until they closed the window themselves.
+            [StreamFailureNotice showWithTitle:MLString(@"Connection Failed", nil)
+                                       message:message
+                                   buttonTitle:MLString(@"OK", @"OK")];
+            [self beginStopStreamIfNeededWithReason:@"start-failed"];
+            [self requestSafeCloseOfStreamWindow];
         } else {
             [self.delegate appDidQuit:self.app];
             [self requestSafeCloseOfStreamWindow];

@@ -106,3 +106,24 @@ enum PermissionAlertPresenter {
     return true
   }
 }
+
+/// Tells the user why a stream could not start, on the host window, once the stream window has gone. It waits for a
+/// window that can take the sheet (the stream window may be leaving full screen, another sheet may be up) and shows the
+/// notice once; it does not give up, since the reason would be lost.
+@objc final class StreamFailureNotice: NSObject {
+  @objc static func show(title: String, message: String, buttonTitle: String) {
+    present(title: title, message: message, buttonTitle: buttonTitle)
+  }
+
+  private static func present(title: String, message: String, buttonTitle: String) {
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = title
+    alert.informativeText = message
+    alert.addButton(withTitle: buttonTitle)
+    if PermissionAlertPresenter.presentWithoutBlocking(alert, completion: { _ in }) { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+      present(title: title, message: message, buttonTitle: buttonTitle)
+    }
+  }
+}
