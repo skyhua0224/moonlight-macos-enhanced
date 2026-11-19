@@ -167,6 +167,10 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     // 显示弹窗时释放键鼠捕获，让用户可以自由移动鼠标点击按钮
     [self uncaptureMouseWithCode:@"MUC401" reason:@"show-error-overlay"];
 
+    // The loading overlay raises itself above every view added to the stream view; with it still up the error below
+    // is never seen.
+    self.streamView.statusText = nil;
+
     if (!self.timeoutOverlayContainer) {
         NSVisualEffectView *container = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
         container.material = NSVisualEffectMaterialHUDWindow;

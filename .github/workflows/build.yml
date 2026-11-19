@@ -83,11 +83,12 @@ jobs:
 
     # Plain C tests of the input logic (no hardware, no host): the free mouse virtual cursor, and when the
     # CoreHID mouse counts as silent, and when the app asks for Input Monitoring at launch.
-    - name: Input logic tests (free mouse, CoreHID silence, Input Monitoring at launch)
+    - name: Input logic tests (free mouse, CoreHID silence, Input Monitoring at launch, RTSP ANNOUNCE size)
       run: |
         sh tests/free-mouse-truth/run.sh
         sh tests/corehid-silence/run.sh
         sh tests/input-monitoring-launch/run.sh
+        sh tests/rtsp-announce-size/run.sh
 
     - name: Configure version and update channel
       shell: bash
