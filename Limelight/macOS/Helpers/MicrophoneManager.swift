@@ -298,6 +298,9 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
 
     private var didBecomeActiveObserver: NSObjectProtocol?
     private var hasShownRuntimeAlert = false
+    // The CoreHID-silent alert is kept while a stream window is on screen and shown when it has closed.
+    private var runtimeAlertPending = false
+    private var streamWindowCloseObserver: NSObjectProtocol?
     private var observedSystemState: InputMonitoringAuthorizationState = .notDetermined
     private var needsStreamReentry = false
     private var hasPersistedGrantHistory = false
@@ -331,11 +334,25 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         ) { [weak self] _ in
             self?.refreshAuthorizationStatus()
         }
+        streamWindowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let window = note.object as? NSWindow, PermissionAlertPresenter.isStreamWindow(window) else { return }
+            // Let the stream window finish closing and the host list come back before a sheet goes on it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                self?.presentPendingRuntimeAlertIfPossible()
+            }
+        }
     }
 
     deinit {
         if let didBecomeActiveObserver {
             NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+        }
+        if let streamWindowCloseObserver {
+            NotificationCenter.default.removeObserver(streamWindowCloseObserver)
         }
     }
 
@@ -515,7 +532,8 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
             // "Remove and add it again" is for a grant that went stale; a user who never allowed it needs "allow it".
             self.shouldSuggestSettingsRepair = self.hasPersistedGrantHistory || self.didAttemptAuthorizationThisSession
             if userChoseCoreHID || self.didAttemptAuthorizationThisSession || self.hasPersistedGrantHistory {
-                self.presentRuntimeAlertIfNeeded()
+                self.runtimeAlertPending = true
+                self.presentPendingRuntimeAlertIfPossible()
             }
         }
     }
@@ -634,12 +652,18 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         return finalState == .granted
     }
 
-    private func presentRuntimeAlertIfNeeded() {
+    /// Shows the CoreHID-silent alert if one is waiting and no stream window is on screen. It is never run modally: see
+    /// PermissionAlertPresenter. During a stream the user is told by the Input Monitoring state in Settings and, when
+    /// the stream window closes, by this alert.
+    private func presentPendingRuntimeAlertIfPossible() {
+        guard runtimeAlertPending else { return }
         guard authorizationState != .granted,
               authorizationState != .grantedNeedsReentry,
               !hasShownRuntimeAlert
-        else { return }
-        hasShownRuntimeAlert = true
+        else {
+            runtimeAlertPending = false
+            return
+        }
 
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -651,9 +675,14 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         )
         alert.addButton(withTitle: localized("Open Input Monitoring", fallback: "Open Input Monitoring"))
         alert.addButton(withTitle: localized("Later", fallback: "Later"))
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            openSystemPreferences()
+        let shown = PermissionAlertPresenter.presentWithoutBlocking(alert) { [weak self] response in
+            if response == .alertFirstButtonReturn {
+                self?.openSystemPreferences()
+            }
+        }
+        if shown {
+            hasShownRuntimeAlert = true
+            runtimeAlertPending = false
         }
     }
 
@@ -1624,7 +1653,6 @@ extension InputMonitoringPermissionManager {
     }
 
     private func presentLaunchAlert(version: String) {
-        hasShownRuntimeAlert = true
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = localized(
@@ -1635,10 +1663,17 @@ extension InputMonitoringPermissionManager {
         )
         alert.addButton(withTitle: localized("Open Input Monitoring", fallback: "Open Input Monitoring"))
         alert.addButton(withTitle: localized("Later", fallback: "Later"))
-        if alert.runModal() == .alertFirstButtonReturn {
-            openSystemPreferences()
-        } else {
-            UserDefaults.standard.set(version, forKey: Self.launchPromptVersionKey)
+        // Not shown when a stream has already started (or no window can take it): nothing is recorded, so the next
+        // launch asks again.
+        let shown = PermissionAlertPresenter.presentWithoutBlocking(alert) { [weak self] response in
+            if response == .alertFirstButtonReturn {
+                self?.openSystemPreferences()
+            } else {
+                UserDefaults.standard.set(version, forKey: Self.launchPromptVersionKey)
+            }
+        }
+        if shown {
+            hasShownRuntimeAlert = true
         }
     }
 }

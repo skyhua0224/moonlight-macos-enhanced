@@ -2,10 +2,11 @@
 //  InputMonitoringLaunchPrompt.swift
 //  Moonlight for macOS
 //
-//  What the app does about Input Monitoring when it starts. Foundation only, so a test can build it alone
-//  (tests/input-monitoring-launch).
+//  What the app does about Input Monitoring when it starts, and how a permission alert is put on screen. AppKit and
+//  Foundation only, so a test can build it alone (tests/input-monitoring-launch, tests/permission-alert-nonblocking).
 //
 
+import AppKit
 import Foundation
 
 /// What the system reports for Input Monitoring (IOHIDCheckAccess / CGPreflightListenEventAccess), read without asking.
@@ -46,5 +47,62 @@ enum InputMonitoringLaunchRules {
       return .requestAccess
     }
     return .showAlert
+  }
+}
+
+/// Puts a permission alert on screen without ever blocking the main thread or the stream.
+///
+/// NSAlert.runModal runs a modal session on the main thread, and a block dispatched to the main queue does not run
+/// until the session ends. The stream start binds its connection in such a block, so a runModal alert raised while a
+/// stream is starting (CoreHID found without Input Monitoring) left the stream stuck at "Starting", with the alert
+/// behind the stream window and the disconnect shortcut unable to run. A permission alert is therefore
+///  - never shown while a stream window is on screen (the caller keeps it and shows it when the stream window closes),
+///  - and when it is shown, it is a sheet on an ordinary window of the app, which does not take over the main thread.
+enum PermissionAlertPresenter {
+  /// Name of the stream window class (StreamViewController.m).
+  static let streamWindowClassName = "ClientWindow"
+
+  static func isStreamWindow(_ window: NSWindow, streamWindowClass: AnyClass? = NSClassFromString(streamWindowClassName)) -> Bool {
+    guard let streamWindowClass else { return false }
+    return window.isKind(of: streamWindowClass)
+  }
+
+  /// A stream window exists and is on screen or in the Dock: a stream is starting, running or being left.
+  static func streamWindowVisible(
+    windows: [NSWindow] = NSApp.windows,
+    streamWindowClass: AnyClass? = NSClassFromString(streamWindowClassName)
+  ) -> Bool {
+    windows.contains { isStreamWindow($0, streamWindowClass: streamWindowClass) && ($0.isVisible || $0.isMiniaturized) }
+  }
+
+  /// The window the sheet goes on: the main window if it is an ordinary one, else the first ordinary visible window.
+  static func hostWindow(
+    windows: [NSWindow] = NSApp.windows,
+    mainWindow: NSWindow? = NSApp.mainWindow,
+    streamWindowClass: AnyClass? = NSClassFromString(streamWindowClassName)
+  ) -> NSWindow? {
+    func usable(_ w: NSWindow) -> Bool {
+      w.isVisible && !w.isMiniaturized && !(w is NSPanel) && w.attachedSheet == nil && w.sheetParent == nil
+        && !isStreamWindow(w, streamWindowClass: streamWindowClass)
+    }
+    if let mainWindow, usable(mainWindow) { return mainWindow }
+    return windows.first(where: usable)
+  }
+
+  /// Shows the alert as a sheet and calls `completion` with the answer. Returns false, and shows nothing, when a stream
+  /// window is on screen or there is no window to put it on; the caller decides when to try again.
+  @discardableResult
+  static func presentWithoutBlocking(
+    _ alert: NSAlert,
+    windows: [NSWindow] = NSApp.windows,
+    mainWindow: NSWindow? = NSApp.mainWindow,
+    streamWindowClass: AnyClass? = NSClassFromString(streamWindowClassName),
+    completion: @escaping (NSApplication.ModalResponse) -> Void
+  ) -> Bool {
+    guard !streamWindowVisible(windows: windows, streamWindowClass: streamWindowClass),
+      let host = hostWindow(windows: windows, mainWindow: mainWindow, streamWindowClass: streamWindowClass)
+    else { return false }
+    alert.beginSheetModal(for: host, completionHandler: completion)
+    return true
   }
 }

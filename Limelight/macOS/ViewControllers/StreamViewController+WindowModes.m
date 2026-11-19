@@ -153,6 +153,9 @@
     }];
 }
 
+/// How long the stream window may stay on screen after the user asked to disconnect.
+static const NSTimeInterval MLStreamDisconnectCloseDeadlineSeconds = 0.8;
+
 - (IBAction)performCloseStreamWindow:(id)sender {
     [self.hidSupport releaseAllModifierKeys];
     NSString *disconnectSource = [self resolvedDisconnectSourceFromSender:sender];
@@ -190,6 +193,23 @@
         Log(LOG_I, @"performCloseStreamWindow: safe close (style=%llu level=%ld)", (unsigned long long)w.styleMask, (long)w.level);
         [strongSelf requestSafeCloseOfStreamWindow];
     }];
+
+    // The stop can wait for a long time: a start that is stuck (a connection that is not up, a sheet or alert that
+    // holds the main thread) keeps the connection teardown from finishing, and the window would stay on screen with
+    // a disconnect that does nothing. The user's disconnect must end the session on screen within a second, so the
+    // window is closed by then whether or not the stop has finished (the stop goes on in the background, as it does
+    // for a second disconnect request, which takes the immediate path above).
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(MLStreamDisconnectCloseDeadlineSeconds * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        NSWindow *w = strongSelf.view.window;
+        if (strongSelf == nil || w == nil || !w.isVisible) {
+            return;
+        }
+        Log(LOG_W, @"[diag] Disconnect still waiting for the stop after %.1fs: closing the stream window now",
+            MLStreamDisconnectCloseDeadlineSeconds);
+        [strongSelf requestSafeCloseOfStreamWindow];
+    });
 }
 
 - (IBAction)performCloseAndQuitApp:(id)sender {
