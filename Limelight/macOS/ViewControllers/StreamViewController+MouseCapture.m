@@ -1236,27 +1236,24 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 }
 
 - (void)reconcileHybridFreeMouseAnchorToCurrentPointerForEvent:(NSEvent *)event {
+    // The CoreHID thread also reconciles the virtual cursor, against the pointer read through a map this method
+    // calibrates (FreeMouseLivePointer.h). Every way out below that is not "CoreHID is quiet" leaves the map invalid.
     if (![self supportsRemoteDesktopCursorSync] || ![self hasReadyInputContext] || !self.view.window) {
+        [self.hidSupport invalidateFreeMouseLivePointerMap];
         return;
     }
     if (self.edgeMenuTemporaryReleaseActive || self.edgeMenuDragging || self.edgeMenuMenuVisible) {
+        [self.hidSupport invalidateFreeMouseLivePointerMap];
         return;
     }
     if (![self.hidSupport shouldUseCoreHIDFreeMouseAbsoluteSyncForCurrentConfiguration]) {
+        [self.hidSupport invalidateFreeMouseLivePointerMap];
         return;
     }
 
     // Only once this capture has had a mouse event, as before.
     if (!self.hasCoreHIDFreeMouseLastTruthPoint) {
-        return;
-    }
-
-    // The virtual cursor is only moved by CoreHID. With no CoreHID motion in the last quarter second it stands still
-    // while the pointer goes on, so every event would be "far" from it and get a correction on top of what HIDSupport
-    // sends for the event itself. HIDSupport sends that event's position as the only thing for it and moves the anchor
-    // to the pointer, so there is nothing to reconcile here.
-    // Read once for the event: HIDSupport mouseMoved: uses the same answer for it (hasRecentCoreHIDMouseMovementForAppKitEvent:).
-    if (![self.hidSupport hasRecentCoreHIDMouseMovementForAppKitEvent:event]) {
+        [self.hidSupport invalidateFreeMouseLivePointerMap];
         return;
     }
 
@@ -1269,6 +1266,19 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     NSPoint currentPoint = [self currentMouseLocationInViewCoordinates];
     NSRect toleranceBounds = NSInsetRect(self.view.bounds, -2.0, -2.0);
     if (!NSPointInRect(currentPoint, toleranceBounds)) {
+        [self.hidSupport invalidateFreeMouseLivePointerMap];
+        return;
+    }
+    [self.hidSupport updateFreeMouseLivePointerMapWithViewPoint:currentPoint
+                                                  referenceSize:self.view.bounds.size
+                                                    viewFlipped:self.view.isFlipped];
+
+    // The virtual cursor is only moved by CoreHID. With no CoreHID motion in the last quarter second it stands still
+    // while the pointer goes on, so every event would be "far" from it and get a correction on top of what HIDSupport
+    // sends for the event itself. HIDSupport sends that event's position as the only thing for it and moves the anchor
+    // to the pointer, so there is nothing to reconcile here.
+    // Read once for the event: HIDSupport mouseMoved: uses the same answer for it (hasRecentCoreHIDMouseMovementForAppKitEvent:).
+    if (![self.hidSupport hasRecentCoreHIDMouseMovementForAppKitEvent:event]) {
         return;
     }
 

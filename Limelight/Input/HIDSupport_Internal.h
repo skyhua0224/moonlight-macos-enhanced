@@ -11,6 +11,7 @@
 #import "HIDSupportRumbleTypes.h"
 #import "MLPrecisionTouchpad.h"
 #import "FreeMouseVirtualCursor.h"
+#import "FreeMouseLivePointer.h"
 #import "CoreHIDSilence.h"
 
 #import "MoonlightEnhanced-Swift.h"
@@ -106,6 +107,13 @@
 @property (nonatomic) NSSize freeMouseVirtualCursorReferenceSize;
 /// The virtual cursor itself (FreeMouseVirtualCursor.h). Read and written only under freeMouseVirtualCursorLock.
 - (MLFreeMouseVirtualCursor *)freeMouseVirtualCursorState;
+/// The live pointer map (FreeMouseLivePointer.h) and when the CoreHID thread last reconciled against it. Read and
+/// written only under freeMouseVirtualCursorLock.
+- (MLLivePointerMap *)freeMouseLivePointerMapState;
+@property (nonatomic) NSTimeInterval freeMouseLiveReconcileLastUptime;
+/// CoreHID thread, once per raw movement: reconciles the virtual cursor against the pointer as it is now, at most every
+/// 4 ms, so the cursor does not wait for the main thread's mouse events.
+- (void)reconcileFreeMouseVirtualCursorFromLivePointerIfDue;
 /// Whether the CoreHID mouse is silent (CoreHIDSilence.h). Read and written only under freeMouseVirtualCursorLock.
 - (MLCoreHIDSilence *)coreHIDSilenceState;
 /// Stops using CoreHID for the free mouse after the silence verdict: the absolute pointer path, with the reason logged.
@@ -133,6 +141,10 @@
 @property (nonatomic) NSInteger inputDiagnosticsRawRelativeDeltaY;
 @property (nonatomic) NSInteger inputDiagnosticsSentRelativeDeltaX;
 @property (nonatomic) NSInteger inputDiagnosticsSentRelativeDeltaY;
+@property (nonatomic) NSUInteger inputDiagnosticsFreeMouseLiveReconciles;
+@property (nonatomic) NSUInteger inputDiagnosticsFreeMouseLiveCorrections;
+@property (nonatomic) double inputDiagnosticsFreeMouseLiveMaxDrift;
+@property (nonatomic) double inputDiagnosticsFreeMouseLiveMapMaxError;
 @property (nonatomic) short lastAbsolutePointerHostX;
 @property (nonatomic) short lastAbsolutePointerHostY;
 @property (nonatomic) short lastAbsolutePointerReferenceWidth;

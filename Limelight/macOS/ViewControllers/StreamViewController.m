@@ -1311,6 +1311,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [self.hidSupport setFreeMouseVirtualCursorActive:NO];
         [self.hidSupport resetFreeMouseVirtualCursorState];
         self.hidSupport.freeMouseAbsoluteSyncHandler = nil;
+        [self.hidSupport invalidateFreeMouseLivePointerMap];
     }
 }
 

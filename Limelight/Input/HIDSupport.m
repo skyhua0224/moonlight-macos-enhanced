@@ -418,6 +418,7 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
     // The CoreHID free-mouse virtual cursor; guarded by freeMouseVirtualCursorLock.
     MLFreeMouseVirtualCursor _freeMouseVirtualCursor;
     MLCoreHIDSilence _coreHIDSilence;
+    MLLivePointerMap _freeMouseLivePointerMap;
     // Typed-character cache. Main thread only (Text Input Services is not
     // thread safe); key events arrive on the main thread.
     NSMutableDictionary<NSNumber *, NSNumber *> *_typedVirtualKeyCache;
@@ -493,6 +494,10 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         self.inputDiagnosticsRawRelativeDeltaY = 0;
         self.inputDiagnosticsSentRelativeDeltaX = 0;
         self.inputDiagnosticsSentRelativeDeltaY = 0;
+        self.inputDiagnosticsFreeMouseLiveReconciles = 0;
+        self.inputDiagnosticsFreeMouseLiveCorrections = 0;
+        self.inputDiagnosticsFreeMouseLiveMaxDrift = 0;
+        self.inputDiagnosticsFreeMouseLiveMapMaxError = 0;
     }
 }
 
@@ -512,6 +517,10 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         snapshot.rawRelativeDeltaY = self.inputDiagnosticsRawRelativeDeltaY;
         snapshot.sentRelativeDeltaX = self.inputDiagnosticsSentRelativeDeltaX;
         snapshot.sentRelativeDeltaY = self.inputDiagnosticsSentRelativeDeltaY;
+        snapshot.freeMouseLiveReconciles = self.inputDiagnosticsFreeMouseLiveReconciles;
+        snapshot.freeMouseLiveCorrections = self.inputDiagnosticsFreeMouseLiveCorrections;
+        snapshot.freeMouseLiveMaxDrift = self.inputDiagnosticsFreeMouseLiveMaxDrift;
+        snapshot.freeMouseLiveMapMaxError = self.inputDiagnosticsFreeMouseLiveMapMaxError;
 
         self.inputDiagnosticsMouseMoveEvents = 0;
         self.inputDiagnosticsNonZeroRelativeEvents = 0;
@@ -525,6 +534,10 @@ static short HIDVirtualKeyForTypedCharacter(UniChar character) {
         self.inputDiagnosticsRawRelativeDeltaY = 0;
         self.inputDiagnosticsSentRelativeDeltaX = 0;
         self.inputDiagnosticsSentRelativeDeltaY = 0;
+        self.inputDiagnosticsFreeMouseLiveReconciles = 0;
+        self.inputDiagnosticsFreeMouseLiveCorrections = 0;
+        self.inputDiagnosticsFreeMouseLiveMaxDrift = 0;
+        self.inputDiagnosticsFreeMouseLiveMapMaxError = 0;
     }
 
     return snapshot;
@@ -1687,6 +1700,10 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
     return &_freeMouseVirtualCursor;
 }
 
+- (MLLivePointerMap *)freeMouseLivePointerMapState {
+    return &_freeMouseLivePointerMap;
+}
+
 - (MLCoreHIDSilence *)coreHIDSilenceState {
     return &_coreHIDSilence;
 }
@@ -1734,6 +1751,7 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
                                                                  sourceTag:@"coreHIDVirtualFreeMouse"];
     if (dispatchedVirtualFreeMouse) {
         HIDInvalidateCoreHIDFreeMouseAbsoluteSync(self);
+        [self reconcileFreeMouseVirtualCursorFromLivePointerIfDue];
         return;
     }
     if (HIDShouldUseCoreHIDFreeMouseAbsoluteSync(self) && self.freeMouseAbsoluteSyncHandler != nil) {

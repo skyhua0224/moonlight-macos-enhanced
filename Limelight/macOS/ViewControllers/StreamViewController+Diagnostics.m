@@ -598,6 +598,10 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     self.inputDiagnosticsFreeMouseEventAgeOver8Ms = 0;
     self.inputDiagnosticsFreeMouseCorrections = 0;
     self.inputDiagnosticsFreeMouseCorrectionMaxDrift = 0;
+    self.inputDiagnosticsFreeMouseLiveReconciles = 0;
+    self.inputDiagnosticsFreeMouseLiveCorrections = 0;
+    self.inputDiagnosticsFreeMouseLiveMaxDrift = 0;
+    self.inputDiagnosticsFreeMouseLiveMapMaxError = 0;
     self.inputDiagnosticsFreeMouseCorrectionLastLogUptime = 0;
     self.inputDiagnosticsSuppressedRelativeEvents = 0;
     self.inputDiagnosticsRawRelativeDeltaX = 0;
@@ -665,6 +669,14 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     self.inputDiagnosticsRawRelativeDeltaY += snapshot.rawRelativeDeltaY;
     self.inputDiagnosticsSentRelativeDeltaX += snapshot.sentRelativeDeltaX;
     self.inputDiagnosticsSentRelativeDeltaY += snapshot.sentRelativeDeltaY;
+    self.inputDiagnosticsFreeMouseLiveReconciles += snapshot.freeMouseLiveReconciles;
+    self.inputDiagnosticsFreeMouseLiveCorrections += snapshot.freeMouseLiveCorrections;
+    if (snapshot.freeMouseLiveMaxDrift > self.inputDiagnosticsFreeMouseLiveMaxDrift) {
+        self.inputDiagnosticsFreeMouseLiveMaxDrift = snapshot.freeMouseLiveMaxDrift;
+    }
+    if (snapshot.freeMouseLiveMapMaxError > self.inputDiagnosticsFreeMouseLiveMapMaxError) {
+        self.inputDiagnosticsFreeMouseLiveMapMaxError = snapshot.freeMouseLiveMapMaxError;
+    }
 }
 
 - (void)incrementInputDiagnosticsBucket:(NSMutableDictionary<NSString *, NSNumber *> *)bucket key:(NSString *)key {
@@ -799,6 +811,16 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
             (unsigned long)self.inputDiagnosticsFreeMouseEventAgeCount,
             (unsigned long)self.inputDiagnosticsFreeMouseCorrections,
             self.inputDiagnosticsFreeMouseCorrectionMaxDrift]];
+    }
+    if (self.inputDiagnosticsFreeMouseLiveReconciles > 0) {
+        // free mouse reconciled by the CoreHID thread against the live pointer: how many times, how many sent a
+        // correction, the largest drift (view points), and the largest disagreement between the pointer map and the
+        // pointer the main thread read (view points; near 0 when the two readings agree)
+        [parts addObject:[NSString stringWithFormat:@"liveReconcile=%lu/%lu maxLiveDrift=%.1f mapErr=%.2f",
+            (unsigned long)self.inputDiagnosticsFreeMouseLiveReconciles,
+            (unsigned long)self.inputDiagnosticsFreeMouseLiveCorrections,
+            self.inputDiagnosticsFreeMouseLiveMaxDrift,
+            self.inputDiagnosticsFreeMouseLiveMapMaxError]];
     }
     if (captureSkipTop.length > 0) {
         [parts addObject:[NSString stringWithFormat:@"captureSkipTop=%@", captureSkipTop]];

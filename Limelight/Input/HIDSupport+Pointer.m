@@ -142,6 +142,124 @@ static inline NSPoint HIDClampFreeMousePoint(NSPoint point, NSSize referenceSize
     return shouldSendCorrection;
 }
 
+// The virtual cursor is reconciled against the live pointer from the CoreHID thread as well as by the main thread's
+// mouse events (see FreeMouseLivePointer.h): every 4 ms of motion at most, whatever the main thread is doing.
+static const NSTimeInterval HIDFreeMouseLiveReconcileInterval = 0.004;
+// The map is calibrated by each mouse event the main thread handles; it is trusted for this long after the last one.
+static const NSTimeInterval HIDFreeMouseLiveMapMaxAge = 0.3;
+static const double HIDFreeMouseLiveBoundsTolerance = 2.0;
+// The same distance the main thread's reconcile uses before it tells the host.
+static const double HIDFreeMouseLiveCorrectionThreshold = 1.5;
+
+// The pointer in global display coordinates (points, origin at the top left of the main display). The Apple pages name
+// the calls and state no thread rule; that an event made with a NULL source reads the current pointer, that its
+// location relates to NSEvent mouseLocation by y = main display height - y, and that a background thread reads the
+// same pointer, was checked on macOS 26 (sources: macos-apple-cgevent-init-source-20261119,
+// macos-apple-cgevent-location-20261119). The main thread's calibration against NSEvent mouseLocation makes the map
+// independent of the second relation, and `mapErr` in the input statistics shows if the two readings ever disagree.
+static BOOL HIDReadGlobalPointerLocation(CGPoint *location) {
+    CGEventRef event = CGEventCreate(NULL);
+    if (event == NULL) {
+        return NO;
+    }
+    *location = CGEventGetLocation(event);
+    CFRelease(event);
+    return YES;
+}
+
+- (void)updateFreeMouseLivePointerMapWithViewPoint:(NSPoint)viewPoint
+                                     referenceSize:(NSSize)referenceSize
+                                       viewFlipped:(BOOL)viewFlipped {
+    CGPoint location = CGPointZero;
+    if (!HIDReadGlobalPointerLocation(&location)) {
+        return;
+    }
+    NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+    double error = -1.0;
+    @synchronized (self.freeMouseVirtualCursorLock) {
+        MLLivePointerMap *map = [self freeMouseLivePointerMapState];
+        // What the map made of this pointer before it is calibrated again: the two readings are the same instant, so
+        // a disagreement means the view moved or Quartz and AppKit do not report the same pointer.
+        MLFreeMousePoint predicted;
+        if (MLLivePointerMapToView(map, location.x, location.y, now, 1.0, 1.0e9, &predicted)) {
+            error = hypot(predicted.x - viewPoint.x, predicted.y - viewPoint.y);
+        }
+        *map = MLLivePointerMapCalibrate(location.x, location.y, viewPoint.x, viewPoint.y, viewFlipped,
+                                         referenceSize.width, referenceSize.height, now);
+    }
+    if (error >= 0.0) {
+        @synchronized (self.inputDiagnosticsLock) {
+            if (error > self.inputDiagnosticsFreeMouseLiveMapMaxError) {
+                self.inputDiagnosticsFreeMouseLiveMapMaxError = error;
+            }
+        }
+    }
+}
+
+- (void)invalidateFreeMouseLivePointerMap {
+    @synchronized (self.freeMouseVirtualCursorLock) {
+        [self freeMouseLivePointerMapState]->valid = false;
+    }
+}
+
+- (void)reconcileFreeMouseVirtualCursorFromLivePointerIfDue {
+    if (!self.freeMouseVirtualCursorRequestedActive) {
+        return;
+    }
+
+    NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+    @synchronized (self.freeMouseVirtualCursorLock) {
+        if (now - self.freeMouseLiveReconcileLastUptime < HIDFreeMouseLiveReconcileInterval) {
+            return;
+        }
+        self.freeMouseLiveReconcileLastUptime = now;
+    }
+
+    CGPoint location = CGPointZero;
+    if (!HIDReadGlobalPointerLocation(&location)) {
+        return;
+    }
+
+    BOOL shouldBlendGain = ![self hasPressedMouseButtons];
+    BOOL shouldSendCorrection = NO;
+    double drift = 0.0;
+    NSPoint clampedPoint = NSZeroPoint;
+    NSSize referenceSize = NSZeroSize;
+    @synchronized (self.freeMouseVirtualCursorLock) {
+        MLLivePointerMap *map = [self freeMouseLivePointerMapState];
+        MLFreeMousePoint view;
+        if (!MLLivePointerMapToView(map, location.x, location.y, now, HIDFreeMouseLiveMapMaxAge,
+                                    HIDFreeMouseLiveBoundsTolerance, &view)) {
+            return;
+        }
+        referenceSize = NSMakeSize(map->width, map->height);
+        clampedPoint = HIDClampFreeMousePoint(NSMakePoint(view.x, view.y), referenceSize);
+        shouldSendCorrection = MLFreeMouseVirtualCursorReconcile([self freeMouseVirtualCursorState], view,
+                                                                 referenceSize.width, referenceSize.height,
+                                                                 shouldBlendGain,
+                                                                 HIDFreeMouseLiveCorrectionThreshold, &drift);
+        self.freeMouseVirtualCursorReferenceSize = referenceSize;
+    }
+
+    @synchronized (self.inputDiagnosticsLock) {
+        self.inputDiagnosticsFreeMouseLiveReconciles += 1;
+        if (shouldSendCorrection) {
+            self.inputDiagnosticsFreeMouseLiveCorrections += 1;
+        }
+        if (drift > self.inputDiagnosticsFreeMouseLiveMaxDrift) {
+            self.inputDiagnosticsFreeMouseLiveMaxDrift = drift;
+        }
+    }
+
+    if (shouldSendCorrection) {
+        // Latest position wins, in order with the positions the raw motion sends.
+        [self sendCoalescedAbsoluteMousePositionForViewPoint:clampedPoint
+                                               referenceSize:referenceSize
+                                               clampToBounds:YES
+                                                   sourceTag:@"sendAbsoluteMousePosition"];
+    }
+}
+
 - (BOOL)getFreeMouseVirtualCursorPoint:(NSPoint *)viewPoint
                          referenceSize:(NSSize *)referenceSize {
     BOOL hasAnchor = NO;

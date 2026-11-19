@@ -6,11 +6,16 @@
 //     or against the location stored in the event (event: what the app did until rc.9).
 // The replay measures what the host receives: the distance between the cursor position sent and the real pointer at
 // that moment, and the position steps over 40 view points. No hardware, no host.
+//  3. the live pointer map (FreeMouseLivePointer.h): reading the pointer off the main thread;
+//  4. the smoothness of the host cursor, frame by frame, with the cursor reconciled at the rate of the main thread's
+//     mouse events (about 40 a second, 17 ms old: what a 1000 Hz mouse got in a user's log) or at the rate of the raw
+//     motion (every 4 ms, the pointer read through the map).
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "FreeMouseLivePointer.h"
 #include "FreeMouseVirtualCursor.h"
 
 #ifndef M_PI
@@ -169,9 +174,140 @@ static void testReplay(void) {
     CHECK(event[4].p95 > 10.0 * live[4].p95, "33 ms queue: event %.1f vs live %.1f", event[4].p95, live[4].p95);
 }
 
+
+static void testLivePointerMap(void) {
+    // A 400 x 300 view. One reading: the pointer was at global (350, 640) and at view (50, 60). Other readings follow
+    // from the sign of the view's y axis.
+    MLLivePointerMap m = MLLivePointerMapCalibrate(350, 640, 50, 60, false, 400, 300, 10.0);
+    CHECK(m.valid, "calibrated");
+    MLFreeMousePoint v;
+    CHECK(MLLivePointerMapToView(&m, 350, 640, 10.0, 0.3, 2.0, &v) && near(v.x, 50, 1e-9) && near(v.y, 60, 1e-9), "same reading");
+    CHECK(MLLivePointerMapToView(&m, 380, 600, 10.1, 0.3, 2.0, &v) && near(v.x, 80, 1e-9) && near(v.y, 100, 1e-9),
+          "pointer moved right and down on the screen: x grows, y (up) grows by 40: got %f %f", v.x, v.y);
+    MLLivePointerMap f = MLLivePointerMapCalibrate(350, 640, 50, 60, true, 400, 300, 10.0);
+    CHECK(MLLivePointerMapToView(&f, 380, 600, 10.1, 0.3, 2.0, &v) && near(v.x, 80, 1e-9) && near(v.y, 20, 1e-9),
+          "flipped view: y follows the screen: got %f", v.y);
+    CHECK(!MLLivePointerMapToView(&m, 350, 640, 10.4, 0.3, 2.0, &v), "a map older than the limit is not used");
+    CHECK(!MLLivePointerMapToView(&m, 350, 640, 9.9, 0.3, 2.0, &v), "a map from the future is not used");
+    CHECK(!MLLivePointerMapToView(&m, 350 + 460, 640, 10.0, 0.3, 2.0, &v), "pointer outside the view");
+    CHECK(MLLivePointerMapToView(&m, 350 + 351, 640, 10.0, 0.3, 2.0, &v), "within the tolerance outside the edge");
+    m.valid = false;
+    CHECK(!MLLivePointerMapToView(&m, 350, 640, 10.0, 0.3, 2.0, &v), "an invalid map is not used");
+    MLLivePointerMap bad = MLLivePointerMapCalibrate(NAN, 0, 0, 0, false, 400, 300, 0.0);
+    CHECK(!bad.valid, "non-finite readings do not calibrate");
+    bad = MLLivePointerMapCalibrate(1, 1, 1, 1, false, 0, 300, 0.0);
+    CHECK(!bad.valid, "an empty view does not calibrate");
+}
+
+// ---- smoothness replay: what the host cursor does frame by frame ----
+
+#define SM_N 20000   // ms
+static MLFreeMousePoint smTruth[SM_N], smRaw[SM_N];
+static unsigned long long smSeed = 88172645463325252ULL;
+static double smRand(void) {
+    smSeed ^= smSeed << 13; smSeed ^= smSeed >> 7; smSeed ^= smSeed << 17;
+    return (double)(smSeed >> 11) * (1.0 / 9007199254740992.0);
+}
+static double smGain(double speed) {   // pointer view points per raw view point; grows with speed like macOS's curve
+    double s = speed / 1000.0;
+    return 0.75 * (1.0 + 0.9 * (1.0 - exp(-s * 0.9)) + 0.1 * fmin(s, 4.0));
+}
+static void smGenerate(void) {
+    // Minimum-jerk strokes between random targets with pauses: flicks of 90 to 450 ms, and some slow small moves.
+    double x = 500, y = 400; int i = 0;
+    while (i < SM_N - 1) {
+        double tx = 80 + smRand() * 840, ty = 60 + smRand() * 680;
+        int dur = 90 + (int)(smRand() * 360), pause = (int)(smRand() * 250);
+        if (smRand() < 0.25) { tx = x + (smRand() - 0.5) * 60; ty = y + (smRand() - 0.5) * 60; dur = 300 + (int)(smRand() * 500); }
+        for (int k = 0; k < dur && i < SM_N - 1; k++, i++) {
+            double u = (double)k / dur, s = u * u * u * (10 - 15 * u + 6 * u * u);
+            smTruth[i] = (MLFreeMousePoint){x + (tx - x) * s, y + (ty - y) * s};
+        }
+        x = tx; y = ty;
+        for (int k = 0; k < pause && i < SM_N - 1; k++, i++) smTruth[i] = (MLFreeMousePoint){x, y};
+    }
+    smTruth[SM_N - 1] = smTruth[SM_N - 2];
+    smRaw[0] = (MLFreeMousePoint){0, 0};
+    for (int i = 1; i < SM_N; i++) {
+        double dx = smTruth[i].x - smTruth[i - 1].x, dy = smTruth[i].y - smTruth[i - 1].y;
+        double g = smGain(hypot(dx, dy) / 0.001);
+        smRaw[i] = (MLFreeMousePoint){dx / g, dy / g};
+    }
+}
+typedef struct { double jerk, jerkTruth; int spikes; double p95Lag; int corrections; } SmoothResult;
+static int cmpD(const void *a, const void *b) { double x = *(const double *)a, y = *(const double *)b; return x < y ? -1 : x > y; }
+
+// useLive: the pointer read when the reconcile runs (the app); else the location stored in the event (rc.7).
+// reconcileHz: how often the pointer is read; ageMs: how long after it was created a mouse event reaches the main thread
+// (0 for the CoreHID thread, which does not wait for it); pointerLagMs: how long the system pointer trails the raw motion.
+static SmoothResult smReplay(int useLive, double reconcileHz, int ageMs, int pointerLagMs) {
+    static MLFreeMousePoint sentAt[SM_N];
+    static int created[SM_N], deliver[SM_N];
+    MLFreeMouseVirtualCursor c;
+    MLFreeMouseVirtualCursorReset(&c);
+    MLFreeMouseVirtualCursorAnchor(&c, smTruth[0], 1000, 800, true);
+    MLFreeMousePoint sent = smTruth[0];
+    int period = (int)(1000.0 / reconcileHz + 0.5), head = 0, tail = 0, corrections = 0;
+    if (period < 1) period = 1;
+    for (int i = 1; i < SM_N; i++) {
+        sent = MLFreeMouseVirtualCursorAdvance(&c, smRaw[i].x * 0.75, smRaw[i].y * 0.75, 1000, 800);
+        if (i % period == 0) { created[tail] = i; deliver[tail] = i + ageMs; tail++; }
+        while (head < tail && deliver[head] <= i) {
+            int src = useLive ? i : created[head];
+            head++;
+            int at = src - pointerLagMs; if (at < 0) at = 0;
+            MLFreeMousePoint p = smTruth[at];
+            p.x = floor(p.x * 2.0 + 0.5) / 2.0; p.y = floor(p.y * 2.0 + 0.5) / 2.0;   // device pixels on a 2x display
+            if (MLFreeMouseVirtualCursorReconcile(&c, p, 1000, 800, true, 1.5, NULL)) { sent = c.point; corrections++; }
+        }
+        sentAt[i] = sent;
+    }
+    sentAt[0] = smTruth[0];
+    const int step = 1000 / 60, frames = SM_N / step;
+    double sj = 0, tj = 0; int spikes = 0, n = 0, nl = 0;
+    static double lag[SM_N];
+    for (int f = 2; f < frames - 2; f++) {
+        MLFreeMousePoint a = sentAt[(f - 2) * step], b = sentAt[(f - 1) * step], d = sentAt[f * step];
+        MLFreeMousePoint ta = smTruth[(f - 2) * step], tb = smTruth[(f - 1) * step], td = smTruth[f * step];
+        double jx = d.x - 2 * b.x + a.x, jy = d.y - 2 * b.y + a.y, tjx = td.x - 2 * tb.x + ta.x, tjy = td.y - 2 * tb.y + ta.y;
+        sj += jx * jx + jy * jy; tj += tjx * tjx + tjy * tjy; n++;
+        if (hypot(jx - tjx, jy - tjy) > 8.0) spikes++;
+        lag[nl++] = hypot(d.x - td.x, d.y - td.y);
+    }
+    qsort(lag, (size_t)nl, sizeof(double), cmpD);
+    SmoothResult r = {sqrt(sj / n), sqrt(tj / n), spikes, lag[(int)(nl * 0.95)], corrections};
+    return r;
+}
+
+static void testSmoothness(void) {
+    smGenerate();
+    printf("\nhost cursor smoothness at 60 frames a second, 20 s of strokes (jerk: RMS second difference per frame, view points;\n"
+           "spikes: frames whose jerk differs from the pointer's by over 8; lag: p95 distance to the pointer)\n");
+    printf("  reconcile                              pointer lag  jerk  (pointer)  spikes   lag\n");
+    static const int lags[] = {0, 4, 8};
+    SmoothResult stale40[3], live40[3], live250[3];
+    for (int k = 0; k < 3; k++) {
+        stale40[k] = smReplay(0, 40, 17, lags[k]);
+        live40[k] = smReplay(1, 40, 17, lags[k]);
+        live250[k] = smReplay(1, 250, 0, lags[k]);
+        printf("  main thread 40/s, 17 ms old, event pos    %2d ms    %6.2f   %6.2f   %6d  %6.1f\n", lags[k], stale40[k].jerk, stale40[k].jerkTruth, stale40[k].spikes, stale40[k].p95Lag);
+        printf("  main thread 40/s, 17 ms old, live pointer %2d ms    %6.2f   %6.2f   %6d  %6.1f\n", lags[k], live40[k].jerk, live40[k].jerkTruth, live40[k].spikes, live40[k].p95Lag);
+        printf("  CoreHID thread 250/s, live pointer        %2d ms    %6.2f   %6.2f   %6d  %6.1f\n", lags[k], live250[k].jerk, live250[k].jerkTruth, live250[k].spikes, live250[k].p95Lag);
+    }
+    for (int k = 0; k < 3; k++) {
+        CHECK(live250[k].jerk <= live250[k].jerkTruth * 1.05, "250/s: the cursor is as smooth as the pointer (lag %d ms): %.2f vs %.2f", lags[k], live250[k].jerk, live250[k].jerkTruth);
+        CHECK(live250[k].spikes <= 10, "250/s: %d spikes (lag %d ms)", live250[k].spikes, lags[k]);
+        CHECK(live250[k].spikes * 5 < live40[k].spikes, "250/s has far fewer spikes than 40/s: %d vs %d (lag %d ms)", live250[k].spikes, live40[k].spikes, lags[k]);
+        CHECK(live40[k].jerk > live250[k].jerk * 1.3, "40/s is rougher: %.2f vs %.2f (lag %d ms)", live40[k].jerk, live250[k].jerk, lags[k]);
+        CHECK(live40[k].spikes < stale40[k].spikes, "at 40/s the live pointer beats the event position: %d vs %d spikes (lag %d ms)", live40[k].spikes, stale40[k].spikes, lags[k]);
+    }
+}
+
 int main(void) {
     testRules();
     testReplay();
+    testLivePointerMap();
+    testSmoothness();
     if (failures) {
         printf("%d check(s) failed\n", failures);
         return 1;
