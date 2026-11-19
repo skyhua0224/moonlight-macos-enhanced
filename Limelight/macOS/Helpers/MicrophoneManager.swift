@@ -1551,3 +1551,89 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
     }
 }
+
+// MARK: - Check at launch
+
+/// Input Monitoring is checked when the app starts, not only when a stream starts: CoreHID delivers nothing, and
+/// says nothing, without it, and a grant made for an earlier build can stop matching after an update while the
+/// switch in System Settings still shows on.
+extension InputMonitoringPermissionManager {
+    private static let launchPromptVersionKey = "inputMonitoring.launchPromptVersion"
+
+    /// App version and build, the unit "once per version" is counted in.
+    private static var launchBuildIdentity: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "0"
+        let build = info?[kCFBundleVersionKey as String] as? String ?? "0"
+        return "\(version) (\(build))"
+    }
+
+    /// A stream would take mouse input from CoreHID: the profile of some host does, or the default profile does when
+    /// there is no host yet. A host without a profile of its own follows the default.
+    private static func settingsUseCoreHID() -> Bool {
+        let hosts = (DataManager().getHosts() as? [TemporaryHost]) ?? []
+        let hostIds = hosts.map { $0.uuid }.filter { !$0.isEmpty }
+        if hostIds.isEmpty {
+            return SettingsClass.shouldAllowCoreHIDMouse(for: SettingsModel.globalHostId)
+        }
+        return hostIds.contains { SettingsClass.shouldAllowCoreHIDMouse(for: $0) }
+    }
+
+    @objc(checkAtLaunch)
+    func checkAtLaunch() {
+        guard #available(macOS 15.0, *) else { return }
+
+        let state = Self.currentSystemAuthorizationState()
+        let access: InputMonitoringLaunchAccess
+        switch state {
+        case .granted, .grantedNeedsReentry: access = .granted
+        case .notDetermined: access = .unknown
+        case .denied, .unsupported: access = .denied
+        }
+        let everGranted = hasPersistedGrantHistory || UserDefaults.standard.bool(forKey: Self.everGrantedKey)
+        let version = Self.launchBuildIdentity
+        let action = InputMonitoringLaunchRules.action(
+            usesCoreHID: Self.settingsUseCoreHID(),
+            coreHIDSupported: true,
+            access: access,
+            everGranted: everGranted,
+            promptedVersion: UserDefaults.standard.string(forKey: Self.launchPromptVersionKey),
+            currentVersion: version)
+        LogMessage(LOG_I, "[diag] Input Monitoring at launch: system=\(state.rawValue) everGranted=\(everGranted) action=\(action) "
+            + "iohid=\(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent).rawValue) cgPreflight=\(CGPreflightListenEventAccess())")
+
+        switch action {
+        case .nothing:
+            break
+        case .requestAccess:
+            UserDefaults.standard.set(version, forKey: Self.launchPromptVersionKey)
+            requestAuthorization(nil)
+        case .showAlert:
+            // The system says no, so the settings page must not read "granted, re-enter the stream" from an old grant.
+            runtimeSilentWithoutPermission = true
+            observedSystemState = state
+            authorizationState = state
+            shouldSuggestSettingsRepair = everGranted
+            presentLaunchAlert(version: version)
+        }
+    }
+
+    private func presentLaunchAlert(version: String) {
+        hasShownRuntimeAlert = true
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = localized(
+            "CoreHID Permission Required", fallback: "Input Monitoring access needed")
+        alert.informativeText = localized(
+            "Input Monitoring Launch Alert Message",
+            fallback: "Mouse input needs Input Monitoring, and it is off. In System Settings → Privacy & Security → Input Monitoring, turn Moonlight on, or add it with + if it is not listed. If it is already on, turn it off and on again, or remove it and add it back: the permission can stop matching after an update."
+        )
+        alert.addButton(withTitle: localized("Open Input Monitoring", fallback: "Open Input Monitoring"))
+        alert.addButton(withTitle: localized("Later", fallback: "Later"))
+        if alert.runModal() == .alertFirstButtonReturn {
+            openSystemPreferences()
+        } else {
+            UserDefaults.standard.set(version, forKey: Self.launchPromptVersionKey)
+        }
+    }
+}

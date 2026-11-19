@@ -163,6 +163,7 @@
 "CoreHID Permission Required" = "Input Monitoring access needed";
 "CoreHID Permission Alert Message" = "Moonlight is not receiving mouse input from CoreHID, so the mouse uses the compatibility path for now. Open System Settings → Privacy & Security → Input Monitoring and turn Moonlight on. If it is already listed, turn it off and on again, or remove it and add it back: the permission may no longer match after an update. Then reopen Moonlight.";
 "Open Input Monitoring" = "Open Input Monitoring";
+"Input Monitoring Launch Alert Message" = "Mouse input needs Input Monitoring, and it is off. In System Settings → Privacy & Security → Input Monitoring, turn Moonlight on, or add it with + if it is not listed. If it is already on, turn it off and on again, or remove it and add it back: the permission can stop matching after an update.";
 "Later" = "Later";
 "Scroll Runtime Path Idle" = "No recent scroll path";
 "Scroll Runtime Detail Idle" = "Scroll during a stream to see which path handles it.";
