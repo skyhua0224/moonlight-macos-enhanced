@@ -1656,6 +1656,13 @@ extension InputMonitoringPermissionManager {
         }
     }
 
+#if MLC_CONCEPT_HARNESS
+    /// The concept harness photographs the launch alert; it shows it on request, exactly as the launch check does.
+    @objc func presentLaunchAlertForHarness() {
+        presentLaunchAlert(version: "harness")
+    }
+#endif
+
     private func presentLaunchAlert(version: String) {
         let alert = NSAlert()
         alert.alertStyle = .warning

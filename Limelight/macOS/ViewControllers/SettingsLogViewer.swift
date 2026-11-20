@@ -1448,6 +1448,19 @@ struct SettingsLogViewer: View {
   }
 }
 
+#if MLC_CONCEPT_HARNESS
+/// The concept harness photographs the log window on its own, without the settings window around it.
+@objc(MLCLogViewerHarness) final class LogViewerHarness: NSObject {
+  @objc static func makeWindow() -> NSWindow {
+    let controller = NSHostingController(rootView: SettingsLogViewer(rawLogURL: nil, curatedLogURL: nil))
+    let window = NSWindow(contentViewController: controller)
+    window.setContentSize(NSSize(width: 980, height: 640))
+    window.title = "Live Debug Log"
+    return window
+  }
+}
+#endif
+
 // MARK: - In-stream overlay
 
 /// Filter choices of one open overlay. They start from sensible defaults every time, are not
