@@ -1,15 +1,10 @@
 /* Settings Pane Titles */
 "Stream" = "串流";
-"Video and Audio" = "音视频";
 "Input" = "输入";
 "App" = "应用";
 "Legacy" = "旧版";
 
-/* Toolbar */
-"Profile:" = "配置文件：";
-
 /* Stream Settings */
-"Resolution and FPS" = "分辨率与帧率";
 "Resolution" = "分辨率";
 "Custom" = "自定义";
 "Custom Resolution" = "自定义分辨率";
@@ -20,22 +15,9 @@
 /* Video Settings */
 "Video" = "视频";
 "Video Codec" = "视频编码";
-"Streaming Style" = "串流风格";
-"Streaming Style detail" = "先选整体风格：更低延迟、均衡或更顺滑画面。";
-"Timing" = "时序";
-"Compatibility & Troubleshooting" = "兼容与排障";
 "Compatibility" = "兼容性";
-"Video Codec H264 detail" = "兼容性最好。";
-"Video Codec H265 detail" = "适合大多数场景。";
-"Video Codec AV1 detail" = "更省码率，需要主机和设备支持。";
-"Video Codec AV1 current device ready detail" = "当前设备支持 AV1 硬件解码。";
-"Video Codec AV1 current device fallback detail" = "当前设备不支持 AV1 硬件解码。";
-"Video Codec AV1 YUV444 fallback detail" = "开启 YUV 4:4:4 时不会使用 AV1。";
-"Video Codec AV1 YUV444 ready detail" = "当主机广播兼容的 AV1 配置时，可以协商到 AV1 4:4:4。";
 "AV1" = "AV1";
 "HDR" = "HDR";
-"Enable YUV 4:4:4" = "启用 YUV 4:4:4";
-"YUV 4:4:4 hint" = "需要主机端支持。可能增加延迟。";
 "Frame Pacing" = "帧率平滑";
 "Lowest Latency" = "更低延迟";
 "Smoothest Video" = "更顺滑画面";
@@ -43,20 +25,14 @@
 /* Audio Settings */
 "Audio" = "音频";
 "Enable Microphone" = "启用麦克风";
-"Microphone hint" = "需要主机端支持；不支持时可能不会生效。";
 "Play Sound on Host" = "在主机上播放声音";
 "Volume" = "音量";
 "Audio Output" = "音频输出";
-"No audio output devices" = "没有可用的音频输出设备";
 "Unknown Output" = "未知输出设备";
 "Audio output: %@" = "音频输出：%@";
-"Couldn't switch the audio output" = "无法切换音频输出";
 "Volume is controlled on the output device" = "音量由输出设备控制";
 
 /* Sunshine Feature Warnings */
-"Sunshine support required" = "需要 Sunshine 支持";
-"YUV 4:4:4 requires Sunshine support" = "此选项需要 Sunshine（或兼容主机）支持 YUV 4:4:4。若主机不支持，串流可能失败或自动回退。";
-"Microphone requires Sunshine support" = "此选项需要 Sunshine（或兼容主机）支持麦克风输入。若主机不支持，可能不会生效。";
 "OK" = "好";
 
 /* Remote Overrides */
@@ -68,22 +44,13 @@
 
 /* Input Settings */
 "Controller" = "手柄";
-"Multi-Controller Mode" = "多手柄模式";
 "Single" = "单人";
 "Auto" = "自动";
-"Auto Address Switched Title" = "已自动切换地址";
-"Auto Address Switched Message" = "%@ 已从 %@ 切换到 %@（延迟 %.0fms → %.0fms）。";
-"Rumble Controller" = "手柄震动";
-"Buttons" = "按键";
-"Swap A/B and X/Y Buttons" = "交换 A/B 和 X/Y 键";
 "Emulate Guide Button" = "模拟 Guide 键（Start + Select）";
-"Drivers" = "驱动";
 "Controller Driver" = "手柄驱动";
 "Mouse Driver" = "鼠标输入方式";
-"Mouse Input" = "鼠标输入";
 "Automatic" = "自动";
 "HID" = "HID";
-"MFI" = "MFI";
 "Desktop Sync" = "桌面同步";
 "Fast Response" = "快速响应";
 "GameController" = "GameController";
@@ -91,32 +58,16 @@
 "Recommended" = "推荐";
 "Notched" = "逐格";
 "High Precision" = "高精度";
-"Adaptive" = "自适应";
 "CoreHID Max Mouse Report Rate" = "CoreHID 最大鼠标报告率";
-"CoreHID Max Mouse Report Rate detail" = "1000 Hz 一般就很好。更高不一定更好。";
 "Mouse Mode" = "鼠标模式";
-"Mouse Mode detail" = "锁定鼠标模式更适合游戏；自由鼠标模式更适合远控。";
 "Free Mouse" = "自由鼠标";
 "Free Mouse Movement" = "自由鼠标移动";
-"Free Mouse Movement detail" = "自动会优先选择更快的路径。桌面同步保持经典指针同步。快速响应会尽量持续使用相对移动。";
-"Physical Wheel Mode" = "物理滚轮模式";
 "Physical Wheel Speed" = "物理滚轮速度";
 "Smooth Wheel Mode" = "第三方滚动工具模式";
 "Smooth Wheel Speed" = "第三方滚动工具速度";
 "High Precision Wheel Speed" = "高精度滚轮速度";
 "Smooth Wheel Tail Filter" = "第三方滚动工具尾迹过滤";
-"High Polling" = "高回报率";
 "Trackpad Speed" = "触控板滚动速度";
-"Trackpad Speed detail" = "调整触控板和 Magic Mouse 的滚动速度。";
-"Gesture / Trackpad Distance" = "手势 / 触控板距离";
-"Gesture / Trackpad Distance detail" = "调整触控板和 Magic Mouse 的手势滚动距离。";
-"Current Mouse Path" = "当前鼠标路径";
-"Current Scroll Path" = "当前滚动路径";
-"Scroll & Trackpad" = "滚轮与触控板";
-"Advanced Mouse Settings" = "高级鼠标设置";
-"Advanced Controller Settings" = "高级手柄设置";
-"Gesture Scroll Speed" = "手势 / 触控板滚动速度";
-"Gesture Scroll Speed detail" = "调整触控板和 Magic Mouse 连续手势滚动速度，不影响物理滚轮挡位。";
 "Mouse Runtime Path Idle" = "暂无近期输入路径";
 "Mouse Runtime Detail Idle" = "开始串流并移动鼠标后显示当前的输入路径。";
 "Mouse Runtime Path CoreHID Pending" = "CoreHID 准备中";
@@ -145,28 +96,17 @@
 "Scroll Runtime Detail Synthetic" = "Moonlight 侦测到改写或合成的滚轮尾迹，并以保守方式处理以避免滚动过快。";
 "Scroll Runtime Path GameController" = "GameController 滚轮路径已生效";
 "Scroll Runtime Detail GameController" = "Moonlight 当前正在通过 GameController 鼠标路径处理滚轮输入。";
-"Unlimited" = "不限制";
 "Unlimited (Advanced)" = "不限制 · 高级";
 "MFi" = "MFi";
 
 /* App Settings */
-"Behaviour" = "行为";
-"Automatically Fullscreen Stream Window" = "进入串流时默认全屏";
-"Visuals" = "界面";
 "Advanced" = "高级";
-"Dim Non-Hovered Apps" = "调暗未选中应用封面";
 "Custom Artwork Dimensions" = "自定义封面尺寸";
 
 /* Legacy Settings */
-"Geforce Experience" = "Geforce Experience";
 "Optimize Game Settings" = "优化游戏设置";
-"Optimize Game Settings detail" = "启动前请求主机优化受支持游戏设置。";
-"Preparing video" = "正在准备画面…";
 
 /* Misc */
-"Not supported" = "不支持";
-"Misc" = "杂项";
-"Debug Log" = "调试日志";
 "View Log" = "查看日志";
 "Curated Log" = "浓缩日志";
 "Raw Log" = "原始日志";
@@ -176,9 +116,6 @@
 "Auto Scroll" = "自动滚动";
 "Filtered Rows" = "筛选行数";
 "Total Rows" = "总行数";
-"System Noise Summary" = "系统噪音摘要";
-"Open Folder" = "打开文件夹";
-"Open in Editor" = "在编辑器中打开";
 "Export Log…" = "导出日志…";
 "Live Debug Log" = "实时调试日志";
 "Copy All" = "复制全部";
@@ -188,74 +125,21 @@
 "Copy Line" = "复制此行";
 "Show Details" = "查看详情";
 "(No logs yet)" = "（暂无日志）";
-"Pairing Cache" = "配对缓存";
-"Reset Hosts (Recommended)" = "清空主机列表（推荐）";
-"Full Reset (Pairing + Cache)" = "完全重置（配对+缓存）";
-"Dangerous Operation" = "危险操作";
-"I Understand, Continue" = "我已知晓，继续";
-"Reset Hosts Confirm Message" = "请确认你知道正在操作什么。此操作会清空本机 Moonlight 中保存的主机列表。在线主机可能在重新发现后再次出现，但已保存的配对状态会被清空。";
-"Full Reset Confirm Message" = "请确认你知道正在操作什么。此操作会清空主机列表，并删除本机配对凭据（客户端证书），之后需要重新配对。";
-"Reset Completed" = "清理完成";
-"Hosts reset completed message" = "主机列表已清空。请重启应用后重新添加主机。";
-"Full reset completed message" = "主机列表和本地配对缓存已清空。请重启应用后重新配对。";
-"Restart App" = "重启应用";
-"Advanced Reset Separator" = "高级选项（会删除配对证书）";
 "Network Compatibility" = "网络兼容";
-"Debug Tools" = "调试工具";
-"Pairing & Reset" = "配对与重置";
 "AWDL Stability Helper" = "AWDL 稳定性辅助";
-"AWDL Helper Privilege" = "管理员授权";
 "AWDL Helper Authorization Prompt" = "Moonlight 需要管理员权限，才能在串流期间管理 AWDL 网络接口。";
 "AWDL Helper Install Prompt" = "Moonlight 需要管理员权限来安装 AWDL Helper。";
-"AWDL Helper Ready" = "已就绪";
-"AWDL Helper Failed" = "授权失败";
-"AWDL Helper Last Error %@" = "上次失败：%@";
-"Stream-Only AWDL Stability Helper" = "减少 AirDrop / 接力导致的卡顿";
-"Stream-Only AWDL Stability Helper hint" = "只建议在 Wi‑Fi 下出现规律性卡顿时使用。";
-"Stream-Only AWDL Stability Helper detail" = "串流时会临时关闭 AWDL，用于处理 AirDrop / 接力相关的规律性卡顿。";
-"Reset Hosts" = "清空主机列表";
-"Reset Hosts detail" = "只删除已保存的主机记录。";
-"Full Reset" = "完全重置";
-"Full Reset detail" = "也会删除配对证书，之后需要重新配对。";
-"AWDL Helper Warning Title" = "启用 AWDL 稳定性辅助？";
-"AWDL Helper Warning Message" = "启用后，Moonlight 会在串流期间临时关闭 macOS 的 AWDL 接口。\n\n可能出现：\n• AirDrop、接力、隔空播放接收暂时不可用\n• 附近设备发现能力暂时受影响\n• 可能弹出管理员授权\n\n串流结束后会恢复。如果没有改善卡顿，请关闭。";
-"Current Link" = "当前链路";
-"Current Timing" = "当前时序";
-"Compatibility Guidance" = "兼容性指引";
-"Review Compatibility Guidance" = "查看兼容性指引";
-"Compatibility Guidance hint" = "首次开启前，请先查看这里的 Wi‑Fi、信道、AWDL 风险与时序建议。";
-"AWDL Helper Guidance Title" = "AWDL 稳定性辅助";
-"Why This Needs Confirmation" = "这是什么";
-"AWDL Helper Guidance intro" = "这个选项只适合一种情况：在 Wi‑Fi 下规律性卡顿，关闭 AirDrop 或接力后明显改善。";
-"Recommended Network Setup" = "建议先试这些";
-"Recommended Timing Setup" = "如果还是卡";
-"What This Helper Will Do" = "打开后会怎样";
-"AWDL Helper Guidance network bullet 1" = "能用网线就优先用网线。";
-"AWDL Helper Guidance network bullet 2" = "如果走 Wi‑Fi，尽量用单独的 5 GHz 网络；149+ 信道通常更稳。";
-"AWDL Helper Guidance network bullet 3" = "先试着关闭 AirDrop、接力和 AirPlay 接收器。";
-"AWDL Helper Guidance timing bullet 1" = "先试试“画面延迟与操作”里的预设。";
-"AWDL Helper Guidance timing bullet 2" = "尽量让显示器刷新率和串流帧率更接近。";
-"AWDL Helper Guidance timing bullet 3" = "如果只是普通网络波动，这个选项通常帮不上忙。";
-"AWDL Helper Guidance helper bullet 1" = "只在串流时生效。";
-"AWDL Helper Guidance helper bullet 2" = "串流结束后会恢复原来的状态。";
-"AWDL Helper Guidance helper bullet 3" = "某些情况下 macOS 可能会要求管理员授权。";
-"AWDL Helper Guidance helper bullet 4" = "如果打开后没改善，就应该关掉。";
-"Review Later" = "稍后再看";
-"I Understand and Enable" = "我已了解并启用";
-"Enable Anyway" = "仍然启用";
 
 /* General UI */
 "Search Apps" = "搜索应用";
 "Search Hosts" = "搜索主机";
 "Yes" = "是";
-"Enable" = "启用";
 "Cancel" = "取消";
 "Add" = "添加";
 "Wake" = "唤醒";
 "Close and Quit App" = "关闭并退出应用";
 "Quit App" = "退出应用";
 "Disconnect from Stream" = "断开串流";
-"Pointer & Scroll Tuning" = "指针与滚动调节";
 
 /* Alerts */
 "App Running Alert" = "%@ 仍在运行。\n\n您想退出 %@ 并启动 %@ 吗？";
@@ -263,8 +147,6 @@
 "Quit App Error Message" = "如果此应用是由其他设备启动的，您需要从该设备退出。";
 "Quit App Still Running Message" = "主机还没有结束这个应用。稍等几秒后再试，或在主机上结束它。";
 "Quitting %@…" = "正在退出 %@…";
-"Fetching App List Failed" = "获取应用列表失败";
-"Connection Interrupted" = "与 PC 的连接已中断。";
 "Add Host Manually" = "手动添加主机";
 "Add Host Info" = "如果 Moonlight 没有自动找到您的本地游戏 PC，\n请输入您 PC 的 IP 地址";
 "IP address" = "IP 地址";
@@ -284,7 +166,6 @@
 "Quit App After Stream" = "结束串流后退出应用";
 
 /* Input Settings */
-"Mouse" = "鼠标";
 "Swap Mouse Buttons" = "交换鼠标按键";
 "Reverse Scroll Direction" = "反转滚动方向";
 "Touchscreen Mode" = "触摸屏模式";
@@ -314,14 +195,9 @@
 
 "Poor Connection" = "⚠️ 连接质量差";
 
-"Gamepad Mouse Emulation (!)" = "手柄模拟鼠标";
 "Gamepad Mouse Hint" = "用手柄操作鼠标。DualSense 触控板移动并双指滚动，右摇杆作备用。";
-"DualSense Haptics" = "DualSense 触觉反馈";
-"DualSense Haptics detail" = "使用 Apple 公共 Game Controller 触觉路径，并接收 Foundation authored PCM 后提供 RMS 回退。精确的 USB 音频执行器输出需要 USB 转发。";
 "System Haptics" = "系统触觉";
 "Compatibility Rumble" = "兼容振动";
-"Feedback Controller" = "反馈手柄";
-"Feedback Controller detail" = "选择接收主机反馈的本地手柄。自动模式跟随主机手柄编号。";
 "Host Controller Type" = "主机手柄类型";
 "Host Controller Type detail" = "主机创建的虚拟手柄类型。自动：由主机决定。";
 "Xbox 360" = "Xbox 360";
@@ -331,33 +207,17 @@
 "Controller 2" = "手柄 2";
 "Controller 3" = "手柄 3";
 "Controller 4" = "手柄 4";
-"Motion Sensors" = "运动传感器";
-"Motion Sensors detail" = "仅在主机请求后启用运动数据，也可以在此禁用。";
 "Host Requested" = "按主机请求";
 "Disabled" = "禁用";
-"Joystick Deadzone" = "摇杆死区";
-"Joystick Deadzone hint" = "忽略径向的小幅摇杆偏移，并将剩余行程重新映射到完整范围。";
 "Stick Calibration" = "摇杆校准";
-"Stick Calibration detail" = "按摇杆调整归一化中心偏移和增益，设置按主机保存。";
 "Reset" = "重置";
-"Left X" = "左 X";
-"Left Y" = "左 Y";
-"Right X" = "右 X";
-"Right Y" = "右 Y";
-"Left Gain" = "左增益";
-"Right Gain" = "右增益";
 "VDD Capability" = "VDD 能力";
 "VDD Ready" = "VDD 就绪";
 "VDD Driver Missing" = "缺少 VDD 驱动";
 "VDD Driver Unreachable" = "VDD 驱动不可访问";
 "VDD Unsupported Platform" = "平台不支持 VDD";
 "VDD State Unknown" = "VDD 状态未知";
-"VDD unavailable on this host; virtual display selection is disabled." = "此主机不可用 VDD，已禁用虚拟显示器选择。";
-"Primary" = "主显示器";
 "Sunshine Display Runtime Failed" = "显示设置失败";
-"Controller Diagnostics" = "手柄诊断";
-"Controller Diagnostics summary" = "已连接 %ld 个手柄；检测到 %ld 个 DualSense 手柄。";
-"Controller Diagnostics detail" = "启用输入诊断后会记录结构化映射信息。反馈使用 Apple 公共 Game Controller API。";
 
 "Mouse Mode On" = "鼠标模式开启";
 "Mouse Mode Off" = "鼠标模式关闭";
@@ -370,11 +230,7 @@
 "Auto (Recommended)" = "自动 (推荐)";
 "Native Renderer (Recommended)" = "原生渲染器（推荐）";
 "Default Profile" = "默认配置";
-"Default Profile Scope" = "作为默认配置应用到所有主机，除非某台主机单独覆盖。";
-"Host Profile Scope (%@)" = "仅对 %@ 应用覆盖设置。";
-"Connection Method Default Profile Hint" = "连接方式始终按主机单独管理。请选择具体主机后再编辑地址与路由。";
 "Automatically Discover New Hosts" = "自动发现新主机";
-"Automatically Discover New Hosts hint" = "关闭后，Moonlight 仍会刷新你已保存的主机状态，但不会再自动把局域网中新发现的 Sunshine 主机加入列表。";
 "Toggle Sidebar" = "折叠侧栏";
 "Offline" = "离线";
 "Settings" = "设置";
@@ -388,15 +244,12 @@
 "Status" = "状态";
 "Active Address" = "活动地址";
 "UUID" = "UUID";
-"Pair Name" = "配对名称";
 "Local Address" = "局域网地址";
 "External Address" = "公网地址";
 "IPv6 Address" = "IPv6 地址";
 "Manual Address" = "手动地址";
 "MAC Address" = "MAC 地址";
 "Pair State" = "配对状态";
-"Running Game ID" = "运行游戏 ID";
-"Addresses" = "地址列表";
 "Paired" = "已配对";
 "Unpaired" = "未配对";
 "Online" = "在线";
@@ -407,10 +260,8 @@
 "System Default" = "系统默认";
 "Microphone Permission" = "麦克风权限";
 "Denied" = "未允许";
-"Not Determined" = "未确定";
 "Open Settings" = "打开系统设置";
 "Request" = "请求权限";
-"Retry" = "重试";
 "Test Microphone" = "测试麦克风";
 "Start Test" = "开始测试";
 "Stop" = "停止";
@@ -425,14 +276,7 @@
 
 /* Stream Risk */
 "Profile" = "配置";
-"Profile %@" = "启动前 %@";
 "Startup %@" = "启动前 %@";
-"Profile Assessment" = "开流前参考";
-"Profile Level" = "档位负载";
-"Profile assessment hint" = "这是开流前的静态估算，只用于说明当前档位有多吃资源；不代表串流此刻已经卡顿。实时体验请看 FPS、1% Low、丢包、抖动和链路 RTT。";
-"Steady" = "常规";
-"Aggressive" = "高规格";
-"Extreme" = "超高规格";
 "Balanced" = "均衡";
 "High-Spec" = "高规格";
 "Ultra-Spec" = "超高规格";
@@ -441,29 +285,10 @@
 "Overlay Remote" = "隧道 / Overlay 路径";
 "WAN Remote" = "公网 / 广域网路径";
 "Not Available" = "不可用";
-"Stream Health" = "串流健康度";
-"Risk Level" = "风险等级";
-"Route Tier" = "路径类型";
-"Host Runtime" = "主机运行时";
-"Target FPS" = "目标帧率";
-"Compression Budget" = "压缩预算";
-"Pixel Rate" = "像素吞吐";
-"Display Refresh" = "显示器刷新率";
-"Cadence Match" = "帧节奏匹配";
-"Wireless Link" = "无线链路";
-"Assessment Reasons" = "估算依据";
-"Suggested Fallbacks" = "推荐回退档";
-"Analyze Current Profile" = "分析当前档位";
-"Tap to Analyze" = "点击展开分析";
-"Expanded" = "已展开";
-"Collapsed" = "已折叠";
 "On" = "开启";
 "Off" = "关闭";
 "1% Low" = "1% Low";
-"Link RTT" = "链路 RTT";
 "Stream Latency" = "串流延迟";
-"Control RTT" = "控制 RTT";
-"Path Probe" = "路径探测";
 "Pipeline" = "管线";
 "Host" = "主机";
 "%@ %@ budget is below the recommended realtime floor (%.3f < %.3f bpppf)." = "%@ %@ 的压缩预算低于实时低延迟串流的建议下限（%.3f < %.3f bpppf）。";
@@ -562,11 +387,9 @@
 "Rename Host" = "重命名主机";
 "Rename Host Info" = "为这台主机设置一个自定义名称。留空则使用自动检测到的主机名。";
 "Custom Host Name" = "自定义主机名称";
-"Leave empty to use detected host name" = "留空则使用自动检测到的主机名。";
 "Save" = "保存";
 "Pixel throughput is high enough to stress realtime capture, decode, and render pacing." = "当前像素吞吐已经足以给实时采集、解码和渲染节奏带来明显压力。";
 "The selected codec does not have confirmed local hardware decode support on this Mac." = "当前所选编码格式在这台 Mac 上没有确认可用的本地硬件解码支持。";
-"Target FPS (%d) is above the current display refresh ceiling (%.0f Hz)." = "目标帧率（%d）已经高于当前显示器的刷新率上限（%.0f Hz）。";
 "The selected path is routed through a tunnel or overlay network." = "当前路径经过隧道或 Overlay 网络。";
 "The selected path looks like a public / WAN route rather than direct LAN." = "当前路径看起来更像公网 / 广域网，而不是直接局域网。";
 "The address looks public, but the route still appears local (hairpin NAT or split DNS)." = "地址看起来是公网地址，但路由仍像本地链路（可能是 NAT 回流或分流 DNS）。";
@@ -574,7 +397,6 @@
 "The route could not be classified confidently before stream start." = "在开流前暂时无法有把握地判断当前路径类型。";
 "Auto mode may recommend a steadier startup profile, but it will not block launch." = "自动模式可能会推荐更稳的起始档位，但不会阻止启动。";
 "Manual Expert mode keeps your chosen resolution, FPS, codec, and chroma unchanged." = "手动专家模式会尊重你当前选择的分辨率、帧率、编码和色度格式，不会静默改动。";
-"Smoothness & Latency" = "串流风格";
 "Low Latency" = "更低延迟";
 "Balanced (Recommended)" = "均衡（推荐）";
 "Smoothness First" = "更顺滑画面";
@@ -582,31 +404,9 @@
 "Low" = "低";
 "Standard" = "标准";
 "High" = "高";
-"Buffer Level Low label" = "低（更跟手）";
-"Buffer Level Standard label" = "标准（更均衡）";
-"Buffer Level High label" = "高（更稳画面）";
 "Prioritize Responsiveness" = "输入响应优先";
 "Compatibility Mode" = "显示兼容模式";
 "SDR Compatibility Workaround" = "SDR 兼容优化";
-"Custom Options" = "自定义选项";
-"Custom timing hint" = "自定义后可单独微调下面这些选项。";
-"Custom timing risk title" = "自定义会直接影响串流体验";
-"Custom timing risk detail" = "这些选项会直接影响画面和操作；如果你不确定，建议先用均衡。";
-"I Understand" = "我已了解";
-"Keep Custom" = "继续使用自定义";
-"Use Balanced Instead" = "改回均衡";
-"V-Sync detail" = "减少撕裂，让画面更稳。";
-"Buffer Level detail" = "调高后更稳画面，但操作反馈会慢一点。";
-"Buffer Level Low detail" = "更跟手。";
-"Buffer Level Standard detail" = "更均衡。";
-"Buffer Level High detail" = "更稳画面。";
-"Prioritize Responsiveness detail" = "优先让鼠标和操作更快跟上；部分场景下画面可能没那么稳。";
-"Compatibility section detail" = "下面两项只在遇到显示问题时再调整。";
-"Compatibility Mode detail" = "只在闪烁、黑屏或显示异常时打开。";
-"SDR Compatibility Workaround detail" = "只在 SDR 串流出现异常时打开。";
-"Prioritize Responsiveness hint" = "优先输入响应。";
-"Compatibility Mode hint" = "显示异常时再打开。";
-"SDR Compatibility Workaround hint" = "预留给 SDR 串流下出现异常卡顿或解码不稳的排障场景。除非你正在定位问题，否则建议保持关闭。";
 "Input Monitoring" = "输入监控";
 "Input Monitoring purpose" = "以启用 CoreHID";
 "Input Monitoring Reentry detail" = "重新进入串流后生效。";
@@ -627,24 +427,17 @@
 "Checking Foundation USB forwarding…" = "正在检查 Foundation USB 转发…";
 "Unable to create the host connection" = "无法建立主机连接";
 "No claimable USB devices" = "没有可转发的 USB 设备";
-"Foundation USB forwarding is unavailable" = "Foundation USB 转发不可用";
 "Refresh Foundation USB forwarding capability first" = "请先刷新 Foundation USB 转发能力";
 "Connecting USB/IP…" = "正在连接 USB/IP…";
 "Limited" = "受限";
-"Playback Path" = "播放链路";
-"Capability Status" = "能力状态";
 "Transfer Function" = "传输函数";
 "Renderer Mode" = "渲染模式";
-"Renderer Mode detail" = "原生渲染器是推荐选项，主打最低延迟与最高默认色准。Metal 渲染器提供更专业的 HDR 与色彩调节。兼容渲染器用于旧设备或异常场景下的回退。";
 "Enhanced" = "增强";
 "Native" = "原生";
-"Transfer Function detail" = "选择首选 HDR 传输函数。自动模式现在会优先尝试 HLG，再在需要时回退到 PQ。";
 "PQ" = "PQ";
 "HLG" = "HLG";
 "Host Display" = "主机显示";
-"Sunshine Foundation section detail" = "这些选项会在支持时作为 Sunshine Foundation 启动参数发送；不支持的主机会自动忽略。";
 "Target Display" = "目标显示器";
-"Target Display detail" = "从主机返回的 Sunshine 显示器列表中选择目标显示器。选择“主机默认”时，会保留主机侧的默认显示器设置。";
 "Display Capability" = "显示能力";
 "Display Capability Unknown" = "尚未查询";
 "Display Capability Loading" = "正在查询主机";
@@ -654,7 +447,6 @@
 "Dolby Vision Profile 8.1" = "Dolby Vision Profile 8.1";
 "Dolby Vision Profile 8.4" = "Dolby Vision Profile 8.4";
 "HDR Capabilities" = "HDR 能力";
-"Dolby Vision negotiation detail" = "由主机和显示器自动协商；需要时会回退到兼容 HDR。";
 "HDR10+ capability detail" = "需要 macOS 13+、HEVC 硬解、HDR 显示器和原生渲染器。";
 "Dolby Vision capability detail native" = "主机发送杜比视界时，把元数据直接交给显示器。";
 "Dolby Vision capability detail metal" = "Metal 只显示 HDR10 基础层；完整杜比视界请用原生渲染器。";
@@ -667,7 +459,6 @@
 "Foundation display topology endpoint ready" = "Foundation 显示拓扑端点已就绪。";
 "Sunshine display endpoint unavailable" = "主机未提供 Foundation 显示端点。";
 "No Sunshine host selected" = "选择已配对的 Sunshine 主机以查询显示能力。";
-"Display Runtime" = "显示运行状态";
 "Sunshine Display Runtime Idle" = "空闲";
 "Sunshine Display Runtime Active" = "运行中";
 "Sunshine Display Runtime Reconnected" = "已重连并恢复显示拓扑";
@@ -675,11 +466,8 @@
 "Use Physical Display" = "使用物理显示器";
 "Use Virtual Display detail" = "主机支持 VDD 时请求虚拟显示器。";
 "Screen Mode" = "屏幕模式";
-"Screen Mode detail" = "控制 Sunshine 在本次会话开始前如何准备主机显示拓扑。";
 "Override HDR Display Profile" = "覆盖 HDR 显示档案";
-"Override HDR Display Profile detail" = "向 Sunshine 发送客户端显示亮度参数，适用于支持 HDR 的虚拟显示器场景。";
 "Show Touch Keyboard Automatically" = "自动显示触摸键盘";
-"Show Touch Keyboard Automatically detail" = "远端可编辑输入框获得焦点时，请求 Foundation Sunshine 显示触摸键盘。";
 "Max Brightness" = "最大亮度";
 "Min Brightness" = "最小亮度";
 "Max Average Brightness" = "最大平均亮度";
@@ -696,7 +484,6 @@
 "Make Primary" = "设为主显示器";
 "Only Stream Display" = "仅保留串流显示器";
 "Use As Secondary" = "作为副显示器";
-"Detected Display: %@" = "检测到的显示器：%@";
 "Video Runtime Path Idle" = "等待串流会话启动。";
 "Video Runtime Path Enhanced Active" = "当前使用 Metal 渲染器。";
 "Video Runtime Path Native Active" = "当前使用 Native 渲染器。";
@@ -711,8 +498,6 @@
 "Video Runtime Detail Native Compatibility Fallback" = "已请求原生渲染，但因原生与 Metal 渲染都不可用，Moonlight 已回退到兼容模式。";
 "Video Runtime Detail Compatibility Forced" = "当前使用最保守的兼容显示链路。";
 "Video Runtime Detail Idle" = "显示当前渲染器和最近一次回退原因。";
-"Active Enhancement" = "当前增强器";
-"Active Frame Interpolation" = "当前插帧状态";
 "Video Enhancement Runtime Detail Idle" = "串流开始后显示当前使用的增强器。";
 "Video Enhancement Runtime Detail Off" = "当前串流没有启用增强器。";
 "Video Enhancement Runtime Detail Active" = "当前使用的增强器。";
@@ -727,45 +512,22 @@
 "Enhanced Renderer detail" = "基于 Metal 的渲染链路，提供更丰富的 HDR、色调映射与呈现调节。";
 "Native Renderer" = "原生渲染器";
 "Native Renderer detail" = "延迟最低、默认色准最好：VideoToolbox 解码加原生呈现。";
-"Native Renderer (Recommended) detail" = "推荐使用的链路，主打最低延迟与最高默认色准，使用 VideoToolbox 解码与原生 Sample Buffer 呈现。";
 "Compatibility Renderer" = "兼容渲染器";
 "Compatibility Renderer detail" = "保留给旧系统和异常恢复场景的传统显示链路。";
 "Metal Renderer" = "Metal 渲染器";
-"Metal Renderer Tuning" = "Metal 渲染调节";
-"Metal Renderer tuning detail" = "这些选项用于调节 Metal 渲染器的 HDR 呈现和显示行为。";
-"Metal Renderer tuning unavailable detail" = "仅 Metal 渲染器可用。";
 "Quality Enhancement" = "画质增强";
 "HDR Metadata Source" = "HDR 元数据来源";
-"HDR Metadata Source detail" = "选择 Metal 渲染器是跟随主机 HDR 元数据、使用本地手动显示配置，还是混合两者。";
-"Client Display HDR Profile" = "本机显示器 HDR 配置";
-"Client Display HDR Profile detail" = "设为手动后，才会显示并启用 Metal 渲染器使用的本机显示器亮度配置。";
-"HDR Manual Luminance detail" = "这些亮度值会作为 Metal 渲染器的本机 HDR 配置，并影响 SDR 回退时的色调映射。";
-"Upscaling detail" = "只有在 Metal 渲染器需要缩放画面时才会生效。串流分辨率低于当前显示大小时更容易看出差异。";
-"Upscaling Metal only detail" = "仅 Metal 渲染器可用。";
 "Optical Output Scale" = "光学输出倍率";
-"Optical Output Scale detail" = "调整 Metal 渲染器在 EDR 呈现或 SDR 映射前的 HDR 工作强度。";
 "HLG Viewing Environment" = "HLG 观看环境";
-"HLG Viewing Environment detail" = "在 Metal 渲染器启用时，根据房间明暗对 HLG 渲染做偏置。";
 "EDR Strategy" = "EDR 策略";
-"EDR Strategy detail" = "控制 Metal 渲染器在支持 HDR 的显示器上使用 EDR 余量的激进程度。";
-"Tone Mapping Policy" = "色调映射策略";
-"Tone Mapping Policy detail" = "控制 Metal 渲染器在非 HDR 屏幕上的 HDR→SDR 映射取向。";
 "Display Sync" = "显示同步";
-"Display Sync detail" = "控制 Metal 渲染器是否跟随显示同步。自动模式会沿用当前串流配置。";
 "Frame Queue Target" = "帧队列目标";
-"Frame Queue Target detail" = "覆盖当前呈现链路的待显示帧目标。更低更偏低延迟，更高更偏平滑。";
 "Responsiveness Bias" = "响应倾向";
-"Responsiveness Bias detail" = "让当前呈现链路更积极地削减排队帧，以换取更低的输入延迟。";
 "Allow Drawable Timeout" = "允许 Drawable 超时";
-"Allow Drawable Timeout detail" = "控制 Metal 渲染器在等待窗口服务器时，是否允许 drawable 获取超时。";
 "Hybrid" = "混合";
 "Client Override" = "本机覆盖";
 "Manual" = "手动";
-"HDR Manual Luminance Host detail" = "手动亮度只会在 HDR 元数据来源设为“混合”或“本机覆盖”时生效。";
 "Frame Interpolation" = "插帧";
-"Frame Interpolation detail" = "Metal 渲染器的节奏增强。会在显示器刷新率高于串流帧率且有余量时，调用 VideoToolbox 低延迟插帧。启用后通常会额外增加约一个显示刷新周期以内的延迟。";
-"Frame Interpolation Metal only detail" = "仅 Metal 渲染器可用。";
-"Frame Interpolation unavailable detail" = "当前这台 Mac 或当前渲染路径暂时无法启用低延迟插帧，会自动继续使用非插帧路径。";
 "Reference" = "参考";
 "Dim Room" = "暗室";
 "Office" = "办公";
@@ -797,19 +559,13 @@
 "Sunshine Extensions" = "Sunshine 扩展";
 "Sunshine Extensions detail" = "向支持的主机发送 Foundation Sunshine 启动扩展（显示器、VDD、屏幕模式、HDR 档案）。";
 "Admin Prompt Only" = "仅管理员弹窗";
-"Welcome to Moonlight" = "欢迎使用 Moonlight";
 "Welcome to Moonlight macOS Enhanced" = "欢迎使用 Moonlight macOS Enhanced";
 "Welcome Permissions Subtitle" = "全部可选，之后可在设置中更改。";
 "Microphone Permission detail" = "只有在你想把本地麦克风传到主机时才需要。";
 "Install Persistent Helper" = "安装持久化 Helper";
-"AWDL Helper Installed" = "已安装";
-"AWDL Helper Not Ready" = "未就绪";
-"AWDL Helper Admin Prompt Only" = "仅管理员弹窗";
 "Permissions" = "权限";
 "Continue" = "继续";
 "Welcome AWDL detail" = "可选。串流期间管理 AWDL，让 Wi‑Fi 更稳。";
-"Keyboard Compatibility" = "快捷键翻译";
-"Keyboard Compatibility detail" = "上面控制全局翻译方式；下面的自定义规则始终生效。";
 "Shortcut Translation Rules" = "快捷键翻译规则";
 "No Shortcut Translation Rules" = "还没有翻译规则";
 "No Shortcut Translation Rules detail" = "添加规则，把 Mac 快捷键变成主机快捷键或 Moonlight 动作。";
@@ -828,17 +584,10 @@
 "Click to Record Shortcut" = "点击录制";
 "Shortcut requires modifier" = "快捷键至少需要一个修饰键";
 "Show Disconnect Options" = "显示断开选项";
-"Command → Ctrl" = "⌘ 当 Ctrl";
-"Swap Left Ctrl ↔ Left Win" = "左 Ctrl ↔ 左 Win";
-"Shortcut Translation" = "常用 Windows 快捷键";
-"Hybrid Shortcut Translation" = "Windows 快捷键 + 交换布局";
 "Keep Mac Shortcuts" = "不转换";
-"⌘ as Ctrl" = "⌘ 全局当 Ctrl";
 "⌘ Always as Ctrl" = "⌘ 始终当 Ctrl";
 "Left Ctrl ↔ Left Win" = "交换左 Ctrl 与左 Win";
-"Custom Rules Only" = "关闭全局翻译";
 "Mac Shortcuts as Windows Shortcuts" = "Windows 快捷键（⌘ → Ctrl）";
-"⌘ as Ctrl + Custom Rules" = "Windows 快捷键 + 自定义规则";
 "Windows Shortcuts + Left Ctrl ↔ Left Win" = "Windows 快捷键 + 交换左 Ctrl 与左 Win";
 "⌥ as Win, ⌘ as Alt" = "Windows 键位（⌥ → Win，⌘ → Alt）";
 "Reconnect Stream" = "重连串流";
@@ -852,8 +601,6 @@
 "Switch and Continue" = "切换并继续";
 "Try Selected Route" = "仍尝试当前方式";
 "Auto Sync" = "自动同步";
-"Foundation USB forwarding" = "Foundation USB 转发";
-"Foundation must advertise USB forwarding before a device can be shared." = "Foundation 必须先公布 USB 转发能力，才能共享设备。";
 "Forward" = "转发";
 "Add address (IP, hostname, or IPv6; port optional)" = "添加地址（IP/域名/IPv6，可含端口）";
 "Address" = "地址";
@@ -910,8 +657,6 @@
 "Unknown Error" = "未知错误";
 "Unstable Connection or No Video" = "连接不稳定或无画面";
 "Width:" = "宽：";
-"Playback" = "播放";
-"Devices" = "设备";
 "Input & Devices" = "输入与设备";
 "Application" = "应用";
 "Settings Profile" = "设置配置";
@@ -928,55 +673,35 @@
 "USB settings subtitle" = "把 USB 设备转发到主机。";
 "App diagnostics settings subtitle" = "配置应用行为、权限、日志和诊断。";
 "Audio & Microphone" = "音频与麦克风";
-"Input & Controllers" = "输入与手柄";
 "Keyboard & Mouse" = "键盘与鼠标";
-"USB Devices" = "USB 设备";
 "App & Diagnostics" = "应用与诊断";
 "%d Selected" = "已选择 %d 项";
 "10-bit SDR" = "10-bit SDR";
 "Audio Configuration" = "音频配置";
 "Frame Rate" = "帧率";
 "Auto Adjust Bitrate" = "自动调整码率";
-"Capture system keyboard shortcuts" = "捕获系统快捷键";
 "Change Shortcut" = "更改快捷键";
 "Debug" = "调试";
-"Default Display Mode" = "默认显示模式";
 "EQ" = "均衡器";
-"EQ Detail" = "均衡器精度";
-"EQ Preset" = "均衡器预设";
 "Error" = "错误";
-"Export Performance Report" = "导出性能报告";
 "Gamepad Mouse Emulation" = "手柄模拟鼠标";
 "General" = "通用";
-"Ignore Aspect Ratio" = "忽略宽高比";
 "Info" = "信息";
-"Keyboard" = "键盘";
 "Language" = "语言";
 "Listening Device" = "聆听设备";
 "Locked Mouse" = "锁定鼠标";
-"Long-press Menu to Toggle Mouse Mode" = "长按 Menu 切换鼠标模式";
 "Match Display" = "跟随屏幕";
-"Match Display Resolution hint" = "自动匹配当前显示器尺寸。";
-"Native Touchpad Input" = "原生触控板输入";
 "No Filter" = "无筛选";
 "No Filter (Showing All)" = "无筛选（显示全部）";
-"Performance Diagnostics" = "性能诊断";
-"Performance Diagnostics Waiting" = "开始串流后显示性能数据。";
-"Performance Overlay (⌃⌥S)" = "性能 HUD（⌃⌥S）";
 "Press shortcut to record" = "按下快捷键进行录制";
-"Remote Custom FPS" = "主机自定义帧率";
 "Remote Custom Resolution" = "主机自定义分辨率";
 "Remote FPS" = "主机帧率";
 "Remote FPS Value" = "主机帧率值";
 "Remote Resolution" = "主机分辨率";
-"Remote Resolution Value" = "主机分辨率值";
-"Remote USB/IP" = "远程 USB/IP";
-"Resolution & Scaling" = "分辨率与缩放";
 "Resolution Scale" = "分辨率缩放";
 "Resolution Scale Ratio" = "分辨率缩放比例";
 "Restore Default Shortcut" = "恢复默认";
 "Reverb" = "混响";
-"Reverse Mouse Scrolling Direction" = "反转鼠标滚动方向";
 "Search terms / host / error code / category" = "搜索关键词 / 主机 / 错误码 / 分类";
 "Shortcut capture note" = "按 Esc 取消。多数动作需要两个修饰键，断开和退出可以只用一个。";
 "Show Connection Warnings" = "显示连接质量警告";
@@ -984,10 +709,8 @@
 "Sound Mode" = "音效模式";
 "Soundstage Width" = "音场宽度";
 "Spatial Intensity" = "空间强度";
-"Swap Left and Right Mouse Buttons" = "交换鼠标左右键";
 "Unlock max bitrate (1000 Mbps)" = "解锁最高码率（1000 Mbps）";
 "Upscaling" = "超分辨率";
-"V-Sync" = "垂直同步";
 "Warn" = "警告";
 
 "Controller Deadzone" = "手柄死区";
@@ -995,7 +718,6 @@
 "Native Touchpad detail" = "主机触控板发送游戏触控；Mac 风格触控板移动指针并滚动。串流中长按 Options 切换。";
 "HDR detail" = "主机协商 HDR 时使用显示器的 HDR 链路。";
 "YUV444 detail" = "在解码器和显示链路支持时请求 4:4:4 色度。";
-"Unlock Maximum Bitrate" = "解锁最高码率";
 "HDR Display Profile" = "HDR 显示档案";
 "Metadata Source" = "元数据来源";
 "Client Display Profile" = "客户端显示档案";
@@ -1018,7 +740,6 @@
 "Maximum Brightness" = "最大亮度";
 "Minimum Brightness" = "最小亮度";
 "Maximum Average Brightness" = "最大平均亮度";
-"DualSense Touchpad as Trackpad" = "将 DualSense 触控板用作触控板";
 "DualSense Touchpad Mode" = "DualSense 触控板模式";
 "Host Touchpad" = "主机触控板";
 "Mac-style Trackpad" = "Mac 风格触控板";
@@ -1050,50 +771,24 @@
 "Classic Home Page detail" = "改用旧版主页。重启 Moonlight 后生效。";
 "AWDL Stability Helper detail" = "串流时临时关闭 AWDL，减少规律性的 Wi‑Fi 卡顿；串流期间 AirDrop 和附近设备发现可能受影响。";
 "VSync" = "垂直同步";
-"File Mapping" = "文件映射";
 "Host Files" = "主机文件";
 "Host Files settings subtitle" = "浏览主机共享的只读文件夹并下载文件。";
-"Host Files Status" = "主机文件状态";
-"Host Files Status detail" = "共享文件夹由 Foundation Sunshine 提供。";
-"Open Host Files" = "打开主机文件";
-"Open in Finder" = "在 Finder 中打开";
-"Host Files purpose detail" = "主机文件可浏览主机共享的文件夹，并将文件下载到“下载”文件夹。它不会比较、同步或复制本机文件夹。";
 "Host Files read-only detail" = "文件按需读取，本次会话中为只读。";
 "Host Files ready" = "主机文件已就绪";
 "Checking Host Files…" = "正在检查主机文件…";
 "Invalid Host Files capability response" = "主机文件能力响应无效";
 "Host Files is unavailable" = "主机文件不可用";
-"Access" = "访问";
-"Access Mode" = "访问模式";
-"Read Only" = "只读";
-"Permission" = "权限";
 "Preset" = "预设";
-"Unlocked Maximum Bitrate" = "解锁最高码率";
 "Refresh" = "刷新";
 
 "Sound" = "声音";
-"Sound Effects" = "声音效果";
-"Alert Sound" = "提醒声音";
-"Play Sound Effects Through" = "播放声音效果的设备";
-"Alert Volume" = "提醒音量";
-"Play Sound at Startup" = "启动时播放声音";
-"Play User Interface Sound Effects" = "播放用户界面声音效果";
-"Play Feedback When Volume Changes" = "音量更改时播放反馈";
-"Output & Input" = "输出与输入";
-"Output" = "输出";
 "Name" = "名称";
-"Type" = "类型";
-"Play" = "播放";
-"Output Volume" = "输出音量";
-"Mute" = "静音";
-"AirPlay" = "隔空播放";
 "Built-in" = "内建";
 "Other" = "其他";
 
 "USB Mapping" = "USB 映射";
 
 "USB Mapping Disabled" = "USB 映射已停用";
-"Available Devices" = "可用设备";
 
 "No mapped devices" = "没有已映射设备";
 "Searching…" = "正在搜索…";
@@ -1120,29 +815,15 @@
 "Up to Date" = "已是最新版本";
 "Update Available" = "有可用更新";
 "Update Check Unavailable" = "暂时无法检查更新";
-"Open Download" = "打开下载页面";
-
-"This Mac" = "本机";
-"Choose Folder" = "选择文件夹";
-"No Files" = "没有文件";
-"Choose a local folder to compare files." = "选择本机文件夹以对比文件。";
-"Foundation Sunshine is required for file mapping." = "文件映射需要主机启用 Foundation Sunshine。";
-"Up" = "上一级";
 
 "Host information updated" = "主机信息已更新";
-"Checking file mapping…" = "正在检查文件映射…";
 "Invalid file mapping capability response" = "文件映射能力响应无效";
-"Connecting…" = "正在连接…";
-"File mapping is unavailable" = "文件映射不可用";
 "No shared folders" = "没有共享文件夹";
 "File mapping capability is unavailable" = "文件映射能力不可用";
 "File mapping hello failed" = "文件映射握手失败";
 "Invalid file mapping response" = "文件映射响应无效";
 
 "About hero subtitle" = "为 Mac 提供低延迟、高画质的远程串流体验。";
-
-"Hold Options to Switch Touchpad Mode" = "长按 Options 切换触控板模式";
-"DualSense Options hint" = "按住 Options 两秒，在主机触控和指针／双指滚动之间切换。游戏手柄按键继续正常使用。";
 
 "Advanced Video Settings" = "高级视频设置";
 "Decoding" = "解码能力";
@@ -1173,7 +854,6 @@
 /* Controller touchpad shortcut editor */
 "Touchpad Button Shortcut" = "单击触控板";
 "Touchpad Button Shortcut hint" = "给没有触控板的手柄指定一个发送触控板单击的按键。默认不映射。";
-"Edit Shortcut…" = "编辑…";
 "Shortcut Not Mapped" = "不映射";
 "Shortcut Activation" = "触发方式";
 "Shortcut Immediate" = "立即触发";
@@ -1181,8 +861,6 @@
 "Shortcut Hold Format" = "长按 %.1f 秒";
 "Shortcut Preserve Original" = "保留原按键输入";
 "Shortcut Preserve Original hint" = "关闭后，匹配到的输入仅用于此动作。";
-"Shortcut Menu Priority hint" = "匹配时优先执行此动作，不切换鼠标模式。";
-"Shortcut Disconnect Conflict" = "此组合用于退出串流，请更换。";
 "Shortcut Clear" = "取消映射";
 "Controller Button View" = "View（双窗口键）";
 "Controller Button Menu" = "Menu（菜单键）";
@@ -1210,11 +888,9 @@
 "Controller Hint Search" = "搜索";
 "Controller Hint Select" = "选择";
 "Controller Hint Close" = "关闭";
-"Controller Hint Scroll" = "滚动";
 "Controller Hint Confirm" = "确认";
 "Controller Hint Adjust" = "调整";
 "Controller Hint Column" = "切换栏";
-"Controller Hint Cancel" = "取消";
 "Controller Hint Type" = "输入";
 "Controller Hint Delete" = "删除";
 "Controller Hint Space" = "空格";
@@ -1294,7 +970,6 @@
 "Translation Rule Needs Capture" = "系统快捷键，仅在开启“捕获系统快捷键”时可用。";
 "Precision Touchpad Gesture Permission Title" = "串流时屏蔽 macOS 手势？";
 "Precision Touchpad Gesture Permission Message" = "触控板发送给 Windows 时，Moonlight 可以阻止调度中心、切换桌面等三/四指 macOS 手势同时在这台 Mac 上触发。这需要辅助功能权限。未授权时精确式触控板仍可使用，但这些手势也会在 Mac 上触发。";
-"Open Accessibility Settings" = "打开辅助功能设置";
 "Not Now" = "暂不";
 "DualSense Touchpad Output" = "DualSense 触控板输出";
 "DualSense Touchpad Output detail" = "Windows 精确式触控板需要支持的 Windows 11 主机，否则用手柄触控板；最多两指。";
@@ -1302,7 +977,6 @@
 "DualSense Touchpad Output Precision" = "Windows 精确式触控板";
 "Type Text with the macOS Input Method" = "使用 macOS 输入法输入文字";
 "Type Text with the macOS Input Method Hint" = "用 Mac 输入法组字，确认后以 UTF-8 发送；其他按键仍按键事件发送。";
-"Live stream change failed, reconnecting" = "实时调整未生效，正在重新连接";
 "Bitrate set to %@ Mbps" = "码率已设为 %@ Mbps";
 "Frame rate set to %d FPS" = "帧率已设为 %d FPS";
 "Resolution set to %dx%d" = "分辨率已设为 %dx%d";
@@ -1311,7 +985,6 @@
 "Normal" = "普通";
 "Detailed" = "详细";
 "Display Scale" = "显示缩放";
-"Recommended (%d%%)" = "推荐（%d%%）";
 "%d%% (Recommended)" = "%d%%（推荐）";
 "This host does not support display scaling" = "此主机不支持显示缩放";
 "Display scale is unavailable" = "显示缩放暂时不可用";
@@ -1325,7 +998,6 @@
 "Opus" = "Opus";
 "Lossless (PCM)" = "无损 (PCM)";
 "Audio codec hint PCM" = "无损音频立体声约 %@ Mbps、5.1 约 %@ Mbps，在视频之外；网络不够会卡顿。";
-"Audio codec fallback: channels" = "此编码最多支持 5.1 声道，当前音频配置将使用 Opus。";
 "Audio codec conflict message" = "%1$@ 最多支持 5.1 声道，而音频配置选的是“%2$@”。请选择保留哪一个；在你选择之前，串流会使用 Opus。";
 "Audio codec conflict keep codec" = "使用 %@ + 5.1";
 "Audio codec conflict keep channels" = "保留“%@”，改用 Opus";
@@ -2032,7 +1704,6 @@
 "Free Window" = "自由窗口";
 "Initial Size" = "初始大小";
 "Last Window Size" = "上次的窗口大小";
-"Recently Used" = "最近使用";
 "Resolution per Screen" = "各屏幕分辨率";
 "%d screens set" = "已单独设置 %d 块";
 "Set Up…" = "设置…";
@@ -2051,7 +1722,6 @@
 "Use Picture Setting" = "与画面设置相同";
 "Follows the Window (%d × %d)" = "跟随窗口 (%d × %d)";
 "Free Window fallback notice" = "这台主机不能跟着窗口改分辨率，窗口会保持串流的比例。";
-"Common" = "常见";
 "This Mac's Screens" = "本机屏幕";
 
 /* DualSense client options */
@@ -2113,7 +1783,6 @@
 "deck.play" = "启动";
 "deck.quit" = "退出应用";
 "deck.lastOnline" = "上次在线 %@";
-"deck.neverOnline" = "尚未上线";
 "deck.lastStream" = "上次串流 %@";
 "deck.resumeApp" = "继续 %@";
 "deck.playApp" = "启动 %@";
@@ -2153,24 +1822,18 @@
 "deck.kbm" = "键鼠与手柄";
 "deck.desktop" = "桌面";
 "deck.settings" = "串流设置";
-"deck.continue" = "继续";
-"deck.apps" = "应用";
 "deck.style.auto" = "自动";
 "deck.style.simple" = "简洁";
 "deck.style.games" = "游戏库";
 "deck.style.custom" = "自定义";
-"deck.homeStyle" = "主页样式";
-"deck.edit" = "编辑主页";
 "deck.done" = "完成";
 "deck.reset" = "恢复默认";
 "deck.section.computer" = "电脑";
-"deck.section.nowPlaying" = "正在运行";
 "deck.section.continuePlaying" = "最近使用";
 "deck.section.pinned" = "固定";
 "deck.section.apps" = "应用";
 "deck.section.hostInfo" = "主机信息";
 "deck.section.recentSessions" = "最近串流";
-"deck.noRunning" = "没有正在运行的应用";
 "deck.fact.platform" = "平台";
 "deck.fact.gpu" = "显卡";
 "deck.fact.modes" = "显示模式";
@@ -2179,20 +1842,14 @@
 "deck.customize" = "自定义主页";
 "deck.bigscreen" = "大屏模式";
 "deck.cancel" = "取消";
-"deck.pairing" = "正在配对…";
 "deck.retry" = "重试";
 "deck.pairFailed" = "配对失败，请重试";
 "deck.pairingTitle" = "正在配对";
 "deck.pinWeb" = "在 %@ 的 Sunshine 网页中输入此 PIN";
 "deck.waitingConfirm" = "正在等待 %@ 确认";
 "ov.style.textBar" = "紧凑";
-"ov.style.topStrip" = "顶部细条";
 "ov.style.cornerList" = "角落";
-"ov.style.capsule" = "胶囊";
 "ov.style.chartHUD" = "图表";
-"ov.style.detailed" = "详细";
-"ov.style.anomalyOnly" = "仅异常时";
-"ov.pos.auto" = "随样式";
 "ov.pos.topLeft" = "左上";
 "ov.pos.topCenter" = "顶部居中";
 "ov.pos.topRight" = "右上";
@@ -2233,7 +1890,6 @@
 "ov.auto" = "自动";
 "ov.fixed" = "固定";
 "ov.target" = "目标";
-"ov.targetLine" = "目标线";
 "ov.an.netLoss" = "网络丢包 %@%%";
 "ov.an.loss" = "丢帧 %@%%";
 "ov.an.stall" = "卡顿 +%d";
@@ -2241,40 +1897,16 @@
 "ov.an.noData" = "无画面数据 %d 秒";
 "ov.an.frozen" = "画面停滞 %d 秒";
 "ov.an.poor" = "网络不佳";
-"ov.settings.title" = "性能 HUD 样式";
-"ov.settings.style" = "样式";
-"ov.settings.position" = "位置";
-"ov.settings.opacity" = "不透明度";
-"ov.settings.autoFade" = "无异常时自动淡出";
-"ov.settings.expand" = "异常时自动展开";
-"ov.settings.shortcut" = "⌃⌥S 显示或隐藏 HUD，⌃⌥⇧S 切换样式，都可以在“快捷键”里改。HUD 不接收鼠标和键盘，点击会穿透到串流画面。";
 "ov.settings.bottomNote" = "靠下的位置会避开远程的任务栏或程序坞。";
-"ov.settings.fields" = "显示的数据";
 "ov.settings.fieldsNote" = "当前样式放不下的项会显示为灰色。";
 "Cycle performance overlay style" = "切换性能 HUD 样式";
-"ov.style.sectioned" = "分段顶栏";
 "ov.field.clock" = "本机时间";
 "ov.field.battery" = "本机电量";
-"ov.sec.stream" = "串流";
-"ov.sec.fps" = "帧率";
-"ov.sec.net" = "码率";
-"ov.sec.loss" = "丢包";
-"ov.seg.network" = "网络（单程）";
-"ov.seg.host" = "主机编码";
-"ov.seg.decode" = "解码";
-"ov.seg.queue" = "呈现排队";
-"ov.why.anomaly" = "「仅异常时」不显示常规数据";
-"ov.why.capsule" = "胶囊最多显示 %d 项，这一项不会显示";
-"ov.why.sectioned" = "分段顶栏没有这一项的位置";
 "ov.why.chartHUD" = "图表样式只显示图表类数据";
 "ov.preset.minimal" = "最少";
 "ov.preset.usual" = "常用";
 "ov.preset.all" = "全部";
 "ov.settings.count" = "已选 %d 项";
-"ov.settings.notch" = "刘海屏全屏时分栏显示";
-"ov.settings.stripNote" = "顶栏贴着窗口顶部，没有位置可选；不透明度在下面调。";
-"ov.settings.legend" = "串流延迟分段";
-"ov.settings.legendNote" = "分段顶栏里的彩色条 = 网络单程 + 主机编码 + 解码 + 呈现排队，四段之和就是串流延迟。";
 "deck.layout.card" = "卡片";
 "deck.layout.hero" = "大图";
 "deck.preview.wallpaper" = "主机壁纸";
@@ -2288,7 +1920,6 @@
 "deck.firstRun.byAddress" = "按地址添加";
 "deck.firstRun.nearby" = "附近的电脑";
 "deck.firstRun.searching" = "正在搜索局域网中的电脑";
-"deck.recent.empty" = "串流过的应用会显示在此处";
 "deck.homeShort" = "主页";
 "overlay.legacyNotice" = "串流中的性能 HUD 样式需要 macOS 13 或更高版本；当前系统使用单行 HUD，没有可调样式。";
 "deck.connectMode" = "连接方式";
@@ -2310,9 +1941,6 @@
 "deck.noMacReason" = "没有这台电脑的 MAC 地址，无法发送唤醒包";
 "deck.opt.size" = "卡片大小";
 "deck.copy" = "拷贝";
-"deck.addr.lan" = "局域网地址";
-"deck.addr.public" = "公网地址";
-"deck.addr.saved" = "已保存地址";
 "deck.addr.mdns" = "局域网名称";
 "deck.info.cachedApps" = "已缓存应用";
 "deck.info.pairing" = "配对状态";
@@ -2321,8 +1949,6 @@
 "deck.unknown" = "未知";
 "deck.paired" = "已配对";
 "deck.add.placeholder" = "地址，例如 192.0.2.20";
-"deck.add.hostname" = "主机名";
-"deck.add.port" = "端口";
 "deck.add.add" = "添加";
 "deck.add.connecting" = "正在连接 %@…";
 "deck.add.err.space" = "地址里不能有空格";
@@ -2335,8 +1961,6 @@
 "deck.info.addresses" = "地址";
 "deck.info.status" = "状态";
 "deck.info.device" = "设备";
-"deck.changeIconEllipsis" = "更改图标…";
-"deck.opt.pageSize" = "页面大小";
 "deck.menu.tilesIncrease" = "放大卡片";
 "deck.menu.tilesDecrease" = "缩小卡片";
 "deck.menu.pageActual" = "自动大小";
@@ -2378,9 +2002,7 @@
 "deck.plan.macNo" = "本机不支持 %@ 硬解";
 "deck.plan.software" = "%@ · 软件解码";
 "deck.plan.hdrNo" = "HDR 不可用";
-"deck.plan.risk" = "此线路 %@ 可能卡顿";
 "deck.runningApp" = "运行中 · %@";
-"deck.fact.version" = "版本";
 "deck.path.publicDirect" = "公网直连";
 "deck.path.forward" = "端口转发";
 "deck.evidence.user" = "用户声明";
@@ -2391,12 +2013,10 @@
 "deck.evidence.hostNic" = "%@ 配置在主机自己的网卡上";
 "deck.evidence.ipv6" = "全球 IPv6 地址";
 "deck.evidence.lanFast" = "私有地址,物理网卡出口,往返 %d ms";
-"deck.evidence.untested" = "未测试";
 "deck.evidence.none" = "还没有证据";
 "deck.confidence.low" = "可信度 低";
 "deck.confidence.medium" = "可信度 中";
 "deck.confidence.high" = "可信度 高";
-"deck.addr.domain" = "域名";
 "deck.addr.add" = "添加连接方式…";
 "deck.addr.remove" = "删除";
 "Path: automatic" = "自动判断";
@@ -2464,7 +2084,6 @@
 
 "Performance HUD" = "性能 HUD";
 "Performance HUD settings subtitle" = "帧率、延迟与码率。";
-"HUD Preview" = "预览";
 "HUD Appearance" = "外观";
 "HUD Style" = "样式";
 "HUD Position" = "位置";
@@ -2530,22 +2149,13 @@
 /* Entries that used to live only in the built-in tables of LanguageManager */
 "System" = "系统默认";
 "Global" = "全局";
-"Global (Default)" = "全局（默认）";
-"Scope: Global" = "当前作用范围：全局";
-"Scope: Profile (%@)" = "当前作用范围：配置文件（%@）";
 "Resolution Scale hint" = "降低分辨率以节省带宽。";
-"Scale vs Upscaling hint" = "分辨率缩放用于节省带宽；超分与缩放用于提升客户端重建细节。";
-"AI enhancement recommended hint" = "在低于原生分辨率或较低码率下更容易看出效果。";
-"Resolution Scale + Upscaling hint" = "提示：降低主机渲染比例，再交给客户端超分，通常能在同等带宽下保留更清晰的画面。";
-"MetalFX requires macOS 13 or later." = "需要 macOS 13+。";
 "Mouse and Cursor" = "鼠标与光标";
 "Control Center" = "控制中心";
 "Locked Mouse hint" = "将鼠标锁定在串流窗口内，更适合游戏和镜头控制。";
 "Free Mouse hint" = "更方便切回 macOS 应用和其他显示器，更适合桌面远控。";
 "Current: %@" = "当前：%@";
 "Switched to %@" = "已切换到%@";
-"Remote overrides apply to the host render mode only." = "仅影响被控端渲染/编码。";
-"Enable Remote Resolution/FPS to override the /launch mode parameter." = "需开启远程分辨率/帧率才会覆盖启动参数（/launch mode）。";
 "10-bit SDR detail" = "当主机和解码器支持 HEVC 或 AV1 Main10 时请求 10-bit SDR 串流。";
 "Stereo" = "立体声";
 "5.1 surround sound" = "5.1 环绕声";
@@ -2571,20 +2181,6 @@
 "Smoother low mids and gentler highs for relaxed long-session listening." = "让低中频更顺滑、高频更柔和，更适合长时间听音。";
 "Lifts vocals and lead instruments for clearer mids and cleaner focus." = "强化人声和主旋律存在感，让中频更清楚、结像更集中。";
 "Opens up treble sparkle and perceived detail with a lighter low end." = "提升高频空气感和细节感，同时把低频收得更轻一些。";
-"Multi-channel device detected. Use Default for true 5.1/7.1/7.1.4 playback, or Audio Enhancement for headphone/stereo virtualization." = "检测到多通道输出设备。想保留真实 5.1/7.1/7.1.4 请使用默认；想给耳机或立体声音箱做增强处理请使用音效增强。";
-"Performance Overlay" = "性能 HUD";
-"Performance report exported" = "性能报告已导出";
-"Performance report export failed" = "性能报告导出失败";
-"Rendered FPS" = "渲染 FPS";
-"Frame Pacing Jitter" = "帧节奏抖动";
-"Network Jitter" = "网络抖动";
-"Dropped Frames" = "丢帧";
-"Decode / Render" = "解码 / 渲染";
-"Audio Underruns" = "音频欠载";
-"Native Touchpad Input hint" = "通过 Foundation 发送 DualSense 触控接触点；关闭后将触控板回退为相对鼠标。";
-"Long-press Menu Mouse Hint" = "长按 Menu/Options 约 2 秒，在手柄模式和鼠标模式之间切换。";
-"Optimize mouse for remote desktop" = "优化远程桌面鼠标 (绝对位置)";
-"Pointer Speed hint" = "调整相对鼠标 / 触控板速度；绝对鼠标模式不受这个选项影响。";
 "Frame updates paused" = "画面暂时没有更新";
 "No new video frame has arrived for 15 seconds." = "已经连续 15 秒没有收到新画面。";
 "No new frame has arrived for a while." = "已经有一会儿没有收到新画面了。";
@@ -2594,7 +2190,6 @@
 "Windowed" = "固定比例窗口";
 "Fullscreen" = "全屏";
 "Borderless Windowed" = "无边框全屏";
-"Shortcut Reference" = "串流快捷键";
 "Shortcut requires two modifiers" = "自定义串流快捷键至少要使用两个修饰键。";
 "Shortcut must include regular key" = "这个动作需要“修饰键 + 普通按键”的组合。";
 "Shortcut modifiers only required" = "释放鼠标捕获仅支持纯修饰键快捷键。";
@@ -2606,7 +2201,6 @@
 "Toggle mouse mode" = "切换鼠标模式";
 "Toggle fullscreen control ball" = "切换全屏悬浮球";
 "Open control center" = "打开 Moonlight 控制中心";
-"Open control center (fullscreen / borderless only)" = "打开控制中心（仅全屏 / 无边框）";
 "Toggle borderless / windowed (advanced)" = "无边框 / 窗口切换（高级）";
 "Open Control Center: %@" = "打开控制中心：%@";
 "Release mouse: %@" = "释放鼠标：%@";
