@@ -985,20 +985,6 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 
     VideoStats stats = self.streamMan.connection.renderer.videoStats;
     uint64_t nowStatsMs = LiGetMillis();
-    uint64_t elapsedMs = 0;
-    if (stats.measurementStartTimestamp > 0 && nowStatsMs >= stats.measurementStartTimestamp) {
-        elapsedMs = MAX(1ULL, nowStatsMs - stats.measurementStartTimestamp);
-    }
-
-    float (^displayedFps)(float, uint32_t) = ^float(float completedFps, uint32_t frameCount) {
-        if (completedFps > 0.05f) {
-            return completedFps;
-        }
-        if (elapsedMs == 0 || frameCount == 0) {
-            return 0.0f;
-        }
-        return (float)((double)frameCount / MAX(0.001, (double)elapsedMs / 1000.0));
-    };
 
     {
         // what the control stream really measures on this path: kept per computer and address for the 线路 chips
@@ -1013,7 +999,7 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
         double abrLoss = stats.totalFrames > 0 ? (double)stats.networkDroppedFrames * 100.0 / stats.totalFrames : 0.0;
         [self.adaptiveBitrateController updatePacketLossPercent:abrLoss
                                                           rttMs:abrRtt
-                                                      decodeFps:displayedFps(stats.decodedFps, stats.decodedFrames)
+                                                      decodeFps:stats.decodedFps
                                                   droppedFrames:(int)(stats.networkDroppedFrames + stats.pacerDroppedFrames)];
     }
 
@@ -1022,9 +1008,9 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
                       object:nil
                     userInfo:@{
                         @"timestampMs": @(nowStatsMs),
-                        @"receivedFps": @(displayedFps(stats.receivedFps, stats.receivedFrames)),
-                        @"decodedFps": @(displayedFps(stats.decodedFps, stats.decodedFrames)),
-                        @"renderedFps": @(displayedFps(stats.renderedFps, stats.renderedFrames)),
+                        @"receivedFps": @(stats.receivedFps),
+                        @"decodedFps": @(stats.decodedFps),
+                        @"renderedFps": @(stats.renderedFps),
                         @"decodedFrames": @(stats.decodedFrames),
                         @"renderedFrames": @(stats.renderedFrames),
                         @"totalFrames": @(stats.totalFrames),
@@ -1065,9 +1051,9 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
         }
         Log(LOG_I, @"[perf] fps rx=%.1f de=%.1f rd=%.1f low1=%.1f pace=%.2f p99=%.1f max=%.1f stalls=%u srcGaps=%u clientStalls=%u "
             "decode=%.2f queue=%.2f host=%.1f netDrop=%u pacerDrop=%u jit=%.1f br=%.1f audioUnderruns=%llu%@",
-            displayedFps(stats.receivedFps, stats.receivedFrames),
-            displayedFps(stats.decodedFps, stats.decodedFrames),
-            displayedFps(stats.renderedFps, stats.renderedFrames),
+            stats.receivedFps,
+            stats.decodedFps,
+            stats.renderedFps,
             stats.renderedFpsOnePercentLow, stats.renderFramePacingJitterMs,
             stats.renderIntervalP99Ms, stats.renderIntervalMaxMs,
             stats.renderStallCount, stats.renderSourceGapCount, stats.renderClientStallTotal,
@@ -1964,25 +1950,10 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
 
     struct Resolution res = [self.class getResolution];
     int configuredFps = streamSettings.framerate != nil ? [streamSettings.framerate intValue] : 0;
-    uint64_t nowStatsMs = LiGetMillis();
-    uint64_t measurementElapsedMs = 0;
-    if (stats.measurementStartTimestamp > 0 && nowStatsMs >= stats.measurementStartTimestamp) {
-        measurementElapsedMs = MAX(1ULL, nowStatsMs - stats.measurementStartTimestamp);
-    }
-
-    float (^displayedFps)(float, uint32_t) = ^float(float completedFps, uint32_t frameCount) {
-        if (completedFps > 0.05f) {
-            return completedFps;
-        }
-        if (measurementElapsedMs == 0 || frameCount == 0) {
-            return 0.0f;
-        }
-        double elapsedSeconds = MAX(0.001, (double)measurementElapsedMs / 1000.0);
-        return (float)((double)frameCount / elapsedSeconds);
-    };
-    float receivedFps = displayedFps(stats.receivedFps, stats.receivedFrames);
-    float decodedFps = displayedFps(stats.decodedFps, stats.decodedFrames);
-    float renderedFps = displayedFps(stats.renderedFps, stats.renderedFrames);
+    // Frame rates come from VideoDecoderRenderer.videoStats as of this moment (MLFpsMeter.h), not from the open window.
+    float receivedFps = stats.receivedFps;
+    float decodedFps = stats.decodedFps;
+    float renderedFps = stats.renderedFps;
     
     uint32_t rtt = 0;
     BOOL rttAvailable = NO;
