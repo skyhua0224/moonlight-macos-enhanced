@@ -32,10 +32,35 @@ DESCRIPTIVE = re.compile(r"\s(subtitle|detail|hint|note)$")
 BUILT_IN_TABLE = re.compile(r"\blet\s+(en|zhHans)\s*:\s*\[String\s*:\s*String\]")
 
 
+COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+
+
+def strip_comments(text):
+    """Drop /* */ and // comments (valid in .strings files) but keep line numbers and string literals."""
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1]); i = j + 1
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2); j = n if j < 0 else j + 2
+            out.append("\n" * text.count("\n", i, j)); i = j
+        elif text.startswith("//", i):
+            j = text.find("\n", i); j = n if j < 0 else j
+            i = j
+        else:
+            out.append(c); i += 1
+    return "".join(out)
+
+
 def read_strings(path):
     values, duplicates = {}, []
     with open(path, encoding="utf-8") as handle:
-        for number, line in enumerate(handle, 1):
+        text = strip_comments(handle.read())
+        for number, line in enumerate(text.split("\n"), 1):
             match = PAIR.match(line)
             if not match:
                 continue

@@ -613,7 +613,7 @@
 "Input Monitoring Checking detail" = "Moonlight 正在等待 macOS 刷新最新的输入监控授权状态。";
 "Input Monitoring Repair detail" = "如果你已经允许了 Moonlight，但 CoreHID 仍不可用，请先在输入监控里移除 Moonlight，再重新添加，然后重新打开 Moonlight。";
 "Granted" = "已允许";
-"Granted Pending Reentry" = "已允许";
+"Granted Pending Reentry" = "已允许，重新进入串流后生效";
 "Check Settings" = "检查设置";
 "Installed" = "已安装";
 "Not Ready" = "未就绪";
@@ -1046,7 +1046,7 @@
 "Dim Unfocused Artwork" = "降低未选中应用封面亮度";
 "Classic Home Page" = "经典主页";
 "Classic Home Page detail" = "改用旧版主页。重启 Moonlight 后生效。";
-"AWDL Stability Helper detail" = "改善部分 Wi‑Fi 网络下的主机发现和连接稳定性。";
+"AWDL Stability Helper detail" = "串流时临时关闭 AWDL，减少规律性的 Wi‑Fi 卡顿；串流期间 AirDrop 和附近设备发现可能受影响。";
 "VSync" = "垂直同步";
 "File Mapping" = "文件映射";
 "Host Files" = "主机文件";

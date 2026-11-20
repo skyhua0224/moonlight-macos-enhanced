@@ -614,7 +614,7 @@
 "Input Monitoring Checking detail" = "Moonlight is waiting for macOS to confirm the latest Input Monitoring change.";
 "Input Monitoring Repair detail" = "If you already allowed Moonlight but CoreHID still stays unavailable, remove Moonlight from Input Monitoring, add it again, then reopen Moonlight.";
 "Granted" = "Allowed";
-"Granted Pending Reentry" = "Allowed";
+"Granted Pending Reentry" = "Allowed · Restart the Stream";
 "Check Settings" = "Check Settings";
 "Installed" = "Installed";
 "Not Ready" = "Not Ready";
@@ -991,7 +991,7 @@
 "Dim Unfocused Artwork" = "Dim Unfocused Artwork";
 "Classic Home Page" = "Classic Home Page";
 "Classic Home Page detail" = "Use the older home page. Takes effect after Moonlight restarts.";
-"AWDL Stability Helper detail" = "Improves host discovery and connection stability on some Wi‑Fi networks.";
+"AWDL Stability Helper detail" = "Temporarily turns off AWDL while streaming to reduce periodic Wi‑Fi stutter. AirDrop and nearby discovery may be affected during the stream.";
 "VSync" = "VSync";
 "File Mapping" = "File Mapping";
 "Host Files" = "Host Files";
