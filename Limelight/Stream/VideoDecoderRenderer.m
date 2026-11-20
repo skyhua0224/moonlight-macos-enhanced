@@ -1558,8 +1558,9 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
 - (VideoStats)videoStats {
     VideoStats stats;
     @synchronized (self) { stats = _videoStats; }
-    uint64_t now = LiGetMillis();
     os_unfair_lock_lock(&_fpsLock);
+    // The clock is read under the lock: every note counted below was made at or before this moment.
+    uint64_t now = LiGetMillis();
     stats.receivedFps = (float)MLFpsMeterRate(&_fpsReceived, now);
     stats.decodedFps = (float)MLFpsMeterRate(&_fpsDecoded, now);
     stats.renderedFps = (float)MLFpsMeterRate(&_fpsRendered, now);
@@ -5730,7 +5731,11 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
         if (ret == DR_OK) {
             uint64_t renderSampleNowMs = LiGetMillis();
-            if (![self usesDecompressionSession]) { self->_activeWndVideoStats.decodedFrames++; [self noteDecodedFrameFps]; }
+            if (![self usesDecompressionSession]) {
+                self->_activeWndVideoStats.decodedFrames++;
+                // Software AV1 notes its own frame when a picture comes back (the AV1 submit path), not on every DR_OK.
+                if (self->_av1SoftwareDecoder == nil) [self noteDecodedFrameFps];
+            }
             self->_activeWndVideoStats.totalDecodeTime += LiGetMillis() - decodeStart;
             if (self->_activeRendererMode == MLActiveVideoRendererModeCompatibility && [self displayLayerReadyForDisplay]) {
                 [self recordRenderedFrameSampleAtTimeMs:renderSampleNowMs
@@ -6219,7 +6224,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         _activeWndVideoStats.totalDecodeTime += LiGetMillis() - now;
         if (result == DR_OK && ![self usesDecompressionSession]) {
             _activeWndVideoStats.decodedFrames++;
-            [self noteDecodedFrameFps];
+            if (_av1SoftwareDecoder == nil) [self noteDecodedFrameFps];
             if ([self displayLayerReadyForDisplay]) [self recordRenderedFrameSampleAtTimeMs:LiGetMillis() enqueueTimeMs:unit->enqueueTimeMs];
         }
     }
