@@ -97,6 +97,10 @@ jobs:
         sh tests/key-routing/run.sh
         python3 tests/key-repeat/run.py
 
+    - name: Stream disconnect confirmation policy
+      if: matrix.variant == 'arm64'
+      run: sh tests/disconnect-confirmation/run.sh
+
     # The two Localizable.strings files are the only text source; a description key must not show up as its own
     # English text; every log title the viewer builds has an entry.
     - name: Localization checks
