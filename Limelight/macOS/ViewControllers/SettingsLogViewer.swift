@@ -1098,7 +1098,7 @@ private struct DebugLogViewer: View {
         Text(languageManager.localize("Live Debug Log"))
           .font(.headline)
         Spacer()
-        Button(languageManager.localize("Export Filtered Log…")) {
+        Button(languageManager.localize("Export Log…")) {
           exportFilteredEntries()
         }
         Button(languageManager.localize("Copy All")) {

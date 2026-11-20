@@ -667,14 +667,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = localized(
-            "CoreHID Permission Required", fallback: "Input Monitoring access needed")
-        alert.informativeText = localized(
-            "CoreHID Permission Alert Message",
-            fallback: "Moonlight is not receiving mouse input from CoreHID, so the mouse uses the compatibility path for now. Open System Settings → Privacy & Security → Input Monitoring and turn Moonlight on. If it is already listed, turn it off and on again, or remove it and add it back: the permission may no longer match after an update. Then reopen Moonlight."
-        )
-        alert.addButton(withTitle: localized("Open Input Monitoring", fallback: "Open Input Monitoring"))
-        alert.addButton(withTitle: localized("Later", fallback: "Later"))
+        configureInputMonitoringAlert(alert)
         let shown = PermissionAlertPresenter.presentWithoutBlocking(alert) { [weak self] response in
             if response == .alertFirstButtonReturn {
                 self?.openSystemPreferences()
@@ -684,6 +677,17 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
             hasShownRuntimeAlert = true
             runtimeAlertPending = false
         }
+    }
+
+    /// One text for both Input Monitoring alerts (the launch check and the CoreHID-silent stream).
+    private func configureInputMonitoringAlert(_ alert: NSAlert) {
+        alert.messageText = localized(
+            "Input Monitoring Alert Title", fallback: "Moonlight Needs Input Monitoring")
+        alert.informativeText = localized(
+            "Input Monitoring Alert Message",
+            fallback: "Without it, the mouse uses the compatibility path. In System Settings > Privacy & Security > Input Monitoring, turn on Moonlight. If it is already on, turn it off and on again.")
+        alert.addButton(withTitle: localized("Open System Settings", fallback: "Open System Settings"))
+        alert.addButton(withTitle: localized("Later", fallback: "Later"))
     }
 
     private func localized(_ key: String, fallback: String) -> String {
@@ -1655,14 +1659,7 @@ extension InputMonitoringPermissionManager {
     private func presentLaunchAlert(version: String) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = localized(
-            "CoreHID Permission Required", fallback: "Input Monitoring access needed")
-        alert.informativeText = localized(
-            "Input Monitoring Launch Alert Message",
-            fallback: "Mouse input needs Input Monitoring, and it is off. In System Settings → Privacy & Security → Input Monitoring, turn Moonlight on, or add it with + if it is not listed. If it is already on, turn it off and on again, or remove it and add it back: the permission can stop matching after an update."
-        )
-        alert.addButton(withTitle: localized("Open Input Monitoring", fallback: "Open Input Monitoring"))
-        alert.addButton(withTitle: localized("Later", fallback: "Later"))
+        configureInputMonitoringAlert(alert)
         // Not shown when a stream has already started (or no window can take it): nothing is recorded, so the next
         // launch asks again.
         let shown = PermissionAlertPresenter.presentWithoutBlocking(alert) { [weak self] response in
