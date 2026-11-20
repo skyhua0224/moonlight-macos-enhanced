@@ -89,8 +89,8 @@ final class CoreHIDMouseDriver: NSObject {
       + "noMovementElements=\(devicesWithoutMovement)"
   }
 
-  /// Reads the Input Monitoring state without asking: the same two checks InputMonitoringPermissionManager makes.
-  /// (Sources: macos-apple-iohidaccesstype-20261119, macos-apple-cgpreflightlisteneventaccess-20261119.)
+  /// Reads the current Input Monitoring state without prompting, including for the permission manager.
+  /// Sources: macos-apple-iohid-check-access-20261120 and macos-apple-cgpreflightlisteneventaccess-20261119.
   static func currentListenAccess() -> ListenAccess {
     let ioState = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
     if ioState == kIOHIDAccessTypeGranted || CGPreflightListenEventAccess() {

@@ -24,6 +24,7 @@
 #import "HIDSupport.h"
 #import "MLSystemGestureBlocker.h"
 #import "MLSystemShortcutCapture.h"
+#import "MLCapsLockCapture.h"
 #import "MoonlightEnhanced-Swift.h"
 #import "Logger.h"
 #import "MLEdgeMenuGeometry.h"
@@ -285,11 +286,10 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL streamControlsFrontUpdateScheduled;
 @property (nonatomic) BOOL capsLockStateKnown;
 @property (nonatomic) BOOL capsLockLastState;
+@property (nonatomic, strong) MLCapsLockCapture *directCapsLockCapture;
 @property (nonatomic) int cursorHiddenCounter;
 @property (nonatomic) int cgCursorHiddenCounter;
-
 @property (nonatomic) IOPMAssertionID powerAssertionID;
-
 @property (nonatomic, strong) NSView *overlayContainer;
 // MLOverlayPresenter (macOS 14+) when the SwiftUI overlay is in use; nil for the original one-line overlay.
 @property (nonatomic, strong) id overlayPresenter;
@@ -541,7 +541,6 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL systemShortcutCaptureUnavailableLogged;
 @property (nonatomic) NSInteger precisionTouchpadModeForGestureBlock;
 @property (nonatomic) BOOL systemGestureBlockUnavailableLogged;
-
 // Mac input method text (see StreamViewController+TextInput.m).
 @property (nonatomic) BOOL imeTextInputEnabled;
 @property (nonatomic, strong) NSTextInputContext *imeInputContext;
@@ -976,9 +975,10 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 - (void)updateDirectTouchVideoWidth:(int)width height:(int)height;
 - (void)updateDirectTouchStretch:(BOOL)stretch;
 - (void)tearDownDirectTouchInput;
-/// Installs or removes the macOS system gesture filter so it only runs while the stream owns the trackpad.
 - (void)refreshSystemGestureBlockWithReason:(NSString *)reason;
-- (void)refreshSystemShortcutCaptureWithReason:(NSString *)reason;
+- (void)refreshDirectCapsLockCapture;
+- (void)stopInputCaptureFilters;
+- (BOOL)usesDirectCapsLock;
 - (void)refreshTextInputConfiguration;
 - (BOOL)routeKeyDownToInputMethod:(NSEvent *)event;
 - (BOOL)shouldSwallowKeyUpForInputMethod:(NSEvent *)event;

@@ -1205,10 +1205,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
     NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
     [self.disconnectConfirmation dismiss];
     self.disconnectConfirmation = nil;
-    // Never leave the system gesture filter running once the stream is stopping or gone.
-    self.precisionTouchpadModeForGestureBlock = 0;
-    [self.systemGestureBlocker removeWithReason:@"stream-teardown"];
-    [self.systemShortcutCapture removeWithReason:@"stream-teardown"];
+    [self stopInputCaptureFilters];
 
     if (self.windowDidResignKeyNotification != nil) {
         [defaultCenter removeObserver:self.windowDidResignKeyNotification];

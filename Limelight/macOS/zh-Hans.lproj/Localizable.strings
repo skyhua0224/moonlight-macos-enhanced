@@ -1033,6 +1033,8 @@
 "Physical key position" = "物理按键位置";
 "Typed characters" = "输入的字符";
 "Capture System Shortcuts" = "捕获系统快捷键";
+"Send Caps Lock directly to the host" = "串流时 Caps Lock 直接发给主机";
+"Send Caps Lock directly to the host Hint" = "需要“输入监控”权限。串流捕获键盘时，每次按下 Caps Lock 都会发给主机。";
 "Pointer Speed" = "指针速度";
 "Scroll Mode" = "物理滚轮模式";
 

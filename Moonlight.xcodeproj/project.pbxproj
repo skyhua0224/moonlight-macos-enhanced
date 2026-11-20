@@ -182,6 +182,7 @@
 				Input/HapticContext.m,
 				Input/MLDualSenseTouchpad.m,
 				Input/MLPrecisionTouchpad.m,
+				Input/MLCapsLockCapture.m,
 				Input/MLSystemGestureBlocker.m,
 				Input/MLSystemShortcutCapture.m,
 				Input/HIDSupport.m,

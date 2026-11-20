@@ -183,7 +183,6 @@
 - (void)syncKeyboardModifierStateForEvent:(NSEvent *)event;
 - (char)translatedModifierFlagsForEvent:(NSEvent *)event;
 - (short)translateKeyCodeWithEvent:(NSEvent *)event;
-- (char)translateKeyModifierWithEvent:(NSEvent *)event;
 - (void)handleDpad:(NSInteger)intValue;
 - (void)updateButtonFlags:(int)flag state:(BOOL)set;
 - (void)setupHidManager;

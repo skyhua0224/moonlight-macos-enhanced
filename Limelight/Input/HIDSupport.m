@@ -258,22 +258,10 @@ static BOOL HIDIsModifierKeyCode(unsigned short keyCode) {
 }
 
 static char HIDRemoteModifierFlagsToGenericFlags(NSUInteger remoteMask) {
-    char modifiers = 0;
-
-    if (remoteMask & (HIDKeyboardRemoteModifierMaskLeftShift | HIDKeyboardRemoteModifierMaskRightShift)) {
-        modifiers |= MODIFIER_SHIFT;
-    }
-    if (remoteMask & (HIDKeyboardRemoteModifierMaskLeftControl | HIDKeyboardRemoteModifierMaskRightControl)) {
-        modifiers |= MODIFIER_CTRL;
-    }
-    if (remoteMask & (HIDKeyboardRemoteModifierMaskLeftAlt | HIDKeyboardRemoteModifierMaskRightAlt)) {
-        modifiers |= MODIFIER_ALT;
-    }
-    if (remoteMask & (HIDKeyboardRemoteModifierMaskLeftMeta | HIDKeyboardRemoteModifierMaskRightMeta)) {
-        modifiers |= MODIFIER_META;
-    }
-
-    return modifiers;
+    return ((remoteMask & (HIDKeyboardRemoteModifierMaskLeftShift | HIDKeyboardRemoteModifierMaskRightShift)) ? MODIFIER_SHIFT : 0) |
+           ((remoteMask & (HIDKeyboardRemoteModifierMaskLeftControl | HIDKeyboardRemoteModifierMaskRightControl)) ? MODIFIER_CTRL : 0) |
+           ((remoteMask & (HIDKeyboardRemoteModifierMaskLeftAlt | HIDKeyboardRemoteModifierMaskRightAlt)) ? MODIFIER_ALT : 0) |
+           ((remoteMask & (HIDKeyboardRemoteModifierMaskLeftMeta | HIDKeyboardRemoteModifierMaskRightMeta)) ? MODIFIER_META : 0);
 }
 
 static NSUInteger HIDSyntheticRemoteModifierMaskForKeyCode(HIDSupport *support,
@@ -1229,7 +1217,7 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
 - (void)keyDown:(NSEvent *)event {
     if (self.shouldSendInputEvents) {
         [self syncKeyboardModifierStateForEvent:event];
-        char modifiers = [self translateKeyModifierWithEvent:event];
+        char modifiers = [self translatedModifierFlagsForEvent:event];
         PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
         if (!HIDValidateInputContext(inputCtx, "keyDown")) {
             return;
@@ -1276,7 +1264,7 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
 - (void)keyUp:(NSEvent *)event {
     if (self.shouldSendInputEvents) {
         [self syncKeyboardModifierStateForEvent:event];
-        char modifiers = [self translateKeyModifierWithEvent:event];
+        char modifiers = [self translatedModifierFlagsForEvent:event];
         PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
         if (!HIDValidateInputContext(inputCtx, "keyUp")) {
             return;
@@ -1297,6 +1285,20 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
             LiSendKeyboardEvent2Ctx(inputCtx, keyCode, KEY_ACTION_UP, modifiers, keyFlags);
         });
     }
+}
+
+- (void)sendDirectCapsLockDown:(BOOL)down modifierEvent:(NSEvent *)event {
+    // common-c-keyboard-edge-20261120, LiSendKeyboardEventCtx.
+    PML_INPUT_STREAM_CONTEXT inputCtx = HIDInputContext(self);
+    if (!HIDValidateInputContext(inputCtx, "direct Caps Lock")) {
+        return;
+    }
+    if (down) [self syncKeyboardModifierStateForEvent:event];
+    short keyCode = (short)(0x8000 | [self.mappings[@(kVK_CapsLock)] shortValue]);
+    char modifiers = HIDRemoteModifierFlagsToGenericFlags(self.keyboardRemoteModifierMask);
+    HIDDispatchInput(self, inputCtx, ^{
+        LiSendKeyboardEventCtx(inputCtx, keyCode, down ? KEY_ACTION_DOWN : KEY_ACTION_UP, modifiers);
+    });
 }
 
 - (BOOL)sendUtf8Text:(NSString *)text {
@@ -1511,10 +1513,6 @@ static unsigned short HIDPositionalKeyCode(unsigned short macKeyCode) {
 
 - (char)translatedModifierFlagsForEvent:(NSEvent *)event {
     return HIDRemoteModifierFlagsToGenericFlags([self desiredRemoteKeyboardModifierMaskForEvent:event]);
-}
-
-- (char)translateKeyModifierWithEvent:(NSEvent *)event {
-    return [self translatedModifierFlagsForEvent:event];
 }
 
 - (BOOL)useGCMouse {
