@@ -91,6 +91,13 @@ jobs:
         sh tests/rtsp-announce-size/run.sh
         sh tests/fps-meter/run.sh
 
+    # The two Localizable.strings files are the only text source; a description key must not show up as its own
+    # English text; every log title the viewer builds has an entry.
+    - name: Localization checks
+      run: |
+        python3 scripts/check_localization.py
+        python3 scripts/check_log_text_coverage.py
+
     - name: Configure version and update channel
       shell: bash
       run: |

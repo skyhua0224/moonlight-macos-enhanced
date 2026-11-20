@@ -149,7 +149,7 @@ private struct WelcomePermissionsView: View {
           if inputMonitoringManager.authorizationState != .unsupported {
             permissionRow(
               title: "Input Monitoring",
-              subtitle: "Input Monitoring detail",
+              subtitle: "Input Monitoring purpose",
               stateLabel: inputStatusText,
               isGranted: inputMonitoringManager.isGranted,
               supplementalMessageKey: inputMonitoringManager.supplementalStatusMessageKey,

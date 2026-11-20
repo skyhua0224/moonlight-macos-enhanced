@@ -1098,7 +1098,7 @@ private struct DebugLogViewer: View {
         Text(languageManager.localize("Live Debug Log"))
           .font(.headline)
         Spacer()
-        Button(languageManager.localize("Export Filtered Log…")) {
+        Button(languageManager.localize("Export Log…")) {
           exportFilteredEntries()
         }
         Button(languageManager.localize("Copy All")) {
@@ -1447,6 +1447,19 @@ struct SettingsLogViewer: View {
       onClose: { dismiss() })
   }
 }
+
+#if MLC_CONCEPT_HARNESS
+/// The concept harness photographs the log window on its own, without the settings window around it.
+@objc(MLCLogViewerHarness) final class LogViewerHarness: NSObject {
+  @objc static func makeWindow() -> NSWindow {
+    let controller = NSHostingController(rootView: SettingsLogViewer(rawLogURL: nil, curatedLogURL: nil))
+    let window = NSWindow(contentViewController: controller)
+    window.setContentSize(NSSize(width: 980, height: 640))
+    window.title = "Live Debug Log"
+    return window
+  }
+}
+#endif
 
 // MARK: - In-stream overlay
 

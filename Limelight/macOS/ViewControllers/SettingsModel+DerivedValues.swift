@@ -43,9 +43,9 @@ import VideoToolbox
   var displayKey: String {
     switch self {
     case .compatibility:
-      return "HID"
+      return "Mouse Input Compatibility"
     case .gameController:
-      return "MFI"
+      return "GameController"
     case .coreHID:
       return "CoreHID"
     case .automatic:

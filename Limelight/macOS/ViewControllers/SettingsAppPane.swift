@@ -85,7 +85,7 @@ struct AppView: View {
           }
         ))
         ToggleCell(title: "AWDL Stability Helper", hintKey: "AWDL Stability Helper detail", boolBinding: $settingsModel.awdlStabilityHelperEnabled)
-        SettingsRow(title: "Input Monitoring") {
+        SettingsRow(title: "Input Monitoring", detail: "Input Monitoring purpose") {
           Button(languageManager.localize("Open Settings")) {
             InputMonitoringPermissionManager.sharedManager.openSystemPreferences()
           }

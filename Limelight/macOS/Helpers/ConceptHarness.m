@@ -24,6 +24,7 @@
 static NSString *const kSandbox = @"/tmp/apps-concept/";
 static NSWindow *sOverlayWindow;
 static NSWindowController *sSettingsWindowController;
+static NSWindow *sLogViewerWindow;
 
 // A stand-in stream view: a frame (aspect fill) and, when simulating a notched display, the camera housing.
 @interface MLCFrameView : NSView
@@ -694,6 +695,20 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
             }
         }];
     }
+    if (getenv("MLC_INPUTALERT")) {
+        // MLC_INPUTALERT=1: the Input Monitoring launch alert as a sheet on the main window (take the picture with MLC_SHEETCOMP=1)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[InputMonitoringPermissionManager sharedManager] presentLaunchAlertForHarness];
+        });
+    }
+    if (getenv("MLC_LOGVIEWER")) {
+        // MLC_LOGVIEWER=1: the live log window (Export Log… button) on its own
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            sLogViewerWindow = [MLCLogViewerHarness makeWindow];
+            [sLogViewerWindow setFrameOrigin:NSMakePoint(20, 200)];
+            [sLogViewerWindow makeKeyAndOrderFront:nil];
+        });
+    }
     if (getenv("MLC_APPLIST_EVERY")) {
         // MLC_APPLIST_EVERY=<seconds>: asks the apps page to read the host's app list again, the way a refresh does
         NSTimeInterval every = atof(getenv("MLC_APPLIST_EVERY"));
@@ -1181,6 +1196,7 @@ static NSString *sPadMark = @"";
 
 + (NSWindow *)mainWindow {
     if (sOverlayWindow != nil) return sOverlayWindow;
+    if (sLogViewerWindow != nil) return sLogViewerWindow;
     if (sSettingsWindowController.window != nil) return sSettingsWindowController.window;
     NSWindow *w = [Helpers getMainWindow];
     if (w == nil) w = NSApp.windows.firstObject;
