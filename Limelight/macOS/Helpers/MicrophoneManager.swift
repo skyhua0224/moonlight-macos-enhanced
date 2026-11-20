@@ -553,20 +553,16 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
         }
     }
 
-    private static func currentSystemAuthorizationState() -> InputMonitoringAuthorizationState {
-        guard #available(macOS 15.0, *) else {
-            return .unsupported
-        }
+    // Direct Caps Lock can use a current grant even on macOS versions without CoreHID.
+    @objc var hasCurrentSystemGrant: Bool { CoreHIDMouseDriver.currentListenAccess() == .granted }
 
-        let cgGranted = CGPreflightListenEventAccess()
-        let ioState = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-        if ioState == kIOHIDAccessTypeGranted || cgGranted {
-            return .granted
+    private static func currentSystemAuthorizationState() -> InputMonitoringAuthorizationState {
+        guard #available(macOS 15.0, *) else { return .unsupported }
+        switch CoreHIDMouseDriver.currentListenAccess() {
+        case .granted: return .granted
+        case .denied: return .denied
+        case .unknown, .unchecked: return .notDetermined
         }
-        if ioState == kIOHIDAccessTypeUnknown {
-            return .notDetermined
-        }
-        return .denied
     }
 
     private var isAwaitingSystemRefresh: Bool {

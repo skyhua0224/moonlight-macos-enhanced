@@ -171,7 +171,17 @@ private struct ControllerDeadzoneRow: View {
   }
 }
 
+extension SettingsClass {
+  fileprivate static let sendCapsLockDirectlyKey = "settings.sendCapsLockDirectly"
+
+  @objc static var sendCapsLockDirectly: Bool {
+    UserDefaults.standard.bool(forKey: sendCapsLockDirectlyKey)
+  }
+}
+
 private struct KeyboardMouseSettingsSection: View {
+  // macos-apple-appstorage-20261120, UserDefaults-backed storage.
+  @AppStorage(SettingsClass.sendCapsLockDirectlyKey) private var sendCapsLockDirectly = false
   @EnvironmentObject private var settingsModel: SettingsModel
   @ObservedObject private var languageManager = LanguageManager.shared
   @ObservedObject private var inputPermissions = InputMonitoringPermissionManager.sharedManager
@@ -251,6 +261,11 @@ private struct KeyboardMouseSettingsSection: View {
             messageKey: "Capture System Shortcuts Permission Message")
         }
       }
+      ToggleCell(
+        title: "Send Caps Lock directly to the host",
+        hintKey: "Send Caps Lock directly to the host Hint",
+        boolBinding: $sendCapsLockDirectly
+      )
       ToggleCell(title: "Swap Mouse Buttons", boolBinding: $settingsModel.swapMouseButtons)
       ToggleCell(title: "Reverse Scroll Direction", boolBinding: $settingsModel.reverseScrollDirection)
       SettingsRow(title: "Precision Touchpad") {

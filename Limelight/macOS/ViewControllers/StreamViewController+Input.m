@@ -53,8 +53,8 @@ static const NSUInteger MLMaxImeCommitLength = 4096;
         });
         return;
     }
-    // Same lifetime as the gesture block: only while the stream owns the input.
     [self refreshSystemShortcutCaptureWithReason:reason];
+    [self refreshDirectCapsLockCapture];
 
     NSInteger mode = self.precisionTouchpadModeForGestureBlock;
     NSWindow *window = self.view.window;
@@ -90,10 +90,9 @@ static const NSUInteger MLMaxImeCommitLength = 4096;
 
 #pragma mark - System shortcut capture
 
-- (BOOL)streamOwnsInputForSystemCapture {
+- (BOOL)streamHasForegroundInput {
     NSWindow *window = self.view.window;
-    return self.isMouseCaptured &&
-           !self.stopStreamInProgress &&
+    return !self.stopStreamInProgress &&
            !self.reconnectInProgress &&
            !self.edgeMenuTemporaryReleaseActive &&
            !self.edgeMenuMenuVisible &&
@@ -102,7 +101,7 @@ static const NSUInteger MLMaxImeCommitLength = 4096;
 
 - (void)refreshSystemShortcutCaptureWithReason:(NSString *)reason {
     BOOL wanted = [SettingsClass captureSystemShortcutsFor:self.app.host.uuid] &&
-                  [self streamOwnsInputForSystemCapture];
+                  self.isMouseCaptured && [self streamHasForegroundInput];
     if (!wanted) {
         self.systemShortcutCaptureUnavailableLogged = NO;
         [self.systemShortcutCapture removeWithReason:reason];
@@ -123,6 +122,81 @@ static const NSUInteger MLMaxImeCommitLength = 4096;
         self.systemShortcutCapture = [[MLSystemShortcutCapture alloc] init];
     }
     [self.systemShortcutCapture installWithReason:reason];
+}
+
+#pragma mark - Direct Caps Lock
+
+- (BOOL)ownsKeyboardForDirectCapsLock {
+    return [self streamHasForegroundInput] && self.hidSupport.shouldSendInputEvents &&
+           [self hasReadyInputContext];
+}
+
+- (void)stopDirectCapsLockCapture {
+    [self.directCapsLockCapture stop];
+    self.directCapsLockCapture = nil;
+}
+
+- (void)forwardDirectCapsLockPressWithModifierFlags:(NSEventModifierFlags)flags {
+    // macos-apple-nsevent-keyevent-capslock-20261120, Parameters.
+    // Use the same key-down modifier policy as the legacy path.
+    NSEvent *press = [NSEvent keyEventWithType:NSEventTypeKeyDown
+                                     location:NSZeroPoint
+                                modifierFlags:flags
+                                    timestamp:0
+                                 windowNumber:0
+                                      context:nil
+                                   characters:@""
+                  charactersIgnoringModifiers:@""
+                                    isARepeat:NO
+                                      keyCode:kVK_CapsLock];
+    [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"direct-caps-lock" event:press];
+    [self.hidSupport sendDirectCapsLockDown:YES modifierEvent:press];
+}
+
+- (void)refreshDirectCapsLockCapture {
+    // Use the system's live grant (macos-apple-input-monitoring-20261120).
+    if (![SettingsClass sendCapsLockDirectly] || ![self ownsKeyboardForDirectCapsLock] ||
+        ![[InputMonitoringPermissionManager sharedManager] hasCurrentSystemGrant]) {
+        [self stopDirectCapsLockCapture];
+        return;
+    }
+    if (self.directCapsLockCapture != nil) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    __weak HIDSupport *weakHID = self.hidSupport;
+    MLCapsLockCapture *capture = [[MLCapsLockCapture alloc] initWithOwnsInput:^BOOL {
+        return [weakSelf ownsKeyboardForDirectCapsLock];
+    } sendEdge:^(BOOL down) {
+        if (down) {
+            // macos-apple-nsevent-current-modifier-flags-20261120, Discussion.
+            [weakSelf forwardDirectCapsLockPressWithModifierFlags:[NSEvent modifierFlags]];
+        } else {
+            [weakHID sendDirectCapsLockDown:NO modifierEvent:nil];
+        }
+    }];
+    if ([capture start]) {
+        self.directCapsLockCapture = capture;
+    }
+}
+
+- (BOOL)usesDirectCapsLock {
+    if (!self.directCapsLockCapture.hasKeyboards || ![self ownsKeyboardForDirectCapsLock]) {
+        return NO;
+    }
+    if (![[InputMonitoringPermissionManager sharedManager] hasCurrentSystemGrant]) {
+        [self stopDirectCapsLockCapture];
+        return NO;
+    }
+    return YES;
+}
+
+- (void)stopInputCaptureFilters {
+    [self stopDirectCapsLockCapture];
+    self.precisionTouchpadModeForGestureBlock = 0;
+    [self.systemGestureBlocker removeWithReason:@"stream-teardown"];
+    [self.systemShortcutCapture removeWithReason:@"stream-teardown"];
 }
 
 #pragma mark - Input method text

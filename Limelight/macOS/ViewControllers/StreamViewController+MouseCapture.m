@@ -1832,8 +1832,8 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
         }
     }
 }
-
 - (void)rearmMouseCaptureIfPossibleWithReason:(NSString *)reason {
+    [self refreshDirectCapsLockCapture];
     if (self.isRemoteDesktopMode && ![self reasonAllowsImmediateCaptureInFreeMouseMode:reason]) {
         return;
     }
@@ -2309,12 +2309,12 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     [self routeFlagsChangedToInputMethod:event];
     if (event.keyCode == kVK_CapsLock) {
         BOOL state = (event.modifierFlags & NSEventModifierFlagCapsLock) != 0;
-        // Some devices report both edges with the same lock flag. Forward one tap
-        // per lock transition, including transitions that turn Caps Lock off.
+        // Legacy routing sends one tap per lock transition after the OS delay.
+        // macos-apple-capslock-delay-20261120 and macos-apple-flagschanged-20261120.
         BOOL changed = !self.capsLockStateKnown || state != self.capsLockLastState;
         self.capsLockStateKnown = YES;
         self.capsLockLastState = state;
-        if (changed && self.hidSupport.shouldSendInputEvents) {
+        if (changed && self.hidSupport.shouldSendInputEvents && ![self usesDirectCapsLock]) {
             NSEvent *press = [CapsLockKeyEvent keyPressFrom:event];
             if (press != nil) [self onKeyboardEquivalent:press];
         }

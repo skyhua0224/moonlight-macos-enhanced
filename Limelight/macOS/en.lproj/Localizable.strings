@@ -978,6 +978,8 @@
 "Physical key position" = "Physical Key Position";
 "Typed characters" = "Typed Characters";
 "Capture System Shortcuts" = "Capture System Shortcuts";
+"Send Caps Lock directly to the host" = "Send Caps Lock directly to the host";
+"Send Caps Lock directly to the host Hint" = "Requires Input Monitoring. While the stream captures the keyboard, each physical Caps Lock press goes to the host.";
 "Pointer Speed" = "Pointer Speed";
 "Scroll Mode" = "Physical Wheel Mode";
 
