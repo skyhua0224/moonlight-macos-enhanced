@@ -1203,7 +1203,8 @@ highFreqMotor:(unsigned short)highFreqMotor {
 
 - (void)tearDownStreamLifecycleObserversAndTimers {
     NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
-
+    [self.disconnectConfirmation dismiss];
+    self.disconnectConfirmation = nil;
     // Never leave the system gesture filter running once the stream is stopping or gone.
     self.precisionTouchpadModeForGestureBlock = 0;
     [self.systemGestureBlocker removeWithReason:@"stream-teardown"];
@@ -1253,7 +1254,6 @@ highFreqMotor:(unsigned short)highFreqMotor {
     [defaultCenter removeObserver:self name:HIDMouseModeToggledNotification object:nil];
     [defaultCenter removeObserver:self name:HIDGamepadQuitNotification object:nil];
     [defaultCenter removeObserver:self name:@"StreamingSessionRequestDisconnect" object:nil];
-
     if (self.activeSpaceDidChangeObserver != nil) {
         [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self.activeSpaceDidChangeObserver];
         self.activeSpaceDidChangeObserver = nil;

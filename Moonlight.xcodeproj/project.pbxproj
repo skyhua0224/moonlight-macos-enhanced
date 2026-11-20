@@ -269,6 +269,7 @@
 				macOS/ViewControllers/SettingsView.swift,
 				macOS/ViewControllers/StreamRiskAssessment.swift,
 				macOS/ViewControllers/StreamDisplay.swift,
+				macOS/ViewControllers/MLStreamDisconnectConfirmation.m,
 				macOS/ViewControllers/StreamViewController.m,
 				"macOS/ViewControllers/StreamViewController+Diagnostics.m",
 				"macOS/ViewControllers/StreamViewController+FreeWindow.m",

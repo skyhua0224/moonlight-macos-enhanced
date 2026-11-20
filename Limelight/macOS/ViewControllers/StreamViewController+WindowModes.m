@@ -112,11 +112,12 @@
     Log(LOG_I, @"[diag] performClose invoked: sender=%@ event=%@",
         sender ? NSStringFromClass([sender class]) : @"(null)",
         MLDisconnectEventSummary(NSApp.currentEvent));
-    NSWindow *sheetHost = self.view.window;
-    if (sheetHost.attachedSheet != nil) {
-        // Command-W again while the disconnect options are up: the first button, Disconnect from Stream.
-        Log(LOG_I, @"[diag] performClose while the disconnect options are up: disconnecting");
-        [sheetHost endSheet:sheetHost.attachedSheet returnCode:NSAlertFirstButtonReturn];
+    if (self.disconnectConfirmation != nil) {
+        NSEvent *event = NSApp.currentEvent;
+        if (event.type != NSEventTypeKeyDown || !event.isARepeat) {
+            Log(LOG_I, @"[diag] performClose while the disconnect options are up: disconnecting");
+            [self.disconnectConfirmation chooseDisconnect];
+        }
         return;
     }
     [self uncaptureMouseWithCode:@"MUC301" reason:@"perform-close"];
@@ -125,7 +126,12 @@
         [self performCloseStreamWindow:nil];
         return;
     }
-    
+    NSWindow *host = self.view.window;
+    // apple-appkit-window-attached-sheet (Discussion). Leave other sheets on this window in charge.
+    if (host == nil || host.attachedSheet != nil) {
+        return;
+    }
+
     NSAlert *alert = [[NSAlert alloc] init];
     
     alert.alertStyle = NSAlertStyleInformational;
@@ -135,19 +141,28 @@
     [alert addButtonWithTitle:MLString(@"Close and Quit App", @"Close and Quit App")];
     [alert addButtonWithTitle:MLString(@"Cancel", @"Cancel")];
 
-    [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
+    MLStreamDisconnectConfirmation *confirmation = [[MLStreamDisconnectConfirmation alloc] initWithAlert:alert host:host];
+    self.disconnectConfirmation = confirmation;
+    __weak typeof(self) weakSelf = self;
+    [confirmation presentWithShortcutMatcher:^BOOL(NSEvent *event) {
+        StreamViewController *controller = weakSelf;
+        return [controller event:event
+                 matchesShortcut:[controller streamShortcutForAction:MLShortcutActionShowDisconnectOptions]];
+    } completion:^(NSModalResponse returnCode) {
+        StreamViewController *controller = weakSelf;
+        controller.disconnectConfirmation = nil;
         switch (returnCode) {
             case NSAlertFirstButtonReturn:
-                self.pendingDisconnectSource = @"disconnect-alert-confirmed";
-                [self doCommandBySelector:@selector(performCloseStreamWindow:)];
+                controller.pendingDisconnectSource = @"disconnect-alert-confirmed";
+                [controller performCloseStreamWindow:nil];
                 break;
                 
             case NSAlertSecondButtonReturn:
-                [self doCommandBySelector:@selector(performCloseAndQuitApp:)];
+                [controller performCloseAndQuitApp:nil];
                 break;
 
             default:
-                [self captureMouse];
+                [controller captureMouse];
                 break;
         }
     }];

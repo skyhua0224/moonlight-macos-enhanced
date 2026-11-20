@@ -27,7 +27,7 @@
 #import "MoonlightEnhanced-Swift.h"
 #import "Logger.h"
 #import "MLEdgeMenuGeometry.h"
-
+#import "MLStreamDisconnectConfirmation.h"
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Carbon/Carbon.h>
 #include <arpa/inet.h>
@@ -375,6 +375,7 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) BOOL disconnectWasUserInitiated;
 @property (nonatomic) uint64_t suppressConnectionWarningsUntilMs;
 @property (nonatomic, copy) NSString *pendingDisconnectSource;
+@property (nonatomic, strong) MLStreamDisconnectConfirmation *disconnectConfirmation;
 @property (nonatomic) uint64_t lastOptionUncaptureAtMs;
 @property (nonatomic) NSUInteger pendingOptionUncaptureToken;
 @property (nonatomic) BOOL isMouseCaptured;
@@ -384,7 +385,6 @@ static const NSTimeInterval MLStatsOverlayRefreshIntervalSec = 0.5;
 @property (nonatomic) uint64_t suppressFreeMouseEdgeUncaptureUntilMs;
 @property (nonatomic) BOOL pendingMouseExitedRecapture;
 @property (atomic) BOOL stopStreamInProgress;
-
 @property (nonatomic) BOOL shouldAttemptReconnect;
 @property (nonatomic) NSInteger reconnectAttemptCount;
 /// This stream's path already got its verdict (a failure was recorded), so it is not also recorded as good or failed twice.
