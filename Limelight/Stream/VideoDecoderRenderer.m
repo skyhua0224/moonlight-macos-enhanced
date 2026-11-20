@@ -12,6 +12,7 @@
 #include "DolbyVisionConfiguration.h"
 #include <stdatomic.h>
 #import "RendererLayerContainer.h"
+#import "MLFpsMeter.h"
 #import "MLAV1SoftwareDecoder.h"
 
 #include "Limelight.h"
@@ -1523,6 +1524,47 @@ static BOOL MLGetSharedMetalPipelines(MTLPixelFormat pixelFormat,
     CVPixelBufferRef _lastDecodedImageBuffer;
     BOOL _stretchToFillValue;
     os_unfair_lock _frameStoreLock;
+    // Frames per second over the last second for the three counters of VideoStats (MLFpsMeter.h), guarded by _fpsLock.
+    os_unfair_lock _fpsLock;
+    MLFpsMeter _fpsReceived;
+    MLFpsMeter _fpsDecoded;
+    MLFpsMeter _fpsRendered;
+    // The last statistics window, as before; the videoStats getter below puts the frame rates on a copy of it.
+    VideoStats _videoStats;
+}
+
+- (void)noteFrameForMeter:(MLFpsMeter *)meter {
+    uint64_t now = LiGetMillis();
+    os_unfair_lock_lock(&_fpsLock);
+    MLFpsMeterNote(meter, now);
+    os_unfair_lock_unlock(&_fpsLock);
+}
+
+- (void)noteReceivedFrameFps { [self noteFrameForMeter:&_fpsReceived]; }
+- (void)noteDecodedFrameFps { [self noteFrameForMeter:&_fpsDecoded]; }
+- (void)noteRenderedFrameFps { [self noteFrameForMeter:&_fpsRendered]; }
+
+- (void)resetFrameRateMeters {
+    os_unfair_lock_lock(&_fpsLock);
+    MLFpsMeterReset(&_fpsReceived);
+    MLFpsMeterReset(&_fpsDecoded);
+    MLFpsMeterReset(&_fpsRendered);
+    os_unfair_lock_unlock(&_fpsLock);
+}
+
+// The statistics window is a count that restarts every second, and every rendered frame stores the window that is
+// still open (its *Fps fields are 0 there). Frame rates are read from the meters at the moment of the read instead, so
+// that the overlay, the [perf] line and the diagnostics snapshot never divide a few frames by a few milliseconds.
+- (VideoStats)videoStats {
+    VideoStats stats;
+    @synchronized (self) { stats = _videoStats; }
+    uint64_t now = LiGetMillis();
+    os_unfair_lock_lock(&_fpsLock);
+    stats.receivedFps = (float)MLFpsMeterRate(&_fpsReceived, now);
+    stats.decodedFps = (float)MLFpsMeterRate(&_fpsDecoded, now);
+    stats.renderedFps = (float)MLFpsMeterRate(&_fpsRendered, now);
+    os_unfair_lock_unlock(&_fpsLock);
+    return stats;
 }
 
 - (BOOL)stretchToFill {
@@ -2035,6 +2077,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     if (enqueueTimeMs != 0) _lastRenderedEnqueueTimeMs = enqueueTimeMs;
 
     _activeWndVideoStats.renderedFrames++;
+    [self noteRenderedFrameFps];
     if (enqueueTimeMs != 0 && renderSampleNowMs >= enqueueTimeMs) {
         _activeWndVideoStats.totalRenderTime += renderSampleNowMs - enqueueTimeMs;
     }
@@ -3108,6 +3151,7 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     memset(&_activeWndVideoStats, 0, sizeof(_activeWndVideoStats));
     _lastFrameNumber = 0;
     _videoStats = (VideoStats){0};
+    [self resetFrameRateMeters];
 
     _lastFrameReceiveTimeMs = 0;
     _lastFramePresentationTimeMs = 0;
@@ -3501,6 +3545,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon, void *sourceFr
     MLDecodeFrameContext *frameContext = (MLDecodeFrameContext *)sourceFrameRefCon;
     if (status == noErr && imageBuffer) {
         @synchronized (self) { self->_activeWndVideoStats.decodedFrames++; }
+        [self noteDecodedFrameFps];
         [self handleDecompressionOutput:imageBuffer
                    presentationTimeStamp:presentationTimeStamp
                                 duration:presentationDuration
@@ -5656,6 +5701,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         }
 
         self->_activeWndVideoStats.receivedFrames++;
+        [self noteReceivedFrameFps];
         self->_activeWndVideoStats.totalFrames++;
 
         if (fullLengthBytes > 0) {
@@ -5684,7 +5730,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
         if (ret == DR_OK) {
             uint64_t renderSampleNowMs = LiGetMillis();
-            if (![self usesDecompressionSession]) self->_activeWndVideoStats.decodedFrames++;
+            if (![self usesDecompressionSession]) { self->_activeWndVideoStats.decodedFrames++; [self noteDecodedFrameFps]; }
             self->_activeWndVideoStats.totalDecodeTime += LiGetMillis() - decodeStart;
             if (self->_activeRendererMode == MLActiveVideoRendererModeCompatibility && [self displayLayerReadyForDisplay]) {
                 [self recordRenderedFrameSampleAtTimeMs:renderSampleNowMs
@@ -6153,6 +6199,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         }
         _lastFrameNumber = unit->frameNumber;
         _activeWndVideoStats.receivedFrames++;
+        [self noteReceivedFrameFps];
         _activeWndVideoStats.totalFrames++;
         _activeWndVideoStats.receivedBytes += unit->fullLength > 0 ? unit->fullLength : 0;
         if (_lastFrameReceiveTimeMs != 0 && _lastFramePresentationTimeMs != 0) {
@@ -6172,6 +6219,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
         _activeWndVideoStats.totalDecodeTime += LiGetMillis() - now;
         if (result == DR_OK && ![self usesDecompressionSession]) {
             _activeWndVideoStats.decodedFrames++;
+            [self noteDecodedFrameFps];
             if ([self displayLayerReadyForDisplay]) [self recordRenderedFrameSampleAtTimeMs:LiGetMillis() enqueueTimeMs:unit->enqueueTimeMs];
         }
     }
@@ -6304,6 +6352,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
     }
 
     @synchronized (self) { self->_activeWndVideoStats.decodedFrames++; }
+    [self noteDecodedFrameFps];
     MLDecodeFrameContext frameContext = _av1PendingContexts[((shownTag % 16) + 16) % 16];
     if (_activeRendererMode == MLActiveVideoRendererModeEnhanced || _activeRendererMode == MLActiveVideoRendererModeNative) {
         [self handleDecompressionOutput:frame
