@@ -682,7 +682,7 @@ final class InputMonitoringPermissionManager: NSObject, ObservableObject {
     /// One text for both Input Monitoring alerts (the launch check and the CoreHID-silent stream).
     private func configureInputMonitoringAlert(_ alert: NSAlert) {
         alert.messageText = localized(
-            "Input Monitoring Alert Title", fallback: "Moonlight Needs Input Monitoring")
+            "Input Monitoring Alert Title", fallback: "Moonlight Needs Input Monitoring to Enable CoreHID")
         alert.informativeText = localized(
             "Input Monitoring Alert Message",
             fallback: "Without it, the mouse uses the compatibility path. In System Settings > Privacy & Security > Input Monitoring, turn on Moonlight. If it is already on, turn it off and on again.")

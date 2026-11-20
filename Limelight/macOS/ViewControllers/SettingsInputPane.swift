@@ -299,7 +299,7 @@ private struct KeyboardMouseSettingsSection: View {
         .controllerPicker(selection: $settingsModel.selectedPhysicalWheelMode, options: SettingsModel.physicalWheelModes, title: { value in languageManager.localize(value) })
         .frame(width: 180, alignment: .trailing)
       }
-      SettingsRow(title: "Input Monitoring") {
+      SettingsRow(title: "Input Monitoring", detail: "Input Monitoring purpose") {
         HStack(spacing: 8) {
           Circle()
             .fill(inputPermissions.isGranted ? Color.green : Color.orange)

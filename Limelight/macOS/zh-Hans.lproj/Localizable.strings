@@ -608,7 +608,7 @@
 "Compatibility Mode hint" = "显示异常时再打开。";
 "SDR Compatibility Workaround hint" = "预留给 SDR 串流下出现异常卡顿或解码不稳的排障场景。除非你正在定位问题，否则建议保持关闭。";
 "Input Monitoring" = "输入监控";
-"Input Monitoring detail" = "高回报率鼠标需要此权限。";
+"Input Monitoring purpose" = "以启用 CoreHID";
 "Input Monitoring Reentry detail" = "重新进入串流后生效。";
 "Input Monitoring Checking detail" = "Moonlight 正在等待 macOS 刷新最新的输入监控授权状态。";
 "Input Monitoring Repair detail" = "如果你已经允许了 Moonlight，但 CoreHID 仍不可用，请先在输入监控里移除 Moonlight，再重新添加，然后重新打开 Moonlight。";
@@ -2626,7 +2626,7 @@
 "Wake Host" = "唤醒主机";
 "Refresh Status" = "刷新状态";
 "Back to Computers" = "返回计算机列表";
-"Input Monitoring Alert Title" = "Moonlight 需要“输入监控”权限";
+"Input Monitoring Alert Title" = "Moonlight 需要“输入监控”权限以启用 CoreHID";
 "Input Monitoring Alert Message" = "未开启时，鼠标使用兼容路径。请在“系统设置”>“隐私与安全性”>“输入监控”中打开 Moonlight；已经打开的话，先关闭再打开。";
 "Open System Settings" = "打开系统设置";
 "Mouse Input Compatibility" = "兼容（AppKit）";
