@@ -1126,7 +1126,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [NSEvent removeMonitor:self.localKeyUpMonitor];
         self.localKeyUpMonitor = nil;
     }
-    [self.windowsHeldKeyEquivalentCodes removeAllObjects];
+    [self.heldKeyEquivalentCodes removeAllObjects];
     if (self.localModifierMonitor) {
         [NSEvent removeMonitor:self.localModifierMonitor];
         self.localModifierMonitor = nil;
@@ -1292,7 +1292,7 @@ highFreqMotor:(unsigned short)highFreqMotor {
         [NSEvent removeMonitor:self.localKeyUpMonitor];
         self.localKeyUpMonitor = nil;
     }
-    [self.windowsHeldKeyEquivalentCodes removeAllObjects];
+    [self.heldKeyEquivalentCodes removeAllObjects];
     if (self.localModifierMonitor != nil) {
         [NSEvent removeMonitor:self.localModifierMonitor];
         self.localModifierMonitor = nil;

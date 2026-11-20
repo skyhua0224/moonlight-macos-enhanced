@@ -2106,23 +2106,20 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
 
         NSWindow *window = strongSelf.view.window;
         NSNumber *keyCode = @(event.keyCode);
-        BOOL windowsKeyOrder = [SettingsClass keyboardCompatibilityModeFor:strongSelf.app.host.uuid] ==
-            KeyboardCompatibilityModeSwapOptionAndCommand;
         MLHeldKeyUpAction action = MLHeldKeyUpDecision(window != nil && (event.window == nil || event.window == window),
-                                                       strongSelf.hidSupport.shouldSendInputEvents, windowsKeyOrder,
-                                                       [strongSelf.windowsHeldKeyEquivalentCodes containsObject:keyCode]);
+                                                       strongSelf.hidSupport.shouldSendInputEvents,
+                                                       [strongSelf.heldKeyEquivalentCodes containsObject:keyCode]);
         if (action == MLHeldKeyUpForgetAndLetThrough) {
-            [strongSelf.windowsHeldKeyEquivalentCodes removeObject:keyCode];
+            [strongSelf.heldKeyEquivalentCodes removeObject:keyCode];
             return event;
         }
         if (action == MLHeldKeyUpLetThrough) {
             return event;
         }
-        [strongSelf.windowsHeldKeyEquivalentCodes removeObject:keyCode];
+        [strongSelf.heldKeyEquivalentCodes removeObject:keyCode];
 
-        // Key equivalents may consume the key-down responder path while the
-        // Command modifier is held. Route the release once here and stop it
-        // from reaching the normal responder path a second time.
+        // Deliver the release once before the responder chain (Apple's local
+        // monitor discussion, macos-apple-nsevent-local-monitor-20261120).
         [strongSelf keyUp:event];
         return nil;
     }];
@@ -2992,22 +2989,19 @@ static inline NSPoint MLClampFreeMousePointToExitEdge(NSPoint point,
     
     [self resolveDeferredCommandModifierWithoutRemoteTapWithReason:@"keyboard-equivalent-pass-through" event:event];
     [self.hidSupport keyDown:event];
-    // performKeyEquivalent: receives the key-down side of a key equivalent.
-    // Keep pass-through chords held so HIDSupport can preserve native repeat
-    // behaviour. Windows Command chords are released by the local key-up
-    // monitor because AppKit may consume their responder key-up path.
+    // This key equivalent handles a down (macos-apple-nsresponder-equivalent-20261120,
+    // Discussion). HIDSupport reuses the held key mapping on AppKit auto-repeat
+    // (macos-apple-nsevent-repeat-20261120, Discussion).
     BOOL windowsKeyOrder = [SettingsClass keyboardCompatibilityModeFor:self.app.host.uuid] ==
         KeyboardCompatibilityModeSwapOptionAndCommand;
-    MLPassThroughPlan plan = MLPassThroughChordPlan((eventModifierFlags & NSEventModifierFlagControl) != 0,
-                                                    (eventModifierFlags & NSEventModifierFlagCommand) != 0,
-                                                    windowsKeyOrder);
+    MLPassThroughPlan plan = MLPassThroughPlanForKeyEquivalent(event, windowsKeyOrder);
     if (plan.keyUpNow) {
         [self.hidSupport keyUp:event];
-    } else if (plan.holdUntilKeyUp) {
-        if (self.windowsHeldKeyEquivalentCodes == nil) {
-            self.windowsHeldKeyEquivalentCodes = [NSMutableSet set];
+    } else if (plan.holdUntilKeyUp && self.hidSupport.shouldSendInputEvents) {
+        if (self.heldKeyEquivalentCodes == nil) {
+            self.heldKeyEquivalentCodes = [NSMutableSet set];
         }
-        [self.windowsHeldKeyEquivalentCodes addObject:@(event.keyCode)];
+        [self.heldKeyEquivalentCodes addObject:@(event.keyCode)];
     }
     
     return YES;
