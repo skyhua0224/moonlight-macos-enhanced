@@ -73,7 +73,7 @@ do {
         list == ["/usr/bin/tailscale", "/opt/homebrew/bin/tailscale", "/usr/local/bin/tailscale"], "\(list)")
 }
 
-// 7. Environment: the bundled executable is forced into CLI mode, a standalone CLI is not touched.
+// 7. Environment: every candidate is forced into CLI mode, and the inherited environment survives.
 do {
   let base = ["PATH": "/usr/bin", "HOME": "/Users/demo"]
   let bundled = TailscaleCLI.Candidate(path: TailscaleCLI.bundledAppExecutable(), opensGUIWithoutCLIEnv: true)
@@ -81,7 +81,8 @@ do {
   let forced = TailscaleCLI.environment(for: bundled, base: base)
   check("bundled binary gets TAILSCALE_BE_CLI=1", forced["TAILSCALE_BE_CLI"] == "1", "\(forced)")
   check("bundled binary keeps the inherited environment", forced["HOME"] == "/Users/demo" && forced["PATH"] == "/usr/bin")
-  check("standalone CLI environment is unchanged", TailscaleCLI.environment(for: standalone, base: base) == base)
+  check("standalone CLI also gets TAILSCALE_BE_CLI=1 (a real one ignores it)",
+        TailscaleCLI.environment(for: standalone, base: base) == ["PATH": "/usr/bin", "HOME": "/Users/demo", "TAILSCALE_BE_CLI": "1"])
   check("status runs as 'status --json'", TailscaleCLI.statusArguments == ["status", "--json"])
 }
 
@@ -137,6 +138,23 @@ do {
   check("slot still held at the SIGKILL deadline", !gate.begin(now: schedule.killAt))
   gate.end(success: false, now: schedule.lastResortAt)   // the exit is observed right after the kill
   check("the observed exit releases the slot", gate.begin(now: schedule.lastResortAt, force: true))
+}
+
+// 12. A PATH entry that is a symlink to the app-bundle executable (the usual CLI integration install)
+//     is classified standalone, is picked before the bundle, and still runs with TAILSCALE_BE_CLI=1:
+//     without it that exec path opens the GUI app (issue #121).
+do {
+  let env = ["PATH": "/usr/local/bin"]
+  let bundle = TailscaleCLI.bundledAppExecutable()
+  let present: Set<String> = ["/usr/local/bin/tailscale", bundle]
+  let picked = TailscaleCLI.select(environment: env, isExecutable: { present.contains($0) })
+  check("PATH symlink to the bundle is picked first, PATH order kept",
+        picked == TailscaleCLI.Candidate(path: "/usr/local/bin/tailscale", opensGUIWithoutCLIEnv: false), "\(String(describing: picked))")
+  if let picked {
+    let forced = TailscaleCLI.environment(for: picked, base: env)
+    check("PATH symlink to the bundle still gets TAILSCALE_BE_CLI=1",
+          forced["TAILSCALE_BE_CLI"] == "1" && forced["PATH"] == "/usr/local/bin", "\(forced)")
+  }
 }
 
 print(failures == 0 ? "tailscale-probe: all cases passed" : "tailscale-probe: \(failures) case(s) failed")

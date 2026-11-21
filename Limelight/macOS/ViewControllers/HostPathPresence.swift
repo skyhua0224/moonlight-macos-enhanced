@@ -10,8 +10,8 @@ import SystemConfiguration
 /// Neither call waits on the network from the menu: sections(for:) reads the last probe only.
 /// Tailscale's own status command, when it is installed, says whether a 100.64.0.0/10 peer is on a
 /// DERP relay; otherwise HostPathRank infers that from the route and the smoothed RTT.
-/// The status binary is only ever run as a CLI: a standalone tailscale is preferred, and the executable in
-/// the Tailscale app bundle runs with TAILSCALE_BE_CLI=1 (Tailscale CLI reference,
+/// The status binary is only ever run as a CLI: every candidate (a tailscale on PATH — which can be a
+/// symlink to the app-bundle executable — or the bundle itself) runs with TAILSCALE_BE_CLI=1 (Tailscale CLI reference,
 /// tailscale.com/docs/reference/tailscale-cli, retrieved 2026-11-21: without that variable the bundled
 /// executable opens the macOS app instead of answering). Probes are coalesced to one at a time, back off
 /// 30 s to 10 min after failures, and run only while the app is frontmost unless a connect needs the status.

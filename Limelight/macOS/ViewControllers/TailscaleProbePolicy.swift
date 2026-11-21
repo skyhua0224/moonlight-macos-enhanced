@@ -33,9 +33,11 @@ enum TailscaleCLI {
 
   static let statusArguments = ["status", "--json"]
 
-  /// A standalone CLI never opens the GUI app, so it is preferred over the bundled executable: `tailscale`
-  /// on PATH, then the Standalone variant's /usr/local/bin launcher and Homebrew's /opt/homebrew/bin. A GUI
-  /// app inherits the minimal launchd PATH, so the well-known prefixes are always checked, not just PATH.
+  /// PATH order first (`tailscale`, then the Standalone variant's /usr/local/bin launcher and Homebrew's
+  /// /opt/homebrew/bin), with the app-bundle executable as the fallback. A GUI app inherits the minimal
+  /// launchd PATH, so the well-known prefixes are always checked, not just PATH. A PATH entry can be a
+  /// symlink or shim to the app-bundle executable, so CLI mode is forced for every candidate (see
+  /// environment(for:base:)).
   static func standaloneCandidates(environment: [String: String]) -> [String] {
     var candidates: [String] = []
     for directory in (environment["PATH"] ?? "").split(separator: ":") where !directory.isEmpty {
@@ -62,9 +64,10 @@ enum TailscaleCLI {
     return nil
   }
 
-  /// TAILSCALE_BE_CLI=1 only for the bundled executable; the standalone launcher already runs as a CLI.
+  /// TAILSCALE_BE_CLI=1 for every candidate: the app-bundle executable opens the GUI app without it, and a
+  /// PATH entry that is a symlink or shim to that executable (the usual CLI integration install) needs it
+  /// just the same; a fully standalone CLI ignores the variable.
   static func environment(for candidate: Candidate, base: [String: String]) -> [String: String] {
-    guard candidate.opensGUIWithoutCLIEnv else { return base }
     var environment = base
     environment["TAILSCALE_BE_CLI"] = "1"
     return environment
