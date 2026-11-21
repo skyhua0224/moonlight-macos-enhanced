@@ -117,7 +117,11 @@ final class OverlayHealthDetector {
     lastTime = s.time
 
     // Frames lost during this tick: the loss share of the window it sits in, times the frames of the tick.
-    let lossShare = Double(min(0.95, max(0, (s.netAvailable ? s.netLossPercent : s.clientDropPercent) / 100)))
+    // A percentage outside 0...100 is a corrupt sample of the interval counters (the underflow arrived as
+    // 42949672.4 and, held at the 0.95 share cap, painted a false ~85 % warning over the 10 s window),
+    // so it counts as no loss rather than near-certain loss.
+    let sampleLossPercent = s.netAvailable ? s.netLossPercent : s.clientDropPercent
+    let lossShare = (sampleLossPercent >= 0 && sampleLossPercent <= 100) ? Double(min(0.95, sampleLossPercent / 100)) : 0
     let received = Double(max(0, s.receivedFps)) * dt
     let total = received / (1 - lossShare)
     let lost = total - received
