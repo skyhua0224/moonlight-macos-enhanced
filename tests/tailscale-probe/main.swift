@@ -98,5 +98,46 @@ do {
   check("the setting key is the one the pane writes", TailscaleDetection.defaultsKey == "autoDetectTailscale")
 }
 
+// 9. One completion per attempt: a late duplicate (the fallback settled first, the exit handler
+//    arrives later) can neither add a second failure nor overwrite the settled result.
+do {
+  let gate = TailscaleProbeGate()
+  _ = gate.begin(now: t0)
+  gate.end(success: false, now: t0)   // the fallback settles the attempt as a failure
+  check("duplicate completion is not accepted", gate.end(success: true, now: t0) == false)
+  check("late duplicate completion does not lift the failure backoff", !gate.begin(now: t0.addingTimeInterval(29)))
+  check("late duplicate completion does not hold the slot", gate.begin(now: t0.addingTimeInterval(60), force: true))
+  check("the next attempt still completes normally", gate.end(success: true, now: t0.addingTimeInterval(60)) == true)
+}
+
+// 10. A probe that finishes after detection was turned off publishes nothing and does not mark the
+//     cache fresh; its own success still counts for the backoff.
+do {
+  let late = TailscaleProbeOutcome(succeeded: true, detectionEnabled: false)
+  check("late success with detection off publishes no relays", !late.publishesAnswer)
+  check("late success with detection off does not mark the cache fresh", !late.marksCacheFresh)
+  check("late success still counts as a successful run", late.countsAsSuccess)
+  let live = TailscaleProbeOutcome(succeeded: true, detectionEnabled: true)
+  check("success with detection on publishes and marks fresh", live.publishesAnswer && live.marksCacheFresh)
+  let failed = TailscaleProbeOutcome(succeeded: false, detectionEnabled: true)
+  check("failure publishes and marks nothing", !failed.publishesAnswer && !failed.marksCacheFresh && !failed.countsAsSuccess)
+}
+
+// 11. Escalation: SIGTERM at the answer deadline, SIGKILL after the grace, last resort only after
+//     the kill grace; nothing but an observed exit releases the slot along the way.
+do {
+  let schedule = TailscaleProbeTimeout.schedule(startedAt: t0)
+  let term = schedule.terminateAt.timeIntervalSince(t0)
+  let kill = schedule.killAt.timeIntervalSince(t0)
+  let last = schedule.lastResortAt.timeIntervalSince(t0)
+  check("escalation order 2 s, 3 s, 3.5 s", term == 2 && kill == 3 && last == 3.5, "\(term) \(kill) \(last)")
+  let gate = TailscaleProbeGate()
+  check("probe starts", gate.begin(now: t0))
+  check("slot still held at the SIGTERM deadline", !gate.begin(now: schedule.terminateAt))
+  check("slot still held at the SIGKILL deadline", !gate.begin(now: schedule.killAt))
+  gate.end(success: false, now: schedule.lastResortAt)   // the exit is observed right after the kill
+  check("the observed exit releases the slot", gate.begin(now: schedule.lastResortAt, force: true))
+}
+
 print(failures == 0 ? "tailscale-probe: all cases passed" : "tailscale-probe: \(failures) case(s) failed")
 exit(failures == 0 ? 0 : 1)

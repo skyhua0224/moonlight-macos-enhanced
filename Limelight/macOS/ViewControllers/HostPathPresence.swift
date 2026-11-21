@@ -54,6 +54,7 @@ public final class HostPathSignals: NSObject {
   private let probeGate = TailscaleProbeGate()
   // All probeGate and probeToken access happens on queue; tailscaleAt, relays and appActive go through lock.
   private var probeToken = 0
+  private var probeSettled = false
   private var forceRetryPending = false
 
   private override init() { super.init() }
@@ -106,7 +107,15 @@ public final class HostPathSignals: NSObject {
     NotificationCenter.default.addObserver(forName: Notification.Name("MoonlightTailscaleDetectionChanged"), object: nil, queue: nil) { [weak self] _ in
       self?.tailscaleDetectionChanged()
     }
-    enqueueTailscaleRefresh(force: false)
+    // Seed the activity flag from the real state (start() can run before or after the app is
+    // frontmost); NSApp is only touched on the main thread. The observers keep the flag current.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.lock.lock()
+      self.appActive = NSApp.isActive
+      self.lock.unlock()
+      self.enqueueTailscaleRefresh(force: false)
+    }
   }
 
   /// Wake, focus, and opening a host page ask for a probe now. Backoff stays in the worker.
@@ -251,6 +260,7 @@ public final class HostPathSignals: NSObject {
       if force { forceRetryPending = true }
       return
     }
+    probeSettled = false
     probeToken += 1
     let token = probeToken
     let environment = ProcessInfo.processInfo.environment
@@ -277,23 +287,36 @@ public final class HostPathSignals: NSObject {
       let parsed = HostPathSignals.parseTailscaleRelays(data)
       self?.queue.async { self?.finishTailscaleProbe(token: token, relays: parsed, success: parsed != nil) }
     }
-    // The same 2 s budget the probe pass has; the queue is never blocked waiting for the tool.
-    queue.asyncAfter(deadline: .now() + 2) { [weak self, weak process] in
+    // The probe slot stays held until the process has really exited: SIGTERM at the answer deadline,
+    // SIGKILL one grace later, and only a lost exit event may settle the attempt without observing
+    // the exit. Every wait is scheduled, never blocking the serial queue.
+    let schedule = TailscaleProbeTimeout.schedule(startedAt: Date())
+    let termDelay = max(0, schedule.terminateAt.timeIntervalSinceNow)
+    let killDelay = schedule.killAt.timeIntervalSince(schedule.terminateAt)
+    let lastDelay = schedule.lastResortAt.timeIntervalSince(schedule.killAt)
+    queue.asyncAfter(deadline: .now() + termDelay) { [weak self, weak process] in
       guard let self, let process, process.isRunning else { return }
       process.terminate()
-      self.queue.asyncAfter(deadline: .now() + 1) { [weak self] in
-        // The gate must not stay held if the tool ignores SIGTERM.
-        guard let self, self.probeToken == token, self.probeGate.inFlight else { return }
-        self.finishTailscaleProbe(token: token, relays: nil, success: false)
+      self.queue.asyncAfter(deadline: .now() + killDelay) { [weak self, weak process] in
+        guard let self, let process, process.isRunning else { return }
+        kill(process.processIdentifier, SIGKILL)
+        self.queue.asyncAfter(deadline: .now() + lastDelay) { [weak self] in
+          // Reached only when the exit event itself was lost; the exit handler settles normally.
+          self?.finishTailscaleProbe(token: token, relays: nil, success: false)
+        }
       }
     }
   }
 
   private func finishTailscaleProbe(token: Int, relays: [String: Bool]?, success: Bool) {
-    guard token == probeToken else { return }
-    probeGate.end(success: success, now: Date())
+    // One completion per attempt: whichever of the exit handler and the last resort arrives first
+    // settles the probe; the other is dropped.
+    guard token == probeToken, !probeSettled else { return }
+    probeSettled = true
+    let outcome = TailscaleProbeOutcome(succeeded: success, detectionEnabled: TailscaleDetection.isEnabled(defaults: .standard))
+    probeGate.end(success: outcome.countsAsSuccess, now: Date())
     lock.lock()
-    if success {
+    if outcome.publishesAnswer {
       if let relays { self.relays = relays }
       tailscaleAt = Date()
     }

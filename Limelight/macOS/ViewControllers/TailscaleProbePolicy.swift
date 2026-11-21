@@ -87,7 +87,12 @@ final class TailscaleProbeGate {
     return true
   }
 
-  func end(success: Bool, now: Date) {
+  /// Completes the probe and reports whether this call was the accepted completion. A second
+  /// completion of the same attempt (the fallback settled first and the termination handler arrives
+  /// later, or the other way round) is ignored: the first result stands.
+  @discardableResult
+  func end(success: Bool, now: Date) -> Bool {
+    guard inFlight else { return false }
     inFlight = false
     if success {
       consecutiveFailures = 0
@@ -96,6 +101,36 @@ final class TailscaleProbeGate {
       consecutiveFailures += 1
       blockedUntil = now.addingTimeInterval(TailscaleProbePolicy.backoff(afterFailures: consecutiveFailures))
     }
+    return true
+  }
+}
+
+/// What one finished probe may still change. A probe that completes after the user turned detection
+/// off must not repopulate the relay map or mark the cache fresh; its own success still counts for
+/// the backoff, because it says the tool answered, not that the user wants the answers.
+struct TailscaleProbeOutcome {
+  let succeeded: Bool
+  let detectionEnabled: Bool
+
+  var publishesAnswer: Bool { succeeded && detectionEnabled }
+  var marksCacheFresh: Bool { publishesAnswer }
+  var countsAsSuccess: Bool { succeeded }
+}
+
+enum TailscaleProbeTimeout {
+  /// The tool gets 2 s to answer, the budget of the whole probe pass.
+  static let answerInterval: TimeInterval = 2
+  /// After SIGTERM, one more second before SIGKILL.
+  static let termGrace: TimeInterval = 1
+  /// After SIGKILL, half a second before the last-resort settle. SIGKILL cannot be ignored, so only
+  /// a lost exit event ever reaches that point; it exists so the probe slot cannot stick forever.
+  static let killGrace: TimeInterval = 0.5
+
+  /// The escalation instants of one probe, measured from its start.
+  static func schedule(startedAt: Date) -> (terminateAt: Date, killAt: Date, lastResortAt: Date) {
+    (startedAt.addingTimeInterval(answerInterval),
+     startedAt.addingTimeInterval(answerInterval + termGrace),
+     startedAt.addingTimeInterval(answerInterval + termGrace + killGrace))
   }
 }
 
