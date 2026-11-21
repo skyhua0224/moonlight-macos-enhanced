@@ -87,6 +87,9 @@
                        appName:(NSString *)appName
             windowController:(NSWindowController *)windowController {
 
+    // the addresses are ranked for the stream now: the Tailscale status query may run for this connect
+    // even when the app is not frontmost (HostPathSignals keeps it to one CLI-only probe at a time)
+    [[MLHostPathSignals shared] noteConnectNeeded];
     StreamingSession *session = self.sessions[hostUUID];
     if (!session) {
         session = [[StreamingSession alloc] init];

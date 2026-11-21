@@ -140,6 +140,7 @@
 				macOS/ViewControllers/ControllerHostToast.swift,
 				macOS/ViewControllers/DeckAddressModel.swift,
 				macOS/ViewControllers/HostPathPresence.swift,
+				macOS/ViewControllers/TailscaleProbePolicy.swift,
 				Network/HostPathRank.c,
 				Network/HostPathRoute.c,
 				macOS/ViewControllers/DeckFirstRun.swift,

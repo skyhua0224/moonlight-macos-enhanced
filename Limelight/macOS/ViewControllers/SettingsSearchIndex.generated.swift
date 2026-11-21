@@ -228,6 +228,7 @@ extension SettingsSearchIndex {
     SettingsSearchEntry(id: "app/Application/Dim Unfocused Artwork", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Dim Unfocused Artwork", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Application/Show Connection Warnings", pane: .app, kind: .row, sectionKey: "Application", titleKey: "Show Connection Warnings", detailKey: nil, keywords: []),
     SettingsSearchEntry(id: "app/Network Compatibility/Automatically Discover New Hosts", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "Automatically Discover New Hosts", detailKey: nil, keywords: []),
+    SettingsSearchEntry(id: "app/Network Compatibility/Automatically Detect Tailscale", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "Automatically Detect Tailscale", detailKey: "Automatically Detect Tailscale detail", keywords: []),
     SettingsSearchEntry(id: "app/Network Compatibility/AWDL Stability Helper", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "AWDL Stability Helper", detailKey: "AWDL Stability Helper detail", keywords: []),
     SettingsSearchEntry(id: "app/Network Compatibility/Input Monitoring", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "Input Monitoring", detailKey: "Input Monitoring purpose", keywords: ["Open Settings"]),
     SettingsSearchEntry(id: "app/Network Compatibility/Microphone", pane: .app, kind: .row, sectionKey: "Network Compatibility", titleKey: "Microphone", detailKey: nil, keywords: ["Open Settings"]),

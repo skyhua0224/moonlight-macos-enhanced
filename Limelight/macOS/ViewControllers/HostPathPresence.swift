@@ -10,6 +10,11 @@ import SystemConfiguration
 /// Neither call waits on the network from the menu: sections(for:) reads the last probe only.
 /// Tailscale's own status command, when it is installed, says whether a 100.64.0.0/10 peer is on a
 /// DERP relay; otherwise HostPathRank infers that from the route and the smoothed RTT.
+/// The status binary is only ever run as a CLI: every candidate (a tailscale on PATH — which can be a
+/// symlink to the app-bundle executable — or the bundle itself) runs with TAILSCALE_BE_CLI=1 (Tailscale CLI reference,
+/// tailscale.com/docs/reference/tailscale-cli, retrieved 2026-11-21: without that variable the bundled
+/// executable opens the macOS app instead of answering). Probes are coalesced to one at a time, back off
+/// 30 s to 10 min after failures, and run only while the app is frontmost unless a connect needs the status.
 ///
 /// Sources: Apple Developer Documentation, NWBrowser, macOS 10.15+ (retrieved 2026-11-10);
 /// NWPathMonitor; NSWorkspace.didWakeNotification (register on NSWorkspace.notificationCenter);
@@ -43,6 +48,14 @@ public final class HostPathSignals: NSObject {
   private var started = false
   private var tailscaleAt = Date.distantPast
   private let queue = DispatchQueue(label: "host-path-presence")
+  private var appActive = false
+  private var tailscaleProbeQueued = false
+  private var tailscaleProbeForced = false
+  private let probeGate = TailscaleProbeGate()
+  // All probeGate and probeToken access happens on queue; tailscaleAt, relays and appActive go through lock.
+  private var probeToken = 0
+  private var probeSettled = false
+  private var forceRetryPending = false
 
   private override init() { super.init() }
 
@@ -75,16 +88,48 @@ public final class HostPathSignals: NSObject {
     workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: nil) { [weak self] _ in
       self?.bump()
     }
+    // The Tailscale status is only queried while the app is frontmost (or when a connect needs it, see
+    // noteConnectNeeded): a probe from the background is what kept bringing the Tailscale app forward.
     NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
-      self?.bump()
+      guard let self else { return }
+      self.lock.lock()
+      self.appActive = true
+      self.lock.unlock()
+      self.bump()
+      self.enqueueTailscaleRefresh(force: false)
     }
-    queue.async { [weak self] in self?.refreshTailscale() }
+    NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: nil) { [weak self] _ in
+      guard let self else { return }
+      self.lock.lock()
+      self.appActive = false
+      self.lock.unlock()
+    }
+    NotificationCenter.default.addObserver(forName: Notification.Name("MoonlightTailscaleDetectionChanged"), object: nil, queue: nil) { [weak self] _ in
+      self?.tailscaleDetectionChanged()
+    }
+    // Seed the activity flag from the real state (start() can run before or after the app is
+    // frontmost); NSApp is only touched on the main thread. The observers keep the flag current.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.lock.lock()
+      self.appActive = NSApp.isActive
+      self.lock.unlock()
+      self.enqueueTailscaleRefresh(force: false)
+    }
   }
 
   /// Wake, focus, and opening a host page ask for a probe now. Backoff stays in the worker.
   @objc public func noteAttention() {
     start()
     bump()
+    enqueueTailscaleRefresh(force: false)
+  }
+
+  /// A connect is about to rank the addresses of a host: the status query may run now even when the app is
+  /// not frontmost. Still one probe at a time, still CLI-only, still subject to the fresh cache.
+  @objc public func noteConnectNeeded() {
+    start()
+    enqueueTailscaleRefresh(force: true)
   }
 
   @objc public func generation() -> Int {
@@ -102,7 +147,7 @@ public final class HostPathSignals: NSObject {
     let known = relays[key]
     lock.unlock()
     if stale {
-      queue.async { [weak self] in self?.refreshTailscale() }
+      enqueueTailscaleRefresh(force: false)
     }
     if let known { return known ? 1 : 0 }
     return -1
@@ -181,44 +226,125 @@ public final class HostPathSignals: NSObject {
     lock.unlock()
   }
 
-  private func refreshTailscale() {
-    let urls = [
-      URL(fileURLWithPath: "/Applications/Tailscale.app/Contents/MacOS/Tailscale"),
-      URL(fileURLWithPath: "/usr/local/bin/tailscale"),
-      URL(fileURLWithPath: "/opt/homebrew/bin/tailscale"),
-    ]
-    guard let url = urls.first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) else {
-      lock.lock()
-      tailscaleAt = Date()
-      lock.unlock()
+  /// Many callers can ask for a refresh in one burst (a probe pass asks per address); they collapse into
+  /// one queued request, and a forced request upgrades the pending one.
+  private func enqueueTailscaleRefresh(force: Bool) {
+    lock.lock()
+    let needQueue = !tailscaleProbeQueued
+    tailscaleProbeQueued = true
+    tailscaleProbeForced = tailscaleProbeForced || force
+    lock.unlock()
+    guard needQueue else { return }
+    queue.async { [weak self] in
+      guard let self else { return }
+      self.lock.lock()
+      self.tailscaleProbeQueued = false
+      let force = self.tailscaleProbeForced
+      self.tailscaleProbeForced = false
+      self.lock.unlock()
+      self.runTailscaleProbe(force: force)
+    }
+  }
+
+  private func runTailscaleProbe(force: Bool) {
+    guard TailscaleDetection.isEnabled(defaults: .standard) else { return }
+    lock.lock()
+    let active = appActive
+    let last = tailscaleAt
+    lock.unlock()
+    // Re-check the cache before running: the requests that piled up behind the first one find it fresh.
+    if Date().timeIntervalSince(last) <= TailscaleProbePolicy.freshInterval { return }
+    if !force, !active { return }
+    guard probeGate.begin(now: Date(), force: force) else {
+      // A forced request that arrived while a probe was running is retried the moment that one ends.
+      if force { forceRetryPending = true }
+      return
+    }
+    probeSettled = false
+    probeToken += 1
+    let token = probeToken
+    let environment = ProcessInfo.processInfo.environment
+    guard let cli = TailscaleCLI.select(environment: environment, isExecutable: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+      // Nothing to query: not a failure, just nothing new to learn until the cache goes stale again.
+      finishTailscaleProbe(token: token, relays: nil, success: true)
       return
     }
     let process = Process()
-    process.executableURL = url
-    process.arguments = ["status", "--json"]
+    process.executableURL = URL(fileURLWithPath: cli.path)
+    process.arguments = TailscaleCLI.statusArguments
+    process.environment = TailscaleCLI.environment(for: cli, base: environment)
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = Pipe()
     do {
       try process.run()
     } catch {
+      finishTailscaleProbe(token: token, relays: nil, success: false)
       return
     }
-    let started = Date()
-    while process.isRunning && Date().timeIntervalSince(started) < 2 {
-      Thread.sleep(forTimeInterval: 0.05)
+    process.terminationHandler = { [weak self] _ in
+      let data = pipe.fileHandleForReading.readDataToEndOfFile()
+      let parsed = HostPathSignals.parseTailscaleRelays(data)
+      self?.queue.async { self?.finishTailscaleProbe(token: token, relays: parsed, success: parsed != nil) }
     }
-    if process.isRunning {
+    // The probe slot stays held until the process has really exited: SIGTERM at the answer deadline,
+    // SIGKILL one grace later, and only a lost exit event may settle the attempt without observing
+    // the exit. Every wait is scheduled, never blocking the serial queue.
+    let schedule = TailscaleProbeTimeout.schedule(startedAt: Date())
+    let termDelay = max(0, schedule.terminateAt.timeIntervalSinceNow)
+    let killDelay = schedule.killAt.timeIntervalSince(schedule.terminateAt)
+    let lastDelay = schedule.lastResortAt.timeIntervalSince(schedule.killAt)
+    queue.asyncAfter(deadline: .now() + termDelay) { [weak self, weak process] in
+      guard let self, let process, process.isRunning else { return }
       process.terminate()
+      self.queue.asyncAfter(deadline: .now() + killDelay) { [weak self, weak process] in
+        guard let self, let process, process.isRunning else { return }
+        kill(process.processIdentifier, SIGKILL)
+        self.queue.asyncAfter(deadline: .now() + lastDelay) { [weak self] in
+          // Reached only when the exit event itself was lost; the exit handler settles normally.
+          self?.finishTailscaleProbe(token: token, relays: nil, success: false)
+        }
+      }
     }
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let peers = object["Peer"] as? [String: [String: Any]] else {
+  }
+
+  private func finishTailscaleProbe(token: Int, relays: [String: Bool]?, success: Bool) {
+    // One completion per attempt: whichever of the exit handler and the last resort arrives first
+    // settles the probe; the other is dropped.
+    guard token == probeToken, !probeSettled else { return }
+    probeSettled = true
+    let outcome = TailscaleProbeOutcome(succeeded: success, detectionEnabled: TailscaleDetection.isEnabled(defaults: .standard))
+    probeGate.end(success: outcome.countsAsSuccess, now: Date())
+    lock.lock()
+    if outcome.publishesAnswer {
+      if let relays { self.relays = relays }
+      tailscaleAt = Date()
+    }
+    lock.unlock()
+    if forceRetryPending {
+      forceRetryPending = false
+      enqueueTailscaleRefresh(force: true)
+    }
+  }
+
+  private func tailscaleDetectionChanged() {
+    if TailscaleDetection.isEnabled(defaults: .standard) {
       lock.lock()
+      tailscaleAt = .distantPast
+      lock.unlock()
+      enqueueTailscaleRefresh(force: false)
+    } else {
+      // Off means no query at all; manually saved Tailscale addresses keep connecting as usual.
+      lock.lock()
+      relays = [:]
       tailscaleAt = Date()
       lock.unlock()
-      return
     }
+  }
+
+  private static func parseTailscaleRelays(_ data: Data) -> [String: Bool]? {
+    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let peers = object["Peer"] as? [String: [String: Any]] else { return nil }
     var next: [String: Bool] = [:]
     for peer in peers.values {
       let relay = (peer["Relay"] as? String) ?? ""
@@ -227,10 +353,7 @@ public final class HostPathSignals: NSObject {
         next[ip] = !relay.isEmpty
       }
     }
-    lock.lock()
-    relays = next
-    tailscaleAt = Date()
-    lock.unlock()
+    return next
   }
 
   static func hostPart(_ address: String) -> String {

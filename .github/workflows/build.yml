@@ -101,6 +101,10 @@ jobs:
       if: matrix.variant == 'arm64'
       run: sh tests/disconnect-confirmation/run.sh
 
+    - name: Tailscale probe coalescing and CLI mode tests
+      if: matrix.variant == 'arm64'
+      run: sh tests/tailscale-probe/run.sh
+
     # The two Localizable.strings files are the only text source; a description key must not show up as its own
     # English text; every log title the viewer builds has an entry.
     - name: Localization checks
