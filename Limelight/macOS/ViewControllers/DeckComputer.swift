@@ -1091,7 +1091,28 @@ struct DeckComputerBody: View {
             }
           }
           if let app = model.libraryApps.first { dump("app menu: \(app.name ?? "")", model.actions.appMenu?(app)) }
+          if let app = model.runningGame { dump("running app menu: \(app.name ?? "")", model.actions.appMenu?(app)) }
           if let host = model.host { dump("more menu", DeckMoreMenu.menu(host, model)) }
+        }
+      }
+    }
+    .onAppear {
+      // harness: open the running app's right-click menu so a picture of the screen shows it
+      if conceptEnv("MLC_POPAPPMENU") != nil {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
+          guard let app = model.runningGame, let menu = model.actions.appMenu?(app) else { return }
+          // the menu runs its own tracking loop: a timer in the common modes takes the picture while it is open
+          let shot = Timer(timeInterval: 1.5, repeats: false) { _ in
+            let out = conceptEnv("MLC_MENUOUT") ?? "/tmp/apps-concept/out/menu.png"
+            _ = (NSClassFromString("ConceptHarness") as AnyObject).perform(NSSelectorFromString("padShot:"), with: out)
+            exit(0)
+          }
+          RunLoop.main.add(shot, forMode: .common)
+          if let content = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })?.contentView {
+            menu.popUp(positioning: nil, at: NSPoint(x: 560, y: content.bounds.height - 330), in: content)
+          } else {
+            DeckMenuPresenter.pop(menu)
+          }
         }
       }
     }
