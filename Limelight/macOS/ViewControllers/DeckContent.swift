@@ -671,6 +671,7 @@ struct DeckBigScreenTile: View {
     .contentShape(Rectangle())
     .onTapGesture(count: 2) { model.openApp(app) }
     .deckPadTarget(app, model, radius: 14 * s)
+    .deckAppContextMenu(app, model)
   }
 }
 

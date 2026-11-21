@@ -183,6 +183,7 @@ struct DeckBigScreenCard: View {
     .contentShape(Rectangle())
     .onTapGesture(count: 2) { model.openApp(app) }
     .deckPadTarget(app, model, radius: radius * s)
+    .deckAppContextMenu(app, model)
   }
 }
 

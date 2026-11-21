@@ -2563,6 +2563,10 @@ static const CGFloat runningAnimationDuration = 1.0;
 
     // titles, images, quit visibility, Sunshine overrides and SuperCmds: the old code, unchanged
     [self didOpenContextMenu:menu forApp:app];
+    // 退出应用 sits right under 隐藏, not below the Sunshine overrides: with display and virtual-display
+    // submenus it was the last row and went unnoticed.
+    [menu removeItem:quit];
+    [menu insertItem:quit atIndex:[menu indexOfItem:hide] + 1];
     for (NSMenuItem *item in menu.itemArray) {
         item.enabled = item.enabled || item.submenu != nil;
     }
