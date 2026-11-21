@@ -232,6 +232,8 @@
 "Native Renderer (Recommended)" = "Native Renderer (Recommended)";
 "Default Profile" = "Default Profile";
 "Automatically Discover New Hosts" = "Automatically Discover New Hosts";
+"Automatically Detect Tailscale" = "Automatically Detect Tailscale";
+"Automatically Detect Tailscale detail" = "Marks relayed routes by querying the local tailscale command in CLI mode. Turn off to skip the query; manually added Tailscale addresses still work.";
 "Toggle Sidebar" = "Toggle Sidebar";
 "Offline" = "Offline";
 "Settings" = "Settings";

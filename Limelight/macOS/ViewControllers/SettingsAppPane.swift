@@ -8,6 +8,7 @@ struct AppView: View {
   @SwiftUI.State private var showLiveLogViewer = false
   @AppStorage("theme") private var appearance = 0
   @AppStorage("autoDiscoverNewHosts") private var autoDiscoverNewHosts = true
+  @AppStorage(TailscaleDetection.defaultsKey) private var autoDetectTailscale = true
   @SwiftUI.State private var classicHome = UserDefaults.standard.string(forKey: "MLConceptVariant") == "classic"
 
   var body: some View {
@@ -82,6 +83,14 @@ struct AppView: View {
             guard value != autoDiscoverNewHosts else { return }
             autoDiscoverNewHosts = value
             NotificationCenter.default.post(name: Notification.Name("MoonlightDiscoveryPreferencesChanged"), object: nil)
+          }
+        ))
+        ToggleCell(title: "Automatically Detect Tailscale", hintKey: "Automatically Detect Tailscale detail", boolBinding: Binding(
+          get: { autoDetectTailscale },
+          set: { value in
+            guard value != autoDetectTailscale else { return }
+            autoDetectTailscale = value
+            NotificationCenter.default.post(name: Notification.Name("MoonlightTailscaleDetectionChanged"), object: nil)
           }
         ))
         ToggleCell(title: "AWDL Stability Helper", hintKey: "AWDL Stability Helper detail", boolBinding: $settingsModel.awdlStabilityHelperEnabled)

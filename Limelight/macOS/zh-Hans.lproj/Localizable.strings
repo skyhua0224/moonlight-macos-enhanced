@@ -231,6 +231,8 @@
 "Native Renderer (Recommended)" = "原生渲染器（推荐）";
 "Default Profile" = "默认配置";
 "Automatically Discover New Hosts" = "自动发现新主机";
+"Automatically Detect Tailscale" = "自动探测 Tailscale";
+"Automatically Detect Tailscale detail" = "以命令行模式查询本机 tailscale 并标注中继线路；关闭后不再查询，手动添加的 Tailscale 地址仍可正常使用。";
 "Toggle Sidebar" = "折叠侧栏";
 "Offline" = "离线";
 "Settings" = "设置";
