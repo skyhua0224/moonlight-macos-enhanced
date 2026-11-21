@@ -59,7 +59,26 @@ do {
   check("loss burst: shown percent is the 10 s figure (5..20), not the raw 20", shownPercent >= 5 && shownPercent < 20, "\(shownPercent)")
 }
 
-// 4. Client stalls: two in 10 s are nothing, three are a warning that stays for the hold.
+// 4. A corrupt interval sample (the wrapped 42949672.4 %) is not near-certain loss: before it was
+//    rejected it filled six ticks with the 0.95 loss-share cap and the 10 s window showed a false
+//    ~85 % (114 of 134 frames) network-loss warning while nothing was lost.
+do {
+  let d = OverlayHealthDetector()
+  var anyNetLoss = false
+  var worstLevel = OverlayHealthLevel.normal
+  var shownPercent: Float = 0
+  for i in 0..<120 {
+    let t = Double(i) * 0.5
+    let s = d.ingest(sample(t, rx: 60, netLoss: (i >= 20 && i < 26) ? 42949672.4 : 0))
+    if s.warnings.contains(where: { if case .netLoss = $0 { return true } else { return false } }) { anyNetLoss = true }
+    worstLevel = max(worstLevel, s.level)
+    shownPercent = max(shownPercent, s.lossPercent)
+  }
+  check("a wrapped 42949672.4 % sample raises no network-loss warning", !anyNetLoss)
+  check("a wrapped sample leaves the status normal and the shown percent at 0", worstLevel == .normal && shownPercent == 0, "level=\(worstLevel) percent=\(shownPercent)")
+}
+
+// 5. Client stalls: two in 10 s are nothing, three are a warning that stays for the hold.
 do {
   let d = OverlayHealthDetector()
   var warnedAt: [Double] = []
@@ -76,7 +95,7 @@ do {
   check("the stall warning is gone once the stalls leave the window", (warnedAt.last ?? 99) <= 19 + 10, "\(warnedAt.last ?? -1)")
 }
 
-// 5. The counter of the renderer starts again with a new stream: no negative or huge difference.
+// 6. The counter of the renderer starts again with a new stream: no negative or huge difference.
 do {
   let d = OverlayHealthDetector()
   _ = d.ingest(sample(0, stalls: 50))
@@ -84,7 +103,7 @@ do {
   check("stall counter restarting at 0 is not a burst of stalls", s.recentStalls == 0, "\(s.recentStalls)")
 }
 
-// 6. 1% low is judged against the stream's own rate, and only when something else was seen.
+// 7. 1% low is judged against the stream's own rate, and only when something else was seen.
 do {
   let d = OverlayHealthDetector()
   var any = false
@@ -103,7 +122,7 @@ do {
         OverlayHealth.onePercentLowLevel(low: 54, baseline: 0, configured: 144) != .normal)
 }
 
-// 7. fps colour: what the client rendered of what it received.
+// 8. fps colour: what the client rendered of what it received.
 do {
   check("fps 60 rendered of 60 received on a 144 stream: normal", OverlayHealth.fpsLevel(rendered: 60, received: 60) == .normal)
   check("fps 10 of 10 on a quiet screen: normal", OverlayHealth.fpsLevel(rendered: 10, received: 10) == .normal)
@@ -111,7 +130,7 @@ do {
   check("rendered 30 of 60 received: red", OverlayHealth.fpsLevel(rendered: 30, received: 60) == .bad)
 }
 
-// 8. no data / frozen / poor stay, from 3 s on, and make the status bad.
+// 9. no data / frozen / poor stay, from 3 s on, and make the status bad.
 do {
   let d = OverlayHealthDetector()
   check("no payload for 2 s: not yet", d.ingest(sample(0, noPayload: 2)).warnings.isEmpty)
@@ -121,7 +140,7 @@ do {
   check("poor connection: warning, status bad", p.warnings == [.poor] && p.level == .bad)
 }
 
-// 9. A real stream (506 [perf] lines): the old rules against the new ones.
+// 10. A real stream (506 [perf] lines): the old rules against the new ones.
 do {
   struct Row { var session: Int; var t: Double; var cfg: Float; var rx: Float; var rd: Float; var low1: Float; var stalls: Int; var netLoss: Float }
   var rows: [Row] = []

@@ -2055,7 +2055,13 @@ static NSString *MLDynamicHdrFallbackDisplayName(int fallback) {
     MLNetworkStatsSnapshot net = {0};
     if ([self.streamMan.connection getNetworkStatsSnapshot:&net]) {
         om.netAvailable = YES;
-        om.netLossPercent = net.networkFrameLossPercent;
+        // A loss percentage outside 0...100 is a corrupt sample of the interval
+        // counters (the underflow arrived here as 42949672.40), not real loss.
+        double netLossPercent = net.networkFrameLossPercent;
+        if (!(netLossPercent >= 0.0 && netLossPercent <= 100.0)) {
+            netLossPercent = 0.0;
+        }
+        om.netLossPercent = (float)netLossPercent;
         om.fecRecovered = net.fecRecovered;
         om.fecFailed = net.fecFailed;
         om.fecFeedbackActive = net.fecFeedbackActive;
