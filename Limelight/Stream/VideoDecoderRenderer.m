@@ -12,6 +12,7 @@
 #include "DolbyVisionConfiguration.h"
 #include <stdatomic.h>
 #import "RendererLayerContainer.h"
+#import "MLSDRColorSpace.h"
 #import "MLFpsMeter.h"
 #import "MLAV1SoftwareDecoder.h"
 
@@ -828,15 +829,16 @@ static CGColorSpaceRef MLCreateTransferColorSpace(MLHDRTransferMode mode)
             return CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
         case MLHDRTransferModeSDR:
         default:
-            return CGColorSpaceCreateWithName(kCGColorSpaceITUR_709);
+            // The host's SDR desktop is sRGB-encoded; see MLSDRColorSpace.h.
+            return MLCreateSDRStreamColorSpace();
     }
 }
 
 // Colorspace the SDR Metal drawable is tagged with. The native renderer tags
-// its pixel buffers as Rec.709 (see prepareNativePresentationResources), so
-// ColorSync maps both renderers' SDR output through the same transform. An
-// untagged layer skips colour matching and shows the Rec.709-encoded values
-// through the display's own curve, which renders darker midtones.
+// its pixel buffers with the same space (see prepareNativePresentationResources),
+// so ColorSync maps both renderers' SDR output through the same transform.
+// An untagged layer skips colour matching and shows the code values through
+// the display's own curve instead.
 static CGColorSpaceRef MLSDRPresentationColorSpace(void)
 {
     static CGColorSpaceRef colorSpace = NULL;
