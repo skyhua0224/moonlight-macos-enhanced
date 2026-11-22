@@ -91,6 +91,10 @@ jobs:
         sh tests/rtsp-announce-size/run.sh
         sh tests/fps-meter/run.sh
 
+    # The colour space SDR streams are shown in must be sRGB (the host desktop is sRGB-encoded), not BT.709.
+    - name: SDR presentation colour-space test
+      run: sh tests/sdr-colorspace/run.sh
+
     - name: Keyboard routing and repeat tests
       if: matrix.variant == 'arm64'
       run: |
