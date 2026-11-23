@@ -15,12 +15,11 @@
 
 简体中文 | [English](README.en.md)
 
-
 </div>
 
 **目录**：[当前版本](#当前版本) · [快速开始](#快速开始) · [功能概览](#功能概览) · [截图](#截图) · [主机端兼容性](#主机端兼容性) · [安装](#安装) · [视频与 HDR](#视频与-hdr) · [音频](#音频) · [键盘、鼠标与触控板](#键盘鼠标与触控板) · [手柄](#手柄) · [控制中心](#串流中的控制中心) · [Foundation Sunshine 协作](#foundation-sunshine-协作) · [连接与诊断](#连接与诊断) · [更新](#更新) · [从源码构建](#从源码构建) · [问题反馈](#问题反馈)
 
-## 当前版本
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-release-dark.webp"><img src="readme-assets/headings/h-release.webp" width="34" height="34" alt=""></picture>&nbsp;当前版本
 
 **1.3.9 RC8** 的变更见 [1.3.9 RC8 更新说明](.github/release-notes/v1.3.9-rc.8.md)。主界面重新设计，可个性化调节界面各处细节，提供卡片/大图两种视图，全新支持横版海报；新增性能浮窗；全面支持用手柄操作主页与设置。已发布的安装包仍以 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 为准。1.3.9 是原生架构重建前最后一个版本。
 
@@ -39,111 +38,113 @@
 - **配合 Foundation Sunshine**：显示器与虚拟显示器配置，串流中不重连调整码率、帧率和分辨率，自由窗口（主机分辨率跟随串流窗口），自适应码率，主机显示缩放与主机命令。
 - **其他**：性能浮窗、性能报告导出、应用内更新和中英文日志查看器。
 
-## 快速开始
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-quick-dark.webp"><img src="readme-assets/headings/h-quick.webp" width="34" height="34" alt=""></picture>&nbsp;快速开始
 
 1. 在要串流的电脑上安装并运行 [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) 或 [Sunshine](https://github.com/LizardByte/Sunshine)。
 2. 在 Mac 上安装本应用并打开。首次启动时允许“本地网络”权限，同一局域网内的主机会自动出现；也可以手动添加主机地址。
 3. 点击主机开始配对：应用会显示一个 PIN，在主机的 Sunshine 网页界面中输入它。
 4. 配对完成后选择一个应用开始串流。按 `Ctrl` + `Option` 释放鼠标；全屏时按 `Ctrl` + `Option` + `C` 打开控制中心。
 
-## 功能概览
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-features-dark.webp"><img src="readme-assets/headings/h-features.webp" width="34" height="34" alt=""></picture>&nbsp;功能概览
 
-| 方面 | 内容 |
-| --- | --- |
-| 视频 | AV1（无硬件解码时用软件解码）/ HEVC / H.264，自定义分辨率与帧率，YUV 4:4:4，10-bit SDR；原生、Metal、兼容三种渲染器；VT 超分、MetalFX 与插帧 |
-| HDR | HDR10（PQ / HLG）；Dolby Vision 8.1 / 8.4 与 HDR10+ 的协商和回退；主机中途开关 HDR 时画面随之切换 |
-| 音频 | Opus 立体声、5.1、7.1、7.1.4；无损 PCM、AC3、E-AC3；杜比直通到 HDMI 设备；独立的输出设备；音效增强、参数均衡器与耳机校正预设、双耳环绕声；麦克风 |
-| 键盘、鼠标、触控板 | 锁定鼠标与自由鼠标；CoreHID 高回报率鼠标；精确式触控板；macOS 输入法输入文字；按位置或按字符的按键映射；快捷键翻译；Windows 键位顺序；捕获系统快捷键；键入剪贴板文本 |
-| 手柄 | 多手柄、震动、动作输入、手柄鼠标；DualSense 触控板、灯光、电量与触觉反馈；用手柄操作应用界面 |
-| 串流控制 | 串流中的控制中心；不重连调整码率、帧率和分辨率；自由窗口；自适应码率；视频 FEC 偏好 |
-| 主机协作 | 双向剪贴板、显示器与虚拟显示器配置、主机显示缩放、主机命令、休眠主机、USB 映射、主机文件 |
-| 设置 | 设置搜索；配置方案：与默认配置对照、复制设置、预设、导入与导出 |
-| 诊断与更新 | 性能浮窗、性能报告导出、中英文日志查看器、应用内更新 |
+- **视频**：AV1（无硬件解码时用软件解码）/ HEVC / H.264，自定义分辨率与帧率，YUV 4:4:4，10-bit SDR；原生、Metal、兼容三种渲染器；VT 超分、MetalFX 与插帧
+- **HDR**：HDR10（PQ / HLG）；Dolby Vision 8.1 / 8.4 与 HDR10+ 的协商和回退；主机中途开关 HDR 时画面随之切换
+- **音频**：Opus 立体声、5.1、7.1、7.1.4；无损 PCM、AC3、E-AC3；杜比直通到 HDMI 设备；独立的输出设备；音效增强、参数均衡器与耳机校正预设、双耳环绕声；麦克风
+- **键盘、鼠标、触控板**：锁定鼠标与自由鼠标；CoreHID 高回报率鼠标；精确式触控板；macOS 输入法输入文字；按位置或按字符的按键映射；快捷键翻译；Windows 键位顺序；捕获系统快捷键；键入剪贴板文本
+- **手柄**：多手柄、震动、动作输入、手柄鼠标；DualSense 触控板、灯光、电量与触觉反馈；用手柄操作应用界面
+- **串流控制**：串流中的控制中心；不重连调整码率、帧率和分辨率；自由窗口；自适应码率；视频 FEC 偏好
+- **主机协作**：双向剪贴板、显示器与虚拟显示器配置、主机显示缩放、主机命令、休眠主机、USB 映射、主机文件
+- **设置**：设置搜索；配置方案：与默认配置对照、复制设置、预设、导入与导出
+- **诊断与更新**：性能浮窗、性能报告导出、中英文日志查看器、应用内更新
 
 其中一部分需要 Foundation Sunshine，见下一节。
 
-## 截图
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-shots-dark.webp"><img src="readme-assets/headings/h-shots.webp" width="34" height="34" alt=""></picture>&nbsp;截图
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/home-dark.png"><img src="readme-assets/images/home.png" width="760" alt="主界面"></picture><br><sub>主界面</sub></p>
+
+<div align="center">
 
 <table>
 <tr>
-<td width="50%" valign="top">
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/home-card-dark.png">
-  <img src="readme-assets/images/home-card.png" width="370" alt="卡片视图">
-</picture>
-
-<b>卡片视图</b>
-
-</td>
-<td width="50%" valign="top">
-
+<td width="50%" align="center" valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/home-portrait-dark.png">
   <img src="readme-assets/images/home-portrait.png" width="370" alt="大图视图">
-</picture>
-
-<b>大图视图</b>
-
+</picture><br>
+<sub>大图视图</sub>
+</td>
+<td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/search-dark.png">
+  <img src="readme-assets/images/search.png" width="370" alt="设置搜索">
+</picture><br>
+<sub>设置搜索</sub>
 </td>
 </tr>
 <tr>
-<td width="50%" valign="top">
-
+<td width="50%" align="center" valign="top">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/search-dark.png">
-  <img src="readme-assets/images/search.png" width="370" alt="搜索">
-</picture>
-
-<b>搜索</b>
-
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-video-dark.png">
+  <img src="readme-assets/images/settings-video.png" width="370" alt="视频与 HDR">
+</picture><br>
+<sub>视频与 HDR</sub>
 </td>
-<td width="50%" valign="top">
-
+<td width="50%" align="center" valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-audio-dark.png">
   <img src="readme-assets/images/settings-audio.png" width="370" alt="音频与麦克风">
-</picture>
-
-<b>音频与麦克风</b>
-
+</picture><br>
+<sub>音频与麦克风</sub>
 </td>
 </tr>
 <tr>
-<td width="50%" valign="top">
-
+<td width="50%" align="center" valign="top">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/control-center-dark.png">
-  <img src="readme-assets/images/control-center.png" width="370" alt="串流中的控制中心">
-</picture>
-
-<b>串流中的控制中心</b>
-
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-keyboard-mouse-dark.png">
+  <img src="readme-assets/images/settings-keyboard-mouse.png" width="370" alt="键盘与鼠标">
+</picture><br>
+<sub>键盘与鼠标</sub>
 </td>
-<td width="50%" valign="top">
-
+<td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-controller-dark.png">
+  <img src="readme-assets/images/settings-controller.png" width="370" alt="手柄">
+</picture><br>
+<sub>手柄</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center" valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/hud-chartHUD-dark.png">
   <img src="readme-assets/images/hud-chartHUD.png" width="370" alt="性能浮窗">
-</picture>
-
-<b>性能浮窗</b>
-
+</picture><br>
+<sub>性能浮窗</sub>
+</td>
+<td width="50%" align="center" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/control-center-dark.png">
+  <img src="readme-assets/images/control-center.png" width="370" alt="串流中的控制中心">
+</picture><br>
+<sub>串流中的控制中心</sub>
 </td>
 </tr>
 </table>
+
+</div>
 
 [更多截图 →](SCREENSHOT.md)
 
 截图里的电脑名和地址是示例，游戏封面归其版权方所有。
 
-## 主机端兼容性
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-hosts-dark.webp"><img src="readme-assets/headings/h-hosts.webp" width="34" height="34" alt=""></picture>&nbsp;主机端兼容性
 
-| 主机软件 | 兼容性 | 备注 |
-|----------|--------|------|
-| [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) | ⭐ 推荐 | 可使用本客户端的全部功能；具体能力取决于主机版本和配置 |
-| [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) | ✅ 支持 | 视频、Opus 音频、键鼠和手柄可用；下列增强功能不可用 |
-| GeForce Experience | ⚠️ 基础支持 | 已停止维护，仅基础串流 |
+- [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine)（⭐ 推荐）：可使用本客户端的全部功能；具体能力取决于主机版本和配置
+- [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine)（✅ 支持）：视频、Opus 音频、键鼠和手柄可用；下列增强功能不可用
+- GeForce Experience（⚠️ 基础支持）：已停止维护，仅基础串流
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-needs-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-needs-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-needs-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-needs-d.webp" width="224" alt="需要 Foundation Sunshine"></picture></p>
 
 以下功能需要 Foundation Sunshine，并且主机端启用了对应能力：
 
@@ -153,7 +154,7 @@
 - DualSense 的触控板、灯光与触觉反馈，精确式触控板
 - 主机命令、休眠主机、USB 映射、主机文件
 
-## 安装
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-install-dark.webp"><img src="readme-assets/headings/h-install.webp" width="34" height="34" alt=""></picture>&nbsp;安装
 
 系统要求：macOS 12 或更高版本，Apple Silicon 或 Intel Mac；主机端运行 Sunshine 或 Foundation Sunshine。
 
@@ -167,19 +168,22 @@
 > 3. 若仍被拦截，执行：
 >    `xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app`
 
-## 视频与 HDR
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-video-dark.webp"><img src="readme-assets/headings/h-video.webp" width="34" height="34" alt=""></picture>&nbsp;视频与 HDR
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-video-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-video-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-video-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-video-d.webp" width="596" alt="HDR10+ · Dolby Vision · AV1 · 10-bit SDR · VT / MetalFX"></picture></p>
 
 ### 渲染器
 
 在 `设置 → 视频` 选择渲染器：
 
-| 渲染器 | 适用场景 |
-| --- | --- |
-| 原生渲染器（默认） | VideoToolbox 解码后由系统直接呈现，延迟低，色彩与 HDR 由系统处理 |
-| Metal 渲染器 | 需要手动调节 HDR 与色彩时使用：传输函数、元数据来源、显示器亮度参数、EDR 与色调映射策略，以及显示同步和帧队列等呈现时序 |
-| 兼容渲染器 | 保留的旧链路，用于旧系统或排查问题 |
+- **原生渲染器（默认）**：VideoToolbox 解码后由系统直接呈现，延迟低，色彩与 HDR 由系统处理
+- **Metal 渲染器**：需要手动调节 HDR 与色彩时使用：传输函数、元数据来源、显示器亮度参数、EDR 与色调映射策略，以及显示同步和帧队列等呈现时序
+- **兼容渲染器**：保留的旧链路，用于旧系统或排查问题
 
 只适用于某个渲染器的设置项只在选中它时显示。画质增强可使用 `VT 低延迟超分`、`VT 高质量超分`、`MetalFX`、`基础缩放` 和 `VT 低延迟插帧`，不可用时自动回退。
+
+<details>
+<summary><b>详细说明</b></summary>
 
 ### HDR 与色彩
 
@@ -188,15 +192,20 @@
 - Dolby Vision 8.1 / 8.4 与 HDR10+ 提供能力探测、协商与安全回退，最终输出取决于系统、硬件和显示链路。macOS 的公共接口不能保证完整保留 HDR10+ 动态元数据，此时使用基础 HDR 输出。
 - 开启 HDR 且未手动填写亮度参数时，客户端按当前屏幕自动上报亮度；主机在串流中开关 HDR，画面会随之切换。
 
-## 音频
+</details>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-audio-dark.webp"><img src="readme-assets/headings/h-audio.webp" width="34" height="34" alt=""></picture>&nbsp;音频
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-audio-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-audio-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-audio-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-audio-d.webp" width="418" alt="PCM · AC3 · E-AC3 · 参数均衡器 · 双耳环绕声 · 需要 Foundation Sunshine"></picture></p>
 
 在 `设置 → 音频与麦克风` 选择声道布局和音频编码：
 
-| 音频编码 | 说明 |
-| --- | --- |
-| Opus（默认） | 支持立体声、5.1、7.1 与 7.1.4，占用带宽最小，所有主机可用 |
-| 无损 (PCM) | 不经压缩，最多 5.1 声道；占用带宽明显更高，建议在有线局域网使用 |
-| AC3 / E-AC3 | 最多 5.1 声道；可直通给能接收杜比码流的 HDMI 功放或电视，也可在本机解码 |
+- **Opus（默认）**：支持立体声、5.1、7.1 与 7.1.4，占用带宽最小，所有主机可用
+- **无损 (PCM)**：不经压缩，最多 5.1 声道；占用带宽明显更高，建议在有线局域网使用
+- **AC3 / E-AC3**：最多 5.1 声道；可直通给能接收杜比码流的 HDMI 功放或电视，也可在本机解码
+
+<details>
+<summary><b>详细说明</b></summary>
 
 - `杜比输出` 决定 AC3 / E-AC3 是直通给输出设备还是在本机解码。直通期间该设备由串流独占，音量在设备上调节；直通失败或更换设备时自动改为本机解码。
 - 音频编码与声道布局冲突（例如 PCM 配 7.1）时，设置页会让你选择保留哪一个。主机不支持所选编码时回退到 Opus 并提示。
@@ -206,7 +215,9 @@
 - `静音时保持音频流` 让主机在无声时继续发送静音，避免安静一段时间后第一声被截断。
 - 串流中可在控制中心切换音频输出设备和调节音量。
 
-## 键盘、鼠标与触控板
+</details>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-input-dark.webp"><img src="readme-assets/headings/h-input.webp" width="34" height="34" alt=""></picture>&nbsp;键盘、鼠标与触控板
 
 ### 鼠标
 
@@ -215,15 +226,16 @@
 - 鼠标驱动默认为自动，按 `CoreHID → HID → MFI` 的顺序选择。`CoreHID` 提供高回报率的相对移动，可设置回报率上限。
 - 支持本地光标、指针速度、左右键交换和反转滚动。滚轮按 `物理滚轮`、`改写 / 平滑滚轮`、`触控板` 三种来源分别设置。
 
+<details>
+<summary><b>详细说明</b></summary>
+
 ### 触控板
 
 `精确式触控板` 把 Mac 触控板上的手指触点直接交给 Windows，由 Windows 处理手势与滚动：
 
-| 选项 | 行为 |
-| --- | --- |
-| 关闭 | 触控板作为鼠标使用 |
-| 开启 – 屏蔽 macOS 触控板指针事件 | 指针完全由 Windows 控制。本机指针位置不再同步，全屏悬浮球和移到其他显示器会受影响 |
-| 开启 – 同时使用 | 单指移动仍走 Mac 的指针路径，多指手势交给 Windows |
+- **关闭**：触控板作为鼠标使用
+- **开启 – 屏蔽 macOS 触控板指针事件**：指针完全由 Windows 控制。本机指针位置不再同步，全屏悬浮球和移到其他显示器会受影响
+- **开启 – 同时使用**：单指移动仍走 Mac 的指针路径，多指手势交给 Windows
 
 授予辅助功能权限后，串流期间会屏蔽 macOS 的系统手势（如调度中心），避免与 Windows 手势冲突。
 
@@ -233,46 +245,51 @@
 - `使用 macOS 输入法输入文字`：拼音等输入法在本机完成组字，确认后的文字发送到主机；普通按键和快捷键仍作为按键发送。
 - 支持常用 Windows 快捷键翻译和自定义翻译规则；单独按 Command 可作为 Windows 键。
 
+</details>
+
 ### 串流快捷键
 
 以下快捷键可在 `设置 → 键盘与鼠标` 中调整：
 
-| 快捷键 | 功能 | 说明 |
-|--------|------|------|
-| `Ctrl` + `Option` | 释放鼠标捕获 | 串流窗口中 |
-| `Ctrl` + `Option` + `S` | 切换性能浮窗 | 串流窗口中 |
-| `Ctrl` + `Option` + `M` | 切换鼠标模式 | 串流窗口中 |
-| `Ctrl` + `Option` + `G` | 切换全屏悬浮球 | 全屏模式 |
-| `Ctrl` + `Option` + `W` | 断开串流 | 串流窗口中 |
-| `Ctrl` + `Shift` + `W` | 断开并退出应用 | 串流窗口中 |
-| `Ctrl` + `Option` + `C` | 打开控制中心 | 仅全屏 / 无边框 |
-| `Ctrl` + `Option` + `Command` + `B` | 无边框 / 窗口切换 | 高级排障快捷键 |
+- `Ctrl` + `Option`：释放鼠标捕获（串流窗口中）
+- `Ctrl` + `Option` + `S`：切换性能浮窗（串流窗口中）
+- `Ctrl` + `Option` + `M`：切换鼠标模式（串流窗口中）
+- `Ctrl` + `Option` + `G`：切换全屏悬浮球（全屏模式）
+- `Ctrl` + `Option` + `W`：断开串流（串流窗口中）
+- `Ctrl` + `Shift` + `W`：断开并退出应用（串流窗口中）
+- `Ctrl` + `Option` + `C`：打开控制中心（仅全屏 / 无边框）
+- `Ctrl` + `Option` + `Command` + `B`：无边框 / 窗口切换（高级排障快捷键）
 
 标准 macOS 快捷键（如 `⌘W`、`⌃⌘F`）不在此表内。
 
-## 手柄
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-pad-dark.webp"><img src="readme-assets/headings/h-pad.webp" width="34" height="34" alt=""></picture>&nbsp;手柄
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-input-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-input-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-input-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-input-d.webp" width="489" alt="DualSense · 触控屏 Mac · 精确式触控板 · CoreHID · 需要 Foundation Sunshine"></picture></p>
 
 - 支持多手柄、震动、Guide 模拟、按键交换、摇杆死区和手柄模拟鼠标。
 - `主机控制器类型` 可选自动、Xbox 360、DualShock 4 或 DualSense，启动和恢复串流时告知主机。
 - 可以用手柄操作应用本身：浏览应用列表和设置、打开菜单、调整滑块与选择器、用屏幕键盘输入，串流中打开控制中心。
 - `手柄快捷键` 可为按键组合和触控板手势指定动作。
 
+<details>
+<summary><b>详细说明</b></summary>
+
 ### DualSense / DS5
 
 DS5 可通过蓝牙或 USB 连接 Mac。除普通手柄输入外，以下能力需要主机提供 PlayStation 虚拟控制器及对应反馈：
 
-| 能力 | 使用方式 |
-| --- | --- |
-| 震动与触觉反馈 | 接收主机反馈，按设备能力使用原生触觉或震动回退；效果取决于主机、系统和连接方式 |
-| 灯光与电量 | 同步主机灯光反馈并向主机报告电量 |
-| 动作输入 | 陀螺仪和加速度传感器，可在设置中调整动作传感器模式 |
-| 主机触控板 | 把触控位置和按压发送给远端虚拟控制器，供游戏使用 |
-| Mac 风格触控板 | 单指移动指针、轻点点击、双指滚动和双指轻点右键；滚动跟随 macOS 自然滚动偏好 |
-| 精确式触控板 | 把触点交给 Windows 作为触控板使用；DualSense 触控板最多识别两指 |
+- **震动与触觉反馈**：接收主机反馈，按设备能力使用原生触觉或震动回退；效果取决于主机、系统和连接方式
+- **灯光与电量**：同步主机灯光反馈并向主机报告电量
+- **动作输入**：陀螺仪和加速度传感器，可在设置中调整动作传感器模式
+- **主机触控板**：把触控位置和按压发送给远端虚拟控制器，供游戏使用
+- **Mac 风格触控板**：单指移动指针、轻点点击、双指滚动和双指轻点右键；滚动跟随 macOS 自然滚动偏好
+- **精确式触控板**：把触点交给 Windows 作为触控板使用；DualSense 触控板最多识别两指
 
 在 `设置 → 手柄设置` 选择 `DualSense 触控板模式`。开启 `长按 Options 切换触控板模式` 后，串流中长按 **Options 键约 2 秒**即可切换；按键、摇杆和扳机始终作为手柄输入。
 
-## 串流中的控制中心
+</details>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-cc-dark.webp"><img src="readme-assets/headings/h-cc.webp" width="34" height="34" alt=""></picture>&nbsp;串流中的控制中心
 
 全屏或无边框时按 `Ctrl` + `Option` + `C`，或通过全屏悬浮球、手柄打开控制中心。菜单按用途分组：
 
@@ -285,7 +302,12 @@ DS5 可通过蓝牙或 USB 连接 Mac。除普通手柄输入外，以下能力�
 
 `设置 → 串流` 另有 `自适应码率`（默认关闭）：开启后在串流前探测带宽，并在串流中由主机根据丢包和延迟调整码率。`视频 FEC` 可保持主机默认、自动或指定比例。
 
-## Foundation Sunshine 协作
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-fs-dark.webp"><img src="readme-assets/headings/h-fs.webp" width="34" height="34" alt=""></picture>&nbsp;Foundation Sunshine 协作
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-link-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-link-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-link-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-link-d.webp" width="444" alt="多线路 · Tailscale · 自适应码率 · 串流中调整 · 需要 Foundation Sunshine"></picture></p>
+
+<details>
+<summary><b>详细说明</b></summary>
 
 - **剪贴板**：在 `设置 → 串流 → 剪贴板` 开启，并在主机端启用剪贴板。支持文本与单张 PNG 图片的双向复制粘贴，由当前前台的串流窗口接管。它不是文件传输。
 - **显示器与虚拟显示器**：`设置 → 显示与 HDR` 提供目标显示器、虚拟显示器（VDD）、屏幕模式和显示参数，可按应用保存，连接或重连时交给主机应用。VDD 需要主机驱动已启用。
@@ -295,7 +317,12 @@ DS5 可通过蓝牙或 USB 连接 Mac。除普通手柄输入外，以下能力�
 
 USB 映射和主机文件的页面会显示主机能力及不可用原因。
 
-## 连接与诊断
+</details>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-diag-dark.webp"><img src="readme-assets/headings/h-diag.webp" width="34" height="34" alt=""></picture>&nbsp;连接与诊断
+
+<details>
+<summary><b>详细说明</b></summary>
 
 - 每台主机可单独设置连接方式，支持自定义端口、IPv6 和域名；首选地址不可用时继续尝试其他已知地址。
 - 性能浮窗显示帧率、码率、延迟、网络丢帧、FEC 结果和协商到的 HDR 格式。
@@ -303,11 +330,16 @@ USB 映射和主机文件的页面会显示主机能力及不可用原因。
 - 日志查看器提供浓缩与原始两种视图，支持中英文、筛选和搜索，也可以在串流窗口内打开。
 - 提供连接警告、自动重连、超时恢复和 AWDL 稳定性辅助。
 
-## 更新
+</details>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-update-dark.webp"><img src="readme-assets/headings/h-update.webp" width="34" height="34" alt=""></picture>&nbsp;更新
 
 `设置 → 关于与更新` 显示当前版本并可检查更新，应用菜单中也有“检查更新”。更新优先从 GitHub 下载，失败时尝试同版本的 CNB 镜像，更新包签名由 Sparkle 验证。也可以随时从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 手动下载安装。
 
-## 从源码构建
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-build-dark.webp"><img src="readme-assets/headings/h-build.webp" width="34" height="34" alt=""></picture>&nbsp;从源码构建
+
+<details>
+<summary><b>构建步骤</b></summary>
 
 ```bash
 git clone --recursive https://github.com/skyhua0224/moonlight-macos-enhanced.git
@@ -330,7 +362,9 @@ scripts/build_openssl.sh
 3. 按需修改 Bundle Identifier
 4. 选择 **Moonlight for macOS** scheme 后运行
 
-## 问题反馈
+</details>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-issues-dark.webp"><img src="readme-assets/headings/h-issues.webp" width="34" height="34" alt=""></picture>&nbsp;问题反馈
 
 提交 Bug 时请包含：
 - macOS 版本、机型与芯片类型
@@ -338,27 +372,32 @@ scripts/build_openssl.sh
 - 复现步骤
 - `设置 → 应用与诊断` 导出的调试日志，必要时附截图
 
+<details>
+<summary><b>详细说明</b></summary>
+
 输入类问题请另外说明：
 - 使用的是 **自由鼠标** 还是 **锁定鼠标**，鼠标驱动是 **自动 / CoreHID / HID / MFI** 中的哪一个
 - 是否开启了精确式触控板，以及所选的方式
 - 是否使用了 Mos、BetterMouse、SteerMouse 等第三方鼠标工具
 - 手柄型号与连接方式（蓝牙或 USB）
 
-## 贡献
+</details>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contrib-dark.webp"><img src="readme-assets/headings/h-contrib.webp" width="34" height="34" alt=""></picture>&nbsp;贡献
 
 欢迎提交 Issue 和 PR。建议：
 - 保持中英文用户文案同步
 - 提交前至少验证核心串流与输入路径
 - PR 描述写用户可感知的变化，而不是只贴 commit 标题
 
-## 联系方式
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contact-dark.webp"><img src="readme-assets/headings/h-contact.webp" width="34" height="34" alt=""></picture>&nbsp;联系方式
 
 - 📧 Email: [dev@sky-hua.xyz](mailto:dev@sky-hua.xyz)
 - 💬 Telegram: [@skyhua](https://t.me/skyhua)
 - 🐧 QQ: 2110591491
 - 🔗 GitHub Issues: [提交 Issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
-## 致谢
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-thanks-dark.webp"><img src="readme-assets/headings/h-thanks.webp" width="34" height="34" alt=""></picture>&nbsp;致谢
 
 完整致谢、上游来源与生态参考请见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
 
@@ -367,6 +406,6 @@ scripts/build_openssl.sh
 - 主机端生态参考：`Sunshine`、`foundation-sunshine`
 - 输入与滚轮体验参考：`Mos`、`Mouser`
 
-## 许可证
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-license-dark.webp"><img src="readme-assets/headings/h-license.webp" width="34" height="34" alt=""></picture>&nbsp;许可证
 
 本项目采用 [GPLv3 许可证](LICENSE.txt)。
