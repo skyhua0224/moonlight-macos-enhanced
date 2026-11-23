@@ -14,7 +14,7 @@ lines such as those written by Thread.callStackSymbols:
 
     3   MoonlightEnhanced   0x0000000100a3c1f0 MoonlightEnhanced + 4571632
 
---dsym takes the .dSYM bundle of the release the report came from (the dSYM zip of
+--dsym takes the .dSYM bundle of the release the report came from (the dSYM zip from the CI run of
 that release, unzipped) or a DWARF file inside it. For a crash report, a dSYM of
 another build is refused: the UUIDs must match. A text log carries no UUID, so take
 the dSYM of the release the log came from (check it with dwarfdump --uuid).

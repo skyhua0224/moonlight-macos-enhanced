@@ -199,7 +199,7 @@ jobs:
     # The project strips local symbols from the shipped binaries (Release: STRIP_STYLE
     # non-global), which takes about 15 MB out of each architecture. The names and source
     # lines stay in the dSYM of the same build. Keep it: scripts/symbolicate_crash.py needs
-    # it to read a crash report of this release. The release job attaches these archives.
+    # it to read a crash report of this release. The CI run keeps these archives for 90 days.
     - name: Check stripped symbols and archive ${{ matrix.variant }} dSYMs
       run: |
         products="build/Build/Products/Release"
@@ -304,6 +304,8 @@ jobs:
         name: Moonlight-macOS-dsym-${{ matrix.variant }}
         path: dist/MoonlightEnhanced-dSYM-${{ matrix.variant }}.zip
         if-no-files-found: error
+        # Release pages carry only the DMGs and appcast.xml; crash symbols stay here.
+        retention-days: 90
 
     - name: Upload ${{ matrix.variant }} DMG artifact
       uses: actions/upload-artifact@v7
@@ -538,20 +540,6 @@ jobs:
         name: Moonlight-macOS-dmg-universal
         path: dist
 
-    # The universal package carries the slices of these two builds, so each
-    # architecture's dSYM covers the matching slice of every package.
-    - name: Download x86_64 dSYM artifact
-      uses: actions/download-artifact@v8
-      with:
-        name: Moonlight-macOS-dsym-x86_64
-        path: dist
-
-    - name: Download arm64 dSYM artifact
-      uses: actions/download-artifact@v8
-      with:
-        name: Moonlight-macOS-dsym-arm64
-        path: dist
-
     - name: Get Version
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -563,7 +551,7 @@ jobs:
         RELEASE_TAG: ${{ github.ref_name }}
       run: |
         existing_state=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-          --jq '.[] | select(.tag_name == env.RELEASE_TAG) | (.draft == false or any(.assets[]; .name == "SHA256SUMS"))')
+          --jq '.[] | select(.tag_name == env.RELEASE_TAG) | (.draft == false or any(.assets[]; .name == "appcast.xml"))')
         if [[ "$existing_state" == true ]]; then
           echo "locked=true" >> "$GITHUB_OUTPUT"
         else
@@ -590,6 +578,4 @@ jobs:
           dist/Moonlight-macOS-Enhanced-x86_64.dmg
           dist/Moonlight-macOS-Enhanced-arm64.dmg
           dist/Moonlight-macOS-Enhanced-universal.dmg
-          dist/MoonlightEnhanced-dSYM-arm64.zip
-          dist/MoonlightEnhanced-dSYM-x86_64.zip
         body_path: release_body.md
