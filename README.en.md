@@ -19,7 +19,7 @@
 
 **Contents**: [Current Release](#current-release) · [Quick Start](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [Host Compatibility](#host-compatibility) · [Installation](#installation) · [Video and HDR](#video-and-hdr) · [Audio](#audio) · [Keyboard, Mouse, and Trackpad](#keyboard-mouse-and-trackpad) · [Controllers](#controllers) · [Control Center](#in-stream-control-center) · [Foundation Sunshine Integration](#foundation-sunshine-integration) · [Connectivity and Diagnostics](#connectivity-and-diagnostics) · [Updates](#updates) · [Build from Source](#build-from-source) · [Reporting Issues](#reporting-issues)
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-release-dark.webp"><img src="readme-assets/headings/h-release.webp" width="34" height="34" alt=""></picture>&nbsp;Current Release
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-release-dark.webp"><img src="readme-assets/headings/h-release.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Current Release
 
 **1.3.9** is described in the [1.3.9 release notes](https://github.com/skyhua0224/moonlight-macos-enhanced/releases/tag/v1.3.9). The main window has been redesigned, with fine-grained personalisation, Card and Big Picture views and landscape posters; there is a new performance HUD, and a controller can operate the home page and Settings. Published packages remain the ones on [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). 1.3.9 is the final release before the native architecture rebuild.
 
@@ -38,14 +38,14 @@ What changed in 1.3.9 compared with 1.3.8:
 - **With Foundation Sunshine**: display and virtual display configuration, bitrate, frame rate and resolution changes without reconnecting, Free Window (the host resolution follows the stream window), adaptive bitrate, host display scale and Host Commands.
 - **Also**: a performance HUD, performance report export, in-app updates and a bilingual log viewer.
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-quick-dark.webp"><img src="readme-assets/headings/h-quick.webp" width="34" height="34" alt=""></picture>&nbsp;Quick Start
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-quick-dark.webp"><img src="readme-assets/headings/h-quick.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Quick Start
 
 1. Install and run [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) or [Sunshine](https://github.com/LizardByte/Sunshine) on the computer you want to stream from.
 2. Install this app on the Mac and open it. Allow Local Network access on first launch; hosts on the same network appear automatically, or add a host address manually.
 3. Click a host to pair: the app shows a PIN, which you enter in the host's Sunshine web interface.
 4. Once paired, choose an app to start streaming. Press `Ctrl` + `Option` to release the mouse; in fullscreen, press `Ctrl` + `Option` + `C` to open the control center.
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-features-dark.webp"><img src="readme-assets/headings/h-features.webp" width="34" height="34" alt=""></picture>&nbsp;Features
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-features-dark.webp"><img src="readme-assets/headings/h-features.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Features
 
 - **Video**: AV1 (in software where there is no hardware decoder) / HEVC / H.264, custom resolution and frame rate, YUV 4:4:4, 10-bit SDR; Native, Metal, and Compatibility renderers; VT super resolution, MetalFX, and frame interpolation
 - **HDR**: HDR10 (PQ / HLG); Dolby Vision 8.1 / 8.4 and HDR10+ negotiation with fallback; the picture follows the host when HDR is toggled mid-stream
@@ -59,7 +59,7 @@ What changed in 1.3.9 compared with 1.3.8:
 
 Some of these require Foundation Sunshine; see the next section.
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-shots-dark.webp"><img src="readme-assets/headings/h-shots.webp" width="34" height="34" alt=""></picture>&nbsp;Screenshots
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-shots-dark.webp"><img src="readme-assets/headings/h-shots.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Screenshots
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/home-dark.png"><img src="readme-assets/images/en/home.png" width="760" alt="Main window"></picture><br><sub>Main window</sub></p>
 
@@ -80,38 +80,6 @@ Some of these require Foundation Sunshine; see the next section.
   <img src="readme-assets/images/en/search.png" width="370" alt="Settings search">
 </picture><br>
 <sub>Settings search</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" align="center" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-video-dark.png">
-  <img src="readme-assets/images/en/settings-video.png" width="370" alt="Video and HDR">
-</picture><br>
-<sub>Video and HDR</sub>
-</td>
-<td width="50%" align="center" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-audio-dark.png">
-  <img src="readme-assets/images/en/settings-audio.png" width="370" alt="Audio and microphone">
-</picture><br>
-<sub>Audio and microphone</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" align="center" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-keyboard-mouse-dark.png">
-  <img src="readme-assets/images/en/settings-keyboard-mouse.png" width="370" alt="Keyboard and mouse">
-</picture><br>
-<sub>Keyboard and mouse</sub>
-</td>
-<td width="50%" align="center" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/en/settings-controller-dark.png">
-  <img src="readme-assets/images/en/settings-controller.png" width="370" alt="Controllers">
-</picture><br>
-<sub>Controllers</sub>
 </td>
 </tr>
 <tr>
@@ -138,11 +106,13 @@ Some of these require Foundation Sunshine; see the next section.
 
 Computer names and addresses in the screenshots are examples. Game artwork belongs to its owners.
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-hosts-dark.webp"><img src="readme-assets/headings/h-hosts.webp" width="34" height="34" alt=""></picture>&nbsp;Host Compatibility
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-hosts-dark.webp"><img src="readme-assets/headings/h-hosts.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Host Compatibility
 
 - [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) (⭐ Recommended): Every feature of this client is available; actual capabilities depend on the host version and configuration
 - [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine) (✅ Supported): Video, Opus audio, keyboard, mouse, and controllers work; the enhancements listed below do not
 - GeForce Experience (⚠️ Basic): Deprecated; basic streaming only
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/host-compat-en-dark.webp"><img src="readme-assets/images/sections/host-compat-en-light.webp" width="760" alt="What works with Foundation Sunshine versus other Sunshine hosts"></picture></p>
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-needs-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-needs-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/en/rd-m-needs-d-dark.webp"><img src="readme-assets/buttons/en/rd-m-needs-d.webp" width="231" alt="Requires Foundation Sunshine"></picture></p>
 
@@ -154,23 +124,37 @@ The following require Foundation Sunshine with the corresponding capability enab
 - DualSense touchpad, lighting, and haptics; Precision Touchpad
 - Host Commands, Sleep Host, USB Mapping, Host Files
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-install-dark.webp"><img src="readme-assets/headings/h-install.webp" width="34" height="34" alt=""></picture>&nbsp;Installation
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-install-dark.webp"><img src="readme-assets/headings/h-install.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Installation
 
 Requirements: macOS 12 or later on an Apple Silicon or Intel Mac, with Sunshine or Foundation Sunshine running on the host.
 
-Download the `.dmg` from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases), open it, and drag `MoonlightEnhanced.app` to Applications. The app has its own name and identifier, so it can be installed alongside Moonlight QT.
+**Step 1 · Download**  Download the `.dmg` from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases). If unsure, pick `universal`.
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/install-1-download-en-dark.webp"><img src="readme-assets/images/sections/install-1-download-en-light.webp" width="880" alt="Step 1: download the right DMG, pick universal if unsure"></picture></p>
+
+**Step 2 · Install**  Open it and drag `MoonlightEnhanced.app` to Applications. The app has its own name and identifier, so it can be installed alongside Moonlight QT.
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/install-2-dmg-en-dark.webp"><img src="readme-assets/images/sections/install-2-dmg-en-light.webp" width="880" alt="Step 2: open the DMG and drag the app to Applications"></picture></p>
 
 > ⚠️ This app is currently not notarized by Apple. If macOS says `MoonlightEnhanced.app` is damaged or blocks it from launching, that is usually Gatekeeper stopping a non-notarized app, not a broken file.
->
-> Recommended first-launch steps:
-> 1. Right-click the app and choose `Open`
-> 2. Go to **System Settings → Privacy & Security** and click `Open Anyway`
-> 3. If needed, run:
->    `xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app`
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-video-dark.webp"><img src="readme-assets/headings/h-video.webp" width="34" height="34" alt=""></picture>&nbsp;Video and HDR
+**Step 3 · First launch**  Right-click the app and choose `Open`, or go to **System Settings → Privacy & Security** and click `Open Anyway`. If it is still blocked, run:
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/install-3-gatekeeper-en-dark.webp"><img src="readme-assets/images/sections/install-3-gatekeeper-en-light.webp" width="760" alt="Step 3: if launch is blocked, click Open Anyway in Privacy & Security, or run the Terminal command"></picture></p>
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app
+```
+
+**Step 4 · Input Monitoring**  When the app asks, switch on **System Settings → Privacy & Security → Input Monitoring** to enable CoreHID.
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/install-4-input-monitoring-en-dark.webp"><img src="readme-assets/images/sections/install-4-input-monitoring-en-light.webp" width="880" alt="Step 4: when the app asks, switch on Input Monitoring in System Settings"></picture></p>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-video-dark.webp"><img src="readme-assets/headings/h-video.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Video and HDR
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-video-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-video-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/en/rd-m-video-d-dark.webp"><img src="readme-assets/buttons/en/rd-m-video-d.webp" width="607" alt="HDR10+ · Dolby Vision · AV1 · 10-bit SDR · VT / MetalFX"></picture></p>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/video-hdr-en-dark.webp"><img src="readme-assets/images/sections/video-hdr-en-light.webp" width="880" alt="Video & HDR settings: renderers, HDR transfer function, YUV 4:4:4"></picture></p>
 
 ### Renderers
 
@@ -194,9 +178,11 @@ Settings that apply to one renderer only appear while it is selected. Image enha
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-audio-dark.webp"><img src="readme-assets/headings/h-audio.webp" width="34" height="34" alt=""></picture>&nbsp;Audio
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-audio-dark.webp"><img src="readme-assets/headings/h-audio.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Audio
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-audio-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-audio-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/en/rd-m-audio-d-dark.webp"><img src="readme-assets/buttons/en/rd-m-audio-d.webp" width="437" alt="PCM · AC3 · E-AC3 · Parametric EQ · Binaural audio · Requires Foundation Sunshine"></picture></p>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/audio-en-dark.webp"><img src="readme-assets/images/sections/audio-en-light.webp" width="880" alt="Audio settings: multichannel and spatial audio for headphones"></picture></p>
 
 Choose the channel layout and audio codec in `Settings → Audio & Microphone`:
 
@@ -217,7 +203,9 @@ Choose the channel layout and audio codec in `Settings → Audio & Microphone`:
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-input-dark.webp"><img src="readme-assets/headings/h-input.webp" width="34" height="34" alt=""></picture>&nbsp;Keyboard, Mouse, and Trackpad
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-input-dark.webp"><img src="readme-assets/headings/h-input.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Keyboard, Mouse, and Trackpad
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/keyboard-mouse-en-dark.webp"><img src="readme-assets/images/sections/keyboard-mouse-en-light.webp" width="880" alt="Keyboard & Mouse settings: free/locked mouse, shortcut translation, precision trackpad"></picture></p>
 
 ### Mouse
 
@@ -262,9 +250,11 @@ These shortcuts can be changed in `Settings → Keyboard & Mouse`:
 
 Standard macOS shortcuts such as `⌘W` and `⌃⌘F` are not listed here.
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-pad-dark.webp"><img src="readme-assets/headings/h-pad.webp" width="34" height="34" alt=""></picture>&nbsp;Controllers
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-pad-dark.webp"><img src="readme-assets/headings/h-pad.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Controllers
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-input-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-input-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/en/rd-m-input-d-dark.webp"><img src="readme-assets/buttons/en/rd-m-input-d.webp" width="543" alt="DualSense · Touch-screen Mac · Precision trackpad · CoreHID · Requires Foundation Sunshine"></picture></p>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/controller-en-dark.webp"><img src="readme-assets/images/sections/controller-en-light.webp" width="880" alt="Controller settings: multiple pads, pad mouse, rumble and haptics"></picture></p>
 
 - Multiple controllers, rumble, Guide emulation, button swap, stick deadzone, and controller mouse are supported.
 - `Host Controller Type` can be Automatic, Xbox 360, DualShock 4, or DualSense, and is declared to the host on launch and resume.
@@ -289,7 +279,7 @@ Select `DualSense Touchpad Mode` in `Settings → Controller`. With `Hold Option
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-cc-dark.webp"><img src="readme-assets/headings/h-cc.webp" width="34" height="34" alt=""></picture>&nbsp;In-Stream Control Center
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-cc-dark.webp"><img src="readme-assets/headings/h-cc.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;In-Stream Control Center
 
 In fullscreen or borderless mode, press `Ctrl` + `Option` + `C`, or open the control center from the fullscreen control ball or a controller. Its menu is grouped by purpose:
 
@@ -302,7 +292,7 @@ In fullscreen or borderless mode, press `Ctrl` + `Option` + `C`, or open the con
 
 `Settings → Streaming` also has `Adaptive Bitrate` (off by default): the client probes bandwidth before the stream, and the host then adjusts the bitrate according to loss and latency. `Video FEC` can stay at the host default, be automatic, or use a fixed percentage.
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-fs-dark.webp"><img src="readme-assets/headings/h-fs.webp" width="34" height="34" alt=""></picture>&nbsp;Foundation Sunshine Integration
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-fs-dark.webp"><img src="readme-assets/headings/h-fs.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Foundation Sunshine Integration
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-link-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/en/rd-m-link-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/en/rd-m-link-d-dark.webp"><img src="readme-assets/buttons/en/rd-m-link-d.webp" width="479" alt="Multi-route · Tailscale · Adaptive bitrate · Live adjust · Requires Foundation Sunshine"></picture></p>
 
@@ -319,7 +309,7 @@ The USB Mapping and Host Files pages show the host's capabilities and why someth
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-diag-dark.webp"><img src="readme-assets/headings/h-diag.webp" width="34" height="34" alt=""></picture>&nbsp;Connectivity and Diagnostics
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-diag-dark.webp"><img src="readme-assets/headings/h-diag.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Connectivity and Diagnostics
 
 - Each host has its own connection method, with custom ports, IPv6, and domain names; when the preferred address is unreachable, the other known addresses are tried.
 
@@ -333,11 +323,11 @@ The USB Mapping and Host Files pages show the host's capabilities and why someth
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-update-dark.webp"><img src="readme-assets/headings/h-update.webp" width="34" height="34" alt=""></picture>&nbsp;Updates
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-update-dark.webp"><img src="readme-assets/headings/h-update.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Updates
 
 `Settings → About & Updates` shows the current version and checks for updates; the app menu also has Check for Updates. Updates are downloaded from GitHub first, falling back to the identical CNB archive, and Sparkle verifies the archive signature. You can always install manually from [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases).
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-build-dark.webp"><img src="readme-assets/headings/h-build.webp" width="34" height="34" alt=""></picture>&nbsp;Build from Source
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-build-dark.webp"><img src="readme-assets/headings/h-build.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Build from Source
 
 <details>
 <summary><b>Build steps</b></summary>
@@ -365,7 +355,7 @@ Then:
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-issues-dark.webp"><img src="readme-assets/headings/h-issues.webp" width="34" height="34" alt=""></picture>&nbsp;Reporting Issues
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-issues-dark.webp"><img src="readme-assets/headings/h-issues.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Reporting Issues
 
 Please include:
 - macOS version, Mac model, and chip
@@ -384,21 +374,21 @@ For input problems, also say:
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contrib-dark.webp"><img src="readme-assets/headings/h-contrib.webp" width="34" height="34" alt=""></picture>&nbsp;Contributing
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contrib-dark.webp"><img src="readme-assets/headings/h-contrib.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Contributing
 
 Issues and PRs are welcome. Please try to:
 - Keep Chinese and English user-facing copy in sync
 - Test the core streaming and input paths before submitting
 - Describe user-visible changes in the PR instead of pasting commit titles
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contact-dark.webp"><img src="readme-assets/headings/h-contact.webp" width="34" height="34" alt=""></picture>&nbsp;Contact
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contact-dark.webp"><img src="readme-assets/headings/h-contact.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Contact
 
 - 📧 Email: [dev@sky-hua.xyz](mailto:dev@sky-hua.xyz)
 - 💬 Telegram: [@skyhua](https://t.me/skyhua)
 - 🐧 QQ: 2110591491
 - 🔗 GitHub Issues: [Submit Issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-thanks-dark.webp"><img src="readme-assets/headings/h-thanks.webp" width="34" height="34" alt=""></picture>&nbsp;Acknowledgements
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-thanks-dark.webp"><img src="readme-assets/headings/h-thanks.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Acknowledgements
 
 For the full upstream, ecosystem, and reference list, see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
 
@@ -407,6 +397,6 @@ For the full upstream, ecosystem, and reference list, see [ACKNOWLEDGEMENTS.md](
 - Host ecosystem references: `Sunshine`, `foundation-sunshine`
 - Input and wheel experience references: `Mos`, `Mouser`
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-license-dark.webp"><img src="readme-assets/headings/h-license.webp" width="34" height="34" alt=""></picture>&nbsp;License
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-license-dark.webp"><img src="readme-assets/headings/h-license.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;License
 
 This project is licensed under the [GPLv3 License](LICENSE.txt).

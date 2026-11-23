@@ -19,7 +19,7 @@
 
 **目录**：[当前版本](#当前版本) · [快速开始](#快速开始) · [功能概览](#功能概览) · [截图](#截图) · [主机端兼容性](#主机端兼容性) · [安装](#安装) · [视频与 HDR](#视频与-hdr) · [音频](#音频) · [键盘、鼠标与触控板](#键盘鼠标与触控板) · [手柄](#手柄) · [控制中心](#串流中的控制中心) · [Foundation Sunshine 协作](#foundation-sunshine-协作) · [连接与诊断](#连接与诊断) · [更新](#更新) · [从源码构建](#从源码构建) · [问题反馈](#问题反馈)
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-release-dark.webp"><img src="readme-assets/headings/h-release.webp" width="34" height="34" alt=""></picture>&nbsp;当前版本
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-release-dark.webp"><img src="readme-assets/headings/h-release.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;当前版本
 
 **1.3.9** 的变更见 [1.3.9 更新说明](https://github.com/skyhua0224/moonlight-macos-enhanced/releases/tag/v1.3.9)。主界面重新设计，可个性化调节界面各处细节，提供卡片/大图两种视图，全新支持横版海报；新增性能浮窗；全面支持用手柄操作主页与设置。已发布的安装包仍以 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 为准。1.3.9 是原生架构重建前最后一个版本。
 
@@ -38,14 +38,14 @@
 - **配合 Foundation Sunshine**：显示器与虚拟显示器配置，串流中不重连调整码率、帧率和分辨率，自由窗口（主机分辨率跟随串流窗口），自适应码率，主机显示缩放与主机命令。
 - **其他**：性能浮窗、性能报告导出、应用内更新和中英文日志查看器。
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-quick-dark.webp"><img src="readme-assets/headings/h-quick.webp" width="34" height="34" alt=""></picture>&nbsp;快速开始
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-quick-dark.webp"><img src="readme-assets/headings/h-quick.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;快速开始
 
 1. 在要串流的电脑上安装并运行 [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine) 或 [Sunshine](https://github.com/LizardByte/Sunshine)。
 2. 在 Mac 上安装本应用并打开。首次启动时允许“本地网络”权限，同一局域网内的主机会自动出现；也可以手动添加主机地址。
 3. 点击主机开始配对：应用会显示一个 PIN，在主机的 Sunshine 网页界面中输入它。
 4. 配对完成后选择一个应用开始串流。按 `Ctrl` + `Option` 释放鼠标；全屏时按 `Ctrl` + `Option` + `C` 打开控制中心。
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-features-dark.webp"><img src="readme-assets/headings/h-features.webp" width="34" height="34" alt=""></picture>&nbsp;功能概览
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-features-dark.webp"><img src="readme-assets/headings/h-features.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;功能概览
 
 - **视频**：AV1（无硬件解码时用软件解码）/ HEVC / H.264，自定义分辨率与帧率，YUV 4:4:4，10-bit SDR；原生、Metal、兼容三种渲染器；VT 超分、MetalFX 与插帧
 - **HDR**：HDR10（PQ / HLG）；Dolby Vision 8.1 / 8.4 与 HDR10+ 的协商和回退；主机中途开关 HDR 时画面随之切换
@@ -59,7 +59,7 @@
 
 其中一部分需要 Foundation Sunshine，见下一节。
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-shots-dark.webp"><img src="readme-assets/headings/h-shots.webp" width="34" height="34" alt=""></picture>&nbsp;截图
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-shots-dark.webp"><img src="readme-assets/headings/h-shots.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;截图
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/home-dark.png"><img src="readme-assets/images/home.png" width="760" alt="主界面"></picture><br><sub>主界面</sub></p>
 
@@ -80,38 +80,6 @@
   <img src="readme-assets/images/search.png" width="370" alt="设置搜索">
 </picture><br>
 <sub>设置搜索</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" align="center" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-video-dark.png">
-  <img src="readme-assets/images/settings-video.png" width="370" alt="视频与 HDR">
-</picture><br>
-<sub>视频与 HDR</sub>
-</td>
-<td width="50%" align="center" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-audio-dark.png">
-  <img src="readme-assets/images/settings-audio.png" width="370" alt="音频与麦克风">
-</picture><br>
-<sub>音频与麦克风</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" align="center" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-keyboard-mouse-dark.png">
-  <img src="readme-assets/images/settings-keyboard-mouse.png" width="370" alt="键盘与鼠标">
-</picture><br>
-<sub>键盘与鼠标</sub>
-</td>
-<td width="50%" align="center" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/settings-controller-dark.png">
-  <img src="readme-assets/images/settings-controller.png" width="370" alt="手柄">
-</picture><br>
-<sub>手柄</sub>
 </td>
 </tr>
 <tr>
@@ -138,11 +106,13 @@
 
 截图里的电脑名和地址是示例，游戏封面归其版权方所有。
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-hosts-dark.webp"><img src="readme-assets/headings/h-hosts.webp" width="34" height="34" alt=""></picture>&nbsp;主机端兼容性
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-hosts-dark.webp"><img src="readme-assets/headings/h-hosts.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;主机端兼容性
 
 - [Foundation Sunshine](https://github.com/AlkaidLab/foundation-sunshine)（⭐ 推荐）：可使用本客户端的全部功能；具体能力取决于主机版本和配置
 - [Sunshine (LizardByte)](https://github.com/LizardByte/Sunshine)（✅ 支持）：视频、Opus 音频、键鼠和手柄可用；下列增强功能不可用
 - GeForce Experience（⚠️ 基础支持）：已停止维护，仅基础串流
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/host-compat-zh-dark.webp"><img src="readme-assets/images/sections/host-compat-zh-light.webp" width="760" alt="Foundation Sunshine 主机与其他 Sunshine 主机的功能对比"></picture></p>
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-needs-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-needs-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-needs-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-needs-d.webp" width="206" alt="需要 Foundation Sunshine"></picture></p>
 
@@ -154,23 +124,37 @@
 - DualSense 的触控板、灯光与触觉反馈，精确式触控板
 - 主机命令、休眠主机、USB 映射、主机文件
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-install-dark.webp"><img src="readme-assets/headings/h-install.webp" width="34" height="34" alt=""></picture>&nbsp;安装
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-install-dark.webp"><img src="readme-assets/headings/h-install.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;安装
 
 系统要求：macOS 12 或更高版本，Apple Silicon 或 Intel Mac；主机端运行 Sunshine 或 Foundation Sunshine。
 
-从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载 `.dmg`，打开后把 `MoonlightEnhanced.app` 拖到“应用程序”。应用使用独立的名称和标识，可以与 Moonlight QT 版本同时安装。
+**第 1 步 · 下载**　从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 下载 `.dmg`，不确定就选 `universal`。
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/install-1-download-zh-dark.webp"><img src="readme-assets/images/sections/install-1-download-zh-light.webp" width="880" alt="第 1 步：下载对应的 DMG，不确定就选 universal"></picture></p>
+
+**第 2 步 · 安装**　打开后把 `MoonlightEnhanced.app` 拖到“应用程序”。应用使用独立的名称和标识，可以与 Moonlight QT 版本同时安装。
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/install-2-dmg-zh-dark.webp"><img src="readme-assets/images/sections/install-2-dmg-zh-light.webp" width="880" alt="第 2 步：打开 DMG，把 App 拖进「应用程序」"></picture></p>
 
 > ⚠️ 此应用当前未做 Apple 公证。若 macOS 提示“MoonlightEnhanced.app 已损坏”或阻止打开，通常是 Gatekeeper 拦截未公证应用，并不代表文件损坏。
->
-> 首次启动建议按这个顺序尝试：
-> 1. 右键应用，选择“打开”
-> 2. 前往 **系统设置 → 隐私与安全性**，选择“仍要打开”
-> 3. 若仍被拦截，执行：
->    `xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app`
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-video-dark.webp"><img src="readme-assets/headings/h-video.webp" width="34" height="34" alt=""></picture>&nbsp;视频与 HDR
+**第 3 步 · 首次启动**　右键应用，选择“打开”；或前往 **系统设置 → 隐私与安全性**，选择“仍要打开”。若仍被拦截，执行：
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/install-3-gatekeeper-zh-dark.webp"><img src="readme-assets/images/sections/install-3-gatekeeper-zh-light.webp" width="760" alt="第 3 步：首次启动被拦截时，在隐私与安全性中点「仍要打开」，仍被拦截就用终端命令"></picture></p>
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MoonlightEnhanced.app
+```
+
+**第 4 步 · 输入监控**　应用提示时，在 **系统设置 → 隐私与安全性 → 输入监控** 中打开开关，以启用 CoreHID。
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/install-4-input-monitoring-zh-dark.webp"><img src="readme-assets/images/sections/install-4-input-monitoring-zh-light.webp" width="880" alt="第 4 步：应用提示时，在系统设置中打开「输入监控」开关"></picture></p>
+
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-video-dark.webp"><img src="readme-assets/headings/h-video.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;视频与 HDR
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-video-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-video-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-video-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-video-d.webp" width="578" alt="HDR10+ · Dolby Vision · AV1 · 10-bit SDR · VT / MetalFX"></picture></p>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/video-hdr-zh-dark.webp"><img src="readme-assets/images/sections/video-hdr-zh-light.webp" width="880" alt="视频与 HDR 设置：渲染器、HDR 传输函数、YUV 4:4:4"></picture></p>
 
 ### 渲染器
 
@@ -194,9 +178,11 @@
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-audio-dark.webp"><img src="readme-assets/headings/h-audio.webp" width="34" height="34" alt=""></picture>&nbsp;音频
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-audio-dark.webp"><img src="readme-assets/headings/h-audio.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;音频
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-audio-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-audio-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-audio-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-audio-d.webp" width="400" alt="PCM · AC3 · E-AC3 · 参数均衡器 · 双耳环绕声 · 需要 Foundation Sunshine"></picture></p>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/audio-zh-dark.webp"><img src="readme-assets/images/sections/audio-zh-light.webp" width="880" alt="音频设置：多声道与耳机空间音频"></picture></p>
 
 在 `设置 → 音频与麦克风` 选择声道布局和音频编码：
 
@@ -217,7 +203,9 @@
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-input-dark.webp"><img src="readme-assets/headings/h-input.webp" width="34" height="34" alt=""></picture>&nbsp;键盘、鼠标与触控板
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-input-dark.webp"><img src="readme-assets/headings/h-input.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;键盘、鼠标与触控板
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/keyboard-mouse-zh-dark.webp"><img src="readme-assets/images/sections/keyboard-mouse-zh-light.webp" width="880" alt="键盘与鼠标设置：自由/锁定鼠标、快捷键翻译、精确触控板"></picture></p>
 
 ### 鼠标
 
@@ -262,9 +250,11 @@
 
 标准 macOS 快捷键（如 `⌘W`、`⌃⌘F`）不在此表内。
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-pad-dark.webp"><img src="readme-assets/headings/h-pad.webp" width="34" height="34" alt=""></picture>&nbsp;手柄
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-pad-dark.webp"><img src="readme-assets/headings/h-pad.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;手柄
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-input-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-input-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-input-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-input-d.webp" width="470" alt="DualSense · 触控屏 Mac · 精确式触控板 · CoreHID · 需要 Foundation Sunshine"></picture></p>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/images/sections/controller-zh-dark.webp"><img src="readme-assets/images/sections/controller-zh-light.webp" width="880" alt="手柄设置：多手柄、手柄鼠标、震动与触觉"></picture></p>
 
 - 支持多手柄、震动、Guide 模拟、按键交换、摇杆死区和手柄模拟鼠标。
 - `主机控制器类型` 可选自动、Xbox 360、DualShock 4 或 DualSense，启动和恢复串流时告知主机。
@@ -289,7 +279,7 @@ DS5 可通过蓝牙或 USB 连接 Mac。除普通手柄输入外，以下能力�
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-cc-dark.webp"><img src="readme-assets/headings/h-cc.webp" width="34" height="34" alt=""></picture>&nbsp;串流中的控制中心
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-cc-dark.webp"><img src="readme-assets/headings/h-cc.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;串流中的控制中心
 
 全屏或无边框时按 `Ctrl` + `Option` + `C`，或通过全屏悬浮球、手柄打开控制中心。菜单按用途分组：
 
@@ -302,7 +292,7 @@ DS5 可通过蓝牙或 USB 连接 Mac。除普通手柄输入外，以下能力�
 
 `设置 → 串流` 另有 `自适应码率`（默认关闭）：开启后在串流前探测带宽，并在串流中由主机根据丢包和延迟调整码率。`视频 FEC` 可保持主机默认、自动或指定比例。
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-fs-dark.webp"><img src="readme-assets/headings/h-fs.webp" width="34" height="34" alt=""></picture>&nbsp;Foundation Sunshine 协作
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-fs-dark.webp"><img src="readme-assets/headings/h-fs.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;Foundation Sunshine 协作
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-link-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-m-link-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-m-link-d-dark.webp"><img src="readme-assets/buttons/zh/rd-m-link-d.webp" width="425" alt="多线路 · Tailscale · 自适应码率 · 串流中调整 · 需要 Foundation Sunshine"></picture></p>
 
@@ -319,7 +309,7 @@ USB 映射和主机文件的页面会显示主机能力及不可用原因。
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-diag-dark.webp"><img src="readme-assets/headings/h-diag.webp" width="34" height="34" alt=""></picture>&nbsp;连接与诊断
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-diag-dark.webp"><img src="readme-assets/headings/h-diag.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;连接与诊断
 
 - 每台主机可单独设置连接方式，支持自定义端口、IPv6 和域名；首选地址不可用时继续尝试其他已知地址。
 
@@ -333,11 +323,11 @@ USB 映射和主机文件的页面会显示主机能力及不可用原因。
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-update-dark.webp"><img src="readme-assets/headings/h-update.webp" width="34" height="34" alt=""></picture>&nbsp;更新
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-update-dark.webp"><img src="readme-assets/headings/h-update.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;更新
 
 `设置 → 关于与更新` 显示当前版本并可检查更新，应用菜单中也有“检查更新”。更新优先从 GitHub 下载，失败时尝试同版本的 CNB 镜像，更新包签名由 Sparkle 验证。也可以随时从 [Releases](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) 手动下载安装。
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-build-dark.webp"><img src="readme-assets/headings/h-build.webp" width="34" height="34" alt=""></picture>&nbsp;从源码构建
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-build-dark.webp"><img src="readme-assets/headings/h-build.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;从源码构建
 
 <details>
 <summary><b>构建步骤</b></summary>
@@ -365,7 +355,7 @@ scripts/build_openssl.sh
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-issues-dark.webp"><img src="readme-assets/headings/h-issues.webp" width="34" height="34" alt=""></picture>&nbsp;问题反馈
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-issues-dark.webp"><img src="readme-assets/headings/h-issues.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;问题反馈
 
 提交 Bug 时请包含：
 - macOS 版本、机型与芯片类型
@@ -384,21 +374,21 @@ scripts/build_openssl.sh
 
 </details>
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contrib-dark.webp"><img src="readme-assets/headings/h-contrib.webp" width="34" height="34" alt=""></picture>&nbsp;贡献
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contrib-dark.webp"><img src="readme-assets/headings/h-contrib.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;贡献
 
 欢迎提交 Issue 和 PR。建议：
 - 保持中英文用户文案同步
 - 提交前至少验证核心串流与输入路径
 - PR 描述写用户可感知的变化，而不是只贴 commit 标题
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contact-dark.webp"><img src="readme-assets/headings/h-contact.webp" width="34" height="34" alt=""></picture>&nbsp;联系方式
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-contact-dark.webp"><img src="readme-assets/headings/h-contact.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;联系方式
 
 - 📧 Email: [dev@sky-hua.xyz](mailto:dev@sky-hua.xyz)
 - 💬 Telegram: [@skyhua](https://t.me/skyhua)
 - 🐧 QQ: 2110591491
 - 🔗 GitHub Issues: [提交 Issue](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-thanks-dark.webp"><img src="readme-assets/headings/h-thanks.webp" width="34" height="34" alt=""></picture>&nbsp;致谢
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-thanks-dark.webp"><img src="readme-assets/headings/h-thanks.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;致谢
 
 完整致谢、上游来源与生态参考请见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
 
@@ -407,6 +397,6 @@ scripts/build_openssl.sh
 - 主机端生态参考：`Sunshine`、`foundation-sunshine`
 - 输入与滚轮体验参考：`Mos`、`Mouser`
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-license-dark.webp"><img src="readme-assets/headings/h-license.webp" width="34" height="34" alt=""></picture>&nbsp;许可证
+## <picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/headings/h-license-dark.webp"><img src="readme-assets/headings/h-license.webp" width="34" height="34" align="absmiddle" alt=""></picture>&nbsp;许可证
 
 本项目采用 [GPLv3 许可证](LICENSE.txt)。
