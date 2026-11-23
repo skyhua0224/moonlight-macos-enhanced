@@ -4,9 +4,9 @@
 
 ## 去哪里取 dSYM
 
-- 发版页只放安装包和 `appcast.xml`。`MoonlightEnhanced-dSYM-arm64.zip` 与 `MoonlightEnhanced-dSYM-x86_64.zip` 保存在该 tag 的 CI 运行产物里（保留 90 天），发版时另行存档。arm64、x86_64、universal 三种 DMG 里的二进制都来自这两次构建（universal 的两个切片分别取自它们），所以这两个 dSYM 覆盖全部三种安装包。每个 zip 含主程序和文件提供扩展两个 `.dSYM`。
-- 同一份文件也在对应 CI 运行的产物里（`Moonlight-macOS-dsym-arm64`、`Moonlight-macOS-dsym-x86_64`），保留期按仓库的产物设置。需要长期保存的以 Release 附件为准。
-- 要用哪个版本的 dSYM：看报告里的 App 版本与 Build 号，取同名 tag 的 Release。拿不准时用 UUID 核对：`dwarfdump --uuid MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced` 与 `dwarfdump --uuid MoonlightEnhanced.app.dSYM` 必须一致。
+- 发版页只放安装包和 `appcast.xml`。`MoonlightEnhanced-dSYM-arm64.zip` 与 `MoonlightEnhanced-dSYM-x86_64.zip` 保存在该 tag 的 CI 运行产物里（保留 90 天）。发版时由维护者手动下载这两个文件，另存一份私有存档，用于 90 天之后的崩溃分析。arm64、x86_64、universal 三种 DMG 里的二进制都来自这两次构建（universal 的两个切片分别取自它们），所以这两个 dSYM 覆盖全部三种安装包。每个 zip 含主程序和文件提供扩展两个 `.dSYM`。
+- CI 产物名为 `Moonlight-macOS-dsym-arm64`、`Moonlight-macOS-dsym-x86_64`。90 天内从该 tag 的 CI 运行下载；更早的版本向维护者索取私有存档。
+- 要用哪个版本的 dSYM：看报告里的 App 版本与 Build 号，取同名 tag 的 CI 运行产物或私有存档。拿不准时用 UUID 核对：`dwarfdump --uuid MoonlightEnhanced.app/Contents/MacOS/MoonlightEnhanced` 与 `dwarfdump --uuid MoonlightEnhanced.app.dSYM` 必须一致。
 
 ## 三种来源怎么符号化
 
