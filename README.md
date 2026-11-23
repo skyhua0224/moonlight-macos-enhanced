@@ -7,6 +7,10 @@
   <img src="readme-assets/images/header-light.png" width="1000" alt="Moonlight macOS Enhanced">
 </picture>
 
+<p align="center"><a href="https://github.com/skyhua0224/moonlight-macos-enhanced/releases/latest"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-download-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-download-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-download-d-dark.webp"><img src="readme-assets/buttons/zh/rd-download-d.webp" alt="下载（通用版，推荐）" height="56"></picture></a>&nbsp;<a href="https://github.com/skyhua0224/moonlight-macos-enhanced"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-star-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-star-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-star-d-dark.webp"><img src="readme-assets/buttons/zh/rd-star-d.webp" alt="点个 Star" height="56"></picture></a>&nbsp;<a href=".github/release-notes/v1.3.9-rc.8.md"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-notes-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-notes-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-notes-d-dark.webp"><img src="readme-assets/buttons/zh/rd-notes-d.webp" alt="更新说明" height="56"></picture></a>&nbsp;<a href="https://github.com/skyhua0224/moonlight-macos-enhanced/issues"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="readme-assets/buttons/zh/rd-issues-p-dark.webp"><source media="(max-width: 600px)" srcset="readme-assets/buttons/zh/rd-issues-p.webp"><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-issues-d-dark.webp"><img src="readme-assets/buttons/zh/rd-issues-d.webp" alt="问题反馈" height="56"></picture></a></p>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="readme-assets/buttons/zh/rd-req-d-dark.webp"><img src="readme-assets/buttons/zh/rd-req-d.webp" alt="macOS 12 或更高，Apple 芯片与 Intel" height="34"></picture></p>
+
 [![Build](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml/badge.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/actions/workflows/build.yml) [![Release](https://img.shields.io/github/v/release/skyhua0224/moonlight-macos-enhanced?include_prereleases)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Downloads](https://img.shields.io/github/downloads/skyhua0224/moonlight-macos-enhanced/total)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-Native-orange.svg)](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
 
 **Moonlight macOS / Moonlight for macOS 原生增强版客户端**
@@ -14,8 +18,6 @@
 `Moonlight macOS Enhanced` 是一个原生 macOS 串流客户端，用于连接 Sunshine、Foundation Sunshine 与兼容 GameStream 的主机。界面使用 AppKit / SwiftUI 构建，支持 Apple Silicon 与 Intel Mac，要求 macOS 12 或更高版本。
 
 简体中文 | [English](README.en.md)
-
-[下载](https://github.com/skyhua0224/moonlight-macos-enhanced/releases) · [更新说明](.github/release-notes/v1.3.9-rc.8.md) · [问题反馈](https://github.com/skyhua0224/moonlight-macos-enhanced/issues)
 
 
 </div>
