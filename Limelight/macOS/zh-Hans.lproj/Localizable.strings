@@ -1786,6 +1786,8 @@
 "deck.quit" = "退出应用";
 "deck.quitNamed" = "退出 %@";
 "deck.quitRunning" = "退出正在运行的应用";
+"deck.quitDesktop" = "退出桌面";
+"deck.quitBigScreen" = "退出大屏模式";
 "deck.lastOnline" = "上次在线 %@";
 "deck.lastStream" = "上次串流 %@";
 "deck.resumeApp" = "继续 %@";

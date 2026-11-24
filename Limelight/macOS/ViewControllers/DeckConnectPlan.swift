@@ -24,8 +24,11 @@ struct DeckPlanApp: Equatable {
 }
 
 struct DeckQuitEntry: Equatable {
+  /// 桌面 and 大屏模式 are named by what they are (退出桌面, 退出大屏模式); every other app by its own name (退出 X).
+  enum Role: Equatable { case desktop, bigScreen, app }
   var appId: String
   var name: String?
+  var role: Role = .app
 }
 
 enum DeckConnectTarget: Equatable {
@@ -91,7 +94,8 @@ struct DeckConnectPlan: Equatable {
     guard reachable, let runningId, !runningId.isEmpty, runningId != "0",
           let app = apps.first(where: { $0.id == runningId }) else { return nil }
     let name = app.name.trimmingCharacters(in: .whitespacesAndNewlines)
-    return DeckQuitEntry(appId: app.id, name: name.isEmpty ? nil : name)
+    let role: DeckQuitEntry.Role = app.kind == "bigscreen" ? .bigScreen : (isDesktopLike(app) ? .desktop : .app)
+    return DeckQuitEntry(appId: app.id, name: name.isEmpty ? nil : name, role: role)
   }
 
   /// A name for the button: cut at `limit` characters.

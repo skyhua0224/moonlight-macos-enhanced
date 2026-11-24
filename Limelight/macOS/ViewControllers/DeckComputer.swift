@@ -280,7 +280,12 @@ extension DeckAppsModel {
     let planApps = apps.map { DeckPlanApp(id: $0.id ?? "", name: $0.name ?? "", kind: $0.deckInfo.kind) }
     guard let entry = DeckConnectPlan.quitEntry(runningId: runningId, apps: planApps, reachable: reachable),
           let app = apps.first(where: { $0.id == entry.appId }) else { return nil }
-    let title = entry.name.map { DLf("deck.quitNamed", DeckConnectPlan.shortName($0, limit: 24)) } ?? DL("deck.quitRunning")
+    let title: String
+    switch entry.role {
+    case .desktop: title = DL("deck.quitDesktop")
+    case .bigScreen: title = DL("deck.quitBigScreen")
+    case .app: title = entry.name.map { DLf("deck.quitNamed", DeckConnectPlan.shortName($0, limit: 24)) } ?? DL("deck.quitRunning")
+    }
     return (app, title)
   }
 

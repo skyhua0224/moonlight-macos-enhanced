@@ -1201,8 +1201,7 @@ enum DeckMoreMenu {
 
     // 退出 <app> first, for whatever runs now (桌面 and 大屏模式 have no tile to quit them from)
     if let quit = model.quitTarget(reachable: host.online && host.paired) {
-      let text = quit.app.name.flatMap { $0.isEmpty ? nil : DLf("deck.quitNamed", $0) } ?? DL("deck.quitRunning")
-      head.append(DeckBlockMenuItem(text, symbol: "xmark.circle") { model.quitApp(quit.app) })
+      head.append(DeckBlockMenuItem(quit.title, symbol: "xmark.circle") { model.quitApp(quit.app) })
       head.append(.separator())
     }
     for section in DeckConnectMenuRegistry.sections(for: host) {
