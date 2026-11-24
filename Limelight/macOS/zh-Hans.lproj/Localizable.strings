@@ -1791,6 +1791,7 @@
 "deck.lastOnline" = "上次在线 %@";
 "deck.lastStream" = "上次串流 %@";
 "deck.resumeApp" = "继续 %@";
+"deck.resumeBigScreen" = "继续大屏模式";
 "deck.playApp" = "启动 %@";
 "deck.appCount" = "%d 个应用";
 "deck.noMac" = "无法唤醒";

@@ -1743,6 +1743,7 @@
 "deck.lastOnline" = "Last online %@";
 "deck.lastStream" = "Streamed %@";
 "deck.resumeApp" = "Resume %@";
+"deck.resumeBigScreen" = "Resume Big Screen";
 "deck.playApp" = "Play %@";
 "deck.appCount" = "%d apps";
 "deck.noMac" = "Cannot wake";
