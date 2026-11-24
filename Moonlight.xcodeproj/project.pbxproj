@@ -214,6 +214,7 @@
 				"macOS/Helpers/NSWindow+Moonlight.m",
 				macOS/Helpers/NumberOnlyFormatter.swift,
 				macOS/Helpers/SparkleUpdateManager.swift,
+				macOS/Helpers/UpdateVersionPolicy.swift,
 				macOS/Helpers/ViewExtensions.swift,
 				macOS/HostCell.xib,
 				"macOS/Supporting Files/main.m",
