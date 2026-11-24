@@ -1734,6 +1734,8 @@
 "deck.resume" = "Resume";
 "deck.play" = "Play";
 "deck.quit" = "Quit App";
+"deck.quitNamed" = "Quit %@";
+"deck.quitRunning" = "Quit Running App";
 "deck.desktopWhileRunning" = "The host runs one app at a time: connecting to the desktop quits %@ first";
 "Another App Is Running" = "Another app is running on the host. Quit it first, then start this one.";
 "deck.lastOnline" = "Last online %@";

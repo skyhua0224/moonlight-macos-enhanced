@@ -1784,6 +1784,8 @@
 "deck.resume" = "继续";
 "deck.play" = "启动";
 "deck.quit" = "退出应用";
+"deck.quitNamed" = "退出 %@";
+"deck.quitRunning" = "退出正在运行的应用";
 "deck.lastOnline" = "上次在线 %@";
 "deck.lastStream" = "上次串流 %@";
 "deck.resumeApp" = "继续 %@";

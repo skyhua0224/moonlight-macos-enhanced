@@ -274,6 +274,16 @@ extension DeckAppsModel {
     return app
   }
 
+  /// 退出 <app> for whatever runs now, 桌面 and 大屏模式 included (DeckConnectPlan.quitEntry decides): the app to quit
+  /// and the words of the button.
+  func quitTarget(reachable: Bool) -> (app: TemporaryApp, title: String)? {
+    let planApps = apps.map { DeckPlanApp(id: $0.id ?? "", name: $0.name ?? "", kind: $0.deckInfo.kind) }
+    guard let entry = DeckConnectPlan.quitEntry(runningId: runningId, apps: planApps, reachable: reachable),
+          let app = apps.first(where: { $0.id == entry.appId }) else { return nil }
+    let title = entry.name.map { DLf("deck.quitNamed", DeckConnectPlan.shortName($0, limit: 24)) } ?? DL("deck.quitRunning")
+    return (app, title)
+  }
+
   /// Only on a Foundation Sunshine host that has an app with FsKind=bigscreen.
   var bigScreenApp: TemporaryApp? { connectPlan.bigScreenId.flatMap { id in apps.first { $0.id == id } } }
 
@@ -1102,6 +1112,26 @@ struct DeckComputerBody: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
           guard let app = model.runningGame, let menu = model.actions.appMenu?(app) else { return }
           // the menu runs its own tracking loop: a timer in the common modes takes the picture while it is open
+          let shot = Timer(timeInterval: 1.5, repeats: false) { _ in
+            let out = conceptEnv("MLC_MENUOUT") ?? "/tmp/apps-concept/out/menu.png"
+            _ = (NSClassFromString("ConceptHarness") as AnyObject).perform(NSSelectorFromString("padShot:"), with: out)
+            exit(0)
+          }
+          RunLoop.main.add(shot, forMode: .common)
+          if let content = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })?.contentView {
+            menu.popUp(positioning: nil, at: NSPoint(x: 560, y: content.bounds.height - 330), in: content)
+          } else {
+            DeckMenuPresenter.pop(menu)
+          }
+        }
+      }
+    }
+    .onAppear {
+      // harness: open the ⋯ menu of the computer so a picture of the screen shows it
+      if conceptEnv("MLC_POPMOREMENU") != nil {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
+          guard let host = model.host else { return }
+          let menu = DeckMoreMenu.menu(host, model)
           let shot = Timer(timeInterval: 1.5, repeats: false) { _ in
             let out = conceptEnv("MLC_MENUOUT") ?? "/tmp/apps-concept/out/menu.png"
             _ = (NSClassFromString("ConceptHarness") as AnyObject).perform(NSSelectorFromString("padShot:"), with: out)

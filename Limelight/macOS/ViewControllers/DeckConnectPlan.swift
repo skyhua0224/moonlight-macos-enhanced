@@ -23,6 +23,11 @@ struct DeckPlanApp: Equatable {
   var kind: String?
 }
 
+struct DeckQuitEntry: Equatable {
+  var appId: String
+  var name: String?
+}
+
 enum DeckConnectTarget: Equatable {
   /// 连接桌面: starts this app.
   case desktop(id: String)
@@ -77,6 +82,16 @@ struct DeckConnectPlan: Equatable {
   static func desktopWhileRunning(plan: DeckConnectPlan, runningId: String?) -> String? {
     guard let runningId, !runningId.isEmpty, case .desktop(let id) = plan.target, id != runningId else { return nil }
     return id
+  }
+
+  /// 退出 <app>: the app the host runs now, whichever it is (桌面, 大屏模式 or an ordinary app). Nil when nothing
+  /// runs, when the computer is not reachable and paired, or when the running id is not in the list (nothing to quit).
+  /// `name` is nil when the host gave none, so the caller writes 退出正在运行的应用.
+  static func quitEntry(runningId: String?, apps: [DeckPlanApp], reachable: Bool) -> DeckQuitEntry? {
+    guard reachable, let runningId, !runningId.isEmpty, runningId != "0",
+          let app = apps.first(where: { $0.id == runningId }) else { return nil }
+    let name = app.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    return DeckQuitEntry(appId: app.id, name: name.isEmpty ? nil : name)
   }
 
   /// A name for the button: cut at `limit` characters.
