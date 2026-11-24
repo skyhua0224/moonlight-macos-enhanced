@@ -392,6 +392,8 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
         host.addressStates = @{addr: @(host.state == StateOnline ? 1 : 0)};
     }
     host.currentGame = m[@"current"] ?: @"0";
+    // MLC_CURRENT=<app id>: the app this host runs now (1 = Desktop, 15 = 大屏, 3 = 原神 ...), for shots of 退出
+    if (getenv("MLC_CURRENT")) host.currentGame = [NSString stringWithUTF8String:getenv("MLC_CURRENT")];
     if (getenv("MLC_RUNNING_OFF")) {
         host.currentGame = @"0";
     }
@@ -405,7 +407,8 @@ static BOOL FrameWatchHasOldPage(NSView *v) {
     }
     if (slug == nil) return;
     NSDictionary *m = MockHostForUUID(app.host.uuid);
-    BOOL running = [m[@"current"] isEqualToString:app.id] && !getenv("MLC_RUNNING_OFF");
+    NSString *current = getenv("MLC_CURRENT") ? [NSString stringWithUTF8String:getenv("MLC_CURRENT")] : m[@"current"];
+    BOOL running = [current isEqualToString:app.id] && !getenv("MLC_RUNNING_OFF");
     app.fsExtras = MockAppExtras(app.host.uuid, slug, running);
 }
 

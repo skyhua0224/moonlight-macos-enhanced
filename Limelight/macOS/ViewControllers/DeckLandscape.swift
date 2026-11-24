@@ -1199,6 +1199,11 @@ enum DeckMoreMenu {
     let menu = model.actions.hostMenu?(model.defaultApp) ?? NSMenu()
     var head: [NSMenuItem] = []
 
+    // 退出 <app> first, for whatever runs now (桌面 and 大屏模式 have no tile to quit them from)
+    if let quit = model.quitTarget(reachable: host.online && host.paired) {
+      head.append(DeckBlockMenuItem(quit.title, symbol: "xmark.circle") { model.quitApp(quit.app) })
+      head.append(.separator())
+    }
     for section in DeckConnectMenuRegistry.sections(for: host) {
       head.append(deckMenuSectionHeader(title: section.title))
       for item in section.items {
@@ -1262,7 +1267,10 @@ struct DeckConnectBar: View {
   var body: some View {
     let choice = DeckConnect.effective(host, model)
     let shown = choice.mode == .bigscreen ? DeckConnectChoice(mode: .desktop, displayId: nil) : choice
-    let title = game.map { DLf("deck.resumeApp", $0.name ?? "") } ?? DeckConnect.primaryLabel(shown, host: host, model: model)
+    // 大屏模式 running reads like 连接桌面 does: 继续大屏模式, and its own button is not offered twice
+    let bigScreenRunning = game != nil && game?.id == model.connectPlan.bigScreenId
+    let title = bigScreenRunning ? DL("deck.resumeBigScreen")
+      : (game.map { DLf("deck.resumeApp", $0.name ?? "") } ?? DeckConnect.primaryLabel(shown, host: host, model: model))
     let nothingToStart = game == nil && model.connectPlan.target == .none
     VStack(alignment: .leading, spacing: 8) {
     // the buttons wrap onto a second row when the column is narrow (a large page scale), never truncate
@@ -1271,8 +1279,10 @@ struct DeckConnectBar: View {
       if model.launching {
         secondary(DL("deck.cancelConnect"), symbol: "xmark") { model.actions.cancelLaunch?() }
       }
+      if let quit = model.quitTarget(reachable: host.online && host.paired) {
+        secondary(quit.title, symbol: "xmark") { model.quitApp(quit.app) }
+      }
       if let game {
-        secondary(DL("deck.quit"), symbol: "xmark") { model.quitApp(game) }
         // 连接桌面 while an app runs: the host keeps one app, so this asks to quit the running one first (the help
         // line says so); DeckConnectPlan.desktopWhileRunning decides whether it is offered
         if DeckConnectPlan.desktopWhileRunning(plan: model.connectPlan, runningId: game.id) != nil {
@@ -1281,7 +1291,7 @@ struct DeckConnectBar: View {
           }
         }
       }
-      if let big = model.bigScreenApp {
+      if let big = model.bigScreenApp, !bigScreenRunning {
         secondary(DL("deck.mode.bigscreen"), symbol: "tv") {
           guard model.canStream else { NSSound.beep(); return }
           DeckConnectStore.set(host.id, DeckConnectChoice(mode: .bigscreen, displayId: nil))

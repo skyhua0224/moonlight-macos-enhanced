@@ -87,6 +87,21 @@ do {
   // 大屏 is its own app: it has its own id, which is what the running app is compared with
   check("大屏模式 and Steam are two apps: 大屏 id differs from the running Steam id", p.bigScreenId == "2" && p.bigScreenId != "3")
 }
+// 退出 <app>: whatever runs, 桌面 and 大屏模式 included
+do {
+  let apps = [app("1", "Desktop", "desktop"), app("2", "大屏", "bigscreen"), app("3", "Steam", "game"), app("4", "  ", "game")]
+  func entry(_ id: String?, reachable: Bool = true) -> DeckQuitEntry? { DeckConnectPlan.quitEntry(runningId: id, apps: apps, reachable: reachable) }
+  check("quit: Desktop runs -> 退出桌面", entry("1") == DeckQuitEntry(appId: "1", name: "Desktop", role: .desktop))
+  check("quit: 大屏模式 runs -> 退出大屏模式", entry("2") == DeckQuitEntry(appId: "2", name: "大屏", role: .bigScreen))
+  let plainDesk = [app("1", "Desktop"), app("9", "Game")]
+  check("quit: a plain host's Desktop is named by name", DeckConnectPlan.quitEntry(runningId: "1", apps: plainDesk, reachable: true)?.role == .desktop)
+  check("quit: a plain host's game stays 退出 X", DeckConnectPlan.quitEntry(runningId: "9", apps: plainDesk, reachable: true)?.role == .app)
+  check("quit: an ordinary app runs", entry("3") == DeckQuitEntry(appId: "3", name: "Steam"))
+  check("quit: no name given -> nil name", entry("4") == DeckQuitEntry(appId: "4", name: nil))
+  check("quit: nothing runs", entry(nil) == nil && entry("") == nil && entry("0") == nil)
+  check("quit: running id not in the list", entry("99") == nil)
+  check("quit: host off or not paired", entry("3", reachable: false) == nil)
+}
 // names
 check("short name kept", DeckConnectPlan.shortName("Hades") == "Hades")
 check("long name cut", DeckConnectPlan.shortName("The Witcher 3: Wild Hunt — Complete Edition") == "The Witcher 3: …", DeckConnectPlan.shortName("The Witcher 3: Wild Hunt — Complete Edition"))
