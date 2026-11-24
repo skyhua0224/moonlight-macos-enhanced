@@ -74,17 +74,16 @@ BETA_NOTES = "beta.md"
 
 
 def get_previous_tag(current_tag: str) -> str | None:
-    if TIMESTAMP_TAG.match(current_tag):
-        # The nearest tag behind the tagged commit: the previous test build, or the release it follows.
-        try:
-            return run_git("describe", "--tags", "--abbrev=0", f"{current_tag}^")
-        except subprocess.CalledProcessError:
-            return None
-    tags = [line.strip() for line in run_git("tag", "--sort=-v:refname").splitlines() if line.strip()]
-    for tag in tags:
-        if tag != current_tag and tag.startswith("v"):
-            return tag
-    return None
+    """The tag behind the tagged commit, by history, not by name: timestamp tags sort above every 2.x number."""
+    args = ["describe", "--tags", "--abbrev=0"]
+    if not (TIMESTAMP_TAG.match(current_tag) or re.search(r"-(rc|beta|alpha)[.-][0-9]+$", current_tag)):
+        # A stable release compares with the stable release before it, not with a candidate or a test build.
+        for pattern in ("*-rc*", "*-beta*", "*-alpha*", "v[0-9][0-9][0-9][0-9].*"):
+            args += ["--exclude", pattern]
+    try:
+        return run_git(*args, f"{current_tag}^") or None
+    except subprocess.CalledProcessError:
+        return None
 
 
 def parse_subject(subject: str) -> tuple[str | None, str | None, str]:

@@ -52,13 +52,19 @@ enum UpdateVersionPolicy {
     var build: Int?
   }
 
-  /// The release to offer: the highest build number among the eligible releases; when none has one, the highest
-  /// version by the legacy comparison (`legacyNewer(a, b)`: a is newer than b).
+  /// The release to offer. Build numbers decide among releases that have one. A release whose build could not be
+  /// read is never dropped: it competes with the best known build by publication time (releases are published in
+  /// build order), and by the legacy version comparison (`legacyNewer(a, b)`: a is newer than b) when a time is missing.
   static func choose(_ releases: [Release], acceptsPrereleases: Bool, legacyNewer: (String, String) -> Bool) -> Release? {
     let eligible = releases.filter { isEligible(tag: $0.tag, prerelease: $0.prerelease, acceptsPrereleases: acceptsPrereleases) }
-    let withBuild = eligible.filter { $0.build != nil }
-    if let best = withBuild.max(by: { ($0.build ?? 0) < ($1.build ?? 0) }) { return best }
-    return eligible.max(by: { legacyNewer($1.tag, $0.tag) })
+    let bestKnown = eligible.filter { $0.build != nil }.max(by: { ($0.build ?? 0) < ($1.build ?? 0) })
+    let bestUnknown = eligible.filter { $0.build == nil }.max(by: { legacyNewer($1.tag, $0.tag) })
+    guard let known = bestKnown else { return bestUnknown }
+    guard let unknown = bestUnknown else { return known }
+    if let knownTime = known.publishedAt, let unknownTime = unknown.publishedAt, knownTime != unknownTime {
+      return unknownTime > knownTime ? unknown : known
+    }
+    return legacyNewer(unknown.tag, known.tag) ? unknown : known
   }
 
   /// Whether the candidate is an update for the running app.

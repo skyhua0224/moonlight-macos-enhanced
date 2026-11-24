@@ -44,5 +44,9 @@ above every earlier one. Stable installs keep reading the Latest release.
 1. `python3 scripts/release_info.py` on the commit to publish; tag it with the printed `release_tag` and push the tag.
 2. CI builds and makes a draft pre-release with the DMGs. Update `.github/release-notes/beta.md` before tagging.
 3. Sign the universal DMG into `appcast.xml` with the Sparkle EdDSA key and `SPARKLE_CHANNEL=beta`
-   (`scripts/generate_sparkle_appcast.sh`); upload it to the release and to the feed branch.
+   (`scripts/generate_sparkle_appcast.sh`). The generator writes only the items it can build from
+   `SPARKLE_ARCHIVES_DIR`, so for the feed branch put the new test build's DMG and the current stable release's
+   universal DMG (with its notes) in that directory, and check that the result lists both. Upload that file to the
+   feed branch. The release gets its own `appcast.xml` made from the new DMG alone; the release-page check reads
+   its build number.
 4. Publish with `gh release edit <tag> --draft=false --prerelease --latest=false`.

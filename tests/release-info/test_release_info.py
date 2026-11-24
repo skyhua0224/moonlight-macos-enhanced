@@ -53,6 +53,30 @@ class ReleaseInfo(unittest.TestCase):
         self.assertEqual(run("--date", d, "--check-tag", "v2026.1124.103318"), 1)
         self.assertEqual(run("--date", d, "--check-tag", "v1.3.9"), 1)
 
+    def test_check_tag_from_the_repository(self):
+        """Without --date, as in CI: the committer date of the checked-out commit, for lightweight and annotated tags."""
+        import tempfile
+        commit_time = "2026-11-24T10:33:17+00:00"
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid",
+               "GIT_AUTHOR_DATE": "2026-01-02T03:04:05+00:00", "GIT_COMMITTER_DATE": commit_time}
+        with tempfile.TemporaryDirectory() as repo:
+            def git(*args, **extra):
+                subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env={**env, **extra})
+            def check(tag):
+                return subprocess.run([sys.executable, SCRIPT, "--check-tag", tag], cwd=repo, capture_output=True).returncode
+            git("init", "-q")
+            git("commit", "-q", "--allow-empty", "-m", "c")
+            # The annotated tag's own date differs from the commit's committer date and must not count.
+            git("tag", "-a", "-m", "m", "v2026.1124.103317", GIT_COMMITTER_DATE="2026-12-31T23:59:59+00:00")
+            self.assertEqual(check("v2026.1124.103317"), 0)
+            self.assertEqual(check("v2026.1124.103318"), 1)
+            self.assertEqual(check("v2026.1231.235959"), 1)
+            git("tag", "-d", "v2026.1124.103317")
+            git("tag", "v2026.1124.103317")
+            self.assertEqual(check("v2026.1124.103317"), 0)
+            self.assertEqual(check("v1.3.9"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

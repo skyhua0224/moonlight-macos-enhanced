@@ -91,7 +91,9 @@ check("stable 1.3.9 is current", !newer("v1.3.9", 1726, "1.3.9", 1726))
 check("no build falls back to version", newer("v2.0.0", nil, "1.3.9", 1726) && !newer("v1.3.9", nil, "1.3.9", 1726))
 
 // MARK: choose
-func rel(_ tag: String, _ pre: Bool, _ build: Int?) -> P.Release { P.Release(tag: tag, prerelease: pre, publishedAt: nil, build: build) }
+func rel(_ tag: String, _ pre: Bool, _ build: Int?, _ at: String? = nil) -> P.Release {
+  P.Release(tag: tag, prerelease: pre, publishedAt: at, build: build)
+}
 let list = [rel("v1.3.9", false, 1726), rel("v1.3.9-rc.10", true, 1690), rel(ts1, true, 1740)]
 check("stable channel never picks the timestamp beta", P.choose(list, acceptsPrereleases: false, legacyNewer: legacyNewer)?.tag == "v1.3.9")
 check("beta channel picks the timestamp beta", P.choose(list, acceptsPrereleases: true, legacyNewer: legacyNewer)?.tag == ts1)
@@ -101,9 +103,18 @@ check("stable channel picks 2.0.0", P.choose(withStable2, acceptsPrereleases: fa
 let noBuilds = [rel("v1.3.9", false, nil), rel("v1.3.9-rc.10", true, nil), rel(ts1, true, nil)]
 check("no builds: legacy order", P.choose(noBuilds, acceptsPrereleases: true, legacyNewer: legacyNewer)?.tag == ts1
   && P.choose(noBuilds, acceptsPrereleases: false, legacyNewer: legacyNewer)?.tag == "v1.3.9")
-let mixed = [rel("v2.0.0", false, 1900), rel(ts1, true, nil)]
-check("a known build beats an unknown one", P.choose(mixed, acceptsPrereleases: true, legacyNewer: legacyNewer)?.tag == "v2.0.0")
 check("nothing eligible", P.choose([rel(ts1, true, 1740)], acceptsPrereleases: false, legacyNewer: legacyNewer) == nil)
+// A release whose appcast could not be read stays a candidate.
+let old = "2026-11-23T10:50:00Z", new = "2026-12-20T08:00:00Z"
+check("unreadable newer release beats the known older one",
+      P.choose([rel("v1.3.9", false, 1726, old), rel("v2.0.0", false, nil, new)], acceptsPrereleases: false, legacyNewer: legacyNewer)?.tag == "v2.0.0")
+check("known newer release beats an unreadable older one",
+      P.choose([rel("v2.0.0", false, 1900, new), rel("v1.3.9", false, nil, old)], acceptsPrereleases: false, legacyNewer: legacyNewer)?.tag == "v2.0.0")
+check("unreadable newer 2.0.0 beats a known older timestamp beta (beta channel)",
+      P.choose([rel(ts1, true, 1740, old), rel("v2.0.0", false, nil, new)], acceptsPrereleases: true, legacyNewer: legacyNewer)?.tag == "v2.0.0")
+check("without times the legacy order decides",
+      P.choose([rel("v1.3.9", false, 1726), rel("v2.0.0", false, nil)], acceptsPrereleases: false, legacyNewer: legacyNewer)?.tag == "v2.0.0")
+check("the unreadable release is then offered by version", newer("v2.0.0", nil, "1.3.9", 1726))
 
 // MARK: feed order
 let feedList = ["gh", "cnb", "branch"]

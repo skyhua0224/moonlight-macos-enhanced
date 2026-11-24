@@ -47,6 +47,19 @@ class ReleaseBody(unittest.TestCase):
         self.assertEqual(body.get_previous_tag("v2026.1124.103317"), "v1.3.9")
         self.assertEqual(body.get_previous_tag("v2026.1201.90000"), "v2026.1124.103317")
 
+    def test_stable_tag_skips_candidates_and_test_builds(self):
+        # v1.3.9 -> v2026.1124.103317 -> v2026.1201.90000 (setUp) -> v2.0.0-rc.1 -> v2.0.0 -> v2.0.1
+        for index, tag in enumerate(["v2.0.0-rc.1", "v2.0.0", "v2.0.1"]):
+            (self.repo / "f").write_text(f"s{index}")
+            git(self.repo, "commit", "-q", "-am", f"s{index}")
+            git(self.repo, "tag", tag)
+        self.assertEqual(body.get_previous_tag("v2.0.1"), "v2.0.0")
+        self.assertEqual(body.get_previous_tag("v2.0.0"), "v1.3.9")
+        self.assertEqual(body.get_previous_tag("v2.0.0-rc.1"), "v2026.1201.90000")
+
+    def test_no_previous_tag(self):
+        self.assertIsNone(body.get_previous_tag("v1.3.9"))
+
     def test_test_build_uses_the_shared_notes(self):
         text = body.build_body("v2026.1201.90000")
         self.assertIn("beta notes", text)
