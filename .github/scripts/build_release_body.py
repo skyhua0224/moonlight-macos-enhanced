@@ -67,7 +67,19 @@ def run_git(*args: str) -> str:
     return result.stdout.strip()
 
 
+# A test build is tagged with the timestamp of its commit (scripts/release_info.py).
+TIMESTAMP_TAG = re.compile(r"^v[0-9]{4}\.[0-9]{3,4}\.[0-9]{1,6}$")
+# Test builds share one notes file: the tag is the commit's time, so it cannot be named in the commit itself.
+BETA_NOTES = "beta.md"
+
+
 def get_previous_tag(current_tag: str) -> str | None:
+    if TIMESTAMP_TAG.match(current_tag):
+        # The nearest tag behind the tagged commit: the previous test build, or the release it follows.
+        try:
+            return run_git("describe", "--tags", "--abbrev=0", f"{current_tag}^")
+        except subprocess.CalledProcessError:
+            return None
     tags = [line.strip() for line in run_git("tag", "--sort=-v:refname").splitlines() if line.strip()]
     for tag in tags:
         if tag != current_tag and tag.startswith("v"):
@@ -129,7 +141,7 @@ def build_fallback_highlights(current_tag: str, previous_tag: str | None) -> str
 
 
 def load_highlights(version: str, previous_tag: str | None) -> str:
-    notes_path = NOTES_DIR / f"{version}.md"
+    notes_path = NOTES_DIR / (BETA_NOTES if TIMESTAMP_TAG.match(version) else f"{version}.md")
     if notes_path.exists():
         return notes_path.read_text(encoding="utf-8").strip()
 

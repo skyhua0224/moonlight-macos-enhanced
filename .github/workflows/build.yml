@@ -91,6 +91,12 @@ jobs:
         sh tests/rtsp-announce-size/run.sh
         sh tests/fps-meter/run.sh
 
+    # Version and tag of a test build come from the commit time; the update check offers a release by build number.
+    - name: Test build version and update check tests
+      run: |
+        sh tests/release-info/run.sh
+        sh tests/update-version-policy/run.sh
+
     # The colour space SDR streams are shown in must be sRGB (the host desktop is sRGB-encoded), not BT.709.
     - name: SDR presentation colour-space test
       run: sh tests/sdr-colorspace/run.sh
@@ -123,13 +129,21 @@ jobs:
         display_version=1.3.9
         update_channel=stable
         if [[ "$GITHUB_REF_TYPE" == tag ]]; then
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-(rc|beta|alpha)[.-][0-9]+)?$ ]]; then
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]{4}\.[0-9]{3,4}\.[0-9]{1,6}$ ]]; then
+            # A test build: the version is the commit time (UTC), the same rule as Foundation Sunshine.
+            # The tag must be the one the script gives the tagged commit, never a hand-typed one.
+            python3 scripts/release_info.py --check-tag "$GITHUB_REF_NAME"
+            marketing_version="${GITHUB_REF_NAME#v}"
+            display_version="$marketing_version"
+            update_channel=beta
+          elif [[ ! "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-(rc|beta|alpha)[.-][0-9]+)?$ ]]; then
             echo "Unsupported release tag: $GITHUB_REF_NAME" >&2
             exit 1
+          else
+            marketing_version="${BASH_REMATCH[1]}"
+            display_version="${GITHUB_REF_NAME#v}"
+            if [[ -n "${BASH_REMATCH[2]}" ]]; then update_channel=beta; fi
           fi
-          marketing_version="${BASH_REMATCH[1]}"
-          display_version="${GITHUB_REF_NAME#v}"
-          if [[ -n "${BASH_REMATCH[2]}" ]]; then update_channel=beta; fi
         fi
         echo "RELEASE_MARKETING_VERSION=$marketing_version" >> "$GITHUB_ENV"
         echo "RELEASE_DISPLAY_VERSION=$display_version" >> "$GITHUB_ENV"
@@ -544,6 +558,21 @@ jobs:
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+    # Release candidates, betas and timestamp test builds are pre-releases and never "Latest": the stable
+    # update feed is the Latest release, so a test build there would reach every stable install.
+    - name: Release kind
+      id: kind
+      run: |
+        tag="${GITHUB_REF_NAME}"
+        if [[ "$tag" =~ ^v[0-9]{4}\.[0-9]{3,4}\.[0-9]{1,6}$ ]]; then
+          python3 scripts/release_info.py --check-tag "$tag"
+          echo "prerelease=true" >> "$GITHUB_OUTPUT"
+        elif [[ "$tag" =~ -(rc|beta|alpha)[.-][0-9]+$ ]]; then
+          echo "prerelease=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "prerelease=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Check whether release archives are finalized
       id: publication
       env:
@@ -573,7 +602,8 @@ jobs:
         # Publish only after signing the final archives with the local EdDSA key.
         # Never replace a published archive: its appcast signature binds its bytes.
         draft: true
-        prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') || contains(github.ref, '-rc') }}
+        prerelease: ${{ steps.kind.outputs.prerelease == 'true' }}
+        make_latest: ${{ steps.kind.outputs.prerelease == 'true' && 'false' || 'legacy' }}
         files: |
           dist/Moonlight-macOS-Enhanced-x86_64.dmg
           dist/Moonlight-macOS-Enhanced-arm64.dmg

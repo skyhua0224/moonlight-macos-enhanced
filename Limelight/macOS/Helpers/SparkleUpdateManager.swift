@@ -8,11 +8,18 @@ enum UpdateSourcePolicy {
   // releases, so the same "latest release" path works on both. The feed
   // branch remains last for builds that predate the release-asset feeds.
   static let githubFeed = "https://github.com/skyhua0224/moonlight-macos-enhanced/releases/latest/download/appcast.xml"
+  static let branchFeed = "https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml"
   static let feeds = [
     githubFeed,
     "https://cnb.cool/AlkaidLab/moonlight-macos-enhanced-release/-/releases/latest/download/appcast.xml",
-    "https://raw.githubusercontent.com/skyhua0224/moonlight-macos-enhanced/refs/heads/chore/update-feed/appcast.xml",
+    branchFeed,
   ]
+
+  /// "Latest" is always a stable release, so a test build (a pre-release that is never Latest) reads the branch feed
+  /// first. It lists the newest test build and the current stable release.
+  static func orderedFeeds(acceptsPrereleases: Bool) -> [String] {
+    UpdateVersionPolicy.orderedFeeds(feeds, branchFeed: branchFeed, acceptsPrereleases: acceptsPrereleases)
+  }
 
   static func metadataVersion(_ tag: String) -> String {
     let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
@@ -91,6 +98,8 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
   @objc(canCheckForUpdates)
   static var canCheckForUpdates: Bool { shared.isConfigured && shared.canCheckUpdates }
 
+  private let feeds = UpdateSourcePolicy.orderedFeeds(
+    acceptsPrereleases: Bundle.main.object(forInfoDictionaryKey: "UpdateChannel") as? String == "beta")
   private var updater: SPUUpdater?
   private var userDriver: MirroredUpdateUserDriver?
   private var feedIndex = 0
@@ -170,7 +179,7 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
     Bundle.main.object(forInfoDictionaryKey: "UpdateChannel") as? String == "beta" ? ["beta"] : []
   }
 
-  func feedURLString(for updater: SPUUpdater) -> String? { UpdateSourcePolicy.feeds[feedIndex] }
+  func feedURLString(for updater: SPUUpdater) -> String? { feeds[feedIndex] }
 
   func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) { appcastLoaded = true }
 
@@ -221,7 +230,7 @@ final class SparkleUpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate
     guard error.domain == SUSparkleErrorDomain else { return false }
     if !appcastLoaded,
       [Int(SUError.appcastError.rawValue), Int(SUError.appcastParseError.rawValue)].contains(error.code),
-      feedIndex + 1 < UpdateSourcePolicy.feeds.count {
+      feedIndex + 1 < feeds.count {
       feedIndex += 1
       retryPending = true
       lastError = nil

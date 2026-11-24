@@ -281,6 +281,7 @@ final class ReleaseUpdateChecker: ObservableObject {
   @Published private(set) var release: ReleaseChannel?
   @Published private(set) var sourceURL: URL?
   @Published private(set) var errorMessage = ""
+  private var releaseBuild: Int?
 
   private let sources = [
     "https://www.alkaidlab.com/release-metadata/moonlight-macos-enhanced.json",
@@ -291,11 +292,12 @@ final class ReleaseUpdateChecker: ObservableObject {
     guard state != .checking else { return }
     state = .checking
     errorMessage = ""
+    releaseBuild = nil
     Task {
       if let githubRelease = await fetchGitHubRelease() {
         release = githubRelease
         sourceURL = URL(string: "https://api.github.com/repos/skyhua0224/moonlight-macos-enhanced/releases")
-        state = isNewer(githubRelease.version, than: appVersion) ? .updateAvailable : .upToDate
+        state = isNewer(githubRelease.version, build: releaseBuild, than: appVersion) ? .updateAvailable : .upToDate
         return
       }
       for rawSource in sources {
@@ -309,7 +311,7 @@ final class ReleaseUpdateChecker: ObservableObject {
           let document = try JSONDecoder().decode(ReleaseMetadataDocument.self, from: data)
           let keys = acceptsPrereleases ? ["latest", "pre-latest"] : ["latest"]
           let channels = keys.compactMap { document.channels[$0] ?? nil }
-          if let channel = channels.max(by: { isNewer($1.version, than: $0.version) }) {
+          if let channel = channels.max(by: { isLegacyNewer($1.version, than: $0.version) }) {
             release = channel
             sourceURL = source
             state = isNewer(channel.version, than: appVersion) ? .updateAvailable : .upToDate
@@ -338,8 +340,25 @@ final class ReleaseUpdateChecker: ObservableObject {
       guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode)
       else { throw URLError(.badServerResponse) }
       let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
-      guard let release = releases.filter({ !$0.prerelease || acceptsPrereleases })
-        .max(by: { isNewer($1.tagName, than: $0.tagName) }) else { return nil }
+      // Only the newest few eligible releases need a build number; each is one small appcast.
+      let eligible = releases
+        .filter { UpdateVersionPolicy.isEligible(tag: $0.tagName, prerelease: $0.prerelease, acceptsPrereleases: acceptsPrereleases) }
+        .sorted { ($0.publishedAt ?? "") > ($1.publishedAt ?? "") }
+        .prefix(4)
+      let builds = await withTaskGroup(of: (String, Int?).self) { group in
+        for release in eligible {
+          group.addTask { (release.tagName, await self.fetchBuildNumber(of: release)) }
+        }
+        var result: [String: Int] = [:]
+        for await (tag, build) in group { if let build { result[tag] = build } }
+        return result
+      }
+      let candidates = eligible.map {
+        UpdateVersionPolicy.Release(tag: $0.tagName, prerelease: $0.prerelease, publishedAt: $0.publishedAt, build: builds[$0.tagName])
+      }
+      guard let chosen = UpdateVersionPolicy.choose(candidates, acceptsPrereleases: acceptsPrereleases,
+                                                    legacyNewer: { [self] in isLegacyNewer($0, than: $1) }),
+        let release = eligible.first(where: { $0.tagName == chosen.tag }) else { return nil }
       let assets = release.assets.map { asset in
         ReleaseAsset(
           type: asset.name.contains("universal") ? "macos-universal-dmg" : nil,
@@ -347,6 +366,7 @@ final class ReleaseUpdateChecker: ObservableObject {
           url: asset.browserDownloadURL,
           fallbackUrl: UpdateSourcePolicy.mirrorURL(for: URL(string: asset.browserDownloadURL))?.absoluteString)
       }
+      releaseBuild = chosen.build
       return ReleaseChannel(
         version: release.tagName,
         prerelease: release.prerelease,
@@ -367,10 +387,36 @@ final class ReleaseUpdateChecker: ObservableObject {
     Bundle.main.object(forInfoDictionaryKey: "UpdateChannel") as? String == "beta"
   }
 
-  private func isNewer(_ candidate: String, than current: String) -> Bool {
+  /// The build number of a release, from the appcast attached to it. Nil when there is none or it cannot be read.
+  private nonisolated func fetchBuildNumber(of release: GitHubRelease) async -> Int? {
+    guard let asset = release.assets.first(where: { $0.name == "appcast.xml" }),
+      let url = UpdateVersionPolicy.appcastURL(from: asset.browserDownloadURL) else { return nil }
+    do {
+      var request = URLRequest(url: url)
+      request.timeoutInterval = 15
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
+        data.count < 1_000_000 else { return nil }
+      return UpdateVersionPolicy.buildNumber(appcast: data, includingBeta: true)
+    } catch {
+      return nil
+    }
+  }
+
+  private var appBuild: Int? {
+    (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String).flatMap { Int($0) }
+  }
+
+  private func isLegacyNewer(_ candidate: String, than current: String) -> Bool {
     let candidate = UpdateSourcePolicy.metadataVersion(candidate)
     let current = UpdateSourcePolicy.metadataVersion(current)
     return SUStandardVersionComparator.default.compareVersion(candidate, toVersion: current) == .orderedDescending
+  }
+
+  private func isNewer(_ candidate: String, build: Int? = nil, than current: String) -> Bool {
+    UpdateVersionPolicy.isNewer(
+      candidate: candidate, candidateBuild: build, current: current, currentBuild: appBuild,
+      legacyNewer: { [self] in isLegacyNewer($0, than: $1) })
   }
 
 }
