@@ -4,20 +4,25 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MoonlightEnhanced</title>
         <item>
-            <title>2026.1124.154906</title>
-            <pubDate>Wed, 25 Nov 2026 00:02:57 +0800</pubDate>
+            <title>2026.1125.122014</title>
+            <pubDate>Wed, 25 Nov 2026 20:35:27 +0800</pubDate>
             <sparkle:channel>beta</sparkle:channel>
-            <sparkle:version>1732</sparkle:version>
-            <sparkle:shortVersionString>2026.1124.154906</sparkle:shortVersionString>
+            <sparkle:version>1735</sparkle:version>
+            <sparkle:shortVersionString>2026.1125.122014</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[## Moonlight for macOS Enhanced v2026.1124.154906
+            <description sparkle:format="markdown"><![CDATA[## Moonlight for macOS Enhanced v2026.1125.122014
+
+## AWDL 稳定性辅助：修复误判随航 | AWDL helper: no false Sidecar detection
+
+修复用过随航后，即使没有连接随航屏幕，AWDL 稳定性辅助也一直跳过、不再关闭 awdl0 的问题。现在只在确实连接了随航屏幕时才保留 awdl0。
+Fixes the AWDL helper always skipping and leaving awdl0 up after Sidecar had been used, even with no Sidecar display connected. It now keeps awdl0 up only while a Sidecar display is actually connected.
 
 ## 主机页通用退出 | Quit from the host page
 
 支持在主机页退出桌面、退出大屏模式和退出其他正在运行的应用；大屏运行时，主按钮为“继续大屏模式”。
 Supports quitting the desktop, Big Picture mode and any other running app from the host page; while Big Picture is running, the main button reads “Continue Big Picture Mode”.
 ]]></description>
-            <enclosure url="https://github.com/skyhua0224/moonlight-macos-enhanced/releases/download/v2026.1124.154906/Moonlight-macOS-Enhanced-universal.dmg" length="12064606" type="application/octet-stream" sparkle:edSignature="ebMYRSBNGTToOgJfpoOiA1zwJs5nYyWdybxno/Jd+0dcOpt89wPFE/31RsNmCQcbzUYmTzjlR9vfbZbq49qEAA=="></enclosure>
+            <enclosure url="https://github.com/skyhua0224/moonlight-macos-enhanced/releases/download/v2026.1125.122014/Moonlight-macOS-Enhanced-universal.dmg" length="12061410" type="application/octet-stream" sparkle:edSignature="99HfVODZANdp/pP+UI9FVIBY2bShRrHHiXQWBFxCkeIrjtBLzAV+jD3snPnquI0GqxAKL5sVSgxNlECpukNrCA=="></enclosure>
         </item>
     
         <item>
@@ -141,6 +146,6 @@ Computer names and addresses in the screenshots are examples; game covers belong
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 7HgPRWOSvQM/0zPVf0Uao9zJsIano8NAAt50Gc+IoLhF2CHhV29AVkEvOPja5CqFwfihUnUs7RQmNb4xDSgfAQ==
-length: 17152
+edSignature: WlLkm9tGtDmsyen/ttFV/F3H88X5h83J+ijomka5SeoFPJN4ULy9xGLgK9udGc/BIHroAWAqe0EQQMYeohZnAw==
+length: 17630
 -->
