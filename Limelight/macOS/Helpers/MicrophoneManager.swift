@@ -1014,16 +1014,12 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
     }
 
-    /// A Sidecar display is connected: its agent process runs for the life of the session, and the display shows up
-    /// among the screens under a name that carries "Sidecar" in every localisation Apple ships (the Chinese name is
-    /// "Sidecar Display（隔空播放）").
+    /// A Sidecar display is connected: it shows up among the screens under a name that carries "Sidecar" in every
+    /// localisation Apple ships (the Chinese name is "Sidecar Display（隔空播放）"). The SidecarDisplayAgent process is
+    /// no signal: once Sidecar has been used, macOS keeps the agent running and relaunches it within seconds after it
+    /// is killed, with no Sidecar display connected (issue #134).
     static func sidecarSessionActive() -> Bool {
-        let agentRunning = NSWorkspace.shared.runningApplications.contains {
-            $0.executableURL?.lastPathComponent == "SidecarDisplayAgent"
-                || ($0.bundleIdentifier ?? "").hasPrefix("com.apple.sidecar")
-        }
-        if agentRunning { return true }
-        return NSScreen.screens.contains { $0.localizedName.localizedCaseInsensitiveContains("sidecar") }
+        NSScreen.screens.contains { $0.localizedName.localizedCaseInsensitiveContains("sidecar") }
     }
 
     @objc(beginStreamSessionIfEnabled:generation:ownerID:)

@@ -1,3 +1,8 @@
+## AWDL 稳定性辅助：修复误判随航 | AWDL helper: no false Sidecar detection
+
+修复用过随航后，即使没有连接随航屏幕，AWDL 稳定性辅助也一直跳过、不再关闭 awdl0 的问题。现在只在确实连接了随航屏幕时才保留 awdl0。
+Fixes the AWDL helper always skipping and leaving awdl0 up after Sidecar had been used, even with no Sidecar display connected. It now keeps awdl0 up only while a Sidecar display is actually connected.
+
 ## 主机页通用退出 | Quit from the host page
 
 支持在主机页退出桌面、退出大屏模式和退出其他正在运行的应用；大屏运行时，主按钮为“继续大屏模式”。
