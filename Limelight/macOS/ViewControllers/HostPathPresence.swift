@@ -67,21 +67,17 @@ public final class HostPathSignals: NSObject {
     guard !already else { return }
     // The 线路 list is classified by DeckAddressModel (one list for 地址 and 线路, the platform's path vocabulary);
     // this layer only supplies the probe facts (probeFact), so it registers no section of its own any more.
-    let parameters = NWParameters.tcp
-    parameters.includePeerToPeer = true
-    let browser = NWBrowser(for: .bonjour(type: "_nvstream._tcp", domain: nil), using: parameters)
-    browser.browseResultsChangedHandler = { [weak self] _, _ in
-      self?.bump()
+    // The Bonjour browser runs only while 自动发现新主机 is on (queue-confined, see reconcileBrowser).
+    queue.async { [weak self] in self?.reconcileBrowser() }
+    NotificationCenter.default.addObserver(forName: DiscoveryPreference.changedNotification, object: nil, queue: nil) { [weak self] _ in
+      self?.queue.async { self?.reconcileBrowser() }
     }
-    browser.stateUpdateHandler = { _ in }
-    browser.start(queue: queue)
     let monitor = NWPathMonitor()
     monitor.pathUpdateHandler = { [weak self] _ in
       self?.bump()
     }
     monitor.start(queue: queue)
     lock.lock()
-    self.browser = browser
     self.monitor = monitor
     lock.unlock()
     let workspace = NSWorkspace.shared.notificationCenter
@@ -116,6 +112,27 @@ public final class HostPathSignals: NSObject {
       self.lock.unlock()
       self.enqueueTailscaleRefresh(force: false)
     }
+  }
+
+  /// Starts or cancels the Bonjour browser to match the switch. Runs on `queue` only. With the switch off the app sends no
+  /// mDNS query for presence; the path monitor and the probes keep working, they are unicast.
+  private func reconcileBrowser() {
+    let enabled = DiscoveryPreference.isEnabled()
+    if !enabled {
+      browser?.cancel()
+      browser = nil
+      return
+    }
+    guard browser == nil else { return }
+    let parameters = NWParameters.tcp
+    parameters.includePeerToPeer = true
+    let browser = NWBrowser(for: .bonjour(type: "_nvstream._tcp", domain: nil), using: parameters)
+    browser.browseResultsChangedHandler = { [weak self] _, _ in
+      self?.bump()
+    }
+    browser.stateUpdateHandler = { _ in }
+    browser.start(queue: queue)
+    self.browser = browser
   }
 
   /// Wake, focus, and opening a host page ask for a probe now. Backoff stays in the worker.

@@ -21,15 +21,8 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-static NSString * const MoonlightAutoDiscoverNewHostsDefaultsKey = @"autoDiscoverNewHosts";
-
 static BOOL MoonlightShouldAutoDiscoverNewHosts(void) {
-    id value = [[NSUserDefaults standardUserDefaults] objectForKey:MoonlightAutoDiscoverNewHostsDefaultsKey];
-    if (value == nil) {
-        return YES;
-    }
-
-    return [[NSUserDefaults standardUserDefaults] boolForKey:MoonlightAutoDiscoverNewHostsDefaultsKey];
+    return [MDNSManager autoDiscoveryEnabledInDefaults:[NSUserDefaults standardUserDefaults]];
 }
 
 @implementation DiscoveryManager {

@@ -54,6 +54,19 @@ do {
   check("ledger: cap holds", g.delay(afterFailures: 40) == 4)
 }
 
+// --- DiscoveryPreference
+do {
+  let d = UserDefaults(suiteName: "net-quiet-test-discovery")!
+  d.removePersistentDomain(forName: "net-quiet-test-discovery")
+  check("discovery switch: absent means on", DiscoveryPreference.isEnabled(d))
+  d.set(false, forKey: DiscoveryPreference.key)
+  check("discovery switch: off is off", !DiscoveryPreference.isEnabled(d))
+  d.set(true, forKey: DiscoveryPreference.key)
+  check("discovery switch: on is on", DiscoveryPreference.isEnabled(d))
+  check("discovery switch: the key is the one the settings page writes", DiscoveryPreference.key == "autoDiscoverNewHosts")
+  d.removePersistentDomain(forName: "net-quiet-test-discovery")
+}
+
 // --- LaunchGate
 do {
   let g = LaunchGate(expiry: 90)
