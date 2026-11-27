@@ -1556,7 +1556,7 @@ extension SettingsModel {
   static let defaultDebugLogAutoScroll = true
   static let defaultDebugLogTimeScope = "launch"
   static let defaultDebugLogInputDiagnostics = false
-  static let defaultAwdlStabilityHelperEnabled = false
+  static let defaultAwdlStabilityHelperEnabled = AwdlHelperDefault.enabledByDefault
   static let defaultAwdlStabilityHelperAcknowledged = false
 
   static func coreHIDMaxMouseReportRateLabel(_ value: Int) -> String {

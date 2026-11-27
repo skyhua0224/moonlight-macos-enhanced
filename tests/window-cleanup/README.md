@@ -9,11 +9,12 @@ They verify ownership-cycle release, stale-entry removal, a close continuation a
 notifications, and restoring an interactive window if fullscreen exit fails.
 The shared-input checks execute the production GCMouse registration and removal
 methods on fake devices. They cover stale-owner cleanup, movement/buttons/scroll,
-owned and repeated cleanup, driver refresh, and owner lifetime. The AWDL checks
-execute production session methods with mocked interface operations. They cover
-old/new owners with equal generation numbers, termination/deinit, repeated and
-missing-owner cleanup, and disabled sessions. No input is sent to a host and no
-network interface is changed. These tests do not drive a real AppKit fullscreen
+owned and repeated cleanup, driver refresh, and owner lifetime. The AWDL check
+runs tests/awdl-helper-policy, which executes the production AWDL session engine
+against a fake interface (old/new owners with equal generation numbers,
+termination/deinit, repeated and missing-owner cleanup, disabled sessions), and
+checks that the stream controller passes its owner id to it. No input is sent to
+a host and no network interface is changed. These tests do not drive a real AppKit fullscreen
 transition or physical input devices.
 
 A Release build passed with Xcode 27.1 on Apple Silicon. A user verified that a

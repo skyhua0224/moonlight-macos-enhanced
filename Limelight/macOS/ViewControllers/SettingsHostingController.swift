@@ -102,12 +102,11 @@ private enum WelcomePermissionsState {
 
     let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
     let inputState = InputMonitoringPermissionManager.sharedManager.authorizationState
-    let awdlState = AwdlHelperManager.sharedManager.authorizationState
     let needsMic = micStatus != .authorized
     let needsInput = inputState != .unsupported &&
       inputState != .granted &&
       inputState != .grantedNeedsReentry
-    let needsAwdl = awdlState == .notDetermined || awdlState == .failed
+    let needsAwdl = AwdlHelperManager.sharedManager.needsFirstSetup
     return needsMic || needsInput || needsAwdl
   }
 }
@@ -161,10 +160,10 @@ private struct WelcomePermissionsView: View {
           permissionRow(
             title: "AWDL Stability Helper",
             subtitle: "Welcome AWDL detail",
-            stateLabel: awdlStatusText,
-            isGranted: awdlGrantedState,
-            actionTitle: awdlActionTitle,
-            action: awdlAction
+            stateLabel: awdlManager.statusLabelKey,
+            isGranted: awdlManager.status == .ready,
+            actionTitle: awdlManager.actionTitleKey,
+            action: { awdlManager.performPrimaryAction() }
           )
 
           permissionRow(
@@ -313,54 +312,6 @@ private struct WelcomePermissionsView: View {
     @unknown default:
       microphoneManager.requestPermission()
     }
-  }
-
-  private var awdlStatusText: String {
-    switch awdlManager.helperInstallState {
-    case .installed:
-      return "Installed"
-    case .notReady:
-      return "Not Ready"
-    case .adminPromptOnly:
-      return "Admin Prompt Only"
-    case .unavailable:
-      return "Unavailable"
-    case .unknown:
-      return "Checking"
-    @unknown default:
-      return "Checking"
-    }
-  }
-
-  private var awdlActionTitle: String? {
-    if awdlManager.supportsPersistentHelperInstallation,
-       awdlManager.helperInstallState != .installed
-    {
-      return "Install Persistent Helper"
-    }
-
-    switch awdlManager.authorizationState {
-    case .ready, .unavailable:
-      return nil
-    case .failed, .notDetermined:
-      return "Request"
-    @unknown default:
-      return "Request"
-    }
-  }
-
-  private func awdlAction() {
-    if awdlManager.supportsPersistentHelperInstallation,
-       awdlManager.helperInstallState != .installed
-    {
-      awdlManager.installPersistentHelper()
-    } else {
-      awdlManager.requestAuthorization()
-    }
-  }
-
-  private var awdlGrantedState: Bool {
-    awdlManager.helperInstallState == .installed
   }
 }
 

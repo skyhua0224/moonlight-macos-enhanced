@@ -1,3 +1,8 @@
+## 串流时默认减少 Wi-Fi 卡顿 | AWDL stability helper on by default while streaming
+
+串流时默认临时关闭隔空投送使用的无线通道（AWDL），明显减少 Wi-Fi 卡顿，串流结束、退出应用或应用异常退出后自动恢复；第一次串流前授权一次管理员权限即可，不授权也能正常串流，连接随航时保持不关，可在设置中关闭。
+The AWDL stability helper is now on by default while streaming, which noticeably reduces Wi-Fi stutter; AWDL is restored when the stream ends, the app quits or the app exits unexpectedly. Authorize once before the first stream (streaming works without it), AWDL is left alone while a Sidecar display is connected, and it can be turned off in Settings.
+
 ## AWDL 稳定性辅助：修复误判随航 | AWDL helper: no false Sidecar detection
 
 修复用过随航后，即使没有连接随航屏幕，AWDL 稳定性辅助也一直跳过、不再关闭 awdl0 的问题。现在只在确实连接了随航屏幕时才保留 awdl0。

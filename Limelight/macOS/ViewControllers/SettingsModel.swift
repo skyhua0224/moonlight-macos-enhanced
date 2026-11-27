@@ -304,6 +304,8 @@ class SettingsModel: ObservableObject {
     didSet {
       UserDefaults.standard.set(
         awdlStabilityHelperEnabled, forKey: Self.awdlStabilityHelperEnabledKey)
+      // Turning it on again is asking for the helper again.
+      AwdlHelperManager.sharedManager.settingChanged(enabled: awdlStabilityHelperEnabled)
     }
   }
   @Published var awdlStabilityHelperAcknowledged: Bool {
@@ -1652,12 +1654,9 @@ class SettingsModel: ObservableObject {
     } else {
       debugLogInputDiagnostics = Self.defaultDebugLogInputDiagnostics
     }
-    if UserDefaults.standard.object(forKey: Self.awdlStabilityHelperEnabledKey) != nil {
-      awdlStabilityHelperEnabled = UserDefaults.standard.bool(
-        forKey: Self.awdlStabilityHelperEnabledKey)
-    } else {
-      awdlStabilityHelperEnabled = Self.defaultAwdlStabilityHelperEnabled
-    }
+    // A value the user set is kept; with none stored the setting is on.
+    awdlStabilityHelperEnabled = AwdlHelperDefault.isEnabled(
+      stored: UserDefaults.standard.object(forKey: Self.awdlStabilityHelperEnabledKey) as? Bool)
     if UserDefaults.standard.object(forKey: Self.awdlStabilityHelperAcknowledgedKey) != nil {
       awdlStabilityHelperAcknowledged = UserDefaults.standard.bool(
         forKey: Self.awdlStabilityHelperAcknowledgedKey)

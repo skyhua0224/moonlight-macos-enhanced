@@ -129,7 +129,6 @@
 "(No logs yet)" = "(No logs yet)";
 "Network Compatibility" = "Network Compatibility";
 "AWDL Stability Helper" = "AWDL Stability Helper";
-"AWDL Helper Authorization Prompt" = "Moonlight needs administrator permission to manage the AWDL interface while streaming.";
 "AWDL Helper Install Prompt" = "Moonlight needs administrator permission to install the AWDL helper.";
 
 /* General UI */
@@ -418,8 +417,6 @@
 "Granted" = "Allowed";
 "Granted Pending Reentry" = "Allowed · Restart the Stream";
 "Check Settings" = "Check Settings";
-"Installed" = "Installed";
-"Not Ready" = "Not Ready";
 "Not Granted" = "Not Allowed";
 "Checking" = "Checking";
 "Unavailable" = "Unavailable";
@@ -561,14 +558,12 @@
 "VT Quality Super Resolution detail" = "Quality VideoToolbox super resolution and model readiness.";
 "Sunshine Extensions" = "Sunshine Extensions";
 "Sunshine Extensions detail" = "Sends Foundation Sunshine launch extensions (display, VDD, screen mode, HDR profile) to hosts that support them.";
-"Admin Prompt Only" = "Admin Prompt Only";
 "Welcome to Moonlight macOS Enhanced" = "Welcome to Moonlight macOS Enhanced";
 "Welcome Permissions Subtitle" = "All optional. You can change them later in Settings.";
 "Microphone Permission detail" = "Needed only if you want to stream your microphone to the host.";
-"Install Persistent Helper" = "Install Persistent Helper";
 "Permissions" = "Permissions";
 "Continue" = "Continue";
-"Welcome AWDL detail" = "Optional. Keeps Wi‑Fi streams steadier by managing AWDL during a session.";
+"Welcome AWDL detail" = "Turns off AWDL while streaming to reduce Wi‑Fi stutter and restores it afterwards. Needs administrator authorization once.";
 "Shortcut Translation Rules" = "Shortcut Translation Rules";
 "No Shortcut Translation Rules" = "No translation rules yet";
 "No Shortcut Translation Rules detail" = "Add a rule to turn a Mac shortcut into a host shortcut or a Moonlight action.";
@@ -716,7 +711,7 @@
 "Dim Unfocused Artwork" = "Dim Unfocused Artwork";
 "Classic Home Page" = "Classic Home Page";
 "Classic Home Page detail" = "Use the older home page. Takes effect after Moonlight restarts.";
-"AWDL Stability Helper detail" = "Temporarily turns off AWDL while streaming to reduce periodic Wi‑Fi stutter. AirDrop and nearby discovery may be affected during the stream.";
+"AWDL Stability Helper detail" = "Turns off AWDL while streaming to reduce periodic Wi‑Fi stutter and restores it when the stream ends. AirDrop and Handoff are unavailable during the stream; AWDL stays on while a Sidecar display is connected.";
 "VSync" = "VSync";
 "Host Files" = "Host Files";
 "Host Files settings subtitle" = "Browse read-only shared folders from the host and download files.";
@@ -2179,3 +2174,26 @@
 "Open System Settings" = "Open System Settings";
 "Mouse Input Compatibility" = "Compatibility (AppKit)";
 "Show Fullscreen Control Ball" = "Show Fullscreen Floating Ball";
+"AWDL Setup Title" = "Reduce Wi‑Fi stutter while streaming";
+"AWDL Setup Message" = "While you stream, Moonlight turns off the wireless channel AirDrop uses (AWDL), which noticeably reduces Wi‑Fi stutter, and turns it back on when the stream ends. AirDrop and Handoff are unavailable meanwhile. This needs administrator authorization once.";
+"AWDL Update Message" = "The AWDL helper installed earlier is older than this version of Moonlight. Update it once with administrator authorization to keep the Wi‑Fi stutter reduction working.";
+"AWDL Helper Status" = "AWDL Helper Status";
+"Authorize" = "Authorize";
+"Update" = "Update";
+"Retry" = "Retry";
+"Failed" = "Failed";
+"Enabled" = "Enabled";
+"Not Authorized" = "Not Authorized";
+"Update Needed" = "Update Needed";
+"AWDL helper does not respond" = "The AWDL helper does not respond.";
+"AWDL helper is older than this app" = "The installed AWDL helper is older than this app.";
+"AWDL helper could not turn awdl0 off" = "The AWDL helper could not turn awdl0 off.";
+"awdl0 stayed on after the helper turned it off" = "awdl0 stayed on after the helper turned it off.";
+"awdl0 could not be turned back on" = "awdl0 could not be turned back on.";
+"AWDL helper cannot be installed in a sandboxed build" = "The AWDL helper cannot be installed in a sandboxed build.";
+"The bundled AWDL helper is missing from this build." = "The bundled AWDL helper is missing from this build.";
+"The bundled AWDL helper has no signature macOS accepts." = "The bundled AWDL helper has no signature macOS accepts.";
+"Administrator authorization timed out. Please try again." = "Administrator authorization timed out. Please try again.";
+"No administrator authorization response was received. Please try again." = "No administrator authorization response was received. Please try again.";
+"Administrator authorization did not complete. Confirm that this account has administrator privileges and try again." = "Administrator authorization did not complete. Confirm that this account has administrator privileges and try again.";
+"The system blocked the administrator authorization request." = "The system blocked the administrator authorization request.";

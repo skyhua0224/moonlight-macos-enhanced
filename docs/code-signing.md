@@ -39,13 +39,13 @@ fixed certificate keep using the same key and appcast.
 ## AWDL privileged helper
 
 Installing the helper with `SMJobBless` needs a TeamIdentifier, which neither
-an ad-hoc nor a self-signed signature has
-(`MLAwdlAuthorizationHelper applicationAtPathSupportsPrivilegedHelperBlessing`).
-The helper is therefore not blessed and AWDL control keeps using the per-use
-authorization prompt, exactly as before this change. The `SMAuthorizedClients`
+an ad-hoc nor a self-signed signature has, and the call is deprecated since
+macOS 13. The helper is therefore installed as a launchd daemon with one
+administrator dialog (see `awdl-helper.md`). The `SMAuthorizedClients`
 requirement (`anchor apple generic`) is only written when Xcode itself signs the
 build with an Apple identity; CI builds with Xcode signing off, so it is not
-written for CI builds either.
+written for CI builds either. The helper then accepts the client whose
+executable sits in an app bundle with the app's bundle identifier.
 
 ## Rotating the certificate
 

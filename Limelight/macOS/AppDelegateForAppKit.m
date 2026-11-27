@@ -111,6 +111,10 @@ static const void *MoonlightOriginalToolbarToolTipKey = &MoonlightOriginalToolba
     [self refreshLocalizedChrome];
     [self showWelcomePermissionsIfNeeded];
     [self checkInputMonitoringAtLaunch];
+    if (![ConceptHarness enabled]) {
+        // Looks at the AWDL helper, and gives back awdl0 if an earlier run ended with it still off.
+        [AwdlHelperManager sharedManager];
+    }
     [ConceptHarness startScripted];
 }
 

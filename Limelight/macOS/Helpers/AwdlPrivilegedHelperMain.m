@@ -2,6 +2,7 @@
 #import <Security/Security.h>
 #import <libproc.h>
 
+#import "AwdlHoldLedger.h"
 #import "AwdlPrivilegedHelperProtocol.h"
 
 static NSString * const MLAwdlPrivilegedHelperFallbackLabel = @"std.skyhua.MoonlightMacEnhanced.AwdlPrivilegedHelper";
@@ -20,33 +21,116 @@ static NSString *MLAwdlAuthorizedClientBundleIdentifier(void) {
     return @"std.skyhua.MoonlightMacEnhanced";
 }
 
-@interface MLAwdlPrivilegedHelperService : NSObject <NSXPCListenerDelegate, MLAwdlPrivilegedHelperProtocol>
+static int MLAwdlRunTask(NSString *launchPath, NSArray<NSString *> *arguments, NSString **stdoutText, NSString **stderrText) {
+    NSPipe *stdoutPipe = [NSPipe pipe];
+    NSPipe *stderrPipe = [NSPipe pipe];
+
+    NSTask *task = [[NSTask alloc] init];
+    task.launchPath = launchPath;
+    task.arguments = arguments;
+    task.standardOutput = stdoutPipe;
+    task.standardError = stderrPipe;
+
+    @try {
+        [task launch];
+        [task waitUntilExit];
+    } @catch (NSException *exception) {
+        if (stdoutText != NULL) {
+            *stdoutText = @"";
+        }
+        if (stderrText != NULL) {
+            *stderrText = exception.reason ?: @"Task launch failed.";
+        }
+        return -1;
+    }
+
+    NSData *stdoutData = [[stdoutPipe fileHandleForReading] readDataToEndOfFile];
+    NSData *stderrData = [[stderrPipe fileHandleForReading] readDataToEndOfFile];
+
+    if (stdoutText != NULL) {
+        *stdoutText = [[NSString alloc] initWithData:stdoutData encoding:NSUTF8StringEncoding] ?: @"";
+    }
+    if (stderrText != NULL) {
+        *stderrText = [[NSString alloc] initWithData:stderrData encoding:NSUTF8StringEncoding] ?: @"";
+    }
+
+    return task.terminationStatus;
+}
+
+static BOOL MLAwdlOutputRepresentsUpState(NSString *stdoutText) {
+    NSRange open = [stdoutText rangeOfString:@"<"];
+    NSRange close = [stdoutText rangeOfString:@">"];
+    if (open.location != NSNotFound &&
+        close.location != NSNotFound &&
+        open.location < close.location) {
+        NSUInteger start = NSMaxRange(open);
+        NSString *flagsString = [stdoutText substringWithRange:NSMakeRange(start, close.location - start)];
+        NSArray<NSString *> *flags = [flagsString componentsSeparatedByString:@","];
+        return [flags containsObject:@"UP"];
+    }
+    return [stdoutText containsString:@"UP"];
+}
+
+/// One ledger for the whole process: the connections of several app instances share the one awdl0.
+static MLAwdlHoldLedger *MLAwdlSharedLedger(void) {
+    static MLAwdlHoldLedger *ledger = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        ledger = [[MLAwdlHoldLedger alloc]
+            initWithQuery:^MLAwdlInterfaceSnapshot{
+                NSString *stdoutText = @"";
+                NSString *stderrText = @"";
+                int status = MLAwdlRunTask(@"/sbin/ifconfig", @[@"awdl0"], &stdoutText, &stderrText);
+                MLAwdlInterfaceSnapshot snapshot = { .present = (status == 0), .up = NO };
+                if (snapshot.present) {
+                    snapshot.up = MLAwdlOutputRepresentsUpState(stdoutText);
+                }
+                return snapshot;
+            }
+            setUp:^NSString *(BOOL up) {
+                NSString *argument = up ? @"up" : @"down";
+                NSString *stdoutText = @"";
+                NSString *stderrText = @"";
+                int status = MLAwdlRunTask(@"/sbin/ifconfig", @[@"awdl0", argument], &stdoutText, &stderrText);
+                if (status == 0) {
+                    return @"";
+                }
+                NSString *message = [(stderrText.length > 0 ? stderrText : stdoutText)
+                    stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                return message.length > 0
+                    ? message
+                    : [NSString stringWithFormat:@"ifconfig awdl0 %@ failed with status %d.", argument, status];
+            }];
+    });
+    return ledger;
+}
+
+/// One instance per client connection: it knows which client a hold belongs to.
+@interface MLAwdlPrivilegedHelperService : NSObject <MLAwdlPrivilegedHelperProtocol>
+@property (nonatomic, copy, readonly) NSString *clientID;
+- (instancetype)initWithClientID:(NSString *)clientID;
 @end
 
 @implementation MLAwdlPrivilegedHelperService
 
-- (BOOL)listener:(NSXPCListener *)listener shouldAcceptNewConnection:(NSXPCConnection *)newConnection {
-    if (![self isConnectionAuthorized:newConnection]) {
-        return NO;
+- (instancetype)initWithClientID:(NSString *)clientID {
+    self = [super init];
+    if (self) {
+        _clientID = [clientID copy];
     }
-
-    newConnection.exportedInterface = [NSXPCInterface interfaceWithProtocol:@protocol(MLAwdlPrivilegedHelperProtocol)];
-    newConnection.exportedObject = self;
-    [newConnection resume];
-    return YES;
+    return self;
 }
 
 - (void)queryAwdlStateWithReply:(void (^)(BOOL present, BOOL up, NSString *stderrText))reply {
     NSString *stdoutText = @"";
     NSString *stderrText = @"";
-    int status = [self runTask:@"/sbin/ifconfig" arguments:@[@"awdl0"] stdout:&stdoutText stderr:&stderrText];
+    int status = MLAwdlRunTask(@"/sbin/ifconfig", @[@"awdl0"], &stdoutText, &stderrText);
     if (status != 0) {
         reply(NO, NO, stderrText ?: @"");
         return;
     }
 
-    BOOL isUp = [self outputRepresentsUpState:stdoutText];
-    reply(YES, isUp, stderrText ?: @"");
+    reply(YES, MLAwdlOutputRepresentsUpState(stdoutText), stderrText ?: @"");
 }
 
 - (void)runIfconfigArgument:(NSString *)argument
@@ -58,20 +142,59 @@ static NSString *MLAwdlAuthorizedClientBundleIdentifier(void) {
 
     NSString *stdoutText = @"";
     NSString *stderrText = @"";
-    int status = [self runTask:@"/sbin/ifconfig"
-                     arguments:@[@"awdl0", argument]
-                        stdout:&stdoutText
-                        stderr:&stderrText];
+    int status = MLAwdlRunTask(@"/sbin/ifconfig", @[@"awdl0", argument], &stdoutText, &stderrText);
     if (status == 0) {
         reply(YES, @"");
         return;
     }
 
-    NSString *message = stderrText.length > 0 ? stderrText : stdoutText;
+    NSString *message = [(stderrText.length > 0 ? stderrText : stdoutText)
+        stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (message.length == 0) {
         message = [NSString stringWithFormat:@"ifconfig awdl0 %@ failed with status %d.", argument, status];
     }
     reply(NO, message);
+}
+
+- (void)interfaceVersionWithReply:(void (^)(NSInteger version, NSString *buildVersion))reply {
+    NSString *build = [[NSBundle mainBundle] infoDictionary][@"CFBundleVersion"];
+    reply(MLAwdlPrivilegedHelperInterfaceVersion, [build isKindOfClass:[NSString class]] ? build : @"");
+}
+
+- (void)holdAwdlDownWithReply:(void (^)(BOOL success, NSString *message))reply {
+    NSString *error = [MLAwdlSharedLedger() holdForClient:self.clientID];
+    reply(error.length == 0, error);
+}
+
+- (void)releaseAwdlHoldWithReply:(void (^)(BOOL success, NSString *message))reply {
+    NSString *error = [MLAwdlSharedLedger() releaseForClient:self.clientID];
+    reply(error.length == 0, error);
+}
+
+@end
+
+@interface MLAwdlPrivilegedHelperListenerDelegate : NSObject <NSXPCListenerDelegate>
+@end
+
+@implementation MLAwdlPrivilegedHelperListenerDelegate
+
+- (BOOL)listener:(NSXPCListener *)listener shouldAcceptNewConnection:(NSXPCConnection *)newConnection {
+    if (![self isConnectionAuthorized:newConnection]) {
+        return NO;
+    }
+
+    NSString *clientID = [[NSUUID UUID] UUIDString];
+    MLAwdlHoldLedger *ledger = MLAwdlSharedLedger();
+    // The app quit, crashed or was killed, or the system dropped the connection: awdl0 must not stay down.
+    void (^clientGone)(void) = ^{
+        [ledger clientDisconnected:clientID];
+    };
+    newConnection.invalidationHandler = clientGone;
+    newConnection.interruptionHandler = clientGone;
+    newConnection.exportedInterface = [NSXPCInterface interfaceWithProtocol:@protocol(MLAwdlPrivilegedHelperProtocol)];
+    newConnection.exportedObject = [[MLAwdlPrivilegedHelperService alloc] initWithClientID:clientID];
+    [newConnection resume];
+    return YES;
 }
 
 - (BOOL)isConnectionAuthorized:(NSXPCConnection *)connection {
@@ -156,64 +279,11 @@ static NSString *MLAwdlAuthorizedClientBundleIdentifier(void) {
     return [bundleIdentifier isEqualToString:MLAwdlAuthorizedClientBundleIdentifier()];
 }
 
-- (int)runTask:(NSString *)launchPath
-      arguments:(NSArray<NSString *> *)arguments
-         stdout:(NSString * _Nullable * _Nullable)stdoutText
-         stderr:(NSString * _Nullable * _Nullable)stderrText {
-    NSPipe *stdoutPipe = [NSPipe pipe];
-    NSPipe *stderrPipe = [NSPipe pipe];
-
-    NSTask *task = [[NSTask alloc] init];
-    task.launchPath = launchPath;
-    task.arguments = arguments;
-    task.standardOutput = stdoutPipe;
-    task.standardError = stderrPipe;
-
-    @try {
-        [task launch];
-        [task waitUntilExit];
-    } @catch (NSException *exception) {
-        if (stdoutText != NULL) {
-            *stdoutText = @"";
-        }
-        if (stderrText != NULL) {
-            *stderrText = exception.reason ?: @"Task launch failed.";
-        }
-        return -1;
-    }
-
-    NSData *stdoutData = [[stdoutPipe fileHandleForReading] readDataToEndOfFile];
-    NSData *stderrData = [[stderrPipe fileHandleForReading] readDataToEndOfFile];
-
-    if (stdoutText != NULL) {
-        *stdoutText = [[NSString alloc] initWithData:stdoutData encoding:NSUTF8StringEncoding] ?: @"";
-    }
-    if (stderrText != NULL) {
-        *stderrText = [[NSString alloc] initWithData:stderrData encoding:NSUTF8StringEncoding] ?: @"";
-    }
-
-    return task.terminationStatus;
-}
-
-- (BOOL)outputRepresentsUpState:(NSString *)stdoutText {
-    NSRange open = [stdoutText rangeOfString:@"<"];
-    NSRange close = [stdoutText rangeOfString:@">"];
-    if (open.location != NSNotFound &&
-        close.location != NSNotFound &&
-        open.location < close.location) {
-        NSUInteger start = NSMaxRange(open);
-        NSString *flagsString = [stdoutText substringWithRange:NSMakeRange(start, close.location - start)];
-        NSArray<NSString *> *flags = [flagsString componentsSeparatedByString:@","];
-        return [flags containsObject:@"UP"];
-    }
-    return [stdoutText containsString:@"UP"];
-}
-
 @end
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
-        MLAwdlPrivilegedHelperService *delegate = [[MLAwdlPrivilegedHelperService alloc] init];
+        MLAwdlPrivilegedHelperListenerDelegate *delegate = [[MLAwdlPrivilegedHelperListenerDelegate alloc] init];
         NSXPCListener *listener = [[NSXPCListener alloc] initWithMachServiceName:MLAwdlPrivilegedHelperServiceLabel()];
         listener.delegate = delegate;
         [listener resume];

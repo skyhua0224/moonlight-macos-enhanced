@@ -2,27 +2,35 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Talks to the installed privileged helper (a launchd daemon, installed once by the app) and inspects the copy bundled in
+/// the app. Every call that reaches the helper blocks until the helper answers or the call times out: call it off the main
+/// thread.
 @interface MLAwdlAuthorizationHelper : NSObject
 
 + (BOOL)bundledPrivilegedHelperAvailable;
 
 + (BOOL)bundledPrivilegedHelperHasUsableSignature;
 
-+ (BOOL)installedPrivilegedHelperHasUsableSignature;
++ (BOOL)installedPrivilegedHelperFilePresent;
 
-+ (BOOL)mainApplicationSupportsPrivilegedHelperBlessing;
++ (BOOL)installedPrivilegedHelperHasUsableSignature;
 
 + (BOOL)privilegedHelperLaunchdJobLoaded;
 
-+ (BOOL)prepareSessionWithPrompt:(NSString *)prompt
-                    errorMessage:(NSString * _Nullable * _Nullable)errorMessage;
+/// What the helper says about itself. Keys: `reachable` (NSNumber BOOL: it answered the awdl0 query),
+/// `interfaceVersion` (NSNumber: 0 when it did not answer the version call, which is how helpers of builds before the
+/// version call behave), `buildVersion` (NSString), `error` (NSString, empty when reachable).
++ (NSDictionary<NSString *, id> *)helperHandshake;
 
-+ (BOOL)privilegedHelperInstalled;
+/// Brings awdl0 down for this app until `releaseAwdlHold...`, or until the helper sees this process go away.
++ (BOOL)holdAwdlDownWithErrorMessage:(NSString * _Nullable * _Nullable)errorMessage NS_SWIFT_NAME(holdAwdlDown(errorMessage:));
 
-+ (BOOL)runIfconfigArgument:(NSString *)argument
-                     prompt:(NSString *)prompt
-               errorMessage:(NSString * _Nullable * _Nullable)errorMessage;
++ (BOOL)releaseAwdlHoldWithErrorMessage:(NSString * _Nullable * _Nullable)errorMessage NS_SWIFT_NAME(releaseAwdlHold(errorMessage:));
 
+/// `ifconfig awdl0 up` through the helper, for a restore that has no hold to release (a hold lost with an earlier run).
++ (BOOL)bringAwdlUpWithErrorMessage:(NSString * _Nullable * _Nullable)errorMessage NS_SWIFT_NAME(bringAwdlUp(errorMessage:));
+
+/// Drops the connection to the helper; the next call opens a new one. Dropping it ends this process's hold.
 + (void)invalidateSession;
 
 @end

@@ -1036,7 +1036,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
                 if (success && self.launchToken == token) {
                     self.runningApp = app;
                     [MLDeckActivity recordConnectedWithHostUUID:self.host.uuid ?: @"" appId:app.id ?: @"" appName:app.name ?: @""];
-                    [self performSegueWithIdentifier:@"streamSegue" sender:nil];
+                    [self openStreamWindowAfterAwdlSetup];
                 } else {
                     [self abandonLaunch];
                 }
@@ -1047,8 +1047,21 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     } else {
         self.runningApp = app;
         [MLDeckActivity recordConnectedWithHostUUID:self.host.uuid ?: @"" appId:app.id ?: @"" appName:app.name ?: @""];
-        [self performSegueWithIdentifier:@"streamSegue" sender:nil];
+        [self openStreamWindowAfterAwdlSetup];
     }
+}
+
+/// The stream window opens once the AWDL helper has been dealt with: with the helper missing or out of date the user is
+/// asked, here and once, for the administrator authorization (never during the stream). Whatever the answer, the stream
+/// starts; a launch cancelled meanwhile does not.
+- (void)openStreamWindowAfterAwdlSetup {
+    NSUInteger token = self.launchToken;
+    __weak typeof(self) weakSelf = self;
+    [AwdlHelperSetup prepareForStreamThen:^{
+        AppsViewController *strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf.launchToken != token) return;
+        [strongSelf performSegueWithIdentifier:@"streamSegue" sender:nil];
+    }];
 }
 
 - (BOOL)confirmConnectionRouteForStreaming {
