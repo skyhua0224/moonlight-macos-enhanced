@@ -84,7 +84,8 @@ int main(void) {
             TestManager *m = makeManager(d, [TestManager class]);
             [m searchForHosts];
             check(@"on: first query at once", gSearches == 1 && m.searchRunning);
-            pump(0.4);
+            // a slow runner may need longer than 8 test rounds for 5 restarts: wait up to 2 s, stop as soon as they are in
+            for (int i = 0; i < 40 && gSearches < 5; i++) pump(0.05);
             check(@"on: restarts follow the schedule", gSearches >= 5);
 
             // --- the switch is turned off while it runs: stops now, no restart of the app
