@@ -11,8 +11,13 @@ static NSMutableDictionary<NSString *, void (^)(void)> *gQuietHooks;
     if (gQuietHooks == nil) gQuietHooks = [NSMutableDictionary dictionary];
     gQuietHooks[key] = [cancel copy];
 }
+static NSMutableDictionary<NSString *, void (^)(void)> *gIdleHooks;
 + (void)onIdle:(NSString *)key resume:(void (^)(void))resume {
-    (void)key; (void)resume;  // the test resumes through the round schedule
+    if (gIdleHooks == nil) gIdleHooks = [NSMutableDictionary dictionary];
+    gIdleHooks[key] = [resume copy];
+}
++ (void)fireIdle {
+    for (void (^hook)(void) in gIdleHooks.allValues) hook();
 }
 + (void)fireQuiet {
     for (void (^hook)(void) in gQuietHooks.allValues) hook();

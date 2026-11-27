@@ -120,15 +120,18 @@ int main(void) {
             NSUInteger stopsBeforeQuiet = gStops;
             MLNetworkQuiet.isQuiet = YES;
             [MLNetworkQuiet fireQuiet];
-            pump(0.01);
+            // checked before the run loop turns, so a scheduled round cannot be what stopped it
             check(@"stream: the quiet hook stops the browser at once", gStops > stopsBeforeQuiet);
             pump(0.11);
             NSUInteger quietAt = gSearches;
             pump(0.4);
             check(@"stream: no query while the app is quiet", gSearches == quietAt);
             MLNetworkQuiet.isQuiet = NO;
+            [MLNetworkQuiet fireIdle];
+            // again without turning the run loop: the idle hook itself searches, not the round timer
+            check(@"stream over: the idle hook searches at once", gSearches > quietAt);
             pump(0.2);
-            check(@"stream over: queries resume", gSearches > quietAt);
+            check(@"stream over: queries resume", gSearches > quietAt + 1);
 
             // --- discovery stopped (hosts page gone, pairing)
             [m stopSearching];

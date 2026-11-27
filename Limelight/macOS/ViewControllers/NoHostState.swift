@@ -91,8 +91,12 @@ final class NoHostLocalNetworkProbe: ObservableObject {
 
   private func start() {
     let browser = NWBrowser(for: .bonjour(type: "_nvstream._tcp", domain: nil), using: .tcp)
-    browser.stateUpdateHandler = { [weak self] state in
-      DispatchQueue.main.async { self?.handle(state) }
+    browser.stateUpdateHandler = { [weak self, weak browser] state in
+      DispatchQueue.main.async {
+        // a block queued by a browser that was cancelled since must not change what the page shows
+        guard let self, let browser, self.browser === browser else { return }
+        self.handle(state)
+      }
     }
     browser.browseResultsChangedHandler = { _, _ in }
     browser.start(queue: .main)
