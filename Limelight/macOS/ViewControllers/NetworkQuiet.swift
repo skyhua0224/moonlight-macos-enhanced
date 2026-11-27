@@ -139,6 +139,18 @@ final class LaunchGate {
   func since(_ host: String) -> Date? { lock.lock(); defer { lock.unlock() }; return pending[host] }
 }
 
+/// The 自动发现新主机 switch. Off means the app sends no Bonjour (mDNS) query at all: MDNSManager, the presence browser
+/// (HostPathSignals) and the permission probe (NoHostLocalNetworkProbe) all read it. Absent means on.
+enum DiscoveryPreference {
+  static let key = "autoDiscoverNewHosts"
+  /// Posted by the settings page after the switch changes; every Bonjour user re-reads the switch at once.
+  static let changedNotification = Notification.Name("MoonlightDiscoveryPreferencesChanged")
+
+  static func isEnabled(_ defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey: key) == nil ? true : defaults.bool(forKey: key)
+  }
+}
+
 // MARK: - Process-wide instances for the Objective-C callers
 
 /// The one answer to 「may background traffic run now」, and the hooks that stop what already runs.

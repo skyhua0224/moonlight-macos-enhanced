@@ -14,15 +14,76 @@
 
 #include <Limelight.h>
 
+#import <AppKit/AppKit.h>
+
+static NSString * const MDNSAutoDiscoverNewHostsKey = @"autoDiscoverNewHosts";
+static NSString * const MDNSDiscoveryPreferencesChangedName = @"MoonlightDiscoveryPreferencesChanged";
+
+// The host list is on screen when the app is in front and one of its windows can be seen. Nothing else needs the
+// Bonjour browser: the stored computers are polled over HTTP, which is unicast.
+static BOOL MDNSDefaultForeground(void) {
+    if (NSApp == nil) {
+        return YES;
+    }
+    if (!NSApp.isActive || NSApp.isHidden) {
+        return NO;
+    }
+    for (NSWindow *window in NSApp.windows) {
+        if (window.isVisible && !window.isMiniaturized && (window.occlusionState & NSWindowOcclusionStateVisible) && window.canBecomeMainWindow) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
 @implementation MDNSManager {
     NSNetServiceBrowser* mDNSBrowser;
     NSMutableArray* services;
     NSMutableDictionary<NSString *, NSDate *> *failedResolveUntil;
-    BOOL scanActive;
-    BOOL timerPending;
+    BOOL scanActive;        // discovery asked for a search (startDiscovery); policy decides whether it really runs
+    BOOL searching;         // the browser is being restarted by the schedule below
+    BOOL browserStarted;
+    NSUInteger searchRound;
+    NSTimer *searchTimer;
 }
 
 static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
+
++ (BOOL)autoDiscoveryEnabledInDefaults:(NSUserDefaults *)defaults {
+    if ([defaults objectForKey:MDNSAutoDiscoverNewHostsKey] == nil) {
+        return YES;
+    }
+    return [defaults boolForKey:MDNSAutoDiscoverNewHostsKey];
+}
+
+// Apple's NSNetServiceBrowser documentation: the browser keeps its own Bonjour query schedule once started, and
+// stop ends it. RFC 6762 section 5.2 asks a continuous querier to send its second query at least one second after
+// the first and to double the interval each time, up to at least 60 minutes between queries. The host page wants
+// quick results when it opens, so the first six restarts stay five seconds apart (30 s); after that the interval
+// doubles to a 60 s cap, and a restart that finds nothing new costs one packet per minute.
++ (NSTimeInterval)restartIntervalForRound:(NSUInteger)round {
+    if (round < 6) {
+        return 5.0;
+    }
+    NSTimeInterval interval = 5.0 * (NSTimeInterval)(1u << MIN(round - 5, (NSUInteger)10));
+    return MIN(interval, 60.0);
+}
+
+- (NSTimeInterval)restartIntervalForRound:(NSUInteger)round {
+    return [MDNSManager restartIntervalForRound:round];
+}
+
+- (NSNetServiceBrowser *)makeBrowser {
+    return [[NSNetServiceBrowser alloc] init];
+}
+
+static void MDNSRunOnMain(dispatch_block_t block) {
+    if ([NSThread isMainThread]) {
+        block();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), block);
+    }
+}
 
 - (id) initWithCallback:(id<MDNSCallback>)callback {
     self = [super init];
@@ -30,40 +91,99 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
     self.callback = callback;
     
     scanActive = FALSE;
-    
-    mDNSBrowser = [[NSNetServiceBrowser alloc] init];
-    [mDNSBrowser setDelegate:self];
+    _defaults = [NSUserDefaults standardUserDefaults];
+    _foregroundProvider = ^BOOL { return MDNSDefaultForeground(); };
     
     services = [[NSMutableArray alloc] init];
     failedResolveUntil = [[NSMutableDictionary alloc] init];
+
+    // The switch, the window and the app being in front all change what may be searched; each takes effect at once.
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    for (NSNotificationName name in @[MDNSDiscoveryPreferencesChangedName,
+                                      NSApplicationDidBecomeActiveNotification, NSApplicationDidResignActiveNotification,
+                                      NSApplicationDidHideNotification, NSApplicationDidUnhideNotification,
+                                      NSWindowDidChangeOcclusionStateNotification, NSWindowWillCloseNotification,
+                                      NSWindowDidMiniaturizeNotification, NSWindowDidDeminiaturizeNotification]) {
+        [center addObserver:self selector:@selector(searchPolicyInputChanged:) name:name object:nil];
+    }
     
     return self;
 }
 
-- (void) searchForHosts {
-    if (scanActive) {
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [searchTimer invalidate];
+    [mDNSBrowser setDelegate:nil];
+    [mDNSBrowser stop];
+}
+
+- (BOOL)searchRunning {
+    return searching;
+}
+
+- (void)searchPolicyInputChanged:(NSNotification *)note {
+    // WillClose and the occlusion change arrive before the window state settles: look again on the next turn.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self refreshSearchPolicy];
+    });
+}
+
+- (void)refreshSearchPolicy {
+    MDNSRunOnMain(^{
+        [self reconcileSearch];
+    });
+}
+
+// The one place that starts or stops the browser. Main thread only.
+- (void)reconcileSearch {
+    BOOL want = scanActive
+        && [MDNSManager autoDiscoveryEnabledInDefaults:self.defaults]
+        && (self.foregroundProvider == nil || self.foregroundProvider());
+    if (want == searching) {
         return;
     }
-    
-    Log(LOG_I, @"Starting mDNS discovery");
-    scanActive = TRUE;
-
-    if (!timerPending) {
-        timerPending = TRUE;
-
-        // Just invoke the timer callback to save a little code
-        [self startSearchTimerCallback:nil];
+    if (want) {
+        Log(LOG_I, @"Starting mDNS search");
+        searching = YES;
+        searchRound = 0;
+        [self runSearchRound];
+    } else {
+        Log(LOG_I, @"Stopping mDNS search (discovery %@, switch %@)", scanActive ? @"on" : @"off",
+            [MDNSManager autoDiscoveryEnabledInDefaults:self.defaults] ? @"on" : @"off");
+        searching = NO;
+        [self stopBrowser];
     }
 }
 
-- (void) stopSearching {
-    if (!scanActive) {
-        return;
+- (void)stopBrowser {
+    [searchTimer invalidate];
+    searchTimer = nil;
+    if (browserStarted) {
+        browserStarted = NO;
+        [mDNSBrowser stop];
     }
-    
-    Log(LOG_I, @"Stopping mDNS discovery");
-    scanActive = FALSE;
-    [mDNSBrowser stop];
+}
+
+- (void) searchForHosts {
+    MDNSRunOnMain(^{
+        if (scanActive) {
+            return;
+        }
+        Log(LOG_I, @"Starting mDNS discovery");
+        scanActive = TRUE;
+        [self reconcileSearch];
+    });
+}
+
+- (void) stopSearching {
+    MDNSRunOnMain(^{
+        if (!scanActive) {
+            return;
+        }
+        Log(LOG_I, @"Stopping mDNS discovery");
+        scanActive = FALSE;
+        [self reconcileSearch];
+    });
 }
 
 - (void) forgetHosts {
@@ -303,31 +423,39 @@ static NSString* NV_SERVICE_TYPE = @"_nvstream._tcp";
 - (void)netServiceBrowser:(NSNetServiceBrowser *)aNetServiceBrowser didNotSearch:(NSDictionary *)errorDict {
     Log(LOG_W, @"Did not perform search: \n%@", [errorDict description]);
     
-    // We'll schedule a retry in startSearchTimerCallback
+    // The next round of the schedule (runSearchRound) tries again.
 }
 
-- (void)startSearchTimerCallback:(NSTimer *)timer {
-    // Check if we've been stopped since this was queued
-    if (!scanActive) {
-        timerPending = FALSE;
+// One round of the schedule: restart the browser unless a launch or stream owns the network, then wait for the next
+// round. A stream or launch stops the browser (the stored computers keep being polled over HTTP) and the schedule
+// begins again at five seconds once the app is quiet.
+- (void)runSearchRound {
+    searchTimer = nil;
+    if (!searching) {
         return;
     }
-    
-    if (![MLNetworkQuiet isQuiet]) {
-        Log(LOG_D, @"Restarting mDNS search");
+    if ([MLNetworkQuiet isQuiet]) {
+        [self stopBrowser];
+        searchRound = 0;
+    } else {
+        Log(LOG_D, @"Restarting mDNS search (round %lu)", (unsigned long)searchRound);
+        if (mDNSBrowser == nil) {
+            mDNSBrowser = [self makeBrowser];
+            [mDNSBrowser setDelegate:self];
+        }
         [mDNSBrowser stop];
         [mDNSBrowser searchForServicesOfType:NV_SERVICE_TYPE inDomain:@""];
+        browserStarted = YES;
     }
-    
-    // Search again in 5 seconds. We need to do this because
-    // we want more aggressive querying than Bonjour will normally
-    // do for when we're at the hosts screen. This also covers scenarios
-    // where discovery didn't work, like if WiFi was disabled.
-    [NSTimer scheduledTimerWithTimeInterval:5.0
-                                     target:self
-                                   selector:@selector(startSearchTimerCallback:)
-                                   userInfo:nil
-                                    repeats:NO];
+
+    NSTimeInterval interval = [self restartIntervalForRound:searchRound];
+    if (searchRound < NSUIntegerMax) {
+        searchRound++;
+    }
+    __weak MDNSManager *weakSelf = self;
+    searchTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:NO block:^(NSTimer *timer) {
+        [weakSelf runSearchRound];
+    }];
 }
 
 - (void)retryResolveTimerCallback:(NSTimer *)timer {

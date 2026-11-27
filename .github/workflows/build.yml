@@ -101,6 +101,11 @@ jobs:
     - name: SDR presentation colour-space test
       run: sh tests/sdr-colorspace/run.sh
 
+    # The Bonjour search must not run with the auto-discovery switch off, nor while the host list is out of sight.
+    - name: mDNS search policy tests
+      if: matrix.variant == 'arm64'
+      run: sh tests/mdns-policy/run.sh
+
     - name: Keyboard routing and repeat tests
       if: matrix.variant == 'arm64'
       run: |
