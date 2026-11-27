@@ -127,7 +127,6 @@
 "(No logs yet)" = "（暂无日志）";
 "Network Compatibility" = "网络兼容";
 "AWDL Stability Helper" = "AWDL 稳定性辅助";
-"AWDL Helper Authorization Prompt" = "Moonlight 需要管理员权限，才能在串流期间管理 AWDL 网络接口。";
 "AWDL Helper Install Prompt" = "Moonlight 需要管理员权限来安装 AWDL Helper。";
 
 /* General UI */
@@ -417,8 +416,6 @@
 "Granted" = "已允许";
 "Granted Pending Reentry" = "已允许，重新进入串流后生效";
 "Check Settings" = "检查设置";
-"Installed" = "已安装";
-"Not Ready" = "未就绪";
 "Not Granted" = "未允许";
 "Checking" = "检查中";
 "Unavailable" = "不可用";
@@ -560,14 +557,12 @@
 "VT Quality Super Resolution detail" = "偏画质的 VideoToolbox 超分及模型就绪情况。";
 "Sunshine Extensions" = "Sunshine 扩展";
 "Sunshine Extensions detail" = "向支持的主机发送 Foundation Sunshine 启动扩展（显示器、VDD、屏幕模式、HDR 档案）。";
-"Admin Prompt Only" = "仅管理员弹窗";
 "Welcome to Moonlight macOS Enhanced" = "欢迎使用 Moonlight macOS Enhanced";
 "Welcome Permissions Subtitle" = "全部可选，之后可在设置中更改。";
 "Microphone Permission detail" = "只有在你想把本地麦克风传到主机时才需要。";
-"Install Persistent Helper" = "安装持久化 Helper";
 "Permissions" = "权限";
 "Continue" = "继续";
-"Welcome AWDL detail" = "可选。串流期间管理 AWDL，让 Wi‑Fi 更稳。";
+"Welcome AWDL detail" = "串流时关闭 AWDL 以减少 Wi‑Fi 卡顿，串流结束后自动恢复。需要授权一次管理员权限。";
 "Shortcut Translation Rules" = "快捷键翻译规则";
 "No Shortcut Translation Rules" = "还没有翻译规则";
 "No Shortcut Translation Rules detail" = "添加规则，把 Mac 快捷键变成主机快捷键或 Moonlight 动作。";
@@ -771,7 +766,7 @@
 "Dim Unfocused Artwork" = "降低未选中应用封面亮度";
 "Classic Home Page" = "经典主页";
 "Classic Home Page detail" = "改用旧版主页。重启 Moonlight 后生效。";
-"AWDL Stability Helper detail" = "串流时临时关闭 AWDL，减少规律性的 Wi‑Fi 卡顿；串流期间 AirDrop 和附近设备发现可能受影响。";
+"AWDL Stability Helper detail" = "串流时关闭 AWDL，减少规律性的 Wi‑Fi 卡顿，串流结束后自动恢复；串流期间隔空投送和接力暂时不可用。连接随航屏幕时保持开启。";
 "VSync" = "垂直同步";
 "Host Files" = "主机文件";
 "Host Files settings subtitle" = "浏览主机共享的只读文件夹并下载文件。";
@@ -2233,3 +2228,26 @@
 "Input Monitoring Alert Message" = "未开启时，鼠标使用兼容路径。请在“系统设置”>“隐私与安全性”>“输入监控”中打开 Moonlight；已经打开的话，先关闭再打开。";
 "Open System Settings" = "打开系统设置";
 "Mouse Input Compatibility" = "兼容（AppKit）";
+"AWDL Setup Title" = "串流时减少 Wi‑Fi 卡顿";
+"AWDL Setup Message" = "串流时临时关闭隔空投送使用的无线通道（AWDL），可明显减少 Wi‑Fi 卡顿，串流结束后自动恢复；期间隔空投送和接力暂时不可用。需要授权一次管理员权限，之后不再询问。";
+"AWDL Update Message" = "之前安装的 AWDL 辅助程序比当前版本的 Moonlight 旧。授权一次管理员权限即可更新，继续减少串流时的 Wi‑Fi 卡顿。";
+"AWDL Helper Status" = "AWDL 辅助程序状态";
+"Authorize" = "授权";
+"Update" = "更新";
+"Retry" = "重试";
+"Failed" = "失败";
+"Enabled" = "已启用";
+"Not Authorized" = "未授权";
+"Update Needed" = "需要更新";
+"AWDL helper does not respond" = "AWDL 辅助程序没有响应。";
+"AWDL helper is older than this app" = "已安装的 AWDL 辅助程序比本应用旧。";
+"AWDL helper could not turn awdl0 off" = "AWDL 辅助程序无法关闭 awdl0。";
+"awdl0 stayed on after the helper turned it off" = "辅助程序关闭 awdl0 后它仍保持开启。";
+"awdl0 could not be turned back on" = "无法重新开启 awdl0。";
+"AWDL helper cannot be installed in a sandboxed build" = "沙盒版本无法安装 AWDL 辅助程序。";
+"The bundled AWDL helper is missing from this build." = "此版本缺少内置的 AWDL 辅助程序。";
+"The bundled AWDL helper has no signature macOS accepts." = "内置的 AWDL 辅助程序没有 macOS 接受的签名。";
+"Administrator authorization timed out. Please try again." = "管理员授权超时，请重试。";
+"No administrator authorization response was received. Please try again." = "没有收到管理员授权响应，请重试。";
+"Administrator authorization did not complete. Confirm that this account has administrator privileges and try again." = "管理员授权未完成。请确认此账户有管理员权限后重试。";
+"The system blocked the administrator authorization request." = "系统拦截了管理员授权请求。";

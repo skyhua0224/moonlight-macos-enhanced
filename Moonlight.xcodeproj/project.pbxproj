@@ -201,6 +201,9 @@
 				macOS/Assets.xcassets,
 				macOS/Helpers/AlertPresenter.m,
 				macOS/Helpers/AwdlAuthorizationHelper.m,
+				macOS/Helpers/AwdlHelperManager.swift,
+				macOS/Helpers/AwdlHelperPolicy.swift,
+				macOS/Helpers/AwdlHelperSetup.swift,
 				macOS/Helpers/BackgroundColorView.m,
 				macOS/Helpers/ControllerNavigation.m,
 				macOS/Helpers/Helpers.m,
@@ -611,6 +614,8 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/Limelight/macOS/Helpers/AwdlPrivilegedHelperMain.m",
+				"$(SRCROOT)/Limelight/macOS/Helpers/AwdlHoldLedger.m",
+				"$(SRCROOT)/Limelight/macOS/Helpers/AwdlHoldLedger.h",
 				"$(SRCROOT)/Limelight/macOS/Helpers/AwdlPrivilegedHelperProtocol.h",
 				"$(SRCROOT)/scripts/build_awdl_privileged_helper.sh",
 			);

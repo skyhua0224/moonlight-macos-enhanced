@@ -94,6 +94,9 @@ struct AppView: View {
           }
         ))
         ToggleCell(title: "AWDL Stability Helper", hintKey: "AWDL Stability Helper detail", boolBinding: $settingsModel.awdlStabilityHelperEnabled)
+        if settingsModel.awdlStabilityHelperEnabled {
+          AwdlHelperStatusRow()
+        }
         SettingsRow(title: "Input Monitoring", detail: "Input Monitoring purpose") {
           Button(languageManager.localize("Open Settings")) {
             InputMonitoringPermissionManager.sharedManager.openSystemPreferences()
@@ -136,6 +139,45 @@ struct AppView: View {
     }
     .sheet(isPresented: $showLiveLogViewer) {
       SettingsLogViewer(rawLogURL: nil, curatedLogURL: nil).environmentObject(settingsModel)
+    }
+  }
+}
+
+/// Under the AWDL switch: whether the helper is authorized, and the one button that fixes it when it is not. Quiet: it
+/// never asks by itself, and a stream starts whatever it says.
+private struct AwdlHelperStatusRow: View {
+  @ObservedObject private var languageManager = LanguageManager.shared
+  @ObservedObject private var awdl = AwdlHelperManager.sharedManager
+
+  var body: some View {
+    // Without awdl0 or without a helper in this build there is nothing to authorize.
+    if awdl.status != .noInterface && awdl.status != .unsupported {
+      SettingsRow(title: "AWDL Helper Status") {
+        VStack(alignment: .trailing, spacing: 4) {
+          HStack(spacing: 10) {
+            Label(
+              languageManager.localize(awdl.statusLabelKey),
+              systemImage: awdl.status == .ready ? "checkmark.circle.fill" : "minus.circle"
+            )
+            .foregroundColor(awdl.status == .ready ? .green : .secondary)
+            if let titleKey = awdl.actionTitleKey {
+              Button(languageManager.localize(titleKey)) {
+                awdl.performPrimaryAction()
+              }
+              .controllerButtonStyle(.bordered)
+              .disabled(awdl.isWorking)
+            }
+          }
+          if awdl.status == .failed, !awdl.lastErrorMessage.isEmpty {
+            Text(verbatim: awdl.lastErrorMessage)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .multilineTextAlignment(.trailing)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+      .onAppear { awdl.refreshAuthorizationStatus() }
     }
   }
 }

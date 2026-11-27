@@ -7,6 +7,7 @@ fi
 
 helper_label="${PRODUCT_BUNDLE_IDENTIFIER}.AwdlPrivilegedHelper"
 helper_source="${SRCROOT}/Limelight/macOS/Helpers/AwdlPrivilegedHelperMain.m"
+helper_ledger_source="${SRCROOT}/Limelight/macOS/Helpers/AwdlHoldLedger.m"
 helper_include_dir="${SRCROOT}/Limelight/macOS/Helpers"
 helper_output_dir="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchServices"
 helper_output_path="${helper_output_dir}/${helper_label}"
@@ -78,6 +79,7 @@ done
 xcrun clang \
   "${clang_args[@]}" \
   "$helper_source" \
+  "$helper_ledger_source" \
   -o "$helper_output_path" \
   -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$helper_info_plist" \
   -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __launchd_plist -Xlinker "$helper_launchd_plist"

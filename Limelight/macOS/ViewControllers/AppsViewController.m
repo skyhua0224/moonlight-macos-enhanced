@@ -1036,7 +1036,7 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
                 if (success && self.launchToken == token) {
                     self.runningApp = app;
                     [MLDeckActivity recordConnectedWithHostUUID:self.host.uuid ?: @"" appId:app.id ?: @"" appName:app.name ?: @""];
-                    [self performSegueWithIdentifier:@"streamSegue" sender:nil];
+                    [self openStreamWindowAfterAwdlSetupForApp:app];
                 } else {
                     [self abandonLaunch];
                 }
@@ -1047,8 +1047,31 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
     } else {
         self.runningApp = app;
         [MLDeckActivity recordConnectedWithHostUUID:self.host.uuid ?: @"" appId:app.id ?: @"" appName:app.name ?: @""];
-        [self performSegueWithIdentifier:@"streamSegue" sender:nil];
+        [self openStreamWindowAfterAwdlSetupForApp:app];
     }
+}
+
+/// The stream window opens once the AWDL helper has been dealt with: with the helper missing or out of date the user is
+/// asked, here and once, for the administrator authorization (never during the stream). Whatever the answer, the stream
+/// starts; a launch cancelled meanwhile does not.
+- (void)openStreamWindowAfterAwdlSetupForApp:(TemporaryApp *)app {
+    NSUInteger token = self.launchToken;
+    NSString *hostUUID = self.host.uuid ?: @"";
+    __weak typeof(self) weakSelf = self;
+    [AwdlHelperSetup prepareForStreamThen:^{
+        AppsViewController *strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf.launchToken != token) return;
+        // The page may have been switched to another computer while the question was up.
+        if (![(strongSelf.host.uuid ?: @"") isEqualToString:hostUUID]) {
+            [MLNetworkQuiet end:[@"launch:" stringByAppendingString:hostUUID]];
+            [MLLaunchGate release:hostUUID];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLLaunchStateChanged" object:nil userInfo:@{@"hostUUID": hostUUID}];
+            return;
+        }
+        // The running-app refresh may have replaced it while the question was up; the stream is for the app that was chosen.
+        strongSelf.runningApp = app;
+        [strongSelf performSegueWithIdentifier:@"streamSegue" sender:nil];
+    }];
 }
 
 - (BOOL)confirmConnectionRouteForStreaming {

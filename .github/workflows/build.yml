@@ -111,6 +111,14 @@ jobs:
       if: matrix.variant == 'arm64'
       run: sh tests/net-quiet/run.sh
 
+    # The AWDL stability helper: its default, when the authorization is asked for, the self-check, the stream session and
+    # every way awdl0 is given back (policy); who keeps awdl0 down inside the privileged helper (ledger).
+    - name: AWDL helper tests
+      if: matrix.variant == 'arm64'
+      run: |
+        sh tests/awdl-helper-policy/run.sh
+        sh tests/awdl-hold-ledger/run.sh
+
     - name: Keyboard routing and repeat tests
       if: matrix.variant == 'arm64'
       run: |
