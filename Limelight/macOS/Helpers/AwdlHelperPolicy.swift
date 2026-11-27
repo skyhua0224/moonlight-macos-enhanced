@@ -120,13 +120,21 @@ struct AwdlInterfaceSnapshot: Equatable {
   var up: Bool
 }
 
+enum AwdlReleaseResult: Equatable {
+  /// This client's hold is over and awdl0 is the helper's to bring up.
+  case released
+  /// Another client holds awdl0 down: it stays down, and bringing it up would be wrong.
+  case stillHeld
+  case failed(String)
+}
+
 protocol AwdlHelperProbing: AnyObject {
   func handshake() -> AwdlHelperHandshake
   /// Whether awdl0 exists and is up. Needs no privilege.
   func interfaceSnapshot() -> AwdlInterfaceSnapshot
   /// Each call below returns nil on success, otherwise why not.
   func holdDown() -> String?
-  func releaseHold() -> String?
+  func releaseHold() -> AwdlReleaseResult
   /// awdl0 up without a hold behind it.
   func forceUp() -> String?
   /// Waits a moment for the interface to change; false when it did not.
@@ -206,8 +214,11 @@ enum AwdlSelfCheckOutcome: Equatable {
 }
 
 enum AwdlSelfCheck {
-  /// Handshake, then awdl0 down and up again. awdl0 is brought back whatever happens in between.
-  static func run(_ probe: AwdlHelperProbing, allowToggle: Bool = true) -> AwdlSelfCheckOutcome {
+  /// Handshake, then awdl0 down and up again. awdl0 is brought back whatever happens in between; when that fails, the
+  /// marker stays, so that the next launch, wake or check brings it back. `marker` is written before awdl0 goes down.
+  static func run(
+    _ probe: AwdlHelperProbing, allowToggle: Bool = true, marker: AwdlPendingRestoreStoring? = nil
+  ) -> AwdlSelfCheckOutcome {
     let handshake = probe.handshake()
     switch AwdlHelperLink.evaluate(handshake, installedFilePresent: probe.installedFilePresent) {
     case .notInstalled, .notRunning:
@@ -223,16 +234,23 @@ enum AwdlSelfCheck {
     // Down already (by the user or another tool) or a stream is using it: there is nothing to turn off and back on.
     guard before.up, allowToggle else { return .passed(toggleVerified: false) }
 
+    marker?.required = true
     if let error = probe.holdDown() {
+      marker?.required = false
       return .failed(.holdRejected(error))
     }
     let wentDown = probe.waitForInterface(up: false)
-    let releaseError = probe.releaseHold()
-    var cameBack = releaseError == nil && probe.waitForInterface(up: true)
+    var cameBack: Bool
+    switch probe.releaseHold() {
+    case .released: cameBack = probe.waitForInterface(up: true)
+    case .stillHeld: cameBack = true
+    case .failed: cameBack = false
+    }
     if !cameBack {
       cameBack = probe.forceUp() == nil && probe.waitForInterface(up: true)
     }
     guard cameBack else { return .failed(.notRestored) }
+    marker?.required = false
     guard wentDown else { return .failed(.downNotObserved) }
     return .passed(toggleVerified: true)
   }
@@ -284,6 +302,8 @@ enum AwdlSessionEnd: Equatable {
   case notOwner
   case nothingToRestore
   case restored
+  /// Another client holds awdl0 down; the helper brings it up when that one lets go.
+  case heldByOthers
   case restoreFailed(String)
 }
 
@@ -341,8 +361,9 @@ final class AwdlSessionEngine {
     let current = probe.interfaceSnapshot()
     guard current.up else { return .alreadyDown }
 
-    // The marker first: a crash between the two steps must still find it.
+    // The marker first: a crash between the two steps must still find it. Without a marker on disk awdl0 is not touched.
     pending.required = true
+    guard pending.required else { return .holdFailed("the recovery marker could not be written") }
     if let error = probe.holdDown() {
       pending.required = false
       return .holdFailed(error)
@@ -380,7 +401,9 @@ final class AwdlSessionEngine {
     guard pending.required else { return .nothingPending }
 
     let snapshot = probe.interfaceSnapshot()
-    if !snapshot.present || snapshot.up {
+    // A failed query looks like an absent interface: only an interface seen up ends the obligation.
+    guard snapshot.present else { return .cannotRestore("awdl0 is not available") }
+    if snapshot.up {
       pending.required = false
       return .alreadyUp
     }
@@ -427,10 +450,16 @@ final class AwdlSessionEngine {
     guard holding || forceHolding else { return .nothingToRestore }
 
     var failure: String?
-    if let error = probe.releaseHold() {
+    switch probe.releaseHold() {
+    case .stillHeld:
+      // Another client keeps awdl0 down: the helper brings it up when that one lets go; this run owes nothing.
+      pending.required = false
+      log("[diag] AWDL helper released its hold, another stream still holds awdl0: reason=\(reason)")
+      return .heldByOthers
+    case .failed(let error):
       failure = error
-    } else if !probe.waitForInterface(up: true) {
-      failure = "awdl0 stayed down"
+    case .released:
+      if !probe.waitForInterface(up: true) { failure = "awdl0 stayed down" }
     }
     // The hold may be gone already (the helper restarted): then the release has nothing to give back, and awdl0 is
     // brought up directly.

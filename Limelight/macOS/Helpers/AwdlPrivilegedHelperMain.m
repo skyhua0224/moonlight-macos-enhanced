@@ -166,9 +166,10 @@ static MLAwdlHoldLedger *MLAwdlSharedLedger(void) {
     reply(error.length == 0, error);
 }
 
-- (void)releaseAwdlHoldWithReply:(void (^)(BOOL success, NSString *message))reply {
-    NSString *error = [MLAwdlSharedLedger() releaseForClient:self.clientID];
-    reply(error.length == 0, error);
+- (void)releaseAwdlHoldWithReply:(void (^)(BOOL success, BOOL stillHeld, NSString *message))reply {
+    MLAwdlHoldLedger *ledger = MLAwdlSharedLedger();
+    NSString *error = [ledger releaseForClient:self.clientID];
+    reply(error.length == 0, ledger.holderCount > 0, error);
 }
 
 @end

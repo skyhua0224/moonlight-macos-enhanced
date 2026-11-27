@@ -73,9 +73,13 @@ private final class AwdlRuntimeProbe: AwdlHelperProbing {
         return MLAwdlAuthorizationHelper.holdAwdlDown(errorMessage: &message) ? nil : (message as String? ?? "")
     }
 
-    func releaseHold() -> String? {
+    func releaseHold() -> AwdlReleaseResult {
         var message: NSString?
-        return MLAwdlAuthorizationHelper.releaseAwdlHold(errorMessage: &message) ? nil : (message as String? ?? "")
+        var stillHeld = ObjCBool(false)
+        guard MLAwdlAuthorizationHelper.releaseAwdlHold(stillHeld: &stillHeld, errorMessage: &message) else {
+            return .failed(message as String? ?? "")
+        }
+        return stillHeld.boolValue ? .stillHeld : .released
     }
 
     func forceUp() -> String? {
@@ -142,7 +146,6 @@ final class AwdlHelperManager: NSObject, ObservableObject {
     /// The system's authorization dialog is up, or the self-check is running.
     @Published private(set) var isWorking: Bool = false
 
-    private static let lastErrorMessageKey = "networkCompatibility.awdlHelperLastErrorMessage"
     private static let installAnsweredKey = "networkCompatibility.awdlHelperSetupAnswered"
     private static let updatePromptedBuildKey = "networkCompatibility.awdlHelperUpdatePromptedBuild"
     /// Before the default-on release the marker was a UserDefaults flag.
@@ -160,21 +163,26 @@ final class AwdlHelperManager: NSObject, ObservableObject {
     private var observers: [NSObjectProtocol] = []
     /// What the last look at the helper found; nil until the first one. Only touched on `sessionQueue`.
     private var lastLink: AwdlHelperLink?
+    /// Why the last setup, check or session failed. Kept until something verifies the helper (a check or a stream that
+    /// works), so that a handshake alone does not turn a failed state into an enabled one. Only on `sessionQueue`.
     private var failureMessage: String
+    private let pendingMarker: AwdlPendingRestoreFile
 
     override init() {
         let marker = AwdlPendingRestoreFile(url: Self.pendingRestoreURL())
         // A hold left over from the build before this one.
         if UserDefaults.standard.bool(forKey: Self.legacyPendingRestoreKey) {
             marker.required = true
-            UserDefaults.standard.removeObject(forKey: Self.legacyPendingRestoreKey)
+            if marker.required {
+                UserDefaults.standard.removeObject(forKey: Self.legacyPendingRestoreKey)
+            }
         }
         engine = AwdlSessionEngine(probe: probe, pending: marker) { message in
             LogMessage(LOG_I, message)
         }
-        failureMessage = UserDefaults.standard.string(forKey: Self.lastErrorMessageKey) ?? ""
+        pendingMarker = marker
+        failureMessage = ""
         super.init()
-        lastErrorMessage = failureMessage
 
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
@@ -320,8 +328,7 @@ final class AwdlHelperManager: NSObject, ObservableObject {
     private func statusLocked(for link: AwdlHelperLink) -> AwdlHelperStatus {
         switch link {
         case .ready:
-            failureMessage = ""
-            return .ready
+            return failureMessage.isEmpty ? .ready : .failed
         case .notInstalled:
             return failureMessage.isEmpty ? .notSetUp : .failed
         case .notRunning, .outdated:
@@ -333,10 +340,7 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         let message = failureMessage
         DispatchQueue.main.async {
             if self.status != status { self.status = status }
-            if self.lastErrorMessage != message {
-                self.lastErrorMessage = message
-                UserDefaults.standard.set(message, forKey: Self.lastErrorMessageKey)
-            }
+            if self.lastErrorMessage != message { self.lastErrorMessage = message }
         }
     }
 
@@ -403,7 +407,6 @@ final class AwdlHelperManager: NSObject, ObservableObject {
     /// Installs or updates the helper (one administrator authorization), then checks it by turning awdl0 off and on.
     /// `completion` runs on the main thread with whether the helper is ready afterwards.
     func setUpHelper(_ completion: ((Bool) -> Void)? = nil) {
-        let sidecar = Self.sidecarSessionActive()
         DispatchQueue.main.async {
             self.isWorking = true
             // Asked for, from here or from the question before a stream: either way it is answered.
@@ -415,8 +418,11 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         installQueue.async {
             self.logInfo("[diag] AWDL helper setup started")
             let outcome = self.performInstall()
+            // Read after the dialog: a Sidecar display may have been connected while it was up.
+            let sidecar = DispatchQueue.main.sync { Self.sidecarSessionActive() }
             self.sessionQueue.async {
                 var ready = false
+                self.failureMessage = ""
                 switch outcome {
                 case .installed:
                     MLAwdlAuthorizationHelper.invalidateSession()
@@ -437,8 +443,8 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
     }
 
-    /// What the button of a status row does. A helper that answers is checked again; one that does not is installed
-    /// (the administrator authorization), which also checks it.
+    /// What the button of a status row does. A current helper is checked again; one that is missing, not answering or
+    /// older than the app is installed (the administrator authorization), which also checks it.
     func performPrimaryAction(_ completion: ((Bool) -> Void)? = nil) {
         switch status {
         case .notSetUp, .needsUpdate:
@@ -447,7 +453,8 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             let sidecar = Self.sidecarSessionActive()
             DispatchQueue.main.async { self.isWorking = true }
             sessionQueue.async {
-                if self.probe.handshake().reachable {
+                let link = AwdlHelperLink.evaluate(self.probe.handshake(), installedFilePresent: self.probe.installedFilePresent)
+                if link == .ready {
                     let ready = self.runSelfCheckLocked(allowToggle: !sidecar)
                     DispatchQueue.main.async {
                         self.isWorking = false
@@ -468,13 +475,15 @@ final class AwdlHelperManager: NSObject, ObservableObject {
     /// Handshake, then awdl0 off and on again; the status says the result. A freshly installed helper needs a moment
     /// before launchd lets the app talk to it, so a helper that does not answer is asked again for a short while.
     private func runSelfCheckLocked(allowToggle: Bool) -> Bool {
-        var outcome = AwdlSelfCheck.run(probe, allowToggle: allowToggle && !engine.isActive)
+        // awdl0 left down by an earlier check or run goes back up first, or this check would see it down and pass.
+        _ = engine.restorePending(reason: "before-self-check")
+        var outcome = AwdlSelfCheck.run(probe, allowToggle: allowToggle && !engine.isActive, marker: pendingMarker)
         var attempts = 0
         while case .failed(.helperNotRunning) = outcome, attempts < 5 {
             attempts += 1
             usleep(400_000)
             MLAwdlAuthorizationHelper.invalidateSession()
-            outcome = AwdlSelfCheck.run(probe, allowToggle: allowToggle && !engine.isActive)
+            outcome = AwdlSelfCheck.run(probe, allowToggle: allowToggle && !engine.isActive, marker: pendingMarker)
         }
 
         switch outcome {
@@ -494,8 +503,7 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             if !failure.detail.isEmpty { message += " (\(failure.detail))" }
             logWarning("[diag] AWDL helper self-check failed: \(message)")
             failureMessage = message
-            lastLink = nil
-            refreshLocked()
+            publish(.failed)
             return false
         }
     }
@@ -515,32 +523,15 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             return .failed(LanguageManager.shared.localize("The bundled AWDL helper has no signature macOS accepts."))
         }
 
+        // No file is written for root to run: a script or plist in the user's temporary directory could be replaced while
+        // the authorization dialog is up. The script and the plist go into the one command the dialog authorizes.
         let label = Self.helperLabel()
-        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let tempPlistURL = tempDirectory.appendingPathComponent("\(label).plist")
-        let tempScriptURL = tempDirectory.appendingPathComponent("install-awdl-helper.sh")
-
-        do {
-            try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-            try makeLaunchdPlist(label: label).write(to: tempPlistURL, options: .atomic)
-            try makeInstallScript().write(to: tempScriptURL, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tempScriptURL.path)
-        } catch {
-            return .failed(error.localizedDescription)
-        }
-        defer {
-            try? FileManager.default.removeItem(at: tempDirectory)
-        }
-
-        let command = [
-            "/bin/sh",
-            shellQuote(tempScriptURL.path),
-            shellQuote(bundledHelperPath),
-            shellQuote(Self.installedHelperPath()),
-            shellQuote(tempPlistURL.path),
-            shellQuote(Self.installedLaunchdPlistPath()),
-            shellQuote(label),
-        ].joined(separator: " ")
+        let command = "/bin/sh -c " + shellQuote(makeInstallScript(
+            helperSource: bundledHelperPath,
+            helperDestination: Self.installedHelperPath(),
+            plistContent: makeLaunchdPlist(label: label),
+            plistDestination: Self.installedLaunchdPlistPath(),
+            label: label))
 
         logInfo("[diag] AWDL helper install requesting administrator command")
         let prompt = LanguageManager.shared.localize("AWDL Helper Install Prompt")
@@ -570,44 +561,43 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
     }
 
-    private func makeLaunchdPlist(label: String) -> Data {
+    private func makeLaunchdPlist(label: String) -> String {
         let plist: [String: Any] = [
             "Label": label,
             "ProgramArguments": [Self.installedHelperPath()],
             "MachServices": [label: true],
             "RunAtLoad": true,
         ]
-        return try! PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        let data = try! PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        // One line: the whole script is one AppleScript string.
+        return String(decoding: data, as: UTF8.self)
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\t", with: "")
     }
 
-    private func makeInstallScript() -> String {
-        """
-        set -euo pipefail
-        helper_src="$1"
-        helper_dst="$2"
-        plist_src="$3"
-        plist_dst="$4"
-        label="$5"
-
-        /bin/mkdir -p /Library/PrivilegedHelperTools
-        /bin/mkdir -p /Library/LaunchDaemons
-
-        /bin/launchctl bootout system "$plist_dst" >/dev/null 2>&1 || true
-        /bin/rm -f "$helper_dst" "$plist_dst"
-
-        /usr/bin/install -m 755 "$helper_src" "$helper_dst"
-        /usr/sbin/chown root:wheel "$helper_dst"
-        /bin/chmod 755 "$helper_dst"
-        /usr/bin/xattr -d com.apple.quarantine "$helper_dst" >/dev/null 2>&1 || true
-
-        /usr/bin/install -m 644 "$plist_src" "$plist_dst"
-        /usr/sbin/chown root:wheel "$plist_dst"
-        /bin/chmod 644 "$plist_dst"
-
-        /bin/launchctl bootstrap system "$plist_dst"
-        /bin/launchctl enable "system/$label" >/dev/null 2>&1 || true
-        /bin/launchctl kickstart -k "system/$label" >/dev/null 2>&1 || true
-        """
+    private func makeInstallScript(
+        helperSource: String, helperDestination: String, plistContent: String, plistDestination: String, label: String
+    ) -> String {
+        [
+            "set -euo pipefail",
+            "helper_src=\(shellQuote(helperSource))",
+            "helper_dst=\(shellQuote(helperDestination))",
+            "plist_dst=\(shellQuote(plistDestination))",
+            "label=\(shellQuote(label))",
+            "/bin/mkdir -p /Library/PrivilegedHelperTools /Library/LaunchDaemons",
+            "/bin/launchctl bootout system \"$plist_dst\" >/dev/null 2>&1 || true",
+            "/bin/rm -f \"$helper_dst\" \"$plist_dst\"",
+            "/usr/bin/install -m 755 \"$helper_src\" \"$helper_dst\"",
+            "/usr/sbin/chown root:wheel \"$helper_dst\"",
+            "/bin/chmod 755 \"$helper_dst\"",
+            "/usr/bin/xattr -d com.apple.quarantine \"$helper_dst\" >/dev/null 2>&1 || true",
+            "/usr/bin/printf '%s\\n' \(shellQuote(plistContent)) > \"$plist_dst\"",
+            "/usr/sbin/chown root:wheel \"$plist_dst\"",
+            "/bin/chmod 644 \"$plist_dst\"",
+            "/bin/launchctl bootstrap system \"$plist_dst\"",
+            "/bin/launchctl enable \"system/$label\" >/dev/null 2>&1 || true",
+            "/bin/launchctl kickstart -k \"system/$label\" >/dev/null 2>&1 || true",
+        ].joined(separator: "; ")
     }
 
     private func shellQuote(_ value: String) -> String {
@@ -670,10 +660,14 @@ final class AwdlHelperManager: NSObject, ObservableObject {
     }
 
     private func handleApplicationWillTerminate() {
-        // The helper gives awdl0 back when this process goes away, so a slow answer must not hold the quit up.
-        sessionQueue.sync {
+        // The helper gives awdl0 back when this process goes away and the marker file is the second chance, so a check
+        // that waits on an unresponsive helper must not hold the quit up.
+        let done = DispatchSemaphore(value: 0)
+        sessionQueue.async {
             _ = self.engine.shutdown(reason: "app-will-terminate")
+            done.signal()
         }
+        _ = done.wait(timeout: .now() + 2)
     }
 
     private func handleWake() {

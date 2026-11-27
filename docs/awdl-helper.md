@@ -24,7 +24,8 @@ The setting is on by default. A value the user set is kept: only a missing value
    Wi-Fi stutter, and restored afterwards; AirDrop and Handoff are unavailable meanwhile) and offers **Authorize** and
    **Not Now**. The same for a helper older than the app, once per app build (**Update**).
 3. **Authorize**: one administrator dialog installs the helper (`/Library/PrivilegedHelperTools`, a LaunchDaemon in
-   `/Library/LaunchDaemons`), then the self-check runs.
+   `/Library/LaunchDaemons`), then the self-check runs. The install script and the daemon's property list are part of
+   the one command the dialog authorizes; no file is written for root to run.
 4. Whatever the answer (not now, cancelled, no administrator rights, a profile that forbids it, a failed install), the
    stream starts. The answer is remembered and the question does not come back; the settings page shows the state and a
    button (**Authorize**, **Update**, **Retry**). Turning the switch off and on again asks again.
@@ -50,7 +51,8 @@ A new app build with an unchanged helper asks for nothing.
 | Stream ends, window closes, connection fails | the session ends: release, then check awdl0 is up, else `ifconfig awdl0 up` through the helper |
 | App quits | the same, on the quit notification |
 | Crash, force quit, kill | the helper sees the XPC connection go and brings awdl0 up when the last holder is gone |
-| Helper could not be reached | a marker file stays; the next launch, wake or stream start brings awdl0 up first |
+| Another stream (a second app instance) still holds awdl0 | it stays down; the helper brings it up when the last holder lets go |
+| Helper could not be reached | a marker file stays; the next launch, wake, stream start or check brings awdl0 up first |
 | Sleep and wake | with no stream: the marker is honored; under a stream: awdl0 is turned off again |
 | Reboot | the system starts with awdl0 up |
 

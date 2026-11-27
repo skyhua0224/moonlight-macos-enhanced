@@ -235,9 +235,12 @@ typedef void (^MLAwdlHelperCall)(id<MLAwdlPrivilegedHelperProtocol> proxy, void 
     return held;
 }
 
-+ (BOOL)releaseAwdlHoldWithErrorMessage:(NSString * _Nullable * _Nullable)errorMessage {
++ (BOOL)releaseAwdlHoldStillHeld:(BOOL *)stillHeld
+                    errorMessage:(NSString * _Nullable * _Nullable)errorMessage {
+    __block BOOL heldByOthers = NO;
     BOOL released = [self performHelperCall:^(id<MLAwdlPrivilegedHelperProtocol> proxy, void (^finish)(BOOL, NSString *)) {
-        [proxy releaseAwdlHoldWithReply:^(BOOL success, NSString *message) {
+        [proxy releaseAwdlHoldWithReply:^(BOOL success, BOOL stillHeldByOthers, NSString *message) {
+            heldByOthers = stillHeldByOthers;
             finish(success, message);
         }];
     } timeout:MLAwdlPrivilegedHelperTimeout errorMessage:errorMessage];
@@ -245,6 +248,9 @@ typedef void (^MLAwdlHelperCall)(id<MLAwdlPrivilegedHelperProtocol> proxy, void 
         @synchronized (self) {
             MLAwdlHoldActive = NO;
         }
+    }
+    if (stillHeld != NULL) {
+        *stillHeld = released && heldByOthers;
     }
     return released;
 }

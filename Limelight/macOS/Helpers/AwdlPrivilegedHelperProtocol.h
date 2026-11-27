@@ -22,8 +22,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// the last holder releases it, and when a holder's connection ends for any reason (quit, crash, force quit).
 - (void)holdAwdlDownWithReply:(void (^)(BOOL success, NSString *message))reply;
 
-/// Version 2. Ends this connection's hold. Harmless without one.
-- (void)releaseAwdlHoldWithReply:(void (^)(BOOL success, NSString *message))reply;
+/// Version 2. Ends this connection's hold. Harmless without one. `stillHeld`: another client holds awdl0 down, so it
+/// stays down until that one lets go.
+- (void)releaseAwdlHoldWithReply:(void (^)(BOOL success, BOOL stillHeld, NSString *message))reply;
 
 @end
 

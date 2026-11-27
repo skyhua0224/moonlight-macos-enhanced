@@ -25,7 +25,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Brings awdl0 down for this app until `releaseAwdlHold...`, or until the helper sees this process go away.
 + (BOOL)holdAwdlDownWithErrorMessage:(NSString * _Nullable * _Nullable)errorMessage NS_SWIFT_NAME(holdAwdlDown(errorMessage:));
 
-+ (BOOL)releaseAwdlHoldWithErrorMessage:(NSString * _Nullable * _Nullable)errorMessage NS_SWIFT_NAME(releaseAwdlHold(errorMessage:));
+/// `stillHeld` is set when another client holds awdl0 down: it then stays down, and bringing it up would be wrong.
++ (BOOL)releaseAwdlHoldStillHeld:(BOOL *)stillHeld
+                    errorMessage:(NSString * _Nullable * _Nullable)errorMessage NS_SWIFT_NAME(releaseAwdlHold(stillHeld:errorMessage:));
 
 /// `ifconfig awdl0 up` through the helper, for a restore that has no hold to release (a hold lost with an earlier run).
 + (BOOL)bringAwdlUpWithErrorMessage:(NSString * _Nullable * _Nullable)errorMessage NS_SWIFT_NAME(bringAwdlUp(errorMessage:));

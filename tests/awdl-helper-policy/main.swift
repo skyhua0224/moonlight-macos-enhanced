@@ -102,6 +102,8 @@ final class FakeProbe: AwdlHelperProbing {
   var holdError: String?
   var releaseError: String?
   var forceUpError: String?
+  /// Another client holds awdl0 down too.
+  var othersHold = false
   /// The helper accepts the down but the interface does not go down.
   var holdLeavesUp = false
   var commands: [String] = []
@@ -118,11 +120,12 @@ final class FakeProbe: AwdlHelperProbing {
     if !holdLeavesUp { snapshot.up = false }
     return nil
   }
-  func releaseHold() -> String? {
+  func releaseHold() -> AwdlReleaseResult {
     commands.append("release")
-    if let releaseError { return releaseError }
+    if let releaseError { return .failed(releaseError) }
+    if othersHold { return .stillHeld }
     snapshot.up = true
-    return nil
+    return .released
   }
   func forceUp() -> String? {
     commands.append("force-up")
@@ -137,7 +140,13 @@ final class FakeProbe: AwdlHelperProbing {
 }
 
 final class FakeMarker: AwdlPendingRestoreStoring {
-  var required = false
+  /// The marker cannot be written (an unwritable directory): setting it has no effect.
+  var refuseWrite = false
+  private var stored = false
+  var required: Bool {
+    get { stored }
+    set { if !refuseWrite || !newValue { stored = newValue } }
+  }
 }
 
 // MARK: - Self-check
@@ -200,6 +209,32 @@ do {
   let p = FakeProbe()
   p.snapshot.present = false
   expect("self-check: no awdl0", AwdlSelfCheck.run(p), .noInterface)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  _ = AwdlSelfCheck.run(p, marker: m)
+  check("self-check: the marker is cleared once awdl0 is up again", !m.required && p.snapshot.up)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  p.releaseError = "gone"
+  p.forceUpError = "no"
+  expect("self-check: awdl0 cannot be brought back", AwdlSelfCheck.run(p, marker: m), .failed(.notRestored))
+  check("self-check: the marker stays, so launch, wake or the next check brings awdl0 back", m.required && !p.snapshot.up)
+  p.releaseError = nil
+  p.forceUpError = nil
+  expect("self-check: a later restore finds it", AwdlSessionEngine(probe: p, pending: m).restorePending(reason: "launch"), .restored)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  p.holdError = "denied"
+  _ = AwdlSelfCheck.run(p, marker: m)
+  check("self-check: a refused hold leaves no marker", !m.required)
+}
+do {
+  let p = FakeProbe()
+  p.othersHold = true
+  expect("self-check: another client's hold is not an error", AwdlSelfCheck.run(p), .passed(toggleVerified: true))
 }
 check("self-check: every failure has a message key", [
   AwdlSelfCheckFailure.helperNotRunning(""), .helperOutdated(found: 0, expected: 2), .holdRejected(""), .downNotObserved, .notRestored,
@@ -286,6 +321,22 @@ do {
   check("session: the hold is given back and no marker is left", !m.required && p.snapshot.up && p.changes == ["hold", "release"])
 }
 
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  m.refuseWrite = true
+  expect("session: the marker cannot be written: awdl0 is left alone", engine(p, m).begin(enabled: true, sidecarActive: false, generation: 1, ownerID: "a"), .holdFailed("the recovery marker could not be written"))
+  check("session: no hold was taken", p.changes.isEmpty && p.snapshot.up)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  let e = engine(p, m)
+  _ = e.begin(enabled: true, sidecarActive: false, generation: 1, ownerID: "a")
+  p.othersHold = true
+  p.snapshot.up = false
+  expect("session: another stream still holds awdl0: it stays down", e.end(forOwner: "a", reason: "stream-ended"), .heldByOthers)
+  check("session: no direct bring-up, no marker", !p.changes.contains("force-up") && !p.snapshot.up && !m.required)
+}
+
 // Restore paths
 do {
   let p = FakeProbe(), m = FakeMarker()
@@ -337,6 +388,13 @@ do {
   m.required = true
   expect("restore: the helper (or the system) brought awdl0 up already: only the marker goes", engine(p, m).restorePending(reason: "launch"), .alreadyUp)
   check("restore: nothing asked of awdl0", !m.required && p.changes.isEmpty)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  m.required = true
+  p.snapshot.present = false
+  expect("restore: awdl0 cannot be queried (not the same as up)", engine(p, m).restorePending(reason: "launch"), .cannotRestore("awdl0 is not available"))
+  check("restore: the marker stays", m.required)
 }
 do {
   let p = FakeProbe(), m = FakeMarker()
