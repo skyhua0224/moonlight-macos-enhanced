@@ -106,6 +106,29 @@ static void MDNSRunOnMain(dispatch_block_t block) {
                                       NSWindowDidMiniaturizeNotification, NSWindowDidDeminiaturizeNotification]) {
         [center addObserver:self selector:@selector(searchPolicyInputChanged:) name:name object:nil];
     }
+    // A launch or a stream takes the network: stop the browser now, not at the next round (which can be a minute away).
+    __weak MDNSManager *weakSelf = self;
+    [MLNetworkQuiet onQuiet:[NSString stringWithFormat:@"mdns-%p", self] cancel:^{
+        MDNSRunOnMain(^{
+            MDNSManager *strongSelf = weakSelf;
+            if (strongSelf != nil && strongSelf->searching) {
+                [strongSelf stopBrowserOnly];
+                strongSelf->searchRound = 0;
+            }
+        });
+    }];
+    // Nothing is going on again: search at once instead of waiting for the next round.
+    [MLNetworkQuiet onIdle:[NSString stringWithFormat:@"mdns-%p", self] resume:^{
+        MDNSRunOnMain(^{
+            MDNSManager *strongSelf = weakSelf;
+            if (strongSelf != nil && strongSelf->searching && !strongSelf->browserStarted) {
+                [strongSelf->searchTimer invalidate];
+                strongSelf->searchTimer = nil;
+                strongSelf->searchRound = 0;
+                [strongSelf runSearchRound];
+            }
+        });
+    }];
     
     return self;
 }
@@ -158,9 +181,28 @@ static void MDNSRunOnMain(dispatch_block_t block) {
 - (void)stopBrowser {
     [searchTimer invalidate];
     searchTimer = nil;
+    [self stopBrowserOnly];
+}
+
+// Stops the browser and the pending resolutions but keeps the round schedule, so that the search comes back by itself.
+- (void)stopBrowserOnly {
     if (browserStarted) {
         browserStarted = NO;
         [mDNSBrowser stop];
+    }
+    // A service found before the stop would keep resolving (and querying) for up to its 5 s timeout. Stop the pending
+    // resolutions and forget those services so that the next search finds and resolves them again. Resolved services and
+    // the failed resolutions held back by failedResolveUntil stay.
+    NSMutableArray<NSNetService *> *canceled = [NSMutableArray array];
+    for (NSNetService *service in services) {
+        if (service.addresses.count == 0) {
+            [canceled addObject:service];
+        }
+    }
+    for (NSNetService *service in canceled) {
+        [service setDelegate:nil];
+        [service stop];
+        [services removeObject:service];
     }
 }
 
@@ -435,7 +477,7 @@ static void MDNSRunOnMain(dispatch_block_t block) {
         return;
     }
     if ([MLNetworkQuiet isQuiet]) {
-        [self stopBrowser];
+        [self stopBrowserOnly];
         searchRound = 0;
     } else {
         Log(LOG_D, @"Restarting mDNS search (round %lu)", (unsigned long)searchRound);

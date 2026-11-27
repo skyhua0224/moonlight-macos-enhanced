@@ -115,9 +115,13 @@ int main(void) {
             pump(0.05);
             check(@"window back: searches at once and restarts", m.searchRunning && gSearches > hidden);
 
-            // --- a stream or launch owns the network
+            // --- a stream or launch owns the network: the quiet hook stops the browser at once, not at the next round
+            NSUInteger stopsBeforeQuiet = gStops;
             MLNetworkQuiet.isQuiet = YES;
-            pump(0.12);
+            [MLNetworkQuiet fireQuiet];
+            pump(0.01);
+            check(@"stream: the quiet hook stops the browser at once", gStops > stopsBeforeQuiet);
+            pump(0.11);
             NSUInteger quietAt = gSearches;
             pump(0.4);
             check(@"stream: no query while the app is quiet", gSearches == quietAt);

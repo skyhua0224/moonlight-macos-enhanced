@@ -6,6 +6,17 @@ static BOOL gQuiet;
 @implementation MLNetworkQuiet
 + (BOOL)isQuiet { return gQuiet; }
 + (void)setIsQuiet:(BOOL)v { gQuiet = v; }
+static NSMutableDictionary<NSString *, void (^)(void)> *gQuietHooks;
++ (void)onQuiet:(NSString *)key cancel:(void (^)(void))cancel {
+    if (gQuietHooks == nil) gQuietHooks = [NSMutableDictionary dictionary];
+    gQuietHooks[key] = [cancel copy];
+}
++ (void)onIdle:(NSString *)key resume:(void (^)(void))resume {
+    (void)key; (void)resume;  // the test resumes through the round schedule
+}
++ (void)fireQuiet {
+    for (void (^hook)(void) in gQuietHooks.allValues) hook();
+}
 @end
 @implementation Utils
 + (BOOL)isActiveNetworkVPN { return NO; }

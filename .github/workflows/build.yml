@@ -106,6 +106,11 @@ jobs:
       if: matrix.variant == 'arm64'
       run: sh tests/mdns-policy/run.sh
 
+    # The discovery switch reader and the quiet rules (NetworkQuiet.swift) the mDNS policy relies on.
+    - name: Network quiet tests
+      if: matrix.variant == 'arm64'
+      run: sh tests/net-quiet/run.sh
+
     - name: Keyboard routing and repeat tests
       if: matrix.variant == 'arm64'
       run: |

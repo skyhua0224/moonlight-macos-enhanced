@@ -8,7 +8,7 @@ Fixes the AWDL helper always skipping and leaving awdl0 up after Sidecar had bee
 支持在主机页退出桌面、退出大屏模式和退出其他正在运行的应用；大屏运行时，主按钮为“继续大屏模式”。
 Supports quitting the desktop, Big Picture mode and any other running app from the host page; while Big Picture is running, the main button reads “Continue Big Picture Mode”.
 
-## 关闭自动发现后不再查询局域网 | No local network queries when auto discovery is off
+## 关闭自动发现后停止 Bonjour 浏览 | Bonjour browsing stops when auto discovery is off
 
-修复关闭“自动发现新主机”后仍然每 5 秒向局域网发送一次查询的问题：关闭后不再发送任何局域网查询，开启时主机页不在前台也会停止查询。
-Fixes local network queries still being sent every 5 seconds after “Automatically Discover New Hosts” was turned off: with it off, no local network queries are sent, and with it on, queries also stop while the host list is out of sight.
+修复关闭“自动发现新主机”后仍然每 5 秒发起一次 Bonjour 局域网浏览的问题：关闭后不再进行 Bonjour 浏览，已保存主机的连接检查照常进行；开启时，主机页不在前台、启动应用或串流期间，主机发现的浏览也会暂停。
+Fixes Bonjour local network browsing still restarting every 5 seconds after “Automatically Discover New Hosts” was turned off: with it off, no Bonjour browsing runs (saved hosts are still checked as before); with it on, host discovery browsing also pauses while the host list is out of sight, an app is launching or a stream is open.

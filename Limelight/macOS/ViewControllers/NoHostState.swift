@@ -84,6 +84,8 @@ final class NoHostLocalNetworkProbe: ObservableObject {
     } else {
       browser?.cancel()
       browser = nil
+      // a denial seen before the switch went off says nothing about the permission now
+      denied = false
     }
   }
 
