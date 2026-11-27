@@ -12,6 +12,7 @@
 
 import AppKit
 import Combine
+import CryptoKit
 import Foundation
 import Security
 
@@ -418,15 +419,13 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         installQueue.async {
             self.logInfo("[diag] AWDL helper setup started")
             let outcome = self.performInstall()
-            // Read after the dialog: a Sidecar display may have been connected while it was up.
-            let sidecar = DispatchQueue.main.sync { Self.sidecarSessionActive() }
             self.sessionQueue.async {
                 var ready = false
                 self.failureMessage = ""
                 switch outcome {
                 case .installed:
                     MLAwdlAuthorizationHelper.invalidateSession()
-                    ready = self.runSelfCheckLocked(allowToggle: !sidecar)
+                    ready = self.runSelfCheckLocked()
                 case .cancelled:
                     self.logInfo("[diag] AWDL helper setup cancelled by the user")
                     self.refreshLocked()
@@ -450,12 +449,11 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         case .notSetUp, .needsUpdate:
             setUpHelper(completion)
         case .failed:
-            let sidecar = Self.sidecarSessionActive()
             DispatchQueue.main.async { self.isWorking = true }
             sessionQueue.async {
                 let link = AwdlHelperLink.evaluate(self.probe.handshake(), installedFilePresent: self.probe.installedFilePresent)
                 if link == .ready {
-                    let ready = self.runSelfCheckLocked(allowToggle: !sidecar)
+                    let ready = self.runSelfCheckLocked()
                     DispatchQueue.main.async {
                         self.isWorking = false
                         completion?(ready)
@@ -472,18 +470,24 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         }
     }
 
+    /// Asked right before the check turns awdl0 off: no stream holds it, and no Sidecar display needs it. (The main
+    /// thread waits for the session queue only for a bounded time at quit, so reading the screens from here is safe.)
+    private func mayToggleNow() -> Bool {
+        !engine.isActive && !DispatchQueue.main.sync { Self.sidecarSessionActive() }
+    }
+
     /// Handshake, then awdl0 off and on again; the status says the result. A freshly installed helper needs a moment
     /// before launchd lets the app talk to it, so a helper that does not answer is asked again for a short while.
-    private func runSelfCheckLocked(allowToggle: Bool) -> Bool {
+    private func runSelfCheckLocked() -> Bool {
         // awdl0 left down by an earlier check or run goes back up first, or this check would see it down and pass.
         _ = engine.restorePending(reason: "before-self-check")
-        var outcome = AwdlSelfCheck.run(probe, allowToggle: allowToggle && !engine.isActive, marker: pendingMarker)
+        var outcome = AwdlSelfCheck.run(probe, allowToggle: self.mayToggleNow(), marker: pendingMarker)
         var attempts = 0
         while case .failed(.helperNotRunning) = outcome, attempts < 5 {
             attempts += 1
             usleep(400_000)
             MLAwdlAuthorizationHelper.invalidateSession()
-            outcome = AwdlSelfCheck.run(probe, allowToggle: allowToggle && !engine.isActive, marker: pendingMarker)
+            outcome = AwdlSelfCheck.run(probe, allowToggle: self.mayToggleNow(), marker: pendingMarker)
         }
 
         switch outcome {
@@ -522,6 +526,12 @@ final class AwdlHelperManager: NSObject, ObservableObject {
         guard MLAwdlAuthorizationHelper.bundledPrivilegedHelperHasUsableSignature() else {
             return .failed(LanguageManager.shared.localize("The bundled AWDL helper has no signature macOS accepts."))
         }
+        // The bytes that passed the check. The script, running as root, compares what it installed with this digest, so
+        // a file replaced while the dialog is up is not installed.
+        guard let helperBytes = try? Data(contentsOf: URL(fileURLWithPath: bundledHelperPath)) else {
+            return .failed(LanguageManager.shared.localize("The bundled AWDL helper is missing from this build."))
+        }
+        let helperDigest = SHA256.hash(data: helperBytes).map { String(format: "%02x", $0) }.joined()
 
         // No file is written for root to run: a script or plist in the user's temporary directory could be replaced while
         // the authorization dialog is up. The script and the plist go into the one command the dialog authorizes.
@@ -531,7 +541,8 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             helperDestination: Self.installedHelperPath(),
             plistContent: makeLaunchdPlist(label: label),
             plistDestination: Self.installedLaunchdPlistPath(),
-            label: label))
+            label: label,
+            helperDigest: helperDigest))
 
         logInfo("[diag] AWDL helper install requesting administrator command")
         let prompt = LanguageManager.shared.localize("AWDL Helper Install Prompt")
@@ -576,7 +587,8 @@ final class AwdlHelperManager: NSObject, ObservableObject {
     }
 
     private func makeInstallScript(
-        helperSource: String, helperDestination: String, plistContent: String, plistDestination: String, label: String
+        helperSource: String, helperDestination: String, plistContent: String, plistDestination: String, label: String,
+        helperDigest: String
     ) -> String {
         [
             "set -euo pipefail",
@@ -590,6 +602,7 @@ final class AwdlHelperManager: NSObject, ObservableObject {
             "/usr/bin/install -m 755 \"$helper_src\" \"$helper_dst\"",
             "/usr/sbin/chown root:wheel \"$helper_dst\"",
             "/bin/chmod 755 \"$helper_dst\"",
+            "[ \"$(/usr/bin/shasum -a 256 \"$helper_dst\" | /usr/bin/awk '{print $1}')\" = \(shellQuote(helperDigest)) ] || { /bin/rm -f \"$helper_dst\"; exit 1; }",
             "/usr/bin/xattr -d com.apple.quarantine \"$helper_dst\" >/dev/null 2>&1 || true",
             "/usr/bin/printf '%s\\n' \(shellQuote(plistContent)) > \"$plist_dst\"",
             "/usr/sbin/chown root:wheel \"$plist_dst\"",

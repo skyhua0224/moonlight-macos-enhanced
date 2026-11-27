@@ -1056,10 +1056,18 @@ static NSString * const MLSunshinePerAppTopologyDefaultsPrefix = @"Moonlight.Sun
 /// starts; a launch cancelled meanwhile does not.
 - (void)openStreamWindowAfterAwdlSetupForApp:(TemporaryApp *)app {
     NSUInteger token = self.launchToken;
+    NSString *hostUUID = self.host.uuid ?: @"";
     __weak typeof(self) weakSelf = self;
     [AwdlHelperSetup prepareForStreamThen:^{
         AppsViewController *strongSelf = weakSelf;
         if (strongSelf == nil || strongSelf.launchToken != token) return;
+        // The page may have been switched to another computer while the question was up.
+        if (![(strongSelf.host.uuid ?: @"") isEqualToString:hostUUID]) {
+            [MLNetworkQuiet end:[@"launch:" stringByAppendingString:hostUUID]];
+            [MLLaunchGate release:hostUUID];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"MLLaunchStateChanged" object:nil userInfo:@{@"hostUUID": hostUUID}];
+            return;
+        }
         // The running-app refresh may have replaced it while the question was up; the stream is for the app that was chosen.
         strongSelf.runningApp = app;
         [strongSelf performSegueWithIdentifier:@"streamSegue" sender:nil];

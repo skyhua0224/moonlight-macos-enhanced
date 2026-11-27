@@ -217,7 +217,7 @@ enum AwdlSelfCheck {
   /// Handshake, then awdl0 down and up again. awdl0 is brought back whatever happens in between; when that fails, the
   /// marker stays, so that the next launch, wake or check brings it back. `marker` is written before awdl0 goes down.
   static func run(
-    _ probe: AwdlHelperProbing, allowToggle: Bool = true, marker: AwdlPendingRestoreStoring? = nil
+    _ probe: AwdlHelperProbing, allowToggle: @autoclosure () -> Bool = true, marker: AwdlPendingRestoreStoring? = nil
   ) -> AwdlSelfCheckOutcome {
     let handshake = probe.handshake()
     switch AwdlHelperLink.evaluate(handshake, installedFilePresent: probe.installedFilePresent) {
@@ -232,10 +232,26 @@ enum AwdlSelfCheck {
     let before = probe.interfaceSnapshot()
     guard before.present else { return .noInterface }
     // Down already (by the user or another tool) or a stream is using it: there is nothing to turn off and back on.
-    guard before.up, allowToggle else { return .passed(toggleVerified: false) }
+    // `allowToggle` is read here, right before awdl0 is touched: a Sidecar display may have connected since the check began.
+    guard before.up, allowToggle() else { return .passed(toggleVerified: false) }
 
+    // Without a marker on disk awdl0 is not touched: a helper that dies with awdl0 down would leave no record.
     marker?.required = true
+    if let marker, !marker.required {
+      return .failed(.holdRejected("the recovery marker could not be written"))
+    }
     if let error = probe.holdDown() {
+      // A hold that failed without an answer may still have taken effect.
+      if !probe.interfaceSnapshot().up {
+        var restored: Bool
+        switch probe.releaseHold() {
+        case .released: restored = probe.waitForInterface(up: true)
+        case .stillHeld: restored = true
+        case .failed: restored = false
+        }
+        if !restored { restored = probe.forceUp() == nil && probe.waitForInterface(up: true) }
+        guard restored else { return .failed(.notRestored) }
+      }
       marker?.required = false
       return .failed(.holdRejected(error))
     }
@@ -365,7 +381,13 @@ final class AwdlSessionEngine {
     pending.required = true
     guard pending.required else { return .holdFailed("the recovery marker could not be written") }
     if let error = probe.holdDown() {
-      pending.required = false
+      // A hold that failed without an answer (the helper went away mid-call) may still have taken effect: awdl0 is
+      // looked at, and if it is down the marker stays until it is seen up.
+      if probe.interfaceSnapshot().up {
+        pending.required = false
+      } else {
+        _ = restoreHold(reason: "hold-failed", forceHolding: true)
+      }
       return .holdFailed(error)
     }
     guard probe.waitForInterface(up: false) else {
@@ -452,8 +474,8 @@ final class AwdlSessionEngine {
     var failure: String?
     switch probe.releaseHold() {
     case .stillHeld:
-      // Another client keeps awdl0 down: the helper brings it up when that one lets go; this run owes nothing.
-      pending.required = false
+      // Another client keeps awdl0 down: the helper brings it up when that one lets go. The marker stays (the other
+      // client may share it); the next run clears it when it sees awdl0 up.
       log("[diag] AWDL helper released its hold, another stream still holds awdl0: reason=\(reason)")
       return .heldByOthers
     case .failed(let error):

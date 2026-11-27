@@ -100,6 +100,8 @@ final class FakeProbe: AwdlHelperProbing {
   var helper = AwdlHelperHandshake(reachable: true, interfaceVersion: 2, buildVersion: "1500")
   var fileThere = true
   var holdError: String?
+  /// The helper reports a failure although awdl0 did go down (it exited before its reply arrived).
+  var holdErrorAfterDown = false
   var releaseError: String?
   var forceUpError: String?
   /// Another client holds awdl0 down too.
@@ -116,7 +118,10 @@ final class FakeProbe: AwdlHelperProbing {
   func interfaceSnapshot() -> AwdlInterfaceSnapshot { snapshot }
   func holdDown() -> String? {
     commands.append("hold")
-    if let holdError { return holdError }
+    if let holdError {
+      if holdErrorAfterDown { snapshot.up = false }
+      return holdError
+    }
     if !holdLeavesUp { snapshot.up = false }
     return nil
   }
@@ -235,6 +240,36 @@ do {
   let p = FakeProbe()
   p.othersHold = true
   expect("self-check: another client's hold is not an error", AwdlSelfCheck.run(p), .passed(toggleVerified: true))
+  check("self-check: awdl0 stays down for the other holder, no direct bring-up", !p.snapshot.up && !p.changes.contains("force-up"))
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  m.refuseWrite = true
+  expect("self-check: no marker on disk, awdl0 is not touched", AwdlSelfCheck.run(p, marker: m), .failed(.holdRejected("the recovery marker could not be written")))
+  check("self-check: nothing was asked of awdl0", p.changes.isEmpty && p.snapshot.up)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  p.holdError = "helper exited"
+  p.holdErrorAfterDown = true
+  expect("self-check: the hold failed after awdl0 went down: it is brought back", AwdlSelfCheck.run(p, marker: m), .failed(.holdRejected("helper exited")))
+  check("self-check: up again, no marker", p.snapshot.up && !m.required)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  p.holdError = "helper exited"
+  p.holdErrorAfterDown = true
+  p.releaseError = "gone"
+  p.forceUpError = "no"
+  expect("self-check: down after a failed hold and cannot be brought back", AwdlSelfCheck.run(p, marker: m), .failed(.notRestored))
+  check("self-check: the marker stays", m.required)
+}
+do {
+  // Sidecar connects while the check waits: asked again right before awdl0 is touched.
+  let p = FakeProbe()
+  var asked = 0
+  expect("self-check: a display connected meanwhile", AwdlSelfCheck.run(p, allowToggle: { asked += 1; return false }()), .passed(toggleVerified: false))
+  check("self-check: nothing touched, the answer was read once", asked == 1 && p.changes.isEmpty)
 }
 check("self-check: every failure has a message key", [
   AwdlSelfCheckFailure.helperNotRunning(""), .helperOutdated(found: 0, expected: 2), .holdRejected(""), .downNotObserved, .notRestored,
@@ -316,6 +351,22 @@ do {
 }
 do {
   let p = FakeProbe(), m = FakeMarker()
+  p.holdError = "helper exited"
+  p.holdErrorAfterDown = true
+  expect("session: the hold failed without an answer but awdl0 went down", engine(p, m).begin(enabled: true, sidecarActive: false, generation: 1, ownerID: "a"), .holdFailed("helper exited"))
+  check("session: it is brought back and no marker is left", p.snapshot.up && !m.required)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
+  p.holdError = "helper exited"
+  p.holdErrorAfterDown = true
+  p.releaseError = "gone"
+  p.forceUpError = "no"
+  _ = engine(p, m).begin(enabled: true, sidecarActive: false, generation: 1, ownerID: "a")
+  check("session: awdl0 down and not restorable: the marker stays for the next launch", m.required && !p.snapshot.up)
+}
+do {
+  let p = FakeProbe(), m = FakeMarker()
   p.holdLeavesUp = true
   expect("session: awdl0 stays up after the helper said down", engine(p, m).begin(enabled: true, sidecarActive: false, generation: 1, ownerID: "a"), .holdFailed("awdl0 stayed up"))
   check("session: the hold is given back and no marker is left", !m.required && p.snapshot.up && p.changes == ["hold", "release"])
@@ -334,7 +385,7 @@ do {
   p.othersHold = true
   p.snapshot.up = false
   expect("session: another stream still holds awdl0: it stays down", e.end(forOwner: "a", reason: "stream-ended"), .heldByOthers)
-  check("session: no direct bring-up, no marker", !p.changes.contains("force-up") && !p.snapshot.up && !m.required)
+  check("session: no direct bring-up; the marker stays until a run sees awdl0 up", !p.changes.contains("force-up") && !p.snapshot.up && m.required)
 }
 
 // Restore paths
