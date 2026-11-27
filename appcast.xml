@@ -4,13 +4,18 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MoonlightEnhanced</title>
         <item>
-            <title>2026.1127.103303</title>
-            <pubDate>Fri, 27 Nov 2026 18:45:01 +0800</pubDate>
+            <title>2026.1127.144657</title>
+            <pubDate>Fri, 27 Nov 2026 22:59:00 +0800</pubDate>
             <sparkle:channel>beta</sparkle:channel>
-            <sparkle:version>1741</sparkle:version>
-            <sparkle:shortVersionString>2026.1127.103303</sparkle:shortVersionString>
+            <sparkle:version>1746</sparkle:version>
+            <sparkle:shortVersionString>2026.1127.144657</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[## Moonlight for macOS Enhanced v2026.1127.103303
+            <description sparkle:format="markdown"><![CDATA[## Moonlight for macOS Enhanced v2026.1127.144657
+
+## 串流时默认减少 Wi-Fi 卡顿 | AWDL stability helper on by default while streaming
+
+串流时默认临时关闭隔空投送使用的无线通道（AWDL），明显减少 Wi-Fi 卡顿，串流结束、退出应用或应用异常退出后自动恢复；第一次串流前授权一次管理员权限即可，不授权也能正常串流，连接随航时保持不关，可在设置中关闭。
+The AWDL stability helper is now on by default while streaming, which noticeably reduces Wi-Fi stutter; AWDL is restored when the stream ends, the app quits or the app exits unexpectedly. Authorize once before the first stream (streaming works without it), AWDL is left alone while a Sidecar display is connected, and it can be turned off in Settings.
 
 ## AWDL 稳定性辅助：修复误判随航 | AWDL helper: no false Sidecar detection
 
@@ -27,7 +32,7 @@ Supports quitting the desktop, Big Picture mode and any other running app from t
 修复关闭“自动发现新主机”后仍然每 5 秒发起一次 Bonjour 局域网浏览的问题：关闭后不再进行 Bonjour 浏览，已保存主机的连接检查照常进行；开启时，主机页不在前台、启动应用或串流期间，主机发现的浏览也会暂停。
 Fixes Bonjour local network browsing still restarting every 5 seconds after “Automatically Discover New Hosts” was turned off: with it off, no Bonjour browsing runs (saved hosts are still checked as before); with it on, host discovery browsing also pauses while the host list is out of sight, an app is launching or a stream is open.
 ]]></description>
-            <enclosure url="https://github.com/skyhua0224/moonlight-macos-enhanced/releases/download/v2026.1127.103303/Moonlight-macOS-Enhanced-universal.dmg" length="12073486" type="application/octet-stream" sparkle:edSignature="GV5TRet4C/smJNX4u28g1eRe6jvnVQMaSdYPBhpJODM+T8PxnSEcCwKibGmEaU8h9hacsG3M+T7qS7yZkxfMBg=="></enclosure>
+            <enclosure url="https://github.com/skyhua0224/moonlight-macos-enhanced/releases/download/v2026.1127.144657/Moonlight-macOS-Enhanced-universal.dmg" length="12106388" type="application/octet-stream" sparkle:edSignature="SPaf53OsgqWNnAg136vYy+Ty6SGvfNRyhpDlkdxy610hEufR0YGdh2H5PLdNlFWRBLw7ix2UwWUnZQW9+zk1BA=="></enclosure>
         </item>
     
         <item>
@@ -151,6 +156,6 @@ Computer names and addresses in the screenshots are examples; game covers belong
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 8oYwCa/KXK10mawhb/U+QaAGcs+7DUvIX/NlC4ZPoViRsWmmdPUyj21EdHidwloinB8xnbEvzc5qvYoMVL+YDg==
-length: 18360
+edSignature: evwuYSxt/B+xFoiPkWQgpzeky1fp2kAF/SCIGWEIqKjl47wH7TKogxezuN6RC2ns8zrsR+iw73tzmm4kRxAvDA==
+length: 19112
 -->
